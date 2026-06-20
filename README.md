@@ -156,6 +156,47 @@ mechanics live in the pipelines [`memory-distill`](pipelines/memory-distill.md) 
 
 ---
 
+## 3b. The knowledge → implementation → usage chain
+
+A project that implements a **domain** (numerics, finance, a scientific model, an external
+service) carries domain knowledge. keystone models it as **three connected artifacts**, by
+*what* each is for — not one blob:
+
+| Artifact | What it answers | Where (in a project) | Required? |
+|---|---|---|---|
+| **knowledge** | *what* a concept is and *how it is realized* — theory, decisions, a domain area, an external resource (an exchange), **sourced** | root `knowledge/` | **optional** (see below) |
+| **implementation** | the code that realizes it | `src/` (the project's source) | yes |
+| **usage skill** | how to *apply* the implementation when a user asks | root `skills/` (USAGE) | yes (for a domain API) |
+
+**knowledge is optional.** Create a `knowledge/` leaf when a concept needs **substantial
+theory, sources, or design rationale** — many formulas, important references/decisions, or
+an external resource (an exchange API). When the concept is light, **skip knowledge**: put a
+short description in the **SKILL.md** (USAGE) and the implementation details in the
+**function docstring** (which is naturally shorter). Don't create a thin `knowledge/` leaf
+that only restates a docstring.
+
+**Rules:**
+
+1. **knowledge documents the implementation and points *down*.** A knowledge leaf links the
+   `src/` that realizes the concept and the `skills/` skill that applies it (when one
+   exists). The reference direction is one-way: knowledge → impl → usage.
+2. **knowledge ≠ skill.** knowledge is "what it is / how it's built" (sourced reference); a
+   skill is "how to use it" (the concept→function map, USAGE). Do not collapse one into the
+   other.
+3. **Keep only what is implemented or planned.** A concept is documented (in `knowledge/`,
+   or just a skill+docstring) *only if* it is implemented **or** planned. A concept that is
+   neither is **not stored** — not as knowledge, not as a task. A *planned* concept rich
+   enough to warrant knowledge stays in `knowledge/` with an impl task in `_forge/TASKS.md`,
+   but gets **no** skill until the code lands.
+4. **One source of truth.** Wherever a domain fact lives (a `knowledge/` leaf, or the
+   docstring + skill when knowledge is skipped), that is its owner; everything else links to
+   it rather than restating it.
+
+When `knowledge/` exists it is also the natural seam to an **MCP knowledge server** later:
+it is cross-project domain reference, built to travel out (see [ROADMAP](ROADMAP.md)).
+
+---
+
 ## 4. Axis "Project type" (archetype) — what is exposed outward
 
 A profile dimension that decides **whether USAGE exists and what shape it takes**.

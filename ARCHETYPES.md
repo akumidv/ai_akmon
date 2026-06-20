@@ -32,7 +32,7 @@ profile + matching [guardrails/](guardrails/); any opted-in [profiles/](profiles
 
 | Archetype | Must also document |
 |---|---|
-| `package` | a **USAGE `skills/`** + usage docs for the public API; a **domain-concept → implementing-function map** (see below); versioning/compat policy; usage examples + failure modes; **no USAGE `tools/`** |
+| `package` | a **USAGE `skills/`** (the domain-concept → implementing-function map, see below) + usage docs for the public API; a root **`knowledge/`** layer **only for concepts rich enough to warrant it** (optional — else skill + docstring, see below); versioning/compat policy; usage examples + failure modes; **no USAGE `tools/`** |
 | `service` | endpoint contract (routes / auth / error model); async / blocking-I/O rules; unit + service tests; USAGE external unless usage assets ship here |
 | `mcp` | the MCP tool contract (names / IO / errors); how a consumer mounts it; unit + tool-contract tests |
 | `frontend` | UI/state conventions; build/test/lint in pre-commit; client-side secrets boundary; "no exported USAGE" unless deliberately added |
@@ -42,29 +42,34 @@ profile + matching [guardrails/](guardrails/); any opted-in [profiles/](profiles
 
 ## USAGE requirement: the domain-concept → function map (`package`, and any archetype with a domain API)
 
-USAGE is **not** "how to call the API" in the abstract. For a project that implements a
-**domain** (numerics, finance, a scientific model, …), the USAGE layer must connect three
-things so an assistant can apply the project correctly to a user's task:
+This is the **usage skill** end of the knowledge → implementation → usage chain
+([README](README.md) §3b). A USAGE skill is **not** "how to call the API" in the abstract —
+it connects three things so an assistant can apply the project to a user's task:
 
-1. **the domain concept** — what it is, sourced (e.g. VaR, a Greek, a payoff, a smile fit),
-2. **the implementing function** — the *actual* public function/class in the project that
-   computes it (verified against code, not described in the abstract),
+1. **the domain concept** — what it is (owned by its `knowledge/` leaf if one exists, else
+   stated briefly in the skill + the function docstring),
+2. **the implementing function** — the *actual* public function/class that computes it
+   (verified against code, not described in the abstract),
 3. **how to apply it** — inputs, units/conventions, failure modes, a worked example.
 
 So the unit of USAGE is a **mapping**: *concept → the function that realizes it → how to
-use it* — not a free-standing knowledge article and not a bare API reference. Domain
-knowledge that has **no** implementing function yet is a gap to record (a design/impl
-task), not USAGE.
+use it* — not a bare API reference.
+
+**Placement (per §3b rules):**
+- **knowledge is optional.** Add a `knowledge/` leaf only when the concept has substantial
+  theory/sources/rationale or is an external resource; otherwise the concept's description
+  lives in the SKILL.md (short) + the function docstring (shorter).
+- A concept that is **implemented** gets a USAGE skill (and a `knowledge/` leaf if rich).
+- A concept that is **planned but not yet coded** is documented (in `knowledge/` if rich,
+  else just catalogued) with an impl task in `_forge/TASKS.md`, but gets **no** skill until
+  the code lands.
+- A concept that is **neither implemented nor planned** is not stored at all.
 
 **Why a keystone requirement, not a per-project choice.** It keeps domain knowledge
-*honest* (every concept points at real, verified code), makes USAGE travel into a consumer
-without re-deriving the domain, and is the natural seam to an MCP knowledge server later.
-It is **mandatory for `package`** and for any archetype that exposes a domain API
+*honest* (every usage skill points at real, verified code), makes USAGE travel into a
+consumer without re-deriving the domain, and is the natural seam to an MCP knowledge server
+later. It is **mandatory for `package`** and for any archetype that exposes a domain API
 (`service`/`mcp` where the contract is domain-shaped); `custom` declares its stance.
-
-> Boundary with development: the same concept→function map is *also* what the
-> [architect](roles/architect.md) consults while building — but its **home is USAGE**
-> (one owner per fact). Development links to it; it is not duplicated into `_forge/`.
 
 ## Applied guardrails & profiles (the map)
 
