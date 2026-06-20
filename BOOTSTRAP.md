@@ -40,11 +40,22 @@ When the user asks "attach keystone", the agent:
    keystone block records the archetype + language, the SHARED/LOCAL/USAGE declaration,
    the USAGE placement, and the **resolved guardrail/profile links** from step 4 (written
    out, so they aren't recomputed each session). This block *is* the attach record.
+   Then **generate/refresh the vendor pointers** (§C): for Claude Code write a `CLAUDE.md`
+   that **imports** AGENTS.md via `@AGENTS.md` — Claude Code auto-loads `CLAUDE.md` but
+   **not** `AGENTS.md`, so the import makes the canonical rules (including the always-on
+   D2/D5 and "read `_forge/memory/` at session start") present at session start instead of
+   one hop behind a prose pointer.
 7. **Update `.gitignore`** for secrets (see §D).
-8. **Wire the commit guard** — add the PreToolUse hook
-   [`hooks/git-commit-guard.py`](hooks/README.md) to the vendor config (for Claude Code,
-   `.claude/settings.json` → PreToolUse/Bash, pointing at the keystone path). Enforces the
-   commit guardrail ([`guardrails/_common.md`](guardrails/_common.md)).
+8. **Wire the hooks** ([`hooks/README.md`](hooks/README.md)) into the vendor config — for
+   Claude Code, `.claude/settings.json`, pointing at the keystone paths:
+   - **commit guard** ([`git-commit-guard.py`](hooks/git-commit-guard.py)) → PreToolUse/Bash
+     — enforces the commit guardrail ([`guardrails/_common.md`](guardrails/_common.md)).
+   - **session-start agent** ([`session-start-agent.py`](hooks/session-start-agent.py)) →
+     SessionStart — enforces the "Role declaration" convention
+     ([`roles/README.md`](roles/README.md)).
+
+   Hooks are Claude-side *enforcement*; the rules they back also live in `AGENTS.md` (§C),
+   so **Codex/Gemini follow them by reading the doc** even without the hooks.
 9. **Run** `python3 _forge/keystone/bin/sync.py` (when present — see
    [ROADMAP O3](ROADMAP.md)); dry-run any tools where safe.
 10. **Does NOT commit** — reports it is ready for review (the user commits `.gitmodules`,
@@ -73,7 +84,8 @@ First add the submodule:
   git submodule add --name _forge/keystone https://github.com/akumidv/ai_keystone _forge/keystone
   git submodule update --init --recursive
 Then read _forge/keystone/BOOTSTRAP.md and follow section A. Keep all existing AGENTS.md
-content — add/update ONLY the keystone block (§C). Show the diff, do not commit.
+content — add/update ONLY the keystone block (§C). Also ensure CLAUDE.md imports AGENTS.md
+via `@AGENTS.md` (§C) so the always-on rules load at session start. Show the diff, do not commit.
 ```
 
 ---
@@ -97,7 +109,9 @@ This project uses the keystone dev layer. Model & notation:
   exposed).
 - **Agents (roles):** [architect](_forge/agents/architect/README.md),
   [engineer](_forge/agents/engineer/README.md) → roles:
-  [keystone/roles/](_forge/keystone/roles/).
+  [keystone/roles/](_forge/keystone/roles/). **Declare the active agent** before doing work
+  and restate it on switch (`🧭 agent: <name> — <focus>`) — see
+  [Role declaration](_forge/keystone/roles/README.md#role-declaration-announce-the-active-agent).
 - **Guardrails (applied — by language):** [_common](_forge/keystone/guardrails/_common.md)
   <!-- + the language guardrail(s) per the map, e.g. [python](_forge/keystone/guardrails/python.md) -->
 - **Profiles (applied — opt-in by need):**
@@ -111,8 +125,28 @@ This project uses the keystone dev layer. Model & notation:
 - **Backlog:** [_forge/TASKS.md](_forge/TASKS.md). **Secrets:** from `.env` (gitignored).
 ```
 
-For **Codex/Gemini** this AGENTS.md block is enough (they read AGENTS.md). For **Claude**,
-the `.claude/skills/` pointers also apply (written by `sync.py`).
+For **Codex/Gemini** this AGENTS.md block is enough — they read `AGENTS.md` directly.
+**Claude Code does not** read `AGENTS.md` automatically; it only auto-loads `CLAUDE.md`. So
+`CLAUDE.md` must **import** AGENTS.md rather than just prose-point at it — otherwise the
+always-on rules (D2/D5) sit one hop behind a pointer the agent may never follow in a session
+that jumps straight to a task:
+
+```markdown
+# CLAUDE.md
+
+This project uses [AGENTS.md](AGENTS.md) as the single source of guidance for AI coding
+agents (including Claude Code).
+
+Claude Code auto-loads `CLAUDE.md` but **not** `AGENTS.md`, so AGENTS.md is imported below.
+This keeps the canonical rules — including the always-on prime directives (D2, D5) and
+"read `_forge/memory/` at session start" — present in context from the start.
+
+@AGENTS.md
+```
+
+Mechanically-enforced rules (e.g. D5 via the commit-guard hook, step 8) hold regardless;
+the import covers the rules that rely on the agent having *read* them (D2, memory). The
+`.claude/skills/` pointers also apply (written by `sync.py` when present).
 
 ---
 

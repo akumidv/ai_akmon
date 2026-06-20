@@ -27,6 +27,21 @@ See the model's three axes in [../README.md](../README.md) §1–3.
 6. **Guardrails** — hard constraints; what it must never do.
 7. **Done** — the definition of done for its output.
 
+## Role declaration (announce the active agent)
+
+The active agent is **chosen per task**, not at session start — so each session opens with
+no agent active. Before doing project work, the assistant **declares which agent it is
+operating as**, and **restates it on every switch** (e.g. handing a locked design from
+`architect` to `engineer`). This keeps the role — and the pipeline/guardrails it pulls in —
+explicit rather than implicit.
+
+- **Format:** `🧭 agent: <name> — <focus>` (e.g. `🧭 agent: engineer — code/tests`).
+- **If the task is ambiguous** about which role it calls for, ask before proceeding.
+- **Executable side:** the [`session-start-agent`](../hooks/README.md) SessionStart hook
+  injects this reminder + the project's scanned agent roster each session, so the
+  convention survives a long session and does not depend on the doc staying in context (the
+  same rule-plus-hook split as the commit guardrail).
+
 ## Inheritance contract (agent → role)
 
 A project agent charter (`_forge/agents/<role>/README.md`) must:
