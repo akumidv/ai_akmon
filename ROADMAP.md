@@ -59,7 +59,9 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
   declaration with no mechanism. `sync.py` does not exist yet.
 - **Direction.** Specify the pointer layout + commit policy; implement `bin/sync.py`
   (stdlib only) to write Claude pointers and the AGENTS.md skill block from one source;
-  document re-run triggers (after submodule update / new local skill).
+  document re-run triggers (after submodule update / new local skill). `sync.py` should
+  also **wire the hooks** ([`hooks/`](hooks/README.md), e.g. `git-commit-guard.py`) into
+  each vendor config — today BOOTSTRAP wires them by hand.
 
 ### O4. Orchestration & separation of duties
 

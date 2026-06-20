@@ -73,6 +73,19 @@ used elsewhere). `shared` vs `local` is a **development-only** distinction.
 = the shared (SHARED) subset of that · everything else (`docs/`, root `skills/`) = the
 product and its use (USAGE).
 
+**Dev docs — split "understand the project" from "the development process" (recommended).**
+Two kinds of dev documentation are easy to conflate; place them by their reader:
+
+| Reader need | Examples | Home |
+|---|---|---|
+| **Understand the project** (a new developer onboarding) | architecture/requirements, accepted decisions (ADRs), a project overview | `docs/dev/` (project docs) |
+| **Run the development process** (how *we* build it) | dev-process rules, verification ledgers, in-progress design concepts (living concept + rejected branches + design backlog) | `_forge/` (the dev layer) |
+
+The test: *does a newcomer read it to learn how the project is built, or is it how we
+manage building it?* The first is stable knowledge (project docs); the second is process
+(the dev layer). A small project may keep both in `docs/dev/`; the split earns its keep once
+the process docs grow. (This is a guideline, not a hard archetype requirement.)
+
 **Scope boundary — what this tree does NOT cover (yet).** The tree spans DEVELOP and USE.
 It does **not** cover a third mode, **OPERATE** — an agent that *acts in the world at
 runtime* (e.g. a trading agent that places orders; an agent that moves data or money).

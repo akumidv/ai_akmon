@@ -41,10 +41,14 @@ When the user asks "attach keystone", the agent:
    the USAGE placement, and the **resolved guardrail/profile links** from step 4 (written
    out, so they aren't recomputed each session). This block *is* the attach record.
 7. **Update `.gitignore`** for secrets (see §D).
-8. **Run** `python3 _forge/keystone/bin/sync.py` (when present — see
+8. **Wire the commit guard** — add the PreToolUse hook
+   [`hooks/git-commit-guard.py`](hooks/README.md) to the vendor config (for Claude Code,
+   `.claude/settings.json` → PreToolUse/Bash, pointing at the keystone path). Enforces the
+   commit guardrail ([`guardrails/_common.md`](guardrails/_common.md)).
+9. **Run** `python3 _forge/keystone/bin/sync.py` (when present — see
    [ROADMAP O3](ROADMAP.md)); dry-run any tools where safe.
-9. **Does NOT commit** — reports it is ready for review (the user commits `.gitmodules`,
-   the submodule pin, and the generated files).
+10. **Does NOT commit** — reports it is ready for review (the user commits `.gitmodules`,
+    the submodule pin, and the generated files).
 
 ---
 

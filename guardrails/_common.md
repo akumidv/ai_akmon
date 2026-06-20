@@ -18,9 +18,14 @@ Applied automatically (not opt-in). Language-specific rules layer on top — see
 
 - **Never `git add` / `commit` / `push` on the owner's behalf** unless explicitly told.
   The owner stages and commits.
+- **No AI `Co-Authored-By` trailer** — the committer is the human.
 - **Tests pass before a commit is offered.** No commit on red (see
   [pre-commit](../pipelines/pre-commit.md)).
 - Branch for non-trivial work; do not commit straight to the default branch unless asked.
+
+> **Enforced** (not just documented) by [`../hooks/git-commit-guard.py`](../hooks/git-commit-guard.py)
+> — a PreToolUse hook that asks/denies at commit time, so the rule holds even after the docs
+> fall out of context. Wired per vendor on attach (BOOTSTRAP) and kept wired by `sync.py`.
 
 ## Verify against reality, not memory
 
