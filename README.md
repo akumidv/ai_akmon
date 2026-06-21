@@ -96,6 +96,17 @@ now** and tracked as an open question in [ROADMAP.md](ROADMAP.md) — do not fol
 actor into USAGE (using a library ≠ operating in a market). When formulated, it becomes a
 third branch of this tree, not a layer under DEVELOP.
 
+**Relative to a subject — the relation is not a global mode.** DEVELOP / USE (USAGE) / OPERATE are
+relations between the actor and a **chosen subject project**, so one session can hold two at once:
+developing alphavar is **DEVELOP** relative to *alphavar* and **USAGE** relative to *keystone*
+(consuming the mounted standard). The two *consumption* relations split by **consequence** —
+**USAGE** is build/dev-time and reversible (using a library; following keystone); **OPERATE** is
+runtime with real, often irreversible consequences (orders, money). So mounting keystone is USAGE,
+**not** OPERATE: keystone's USAGE relation *is* the consuming project's DEVELOP relation — the same
+activity seen from two subjects. This is why a [release](roles/release.md) is cut for a chosen
+**subject** (the project's package, or keystone). Locked in
+[ADR 0001](decisions/0001-release-and-roles-model.md) §6.
+
 ---
 
 ## 3. Axis "Role" — role (here) vs agent (in the project)
@@ -252,7 +263,7 @@ _forge/
 │   ├── profiles/               #   opt-in domain profiles
 │   ├── pipelines/              #   dev cycles: pre-commit, design-flow, code-flow, …
 │   ├── skills/  tools/         #   cross-project skills (SKILL.md) + executable tools
-│   └── bin/sync.py             #   writes thin pointers into .claude/.codex/GEMINI
+│   └── bin/                    #   stdlib CLIs: sync.py (pointers), verify.py (validator)
 │
 ├── agents/                     # CONCRETE AGENTS of this project (inherit roles)
 │   ├── architect/  engineer/   #   each: README.md (charter) + pipeline.md
@@ -276,11 +287,20 @@ The source of truth is the **markdown instruction and the executable code**; eac
 vendor's entry point is a thin **generated** pointer (no duplicated content).
 
 - **skill** = `SKILL.md` (frontmatter + instruction). Native for Claude; a linked
-  document for Codex/Gemini.
+  document for Codex/Gemini. Required frontmatter is minimal and stable:
+  `name`, `description`, `when_to_use`, `owner`; `name` must match the skill directory.
 - **tool** = code under `tools/<name>/`; secrets from `.env`. A skill *calls* a tool.
-- **`bin/sync.py`** writes `.claude/skills/<name>/SKILL.md` stubs and the AGENTS.md skill
-  list. Not symlinks (break on Windows / in submodules); not a Claude plugin (Claude-only
-  — we feed Claude + Codex + Gemini from one source).
+- **`bin/sync.py`** writes thin generated pointers (`CLAUDE.md`, `GEMINI.md`,
+  `.codex/README.md`, `.github/copilot-instructions.md`), deployable hook wiring
+  (`.claude/settings.json`, `.codex/hooks.json`), and `.claude/skills/<name>/SKILL.md`
+  stubs. These deterministic pointers are committed; vendor-local state is not. It does
+  **not** rewrite `AGENTS.md`; the project block there stays hand-reviewed. Not symlinks
+  (break on Windows / in submodules); not a Claude plugin (Claude-only) — we feed Claude +
+  Codex + Gemini from one source.
+- **`bin/verify.py`** validates the keystone project contract: AGENTS anchors, generated
+  pointer drift (via `sync.py`), hook wiring, duplicate skills, skill frontmatter,
+  memory index, agent charters, `.gitignore` secrets policy, and CI preflight wiring. It
+  reports only; it does not modify files.
 
 ---
 

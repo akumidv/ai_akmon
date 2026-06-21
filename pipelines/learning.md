@@ -1,9 +1,11 @@
 # Pipeline: learning
 
-Step **3 (PROMOTE)** of the [learn loop](../README.md#3a-the-learn-loop--how-the-keystone-evolves-through-use):
-the periodic review that lifts proven local assets into keystone so every project inherits
-them. Where [memory-distill](memory-distill.md) runs continuously and stays LOCAL, this
-runs **periodically** and crosses the LOCAL → SHARED boundary.
+The periodic cycle the [learn](../roles/learn.md) role follows. Step **3 (PROMOTE)** of the
+[learn loop](../README.md#3a-the-learn-loop--how-the-keystone-evolves-through-use):
+the review that lifts proven local assets into keystone so every project inherits them. Where
+[memory-distill](memory-distill.md) runs continuously and stays LOCAL, this runs **periodically**
+and crosses the LOCAL → SHARED boundary. [release](../roles/release.md)'s periodic cadence hands
+off to this cycle rather than promoting memory itself.
 
 ## When
 
@@ -34,8 +36,8 @@ insight.
 ## Safety
 
 - Promotion is a **reviewed PR**, never an automatic copy — a changed shared role or
-  guardrail reaches every project, so it goes through review (and, per
-  [ROADMAP O2](../ROADMAP.md), a changelog / compatibility signal when that exists).
+  guardrail reaches every project, so it goes through review (and a changelog / compatibility
+  signal per [ADR 0001](../decisions/0001-release-and-roles-model.md)).
 - Knowledge flows **one way up** the ladder (private → shared memory → local asset →
   keystone). Never push project-specific detail up into keystone.
 

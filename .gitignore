@@ -1,0 +1,7 @@
+# Python bytecode caches — keystone tooling (bin/, tools/, hooks/, tests/) runs in-tree.
+__pycache__/
+*.py[cod]
+
+# Local env / secrets (never committed; see README §8).
+*.env
+!*.env.example

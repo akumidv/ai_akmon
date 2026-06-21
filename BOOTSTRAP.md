@@ -46,20 +46,30 @@ When the user asks "attach keystone", the agent:
    D2/D5 and "read `_forge/memory/` at session start") present at session start instead of
    one hop behind a prose pointer.
 7. **Update `.gitignore`** for secrets (see §D).
-8. **Wire the hooks** ([`hooks/README.md`](hooks/README.md)) into the vendor config — for
-   Claude Code, `.claude/settings.json`, pointing at the keystone paths:
-   - **commit guard** ([`git-commit-guard.py`](hooks/git-commit-guard.py)) → PreToolUse/Bash
-     — enforces the commit guardrail ([`guardrails/_common.md`](guardrails/_common.md)).
-   - **session-start agent** ([`session-start-agent.py`](hooks/session-start-agent.py)) →
-     SessionStart — enforces the "Role declaration" convention
-     ([`roles/README.md`](roles/README.md)).
+8. **Wire the hooks** ([`hooks/README.md`](hooks/README.md)) into vendor config, pointing
+   at the keystone paths. `sync.py` keeps the supported project-local wiring current:
+   - **Claude Code** — `.claude/settings.json`: commit guard, session-start agent,
+     role-on-code, and analysis-guard.
+   - **Codex** — `.codex/hooks.json`: session-start, role-on-code, and analysis-guard
+     reminders. Codex project-local hooks require the project `.codex/` layer to be trusted
+     and reviewed with `/hooks`.
 
-   Hooks are Claude-side *enforcement*; the rules they back also live in `AGENTS.md` (§C),
-   so **Codex/Gemini follow them by reading the doc** even without the hooks.
-9. **Run** `python3 _forge/keystone/bin/sync.py` (when present — see
-   [ROADMAP O3](ROADMAP.md)); dry-run any tools where safe.
-10. **Does NOT commit** — reports it is ready for review (the user commits `.gitmodules`,
-    the submodule pin, and the generated files).
+   Guardrail logic lives once in `hooks/hook_core.py`; vendor files only adapt payload/output
+   and wiring. The rules they back also live in `AGENTS.md` (§C), so assistants still follow
+   the rules by reading the doc if a vendor has no hook surface.
+9. **Run** `python3 _forge/keystone/bin/sync.py --check`; if it reports stale generated
+   pointers, run `python3 _forge/keystone/bin/sync.py` and review the diff. Then run
+   `python3 _forge/keystone/bin/verify.py --strict` to validate the keystone project
+   contract.
+10. **Does NOT commit** — reports it is ready for review. The owner commits `.gitmodules`,
+    the keystone pin, hand-reviewed source docs (`AGENTS.md`, role/guardrail/pipeline docs),
+    and the generated pointer files covered by §D.
+
+Generated pointer files are committed because they are deterministic, thin entry points
+that make a fresh clone usable by each assistant before any local regeneration step runs.
+Add `python3 _forge/keystone/bin/sync.py --check` and
+`python3 _forge/keystone/bin/verify.py --strict` to the project's CI/preflight checks so
+pointer drift and structural contract drift fail before merge.
 
 ---
 
@@ -120,9 +130,12 @@ This project uses the keystone dev layer. Model & notation:
 - **Pipelines:** [pre-commit](_forge/keystone/pipelines/pre-commit.md) (tests mandatory),
   [design-flow](_forge/keystone/pipelines/design-flow.md),
   [code-flow](_forge/keystone/pipelines/code-flow.md),
+  [tasks](_forge/keystone/pipelines/tasks.md) (backlog format),
   [memory-distill](_forge/keystone/pipelines/memory-distill.md) +
   [learning](_forge/keystone/pipelines/learning.md) (the learn loop).
-- **Backlog:** [_forge/TASKS.md](_forge/TASKS.md). **Secrets:** from `.env` (gitignored).
+- **Backlog:** [_forge/TASKS.md](_forge/TASKS.md) — index format per
+  [tasks](_forge/keystone/pipelines/tasks.md) (one line/task, detail by reference; done →
+  `TASKS_ARCHIVE.md`). **Secrets:** from `.env` (gitignored).
 ```
 
 For **Codex/Gemini** this AGENTS.md block is enough — they read `AGENTS.md` directly.
@@ -146,7 +159,7 @@ This keeps the canonical rules — including the always-on prime directives (D2,
 
 Mechanically-enforced rules (e.g. D5 via the commit-guard hook, step 8) hold regardless;
 the import covers the rules that rely on the agent having *read* them (D2, memory). The
-`.claude/skills/` pointers also apply (written by `sync.py` when present).
+`.claude/skills/` pointers also apply (written by `sync.py`).
 
 ---
 
@@ -159,8 +172,36 @@ the import covers the rules that rely on the agent having *read* them (D2, memor
 ```
 
 `_forge/memory/` is **committed** (shared project memory). `_forge/keystone/` is the
-submodule. Generated agent pointers (`.claude/skills/`, …) — commit policy per
-[ROADMAP O3](ROADMAP.md).
+submodule.
+
+**Generated pointer commit policy.** Files written by
+`python3 _forge/keystone/bin/sync.py` are deterministic pointers, not sources of truth.
+They are still **committed** so every assistant sees the same entry points on a fresh
+clone:
+
+- `CLAUDE.md`
+- `GEMINI.md`
+- `.codex/README.md`
+- `.codex/hooks.json` (project hook wiring only)
+- `.github/copilot-instructions.md`
+- `.claude/settings.json` (project hook wiring only)
+- `.claude/skills/*/SKILL.md` stubs
+
+Do **not** commit vendor-local state or secrets: `.claude/settings.local.json`, caches,
+logs, credentials, and real `.env` files stay local/gitignored. `AGENTS.md` is not
+generated by `sync.py`; it remains a hand-reviewed source document.
+
+**CI/preflight check.** A keystone-consuming project should run:
+
+```bash
+python3 _forge/keystone/bin/sync.py --check
+python3 _forge/keystone/bin/verify.py --strict
+```
+
+Both commands are stdlib-only and can run immediately after checkout, before dependency
+installation. `sync.py --check` exits non-zero when generated pointers are stale or
+missing; `verify.py --strict` validates the wider keystone structure and treats warnings
+as failures for CI.
 
 ---
 
@@ -174,11 +215,21 @@ git submodule update --init --recursive
 ```
 
 ### Pull the latest shared layer into a project
+Before bumping, **read keystone's [CHANGELOG.md](CHANGELOG.md)** for the target version to see
+what changed and whether it breaks you (`v0.x.y`: a bumped `x` is breaking — see
+[ADR 0001](decisions/0001-release-and-roles-model.md)). This is the consumer side of the
+[release](roles/release.md) cycle; the bump itself is a release **subject** ("keystone pin bump").
 ```bash
 git submodule update --remote _forge/keystone
-python3 _forge/keystone/bin/sync.py          # refresh agent pointers (when present)
-git add _forge/keystone && git commit -m "bump keystone"   # if the pin moved
+python3 _forge/keystone/bin/sync.py          # refresh generated pointers
+python3 _forge/keystone/bin/sync.py --check  # confirm no pointer drift
+python3 _forge/keystone/bin/verify.py --strict
+# Codex only: open /hooks and review/trust changed project-local hooks after .codex/hooks.json changes
+git add _forge/keystone CLAUDE.md GEMINI.md .codex .github/copilot-instructions.md .claude/settings.json .claude/skills
+git commit -m "bump keystone"             # owner commits if the pin/pointers moved
 ```
+**Record the bump** in the consuming project (a `_forge/TASKS_ARCHIVE.md` line or the project's
+own changelog) — the **downstream bump record** lives in the consumer, not in keystone's notes.
 
 ### Edit the shared layer itself (changes go to ai_keystone)
 Edits **inside** `_forge/keystone/` belong to the `ai_keystone` repo. Commit + push there,

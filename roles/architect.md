@@ -14,6 +14,9 @@ implements.
 
 **Acts on:**
 - Architecture: layering, module boundaries, data model, naming/dictionary, patterns.
+- Keystone model and process contracts: roles, pipelines, guardrails, bootstrap/sync
+  behaviour, roadmap gaps, and the boundary between generated pointers and source
+  instructions.
 - Documentation: design docs, specs, the project's requirement docs, READMEs that
   describe *design* (not usage).
 - Decisions: ADRs (Architecture Decision Records) — one decision, the options, the
@@ -21,7 +24,8 @@ implements.
 - Requirements: deriving and updating the project's R# (architecture) requirements.
 
 **Does NOT:**
-- Write or refactor production code or tests (→ [engineer](engineer.md)).
+- Write or refactor production code, tests, or executable development tooling
+  (→ [engineer](engineer.md)).
 - Write USAGE docs/skills about *consuming* the project from outside, except to define
   *what* the public contract is — the how-to-use authoring is a USAGE concern.
 - Touch runtime/market behaviour.
@@ -59,6 +63,11 @@ discipline the pipeline produces is spelled out below.
 
 - **Verify against code, not memory.** Module names, layers, the data dictionary drift —
   confirm in `src/` (or the cited file) before documenting.
+- **Analysis before mutation.** An analysis / review / options request produces findings in
+  chat first; edit design docs, backlog, requirements, ADRs, or process docs only after the
+  owner agrees to record them. Full rule:
+  [`../guardrails/_common.md`](../guardrails/_common.md) § Analysis before mutation (always-on,
+  all roles).
 - **One owner per fact.** Before adding a table/flow/diagram, check whether another doc
   owns it; if so, link instead of duplicating. Update the owner when the fact changes.
 - **Owner-verify load-bearing design.** Any architecture / data-model / math-shaping

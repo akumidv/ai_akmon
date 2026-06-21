@@ -15,9 +15,15 @@ on every project regardless of role.
 4. **Docs in sync** — if code or behaviour changed, update the doc that **owns** the
    affected fact (API, env vars, package layout, requirements). Never leave docs stale
    after a code change.
-5. **Secrets check** — no real key/token/credential in the diff (code, config, fixtures,
+5. **Generated pointers in sync** — run `python3 _forge/keystone/bin/sync.py --check`
+   when the project uses keystone. If it reports drift, run `python3 _forge/keystone/bin/sync.py`,
+   review the generated files, and include the deterministic pointers in the owner's commit.
+6. **Keystone verify** — run `python3 _forge/keystone/bin/verify.py --strict` to validate
+   AGENTS anchors, generated pointers, hooks, skills, memory, secrets ignore rules, and
+   CI/preflight wiring.
+7. **Secrets check** — no real key/token/credential in the diff (code, config, fixtures,
    markdown). Config comes from `.env` only; `*.env.example` carries empty placeholders.
-6. **Scope check** — the diff contains only what the task needs; no stray files, no
+8. **Scope check** — the diff contains only what the task needs; no stray files, no
    generated artifacts that should be gitignored.
 
 ## Hard rules
@@ -36,5 +42,6 @@ pipeline defines the **gate**; the project supplies the **commands**.
 
 ## Done
 
-All steps pass; docs that own changed facts are updated; no secrets in the diff. Only then
-is the change ready for the owner to commit.
+All steps pass; docs that own changed facts are updated; generated pointers have no drift;
+keystone verify is clean; no secrets are in the diff. Only then is the change ready for
+the owner to commit.

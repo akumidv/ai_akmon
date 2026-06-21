@@ -16,6 +16,13 @@ See the model's three axes in [../README.md](../README.md) §1–3.
 |---|---|---|---|
 | [architect](architect.md) | design, documentation, architecture, requirements, ADRs | [design-flow](../pipelines/design-flow.md) | language `guardrails/` + opted-in `profiles/` |
 | [engineer](engineer.md) | code, tests, refactoring | [code-flow](../pipelines/code-flow.md) | language `guardrails/` + opted-in `profiles/` |
+| [learn](learn.md) | the learn loop — memory, distillation, LOCAL→SHARED promotion | [memory-distill](../pipelines/memory-distill.md) + [learning](../pipelines/learning.md) | promotion test (general + proven); one-way-up; PR-only at SHARED boundary |
+| [release](release.md) | release cycle for a subject (package / keystone tag / pin bump) | [release](../pipelines/release.md) | D5 (owner executes landing); coordinator-not-super-role; propose/prepare |
+
+`release` is parameterized by a **subject**. DEVELOP / USAGE / OPERATE are relations to the
+chosen subject, not global session modes: a keystone pin bump is a release subject inside the
+consuming project's DEVELOP work, while runtime consumption remains OPERATE and out of scope.
+See [ADR 0001](../decisions/0001-release-and-roles-model.md) §6.
 
 ## A role file states
 
@@ -41,6 +48,49 @@ explicit rather than implicit.
   injects this reminder + the project's scanned agent roster each session, so the
   convention survives a long session and does not depend on the doc staying in context (the
   same rule-plus-hook split as the commit guardrail).
+
+### Routing mixed tasks
+
+Some tasks touch both the **model** (what the process should be) and an **executable
+mechanism** (a hook, sync script, validator, or local tool). Route them by the decision
+being made, and restate the agent on every switch:
+
+| Work | Agent |
+|---|---|
+| Keystone model, role boundaries, guardrails, pipeline semantics, roadmap, bootstrap/sync contract | `architect` |
+| Project architecture, requirements, ADRs, design docs | `architect` |
+| Production code, tests, build config | `engineer` |
+| Executable dev tooling (`_forge/keystone/{bin,tools,hooks}/`, `_forge/tools/`, validators, sync scripts) | `engineer` |
+| Generated pointer output produced by an existing tool | no new role; report what the tool changed |
+
+For a mixed design + tool task: start as `architect`, lock the behaviour/contract, switch
+to `engineer` before editing executable code, then switch back to `architect` only for
+model or contract documentation. A documentation edit that merely records implemented tool
+behaviour can stay in the current role; a documentation edit that changes the contract is
+architect work.
+
+### Switching from design to build — the hand-off gate
+
+Moving from a **design** role (`architect`) to a **build** role (`engineer`) — from *deciding
+structure* to *writing code* — is a **gate**, not a relabel. It is the seam where
+[design-flow](../pipelines/design-flow.md) step 8 (Hand off) meets [code-flow](../pipelines/code-flow.md)
+step 1 (Take). **Before the first code edit**, in order:
+
+1. **Land the task** — the locked design is recorded as an implementation task in
+   `_forge/TASKS.md`, **as a one-line index entry linked to its design doc** (design-flow step 8,
+   format: [tasks](../pipelines/tasks.md) — detail by reference, not inlined). A **cold engineer
+   session must be able to pick the work from `_forge/TASKS.md` + the linked doc alone** — do not
+   carry it only in the current session's head.
+2. **Re-read the backlog** — re-read `_forge/TASKS.md` to **sequence** the task against other
+   in-flight / planned work and note its dependencies (what it sits on, what it touches) — code-flow
+   step 1 Take.
+3. **Declare the build role** — announce `🧭 agent: engineer — <focus>` and pull in its pipeline /
+   guardrails.
+
+Skipping 1–2 (jumping straight from a design discussion into editing code) is the failure this gate
+prevents: the work becomes un-resumable and unsequenced. **Executable side:** the
+[`role-on-code`](../hooks/README.md) PreToolUse hook fires on the first code edit of a session and
+injects this same checklist — the rule-plus-hook split, as with role declaration and the commit guard.
 
 ## Inheritance contract (agent → role)
 

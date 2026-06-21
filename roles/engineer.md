@@ -15,12 +15,16 @@ material design gap goes back to the architect, not into improvised structure.
 **Acts on:**
 - Production code under `src/` (or the project's source root).
 - Tests under `tests/` — unit and integration.
+- Executable development tooling under `_forge/keystone/{bin,tools,hooks}/`,
+  `_forge/tools/`, or the project's equivalent dev-tool paths.
 - Mechanical refactors that preserve behaviour.
 - Build/dependency config when a change requires it.
 
 **Does NOT:**
 - Decide load-bearing architecture or change agreed requirements (→ architect; raise a
   task).
+- Design the keystone model, role boundaries, pipeline semantics, or vendor-pointer
+  contract (→ architect; implement the locked contract here).
 - Write USAGE skills/docs about consuming the project (→ USAGE layer).
 - Touch runtime/market behaviour.
 
@@ -56,8 +60,11 @@ closed (see Inputs / outputs and Done).
   the owner explicitly confirm it; passing tests alone do not make it Done.
 - **Reuse, don't re-implement.** Use the project's existing code and the keystone
   `tools/` rather than ad-hoc scripts; deterministic mechanics belong in a tool.
-- **Verify against code, not memory.** Confirm signatures, enums, and names in `src/`
-  before relying on them.
+- **Verify against code, not memory.** Confirm signatures, enums, and names in `src/` or
+  the relevant tooling path before relying on them.
+- **Analysis before mutation.** A "why / what's left / review" request produces findings in
+  chat first; edit backlog, docs, or process files only after the owner agrees to record them.
+  Full rule: [`../guardrails/_common.md`](../guardrails/_common.md) § Analysis before mutation.
 - **Match the surrounding code.** Naming, comment density, and idiom should read like the
   code already there.
 

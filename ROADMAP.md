@@ -39,32 +39,46 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
   enforces propose/execute separation. Until then it lives in a *separate* domain/repo,
   referenced from keystone, not inside it.
 
-### O2. Versioning & compatibility of the standard
+### O2. Release, versioning & compatibility of the standard — RESOLVED
 
 - **Gap.** keystone is one submodule consumed by N projects. There is no notion of a
-  keystone **version**, a **changelog**, or a **breaking-change signal**. A project that
-  bumps the pin can silently inherit a changed role or guardrail.
+  keystone **release**, **version**, **changelog**, or **breaking-change signal**. A project
+  that bumps the pin can silently inherit a changed role or guardrail.
 - **Why it matters.** A standard that retunes itself (the learn loop) must let consumers
   know *what changed and whether it breaks them* — otherwise promotion is unsafe at scale.
-- **Direction.** A `CHANGELOG.md` + semver-ish tags on keystone; compatibility labels on
-  shared skills/roles; the bootstrap/`sync` step surfaces "what changed since your pin".
+- **Resolution.** Locked in [ADR 0001](decisions/0001-release-and-roles-model.md): a
+  subject-parameterized `release` DEVELOP role + two-mode pipeline, `learn` extracted as a
+  sibling role, `v0.x.y` versioning, one-job-per-artifact (archive vs release notes vs tag vs
+  downstream bump record), and a `CHANGELOG.md` with an `Unreleased` section. Implementation is
+  phased via backlog T10–T15 (design: [release-versioning.md](design/release-versioning.md)).
 
-### O3. Cross-agent contract (Claude / Codex / Gemini)
+### O3. Cross-agent contract (Claude / Codex / Gemini) — PARTIALLY DONE
 
+- **Status.** The base contract is closed (T1): `verify.py` checks vendor pointers/imports
+  and source skill-root linkage, AGENTS.md stays hand-reviewed. **Remaining (v2):** how
+  `AGENTS.md` ↔ skills/roles relate *beyond thin pointers* — e.g. a generated AGENTS skill
+  block from one source without clobbering project text. Framed as a parked design skeleton
+  ([design/cross-agent-contract-v2.md](design/cross-agent-contract-v2.md), backlog T16).
 - **Gap.** README §7 declares "source of truth = markdown + code; vendors get generated
-  pointers via `sync.py`" — but the contract is not specified: which files
-  (`.claude/skills/`, `.codex/`, `GEMINI.md`), what is committed vs generated, how
-  `AGENTS.md` ↔ `CLAUDE.md` ↔ roles/skills relate.
-- **Why it matters.** "LLM-agnostic" is the project's headline claim; right now it is a
-  declaration with no mechanism. `sync.py` does not exist yet.
-- **Direction.** Specify the pointer layout + commit policy; implement `bin/sync.py`
-  (stdlib only) to write Claude pointers and the AGENTS.md skill block from one source;
-  document re-run triggers (after submodule update / new local skill). `sync.py` should
-  also **wire the hooks** ([`hooks/`](hooks/README.md), e.g. `git-commit-guard.py`) into
-  each vendor config — today BOOTSTRAP wires them by hand.
+  pointers via `sync.py`" — an initial stdlib-only `bin/sync.py` now writes the basic
+  pointer set and Claude hook wiring; `bin/verify.py` validates the project contract;
+  BOOTSTRAP specifies which generated pointers are committed; and CI/preflight guidance
+  runs both tools. The remaining contract gap is how `AGENTS.md` ↔ `CLAUDE.md` ↔
+  roles/skills relate beyond the current thin pointers.
+- **Why it matters.** "LLM-agnostic" is the project's headline claim; right now it has
+  a minimal mechanism, but skills and role pointers can still drift from `AGENTS.md` unless
+  the source-to-pointer relationship is fully specified.
+- **Direction.** Extend `bin/sync.py` to write the AGENTS.md skill block from one source
+  if that can be done without overwriting project-specific text; document re-run triggers
+  after submodule updates and new local skills.
 
 ### O4. Orchestration & separation of duties
 
+- **Status.** More live now: there are **4 roles** (architect, engineer, learn, release),
+  past the "3rd role" threshold that originally parked this. But `release`'s anti-super-role
+  **routing** (findings → the owning role) is a de-facto lightweight orchestration for
+  DEVELOP, so a dedicated orchestrator is still deferred — revisit when role routing causes
+  real friction, or when OPERATE (O1) needs a hard propose≠execute enforcer (backlog T4).
 - **Gap.** The architect → engineer hand-off is described, but *who routes work* across
   roles, and how propose/execute separation is enforced, is undefined. Matters more as
   roles/agents multiply and once OPERATE (O1) exists.
@@ -73,8 +87,12 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
 - **Direction.** A lightweight orchestrator role/skill that selects the role for a task,
   enforces the hand-off, and (for OPERATE) guarantees propose ≠ execute.
 
-### O5. Skill contract
+### O5. Skill contract — PARTIALLY DONE
 
+- **Status.** The minimal contract is closed (T2): required `name` / `description` /
+  `when_to_use` / `owner` frontmatter, checked by `verify.py`. **Remaining:** a richer schema
+  (inputs / outputs / constraints / safety / eval) and **eval gates** in CI before a
+  shared-layer change merges.
 - **Gap.** "skill = SKILL.md" is stated, but there is no schema. Skills will not be
   comparable across projects (no agreed purpose / inputs / outputs / constraints /
   safety / eval / owner fields).
@@ -115,6 +133,8 @@ selectively, observability/eval first — never as a dependency the model needs 
 1. **O1 direction note + this ROADMAP** — make every gap explicit (cheap, prevents loss).
 2. **Pipelines + guardrails + profiles** — make the roles and the learn loop runnable.
 3. **ARCHETYPES + BOOTSTRAP** — make keystone deployable to a new project.
-4. **O3 `sync.py`** — make the cross-agent claim real.
-5. **O2 versioning, O5 skill contract, O4 orchestration** — harden for scale.
+4. **O3 `sync.py`** — make the cross-agent claim real. *(base done — T1; v2 remains.)*
+5. **Harden for scale** — *O2 versioning ✅ resolved (ADR 0001); O5 skill contract ✅ minimal
+   done (T2)* → remaining: O5 richer schema/eval gates, O3 v2 (generated AGENTS skill block),
+   O4 orchestration (deferred until routing friction — T4).
 6. **O1 OPERATE** — formulate the runtime branch when a runtime actor is actually needed.

@@ -34,6 +34,25 @@ Applied automatically (not opt-in). Language-specific rules layer on top — see
 - **Owner-verify** any change to math, data shape, or architecture. Passing tests and
   plausibility are necessary, not sufficient.
 
+## Analysis before mutation
+
+Applies to **every role and every agent** (architect and engineer alike).
+
+- **An analysis-only turn produces words, not edits.** When the owner asks you to **analyze,
+  explain, review, compare options, or identify what remains** — typical openers: *why, how,
+  what's left, what would you, which is better, take a look, assess* — report the findings and a
+  recommendation **in chat first**; do **not** edit files yet.
+- **Write only after a go-ahead.** Mutate backlog (`TASKS.md`), design docs, ADRs, requirements,
+  or keystone process docs only after explicit confirmation (*write it / record it / add it /
+  make the change*), or when the original request was itself an edit command (*write, add,
+  update, fix, implement*).
+- A rule that says **where** something is recorded (e.g. `TASKS.md` is the backlog sink) applies
+  only **after** the decision to record it — it is **not** a license to write during analysis.
+
+> **Enforced** (not just documented) by [`../hooks/analysis-guard.py`](../hooks/analysis-guard.py)
+> — a PreToolUse hook that, on the first edit to a planning/design doc in a session, reminds you
+> to confirm when the turn is analysis-only. Wired per vendor and kept wired by `sync.py`.
+
 ## Documentation hygiene
 
 - **One owner per fact.** Before adding a table / flow / list, check whether another doc
@@ -54,3 +73,22 @@ Applied automatically (not opt-in). Language-specific rules layer on top — see
 - Change only what the task needs; no stray edits, no unrelated refactors riding along.
 - A material design gap goes back to the [architect](../roles/architect.md) role — do not
   improvise load-bearing architecture inside a code task.
+
+## API shape — subject first, then how
+
+- **Every callable reads as `f(subject, *rest)`:** the **first parameter is the data it acts on**
+  (the *subject* — a frame/object, or a location/handle); parameters **after** it either say
+  *what to do* (modifiers/options) or supply *additional data*. So a reader knows *what a call
+  operates on* from position alone — applies to **design and code** (architect shapes it,
+  engineer writes it).
+- **By shape:** *transform* → data first · *method* → subject is `self`, an explicit data param
+  comes first after `self` · *reader/loader* → the **location/handle** is the subject (location
+  first) · *writer/persister* → the **data** is the subject (data first; destination is a
+  modifier) · *factory* (build-from-spec) → **selector first**, exempt.
+- A project may pin the specifics and exemptions as a requirement; this is the floor.
+
+## Don't duplicate what the code already states
+
+- Don't hand-maintain metadata that re-states a callable's own **signature or types** (its
+  params, input/return kinds, schema): **derive it from the single source**. A parallel
+  declaration drifts from the code. Declare only what the signature/type *cannot* express.
