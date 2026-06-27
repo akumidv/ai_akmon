@@ -5,7 +5,7 @@ the submodule into every consuming project). This is the standard's analogue of 
 `docs/dev/decisions/`: a consuming project records its *own* domain/architecture ADRs there, and
 inherits keystone's ADRs here.
 
-Conventions ([design-flow](../pipelines/design-flow.md) · [tasks](../pipelines/tasks.md) §No dates):
+Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipelines/tasks.md) §No dates):
 
 - One ADR = one decision: the context, the locked choice, the consequences. Options/rationale may
   live in a [`design/`](../design/) concept the ADR references.
@@ -18,3 +18,6 @@ Conventions ([design-flow](../pipelines/design-flow.md) · [tasks](../pipelines/
 - [0001 — Release/versioning standard and the release/learn roles](0001-release-and-roles-model.md)
   — release as a subject-parameterized DEVELOP role, `learn` extracted as a sibling, two-mode
   release cycle, `v0.x.y`, and subject relativity of the Layer axis. Resolves ROADMAP O2.
+- [0002 — Typed task-id convention](0002-task-id-convention.md) — task ids carry a type letter
+  (A architecture/design · C code · L learning · V release) + number, role derived; optional
+  `[#issue]` GitHub link; legacy `T#` grandfathered.

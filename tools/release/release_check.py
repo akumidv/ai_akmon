@@ -12,8 +12,7 @@ Modes (mutually exclusive; ``--check`` is the default):
     --check             run the subject's release suite (runner-resilient)
     --plan vX.Y.Z       print the exact owner-run commit/tag/push command set
 
-The release **subject** is parameterized ([ADR 0001](../../decisions/0001-release-and-roles-model.md)
-§5), selected with ``--subject``:
+The release **subject** is parameterized, selected with ``--subject``:
 
     keystone  (default)  release the keystone standard itself (its tag)
     package              release the consuming project's own package version
@@ -38,6 +37,8 @@ from pathlib import Path
 # tools/release/release_check.py → keystone root is two levels up.
 KEYSTONE_ROOT = Path(__file__).resolve().parents[2]
 BIN = KEYSTONE_ROOT / "bin"
+# keystone's own development layer (self-CI runner + tests) lives under meta/.
+META = KEYSTONE_ROOT / "meta"
 
 _VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 _UNRELEASED_RE = re.compile(r"^##\s+Unreleased\b", re.MULTILINE | re.IGNORECASE)
@@ -91,10 +92,10 @@ def _changelog_summary(keystone: Path) -> list[str]:
     return lines
 
 
-def _tasks_summary(keystone: Path) -> list[str]:
+def _tasks_summary(tasks_dir: Path) -> list[str]:
     out: list[str] = []
     for name in ("TASKS.md", "TASKS_ARCHIVE.md"):
-        text = _read(keystone / name)
+        text = _read(tasks_dir / name)
         if not text:
             out.append(f"{name}: (missing)")
             continue
@@ -110,21 +111,25 @@ def _tasks_summary(keystone: Path) -> list[str]:
 def run_state(root: Path, subject: str) -> int:
     keystone = root / "_forge" / "keystone"
     # The subject decides which working tree a tag is cut from: keystone is the submodule's
-    # own tree; package is the project root. TASKS/CHANGELOG are read from the same place.
+    # own tree; package is the project root. For keystone the backlog lives in its dev layer
+    # (meta/) while the changelog stays at the keystone root; for package both come from the
+    # project root.
     if subject == "keystone":
-        base = keystone
+        tasks_dir = keystone / "meta"
+        changelog_dir = keystone
         git_dir = keystone if (keystone / ".git").exists() else root
     else:  # package
-        base = root
+        tasks_dir = root
+        changelog_dir = root
         git_dir = root
 
     print(f"== release state (subject: {subject}) ==")
     print(f"project root: {root}")
     print()
-    for line in _tasks_summary(base):
+    for line in _tasks_summary(tasks_dir):
         print(line)
     print()
-    for line in _changelog_summary(base):
+    for line in _changelog_summary(changelog_dir):
         print(line)
     print()
     if subject == "package":
@@ -160,8 +165,8 @@ def run_check(root: Path, subject: str) -> int:
         commands = [
             [sys.executable, str(BIN / "sync.py"), "--project-root", str(root), "--check"],
             [sys.executable, str(BIN / "verify.py"), "--project-root", str(root), "--strict", "--quiet"],
-            [sys.executable, str(BIN / "self_ci.py")],
-            _pytest_command(root, "_forge/keystone/tests"),
+            [sys.executable, str(META / "self_ci.py")],
+            _pytest_command(root, str(META / "tests")),
         ]
         failed = _run_commands(root, commands)
     else:  # package — the project's own suite. Keep verify (the keystone contract still

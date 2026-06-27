@@ -1,6 +1,6 @@
 # Roadmap — keystone
 
-The forward-looking plan. The operating model itself is in [README.md](README.md); this
+The forward-looking plan. The operating model itself is in [CONCEPT.md](CONCEPT.md); this
 file records **what is deliberately not yet formulated** (so the gaps are explicit, not
 lost) and the order in which to close them.
 
@@ -11,7 +11,7 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
 
 ## Done (formulated in the model)
 
-- **Three axes** — Layer (SHARED/LOCAL/USAGE), Role (architect/engineer/…), Project type
+- **Three axes** — Layer (SHARED/LOCAL/USAGE), Role (architect/engineer/…), Archetype
   (package/service/…). Layer as a decision tree, not a grid (no false "shared usage").
 - **Role vs agent** — role = definition (in keystone); agent = incarnation (in a
   project). Axis values are roles; an agent is a point where axes meet.

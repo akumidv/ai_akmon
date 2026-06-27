@@ -161,7 +161,7 @@ def test_session_start_lists_dev_and_desk_agents(tmp_path):
     assert result.event_name == "SessionStart"
     ctx = result.additional_context
     assert "DEVELOP (build the project): architect, engineer" in ctx
-    assert "OPERATE (run on the market): options-analyst" in ctx
+    assert "OPERATE (run/use from outside): options-analyst" in ctx
     assert "_forge/memory/" in ctx
 
 
@@ -175,6 +175,24 @@ def test_session_start_dev_only_omits_operate_line(tmp_path):
 
 def test_session_start_none_when_no_agents(tmp_path):
     assert session_start_result(tmp_path) is None
+
+
+def test_session_start_includes_develop_discriminator_when_dev_agents_exist(tmp_path):
+    # A10: the routing rule (decompose→review · construct→architect · realize→engineer) is
+    # surfaced up front, not only after a code/planning edit.
+    _make_agent(tmp_path / "_forge" / "agents", "engineer")
+    ctx = session_start_result(tmp_path).additional_context
+    assert "decompose an existing thing → review" in ctx
+    assert "construct a new structure/decision → architect" in ctx
+    assert "realize a decided structure in code → engineer" in ctx
+
+
+def test_session_start_operate_only_uses_generic_pick_line(tmp_path):
+    # With no DEVELOP agents, the DEVELOP-specific discriminator would be noise: fall back.
+    _make_agent(tmp_path / "agents", "options-analyst")
+    ctx = session_start_result(tmp_path).additional_context
+    assert "→ review" not in ctx  # no DEVELOP discriminator
+    assert "Pick the one the task calls for" in ctx
 
 
 # --------------------------------------------------------------------------------------
@@ -316,3 +334,47 @@ def test_analysis_guard_and_role_on_code_are_disjoint(monkeypatch, tmp_path):
     edit = hook_core.EDIT_TOOL
     assert analysis_write_result(edit, "/r/src/alphavar/x.py", "s1") is None
     assert role_on_code_result(edit, "/r/_forge/TASKS.md", "s2") is None
+
+
+# --------------------------------------------------------------------------------------
+# configurable dev-layer root (FORGE_ROOT) — A4
+# --------------------------------------------------------------------------------------
+
+
+def test_forge_root_resolvers_default_and_override(monkeypatch, tmp_path):
+    monkeypatch.delenv("FORGE_ROOT", raising=False)
+    assert hook_core.forge_root_name() == "_forge"
+    assert hook_core.keystone_root(tmp_path) == tmp_path / "_forge" / "keystone"
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    assert hook_core.forge_root_name() == "tools/ai"
+    assert hook_core.forge_root(tmp_path) == tmp_path / "tools" / "ai"
+    assert hook_core.keystone_root(tmp_path) == tmp_path / "tools" / "ai" / "keystone"
+
+
+def test_is_code_path_excludes_custom_dev_root(monkeypatch):
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    # the relocated dev tree is excluded from "code"...
+    assert not is_code_path("/repo/tools/ai/keystone/hooks/hook_core.py")
+    assert not is_code_path("/repo/tools/ai/memory/note.py")
+    # ...and the old default path is now just ordinary code (the layer moved away from it)
+    assert is_code_path("/repo/_forge/keystone/hooks/hook_core.py")
+
+
+def test_is_planning_doc_tracks_custom_dev_root(monkeypatch):
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    assert is_planning_doc("/repo/tools/ai/TASKS.md")
+    assert is_planning_doc("/repo/tools/ai/design/x.md")
+    assert is_planning_doc("/repo/tools/ai/keystone/pipelines/tasks.md")
+    # the default path no longer counts as the planning surface under the custom root
+    assert not is_planning_doc("/repo/_forge/TASKS.md")
+
+
+def test_session_start_reads_custom_dev_root_agents(monkeypatch, tmp_path):
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    agents = tmp_path / "tools" / "ai" / "agents" / "architect"
+    agents.mkdir(parents=True)
+    (agents / "README.md").write_text("# architect\n", encoding="utf-8")
+    result = session_start_result(tmp_path)
+    assert isinstance(result, HookResult)
+    assert "architect" in result.additional_context
+    assert "tools/ai/memory/" in result.additional_context  # memory hint tracks the root

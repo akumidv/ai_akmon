@@ -45,7 +45,7 @@ instead of promoting memory itself.
 
 ## Pipeline
 
-Two cycles, by cadence — see the [learn loop](../README.md#3a-the-learn-loop--how-the-keystone-evolves-through-use):
+Two cycles, by cadence — see the learn loop:
 
 - [memory-distill](../pipelines/memory-distill.md) — **continuous**, stays LOCAL: capture →
   distill → keep the index honest.
@@ -71,8 +71,7 @@ Two cycles, by cadence — see the [learn loop](../README.md#3a-the-learn-loop--
 ## Guardrails
 
 - **Promotion is a reviewed PR, never an automatic copy** — a changed shared role or guardrail
-  reaches every project, so it goes through review (and a release/compat signal per
-  [ADR 0001](../decisions/0001-release-and-roles-model.md)).
+  reaches every project, so it goes through review (and a release/compat signal).
 - **Knowledge flows one way up** the ladder (private → shared memory → local asset → keystone);
   never push project-specific detail up into keystone.
 - **No execution at the SHARED boundary** — propose the PR and the pin-bump plan; the merge and

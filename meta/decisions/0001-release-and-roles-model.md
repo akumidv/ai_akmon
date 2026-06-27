@@ -4,13 +4,13 @@
 - **Owner:** akuminov@gmail.com
 - **References:** [ROADMAP O2](../ROADMAP.md) (release/versioning gap, resolved here) ·
   [design/release-versioning.md](../design/release-versioning.md) (the living concept this
-  locks) · [roles/architect](../roles/architect.md), [roles/engineer](../roles/engineer.md) ·
+  locks) · [roles/architect](../../roles/architect.md), [roles/engineer](../../roles/engineer.md) ·
   D5 (owner owns commits) · backlog T10–T15.
 
 > This is keystone's **first ADR** and therefore also establishes the convention:
 > `_forge/keystone/decisions/` holds ADRs for the **standard itself** (SHARED, travels with the
 > submodule), parallel to a consuming project's `docs/dev/decisions/`. ADRs are numbered, not
-> dated — the commit history is the timeline ([tasks](../pipelines/tasks.md) §No dates).
+> dated — the commit history is the timeline ([tasks](../../pipelines/tasks.md) §No dates).
 
 ## Context
 

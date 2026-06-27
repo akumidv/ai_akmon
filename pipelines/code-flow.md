@@ -45,7 +45,7 @@ does not decide architecture or process contracts.
    architecture**, explain it and obtain **owner verification**. Green tests are
    necessary, not sufficient.
 6. **Close** — mark the task done in `_forge/TASKS.md` *only after* owner verification.
-   Capture any reusable insight to `_forge/memory/` (feeds the [learn loop](../README.md#3a-the-learn-loop--how-the-keystone-evolves-through-use)).
+   Capture any reusable insight to `_forge/memory/` (feeds the learn loop).
 
 ## Gates (must hold to advance)
 

@@ -2,7 +2,7 @@
 
 Consumer-facing release notes for the **keystone standard** (repo `ai_keystone`, mounted as
 `_forge/keystone/`). It tells a consuming project *what changed and whether it breaks them* before
-they bump the pin. Convention ([ADR 0001](decisions/0001-release-and-roles-model.md)):
+they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-model.md)):
 
 - **Versioning `v0.x.y`** while pre-1.0 — bump `x` for a **breaking** change to layout, required
   files, or a role/pipeline contract; bump `y` for minor/patch.
@@ -11,6 +11,8 @@ they bump the pin. Convention ([ADR 0001](decisions/0001-release-and-roles-model
 - **No dates** — the git tag is the timeline ([tasks](pipelines/tasks.md) §No dates).
 
 ## Unreleased
+
+## v0.2.0
 
 ### Added
 - **`release` skill** ([`skills/release/SKILL.md`](skills/release/SKILL.md)) — the first keystone
@@ -21,10 +23,48 @@ they bump the pin. Convention ([ADR 0001](decisions/0001-release-and-roles-model
   (pin-bump deferred, T18). Runner-resilient verify (`uv` → `.venv` → system `pytest`); never
   commits/tags/pushes. Driven by the `release` skill (T14).
 - **`tools/README.md`** — the keystone SHARED `tools/` index, with the `tools/` vs `bin/` boundary.
+- **`meta/bin/validate.py`** — the dev-layer validator (counterpart to `bin/verify.py`): checks
+  keystone's own tree, runs the synthetic-fixture self-CI, and runs the unit tests. A consumer
+  never runs it; keystone runs it in-tree. (C7)
+- **BOOTSTRAP dev-layer venv** — attach (§A step 5) now provisions a `_forge/.venv` and installs
+  the agent-tooling deps (pytest) **when the project language is not python/mixed**, so the
+  keystone-dev validator and any future deps-bearing tool can run on a non-Python project. The
+  venv lives outside the submodule, is gitignored (§D), and is never needed for the stdlib-only
+  consumer CI checks. (C8)
 
 ### Changed
+- **Sharper SessionStart role hint** — the active-agent reminder now carries the DEVELOP routing
+  discriminator (decompose → review · construct → architect · realize → engineer) up front, when
+  the project has dev agents, instead of a vague "pick the one the task calls for". The agent gets
+  the picking rule at session start, not only after a code/planning edit. OPERATE-only projects
+  keep the generic line. (A10)
+- **Configurable dev-layer root** — `_forge/` is now the *default*, not a hard-coded literal. A
+  project may relocate the dev layer by declaring **`FORGE_ROOT`** (a project-root-relative path,
+  e.g. `tools/ai`); keystone then mounts at `<FORGE_ROOT>/keystone` and `sync.py` / `verify.py` /
+  the hooks derive every path (generated pointers, hook commands, the do-not-edit banner) from it.
+  Unset → `_forge`, byte-identical to before. Documented in MODEL.md §2 + BOOTSTRAP §A. (A4)
 - `verify.py` gains `check_keystone_gitignore` — warns when the keystone submodule has no
   `.gitignore` ignoring `__pycache__/` (so a release commit cut from the submodule stays clean).
+- **USE/dev verify split** — `bin/verify.py` is now the **USE-contract verifier only**: it
+  dropped the keystone-self layout/CI requirements and no longer references the dev layer at all.
+  keystone-self checks moved to the new `meta/bin/validate.py`. Consumer CI is unchanged
+  (`sync.py --check` + `verify.py --strict`). (C7)
+- **Stricter USE-surface isolation** — the develop-boundary check became
+  `check_use_surface_isolation`: it now scans the *whole* USE surface (incl. `skills/`, `tools/`)
+  and fails on **any mention** of the dev layer — numbered `ADR ####` / `ROADMAP O#` citations and
+  dev-tree paths in links *or* inline code — not just markdown links. Generic vocabulary ("file an
+  ADR") stays legal. (C7)
+- **Terminology** — the third axis is now consistently called **Archetype** (was "Project type")
+  across `MODEL.md`, `ARCHETYPES.md`, `BOOTSTRAP.md`, `README.md`.
+
+### Breaking
+- **Dev layer renamed `develop/` → `meta/`.** keystone's own development artifacts (CONCEPT,
+  decisions/ADRs, ROADMAP, design, reviews, tests, self_ci) now live under
+  `_forge/keystone/meta/`. The rename avoids colliding with the **DEVELOP** role/mode of the
+  model. *Migration:* a consumer that hardcoded any `_forge/keystone/develop/...` path (CI, docs,
+  scripts) must repoint it to `meta/...`. CI that ran `develop/self_ci.py` / `pytest develop/tests`
+  should drop them (those are keystone-self checks, run via `meta/bin/validate.py`, not a consumer
+  concern). (C7)
 
 ## v0.1.0
 
@@ -36,7 +76,7 @@ keystone and still carry old-style skill frontmatter.
 ### Added
 - **`release` role** + [release pipeline](pipelines/release.md): a subject-parameterized DEVELOP
   role (package / keystone tag / pin bump) with a two-mode cycle (lightweight cut · periodic
-  cadence). Locked in [ADR 0001](decisions/0001-release-and-roles-model.md).
+  cadence). Locked in [ADR 0001](meta/decisions/0001-release-and-roles-model.md).
 - **`learn` role** ([learn](roles/learn.md)): the learn loop now has an owning role wrapping the
   `memory-distill` + `learning` pipelines.
 - **`decisions/`** — keystone now keeps its own ADRs (this is where standard-level decisions land,

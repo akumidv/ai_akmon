@@ -31,8 +31,10 @@ recording it before agreement.
      settling the convention from local code or taste alone. Record the practice you found and
      the rationale for following or departing from it (it becomes part of the decision record).
 3. **Design** — propose the structure; decide **point by point**. For anything
-   load-bearing, weigh **≥2 options** with their trade-offs; do not present a single
-   option as inevitable.
+   load-bearing, frame the design space before recommending: include the realistic
+   options (including the status quo when viable), the evaluation criteria, trade-offs,
+   best-practice principles involved, risks, and revisit-if conditions. Do not present a
+   single option as inevitable.
 4. **Confirm recording** *(gate)* — before mutating design docs, ADRs, requirements, or
    backlog files, get explicit owner confirmation that the findings should be recorded.
    This gate is already satisfied when the request itself is an edit command ("write",
@@ -55,6 +57,9 @@ recording it before agreement.
 
 - **After Survey:** the current design is confirmed against code, not memory; names
   checked for collisions.
+- **Before Record:** load-bearing recommendations have alternatives, evaluation criteria,
+  and a stated rationale for the chosen option, unless the change is explicitly too small
+  for alternatives to be material.
 - **Before Record:** the owner has explicitly agreed to write/update the relevant design,
   backlog, requirement, ADR, or process file unless the original request was already an
   edit command.
@@ -77,6 +82,6 @@ recording it before agreement.
 
 ## Done
 
-A locked, linked design; an ADR per non-trivial decision; the updated requirement(s); and
-an implementation task in `_forge/TASKS.md`. Code is **not** part of this pipeline — it is
-[code-flow](code-flow.md).
+A locked, linked design with alternatives/trade-offs and recommendation rationale; an ADR
+per non-trivial decision; the updated requirement(s); and an implementation task in
+`_forge/TASKS.md`. Code is **not** part of this pipeline — it is [code-flow](code-flow.md).

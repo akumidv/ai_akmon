@@ -4,7 +4,7 @@ Instructions for the **agent** (Claude / Codex / Gemini) asked to attach or real
 keystone layer in a project. Also carries **ready prompts for the user**.
 
 Source of rules: [README.md](README.md) (the three axes, the layer decision tree, the
-learn loop) and [ARCHETYPES.md](ARCHETYPES.md) (project types + the guardrail/profile
+learn loop) and [ARCHETYPES.md](ARCHETYPES.md) (archetypes + the guardrail/profile
 map). Note: keystone does **not** exist in the target project until step 1 — the shared
 layer lives only in the repo `ai_keystone` and must be cloned in as a submodule **first**.
 The agent reads `README.md` only after the submodule is attached.
@@ -13,10 +13,16 @@ The agent reads `README.md` only after the submodule is attached.
 
 ## A. What the agent does on attach
 
+`_forge/` below is the **default** dev-layer root. A project may relocate it by declaring
+`FORGE_ROOT` (a project-root-relative path, e.g. `tools/ai`); keystone then mounts at
+`<FORGE_ROOT>/keystone` and the tooling derives every path from it. If `FORGE_ROOT` is set,
+export it in the shell before running `sync.py` / `verify.py` (and substitute it for `_forge/`
+in the mount path and the steps below). Unset → `_forge`.
+
 When the user asks "attach keystone", the agent:
 
-1. **Attach the shared layer as a submodule** (mount path `_forge/keystone`, repo
-   `ai_keystone` — skip if the prompt already ran it):
+1. **Attach the shared layer as a submodule** (mount path `<FORGE_ROOT>/keystone`, default
+   `_forge/keystone`, repo `ai_keystone` — skip if the prompt already ran it):
    ```bash
    git submodule add --name _forge/keystone \
      https://github.com/akumidv/ai_keystone _forge/keystone
@@ -36,6 +42,30 @@ When the user asks "attach keystone", the agent:
    _forge/agents/        _forge/skills/   _forge/tools/   _forge/memory/   _forge/TASKS.md
    ```
    and, if the archetype exports USAGE (e.g. `package`), the root `skills/`.
+
+   **Dev-layer venv (non-Python projects only).** If the archetype **language is not
+   `python`/`mixed`**, the project has no Python environment, yet some agent tooling needs
+   one (e.g. running the keystone unit tests via `pytest`, or any future tool with a
+   third-party dep). Provision a dedicated dev-layer venv at **`_forge/.venv`** (in the LOCAL
+   layer, *outside* the submodule so it survives a submodule re-checkout) and install the
+   agent-tooling deps. **Prefer `uv`** — it bundles its own installer and provisions a usable
+   venv in one step on a host with no Python packaging set up:
+   ```bash
+   uv venv _forge/.venv
+   uv pip install --python _forge/.venv/bin/python pytest
+   ```
+   Stdlib fallback **only if `uv` is unavailable** — note `python3 -m venv` needs the `venv`/
+   `ensurepip` stdlib module, which is a *separate OS package* (`python3-venv`) often absent on
+   a non-Python host; install it first, or the venv lands without `pip`:
+   ```bash
+   python3 -m venv _forge/.venv          # requires python3-venv installed
+   _forge/.venv/bin/python -m pip install pytest
+   ```
+   `pytest` is the only dep today (add more here as agent tools acquire deps). On a
+   **Python** project this step is skipped — the project's own env already supplies pytest.
+   The consumer's own CI checks (`sync.py --check`, `verify.py --strict`) are stdlib-only and
+   never need this venv; it exists for *developing* the dev layer (the keystone-dev validator
+   and any future deps-bearing tool). Add `_forge/.venv/` to `.gitignore` (§D).
 6. **Generate or update `AGENTS.md`** (§C template), preserving existing content. The
    keystone block records the archetype + language, the SHARED/LOCAL/USAGE declaration,
    the USAGE placement, and the **resolved guardrail/profile links** from step 4 (written
@@ -83,7 +113,7 @@ First add the shared layer as a git submodule:
   git submodule add --name _forge/keystone https://github.com/akumidv/ai_keystone _forge/keystone
   git submodule update --init --recursive
 Then read _forge/keystone/BOOTSTRAP.md and follow section A (it points to README.md for
-the model and ARCHETYPES.md for the project type). Do not commit.
+the model and ARCHETYPES.md for the archetype). Do not commit.
 ```
 
 ### B2. Existing project (already has AGENTS.md / CLAUDE.md)
@@ -169,10 +199,14 @@ the import covers the rules that rely on the agent having *read* them (D2, memor
 # secrets
 *.env
 !*.env.example
+
+# dev-layer venv (non-Python projects; provisioned in §A step 5)
+_forge/.venv/
 ```
 
 `_forge/memory/` is **committed** (shared project memory). `_forge/keystone/` is the
-submodule.
+submodule. `_forge/.venv/` (if provisioned) is **local-only** — a per-checkout dev tool
+environment, never committed.
 
 **Generated pointer commit policy.** Files written by
 `python3 _forge/keystone/bin/sync.py` are deterministic pointers, not sources of truth.
@@ -216,8 +250,7 @@ git submodule update --init --recursive
 
 ### Pull the latest shared layer into a project
 Before bumping, **read keystone's [CHANGELOG.md](CHANGELOG.md)** for the target version to see
-what changed and whether it breaks you (`v0.x.y`: a bumped `x` is breaking — see
-[ADR 0001](decisions/0001-release-and-roles-model.md)). This is the consumer side of the
+what changed and whether it breaks you (`v0.x.y`: a bumped `x` is breaking). This is the consumer side of the
 [release](roles/release.md) cycle; the bump itself is a release **subject** ("keystone pin bump").
 ```bash
 git submodule update --remote _forge/keystone

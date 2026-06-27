@@ -8,21 +8,26 @@ in keystone so every project's agents inherit one standard.
 > is the *incarnation* — it inherits a role and adds project specifics. One role may
 > have several agents in a project (e.g. two `engineer` agents: backend + data-pipeline).
 
-See the model's three axes in [../README.md](../README.md) §1–3.
+See the model's three axes in [MODEL.md](../MODEL.md) §1–3.
 
 ## Roles
 
+The three DEVELOP roles are the **analysis → synthesis → realization** triad — split by
+cognitive operation, because each mode has its own definition of good and one bar cannot
+optimise all three (a reviewer bent on a fix stops analysing; an architect re-deriving the
+as-is wastes its budget). `learn` and `release` are cross-cutting.
+
 | Role | Focus | Pipeline | Guardrails |
 |---|---|---|---|
-| [architect](architect.md) | design, documentation, architecture, requirements, ADRs | [design-flow](../pipelines/design-flow.md) | language `guardrails/` + opted-in `profiles/` |
-| [engineer](engineer.md) | code, tests, refactoring | [code-flow](../pipelines/code-flow.md) | language `guardrails/` + opted-in `profiles/` |
+| [review](review.md) | **analysis** — assess what *is*: state/quality/conformance, problems, bottlenecks; output is a report | [review-flow](../pipelines/review-flow.md) | language `guardrails/` + opted-in `profiles/` |
+| [architect](architect.md) | **synthesis** — design what *should be*: options, trade-offs, contracts, ADRs | [design-flow](../pipelines/design-flow.md) | language `guardrails/` + opted-in `profiles/` |
+| [engineer](engineer.md) | **realization** — code, tests, refactoring | [code-flow](../pipelines/code-flow.md) | language `guardrails/` + opted-in `profiles/` |
 | [learn](learn.md) | the learn loop — memory, distillation, LOCAL→SHARED promotion | [memory-distill](../pipelines/memory-distill.md) + [learning](../pipelines/learning.md) | promotion test (general + proven); one-way-up; PR-only at SHARED boundary |
 | [release](release.md) | release cycle for a subject (package / keystone tag / pin bump) | [release](../pipelines/release.md) | D5 (owner executes landing); coordinator-not-super-role; propose/prepare |
 
 `release` is parameterized by a **subject**. DEVELOP / USAGE / OPERATE are relations to the
 chosen subject, not global session modes: a keystone pin bump is a release subject inside the
 consuming project's DEVELOP work, while runtime consumption remains OPERATE and out of scope.
-See [ADR 0001](../decisions/0001-release-and-roles-model.md) §6.
 
 ## A role file states
 
@@ -53,10 +58,16 @@ explicit rather than implicit.
 
 Some tasks touch both the **model** (what the process should be) and an **executable
 mechanism** (a hook, sync script, validator, or local tool). Route them by the decision
-being made, and restate the agent on every switch:
+being made, and restate the agent on every switch.
+
+**The discriminator (the one question that routes any task):** does it **decompose** an
+existing thing to understand/measure it → `review` · **construct** a new structure/decision →
+`architect` · **realize** a decided structure in code → `engineer`?
 
 | Work | Agent |
 |---|---|
+| Review state/quality/conformance (product / component / element); find problems, bottlenecks, mismatches vs goal/vision/requirements | `review` |
+| Produce a findings report / an as-is assessment | `review` |
 | Keystone model, role boundaries, guardrails, pipeline semantics, roadmap, bootstrap/sync contract | `architect` |
 | Project architecture, requirements, ADRs, design docs | `architect` |
 | Production code, tests, build config | `engineer` |

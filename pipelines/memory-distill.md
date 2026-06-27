@@ -1,7 +1,7 @@
 # Pipeline: memory-distill
 
 The continuous cycle the [learn](../roles/learn.md) role follows. Steps **1–2** of the
-[learn loop](../README.md#3a-the-learn-loop--how-the-keystone-evolves-through-use):
+learn loop:
 turn raw insights into shared memory, and recurring memory into reusable local assets.
 This runs **continuously**, as work happens — not on a schedule (that is
 [learning](learning.md)).

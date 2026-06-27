@@ -1,6 +1,6 @@
 # Project archetypes
 
-The **Project type** axis (see [README.md](README.md) §4): it decides **whether the USAGE
+The **Archetype** axis (see [MODEL.md](MODEL.md) §4): it decides **whether the USAGE
 layer exists and what shape it takes**. Chosen by the **contract a project exposes**, not
 by its language.
 
@@ -26,7 +26,7 @@ IDs are immutable contract values (tooling/templates depend on them).
 
 ## Required per archetype (beyond the universal set)
 
-**Universal (every archetype):** the Layer/Role/type declaration in `AGENTS.md`; the
+**Universal (every archetype):** the Layer/Role/Archetype declaration in `AGENTS.md`; the
 secrets policy; the `_forge/` layout + `bin/sync.py`; archetype ID + owner; the language
 profile + matching [guardrails/](guardrails/); any opted-in [profiles/](profiles/).
 
@@ -37,13 +37,13 @@ profile + matching [guardrails/](guardrails/); any opted-in [profiles/](profiles
 | `mcp` | the MCP tool contract (names / IO / errors); how a consumer mounts it; unit + tool-contract tests |
 | `frontend` | UI/state conventions; build/test/lint in pre-commit; client-side secrets boundary; "no exported USAGE" unless deliberately added |
 | `job` | the orchestration target; inputs/outputs, idempotency, retry/replay; data + secrets boundary; "no exported USAGE" |
-| `platform` | the runtime agent layer kept **separate** from `_forge/`; which consumed USAGE contracts it relies on; agent isolation/safety. *(A runtime platform that hosts OPERATE actors is out of keystone scope — see [ROADMAP O1](ROADMAP.md).)* |
+| `platform` | the runtime agent layer kept **separate** from `_forge/`; which consumed USAGE contracts it relies on; agent isolation/safety. *(A runtime platform that hosts OPERATE actors is out of keystone scope.)* |
 | `custom` | scope, toolchain, runtime, risk profile, USAGE placement, mandatory checks |
 
 ## USAGE requirement: the domain-concept → function map (`package`, and any archetype with a domain API)
 
 This is the **usage skill** end of the knowledge → implementation → usage chain
-([README](README.md) §3b). A USAGE skill is **not** "how to call the API" in the abstract —
+([MODEL.md](MODEL.md)). A USAGE skill is **not** "how to call the API" in the abstract —
 it connects three things so an assistant can apply the project to a user's task:
 
 1. **the domain concept** — what it is (owned by its `knowledge/` leaf if one exists, else
@@ -107,4 +107,4 @@ Two kinds of attachment:
 - **Separate agents are not required by default** — prefer profile-based rules/skills;
   introduce a dedicated agent only when the toolchain/runtime *and* safety envelope differ
   materially **and** profile controls prove insufficient (this is the same test the Role
-  axis uses in [README.md](README.md) §3).
+  axis uses in [MODEL.md](MODEL.md) §3).

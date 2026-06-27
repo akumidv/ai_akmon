@@ -34,8 +34,6 @@ jobs:
     steps:
       - run: python3 _forge/keystone/bin/sync.py --check
       - run: python3 _forge/keystone/bin/verify.py --strict
-      - run: python3 _forge/keystone/bin/self_ci.py
-      - run: uv run pytest _forge/keystone/tests
 """
 
 GITIGNORE = "*.env\n!*.env.example\n"
@@ -68,9 +66,8 @@ def _make_project(tmp_path: Path) -> Path:
         "README.md",
         "BOOTSTRAP.md",
         "ARCHETYPES.md",
-        "ROADMAP.md",
         "CHANGELOG.md",
-        "decisions/README.md",
+        "MODEL.md",
         "roles/README.md",
         "roles/architect.md",
         "roles/engineer.md",
@@ -84,7 +81,6 @@ def _make_project(tmp_path: Path) -> Path:
         "pipelines/tasks.md",
         "bin/sync.py",
         "bin/verify.py",
-        "bin/self_ci.py",
         "hooks/hook_core.py",
         "hooks/claude_adapter.py",
         "hooks/codex_adapter.py",
@@ -144,6 +140,74 @@ def test_main_strict_passes_on_compliant_project(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
+# USE-surface isolation (ADR 0003 §6): the surface must not name dev artifacts
+# --------------------------------------------------------------------------------------
+
+
+def _use_doc(root: Path) -> Path:
+    return root / "_forge" / "keystone" / "roles" / "architect.md"
+
+
+def _isolation_errors(verifier) -> list[str]:
+    return [m for m in _messages(verifier.findings, "error") if "development artifacts" in m]
+
+
+def test_numbered_adr_citation_is_isolation_error(tmp_path):
+    root = _make_project(tmp_path)
+    _use_doc(root).write_text("# architect\n\nLocked in ADR 0001.\n", encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert any("cites ADR 0001" in m for m in _isolation_errors(verifier))
+
+
+def test_roadmap_citation_is_isolation_error(tmp_path):
+    root = _make_project(tmp_path)
+    _use_doc(root).write_text("# architect\n\nOut of scope (ROADMAP O1).\n", encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert any("cites ROADMAP O1" in m for m in _isolation_errors(verifier))
+
+
+def test_dev_path_in_inline_code_is_isolation_error(tmp_path):
+    root = _make_project(tmp_path)
+    _use_doc(root).write_text("# architect\n\nWritten into `meta/reviews/x.md`.\n", encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert any("path meta/reviews/x.md" in m for m in _isolation_errors(verifier))
+
+
+def test_dev_path_in_markdown_link_is_isolation_error(tmp_path):
+    root = _make_project(tmp_path)
+    _use_doc(root).write_text("# architect\n\nSee [the record](../../decisions/0001-x.md).\n", encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert any("decisions/0001-x.md" in m for m in _isolation_errors(verifier))
+
+
+def test_bare_prose_dev_name_is_isolation_error(tmp_path):
+    """An unambiguous dev-artifact name leaks even outside a path/link (no backticks)."""
+    root = _make_project(tmp_path)
+    _use_doc(root).write_text("# architect\n\nVerification runs self_ci before handoff.\n", encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert any("names self_ci" in m for m in _isolation_errors(verifier))
+
+
+def test_generic_dev_vocabulary_is_allowed(tmp_path):
+    """The bare concept words stay legal — only number-pinned citations, dev paths, and
+    unambiguous dev names leak. Generic words (sync/verify/pytest/design/decisions) do not."""
+    root = _make_project(tmp_path)
+    _use_doc(root).write_text(
+        "# architect\n\nFile an ADR; detail lives in decisions/ ADRs and design/ docs.\n"
+        "Run sync and verify, then pytest. Capture the project roadmap before building.\n",
+        encoding="utf-8",
+    )
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert not _isolation_errors(verifier), _isolation_errors(verifier)
+
+
+# --------------------------------------------------------------------------------------
 # errors
 # --------------------------------------------------------------------------------------
 
@@ -184,7 +248,7 @@ def test_agents_md_missing_anchor_is_error(tmp_path):
 def test_agents_md_generated_marker_is_error(tmp_path):
     root = _make_project(tmp_path)
     (root / "AGENTS.md").write_text(
-        AGENTS_MD + f"\n<!-- {sync.GENERATED} -->\n",
+        AGENTS_MD + f"\n<!-- {sync.GENERATED_MARKER} -->\n",
         encoding="utf-8",
     )
     verifier = verify.Verifier(root)
@@ -279,7 +343,7 @@ def test_obsolete_generated_skill_stub_is_error(tmp_path):
     root = _make_project(tmp_path)
     stale = root / ".claude" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED} -->\n", encoding="utf-8")
+    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED_MARKER} -->\n", encoding="utf-8")
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("old-skill/SKILL.md" in message for message in _messages(verifier.findings, "error"))

@@ -7,9 +7,8 @@ reading raw commits, and cut it by one repeatable pipeline.
 
 This is a **DEVELOP** role: cutting and publishing a release is still developing the project
 (making a reviewed state available). **OPERATE** is the other side — *consuming* the published
-release at runtime — and is out of keystone scope (ROADMAP O1). The role is **parameterized by
-subject**, not split into variants. Locked in
-[ADR 0001](../decisions/0001-release-and-roles-model.md).
+release at runtime — and is out of keystone scope. The role is **parameterized by
+subject**, not split into variants.
 
 ---
 
@@ -23,7 +22,7 @@ subject**, not split into variants. Locked in
 - The three release subjects: this project's **package**, **keystone** (its tag), or a **keystone
   pin bump** recorded inside a consuming project.
 
-**Does NOT** (it **routes**, it does not do — ADR 0001 §3):
+**Does NOT** (it **routes**, it does not do):
 - Invent or change architecture / requirements / ADRs → file an [architect](architect.md) task.
 - Implement code or executable tooling → file an [engineer](engineer.md) task.
 - Promote memory or run the learn loop → hand off to [learn](learn.md).
@@ -55,8 +54,7 @@ where this role routes work to architect/engineer/[learn](learn.md), never doing
 ## Requirements
 
 - **Subject first** — fix the release subject before auditing anything against it; everything is
-  relative to that choice (see the Layer-axis subject relativity in [README](../README.md) /
-  [ADR 0001](../decisions/0001-release-and-roles-model.md) §6).
+  relative to that choice.
 - **One job per artifact** — `TASKS.md` = queue, `TASKS_ARCHIVE.md` = ledger, release notes =
   consumer impact, tag = identity, downstream bump record = in the *consuming* project. Do not let
   one stand in for another.
@@ -64,8 +62,8 @@ where this role routes work to architect/engineer/[learn](learn.md), never doing
   role-pipeline contract; `y` otherwise.
 - **Every consumer-visible/migration/breaking change has a release-note entry**; `breaking` also
   needs owner confirmation before tag.
-- **Verification is green** before handoff (subject's check set; keystone: sync/verify/self_ci/
-  pytest).
+- **Verification is green** before handoff (the subject's check set, run via the release tool's
+  `--check`).
 
 ---
 

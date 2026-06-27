@@ -1,11 +1,11 @@
 # `tools/` — keystone SHARED executable tools
 
 Cross-project executable tools that ship *with* the standard (the SHARED dev layer, see
-[README §6](../README.md)). A **skill calls a tool** ([README §7](../README.md)): the tool
+[MODEL.md](../MODEL.md)). A **skill calls a tool** ([MODEL.md](../MODEL.md)): the tool
 is the executable; the skill is the know-how that drives it.
 
 > **`tools/` vs `bin/`.** [`bin/`](../bin/) holds the stdlib **CLIs the contract depends on**
-> and CI runs every push (`sync.py`, `verify.py`, `self_ci.py`). `tools/` holds executables a
+> and CI runs every push (`sync.py`, `verify.py`). `tools/` holds executables a
 > **role/skill drives on demand** — not CI gates. A release is owner-driven, so the release
 > tool lives here, not in `bin/`, and is not wired into CI.
 

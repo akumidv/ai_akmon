@@ -12,19 +12,41 @@ docs / ADRs / ledgers — link it, don't restate it.
 One task = **one line**:
 
 ```
-- <id> · <title> · <status> · <role> · <goal ≤12 words> · [detail](link)
+- <id> · <title> · <status> · <goal ≤12 words> · [detail](link)
 ```
 
-- **id** — `T<n>`, stable, never reused.
+- **id** — a **typed** identifier: one uppercase type letter + a number, no separator (`A1`,
+  `C2`, `L1`, `V3`). Stable, **never reused** (the counter runs per type). The type letter
+  encodes the kind of work; the owning **role is derived** from it (table below), so the role is
+  not a separate field.
+
+  | Letter | Type | Role (derived) | Pipeline |
+  |---|---|---|---|
+  | **N** | aNalysis — review of state/quality/conformance; findings report | review | review-flow |
+  | **A** | Architecture & design — contracts, requirements (R#), ADRs, design concepts | architect | design-flow |
+  | **C** | Code — production code, tests, refactor, dev tooling | engineer | code-flow |
+  | **L** | Learning — memory distill / promotion | learn | learning + memory-distill |
+  | **V** | Release — version cut / changelog / pin bump | release | release |
+
+  Letters deliberately avoid `D`/`R`/`O`/`T` — taken by `D#` (dev requirements), `R#`
+  (architecture requirements), `O#` (roadmap gaps), and legacy `T#` tasks. Add a new type letter
+  only when a genuinely new role/pipeline appears (then via an ADR), not per project — as `N`
+  was added for the `review` role.
+- **GitHub link (optional)** — when a task has a tracker issue, append it to the id in brackets:
+  `C2[#134]` for an issue in **this** repo (GitHub autolinks `#134`), or `C2[owner/repo#134]`
+  across repos (e.g. a project task referencing a keystone issue). The local id stays canonical;
+  `[#…]` is provenance, not the id. Distinct from the trailing `[detail](link)`.
 - **status** — exactly one of `active | blocked | deferred | done`. `blocked` = waiting on an
   external dependency; `deferred` = a deliberate not-now (still a real intent, just parked).
-- **role** — the keystone role that owns it (`architect` / `engineer` / …).
 - **goal** — ≤12 words, the outcome. Not the plan.
 - **detail link** — design doc, ADR, or ledger row. Required once detail exists; omit only for
   a one-line task that needs none.
 
 A short multi-line note under an entry is allowed **only** for a genuine loose end that has no
 other home yet — and that is a signal to write the design doc, not to grow the entry.
+
+Legacy `T<n>` ids already in `TASKS_ARCHIVE.md` are **grandfathered** (frozen as-is); the typed
+scheme applies to the live backlog and every new task. Don't renumber history.
 
 ## Files & lifecycle
 
@@ -45,9 +67,9 @@ before mutation; this convention only says *where* accepted work lands.
 ## Where do implementation-born tasks go?
 
 Tasks discovered **during coding** (a follow-up, a bug, a cleanup) usually have no design doc
-and need none. They land in the **same `TASKS.md`**, `role: engineer`, status `active`/
-`blocked` — origin (design vs process) does not change the destination, only whether a detail
-link exists:
+and need none. They land in the **same `TASKS.md`** as a **`C`** task (engineer, derived), status
+`active`/`blocked` — origin (design vs process) does not change the destination, only whether a
+detail link exists:
 
 - small & self-contained → one line, **no link** (the goal is the whole spec);
 - needs a sentence of context → the 1–3 line loose-end note (a hint to write an artifact if it
@@ -84,5 +106,5 @@ docs and `decisions/` ADRs follow it too — order ADRs by their number, not a d
 
 - A task entry that restates a design already written elsewhere.
 - `done` entries lingering in `TASKS.md`.
-- Per-agent backlog files — keep one backlog, filter by the `role` field.
+- Per-agent backlog files — keep one backlog, filter by the type letter (role is derived).
 - Heavyweight schemas (weights, estimates, dependency graphs) — re-bloat by another name.

@@ -74,8 +74,10 @@ closed (see Inputs / outputs and Done).
 
 - Bound by language [guardrails/](../guardrails/) and any opted-in [profiles/](../profiles/).
 - Never commit/`git add` on the owner's behalf unless explicitly told.
-- A material design gap goes back to the architect as a task — never improvise
-  load-bearing architecture.
+- **Escalate, don't absorb.** A material design gap goes up to [architect](architect.md) as a
+  task — never improvise load-bearing architecture. A problem that spans **several** component
+  boundaries (a state/scope question, not a local fix) goes up as a [review](review.md)
+  request first, then design — don't patch around it locally.
 - Stay on the DEVELOP branch; never reach into runtime/market actions.
 
 ---

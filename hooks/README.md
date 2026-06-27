@@ -41,12 +41,15 @@ project-local hook surface.
   for the same "Role declaration" convention: SessionStart only fires once, so a **design→code switch mid-session** (architect →
   writing code) goes unannounced. On the **first** `Edit`/`Write`/`MultiEdit`/`apply_patch` of a
   session that targets a **code file** (extension allow-list; docs/design/memory/keystone paths
-  excluded) it reminds the model to declare the **build (engineer)** role + its pipeline, then
+  excluded) it reminds the model that editing code is **realization** → declare the **engineer**
+  role + its pipeline (the triad discriminator: `review` = analysis · `architect` = synthesis ·
+  `engineer` = realization), then
   silences itself for the session (a per-session marker — no per-edit nagging). Runs as a
   **PreToolUse → Edit|Write|MultiEdit/apply_patch** hook.
 - [`analysis-guard.py`](analysis-guard.py) — Claude PreToolUse wrapper for the neutral
   analysis-before-mutation reminder: on the first edit to a planning/design doc in a session,
-  remind the assistant to stop and ask confirmation if the current turn was analysis-only.
+  remind the assistant to stop and ask confirmation if the current turn was analysis-only, and
+  to declare the role (assessing the as-is = `review`; constructing the design = `architect`).
 - [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for the same neutral
   reminders (`session-start`, `role-on-code`, `analysis-guard`).
 

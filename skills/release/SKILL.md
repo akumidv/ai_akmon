@@ -12,7 +12,7 @@ run the release conversation* and *when to stop* (the D5 boundary). The pipeline
 is [`pipelines/release.md`](../../pipelines/release.md); this skill is the agent-facing
 how-to, and it drives the [`tools/release/release_check.py`](../../tools/release/release_check.py)
 tool for the mechanical parts (state collection, the verify suite, the owner command plan).
-A skill *calls* a tool ([README](../../README.md) §7); the tool is a SHARED dev tool, not a
+A skill *calls* a tool ([MODEL.md](../../MODEL.md)); the tool is a SHARED dev tool, not a
 CI gate — releases are owner-driven, so nothing here is wired into CI.
 
 > **Propose / prepare, never execute (D5).** The release role *prepares* every
@@ -21,7 +21,7 @@ CI gate — releases are owner-driven, so nothing here is wired into CI.
 
 ## The unit of release: one subject, classified, verified, handed off
 
-A release is cut for **exactly one subject** ([ADR 0001](../../decisions/0001-release-and-roles-model.md) §5):
+A release is cut for **exactly one subject**:
 
 1. **the subject** — a project's **package**, **keystone** (its tag), or a **keystone pin
    bump** recorded inside a consuming project. Fix it *first*; everything downstream is
@@ -50,9 +50,9 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
    heading; keep an empty `Unreleased` so the verify warn stays satisfied. This is the
    **only** file the release role edits — route everything else to its owning role.
 9. **Verify.** Run `python3 _forge/keystone/tools/release/release_check.py --check`. It runs the
-   subject's release suite (for keystone: `sync --check`, `verify --strict`, `self_ci`,
-   `pytest`) and is resilient to the test runner (`uv` → project `.venv` → system
-   `pytest`). All green before handoff.
+   subject's release suite (pointer sync, contract verify, and the subject's own checks + tests)
+   and is resilient to the test runner (`uv` → project `.venv` → system `pytest`). All green
+   before handoff.
 10. **Owner handoff** *(gate, D5)*. Run
     `python3 _forge/keystone/tools/release/release_check.py --plan vX.Y.Z` to print the exact
     owner-run command set, then present it with the residual risk and **stop**. The owner
@@ -85,8 +85,8 @@ subject — a keystone **pin bump** — is deferred (backlog T18).
 | `--check` *(default)* | run the subject's release suite, runner-resilient | no |
 | `--plan vX.Y.Z` | print the exact owner-run commit/tag/push command set | no |
 
-- **`--subject keystone`** runs the keystone suite (`sync --check`, `verify --strict`,
-  `self_ci`, `pytest`); the plan tags from the submodule tree.
+- **`--subject keystone`** runs the keystone suite (pointer sync, contract verify, and
+  keystone's own self-checks + tests); the plan tags from the submodule tree.
 - **`--subject package`** runs the keystone contract check (`verify --strict`) and then
   **defers to the project's own commands** in [`_forge/agents/release/README.md`](../../../agents/release/README.md)
   (tests / lint / build) — it does not guess them. The plan tags from the project root.

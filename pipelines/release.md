@@ -2,8 +2,6 @@
 
 The cycle the [release](../roles/release.md) role follows to cut a release for one **subject** —
 keystone itself, a consuming project's package, or a keystone pin bump inside a consuming project.
-Locked in [ADR 0001](../decisions/0001-release-and-roles-model.md); rationale in
-[design/release-versioning.md](../design/release-versioning.md).
 
 > A pipeline is a **declarative, ordered cycle** — the steps and their gates, not a script.
 > Release tooling defaults to **propose/prepare**: it may print commands, validate state, or draft
@@ -40,8 +38,8 @@ or to bump a keystone pin. **Not** every commit. Pick the mode:
    coverage; mismatches become architect/engineer tasks.
 8. **Prepare release artifacts** — update release notes / `CHANGELOG.md` (`Unreleased` → the new
    version) and downstream bump notes. The archive stays traceability, not release prose.
-9. **Verify** — run the subject's release check set. For keystone: `sync.py --check`,
-   `verify.py --strict`, `self_ci.py`, `pytest _forge/keystone/tests`.
+9. **Verify** — run the subject's release check set via the release tool's `--check`
+   (runner-resilient: it picks an available test runner).
 10. **Owner handoff** *(gate, D5)* — present exact commit/tag/publish/pin-bump commands and the
     residual risk. **Stop.** The owner runs the landing commands.
 11. **Propagate** — for each selected consumer: prepare the owner-run pin/version bump plan,
@@ -59,7 +57,7 @@ or to bump a keystone pin. **Not** every commit. Pick the mode:
 
 ## Anti-super-role
 
-`release` **coordinates, it does not implement** (ADR 0001 §3). Every sweep finding is routed to
+`release` **coordinates, it does not implement.** Every sweep finding is routed to
 the owning role — architecture/ADR → [architect](../roles/architect.md), code/tooling →
 [engineer](../roles/engineer.md), memory/promotion → [learn](../roles/learn.md) — and `release`
 edits only release artifacts (release notes, changelog, bump records, release plan files). It never

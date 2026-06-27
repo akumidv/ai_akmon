@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Codex command-hook entrypoint for keystone guardrail reminders.
 
-Usage from .codex/hooks.json::
+Usage from .codex/hooks.json (``_forge`` is the default dev-layer root; a project that sets
+``FORGE_ROOT`` gets the matching path written by ``sync.py``)::
 
     python3 "$(git rev-parse --show-toplevel)/_forge/keystone/hooks/codex-hook.py" analysis-guard
 

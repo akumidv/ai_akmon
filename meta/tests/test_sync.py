@@ -196,7 +196,7 @@ def test_planned_files_include_all_vendor_pointers(tmp_path):
     assert errors == []
     for planned in files:
         if planned.path.name == "CLAUDE.md":
-            assert sync.GENERATED in planned.content  # do-not-edit banner present
+            assert sync.GENERATED_MARKER in planned.content  # do-not-edit banner present
 
 
 def test_apply_check_mode_reports_without_writing(tmp_path):
@@ -221,7 +221,7 @@ def test_apply_check_reports_obsolete_generated_skill_stub(tmp_path):
     root = _make_root(tmp_path)
     stale = root / ".claude" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED} -->\n", encoding="utf-8")
+    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED_MARKER} -->\n", encoding="utf-8")
 
     files, _ = sync._planned_files(root)
     result = sync._apply(files, write=False, root=root)
@@ -234,7 +234,7 @@ def test_apply_write_deletes_obsolete_generated_skill_stub(tmp_path):
     root = _make_root(tmp_path)
     stale = root / ".claude" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED} -->\n", encoding="utf-8")
+    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED_MARKER} -->\n", encoding="utf-8")
 
     files, _ = sync._planned_files(root)
     result = sync._apply(files, write=True, root=root)
@@ -274,7 +274,7 @@ def test_main_check_returns_1_for_obsolete_generated_skill_stub(tmp_path):
     assert sync.main(["--project-root", str(root)]) == 0
     stale = root / ".claude" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED} -->\n", encoding="utf-8")
+    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED_MARKER} -->\n", encoding="utf-8")
 
     assert sync.main(["--project-root", str(root), "--check"]) == 1
     assert stale.exists()
@@ -292,3 +292,82 @@ def test_main_check_and_dry_run_are_mutually_exclusive(tmp_path):
     root = _make_root(tmp_path)
     with pytest.raises(SystemExit):
         sync.main(["--project-root", str(root), "--check", "--dry-run"])
+
+
+# --------------------------------------------------------------------------------------
+# configurable dev-layer root (FORGE_ROOT) — A4
+# --------------------------------------------------------------------------------------
+
+
+def _make_root_at(tmp_path: Path, forge: str) -> Path:
+    """A minimal tree whose dev-layer root is ``forge`` (e.g. ``tools/ai``)."""
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / forge / "keystone").mkdir(parents=True)
+    return tmp_path
+
+
+def test_forge_root_name_defaults_to_forge(monkeypatch):
+    monkeypatch.delenv("FORGE_ROOT", raising=False)
+    assert sync.forge_root_name() == "_forge"
+
+
+def test_forge_root_name_reads_env_and_strips_slashes(monkeypatch):
+    monkeypatch.setenv("FORGE_ROOT", "/tools/ai/")
+    assert sync.forge_root_name() == "tools/ai"
+
+
+def test_forge_root_name_blank_env_falls_back_to_default(monkeypatch):
+    monkeypatch.setenv("FORGE_ROOT", "")
+    assert sync.forge_root_name() == "_forge"
+
+
+def test_keystone_root_derives_from_configured_forge(monkeypatch, tmp_path):
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    assert sync.keystone_root(tmp_path) == tmp_path / "tools" / "ai" / "keystone"
+
+
+def test_find_project_root_detects_via_custom_forge_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    root = _make_root_at(tmp_path, "tools/ai")
+    nested = root / "src" / "pkg"
+    nested.mkdir(parents=True)
+    assert sync._find_project_root(nested) == root
+
+
+def test_generated_hook_commands_use_custom_forge_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    root = _make_root_at(tmp_path, "tools/ai")
+    claude = sync._claude_settings(root).content
+    assert "tools/ai/keystone/hooks/git-commit-guard.py" in claude
+    assert "_forge/keystone/hooks" not in claude
+    files, errors = sync._planned_files(root)
+    assert errors == []
+    codex = next(f for f in files if f.path.name == "hooks.json").content
+    assert "tools/ai/keystone/hooks/codex-hook.py" in codex
+    assert "_forge/keystone/hooks" not in codex
+
+
+def test_keystone_hook_marker_tracks_custom_forge_root(monkeypatch):
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    entry = _keystone_entry("x/tools/ai/keystone/hooks/h.py")
+    assert sync._is_keystone_entry(entry)
+    # an entry at the default path is no longer "keystone-owned" under the custom root
+    assert not sync._is_keystone_entry(_keystone_entry("x/_forge/keystone/hooks/h.py"))
+
+
+def test_skill_sources_search_custom_forge_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    _make_skill(tmp_path, "tools/ai/keystone/skills", "alpha")
+    _make_skill(tmp_path, "tools/ai/skills", "beta")
+    sources, errors = sync._skill_sources(tmp_path)
+    assert errors == []
+    assert {s.parent.name for s in sources} == {"alpha", "beta"}
+
+
+def test_full_generation_under_custom_root_is_idempotent(monkeypatch, tmp_path):
+    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    root = _make_root_at(tmp_path, "tools/ai")
+    assert sync.main(["--project-root", str(root)]) == 0  # write
+    assert sync.main(["--project-root", str(root), "--check"]) == 0  # clean second pass
+    banner = (root / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "tools/ai/keystone/bin/sync.py" in banner  # GENERATED banner tracks the root

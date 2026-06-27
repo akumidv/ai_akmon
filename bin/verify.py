@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Validate a keystone-consuming project layout.
+"""Validate a keystone-consuming project's USE contract.
 
-This tool checks the structural contract around AGENTS.md, generated vendor pointers,
-hooks, skills, memory, and the local _forge layout. It does not modify files; run
-``sync.py`` for generated pointer fixes.
+This is the USE-layer verifier: it checks the structural contract a *consuming* project
+must satisfy — AGENTS.md, generated vendor pointers, hooks, skills, memory, the local
+_forge layout, and the USE-surface isolation rule. It deliberately knows nothing about
+keystone's own development artifacts; keystone's self-checks live in the dev-layer
+validator (run in-tree from keystone's own repo, not shipped as part of the contract a
+consumer follows). It does not modify files; run ``sync.py`` for generated pointer fixes.
 """
 
 from __future__ import annotations
@@ -18,8 +21,49 @@ import sync as sync_tool
 _TASKS_MAX_LINES = 200
 _TASK_STATUS_RE = re.compile(r"\b(active|blocked|deferred|done)\b")
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
-_GENERATED_MARKER = sync_tool.GENERATED
+_GENERATED_MARKER = sync_tool.GENERATED_MARKER
 _SKILL_REQUIRED_FRONTMATTER = ("name", "description", "when_to_use", "owner")
+
+# USE-surface isolation: the documentary surface a consumer reads as guidance must be
+# self-contained and must not even *name* keystone's own development artifacts. A deployed
+# external agent should not learn they exist — naming them costs tokens and invites it to chase
+# inert files. The rule forbids three things, while leaving generic process vocabulary ("file an
+# ADR", "run sync and verify") intact:
+#   1. a citation of a specific numbered standard-level decision record (DR + a number), or a
+#      roadmap item/file, even in plain prose;
+#   2. any link or inline-code *path* into the development tree or its artifacts;
+#   3. an unambiguous dev-artifact name in plain prose (e.g. "self_ci") — names that mean nothing
+#      but a keystone dev file, unlike generic words ("sync", "verify", "pytest").
+# Scanned surface = the documentary USE docs only. tools/ *executables* (.py) are NOT scanned:
+# the release tool legitimately operates on the dev tree (it runs meta/self_ci.py) — that is code
+# doing its job, not guidance naming an inert artifact. Only README.md and CHANGELOG.md may bridge
+# to the dev tree, and they are not in this surface.
+_USE_OPERATIVE_GLOBS = (
+    "roles/*.md",
+    "pipelines/*.md",
+    "guardrails/*.md",
+    "profiles/*.md",
+    "skills/**/*.md",
+    "tools/**/*.md",
+)
+_USE_OPERATIVE_FILES = ("ARCHETYPES.md", "BOOTSTRAP.md", "MODEL.md")
+
+# Citations that pin a specific keystone development artifact, even in plain prose:
+#  - a numbered decision record ("ADR 0001", "ADR-12") — the bare word "ADR" as a concept is fine;
+#  - a roadmap item or file ("ROADMAP O1", "ROADMAP.md") — the generic word "roadmap" is fine.
+_NUMBERED_DR_RE = re.compile(r"\bADR[\s-]?\d{2,4}\b")
+_ROADMAP_CITE_RE = re.compile(r"\bROADMAP(?:\.md|\s+O\d+)")
+# Unambiguous dev-artifact names that leak even in plain prose. Kept deliberately narrow: only
+# tokens that can mean nothing *but* a keystone dev file. Generic words a consumer legitimately
+# uses ("sync", "verify", "pytest", "design", "decisions") are excluded.
+_DEV_NAME_RE = re.compile(r"\bself_ci\b|\bCONCEPT\.md\b")
+# Markdown link target and inline-code span — the two ways a path is written in these docs.
+_LINK_RE = re.compile(r"\]\(([^)]+)\)")
+_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+# Path fragments that only ever point into keystone's own development tree / artifacts. A path
+# (link target or inline code) containing any of these is a leak; the same word in free prose
+# (e.g. "detail in decisions/ ADRs") is not, because it is not written as a path here.
+_DEV_PATH_TOKENS = ("meta/", "decisions/", "reviews/", "ROADMAP", "CONCEPT", "self_ci")
 
 _VENDOR_POINTERS = {
     "CLAUDE.md": ("AGENTS.md", "@AGENTS.md"),
@@ -39,6 +83,10 @@ class Verifier:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.findings: list[Finding] = []
+        # The dev-layer root is configurable (FORGE_ROOT, default _forge); keystone mounts at
+        # <forge>/keystone. Every path below derives from these so a relocated layer still verifies.
+        self.forge = sync_tool.forge_root_name()
+        self.keystone = f"{self.forge}/keystone"
 
     def ok(self, message: str) -> None:
         self.findings.append(Finding("ok", message))
@@ -59,33 +107,77 @@ class Verifier:
         return False
 
     def check_basic_layout(self) -> None:
+        forge, keystone = self.forge, self.keystone
         for relative in (
             "AGENTS.md",
-            "_forge/TASKS.md",
-            "_forge/keystone/README.md",
-            "_forge/keystone/BOOTSTRAP.md",
-            "_forge/keystone/ARCHETYPES.md",
-            "_forge/keystone/ROADMAP.md",
-            "_forge/keystone/CHANGELOG.md",
-            "_forge/keystone/decisions/README.md",
-            "_forge/keystone/roles/README.md",
-            "_forge/keystone/roles/architect.md",
-            "_forge/keystone/roles/engineer.md",
-            "_forge/keystone/roles/learn.md",
-            "_forge/keystone/roles/release.md",
-            "_forge/keystone/guardrails/_common.md",
-            "_forge/keystone/pipelines/pre-commit.md",
-            "_forge/keystone/pipelines/code-flow.md",
-            "_forge/keystone/pipelines/design-flow.md",
-            "_forge/keystone/pipelines/release.md",
-            "_forge/keystone/pipelines/tasks.md",
-            "_forge/keystone/bin/sync.py",
-            "_forge/keystone/bin/verify.py",
-            "_forge/keystone/bin/self_ci.py",
+            f"{forge}/TASKS.md",
+            f"{keystone}/README.md",
+            f"{keystone}/BOOTSTRAP.md",
+            f"{keystone}/ARCHETYPES.md",
+            f"{keystone}/CHANGELOG.md",
+            f"{keystone}/MODEL.md",
+            f"{keystone}/roles/README.md",
+            f"{keystone}/roles/architect.md",
+            f"{keystone}/roles/engineer.md",
+            f"{keystone}/roles/learn.md",
+            f"{keystone}/roles/release.md",
+            f"{keystone}/guardrails/_common.md",
+            f"{keystone}/pipelines/pre-commit.md",
+            f"{keystone}/pipelines/code-flow.md",
+            f"{keystone}/pipelines/design-flow.md",
+            f"{keystone}/pipelines/release.md",
+            f"{keystone}/pipelines/tasks.md",
+            f"{keystone}/bin/sync.py",
+            f"{keystone}/bin/verify.py",
         ):
             self.check_path(relative)
-        for relative in ("_forge/agents", "_forge/memory"):
+        for relative in (f"{forge}/agents", f"{forge}/memory"):
             self.check_path(relative, kind="dir")
+
+    def check_use_surface_isolation(self) -> None:
+        """The operative USE surface must not name keystone's own development artifacts.
+
+        A consumer follows roles/pipelines/guardrails/profiles/skills/tools +
+        ARCHETYPES/BOOTSTRAP/MODEL; those must be self-contained, so a deployed agent never
+        reads (or even learns of) the inert development tree. Forbidden: a numbered
+        decision-record citation, and any link/inline-code path into the dev tree or its
+        artifacts. Generic process vocabulary ("file an ADR") stays allowed. README.md and
+        CHANGELOG.md are the deliberate bridges and are not in this surface.
+        """
+        keystone = self.root / self.keystone
+        if not keystone.is_dir():
+            return
+        sources: list[Path] = []
+        for pattern in _USE_OPERATIVE_GLOBS:
+            sources.extend(sorted(keystone.glob(pattern)))
+        for name in _USE_OPERATIVE_FILES:
+            candidate = keystone / name
+            if candidate.is_file():
+                sources.append(candidate)
+
+        violations: list[str] = []
+        for source in sorted(set(sources)):
+            violations.extend(self._isolation_violations(source))
+        if violations:
+            self.error(
+                "USE surface names keystone development artifacts (keep it self-contained so a "
+                f"consumer never reads the dev tree): {'; '.join(violations)}"
+            )
+        else:
+            self.ok("USE surface names no keystone development artifacts")
+
+    def _isolation_violations(self, source: Path) -> list[str]:
+        text = source.read_text(encoding="utf-8")
+        relative = source.relative_to(self.root)
+        found: list[str] = []
+        for cite_re in (_NUMBERED_DR_RE, _ROADMAP_CITE_RE):
+            found.extend(f"{relative} → cites {cite}" for cite in cite_re.findall(text))
+        found.extend(f"{relative} → names {name}" for name in _DEV_NAME_RE.findall(text))
+        for span in (*_LINK_RE.findall(text), *_INLINE_CODE_RE.findall(text)):
+            path = span.split()[0].split("#", 1)[0] if span.strip() else ""
+            if any(token in path for token in _DEV_PATH_TOKENS):
+                found.append(f"{relative} → path {span}")
+        return found
 
     def check_agents_md(self) -> None:
         path = self.root / "AGENTS.md"
@@ -96,10 +188,10 @@ class Verifier:
             self.error("AGENTS.md must be a hand-reviewed source document, not generated by sync.py")
         required = {
             "keystone block": "## Dev layer — keystone",
-            "model link": "_forge/keystone/README.md",
+            "model link": f"{self.keystone}/README.md",
             "archetype link": "ARCHETYPES.md",
-            "role link": "_forge/keystone/roles/",
-            "memory rule": "_forge/memory",
+            "role link": f"{self.keystone}/roles/",
+            "memory rule": f"{self.forge}/memory",
             "owner verifies directive": "D2",
             "owner owns commits directive": "D5",
             "secrets rule": ".env",
@@ -137,18 +229,19 @@ class Verifier:
 
         skill_sources, _ = sync_tool._skill_sources(self.root)
         if skill_sources:
-            if "skills/" in agents_text or "_forge/skills" in agents_text or "_forge/keystone/skills" in agents_text:
+            skill_roots = ("skills/", f"{self.forge}/skills", f"{self.keystone}/skills")
+            if any(root_hint in agents_text for root_hint in skill_roots):
                 self.ok("AGENTS.md references source skill roots")
             else:
                 self.warn("skills exist, but AGENTS.md does not mention source skill roots")
 
     def check_agent_charters(self) -> None:
-        agents_dir = self.root / "_forge" / "agents"
+        agents_dir = self.root / self.forge / "agents"
         if not agents_dir.is_dir():
             return
         agents = sorted(path for path in agents_dir.iterdir() if path.is_dir())
         if not agents:
-            self.warn("_forge/agents has no agent charters")
+            self.warn(f"{self.forge}/agents has no agent charters")
             return
         for agent in agents:
             readme = agent / "README.md"
@@ -156,25 +249,25 @@ class Verifier:
                 self.error(f"{readme.relative_to(self.root)} is missing")
                 continue
             text = readme.read_text(encoding="utf-8")
-            if "_forge/keystone/roles" in text or "keystone/roles" in text:
+            if f"{self.keystone}/roles" in text or "keystone/roles" in text:
                 self.ok(f"{readme.relative_to(self.root)} links a keystone role")
             else:
                 self.warn(f"{readme.relative_to(self.root)} does not link a keystone role")
 
     def check_memory(self) -> None:
-        memory_dir = self.root / "_forge" / "memory"
+        memory_dir = self.root / self.forge / "memory"
         if not memory_dir.is_dir():
             return
         index = memory_dir / "README.md"
         legacy_index = memory_dir / "MEMORY.md"
         if index.is_file():
             index_text = index.read_text(encoding="utf-8")
-            self.ok("_forge/memory/README.md exists")
+            self.ok(f"{self.forge}/memory/README.md exists")
         elif legacy_index.is_file():
             index_text = legacy_index.read_text(encoding="utf-8")
-            self.warn("_forge/memory/MEMORY.md exists; README.md is the preferred index")
+            self.warn(f"{self.forge}/memory/MEMORY.md exists; README.md is the preferred index")
         else:
-            self.error("_forge/memory needs README.md index")
+            self.error(f"{self.forge}/memory needs README.md index")
             return
 
         missing_from_index = []
@@ -247,13 +340,13 @@ class Verifier:
             self.ok("generated pointers match sync.py")
 
     def check_tasks(self) -> None:
-        path = self.root / "_forge" / "TASKS.md"
+        path = self.root / self.forge / "TASKS.md"
         if not path.is_file():
             return  # basic layout already reports a missing TASKS.md
         lines = path.read_text(encoding="utf-8").splitlines()
         if len(lines) > _TASKS_MAX_LINES:
             self.warn(
-                f"_forge/TASKS.md is {len(lines)} lines; keep it an index "
+                f"{self.forge}/TASKS.md is {len(lines)} lines; keep it an index "
                 "(pipelines/tasks.md) — detail by reference, not inlined"
             )
         entries = [line for line in lines if line.lstrip().startswith("- ") and " · " in line]
@@ -266,20 +359,20 @@ class Verifier:
             if not without_status:
                 self.ok("TASKS.md uses well-formed index entries")
         if _DATE_RE.search("\n".join(lines)):
-            self.warn("_forge/TASKS.md contains dates; dates are noise — derive them from git history")
+            self.warn(f"{self.forge}/TASKS.md contains dates; dates are noise — derive them from git history")
 
     def check_hooks(self) -> None:
-        for relative in (
-            "_forge/keystone/hooks/hook_core.py",
-            "_forge/keystone/hooks/claude_adapter.py",
-            "_forge/keystone/hooks/codex_adapter.py",
-            "_forge/keystone/hooks/codex-hook.py",
-            "_forge/keystone/hooks/git-commit-guard.py",
-            "_forge/keystone/hooks/session-start-agent.py",
-            "_forge/keystone/hooks/role-on-code.py",
-            "_forge/keystone/hooks/analysis-guard.py",
+        for script in (
+            "hook_core.py",
+            "claude_adapter.py",
+            "codex_adapter.py",
+            "codex-hook.py",
+            "git-commit-guard.py",
+            "session-start-agent.py",
+            "role-on-code.py",
+            "analysis-guard.py",
         ):
-            self.check_path(relative)
+            self.check_path(f"{self.keystone}/hooks/{script}")
 
     def check_gitignore(self) -> None:
         path = self.root / ".gitignore"
@@ -300,17 +393,17 @@ class Verifier:
         v0.1.0 cut). A missing keystone .gitignore is a warning, not an error — keystone may
         be vendored read-only — but a present one should ignore the bytecode caches.
         """
-        keystone = self.root / "_forge" / "keystone"
+        keystone = self.root / self.keystone
         if not keystone.is_dir():
             return
         path = keystone / ".gitignore"
         if not path.is_file():
-            self.warn("_forge/keystone/.gitignore is missing; add one ignoring __pycache__/")
+            self.warn(f"{self.keystone}/.gitignore is missing; add one ignoring __pycache__/")
             return
         if "__pycache__" in path.read_text(encoding="utf-8"):
             self.ok("keystone .gitignore ignores __pycache__")
         else:
-            self.warn("_forge/keystone/.gitignore should ignore __pycache__/")
+            self.warn(f"{self.keystone}/.gitignore should ignore __pycache__/")
 
     def check_ci(self) -> None:
         workflow_dir = self.root / ".github" / "workflows"
@@ -320,10 +413,8 @@ class Verifier:
             return
         workflow_text = "\n".join(path.read_text(encoding="utf-8") for path in workflows)
         required = (
-            "python3 _forge/keystone/bin/sync.py --check",
-            "python3 _forge/keystone/bin/verify.py --strict",
-            "python3 _forge/keystone/bin/self_ci.py",
-            "pytest _forge/keystone/tests",
+            f"python3 {self.keystone}/bin/sync.py --check",
+            f"python3 {self.keystone}/bin/verify.py --strict",
         )
         missing = [command for command in required if command not in workflow_text]
         if missing:
@@ -338,7 +429,7 @@ class Verifier:
         trust-based (ADR 0001 §9). A missing CHANGELOG.md is not an error here — only a present
         one that has nowhere to record pending changes.
         """
-        path = self.root / "_forge" / "keystone" / "CHANGELOG.md"
+        path = self.root / self.keystone / "CHANGELOG.md"
         if not path.is_file():
             return
         text = path.read_text(encoding="utf-8")
@@ -349,6 +440,7 @@ class Verifier:
 
     def run(self) -> None:
         self.check_basic_layout()
+        self.check_use_surface_isolation()
         self.check_agents_md()
         self.check_cross_agent_contract()
         self.check_agent_charters()

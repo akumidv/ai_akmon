@@ -28,8 +28,6 @@ jobs:
     steps:
       - run: python3 _forge/keystone/bin/sync.py --check
       - run: python3 _forge/keystone/bin/verify.py --strict
-      - run: python3 _forge/keystone/bin/self_ci.py
-      - run: uv run pytest _forge/keystone/tests
 """
 
 
@@ -64,9 +62,8 @@ def _make_fixture(root: Path, keystone_root: Path) -> None:
         "README.md",
         "BOOTSTRAP.md",
         "ARCHETYPES.md",
-        "ROADMAP.md",
         "CHANGELOG.md",
-        "decisions/README.md",
+        "MODEL.md",
         "roles/README.md",
         "roles/architect.md",
         "roles/engineer.md",
@@ -80,7 +77,6 @@ def _make_fixture(root: Path, keystone_root: Path) -> None:
         "pipelines/tasks.md",
         "bin/sync.py",
         "bin/verify.py",
-        "bin/self_ci.py",
         "hooks/hook_core.py",
         "hooks/claude_adapter.py",
         "hooks/codex_adapter.py",
