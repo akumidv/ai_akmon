@@ -42,7 +42,9 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
    relevant design/ADRs by hand when the summary points at them.
 3. **Classify changes** into the four impact classes. Every `consumer-visible` /
    `migration` / `breaking` change needs a `CHANGELOG.md` line; `breaking` also needs
-   explicit owner confirmation before the tag.
+   explicit owner confirmation before the tag. Write each `breaking`/`migration` line as a
+   **verifiable** checklist item — name the file/path/contract that moved — because a consumer's
+   bump procedure (BOOTSTRAP "Pull the latest shared layer") walks them as re-attach checks.
 4. **Owner gates** *(gate)*. Confirm: version class (`v0.x.y` — bump `x` only for a
    breaking change to layout / required files / a role-pipeline contract; `y` otherwise),
    breaking-change handling, migration notes, deferrals, and which consumers to update.

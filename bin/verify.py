@@ -117,6 +117,7 @@ class Verifier:
             f"{keystone}/CHANGELOG.md",
             f"{keystone}/MODEL.md",
             f"{keystone}/roles/README.md",
+            f"{keystone}/roles/review.md",
             f"{keystone}/roles/architect.md",
             f"{keystone}/roles/engineer.md",
             f"{keystone}/roles/learn.md",
@@ -438,6 +439,37 @@ class Verifier:
         else:
             self.warn("CHANGELOG.md has no `## Unreleased` section; add one for pending changes")
 
+    def check_attach_record(self) -> None:
+        """Validate the `_forge/.keystone.toml` integration record *of a consuming project*.
+
+        It is the "where the project is" anchor that BOOTSTRAP §B2 diffs against keystone's
+        CHANGELOG to compute which Breaking/migration entries a realign still needs to verify.
+        The agent writes it on attach/realign (sync.py is stdlib-only and cannot run `git describe`).
+
+        It is a **consumer** artifact, so this check applies only when keystone is mounted as a
+        submodule (`<FORGE_ROOT>/keystone/` present) — verify run against the keystone repo itself
+        skips it. Even on a consumer, a *missing* record is a non-gating note (the project may
+        predate this contract; the fix is a realign), so it never fails `--strict`; only a
+        *present but malformed* record — missing the required top-level keys — is an error.
+        """
+        if not (self.root / self.keystone).is_dir():
+            return  # keystone repo itself, or not a keystone consumer — no integration record expected
+        name = f"{self.forge}/.keystone.toml"
+        path = self.root / self.forge / ".keystone.toml"
+        if not path.is_file():
+            self.ok(
+                f"{name} not present (optional; a realign writes it so future "
+                "bumps can diff the CHANGELOG — BOOTSTRAP §B2)"
+            )
+            return
+        fields = sync_tool.read_keystone_toml(path)
+        required = ("keystone_version", "attached_archetype", "last_realign")
+        missing = [key for key in required if not fields.get(key)]
+        if missing:
+            self.error(f"{name} is missing required key(s): {', '.join(missing)}")
+        else:
+            self.ok(f"{name} records keystone version {fields['keystone_version']}")
+
     def run(self) -> None:
         self.check_basic_layout()
         self.check_use_surface_isolation()
@@ -453,6 +485,7 @@ class Verifier:
         self.check_keystone_gitignore()
         self.check_ci()
         self.check_changelog()
+        self.check_attach_record()
 
 
 def print_findings(findings: list[Finding], *, quiet: bool) -> None:

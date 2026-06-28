@@ -8,9 +8,44 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   files, or a role/pipeline contract; bump `y` for minor/patch.
 - Entries are grouped **Added / Changed / Fixed / Breaking**; every `consumer-visible`,
   `migration`, or `breaking` change gets a line. `internal` changes need no entry.
+- A `Breaking`/`migration` line is a consumer's **re-attach checklist item** (the bump procedure
+  in [BOOTSTRAP.md](BOOTSTRAP.md) diffs the version window and walks them), so write each as
+  something a consumer can *verify and act on* — name the file/path/contract that moved — not just
+  *read*. The procedure lives in BOOTSTRAP; this changelog stays the record of *what changed*.
 - **No dates** — the git tag is the timeline ([tasks](pipelines/tasks.md) §No dates).
 
 ## Unreleased
+
+## v0.2.1
+
+### Added
+- **Integration record `<FORGE_ROOT>/.keystone.toml`** ([BOOTSTRAP.md](BOOTSTRAP.md) §C) — a
+  machine-readable (TOML) record of the keystone version a project sits on, plus its pinned test
+  env. The agent writes it on attach/realign (step 6); `verify.py` validates it; the bump procedure
+  diffs it against this CHANGELOG to compute which `Breaking`/`migration` entries still need
+  verifying. Read via `tomllib`, with a stdlib line-parser fallback for host Python < 3.11.
+- **Version-windowed delta-check** in the bump procedure ([BOOTSTRAP.md](BOOTSTRAP.md) "Pull the
+  latest shared layer") — `from` = recorded version, `to` = target; walk only the `Breaking`/
+  `migration` lines in `(from, to]` as a checklist.
+- **Optional `[test].runner`** in `.keystone.toml` ([BOOTSTRAP.md](BOOTSTRAP.md) §A5/§C) —
+  attach pins the project's existing test env (its own manager, or a `_forge/.venv` only when the
+  project has no Python env) and `release_check` runs it verbatim instead of guessing. Absent →
+  discovery fallback, so projects without the field are unaffected.
+
+### Changed
+- **`verify.py` validates `<FORGE_ROOT>/.keystone.toml`** on a consumer (where keystone is a
+  mounted submodule); skipped when run against the keystone repo itself. A *missing* record is a
+  non-gating note (does not fail `--strict`); only a *present but malformed* record (missing
+  required keys) is an error. Adopting the record is optional — a realign writes it.
+
+### Fixed
+- `verify.py` now checks `roles/review.md` exists (it was added as a role but left out of the
+  required-files list).
+- `tools/release/release_check.py` test-runner resolution: it now prefers the dev-layer venv
+  (`_forge/.venv`), invoked as `<venv>/bin/python -m pytest` (not the `bin/pytest` console script,
+  whose baked-in shebang breaks on a relocated venv); and when it falls back to `uv` it installs
+  pytest on the fly (`uv run --with pytest`) — a bare `uv run pytest` ran in an ephemeral env
+  without pytest and failed the release check on hosts with `uv` but no pytest on PATH.
 
 ## v0.2.0
 

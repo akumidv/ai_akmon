@@ -148,15 +148,71 @@ def run_state(root: Path, subject: str) -> int:
 # --------------------------------------------------------------------------------------
 
 
+def _read_keystone_toml(path: Path) -> dict:
+    """Read `_forge/.keystone.toml` into a nested dict (mirrors `sync.read_keystone_toml`).
+
+    Kept self-contained — this tool does not import `sync` — and stdlib-only: `tomllib` when
+    present (3.11+), else a minimal fallback for the record's subset (flat `key = "value"`,
+    `[section]`, `#` comments) so it works on a consumer host with an older Python."""
+    if not path.is_file():
+        return {}
+    try:
+        import tomllib
+
+        with path.open("rb") as handle:
+            return tomllib.load(handle)
+    except ImportError:
+        pass
+    data: dict = {}
+    section = data
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = data.setdefault(stripped[1:-1].strip(), {})
+            continue
+        key, sep, value = stripped.partition("=")
+        if sep:
+            section[key.strip()] = value.strip().strip('"').strip("'")
+    return data
+
+
+def _pinned_test_runner(root: Path) -> str | None:
+    """The `[test].runner` recorded in `<root>/_forge/.keystone.toml`, if any.
+
+    Attach (BOOTSTRAP §A5) pins the project's *existing* test environment here — `uv` may be
+    absent, and a Python project usually already has its own manager (poetry/pdm/pip-venv/conda)
+    and an env with pytest, so the right move is to *use what is there*, decided once at attach,
+    not to re-guess (or build a second `_forge/.venv`) on every run. Absent → fall back to
+    `_pytest_command`'s discovery for projects that predate this field."""
+    test = _read_keystone_toml(root / "_forge" / ".keystone.toml").get("test")
+    runner = test.get("runner") if isinstance(test, dict) else None
+    return runner.strip() if isinstance(runner, str) and runner.strip() else None
+
+
 def _pytest_command(root: Path, tests: str) -> list[str]:
-    """Resolve a test runner resiliently: uv → project .venv → system pytest."""
-    if shutil.which("uv"):
-        return ["uv", "run", "pytest", tests]
-    venv_pytest = root / ".venv" / "bin" / "pytest"
-    if venv_pytest.is_file():
-        return [str(venv_pytest), tests]
+    """Resolve a test runner: the pinned `test_runner` (attach record) first, else discovery.
+
+    Discovery order: the dev-layer venv BOOTSTRAP §A5 provisions (`_forge/.venv`) → a system
+    pytest → `uv` → `python -m pytest`. The dev venv comes first because it is the deliberately-
+    provisioned env; `uv` is a fallback, and when used it must install pytest on the fly
+    (`--with pytest`) — a bare `uv run pytest` runs in an ephemeral env *without* pytest and fails.
+
+    The dev venv is invoked as `<venv>/bin/python -m pytest`, never via its `bin/pytest` console
+    script: that script bakes an absolute-path shebang at creation, so a relocated/recopied venv
+    leaves it pointing at a missing interpreter (FileNotFoundError) even though pytest imports fine.
+    Mirror the dev-deps in §A5 if the dev venv grows more than pytest."""
+    pinned = _pinned_test_runner(root)
+    if pinned:
+        return [*pinned.split(), tests]
+    venv_python = root / "_forge" / ".venv" / "bin" / "python"
+    if venv_python.is_file():
+        return [str(venv_python), "-m", "pytest", tests]
     if shutil.which("pytest"):
         return ["pytest", tests]
+    if shutil.which("uv"):
+        return ["uv", "run", "--with", "pytest", "pytest", tests]
     return [sys.executable, "-m", "pytest", tests]
 
 

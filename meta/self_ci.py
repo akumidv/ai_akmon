@@ -65,6 +65,7 @@ def _make_fixture(root: Path, keystone_root: Path) -> None:
         "CHANGELOG.md",
         "MODEL.md",
         "roles/README.md",
+        "roles/review.md",
         "roles/architect.md",
         "roles/engineer.md",
         "roles/learn.md",

@@ -43,33 +43,48 @@ When the user asks "attach keystone", the agent:
    ```
    and, if the archetype exports USAGE (e.g. `package`), the root `skills/`.
 
-   **Dev-layer venv (non-Python projects only).** If the archetype **language is not
-   `python`/`mixed`**, the project has no Python environment, yet some agent tooling needs
-   one (e.g. running the keystone unit tests via `pytest`, or any future tool with a
-   third-party dep). Provision a dedicated dev-layer venv at **`_forge/.venv`** (in the LOCAL
-   layer, *outside* the submodule so it survives a submodule re-checkout) and install the
-   agent-tooling deps. **Prefer `uv`** — it bundles its own installer and provisions a usable
-   venv in one step on a host with no Python packaging set up:
-   ```bash
-   uv venv _forge/.venv
-   uv pip install --python _forge/.venv/bin/python pytest
-   ```
-   Stdlib fallback **only if `uv` is unavailable** — note `python3 -m venv` needs the `venv`/
-   `ensurepip` stdlib module, which is a *separate OS package* (`python3-venv`) often absent on
-   a non-Python host; install it first, or the venv lands without `pip`:
-   ```bash
-   python3 -m venv _forge/.venv          # requires python3-venv installed
-   _forge/.venv/bin/python -m pip install pytest
-   ```
-   `pytest` is the only dep today (add more here as agent tools acquire deps). On a
-   **Python** project this step is skipped — the project's own env already supplies pytest.
-   The consumer's own CI checks (`sync.py --check`, `verify.py --strict`) are stdlib-only and
-   never need this venv; it exists for *developing* the dev layer (the keystone-dev validator
-   and any future deps-bearing tool). Add `_forge/.venv/` to `.gitignore` (§D).
+   **Pin the test environment (`[test].runner`).** Some agent tooling needs Python with `pytest`
+   (e.g. the keystone unit tests, or any future deps-bearing tool). **Use what the project already
+   has; only build a venv when there is none.** Decide the runner once, here, and record it in the
+   integration record (`[test].runner` in `<FORGE_ROOT>/.keystone.toml`, §C) so `release_check` uses
+   it verbatim rather than guessing per-run — `uv` may be absent, and a Python project usually has
+   its own manager:
+   - **Python / mixed project** — it already supplies `pytest` through its own manager
+     (poetry / pdm / pip-venv / conda / uv). **Do not build `_forge/.venv`.** Pin that manager,
+     e.g. `runner = "poetry run pytest"`, `runner = ".venv/bin/python -m pytest"`.
+   - **Non-Python project** (no Python env at all) — provision a dedicated dev-layer venv at
+     **`_forge/.venv`** (LOCAL layer, *outside* the submodule so it survives a submodule
+     re-checkout) and install the agent-tooling deps, then pin
+     `runner = "_forge/.venv/bin/python -m pytest"`. Build it with whatever is available:
+     ```bash
+     uv venv _forge/.venv && uv pip install --python _forge/.venv/bin/python pytest   # if uv present
+     python3 -m venv _forge/.venv && _forge/.venv/bin/python -m pip install pytest     # stdlib fallback
+     ```
+     `python3 -m venv` needs the `venv`/`ensurepip` stdlib module (a *separate OS package*,
+     `python3-venv`, often absent on a non-Python host) — install it first or the venv lands
+     without `pip`. Add `_forge/.venv/` to `.gitignore` (§D).
+
+   Pin the runner as `<interpreter> -m pytest`, **not** a venv's `bin/pytest` console script — that
+   script bakes an absolute-path shebang at creation and breaks if the venv is relocated. `pytest`
+   is the only agent-tooling dep today (add more to the chosen env as tools acquire deps). The
+   consumer's own contract checks (`sync.py --check`, `verify.py --strict`) are stdlib-only and
+   never need any of this; the test env exists for *developing* the dev layer.
 6. **Generate or update `AGENTS.md`** (§C template), preserving existing content. The
    keystone block records the archetype + language, the SHARED/LOCAL/USAGE declaration,
    the USAGE placement, and the **resolved guardrail/profile links** from step 4 (written
-   out, so they aren't recomputed each session). This block *is* the attach record.
+   out, so they aren't recomputed each session). This block *is* the prose attach record.
+
+   **Write the machine-readable integration record** `<FORGE_ROOT>/.keystone.toml` (§C) — the
+   version this project sits on, so a later bump can diff the CHANGELOG (see "Pull the latest
+   shared layer"). `sync.py` cannot generate it (it is stdlib-only and cannot run `git`), so the
+   agent writes it here, reading the version (tag-anchored, SHA-suffixed only between tags) from
+   the submodule:
+   ```bash
+   git -C _forge/keystone describe --tags        # → keystone_version + last_realign
+   ```
+   On a **realign/bump** of an existing project, refresh `keystone_version` and `last_realign` to
+   the new `describe` value after the delta-check passes.
+
    Then **generate/refresh the vendor pointers** (§C): for Claude Code write a `CLAUDE.md`
    that **imports** AGENTS.md via `@AGENTS.md` — Claude Code auto-loads `CLAUDE.md` but
    **not** `AGENTS.md`, so the import makes the canonical rules (including the always-on
@@ -199,6 +214,37 @@ Mechanically-enforced rules (e.g. D5 via the commit-guard hook, step 8) hold reg
 the import covers the rules that rely on the agent having *read* them (D2, memory). The
 `.claude/skills/` pointers also apply (written by `sync.py`).
 
+### Integration record — `<FORGE_ROOT>/.keystone.toml`
+
+The machine-readable companion to the AGENTS.md keystone block: the keystone **version** this
+project was attached/realigned against, plus the pinned test environment. The agent writes it
+(step 6); `verify.py` reads it; a bump diffs it against the CHANGELOG ("Pull the latest shared
+layer"). **Committed, not gitignored** — it travels with the repo and shows in the bump diff.
+TOML (read with `tomllib`, or a stdlib line-parser fallback when the host Python is < 3.11):
+
+```toml
+keystone_version = "v0.2.0"        # `git -C _forge/keystone describe --tags`
+attached_archetype = "frontend/js" # archetype/language from the keystone block
+last_realign = "v0.2.0"            # version of the last attach/realign (== keystone_version after a clean bump)
+
+[test]
+runner = "poetry run pytest"       # optional — the test env pinned at attach (§A5); release_check uses it verbatim
+```
+
+`keystone_version` comes from `git describe --tags`: **the tag is the anchor**. Describe appends
+`-N-gSHA` on its own when the submodule sits *between* tags, so the commit hash rides along only
+when it adds information — there is no separate pin field to keep in sync, and no chicken-and-egg
+(the version is recorded *after* the submodule is on the target commit, when the tag/SHA exist).
+
+`[test].runner` is **optional**: when present, `release_check` runs it verbatim (append the test
+path) instead of discovering one; when absent it falls back to discovery (dev venv → system
+pytest → uv). Pin it as `<interpreter> -m pytest` or a manager invocation (`poetry run pytest`),
+never a venv `bin/pytest` console script (stale-shebang on relocation).
+
+It lives in the LOCAL layer (`<FORGE_ROOT>/`, **outside** the submodule) so it survives a
+submodule re-checkout, and is **not** linked from AGENTS.md — so it stays out of context during
+development and is read only at attach/verify/bump time.
+
 ---
 
 ## D. .gitignore (project root)
@@ -257,9 +303,21 @@ git submodule update --init --recursive
 ```
 
 ### Pull the latest shared layer into a project
-Before bumping, **read keystone's [CHANGELOG.md](CHANGELOG.md)** for the target version to see
-what changed and whether it breaks you (`v0.x.y`: a bumped `x` is breaking). This is the consumer side of the
-[release](roles/release.md) cycle; the bump itself is a release **subject** ("keystone pin bump").
+This is the consumer side of the [release](roles/release.md) cycle; the bump itself is a release
+**subject** ("keystone pin bump").
+
+**Delta-check first (what to verify, not where it is stored).** The delta-check is a *procedure*,
+not stored data — it computes a version window and reads the changes from the CHANGELOG; it never
+keeps its own copy of them (the CHANGELOG is the single owner of "what changed"):
+1. `from` = `keystone_version` in `<FORGE_ROOT>/.keystone.toml` — where the project sits now.
+2. `to` = `git -C _forge/keystone describe --tags` after `git submodule update --remote` — the target.
+3. In [CHANGELOG.md](CHANGELOG.md), read only the version sections in the window `(from, to]`
+   (`v0.x.y`: a bumped `x` is breaking). Everything `≤ from` is already applied; skip it.
+4. Each **`Breaking`/`migration`** line in that window is a **checklist item** — verify the project
+   satisfies it (e.g. a new required file, a renamed path, a changed contract). `Added`/`Fixed`
+   lines need no action.
+5. Realign per §A (refresh the keystone block, re-run `sync.py`), then update `.keystone.toml`
+   (`keystone_version` and `last_realign`) to `to`.
 ```bash
 git submodule update --remote _forge/keystone
 python3 _forge/keystone/bin/sync.py          # refresh generated pointers

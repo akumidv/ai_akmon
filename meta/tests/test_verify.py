@@ -69,6 +69,7 @@ def _make_project(tmp_path: Path) -> Path:
         "CHANGELOG.md",
         "MODEL.md",
         "roles/README.md",
+        "roles/review.md",
         "roles/architect.md",
         "roles/engineer.md",
         "roles/learn.md",
@@ -500,3 +501,53 @@ def test_changelog_without_unreleased_is_warning(tmp_path):
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("Unreleased" in message for message in _messages(verifier.findings, "warn"))
+
+
+# --------------------------------------------------------------------------------------
+# integration record (_forge/.keystone.toml) — a consumer artifact, non-gating when absent
+# --------------------------------------------------------------------------------------
+
+_VALID_ATTACH = (
+    'keystone_version = "v0.3.0"\n'
+    'attached_archetype = "package/python"\n'
+    'last_realign = "v0.3.0"\n'
+)
+
+
+def _attach(root: Path) -> Path:
+    return root / "_forge" / ".keystone.toml"
+
+
+def test_attach_record_missing_is_non_gating(tmp_path):
+    root = _make_project(tmp_path)  # _make_project never writes .keystone.toml
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert "warn" not in _levels(verifier.findings)
+    assert "error" not in _levels(verifier.findings)
+    assert any(".keystone.toml not present" in m for m in _messages(verifier.findings, "ok"))
+
+
+def test_attach_record_valid_is_ok(tmp_path):
+    root = _make_project(tmp_path)
+    _attach(root).write_text(_VALID_ATTACH, encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert any("records keystone version v0.3.0" in m for m in _messages(verifier.findings, "ok"))
+
+
+def test_attach_record_malformed_is_error(tmp_path):
+    root = _make_project(tmp_path)
+    _attach(root).write_text('keystone_version = "v0.3.0"\n', encoding="utf-8")  # missing the other keys
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    errors = _messages(verifier.findings, "error")
+    assert any("missing required key" in m for m in errors)
+
+
+def test_attach_record_skipped_without_keystone_submodule(tmp_path):
+    # No _forge/keystone/ mounted (e.g. verify run against the keystone repo itself): skip entirely.
+    root = tmp_path
+    _write(root / "_forge" / "TASKS.md")
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert verifier.findings == []
