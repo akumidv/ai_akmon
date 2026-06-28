@@ -152,8 +152,16 @@ This project uses the keystone dev layer. Model & notation:
   [keystone/roles/](_forge/keystone/roles/). **Declare the active agent** before doing work
   and restate it on switch (`🧭 agent: <name> — <focus>`) — see
   [Role declaration](_forge/keystone/roles/README.md#role-declaration-announce-the-active-agent).
-- **Guardrails (applied — by language):** [_common](_forge/keystone/guardrails/_common.md)
-  <!-- + the language guardrail(s) per the map, e.g. [python](_forge/keystone/guardrails/python.md) -->
+- **Guardrails (always-on, by language):** the common guardrail is **imported** (not just
+  linked) so its always-on rules load into context at session start. Put each `@`-import on its
+  own line, blank-line-separated; keystone is the single owner — do not restate the rules here.
+
+@_forge/keystone/guardrails/_common.md
+
+  <!-- + each language guardrail per the ARCHETYPES map, on its own line, e.g.
+       @_forge/keystone/guardrails/python.md
+       Only guardrails are imported (always-on). Roles/MODEL/pipelines stay links below
+       (on-demand) — pulled when an agent enters a role or runs a pipeline, not every session. -->
 - **Profiles (applied — opt-in by need):**
   <!-- only the profiles this project actually uses, e.g.
        - [quant](_forge/keystone/profiles/quant.md) — numerics -->
