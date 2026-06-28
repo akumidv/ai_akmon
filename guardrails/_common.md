@@ -7,6 +7,22 @@ Applied automatically (not opt-in). Language-specific rules layer on top — see
 > Guardrails are **constraints**, not guidance: they say what must always / never happen.
 > Pipelines say *how* to work; profiles add *domain* rules; guardrails are the floor.
 
+## Language — artifacts English, chat in the user's language
+
+Two distinct surfaces, two **rules** (not a default and a permission):
+
+- **Persistent artifacts → always English.** Documentation, agent instructions, skills,
+  memory notes, ADRs, development/architecture plans, code comments, commit messages. This
+  holds **regardless of the language the user wrote in** — artifacts are read by every future
+  agent, so they stay in one canonical language.
+- **Chat replies → match the user's language.** Reply in the language the user wrote their
+  message in. User writes Russian → reply in Russian; writes English → reply in English.
+
+These do **not** conflict, and one must not bleed into the other: you analyze and write files
+in English, then deliver the **chat answer** in the user's language. The English you used for
+analysis and artifacts is **not** a reason to answer in English — pick the reply language from
+the user's last message, not from the language of your own reasoning.
+
 ## Secrets
 
 - **Config via environment only.** Never hardcode a secret, key, token, or credential.
