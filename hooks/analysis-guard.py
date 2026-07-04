@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude PreToolUse wrapper for the keystone analysis-before-mutation reminder.
+"""Claude PreToolUse wrapper for the akmon analysis-before-mutation reminder.
 
 The logic lives in ``hook_core.py`` and returns a vendor-neutral ``HookResult``. This entrypoint
 only adapts Claude Code's JSON payload/output shape so existing ``.claude/settings.json`` wiring

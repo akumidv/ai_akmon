@@ -21,9 +21,9 @@ import routing
 
 
 def _find_project_root(start: Path) -> Path:
-    forge = routing.forge_root_name()
+    aitna = routing.aitna_root_name()
     for candidate in (start, *start.parents):
-        if (candidate / "AGENTS.md").is_file() and (candidate / forge / "keystone").exists():
+        if (candidate / "AGENTS.md").is_file() and (candidate / aitna / "akmon").exists():
             return candidate
     return start
 
@@ -39,7 +39,7 @@ def _read_json(path: Path) -> dict:
 
 
 def _prompt(gate: str, prompt_text: str) -> str:
-    return f"""You are an independent second-opinion reviewer for a keystone verify gate.
+    return f"""You are an independent second-opinion reviewer for a akmon verify gate.
 
 Gate: {gate}
 
@@ -72,7 +72,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--provider", help="External review provider. Defaults to configured opposite vendor.")
     parser.add_argument("--orchestrator-vendor", default="openai", help="Vendor running the main session.")
     parser.add_argument("--gate", required=True, help="Verify gate name, e.g. design-align or code-verify.")
-    parser.add_argument("--prompt-file", type=Path, required=True, help="File containing the review material.")
+    parser.add_argument(
+        "--gate-pack", type=Path, required=True, help="Path to a built gate-pack markdown file (see gate_pack.py)."
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -81,18 +83,31 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = (args.project_root or _find_project_root(Path.cwd())).resolve()
-    keystone_dir = root / routing.forge_root_name() / "keystone"
-    registry = routing.load_registry(keystone_dir, root)
+    akmon_dir = root / routing.aitna_root_name() / "akmon"
+    registry = routing.load_registry(akmon_dir, root)
     config = _read_json(root / routing.LOCAL_CONFIG_REL)
-    provider = args.provider or routing.second_opinion_provider(registry, config, args.orchestrator_vendor)
+
+    if args.provider:
+        provider, model = args.provider, None
+    else:
+        target = routing.resolve_second_opinion(registry, config, args.orchestrator_vendor)
+        if target is None:
+            print(
+                "second-opinion: skipped (no model-diverse provider reachable — ladder exhausted; "
+                "would repeat the reviewed model)"
+            )
+            return 0
+        provider, model = target.provider, target.model
+
     spec = routing.second_opinion_spec(registry, provider)
-    prompt_text = args.prompt_file.read_text(encoding="utf-8")
-    command = routing.second_opinion_command(spec, _prompt(args.gate, prompt_text))
+    material = args.gate_pack.read_text(encoding="utf-8")
+    command = routing.second_opinion_command(spec, _prompt(args.gate, material), model=model)
     report = _report_path(root, str(spec["report_dir"]), args.gate)
 
     if args.dry_run:
         print(" ".join(command))
         print(f"report: {report.relative_to(root)}")
+        print(f"provider={provider} model={model or '(default)'}")
         return 0
 
     completed = subprocess.run(command, cwd=root, text=True, capture_output=True, check=False)
@@ -101,7 +116,10 @@ def main(argv: list[str] | None = None) -> int:
         output = f"{output}\n\n[stderr]\n{completed.stderr.strip()}".strip()
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(output + "\n", encoding="utf-8")
-    print(f"second-opinion provider={provider} gate={args.gate} exit={completed.returncode}")
+    print(
+        f"second-opinion provider={provider} model={model or '(default)'} "
+        f"gate={args.gate} exit={completed.returncode}"
+    )
     print(f"report: {report.relative_to(root)}")
     if output:
         print("")

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Codex command-hook entrypoint for keystone guardrail reminders.
+"""Codex command-hook entrypoint for akmon guardrail reminders.
 
-Usage from .codex/hooks.json (``_forge`` is the default dev-layer root; a project that sets
-``FORGE_ROOT`` gets the matching path written by ``sync.py``)::
+Usage from .codex/hooks.json (``_aitna`` is the default dev-layer root; a project that sets
+``AITNA_ROOT`` gets the matching path written by ``sync.py``)::
 
-    python3 "$(git rev-parse --show-toplevel)/_forge/keystone/hooks/codex-hook.py" analysis-guard
+    python3 "$(git rev-parse --show-toplevel)/_aitna/akmon/hooks/codex-hook.py" analysis-guard
 
 The guardrail decisions live in ``hook_core.py``. This wrapper only maps Codex hook
 payloads into those neutral functions and prints plain-text reminders for Codex to ingest.
@@ -25,7 +25,13 @@ from codex_adapter import (
     session_id,
     tool_name,
 )
-from hook_core import analysis_write_result, find_project_root, role_on_code_result, session_start_result
+from hook_core import (
+    analysis_write_result,
+    d2_ledger_reminder_result,
+    find_project_root,
+    role_on_code_result,
+    session_start_result,
+)
 
 
 def _analysis_guard(payload: dict) -> None:
@@ -33,6 +39,17 @@ def _analysis_guard(payload: dict) -> None:
     sid = session_id(payload)
     for path in file_paths(payload):
         result = analysis_write_result(name, path, sid)
+        if result is not None:
+            print_result(result)
+            return
+
+
+def _d2_ledger(payload: dict) -> None:
+    name = normalize_tool(tool_name(payload) or "apply_patch")
+    sid = session_id(payload)
+    root = find_project_root(Path(cwd(payload)) if cwd(payload) else None)
+    for path in file_paths(payload):
+        result = d2_ledger_reminder_result(name, path, sid, root)
         if result is not None:
             print_result(result)
             return
@@ -57,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "hook",
-        choices=("analysis-guard", "role-on-code", "session-start", "git-commit-guard"),
+        choices=("analysis-guard", "role-on-code", "d2-ledger-reminder", "session-start", "git-commit-guard"),
     )
     args = parser.parse_args(argv)
 
@@ -66,11 +83,13 @@ def main(argv: list[str] | None = None) -> int:
         _analysis_guard(payload)
     elif args.hook == "role-on-code":
         _role_on_code(payload)
+    elif args.hook == "d2-ledger-reminder":
+        _d2_ledger(payload)
     elif args.hook == "session-start":
         _session_start(payload)
     elif args.hook == "git-commit-guard":
         # Intentionally not wired by sync.py yet: Codex hard allow/deny output must be verified
-        # before keystone claims enforcement. Keep the mode available for protocol spikes.
+        # before akmon claims enforcement. Keep the mode available for protocol spikes.
         from hook_core import git_commit_guard_result
 
         print_result(git_commit_guard_result(command(payload)))

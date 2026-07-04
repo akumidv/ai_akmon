@@ -16,9 +16,13 @@ import hook_core
 def test_claude_normalize_maps_edit_tools():
     for name in ("Edit", "Write", "MultiEdit"):
         assert claude_adapter.normalize_tool(name) == hook_core.EDIT_TOOL
-    # Non-edit tools pass through unchanged (so the core ignores them).
-    assert claude_adapter.normalize_tool("Read") == "Read"
+    # Non-edit, non-read tools pass through unchanged (so the core ignores them).
     assert claude_adapter.normalize_tool("Bash") == "Bash"
+
+
+def test_claude_normalize_maps_read_tools():
+    for name in ("Read", "Grep", "Glob"):
+        assert claude_adapter.normalize_tool(name) == hook_core.READ_TOOL
 
 
 def test_codex_normalize_maps_apply_patch():
@@ -40,14 +44,14 @@ def test_codex_session_start_payload_fields_are_read():
 
 
 def test_codex_print_result_serializes_hook_specific_output(capsys):
-    result = hook_core.HookResult(event_name="SessionStart", additional_context="[keystone] context")
+    result = hook_core.HookResult(event_name="SessionStart", additional_context="[akmon] context")
     codex_adapter.print_result(result)
 
     payload = json.loads(capsys.readouterr().out)
     assert payload == {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
-            "additionalContext": "[keystone] context",
+            "additionalContext": "[akmon] context",
         }
     }
 
@@ -64,7 +68,7 @@ def test_normalized_vendor_tools_drive_the_core(tmp_path, monkeypatch):
 def test_find_project_root_in_core(tmp_path):
     # A marked project root is found by walking up from a nested dir.
     proj = tmp_path / "proj"
-    (proj / "_forge" / "keystone").mkdir(parents=True)
+    (proj / "_aitna" / "akmon").mkdir(parents=True)
     (proj / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
     nested = proj / "src" / "pkg"
     nested.mkdir(parents=True)
@@ -81,14 +85,14 @@ def test_find_project_root_falls_back_to_start(tmp_path):
 def test_claude_print_result_with_system_message(capsys):
     result = hook_core.HookResult(
         event_name="PreToolUse",
-        system_message="[keystone] → k-explorer (small): find X",
+        system_message="[akmon] → k-explorer (small): find X",
     )
     claude_adapter.print_result(result)
 
     payload = json.loads(capsys.readouterr().out)
     assert payload == {
         "hookSpecificOutput": {"hookEventName": "PreToolUse"},
-        "systemMessage": "[keystone] → k-explorer (small): find X",
+        "systemMessage": "[akmon] → k-explorer (small): find X",
     }
     # systemMessage is top-level, not inside hookSpecificOutput
     assert "systemMessage" in payload
@@ -114,46 +118,46 @@ def test_delegation_log_system_message_with_model_and_description():
     import importlib.util
     from pathlib import Path
 
-    keystone_root = Path(hook_core.__file__).parent.parent
+    akmon_root = Path(hook_core.__file__).parent.parent
     spec = importlib.util.spec_from_file_location(
-        "delegation_log", keystone_root / "hooks" / "delegation-log.py"
+        "delegation_log", akmon_root / "hooks" / "delegation-log.py"
     )
     deleg_log = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(deleg_log)
 
-    # Line format: timestamp\tsubagent\tmodel\tdescription
-    line = "2026-07-04T10:00:00+0000\tk-explorer\tsmall\tfind X in codebase"
+    # Line format: timestamp\tsession_id\tsubagent\tmodel\tzone\tdescription
+    line = "2026-07-04T10:00:00+0000\tsess-1\tk-explorer\tsmall\tauth\tfind X in codebase"
     msg = deleg_log._format_system_message(line)
-    assert msg == "[keystone] → k-explorer (small): find X in codebase"
+    assert msg == "[akmon] → k-explorer (small) [auth]: find X in codebase"
 
 
 def test_delegation_log_system_message_without_model():
     import importlib.util
     from pathlib import Path
 
-    keystone_root = Path(hook_core.__file__).parent.parent
+    akmon_root = Path(hook_core.__file__).parent.parent
     spec = importlib.util.spec_from_file_location(
-        "delegation_log", keystone_root / "hooks" / "delegation-log.py"
+        "delegation_log", akmon_root / "hooks" / "delegation-log.py"
     )
     deleg_log = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(deleg_log)
 
-    line = "2026-07-04T10:00:00+0000\tk-mechanic\t-\treformat code"
+    line = "2026-07-04T10:00:00+0000\tsess-1\tk-mechanic\t-\t-\treformat code"
     msg = deleg_log._format_system_message(line)
-    assert msg == "[keystone] → k-mechanic: reformat code"
+    assert msg == "[akmon] → k-mechanic: reformat code"
 
 
 def test_delegation_log_system_message_without_description():
     import importlib.util
     from pathlib import Path
 
-    keystone_root = Path(hook_core.__file__).parent.parent
+    akmon_root = Path(hook_core.__file__).parent.parent
     spec = importlib.util.spec_from_file_location(
-        "delegation_log", keystone_root / "hooks" / "delegation-log.py"
+        "delegation_log", akmon_root / "hooks" / "delegation-log.py"
     )
     deleg_log = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(deleg_log)
 
-    line = "2026-07-04T10:00:00+0000\tk-reasoner\treasoner\t"
+    line = "2026-07-04T10:00:00+0000\tsess-1\tk-reasoner\treasoner\t-\t"
     msg = deleg_log._format_system_message(line)
-    assert msg == "[keystone] → k-reasoner (reasoner)"
+    assert msg == "[akmon] → k-reasoner (reasoner)"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run keystone's self-checks against a synthetic consuming-project fixture."""
+"""Run akmon's self-checks against a synthetic consuming-project fixture."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from pathlib import Path
 
 AGENTS_MD = """# AGENTS.md
 
-## Dev layer — keystone
+## Dev layer — akmon
 
-Model: `_forge/keystone/README.md`. Archetype: `ARCHETYPES.md`. Roles:
-`_forge/keystone/roles/`. Read `_forge/memory` at session start.
+Model: `_aitna/akmon/README.md`. Archetype: `ARCHETYPES.md`. Roles:
+`_aitna/akmon/roles/`. Read `_aitna/memory` at session start.
 
 Prime directives D2 and D5 are always-on. Secrets come from `.env`.
-Skills live in `_forge/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
+Skills live in `_aitna/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
 """
 
 
@@ -26,16 +26,16 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - run: python3 _forge/keystone/bin/sync.py --check
-      - run: python3 _forge/keystone/bin/verify.py --strict
+      - run: python3 _aitna/akmon/bin/sync.py --check
+      - run: python3 _aitna/akmon/bin/verify.py --strict
 """
 
 
 SKILL_MD = """---
 name: demo
-description: Demonstrates the keystone skill contract.
-when_to_use: Use for keystone self-CI fixture coverage.
-owner: keystone
+description: Demonstrates the akmon skill contract.
+when_to_use: Use for akmon self-CI fixture coverage.
+owner: akmon
 ---
 
 # demo
@@ -47,15 +47,15 @@ def _write(path: Path, text: str = "x\n") -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def _make_fixture(root: Path, keystone_root: Path) -> None:
+def _make_fixture(root: Path, akmon_root: Path) -> None:
     _write(root / "AGENTS.md", AGENTS_MD)
-    _write(root / "_forge" / "TASKS.md", "# Tasks\n\n- T1 · demo · active · engineer · keep fixture valid\n")
-    _write(root / "_forge" / "agents" / "engineer" / "README.md", "See `_forge/keystone/roles/engineer.md`.\n")
-    _write(root / "_forge" / "keystone" / "skills" / "demo" / "SKILL.md", SKILL_MD)
-    _write(root / "_forge" / "memory" / "note.md", "fact\n")
-    _write(root / "_forge" / "memory" / "README.md", "# Memory\n- note.md\n")
+    _write(root / "_aitna" / "TASKS.md", "# Tasks\n\n- T1 · demo · active · engineer · keep fixture valid\n")
+    _write(root / "_aitna" / "agents" / "engineer" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
+    _write(root / "_aitna" / "akmon" / "skills" / "demo" / "SKILL.md", SKILL_MD)
+    _write(root / "_aitna" / "memory" / "note.md", "fact\n")
+    _write(root / "_aitna" / "memory" / "README.md", "# Memory\n- note.md\n")
     _write(root / ".gitignore", "*.env\n!*.env.example\n")
-    _write(root / "_forge" / "keystone" / ".gitignore", "__pycache__/\n*.env\n!*.env.example\n")
+    _write(root / "_aitna" / "akmon" / ".gitignore", "__pycache__/\n*.env\n!*.env.example\n")
     _write(root / ".github" / "workflows" / "ci.yml", CI_YML)
 
     for relative in (
@@ -92,28 +92,28 @@ def _make_fixture(root: Path, keystone_root: Path) -> None:
         "tools/model_routing/routing.py",
         "tools/model_routing/init.py",
     ):
-        source = keystone_root / relative
+        source = akmon_root / relative
         text = source.read_text(encoding="utf-8") if source.is_file() else "fixture placeholder\n"
-        _write(root / "_forge" / "keystone" / relative, text)
+        _write(root / "_aitna" / "akmon" / relative, text)
 
 
 def main() -> int:
-    keystone_root = Path(__file__).resolve().parents[1]
-    with tempfile.TemporaryDirectory(prefix="keystone-self-ci-") as tmp:
+    akmon_root = Path(__file__).resolve().parents[1]
+    with tempfile.TemporaryDirectory(prefix="akmon-self-ci-") as tmp:
         fixture = Path(tmp)
-        _make_fixture(fixture, keystone_root)
+        _make_fixture(fixture, akmon_root)
         commands = (
-            [sys.executable, str(keystone_root / "bin" / "sync.py"), "--project-root", str(fixture)],
+            [sys.executable, str(akmon_root / "bin" / "sync.py"), "--project-root", str(fixture)],
             [
                 sys.executable,
-                str(keystone_root / "bin" / "sync.py"),
+                str(akmon_root / "bin" / "sync.py"),
                 "--project-root",
                 str(fixture),
                 "--check",
             ],
             [
                 sys.executable,
-                str(keystone_root / "bin" / "verify.py"),
+                str(akmon_root / "bin" / "verify.py"),
                 "--project-root",
                 str(fixture),
                 "--strict",

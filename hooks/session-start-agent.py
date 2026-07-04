@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude SessionStart wrapper for the keystone active-agent reminder.
+"""Claude SessionStart wrapper for the akmon active-agent reminder.
 
 The reminder logic lives in ``hook_core.py`` and returns a vendor-neutral ``HookResult``.
 This entrypoint only adapts Claude Code's JSON payload/output shape so existing
@@ -27,7 +27,7 @@ def main() -> int:
     try:
         print_result(session_start_result(_project_root(load_payload())))
     except Exception as exc:
-        print(f"keystone session-start-agent hook: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"akmon session-start-agent hook: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 0
     return 0
 

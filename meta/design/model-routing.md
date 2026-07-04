@@ -3,20 +3,20 @@
 > **Status: locked — owner verified (D2), decisions recorded in
 > [ADR 0004](../decisions/0004-model-routing-capability-tiers.md).
 > Built — all three phases (§8) are code-complete**: registry + init tool
-> (`keystone/tools/model_routing/`), the SessionStart status-line hook
+> (`akmon/tools/model_routing/`), the SessionStart status-line hook
 > (`hooks/model-routing.py`) and the delegation-log hook (`hooks/delegation-log.py`)
 > wired by `sync.py`, the §6 doc edits landed, and alphavar consumed (init run —
 > generated `k-*` agents supersede the hand-written set; project overlay
-> `_forge/model-routing.json` carries the alphavar brief extras; local config/log
+> `_aitna/model-routing.json` carries the alphavar brief extras; local config/log
 > gitignored). **Implementation owner-verified (D2) — C10 closed.** Remaining follow-ups
-> live as their own tasks in keystone's backlog: statistics digest (C13) —
+> live as their own tasks in akmon's backlog: statistics digest (C13) —
 > [TASKS.md](../TASKS.md). Codex hook payload compatibility was closed in C12; the
 > in-the-moment delegation nudge in C14.
 >
-> **Target layer: keystone (SHARED).** This is a mechanism of the standard itself, so all
-> artifacts land in the `ai_keystone` submodule (`_forge/keystone/`); alphavar is the first
-> consumer. Work therefore produces **two commits in two repos** — the keystone change,
-> then the submodule-pin bump here (see memory `keystone-edits-go-to-submodule`).
+> **Target layer: akmon (SHARED).** This is a mechanism of the standard itself, so all
+> artifacts land in the `ai_akmon` submodule (`_aitna/akmon/`); alphavar is the first
+> consumer. Work therefore produces **two commits in two repos** — the akmon change,
+> then the submodule-pin bump here (see memory `akmon-edits-go-to-submodule`).
 
 ## 1. Problem and requirements
 
@@ -44,9 +44,21 @@ Owner requirements:
    release costs at most a one-line data edit (usually none, thanks to aliases).
 8. **Model/subagent switches are visible at code cost, not token cost** — delegation is
    logged by hooks, not narrated by the model.
-9. **The orchestrating model is displayed, with a weak-orchestrator warning** — the
-   session runs on whatever the user launched; the status line names it, and if it ranks
-   below the registry's orchestrator floor, the hook warns and suggests switching up.
+9. **The orchestrating model is displayed, with a corridor warning** — the session runs
+   on whatever the user launched; the status line names it, and the hook warns when it
+   leaves the healthy corridor (§3): below the orchestration floor (too weak — degrades
+   everything downstream) or on the auditor's reserved top rung (wasteful).
+10. **Subagent models follow the live orchestrator** — detected from the transcript at
+    session start and after a mid-session `/model` switch; the orchestrator itself is
+    never overridden, only detected (§3).
+11. **Owner-facing warnings reach the owner.** `additionalContext` reaches only the
+    model; the owner never sees it in the host UI. Anything addressed to the owner — the
+    init instruction, corridor and context-pressure warnings, the rebind notice — must
+    also go out as `systemMessage` (UI-visible). A warning only the model sees fails
+    this requirement.
+12. **Context pressure is detected** (§12) — the hook warns when the session's
+    context-window fill crosses recorded thresholds, before quality degrades or a forced
+    compaction lands mid-task.
 
 ## 2. Vocabulary — tiers, and the task-kind matrix that feeds them
 
@@ -58,7 +70,7 @@ concrete model names live only in local discovery/config, not in the committed s
 | **orchestrator** | decompose, route, integrate results, dialogue with the owner | the main session — whatever model the user runs |
 | **reasoner** | load-bearing synthesis: architecture forks, contested decisions, complex debugging, quant math derivation | top rung of the ladder (§3), as a subagent |
 | **worker** | delegable realization: exploration, summaries, mechanical edits, tests-under-spec, doc-sync | cheapest adequate rung, as a subagent |
-| **second-opinion** | independent review of architecture decisions and code | a *different vendor's* model (e.g. Codex), opt-in |
+| **auditor** | independent review of architecture decisions and code | a *different vendor's* model (e.g. Codex), opt-in |
 
 Tiers are only the vocabulary. The **binding surface is the task-kind matrix** — a finite,
 named list of operations, each mapped to a tier. It lives in the registry as data
@@ -77,6 +89,7 @@ named list of operations, each mapped to a tier. It lives in the registry as dat
 | `design-fork` | reasoner | drafting options for a load-bearing decision |
 | `quant-derivation` | reasoner | pricing/math derivations (quant profile work) |
 | `independent-review` | second-opinion | advisory cross-vendor review at verify gates |
+| `audit` | auditor | clean-context audit of a whole gate's material |
 | decompose / route / synthesize / owner dialogue | orchestrator | **never delegated** |
 
 Two policies make the matrix bite:
@@ -114,24 +127,57 @@ orchestrator model)**:
 - **escalation path** = the rungs between worker and reasoner, in ladder order.
 - **second-opinion** = a different vendor's entry, independent of the local model list.
 - **orchestrator** = whatever the user launched — the binding never overrides it, but
-  (requirement 9) if its rung is below the local highest rung, the status
-  line carries a warning and suggests switching up (e.g. via `/model`): orchestration is
-  decomposition and synthesis, the one place a weak model degrades everything downstream.
+  (requirement 9) the hook warns when it leaves the **healthy corridor**
+  `floor ≤ orchestrator < top`:
+  - **below the floor** (`orchestrator_floor`, a *named* alias — anthropic: `opus`):
+    too weak — orchestration is decomposition and synthesis, the one place a weak model
+    degrades everything downstream; suggest `/model` up. Advisory: the auditor's
+    level verdict (§9.2) stays the authoritative, evidence-based check.
+  - **on the top rung while the floor sits lower**: wasteful — the top rung is the
+    auditor's reserved tier (§9.3); orchestration doesn't need it; suggest `/model`
+    down to the floor.
+  - **degenerate collapse, no warning:** when the ladder tops out at the floor (e.g. no
+    `fable` locally — `available` ends at `opus`), `floor == top`, both conditions go
+    silent, and orchestrator = reasoner = auditor = the floor. That is the accepted
+    degraded mode, not an anomaly.
+  - a floor alias absent from the local ladder disables the corridor (nothing to rank
+    against — only the existing unknown-orchestrator warning remains); a vendor may keep
+    the relative `"highest"` floor (openai does), which reproduces the pre-corridor
+    below-top warning and never fires the wasteful arm.
 
 If discovery is unavailable, the binding uses semantic fallback labels (`worker`, `mid`,
 `strongest`) and warns. File-backed generated agents omit concrete `model:` frontmatter in
 that mode instead of pretending semantic labels are valid vendor model ids.
 
-**Orchestrator detection is layered** (only the agent knows its model for certain):
+**Orchestrator detection is transcript-driven** (the model the main chain actually ran on,
+read as code — no owner action per session after the one-time setup):
 
-1. the hook reads the configured default model from harness settings — pure code;
-2. the status line it injects echoes the assumed orchestrator;
-3. the agent self-checks that one line against its actual model and re-runs init on
-   mismatch (covers a mid-session `/model` switch) — a near-zero-token check.
+1. the hook reads the session transcript (`transcript_path` in its payload), which records
+   `message.model` per turn; it takes the **last main-chain** assistant message (sidechain =
+   subagent turns are skipped so a delegate's model never masquerades as the orchestrator's)
+   and maps the concrete id to an alias — pure code;
+2. when the detected alias differs from the recorded orchestrator — a session launched on a
+   different model, or a mid-session `/model` switch — the hook recomputes the binding and
+   **regenerates the `k-*` defs** so subagents follow the live model. SessionStart carries it
+   plus the status line; **UserPromptSubmit** re-runs the same check each turn (silent unless a
+   switch just landed), which is what makes a mid-session `/model` propagate to delegates;
+3. the orchestrator itself is **never overridden** — it is the owner's explicit choice; the
+   hook only detects it. Detection lags a `/model` switch by one turn (the new model appears in
+   the transcript on the next assistant message) and falls back to harness settings / the
+   recorded config when the transcript names no model yet (a fresh session's first turn). The
+   status line keeps a self-check as the belt-and-suspenders fallback. **Per-user by
+   construction:** the `model:` frontmatter tracks the local orchestrator, so the generated
+   `k-*` defs are gitignored and regenerated, not committed (they would otherwise churn across
+   users/models).
 
-## 4. Mechanism — keystone components
+> **First-run boundary.** Only the one-time setup is explicit — the owner runs `init.py` once
+> to record the `available` ladder and the second-opinion opt-in (the hook needs the ladder to
+> map ids → aliases). Thereafter the orchestrator is auto-detected every session; a model
+> release or a `/model` switch costs zero owner action.
 
-### 4.1 Registry (data) — `_forge/keystone/tools/model_routing/registry.json`
+## 4. Mechanism — akmon components
+
+### 4.1 Registry (data) — `_aitna/akmon/tools/model_routing/registry.json`
 
 The single owner of model-selection policy *and* task-kind knowledge (requirements 3 + 4):
 
@@ -172,9 +218,9 @@ The single owner of model-selection policy *and* task-kind knowledge (requiremen
 A project may overlay this with a local override file (same shape, deep-merged) for
 project-specific kinds or a pinned dated id when behaviour must be frozen.
 
-### 4.2 Init tool (code) — `_forge/keystone/tools/model_routing/`
+### 4.2 Init tool (code) — `_aitna/akmon/tools/model_routing/`
 
-Run as `python _forge/keystone/tools/model_routing/init.py [--orchestrator <alias>]
+Run as `python _aitna/akmon/tools/model_routing/init.py [--orchestrator <alias>]
 [--available <ids>] [--second-opinion on|off]` (stdlib-only, idempotent):
 
 1. Resolves the orchestrator (flag from the agent — only it sees its harness — else the
@@ -182,29 +228,45 @@ Run as `python _forge/keystone/tools/model_routing/init.py [--orchestrator <alia
 2. Computes the tier→model binding from the semantic policy (§3), local available list,
    and the task-kind matrix.
 3. Emits generated artifacts (banner: *generated — edit registry/config, not this file*):
-   - `.claude/agents/*.md` — subagent definitions with concrete `model:` frontmatter only
+   - `.claude/agents/k-*.md` — subagent definitions with concrete `model:` frontmatter only
      when local discovery / `--available` provides aliases, plus a role brief carrying the
-     task kinds each serves (§8.6 decides the granularity);
+     task kinds each serves; includes `k-auditor` for the auditor tier. **Gitignored and regenerated**
+     (the model is per-user; §3), by init here and by the hook each time the orchestrator
+     moves;
    - `.claude/model-routing.local.json` — the resolved binding, second-opinion opt-in,
      registry hash for staleness detection (gitignored — per-user/per-machine, like `.env`).
 
-### 4.3 SessionStart hook (code) — `_forge/keystone/hooks/model-routing.py`
+### 4.3 SessionStart + UserPromptSubmit hook (code) — `_aitna/akmon/hooks/model-routing.py`
 
 Wired beside the existing `session-start-agent.py`, by `bin/sync.py` through the same
-adapter contract (`claude_adapter` / `codex_adapter`):
+adapter contract (`claude_adapter` / `codex_adapter`). One entrypoint, two events: it runs on
+**SessionStart** (the status line below) and on **UserPromptSubmit** (per-turn orchestrator
+re-detection + rebind, silent unless a `/model` switch just landed). Both first apply the
+transcript detection of §3 — detect the live orchestrator, and rebind the `k-*` defs when it
+moved — before producing their output:
 
 - **Config present and fresh** (registry hash matches, orchestrator matches settings) →
   inject one status line: `model routing: vendor=openai · orchestrator=<local-top> ·
-  reasoner=<local-top> · worker=<local-low> · second-opinion=claude(on)`. Zero questions,
-  near-zero tokens. If the orchestrator ranks below the local highest rung, the line gains
+  reasoner=<local-top> · worker=<local-low> · auditor=<local-high> · second-opinion=claude(on)`. Zero questions,
+  near-zero tokens. If the orchestrator leaves the healthy corridor (§3), the line gains
   a warning:
-  `⚠ orchestrator=<local-mid> is below the floor (<local-top>) — consider /model`
+  `⚠ orchestrator=<below-floor> is below the orchestration floor (<floor>) — consider /model up`
+  or
+  `⚠ orchestrator=<top> runs on the auditor's reserved top rung — consider /model down to <floor>`
   (requirement 9; advice only, the user's choice stands).
 - **Config missing or stale** → inject the init instruction: run the tool, and ask the
   owner two questions — (a) confirm the proposed binding, (b) enable second-opinion
   review (requirement 6).
 
-Same rule-plus-hook split keystone already uses (commit guard, role declaration).
+**Delivery — two channels (requirement 11).** `hookSpecificOutput.additionalContext` is
+injected into the *model's* context only; the host UI does not show it to the owner.
+Everything owner-addressed — the init instruction, the corridor warning, the mid-session
+rebind notice, the context-pressure warning (§12) — is therefore *also* returned as the
+top-level `systemMessage` (UI-visible; the claude adapter already carries the field, same
+idiom as C21's delegation indication). The steady-state status line stays context-only so
+the UI is not noisy when nothing needs the owner's attention.
+
+Same rule-plus-hook split akmon already uses (commit guard, role declaration).
 
 ### 4.4 Routing observability (code) — delegation log at zero token cost
 
@@ -233,7 +295,7 @@ plus the delegation log and reports:
 
 It stays token-efficient: a digest goes to chat, the full report to a file, entering
 context only on request. The digest is the on-demand counterpart to the zero-token log
-above. Scoped as its own task — see [keystone TASKS.md](../keystone/meta/TASKS.md) **C13**.
+above. Scoped as its own task — see [akmon TASKS.md](../akmon/meta/TASKS.md) **C13**.
 
 ### 4.5 Pipeline tier annotations (docs — one line per step)
 
@@ -257,8 +319,8 @@ When enabled in config, the orchestrator calls the external vendor at the existi
 *Verify* for code — via the registry-recorded invocation. The channel is the vendor's
 **CLI in non-interactive mode** (`codex exec "<prompt>"` for Claude-led sessions,
 `claude -p --output-format text "<prompt>"` for Codex-led sessions); a plugin command can
-replace it later — it is registry data. Note: keystone's `codex_adapter.py`/`codex-hook.py`
-are the *reverse* direction (keystone guardrails running inside a Codex session), not this
+replace it later — it is registry data. Note: akmon's `codex_adapter.py`/`codex-hook.py`
+are the *reverse* direction (akmon guardrails running inside a Codex session), not this
 channel.
 
 **Delivery — the opinion always surfaces in chat** (unlike routing switches, which are a
@@ -285,14 +347,16 @@ SessionStart hook (code)
 During work (orchestrator):
 ├─ sub-task matches a matrix row  → Agent(<delegate>)   [default path; hook logs it]
 │    └─ failure signal            → escalate one rung up the ladder
+├─ gate-pack audit + trigger fires → Agent(k-auditor, gate-pack)
 ├─ verify gate + opt-in on        → /codex:review (advisory → owner)
 └─ decompose / synthesize / owner dialogue → stays in main session
 ```
 
 ## 6. Keystone doc integration (lands with the mechanism)
 
-- **MODEL.md** — a capability-tier section: the tier vocabulary and the matrix's
-  normative table (§2), binding to the existing cognitive-operation axis.
+- **MODEL.md** — a capability-tier section: the tier vocabulary (adding `auditor` tier,
+  renamed from `synthesizer` in V2) and the matrix's normative table (§2), binding to the
+  existing cognitive-operation axis.
 - **roles/*.md** — one default-tier line per triad role (review fans out to workers,
   architect drafts forks on reasoner, engineer routes mechanics to workers).
 - **guardrails/_common.md** — the floor rule (§2).
@@ -300,7 +364,7 @@ During work (orchestrator):
 
 ## 7. Alternatives considered / rejected branches
 
-- **Model names in role docs / a keystone profile** — rejected: violates keystone's
+- **Model names in role docs / an akmon profile** — rejected: violates akmon's
   LLM-agnosticism; names drift with every release. *Revisit-if:* never for names.
 - **Prose-only skill the agent re-reads each session** — rejected: token burn every
   session, non-deterministic application; contradicts requirement 5 and D4.
@@ -326,14 +390,15 @@ During work (orchestrator):
   the harness UI.
 - **Hand-written `.claude/agents/` files, no tool** — rejected as the end state (drifts
   from the registry, per-vendor duplication), but **accepted as the bootstrap** (§8
-  phasing) to validate matrix rows before building the generator.
+  phasing) to validate matrix rows before building the generator. V2 note: once the `auditor`
+  tier and `audit` task kind are stable, they become part of the code-generated set.
 - **LOCAL-first phasing (build in alphavar, promote later)** — rejected by owner
   decision: this is a mechanism *of the standard*, so it is designed and built in
-  `ai_keystone` directly; alphavar is the first consumer and the proving ground. The
+  `ai_akmon` directly; alphavar is the first consumer and the proving ground. The
   learn loop still applies to the *content* (matrix rows, ladder notes) via memory
   capture.
 - **Subject-scoped agents (`k-framework-maint`, `k-bootstrap`)** — rejected: the matrix
-  is *operation*-based; a subject area (keystone hook maintenance, config deployment)
+  is *operation*-based; a subject area (akmon hook maintenance, config deployment)
   decomposes into existing rows plus `validate-loop`. Surfaced by session mining
   (Phase-1 CAPTURE). *Revisit-if:* a subject demands standing context no operation row
   carries.
@@ -346,17 +411,17 @@ During work (orchestrator):
 ## 8. Decided register (owner-locked) and phasing
 
 All former open points are **locked** (owner verification of this design; recorded in
-[ADR 0004](../keystone/meta/decisions/0004-model-routing-capability-tiers.md)):
+[ADR 0004](../akmon/meta/decisions/0004-model-routing-capability-tiers.md)):
 
 | # | Question | Decision |
 |---|---|---|
 | 1 | worker floor | **lowest locally discovered adequate rung** — worker rows are mechanics; the ladder escalates on signal, so the floor's ceiling rarely binds |
 | 2 | ask every session vs on-stale | **status-line + ask-on-stale**; the self-check line (§3) covers mid-session model switches |
-| 3 | generated `.claude/agents/*.md` | **commit** — alias-based definitions are stable and useful to every clone; only `model-routing.local.json` is local |
+| 3 | generated `.claude/agents/*.md` | ~~commit~~ **revised by [ADR 0006](../decisions/0006-orchestrator-detection-corridor-context-pressure.md): gitignored + regenerated** — the `model:` frontmatter follows the local orchestrator (per-user by construction, §3), so committed copies churn across users/models; the registry + overlay are the committed source, init/hook regenerate |
 | 4 | second-opinion opt-in scope | **per project with per-session override** — recorded in local config; re-asked on staleness |
 | 5 | granularity of generated agents | **few agents grouped by brief**; the bootstrap set is `k-explorer`, `k-mechanic`, `k-validator` (worker tier), `k-implementer` (mid rung — `implement-under-spec` needs its own model, so it splits from mechanic), `k-reasoner` (top rung); split further only if briefs diverge |
-| 5a | agent naming | **`k-` prefix (keystone namespace)**, lowercase-kebab — avoids collision with harness built-ins (`Explore`, `Plan`, …) and marks provenance: `k-*` agents are keystone-managed, later owned by the generator |
-| 6 | home of this design doc | **`ai_keystone` (`meta/design/`)** — revised post-lock: the mechanism is a keystone standard artifact end to end, design doc included, not just its ADR/doc edits; moved out of alphavar's LOCAL `_forge/design/` once the model-routing and D2-ledger work settled |
+| 5a | agent naming | **`k-` prefix (akmon namespace)**, lowercase-kebab — avoids collision with harness built-ins (`Explore`, `Plan`, …) and marks provenance: `k-*` agents are akmon-managed, later owned by the generator |
+| 6 | home of this design doc | **`ai_akmon` (`meta/design/`)** — revised post-lock: the mechanism is a akmon standard artifact end to end, design doc included, not just its ADR/doc edits; moved out of alphavar's LOCAL `_aitna/design/` once the model-routing and D2-ledger work settled |
 | 7 | top rung / orchestrator display | **local-discovery-driven, never a hardcoded name**; status line always names the orchestrator; warn + suggest switching when below the local highest rung (§3, requirement 9) |
 
 **Post-lock additions (owner-approved), from mining seven recent sessions** — three
@@ -372,12 +437,12 @@ orchestrator, exactly the escalation contract.
 
 **Phasing:** (1) bootstrap *(done)* — hand-written grouped subagents in alphavar's
 `.claude/agents/` validate the matrix rows in daily work; capture what delegates
-well/badly to `_forge/memory/`; (2) build registry + init tool + both hooks in
-`ai_keystone`, wire via `sync.py`, land the §6 doc edits; (3) alphavar consumes: bump the
+well/badly to `_aitna/memory/`; (2) build registry + init tool + both hooks in
+`ai_akmon`, wire via `sync.py`, land the §6 doc edits; (3) alphavar consumes: bump the
 submodule pin, run init (generated agents supersede the hand-written set), gitignore the
 local config.
 
-## 9. Extension — synthesizer tier, gate-pack protocol, level-hypothesis check
+## 9. Extension — auditor tier, gate-pack protocol, level-hypothesis check
 
 > **Status: owner-locked (A5) — §9.7 + §10.4 decided; the decision record is
 > [ADR 0005](../decisions/0005-synthesizer-gate-audit-and-role-routing.md).** v2 of this section: v1
@@ -413,7 +478,7 @@ maximal: the orchestrator's own synthesis and the owner's decisions.
 
 The user's choice of session model is not a config accident — it is the **owner's
 hypothesis about the task's level**. The binding respects it (never overrides), routes
-*relative* to it, and — new here — **checks it empirically**: the synthesizer (§9.3),
+*relative* to it, and — new here — **checks it empirically**: the auditor (§9.3),
 which always runs on the maximal available model, sees the whole collected material at a
 gate and includes a **level verdict** in its output: does the material suggest the task
 exceeded the hypothesis (contested forks resolved shallowly, contradictions the
@@ -424,8 +489,8 @@ the evidence-based gate check is the authoritative signal.
 
 ### 9.3 Tier changes (registry-level)
 
-1. **New tier `synthesizer` — pinned to the maximal available rung.** Runs the
-   `synthesis-verify` task kind at review/architect gates: audits the *whole* collected
+1. **New tier `auditor` — pinned to the maximal available rung.** Runs the
+   `audit` task kind at review/architect gates: audits the *whole* collected
    material for what no part-check could see (contradictions between
    independently-correct findings, uncovered seams between zones, option sets with
    incompatible assumptions), plus the level verdict (§9.2). This is the **first audit of
@@ -439,25 +504,25 @@ the evidence-based gate check is the authoritative signal.
    the orchestrator's rung (hypothesis-consistent, fresh context is the main benefit),
    escalate on the existing ladder signals, with per-task-kind floors as registry data
    (e.g. `quant-derivation` may pin higher). A wrong under-powered draft at a gate is
-   caught by the synthesizer — the safety net that makes the cheaper default acceptable.
+   caught by the auditor — the safety net that makes the cheaper default acceptable.
 3. **`second-opinion` — always a *different model*, because it thinks differently.** The
    diversity requirement is about priors, not vendor branding: the reviewer must differ
-   from the models whose work it reviews (the orchestrator as author, the synthesizer as
+   from the models whose work it reviews (the orchestrator as author, the auditor as
    auditor). Preference ladder (registry policy): (1) another vendor's model; (2) the same
    vendor's *different* model; never the same model. Fallback when no other vendor is
    reachable: decided (§9.7 #2) — a different model of the same vendor.
 
 Three independence mechanisms, one axis: adversarial verification varies the **prompt**,
-the synthesizer varies the **context** (fresh view, same or stronger model), second
+the auditor varies the **context** (fresh view, same or stronger model), second
 opinion varies the **priors** (different model). Verification depth scales with gate
-criticality: an ordinary Calibrate gets the synthesizer alone; a load-bearing Align gets
-synthesizer + second opinion.
+criticality: an ordinary Calibrate gets the auditor alone; a load-bearing Align gets
+auditor + second opinion.
 
-4. **Generated agent `k-synthesizer`** — the tier's concrete artifact, joining the
+4. **Generated agent `k-auditor`** — the tier's concrete artifact, joining the
    bootstrap set (§8.5: `k-explorer`, `k-mechanic`, `k-validator`, `k-implementer`,
-   `k-reasoner`, now `k-synthesizer`). Registry deltas: a `synthesizer` selection policy
-   (`"synthesizer": "highest"` — pinned max, unlike the now-dynamic reasoner) and a
-   task-kind row `"synthesis-verify": {"tier": "synthesizer"}`. Definition contract:
+   `k-reasoner`, now `k-auditor`). Registry deltas: an `auditor` selection policy
+   (`"auditor": "highest"` — pinned max, unlike the now-dynamic reasoner) and a
+   task-kind row `"audit": {"tier": "auditor"}`. Definition contract:
    - **frontmatter:** `model:` = the maximal locally available rung; **tools read-only**
      (Read/Grep/Glob + read-only Bash) — like `k-reasoner`, it drafts and audits, never
      edits;
@@ -485,10 +550,10 @@ synthesizer + second opinion.
      drafts *work* structure — a different question shape, hence its own checkable
      matrix row. Registry delta: `"plan-draft": {"tier": "reasoner"}`. *Adopting* the
      plan stays with the orchestrator — the precise invariant reading, §10.1.
-   - **Plan check — the synthesizer's second, pre-fan-out anchor; owner-decided: always
+   - **Plan check — the auditor's second, pre-fan-out anchor; owner-decided: always
      for gate-qualifying work.** Pre-fan-out, "gate-qualifying" is knowable only via the
      structural criterion (the zone plan names ≥2 zones — counts don't exist yet); when
-     it holds, the synthesizer receives a **minimal pack** — yardstick + zone plan, no
+     it holds, the auditor receives a **minimal pack** — yardstick + zone plan, no
      artifacts — and answers: does the plan cover the stated goal; which zones/seams are
      obviously missing? The plan is checked against the *goal*, not against its own
      coverage map. Cheap (input is tens of lines), same pinned-max model, and it runs
@@ -501,7 +566,7 @@ synthesizer + second opinion.
 
 ### 9.4 Gate-pack protocol — one packaging, N executors
 
-One structured input package per gate, consumed by every executor (the synthesizer
+One structured input package per gate, consumed by every executor (the auditor
 subagent and the second-opinion CLI — replacing §4.6's free-form `--prompt-file`):
 
 - **the step's artifacts** — findings with evidence (review) / options with trade-offs +
@@ -520,8 +585,11 @@ contract and the question asked (review: "what contradicts, what seam is uncover
 architect: "do the locked decisions cohere, do options assume compatible things?");
 the **tier** determines only the model. Engineer/code-flow keeps its existing verify
 annotation — implementation errors are gate-detectable and the design leverage was
-already spent at the design gate; the orchestrator may still invoke a synthesizer pass
-on signal for high-leverage code (a core abstraction, a public API).
+already spent at the design gate; the orchestrator may still invoke an audit pass on signal
+for high-leverage code (a core abstraction, a public API) — **A7 (b) makes `audit` a
+cross-cutting verification kind (§10.2), routable from any role and governed by the structural
+trigger, so this engineer-side invocation needs no role-specific carve-out and the C20
+advisory does not warn against it.**
 
 ### 9.5 Triggers and the loop-back edge *(carried from v1, unchanged in substance)*
 
@@ -548,7 +616,7 @@ on signal for high-leverage code (a core abstraction, a public API).
 The owner is the apex decision node; the framework's goal is quality per unit of
 **tokens + owner attention**, and only the first had a mechanism. Two integrations:
 
-- **d2-ledger attachment:** the synthesizer's gate report attaches to the D2 ledger
+- **d2-ledger attachment:** the auditor's gate report attaches to the D2 ledger
   entry alongside the reasoner draft and second-opinion digest (d2-ledger §2.5) — the
   owner opens one entry and sees the change, the drafted rationale, the whole-picture
   audit, and where the independent review disagrees, then decides.
@@ -563,31 +631,31 @@ All points locked by the owner ("9.7 принято"); recorded in
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | `reasoner` dynamic default | **(a)** orchestrator's rung + per-task-kind registry floors, escalate on ladder signals — trusts the level hypothesis; the synthesizer catches under-powered drafts at the gate |
+| 1 | `reasoner` dynamic default | **(a)** orchestrator's rung + per-task-kind registry floors, escalate on ladder signals — trusts the level hypothesis; the auditor catches under-powered drafts at the gate |
 | 2 | second-opinion fallback when no other vendor is reachable | **(b)** a different model of the same vendor — weaker prior diversity still beats none; the ladder (other vendor → other model → never same) is registry data |
 | 3 | optional dependency-graph excerpt in the review gate-pack | **yes**, opt-in per gate |
 | 4 | count-floor numbers | **3 / 2**, tune from telemetry |
 | 5 | skip-above-floor surfacing | **silent-but-logged** |
-| 6 | orchestrator floor relaxation | **yes** — with the synthesizer on, review/architect-dominant sessions may orchestrate below the top rung; the init-time floor warning stands as the weak prior (§9.2), the gate-level verdict is the authoritative signal |
+| 6 | orchestrator floor relaxation | **yes** — with the auditor on, review/architect-dominant sessions may orchestrate below the top rung; the init-time floor warning stands as the weak prior (§9.2), the gate-level verdict is the authoritative signal |
 | 7 | `plan-draft` as its own matrix row (vs reusing `design-fork`) | **own row** — work structure vs product structure are different question shapes; the matrix stays checkable |
 | 8 | plan-check trigger | **always for gate-qualifying work** — pre-fan-out that means the structural criterion (zone plan ≥2 zones); counts don't exist yet |
-| 9 | who runs `plan-draft` | **dynamic reasoner** (the draft is a bounded task; the pinned-max synthesizer keeps the *check*) — was already the §9.3 text; confirmed, not an open fork |
+| 9 | who runs `plan-draft` | **dynamic reasoner** (the draft is a bounded task; the pinned-max auditor keeps the *check*) — was already the §9.3 text; confirmed, not an open fork |
 
 ### 9.8 Alternatives considered / rejected branches
 
-- **v1: `synthesis-verify` as a task kind on the `reasoner` tier, no new tier** —
+- **v1: `audit` as a task kind on the `reasoner` tier, no new tier** —
   superseded: v1 assumed the selection policies coincide (both top-rung); the level-
-  hypothesis model splits them — reasoner goes dynamic/relative, synthesizer stays
+  hypothesis model splits them — reasoner goes dynamic/relative, auditor stays
   pinned-max. The prompt-contract insight of v1 (a category difference from
   `design-fork`/`debug-deep`) carries over unchanged.
 - **`reasoner` statically pinned to the top rung** *(the pre-v2 status quo, §3)* —
   superseded by open point 1: not always available, expensive, and often above the
-  bounded draft's needs; the synthesizer safety net makes the relative default viable.
+  bounded draft's needs; the auditor safety net makes the relative default viable.
   *Revisit-if:* gate audits show under-powered drafts recurring despite the ladder.
 - **Second-opinion bound to vendor diversity only** — superseded: the requirement is
   *model* diversity (different priors); vendor diversity is the preferred but not the
   only way to get it.
-- **Mandatory synthesizer at every gate** (v1-fork B) — rejected: contradicts the
+- **Mandatory auditor at every gate** (v1-fork B) — rejected: contradicts the
   threshold+override decision; cost on trivial gates buys nothing.
 - **Fold into `design-fork`/`debug-deep` prompt contract** — rejected (carried from v1):
   a different question shape; conflation degrades both prompts.
@@ -595,8 +663,8 @@ All points locked by the owner ("9.7 принято"); recorded in
   risk the matrix exists to remove.
 - **Raw worker transcripts as default input** — rejected (carried from v1): process
   noise at token cost; the dependency graph opt-in is the one carve-out.
-- **Other vendor as the synthesizer** — rejected: conflates the context-diversity and
-  prior-diversity mechanisms; the synthesizer must share the session's conventions and
+- **Other vendor as the auditor** — rejected: conflates the context-diversity and
+  prior-diversity mechanisms; the auditor must share the session's conventions and
   registry contract, which a foreign CLI does not; prior diversity is second-opinion's
   job.
 
@@ -622,7 +690,7 @@ The "decompose / route / synthesize — never delegated" invariant (§2, ADR 000
 precisely as: the orchestrator never delegates **adopting** a plan, a route, or a
 synthesis. The **draft** is delegable like any other draft — `plan-draft` (§9.3 item 5)
 for decomposition, exactly the drafts-vs-decides split the rest of the system already
-runs on (reasoner drafts forks, architect + owner decide; synthesizer audits, owner
+runs on (reasoner drafts forks, architect + owner decide; auditor audits, owner
 decides).
 
 ### 10.2 Role → allowed task kinds (registry `role_task_kinds`)
@@ -632,16 +700,25 @@ routing an edit — the guardrail rests on orchestrator discipline alone. As reg
 
 | Role | May route | Never routes |
 |---|---|---|
-| review | explore-search · summarize · debug-deep · plan-draft · synthesis-verify · independent-review | any edit kind — review produces words |
-| architect | explore-search · summarize · design-fork · quant-derivation · plan-draft · synthesis-verify · independent-review · doc-sync *(only post-Record-confirmation)* | mech-edit · implement-under-spec · test-scaffold · validate-loop |
-| engineer | all worker kinds · debug-deep · quant-derivation · plan-draft · independent-review | design-fork — a material design gap goes *back to architect*, not sideways to a reasoner |
+| review | explore-search · summarize · debug-deep · plan-draft | any edit kind — review produces words |
+| architect | explore-search · summarize · design-fork · quant-derivation · plan-draft · doc-sync *(only post-Record-confirmation)* | mech-edit · implement-under-spec · test-scaffold · validate-loop |
+| engineer | all worker kinds · debug-deep · quant-derivation · plan-draft | design-fork — a material design gap goes *back to architect*, not sideways to a reasoner |
 | learn | explore-search · summarize · doc-sync *(post-confirmation)* | — |
 | release | validate-loop · doc-sync · summarize | — |
 
+**Cross-cutting verification kinds — `independent-review` and `audit`** — are **not role-gated** (A7 (b)): any role may route them, and
+*when* they are warranted is the **structural trigger** (fan-out touched ≥2 zones) / count
+floor (§9.5), not the producing role. This dissolves the A7 seam (§9.4) at its source — the
+auditor is a role-agnostic *verification capability*, not an engineer-specific task kind — so
+it belongs to no single row above and is exempt from the warning below. (Consequence:
+learn/release may route them too — advisory-only, and verification is never role-inappropriate.)
+
 Enforcement is advisory, same idiom as the delegation nudge: the delegation hook warns
-when a routed kind falls outside the active role's row. It needs a machine-readable
-active-role marker (the `🧭` chat declaration is invisible to hooks) — decided §10.4:
-doc rule + registry data ship first; the session-state marker lands with C20.
+when a routed kind falls outside the active role's row (**cross-cutting verification kinds
+excepted**, per the note above — a `cross_cutting_kinds` registry list, checked in
+`role_matrix_warning`). It needs a machine-readable active-role marker (the `🧭` chat
+declaration is invisible to hooks) — decided §10.4: doc rule + registry data ship first; the
+session-state marker lands with C20.
 
 ### 10.3 Pipeline step contracts gain data outputs
 
@@ -664,6 +741,7 @@ doc rule + registry data ship first; the session-state marker lands with C20.
 |---|---|---|
 | 1 | Active-role marker for hook enforcement | **(b) then (a)** — ship the matrix as a doc rule + registry data first; add the session-state marker when the delegation hook gains its role check (C20) |
 | 2 | Does `review` routing `debug-deep` blur analysis-only? | **no** — a failure-mechanism diagnosis is analysis; the *fix* is what review must not construct |
+| 3 | `engineer` vs the auditor — §9.4 permits an on-signal code audit, §10.2 omitted it (A7 seam 1) | **(b)** — make `audit` (+ `independent-review`) **cross-cutting verification kinds**: routable from *any* role and exempt from the role-matrix warning; *when* they apply is the structural trigger (§9.5), not the role. Cleaner than a per-row copy — the auditor is role-agnostic *verification*, not engineer-specific work, which dissolves the seam at source and simplifies C20. Consequence: learn/release may route them too (advisory-only, never harmful). Impl in C18: registry `cross_cutting_kinds` + `role_matrix_warning` exemption + test + ADR 0005 addendum. Follow-up weighs the sub-fork (auto-trigger `plan-draft` on un-decomposed high-leverage work — verdict contradiction 2's economics root) |
 
 ## 11. Prior art — the host harness's own subagents (Claude Code)
 
@@ -671,29 +749,229 @@ Checked against the built-in agent set of the harness this session runs in (`Exp
 `Plan`, `general-purpose`, `claude`, plus the deterministic `Workflow` orchestration
 tool and its quality patterns). Verified against the live tool surface, not memory.
 
-| keystone | Closest host built-in | Note |
+| akmon | Closest host built-in | Note |
 |---|---|---|
 | `k-explorer` | **Explore** (fast read-only search, "conclusions not file dumps", breadth parameter) | same shape, independently converged — including enforcement *by tool set*, not prompt trust |
 | `k-reasoner` | **Plan** ("software architect for implementation plans, trade-offs") | partial: Plan is the "tech-lead-shaped" built-in, scoped to implementation planning; k-reasoner is wider (debug-deep, quant) |
-| `k-mechanic` / `k-validator` / `k-implementer` | `general-purpose` / `claude` (catch-alls) | no per-kind split in the host — keystone's task-kind granularity is finer |
-| `synthesizer` | **Workflow "completeness critic"** pattern ("what's missing — claim unverified, modality not run?") + "adversarial verify" | the closest prior art to `synthesis-verify` — but in the host it is a *workflow stage pattern*, not a standing agent with a pinned model |
-| second-opinion | — | absent (single-vendor harness); keystone addition |
-| level-hypothesis check, owner-attention budget (D2 ledger) | — | absent; keystone additions |
+| `k-mechanic` / `k-validator` / `k-implementer` | `general-purpose` / `claude` (catch-alls) | no per-kind split in the host — akmon's task-kind granularity is finer |
+| `auditor` | **Workflow "completeness critic"** pattern ("what's missing — claim unverified, modality not run?") + "adversarial verify" | the closest prior art to `audit` — but in the host it is a *workflow stage pattern*, not a standing agent with a pinned model |
+| second-opinion | — | absent (single-vendor harness); akmon addition |
+| level-hypothesis check, owner-attention budget (D2 ledger) | — | absent; akmon additions |
 | orchestrator = main session, never delegated | same in the host | both systems keep decomposition/synthesis/user dialogue in the main loop |
 
 Adopted into this design from the comparison:
 
 - **Enforcement by tool set** (Explore has no write tools; `k-explorer`/`k-reasoner`/
-  `k-synthesizer` likewise) — already aligned, keep as the rule for audit-tier agents.
+  `k-auditor` likewise) — already aligned, keep as the rule for audit-tier agents.
 - **Deterministic orchestration for the gate fan-out:** the host's `Workflow` runs
-  fan-out/pipeline/verify loops as *code*, not model judgment — exactly keystone's D4
-  instinct. The gate-pack assembly + fan-out + synthesizer call (C16/C17) should be
+  fan-out/pipeline/verify loops as *code*, not model judgment — exactly akmon's D4
+  instinct. The gate-pack assembly + fan-out + auditor call (C16/C17) should be
   runnable as one deterministic script, with the orchestrator deciding only entry and
   the verdict's consumption. *(Vehicle, not contract — per-vendor availability differs.)*
 - **Perspective-diverse verification** (distinct lenses beating N identical checkers) —
-  refines the §9.3 diversity axis: when a gate warrants more than one synthesizer-side
+  refines the §9.3 diversity axis: when a gate warrants more than one auditor-side
   check, vary the *lens* (coherence / coverage / level), not just the count.
 
 Divergences kept deliberately: the host routes to agents by *description matching*;
-keystone routes by the task-kind matrix (checkable data, not affinity). The host has no
-cross-model tiering of its built-ins by task economics — keystone's core addition stands.
+akmon routes by the task-kind matrix (checkable data, not affinity). The host has no
+cross-model tiering of its built-ins by task economics — akmon's core addition stands.
+
+## 12. Runtime weakness signals — context pressure and the intelligence axis
+
+> **Status: built ([ADR 0006](../decisions/0006-orchestrator-detection-corridor-context-pressure.md);
+> C23 — awaiting owner verify, D2).** Requirement 12.
+
+A model can be "weak" for the running session on two axes; each already has (or now gets)
+a distinct detector — no overlap:
+
+- **Intelligence** — the task exceeds the model's level. Detector: the auditor's
+  **level verdict** (§9.2), evidence-based at gates. The static corridor warning (§3) is
+  the weak prior at the session boundary. **No new mechanism** — this axis is closed.
+- **Tokens** — the context window fills up; quality degrades before a forced compaction
+  lands mid-task. Detector: **context-pressure detection**, below.
+
+### 12.1 Signal — read from the transcript the hook already scans
+
+The transcript's per-turn `message.usage` records the context economics of each call.
+The **fill** of the window at the last main-chain assistant turn is
+
+```
+fill = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+```
+
+(the three input components partition the prompt; `output_tokens` is not context carried
+forward). One transcript pass yields both the orchestrator model (§3 detection) and the
+fill — the detector adds **zero extra I/O** to the per-turn hook.
+
+### 12.2 Policy as registry data
+
+```json
+"context_pressure": {
+  "window_default": 200000,
+  "windows": {},
+  "warn_ratios": [0.85, 0.95]
+}
+```
+
+- `window_default` — the assumed context window; `windows` maps alias substrings to
+  exceptions when a model's window differs. Registry data, overlayable per project.
+- `warn_ratios` — ordered warning bands: **high** (plan the compaction: checkpoint
+  durable state to files/TASKS, finish the unit of work) and **critical** (compact now —
+  past this point quality loss and a forced mid-task compaction are imminent).
+
+### 12.3 Mechanism — same hook, banded, throttled
+
+Runs inside the §4.3 UserPromptSubmit pass (and at SessionStart, where a resumed session
+may already be deep):
+
+1. compute `fill / window` for the last main-chain turn;
+2. find the highest crossed band (or none);
+3. **throttle by band, not by turn:** a per-session temp-dir marker
+   (`akmon-context-pressure-<session_id>`, the delegation-nudge idiom) records the last
+   announced band; warn only when the band *rises* — 0→85 warns once, 85→95 warns once
+   more, steady 87% stays silent;
+4. **reset on compaction:** fill dropping below the lowest band clears the marker, so a
+   later re-crossing warns again (each compaction cycle gets its own warnings);
+5. delivery per requirement 11: `systemMessage` (the owner acts — `/compact`, checkpoint)
+   **and** `additionalContext` (the model acts — stop opening new fronts, persist durable
+   state, propose the checkpoint), e.g.
+   `⚠ context pressure: ~83% of 200k — checkpoint durable state and plan compaction`.
+
+Missing/malformed `usage` → silent (never block a turn, the hook's standing rule).
+
+### 12.4 Rejected branches
+
+- **The model self-reports fullness** — rejected: it cannot see its own window fill
+  reliably, and narration costs the very tokens under pressure; the transcript states the
+  fact for free (requirement 8 discipline: code cost, not token cost).
+- **Warn every turn above a threshold** — rejected: a nag the model and owner learn to
+  ignore; banded one-shot warnings with compaction reset keep the signal rare and real.
+- **Auto-compact / auto-checkpoint on critical** — rejected: mutating the session is the
+  owner's move (same never-override stance as the orchestrator choice); the hook informs.
+
+## 13. Delegation drift — from prose to a forcing function
+
+> **Status: axis-1 built (advisory + hard ask + the C28d subagent exemption landed;
+> awaiting owner verify + commit, D2 — see [D2 ledger](../D2_LEDGER.md) D2-8/D2-9).
+> C28a live-verified: no tool-category exemption, but a background/child-session
+> enforcement gap surfaced (D2-10, C31). Axis-2 planned (C29).** Requirement: make
+> delegation *actually happen*, not just be documented.
+
+### 13.1 Problem — the standard said "delegate" seven times and the orchestrator still didn't
+
+Every routing artifact already tells the orchestrator to delegate by task kind
+(MODEL.md § Capability tiers, §9.1 leverage, the roles, the guardrails). The observed
+behaviour was the opposite: **the orchestrator did everything itself** — reads, sweeps,
+edits, shell — and only the owner's manual `k-*` calls produced any delegation. The
+delegation log (§4.4) confirmed it: healthy-looking entries were *all* owner-initiated,
+so the autonomous self-delegation the standard asks for was effectively zero.
+
+Prose does not fix this. A rule restated an eighth time is still a rule that falls out of
+context in a long session — the same reason the commit and analysis guards are **hooks**,
+not paragraphs. Delegation needs a **forcing function** at tool-call time, on the same
+PreToolUse surface those guards already use.
+
+### 13.2 Axis-1 (built) — call-count drift → graduated advisory → hard ask
+
+`hooks/hook_core.py::delegation_nudge_result` counts **consecutive orchestrator delegable
+tool calls with no delegation between them**, keyed per session in the temp dir (the
+§12.3 marker idiom):
+
+- **What counts** — edit (`Write/Edit/MultiEdit`), shell (`Bash`), **and read
+  (`Read/Grep/Glob`)**. Reads count because the actual drift symptom *is* the read/sweep:
+  pulling a wide `git diff`, grepping the tree, reading many files inline is exactly the
+  work a `k-explorer` should absorb so the dump never enters orchestrator context. An
+  edit-only counter would have missed the dominant failure mode.
+- **Graduation** — advisory `additionalContext` at the nudge threshold (default 10,
+  `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`); a hard PreToolUse **`ask`** on *sustained* drift
+  at the ask threshold (default 20, `KEYSTONE_DELEGATION_ASK_THRESHOLD`, clamped ≥ advisory).
+  Each fires **once per drift episode** via its own temp-dir marker.
+- **Reset + re-arm** — any subagent delegation (`Task`/`Agent`) zeroes the counter and
+  clears both markers: a delegation is the exact act the nudge wants, so it re-arms the
+  whole ladder for the next episode.
+- **Wiring** — the matcher in `bin/sync.py::_claude_hooks` is the source of truth
+  (`Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob`), mirrored into
+  `.claude/settings.json`.
+
+**Vendor contract (C28a live-verified; C28b wire shape schema-verified, runtime open).**
+The hook dispatches identically for read-only tools (`Read/Grep/Glob`) and for
+`Bash/Edit` — confirmed live (C28a): a debug-instrumented run showed `delegation-nudge.py`
+firing on a real `Read` call exactly like a real `Bash` call, same counter, same
+`HookResult(permission_decision="ask")` output. No tool-category exemption exists in the
+hook. The codex adapter's output **shape** is confirmed schema-valid (C28b): the installed
+`codex` binary embeds its own JSON schema for hook I/O, and
+`pre-tool-use.command.output.hookSpecificOutput.permissionDecision` is exactly
+`allow|deny|ask`, matching what `codex_adapter.py` emits today. Codex also exposes a
+separate `PermissionRequest` hook event (own `behavior: allow|deny` contract) not yet
+used here. What remains open is **runtime enforcement** — whether codex actually blocks
+on `ask`/`deny`, especially under non-interactive `codex exec` — untested, deferred
+(owner: cost/time). See [D2 ledger](../D2_LEDGER.md) D2-10 for a related lever: both
+Claude and Codex payloads carry a `permission_mode` field with the identical enum
+(`default|acceptEdits|plan|dontAsk|bypassPermissions`), which a hook could read to decide
+`ask` vs `deny` instead of emitting an `ask` that may be a no-op in non-default modes.
+
+**Background/child-session gap (C31, new).** The same live test showed the emitted `ask`
+was **not enforced** — for either `Read` or `Bash` — in a Claude Code background/child
+session (`CLAUDE_CODE_CHILD_SESSION=1`): both tool calls completed normally with no
+permission gate, even though the hook's stdout carried `permissionDecision: "ask"` for
+both. This means the "known-good `git-commit-guard` path" assumption above may hold only
+for interactive/foreground sessions — in a background job, the hard `ask` this section
+relies on for sustained-drift enforcement (and D5's commit guard) may be a no-op. Not yet
+tested from a foreground session. See [D2 ledger](../D2_LEDGER.md) D2-10.
+
+### 13.3 The subagent exemption (C28d) — why a shared session_id is a trap
+
+Claude Code gives a subagent's tool calls the **same `session_id`** as the main chain.
+The counter is keyed by `session_id`, so without a guard a subagent's reads charged the
+**orchestrator's** counter — and worse, tripped the nudge (and the hard `ask`) *inside* a
+`k-*` delegate that has **no `Task` tool and cannot delegate at all*. Demonstrated live: a
+read-only audit subagent tripped the nudge at its tenth read. The advisory wasted the
+delegate's context; the `ask` was un-actionable and blocked its legitimate reads.
+
+Fix: the PreToolUse payload carries `agent_id` **only inside a subagent**. The wrapper
+sets `is_subagent = bool(payload.get("agent_id"))`; `delegation_nudge_result` returns
+early **before touching the counter** when it is set. So subagent calls are fully
+transparent to the mechanism — they neither charge the orchestrator's counter nor receive
+a nudge — regardless of the shared `session_id`.
+
+### 13.4 Axis-2 (planned, C29) — inline output-weight as the context-cost signal
+
+Axis-1 counts *calls*; it cannot tell a one-line `git rev-parse` from a thousand-line
+`git diff`. The principled second axis measures **cumulative byte/char weight of the
+inline tool output the orchestrator pulled instead of delegating** (a PostToolUse
+entrypoint, since the output does not exist at PreToolUse), reset on `Task`/`Agent`. Its
+motivation is **context cost in two senses**, only one of which axis-1 sees:
+
+1. **Token budget** — inline dumps fill the window and pull compaction forward (the §12
+   fill signal, from the *supply* side).
+2. **Reasoning quality** — beyond raw tokens, low-signal bulk dilutes attention (context
+   rot / lost-in-the-middle): small load-bearing details get ignored as the window fills.
+   This is *why* the axis is weighted by fill, not merely additive.
+
+- **Coefficient** — axis-2's weight scales with context fill, reusing the §12.1 `fill`
+  computation (one owner for that fact — link, don't recompute). At least **four bands**
+  (e.g. ~0.5 / 0.7 / 0.85 / 0.95 → ×1 / ×2 / ×4 / ×8): the fuller the window, the more
+  expensive each self-served inline answer is, on *both* grounds above.
+- **Advisory-only, dual-channel** — `additionalContext` (model-addressed) **and** an
+  owner-visible `systemMessage` stating a quality/token recommendation fired and that the
+  owner *may* escalate it to a hard `ask`. **Not** an armed auto-ask — see rejected below.
+
+### 13.5 Rejected branches
+
+- **An eighth prose restatement** — rejected: the prose already existed sevenfold and did
+  not change behaviour (§13.1). The demoted duplicate bullets were removed to restore
+  one-owner-per-fact; the leverage principle stays in MODEL.md, the mechanism here.
+- **Arming axis-2 with an auto-`ask`** — rejected (owner decision): a second hard gate on
+  top of axis-1's ask risks alarm fatigue, and it collides on the same `ask` channel as
+  the commit guard; it also contradicts §12.4's "the hook informs, the owner acts" stance.
+  Axis-2 stays advisory; escalation to a hard ask is an explicit owner move.
+- **Heuristic read-only-vs-mutating classification of the bash string** — rejected as the
+  tuning axis: brittle (`git status && rm -rf` is not read-only) and on the wrong axis. The
+  cost that matters is **output weight**, not mutation: a read-only `git diff` across many
+  files is the *most* expensive thing to pull inline and *should* trip. Axis-2 measures the
+  right thing directly; only genuinely tiny-output commands (`git status`, `rev-parse`,
+  `ls`) are inline-justified, and axis-2's weight already discounts them.
+- **Assuming the drift is "in remission"** — rejected: a healthy delegation log is an
+  artifact of the owner's *manual* audit calls, not autonomous self-delegation. The
+  mechanism must assume the drift is live, which is why axis-2 is warranted on top of
+  axis-1 rather than deferred.

@@ -7,7 +7,7 @@ reading raw commits, and cut it by one repeatable pipeline.
 
 This is a **DEVELOP** role: cutting and publishing a release is still developing the project
 (making a reviewed state available). **OPERATE** is the other side — *consuming* the published
-release at runtime — and is out of keystone scope. The role is **parameterized by
+release at runtime — and is out of akmon scope. The role is **parameterized by
 subject**, not split into variants.
 
 ---
@@ -19,7 +19,7 @@ subject**, not split into variants.
   plan / command files.
 - Read-and-audit (not edit): `TASKS.md`, `TASKS_ARCHIVE.md`, design/ADRs, requirements, memory,
   skills/tools, CI, generated pointers, project docs, and `git status`.
-- The three release subjects: this project's **package**, **keystone** (its tag), or a **keystone
+- The three release subjects: this project's **package**, **akmon** (its tag), or a **akmon
   pin bump** recorded inside a consuming project.
 
 **Does NOT** (it **routes**, it does not do):
@@ -48,6 +48,11 @@ subject**, not split into variants.
 [release](../pipelines/release.md) — two modes: a **lightweight cut** (default) and a **periodic
 cadence** that adds the hygiene/architecture sweeps and a learn-loop handoff. The sweep steps are
 where this role routes work to architect/engineer/[learn](learn.md), never doing it itself.
+
+**Tier routing** (MODEL.md § Capability tiers). `release` routes `validate-loop`, `doc-sync`, and `summarize`. The
+**cross-cutting verification kinds** (`independent-review`, `audit`) are routable
+from any role, so a readiness sweep *may* take an advisory audit — but, as with every finding,
+the audit **drafts**; the release decision and the landing commands stay owner-owned (D5).
 
 ---
 

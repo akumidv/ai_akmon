@@ -1,25 +1,25 @@
-# 0003 — Role triad (analysis/synthesis/implementation) + keystone develop/use separation
+# 0003 — Role triad (analysis/synthesis/implementation) + akmon develop/use separation
 
 **Status:** Accepted (owner-agreed in a design session; records the locked decision).
 
 ## Context
 
-Two coupled problems surfaced while reviewing keystone's own dev layer.
+Two coupled problems surfaced while reviewing akmon's own dev layer.
 
 1. **The `architect` role conflated two different cognitive operations.** It owned both
    *assessing what exists* (finding problems, bottlenecks, mismatches against goal/vision/
    requirements) **and** *constructing what should be* (options, trade-offs, contracts).
    These are different activities with different outputs and different quality bars. With no
    role for the first, a pure review/analysis task had no home and was routed to `architect`
-   by default — observed concretely when a keystone dev-layer review was mislabelled
+   by default — observed concretely when a akmon dev-layer review was mislabelled
    `architect` because the model offered nothing else.
 
-2. **keystone's mounted tree mixes its USE surface with its own DEVELOP artifacts.** The
+2. **akmon's mounted tree mixes its USE surface with its own DEVELOP artifacts.** The
    submodule ships, into every consuming project, both the *standard a consumer follows*
-   (roles/pipelines/guardrails) and *keystone's own development* (the vision in `README.md`,
+   (roles/pipelines/guardrails) and *akmon's own development* (the vision in `README.md`,
    ADRs, `ROADMAP.md`, `design/`, `TASKS.md`, `tests/`). Worse, operative docs **cite** those
    dev artifacts ("Locked in ADR 0001", "see ROADMAP O4"), coupling the standard to
-   keystone's development history and dragging keystone's vision into the consumer's context.
+   akmon's development history and dragging akmon's vision into the consumer's context.
 
 ## Decision
 
@@ -78,13 +78,13 @@ quality mechanism, not bureaucracy.
 
 This is the operative one-liner; it is also the text fed into the SessionStart role hint.
 
-### 5. keystone meta/use separation
+### 5. akmon meta/use separation
 
-keystone applied to itself: relative to a consumer keystone is USAGE; keystone's own DEVELOP
-must not bleed into the consumer's surface. Cordon keystone's development artifacts under
-`_forge/keystone/meta/` ("keystone about itself"). The directory is named **`meta/`**, not
+akmon applied to itself: relative to a consumer akmon is USAGE; akmon's own DEVELOP
+must not bleed into the consumer's surface. Cordon akmon's development artifacts under
+`_aitna/akmon/meta/` ("akmon about itself"). The directory is named **`meta/`**, not
 `develop/`, so it never collides with the **DEVELOP** *role/mode* of the operative model — the
-mode is a relation a consumer reasons about; the directory is keystone's private workspace.
+mode is a relation a consumer reasons about; the directory is akmon's private workspace.
 
 - **USE surface** (loaded/followed by a consumer): a thin operative `MODEL.md` (layers,
   role/agent, the triad + discriminator, archetypes, inheritance, secrets, sync/verify use),
@@ -125,7 +125,7 @@ The split in §6 is mirrored in the tooling so the USE verifier never reads the 
   (AGENTS.md, vendor pointers, hooks, skills, memory, layout, the isolation rule). It ships into
   every consumer and is wired into consumer CI. It must **not** require or reference any `meta/`
   artifact.
-- **`meta/bin/validate.py`** validates **keystone itself** — that the `meta/` dev layer is whole,
+- **`meta/bin/validate.py`** validates **akmon itself** — that the `meta/` dev layer is whole,
   that the synthetic-fixture self-CI (`meta/self_ci.py`: sync + USE verify) passes, and that the
   unit tests pass. A consumer never runs it.
 
@@ -145,7 +145,7 @@ learning · `V` release · **`N` analysis/review**; role derived from the letter
   routes by operation.
 - **Leaner USE context:** decoupling = the dev-layer review's token-trim; vision no longer
   loads in a consumer.
-- **Consumers stop inheriting keystone's ADRs/vision.** They follow `MODEL.md` +
+- **Consumers stop inheriting akmon's ADRs/vision.** They follow `MODEL.md` +
   roles/pipelines/guardrails. This revises [`decisions/README.md`](README.md) (which stated
   ADRs "travel with the submodule into every consuming project") and `README.md §3` ("two
   roles").
@@ -161,4 +161,4 @@ learning · `V` release · **`N` analysis/review**; role derived from the letter
 - Revises [ADR 0001](0001-release-and-roles-model.md) role roster (review added as a fifth
   role; the analysis/synthesis split refines `architect`).
 - Full rationale + the dev-layer review that prompted this lives in
-  `meta/reviews/keystone-dev-layer.md`.
+  `meta/reviews/akmon-dev-layer.md`.

@@ -5,19 +5,20 @@
       "worker": "lowest",
       "mid": "next-after-worker",
       "reasoner": "orchestrator",
-      "synthesizer": "highest",
-      "orchestrator_floor": "highest"
+      "auditor": "highest",
+      "orchestrator_floor": "opus"
     },
     "second_opinion": {
       "cli": "claude",
       "invoke": "claude -p --output-format text",
+      "model_flag": "--model {model}",
       "report_dir": ".codex/second-opinion/"
     },
     "semantic_fallback": {
       "worker": "worker",
       "mid": "mid",
       "reasoner": "strongest",
-      "synthesizer": "strongest",
+      "auditor": "strongest",
       "orchestrator": "strongest"
     }
   },
@@ -27,7 +28,7 @@
       "worker": "lowest",
       "mid": "next-after-worker",
       "reasoner": "orchestrator",
-      "synthesizer": "highest",
+      "auditor": "highest",
       "orchestrator_floor": "highest"
     },
     "second_opinion": {
@@ -39,9 +40,14 @@
       "worker": "worker",
       "mid": "mid",
       "reasoner": "strongest",
-      "synthesizer": "strongest",
+      "auditor": "strongest",
       "orchestrator": "strongest"
     }
+  },
+  "context_pressure": {
+    "window_default": 200000,
+    "windows": {},
+    "warn_ratios": [0.85, 0.95]
   },
   "task_kinds": {
     "explore-search": {"tier": "worker"},
@@ -55,7 +61,7 @@
     "design-fork": {"tier": "reasoner"},
     "quant-derivation": {"tier": "reasoner", "floor": "highest"},
     "plan-draft": {"tier": "reasoner"},
-    "synthesis-verify": {"tier": "synthesizer"},
+    "audit": {"tier": "auditor"},
     "independent-review": {"tier": "second-opinion"}
   },
   "second_opinion_policy": {
@@ -66,10 +72,11 @@
     "review_min_findings": 3,
     "architect_min_options": 2
   },
+  "cross_cutting_kinds": ["independent-review", "audit"],
   "role_task_kinds": {
-    "review": ["explore-search", "summarize", "debug-deep", "plan-draft", "synthesis-verify", "independent-review"],
-    "architect": ["explore-search", "summarize", "design-fork", "quant-derivation", "plan-draft", "synthesis-verify", "independent-review", "doc-sync"],
-    "engineer": ["explore-search", "summarize", "mech-edit", "test-scaffold", "doc-sync", "validate-loop", "implement-under-spec", "debug-deep", "quant-derivation", "plan-draft", "independent-review"],
+    "review": ["explore-search", "summarize", "debug-deep", "plan-draft"],
+    "architect": ["explore-search", "summarize", "design-fork", "quant-derivation", "plan-draft", "doc-sync"],
+    "engineer": ["explore-search", "summarize", "mech-edit", "test-scaffold", "doc-sync", "validate-loop", "implement-under-spec", "debug-deep", "quant-derivation", "plan-draft"],
     "learn": ["explore-search", "summarize", "doc-sync"],
     "release": ["validate-loop", "doc-sync", "summarize"]
   }

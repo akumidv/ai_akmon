@@ -1,13 +1,13 @@
-# keystone — the AI-assistant governance baseline
+# akmon — the AI-assistant governance baseline
 
-> The **keystone** of a project group: the first stone you place, the one that holds
+> The **akmon** of a project group: the first stone you place, the one that holds
 > the arch and sets the geometry of everything built after it. This repository is the
 > cross-project standard for **how an AI assistant helps develop, and helps use,**
 > each project. New projects are bootstrapped from it; existing ones are realigned to
 > it.
 
-Mounted into every project as a git submodule at **`_forge/keystone/`** (the repo is
-`ai_keystone`; the mount path is `keystone` — see [BOOTSTRAP.md](../BOOTSTRAP.md)). It is
+Mounted into every project as a git submodule at **`_aitna/akmon/`** (the repo is
+`ai_akmon`; the mount path is `akmon` — see [BOOTSTRAP.md](../BOOTSTRAP.md)). It is
 **LLM-agnostic**: plain Markdown/JSON any assistant (Claude, Codex, Gemini, …) or human
 can read. No vendor's tooling is privileged; the single entry point in a consuming
 project is its root `AGENTS.md`.
@@ -35,7 +35,7 @@ actor).
 An **agent is not an axis value** — it is a concrete point where the axes meet: a role,
 applied in a project, on a layer. So `engineer` (role) × LOCAL (layer) × `package`
 (project type) = *alphavar's engineer agent*. A role is the reusable **definition** (in
-keystone); an agent is its **incarnation** in a project (in `_forge/agents/`), inheriting
+akmon); an agent is its **incarnation** in a project (in `_aitna/agents/`), inheriting
 the role and adding specifics. One role can have several agents (e.g. two `engineer`
 agents for two subsystems).
 
@@ -53,8 +53,8 @@ Does this artifact help DEVELOP this project — or USE it from outside?
 │
 ├─ DEVELOP ─────────► is the approach common to all my projects, or specific to this one?
 │                     │
-│                     ├─ common        → SHARED  → _forge/keystone/   (this submodule)
-│                     └─ this project  → LOCAL   → _forge/{skills,tools,memory,agents}/
+│                     ├─ common        → SHARED  → _aitna/akmon/   (this submodule)
+│                     └─ this project  → LOCAL   → _aitna/{skills,tools,memory,agents}/
 │
 └─ USE from outside ► USAGE → root skills/ (+ tools/ where applicable)
                       (built to travel into the consuming project)
@@ -62,14 +62,14 @@ Does this artifact help DEVELOP this project — or USE it from outside?
 
 | Layer | Job | Consumer | Lives in |
 |---|---|---|---|
-| **SHARED** | assist development in general | any of my projects | `_forge/keystone/` (submodule) |
-| **LOCAL** | assist development of *this* project | this repo's developer | `_forge/{skills,tools,memory,agents}/` |
+| **SHARED** | assist development in general | any of my projects | `_aitna/akmon/` (submodule) |
+| **LOCAL** | assist development of *this* project | this repo's developer | `_aitna/{skills,tools,memory,agents}/` |
 | **USAGE** | assist *using* what the project exposes | a downstream project | root `skills/` (+ `tools/`) |
 
 SHARED+LOCAL point **inward** (building this repo); USAGE points **outward** (this repo
 used elsewhere). `shared` vs `local` is a **development-only** distinction.
 
-**Naming rule in one line:** `_forge/**` = developing this project · `_forge/keystone/**`
+**Naming rule in one line:** `_aitna/**` = developing this project · `_aitna/akmon/**`
 = the shared (SHARED) subset of that · everything else (`docs/`, root `skills/`) = the
 product and its use (USAGE).
 
@@ -79,7 +79,7 @@ Two kinds of dev documentation are easy to conflate; place them by their reader:
 | Reader need | Examples | Home |
 |---|---|---|
 | **Understand the project** (a new developer onboarding) | architecture/requirements, accepted decisions (ADRs), a project overview | `docs/dev/` (project docs) |
-| **Run the development process** (how *we* build it) | dev-process rules, verification ledgers, in-progress design concepts (living concept + rejected branches + design backlog) | `_forge/` (the dev layer) |
+| **Run the development process** (how *we* build it) | dev-process rules, verification ledgers, in-progress design concepts (living concept + rejected branches + design backlog) | `_aitna/` (the dev layer) |
 
 The test: *does a newcomer read it to learn how the project is built, or is it how we
 manage building it?* The first is stable knowledge (project docs); the second is process
@@ -91,20 +91,20 @@ It does **not** cover a third mode, **OPERATE** — an agent that *acts in the w
 runtime* (e.g. a trading agent that places orders; an agent that moves data or money).
 OPERATE differs in kind: its risk is not a broken build or a wrong answer but **real
 consequences** (lost money, irreversible action), so it needs its own hard runtime
-guardrails, not D#/USAGE rules. OPERATE is **deliberately out of scope for keystone for
+guardrails, not D#/USAGE rules. OPERATE is **deliberately out of scope for akmon for
 now** and tracked as an open question in [ROADMAP.md](ROADMAP.md) — do not fold a runtime
 actor into USAGE (using a library ≠ operating in a market). When formulated, it becomes a
 third branch of this tree, not a layer under DEVELOP.
 
 **Relative to a subject — the relation is not a global mode.** DEVELOP / USE (USAGE) / OPERATE are
 relations between the actor and a **chosen subject project**, so one session can hold two at once:
-developing alphavar is **DEVELOP** relative to *alphavar* and **USAGE** relative to *keystone*
+developing alphavar is **DEVELOP** relative to *alphavar* and **USAGE** relative to *akmon*
 (consuming the mounted standard). The two *consumption* relations split by **consequence** —
-**USAGE** is build/dev-time and reversible (using a library; following keystone); **OPERATE** is
-runtime with real, often irreversible consequences (orders, money). So mounting keystone is USAGE,
-**not** OPERATE: keystone's USAGE relation *is* the consuming project's DEVELOP relation — the same
+**USAGE** is build/dev-time and reversible (using a library; following akmon); **OPERATE** is
+runtime with real, often irreversible consequences (orders, money). So mounting akmon is USAGE,
+**not** OPERATE: akmon's USAGE relation *is* the consuming project's DEVELOP relation — the same
 activity seen from two subjects. This is why a [release](../roles/release.md) is cut for a chosen
-**subject** (the project's package, or keystone). Locked in
+**subject** (the project's package, or akmon). Locked in
 [ADR 0001](decisions/0001-release-and-roles-model.md) §6.
 
 ---
@@ -119,8 +119,8 @@ agent). So we split definition from incarnation:
 
 - **Role** — the *definition* (pipeline, requirements, guardrails). Cross-project →
   lives here in [`roles/`](../roles/). This is "the approaches and requirements for roles".
-- **Agent** — the *incarnation in a project*: inherits a role from keystone and adds
-  project specifics. Lives in the project at `_forge/agents/`.
+- **Agent** — the *incarnation in a project*: inherits a role from akmon and adds
+  project specifics. Lives in the project at `_aitna/agents/`.
 
 Two roles at the start:
 
@@ -134,45 +134,45 @@ pipelines** (documentation/architecture vs code/tests), not different settings. 
 when a dedicated agent is justified — otherwise prefer profile-based rules/skills.
 
 Both agents live on the **DEVELOP** branch and both draw shared requirements from
-**SHARED** (keystone). architect works mostly in `docs/` (and, for a package, USAGE
+**SHARED** (akmon). architect works mostly in `docs/` (and, for a package, USAGE
 `skills/`); engineer works in `src/`/`tests/`.
 
 ---
 
-## 3a. The learn loop — how the keystone evolves through use
+## 3a. The learn loop — how the akmon evolves through use
 
-keystone is a **tuning fork that retunes itself**: knowledge gained while working a
+akmon is a **tuning fork that retunes itself**: knowledge gained while working a
 project flows back, is generalized, and — if it proves cross-project — is promoted into
-keystone so every project inherits it. Without this loop the standard ossifies; the loop
+akmon so every project inherits it. Without this loop the standard ossifies; the loop
 *is* the mechanism by which the model improves.
 
 The cycle (knowledge climbs from local insight toward the shared standard):
 
 ```
 1. CAPTURE   an agent hits an insight / friction / repeated manual step
-                 → writes one fact to _forge/memory/  (LOCAL, in git, team-visible)
+                 → writes one fact to _aitna/memory/  (LOCAL, in git, team-visible)
 2. DISTILL   recurring facts are turned into something reusable:
-                 a LOCAL skill / tool / agent specific   → _forge/{skills,tools,agents}/
+                 a LOCAL skill / tool / agent specific   → _aitna/{skills,tools,agents}/
                  or a refined requirement / ADR           → docs/ (via the architect role)
-3. PROMOTE   if it is general across projects, lift it into keystone (PR):
-                 a cross-project skill/tool   → keystone/{skills,tools}/
-                 a role requirement/pipeline  → keystone/{roles,pipelines}/
-                 a language/domain rule        → keystone/{guardrails,profiles}/
+3. PROMOTE   if it is general across projects, lift it into akmon (PR):
+                 a cross-project skill/tool   → akmon/{skills,tools}/
+                 a role requirement/pipeline  → akmon/{roles,pipelines}/
+                 a language/domain rule        → akmon/{guardrails,profiles}/
 4. PROPAGATE every other project gets it on `git submodule update` (pin bump)
 ```
 
 Direction of flow is one-way **up** the abstraction ladder: *private provider memory →
-shared project memory (`_forge/memory/`) → local reusable asset → keystone*. Each step is
+shared project memory (`_aitna/memory/`) → local reusable asset → akmon*. Each step is
 a deliberate, reviewed promotion, never an automatic copy.
 
 **Two kinds of memory, kept distinct:**
-- **Shared project memory** — `_forge/memory/` (in git, all developers and agents see it,
+- **Shared project memory** — `_aitna/memory/` (in git, all developers and agents see it,
   reviewed). This is the raw material of step 1–2.
 - **Provider-private memory** — each assistant's own store (e.g. Claude's per-project
   memory). Stays with the individual; the loop *distills* from it into shared memory, it
   is never the shared source of truth.
 
-**Promotion test (when does something move up?)** Promote LOCAL → keystone only when it
+**Promotion test (when does something move up?)** Promote LOCAL → akmon only when it
 is (a) general — not tied to this project's domain/runtime, and (b) proven — used more
 than once, or clearly applicable to another project. Otherwise it stays LOCAL. The
 mechanics live in the pipelines [`memory-distill`](../pipelines/memory-distill.md) (steps
@@ -183,7 +183,7 @@ mechanics live in the pipelines [`memory-distill`](../pipelines/memory-distill.m
 ## 3b. The knowledge → implementation → usage chain
 
 A project that implements a **domain** (numerics, finance, a scientific model, an external
-service) carries domain knowledge. keystone models it as **three connected artifacts**, by
+service) carries domain knowledge. akmon models it as **three connected artifacts**, by
 *what* each is for — not one blob:
 
 | Artifact | What it answers | Where (in a project) | Required? |
@@ -210,7 +210,7 @@ that only restates a docstring.
 3. **Keep only what is implemented or planned.** A concept is documented (in `knowledge/`,
    or just a skill+docstring) *only if* it is implemented **or** planned. A concept that is
    neither is **not stored** — not as knowledge, not as a task. A *planned* concept rich
-   enough to warrant knowledge stays in `knowledge/` with an impl task in `_forge/TASKS.md`,
+   enough to warrant knowledge stays in `knowledge/` with an impl task in `_aitna/TASKS.md`,
    but gets **no** skill until the code lands.
 4. **One source of truth.** Wherever a domain fact lives (a `knowledge/` leaf, or the
    docstring + skill when knowledge is skipped), that is its owner; everything else links to
@@ -248,11 +248,11 @@ per-type checklists: [ARCHETYPES.md](../ARCHETYPES.md).
 
 ---
 
-## 6. Layout of `_forge/` in a consuming project
+## 6. Layout of `_aitna/` in a consuming project
 
 ```
-_forge/
-├── keystone/                   # ← THIS submodule (repo ai_keystone)
+_aitna/
+├── akmon/                   # ← THIS submodule (repo ai_akmon)
 │   ├── README.md               #   this file — the model's constitution
 │   ├── BOOTSTRAP.md            #   attach/realign a project (+ ready prompts)
 │   ├── ARCHETYPES.md           #   archetypes + per-archetype USAGE/requirement checklists
@@ -275,8 +275,8 @@ The project root also holds `AGENTS.md` (single source for agents; `CLAUDE.md` i
 pointer) and, for a package/service, the USAGE layer (`skills/`, `docs/`).
 
 **Inheritance contract** (agent → role): the agent charter at
-`_forge/agents/<role>/README.md` links `keystone/roles/<role>.md` as its source of
-requirements and pipeline, and adds only project specifics. The role changes in keystone
+`_aitna/agents/<role>/README.md` links `akmon/roles/<role>.md` as its source of
+requirements and pipeline, and adds only project specifics. The role changes in akmon
 (for all projects); the agent changes locally.
 
 ---
@@ -297,7 +297,7 @@ vendor's entry point is a thin **generated** pointer (no duplicated content).
   **not** rewrite `AGENTS.md`; the project block there stays hand-reviewed. Not symlinks
   (break on Windows / in submodules); not a Claude plugin (Claude-only) — we feed Claude +
   Codex + Gemini from one source.
-- **`bin/verify.py`** validates the keystone project contract: AGENTS anchors, generated
+- **`bin/verify.py`** validates the akmon project contract: AGENTS anchors, generated
   pointer drift (via `sync.py`), hook wiring, duplicate skills, skill frontmatter,
   memory index, agent charters, `.gitignore` secrets policy, and CI preflight wiring. It
   reports only; it does not modify files.
@@ -313,22 +313,22 @@ placeholders). Never in code, markdown, or commits.
 
 ## 9. Distribution — submodule → MCP → product
 
-keystone is designed to survive a change of carrier:
+akmon is designed to survive a change of carrier:
 
 - **Now:** git submodule (deterministic pinning, PR governance).
 - **Next:** hybrid — governance/docs stay in the submodule; executable `tools/` and
   validators move behind an MCP server the agent mounts (same contract, new carrier).
-- **Later:** a standalone product — the name `keystone` stands on its own.
+- **Later:** a standalone product — the name `akmon` stands on its own.
 
 Forward plan: [ROADMAP.md](ROADMAP.md).
 
 ---
 
-## 10. Evolving keystone
+## 10. Evolving akmon
 
 - **Add a shared skill/tool/role** → PR into this repo; it reaches all projects after
   `git submodule update`.
-- **Add a local skill/tool/agent** → directly in the project's `_forge/`. If broadly
-  useful, *promote* it into keystone via PR.
+- **Add a local skill/tool/agent** → directly in the project's `_aitna/`. If broadly
+  useful, *promote* it into akmon via PR.
 - **Change guardrails/profiles/pipelines** → here only (shared for every project).
 - **Attach to / realign a project** → [BOOTSTRAP.md](../BOOTSTRAP.md).

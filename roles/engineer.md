@@ -15,15 +15,15 @@ material design gap goes back to the architect, not into improvised structure.
 **Acts on:**
 - Production code under `src/` (or the project's source root).
 - Tests under `tests/` — unit and integration.
-- Executable development tooling under `_forge/keystone/{bin,tools,hooks}/`,
-  `_forge/tools/`, or the project's equivalent dev-tool paths.
+- Executable development tooling under `_aitna/akmon/{bin,tools,hooks}/`,
+  `_aitna/tools/`, or the project's equivalent dev-tool paths.
 - Mechanical refactors that preserve behaviour.
 - Build/dependency config when a change requires it.
 
 **Does NOT:**
 - Decide load-bearing architecture or change agreed requirements (→ architect; raise a
   task).
-- Design the keystone model, role boundaries, pipeline semantics, or vendor-pointer
+- Design the akmon model, role boundaries, pipeline semantics, or vendor-pointer
   contract (→ architect; implement the locked contract here).
 - Write USAGE skills/docs about consuming the project (→ USAGE layer).
 - Touch runtime/market behaviour.
@@ -34,7 +34,7 @@ material design gap goes back to the architect, not into improvised structure.
 
 | Inputs | Outputs |
 |---|---|
-| a task in `_forge/TASKS.md` (goal + design link) | code that implements the task |
+| a task in `_aitna/TASKS.md` (goal + design link) | code that implements the task |
 | the architect's design doc / ADR | tests that prove it (and guard against regression) |
 | existing code & tests (extend, don't fork) | a green pre-commit run |
 | language `guardrails/` + opted-in `profiles/` | the task marked done after owner verification |
@@ -54,7 +54,17 @@ closed (see Inputs / outputs and Done).
 **Default tier routing** (MODEL.md § Capability tiers): mechanical sub-steps delegate to
 `worker` (`mech-edit`, `implement-under-spec`, `test-scaffold`, `validate-loop`); the Verify
 gate may take `reasoner` review plus a `second-opinion` advisory. Integration and the
-design-gap escalation stay with the orchestrator.
+design-gap escalation stay with the orchestrator. **Plan these delegations up front:** the
+realization plan names *which subagent runs each sub-step before coding starts* — delegation
+is the default, and the orchestrator absorbing delegable work is the failure this routing
+prevents ([guardrails](../guardrails/_common.md) § Route by task kind).
+
+**Gate audit** (MODEL.md § Capability tiers). Implementation errors are gate-detectable, so no audit is *required*;
+but for high-leverage code (a core abstraction, a public API) the orchestrator may still route
+a clean-context `audit` on signal. `audit` is a **cross-cutting verification kind** —
+routable from *any* role including engineer, so
+this needs no role-specific carve-out and the role-matrix advisory never flags it. As
+everywhere: the audit **drafts** a verdict, it never decides.
 
 ---
 
@@ -63,7 +73,7 @@ design-gap escalation stay with the orchestrator.
 - **Tests are mandatory before commit.** No commit on red.
 - **Owner-verify math / DataFrame / architecture changes.** Explain the change and have
   the owner explicitly confirm it; passing tests alone do not make it Done.
-- **Reuse, don't re-implement.** Use the project's existing code and the keystone
+- **Reuse, don't re-implement.** Use the project's existing code and the akmon
   `tools/` rather than ad-hoc scripts; deterministic mechanics belong in a tool.
 - **Verify against code, not memory.** Confirm signatures, enums, and names in `src/` or
   the relevant tooling path before relying on them.
@@ -92,5 +102,5 @@ design-gap escalation stay with the orchestrator.
 - The task's goal is implemented and matches the agreed design.
 - Tests cover the change and pass; pre-commit is green.
 - Math/data/architecture changes are owner-verified.
-- The task is marked done in `_forge/TASKS.md`; reusable insight is captured for the
+- The task is marked done in `_aitna/TASKS.md`; reusable insight is captured for the
   learn loop.

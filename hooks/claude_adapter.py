@@ -1,4 +1,4 @@
-"""Claude Code adapter for neutral keystone hook results."""
+"""Claude Code adapter for neutral akmon hook results."""
 
 from __future__ import annotations
 
@@ -6,15 +6,21 @@ import json
 import sys
 from typing import Any
 
-from hook_core import EDIT_TOOL, HookResult
+from hook_core import EDIT_TOOL, READ_TOOL, HookResult
 
-# Claude Code's file-editing tool names → keystone's neutral edit-tool kind.
+# Claude Code's file-editing tool names → akmon's neutral edit-tool kind.
 EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit"})
+# Claude Code's read/sweep tool names → akmon's neutral read-tool kind.
+READ_TOOLS = frozenset({"Read", "Grep", "Glob"})
 
 
 def normalize_tool(name: str) -> str:
     """Map a Claude tool name to the neutral kind hook_core expects; pass others through."""
-    return EDIT_TOOL if name in EDIT_TOOLS else name
+    if name in EDIT_TOOLS:
+        return EDIT_TOOL
+    if name in READ_TOOLS:
+        return READ_TOOL
+    return name
 
 
 def load_payload() -> dict[str, Any]:

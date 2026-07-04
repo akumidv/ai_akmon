@@ -1,4 +1,4 @@
-# hooks — portable enforcement of keystone guardrails
+# hooks — portable enforcement of akmon guardrails
 
 Hook logic is split into a vendor-neutral **core** plus thin vendor **adapters**. The core
 decides what should happen at the guardrail boundary; adapters only translate a vendor's
@@ -35,12 +35,12 @@ project-local hook surface.
 - [`session-start-agent.py`](session-start-agent.py) — Claude SessionStart wrapper for the
   neutral active-agent reminder: injects a
   reminder to declare the active agent (and restate it on switch) plus the project's
-  **scanned** agent roster (`_forge/agents/` dev + root `agents/` desk), and the "read
-  `_forge/memory/` at session start" rule. Runs as a **SessionStart** hook.
+  **scanned** agent roster (`_aitna/agents/` dev + root `agents/` desk), and the "read
+  `_aitna/memory/` at session start" rule. Runs as a **SessionStart** hook.
 - [`role-on-code.py`](role-on-code.py) — Claude PreToolUse wrapper for the *switch* backstop
   for the same "Role declaration" convention: SessionStart only fires once, so a **design→code switch mid-session** (architect →
   writing code) goes unannounced. On the **first** `Edit`/`Write`/`MultiEdit`/`apply_patch` of a
-  session that targets a **code file** (extension allow-list; docs/design/memory/keystone paths
+  session that targets a **code file** (extension allow-list; docs/design/memory/akmon paths
   excluded) it reminds the model that editing code is **realization** → declare the **engineer**
   role + its pipeline (the triad discriminator: `review` = analysis · `architect` = synthesis ·
   `engineer` = realization), then
@@ -50,28 +50,42 @@ project-local hook surface.
   analysis-before-mutation reminder: on the first edit to a planning/design doc in a session,
   remind the assistant to stop and ask confirmation if the current turn was analysis-only, and
   to declare the role (assessing the as-is = `review`; constructing the design = `architect`).
-- [`model-routing.py`](model-routing.py) — Claude SessionStart wrapper for **model routing**
-  (MODEL.md § Capability tiers): with a fresh local config it injects one status line — the
-  tier→model binding, a self-check, and a weak-orchestrator warning when the session model
-  ranks below the registry floor; with a missing/stale config it injects the init
-  instruction (run [`../tools/model_routing/init.py`](../tools/model_routing/init.py), then
-  confirm the binding + second-opinion opt-in with the owner). Runs as a **SessionStart**
-  hook; logic in [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).
+- [`model-routing.py`](model-routing.py) — Claude wrapper for **model routing** (MODEL.md §
+  Capability tiers). Runs on **SessionStart** and **UserPromptSubmit**: both read the session
+  transcript (`transcript_path`) to detect the model the main chain actually runs on, and
+  when it differs from the recorded orchestrator (a session on another model, or a mid-session
+  `/model` switch) recompute the binding and regenerate the `k-*` subagent defs so delegates
+  follow the live model — the orchestrator itself is never overridden, only detected.
+  SessionStart injects the status line (binding + self-check + the **corridor warning** when
+  the orchestrator sits below the orchestration floor or on the auditor's reserved top
+  rung), or the init instruction on a missing/stale config (run
+  [`../tools/model_routing/init.py`](../tools/model_routing/init.py), confirm the binding +
+  second-opinion opt-in with the owner — the one-time setup that records the available ladder).
+  UserPromptSubmit is silent unless a switch just landed (one-line rebind notice) or the
+  **context fill crossed a warn band** (design §12: banded 0.85/0.95, throttled per band,
+  reset by compaction). Owner-addressed output — init instruction, corridor/pressure
+  warnings, rebind notice — also goes out as `systemMessage` so the owner sees it in the
+  host UI (ADR 0006). Logic
+  in [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).
 - [`delegation-log.py`](delegation-log.py) — Claude PreToolUse wrapper that appends one TSV
   line (timestamp, subagent, model, description) to `.claude/model-routing.log` per
   subagent delegation — routing switches are visible at **zero token cost**; the model never
   narrates them. Runs as a **PreToolUse → Task|Agent** hook; never blocks.
 - [`delegation-nudge.py`](delegation-nudge.py) — Claude PreToolUse wrapper for the
-  **delegation nudge**: counts consecutive orchestrator edit/shell calls since session start
-  or the last subagent delegation (`Task`/`Agent` resets the counter) and, past a threshold
-  (default 10; env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`), injects a **one-time, advisory**
-  reminder that the work may belong to a `k-*` delegate (MODEL.md § Capability tiers). Never
-  blocks — task-kind classification is fuzzy, and a false-positive block would train the
-  reminder to be ignored. Runs as a **PreToolUse → Bash|Edit|Write|MultiEdit|Task|Agent**
-  hook (one combined-matcher entry seeing both the mutations and the delegation resets).
+  **delegation nudge**: counts consecutive orchestrator edit/shell/read calls (Read/Grep/Glob
+  normalize to the same read kind) since session start or the last subagent delegation
+  (`Task`/`Agent` resets the counter) and, past a threshold (default 10; env
+  `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`), injects a **one-time, advisory** reminder that the
+  work may belong to a `k-*` delegate (MODEL.md § Capability tiers). Task-kind classification
+  is fuzzy, so the advisory never blocks; but on *sustained* drift past a second, higher
+  threshold (default 20; env `KEYSTONE_DELEGATION_ASK_THRESHOLD`, clamped to at least the
+  advisory threshold) it graduates to a hard `ask` permission decision — its own
+  once-per-episode marker, also cleared by a delegation. Runs as a **PreToolUse →
+  Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob** hook (one combined-matcher entry
+  seeing the mutations, the reads/sweeps, and the delegation resets).
 - [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for the same neutral
   reminders (`session-start`, `role-on-code`, `analysis-guard`). Model routing is not wired
-  for Codex: a Codex session has no keystone-managed subagent surface to route (the Codex
+  for Codex: a Codex session has no akmon-managed subagent surface to route (the Codex
   channel is the *second-opinion* direction, driven from the orchestrating session).
 
 > The Role-declaration **rule** also lives in `AGENTS.md` (vendor-neutral), so Codex/Gemini
@@ -89,20 +103,25 @@ The hooks are the source of truth here; each assistant wires them in its own way
       "PreToolUse": [
         { "matcher": "Bash",
           "hooks": [{ "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/git-commit-guard.py\"" }] },
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/git-commit-guard.py\"" }] },
         { "matcher": "Edit|Write|MultiEdit",
           "hooks": [{ "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/role-on-code.py\"" }] },
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/role-on-code.py\"" }] },
         { "matcher": "Task|Agent",
           "hooks": [{ "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/delegation-log.py\"" }] }
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/delegation-log.py\"" }] }
       ],
       "SessionStart": [
         { "hooks": [
             { "type": "command",
-              "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/session-start-agent.py\"" },
+              "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/session-start-agent.py\"" },
             { "type": "command",
-              "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/model-routing.py\"" }] }
+              "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/model-routing.py\"" }] }
+      ],
+      "UserPromptSubmit": [
+        { "hooks": [
+            { "type": "command",
+              "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/model-routing.py\"" }] }
       ]
     }
   }
@@ -113,5 +132,5 @@ The hooks are the source of truth here; each assistant wires them in its own way
   expected payload. Until then the AGENTS.md rules stand on their own (the Claude adapter
   adds enforcement on top).
 
-A project may point the wiring at the keystone copy (above) or at a local copy under
-`.claude/hooks/` — prefer the keystone path so submodule updates propagate the fix.
+A project may point the wiring at the akmon copy (above) or at a local copy under
+`.claude/hooks/` — prefer the akmon path so submodule updates propagate the fix.

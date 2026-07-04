@@ -15,7 +15,7 @@ does not decide architecture or process contracts.
 
 ## Steps
 
-1. **Take** — pick a task from `_forge/TASKS.md`; confirm its goal and the design it
+1. **Take** — pick a task from `_aitna/TASKS.md`; confirm its goal and the design it
    implements. If the design has a gap, return it to the [architect](../roles/architect.md)
    role as a task — do not improvise load-bearing structure.
    - **A load-bearing decision that *emerges mid-build* is the same gate, in reverse.** When,
@@ -26,14 +26,14 @@ does not decide architecture or process contracts.
      decision** — never decide-and-code first and document after. (The forward seam is the
      [hand-off gate](../roles/README.md#switching-from-design-to-build--the-hand-off-gate); this
      is its mid-build mirror.)
-2. **Implement** — write the change. **Reuse** existing abstractions and keystone
+2. **Implement** — write the change. **Reuse** existing abstractions and akmon
    `tools/` rather than duplicating logic or writing ad-hoc scripts. Match the
    surrounding code's naming, idiom, and comment density; for executable dev tooling, keep
    it stdlib-only unless the project explicitly accepts a dependency.
    - **Rolling out a cross-cutting convention is three separate moves, not one:** first a
      **read-only audit** that lists the discrepancies (no edits); then **record the rule**
      (design-flow — so the convention is on the record before any code embodies it); then the
-     **mechanical flips as their own tracked task** in `_forge/TASKS.md`, separate from the
+     **mechanical flips as their own tracked task** in `_aitna/TASKS.md`, separate from the
      rule. Do not mix the sweep into the change that introduces the rule (keeps each diff
      reviewable and the rule decided before the churn). A wide rename/reshape always lands as
      its own task.
@@ -50,8 +50,8 @@ does not decide architecture or process contracts.
    necessary, not sufficient. *Tier:* a `reasoner` review plus an optional
    `second-opinion` advisory may widen what the owner sees — they never replace the
    owner's verification.
-6. **Close** — mark the task done in `_forge/TASKS.md` *only after* owner verification.
-   Capture any reusable insight to `_forge/memory/` (feeds the learn loop).
+6. **Close** — mark the task done in `_aitna/TASKS.md` *only after* owner verification.
+   Capture any reusable insight to `_aitna/memory/` (feeds the learn loop).
 
 ## Gates (must hold to advance)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Release readiness tool for the keystone ``release`` role (propose / prepare only).
+"""Release readiness tool for the akmon ``release`` role (propose / prepare only).
 
-Drives the mechanical parts of a keystone release: collect state, run the verify suite, and
+Drives the mechanical parts of a akmon release: collect state, run the verify suite, and
 print an owner-run command plan. It **never** runs ``git commit`` / ``git tag`` / ``git
 push`` / publish / pin-bump commands — the owner executes those (D5). It is stdlib-only and
 safe to run repeatedly.
@@ -14,15 +14,15 @@ Modes (mutually exclusive; ``--check`` is the default):
 
 The release **subject** is parameterized, selected with ``--subject``:
 
-    keystone  (default)  release the keystone standard itself (its tag)
+    akmon  (default)  release the akmon standard itself (its tag)
     package              release the consuming project's own package version
 
-The third subject — a keystone **pin bump** recorded in a consuming project — is deferred
+The third subject — an akmon **pin bump** recorded in a consuming project — is deferred
 (backlog T18). For ``package``, project-specific check/build commands live in the project's
-``_forge/agents/release/README.md`` (the release-agent incarnation); this tool reads that
+``_aitna/agents/release/README.md`` (the release-agent incarnation); this tool reads that
 charter and points the owner at it rather than inventing commands.
 
-The skill that drives this tool: ``_forge/keystone/skills/release/SKILL.md``.
+The skill that drives this tool: ``_aitna/akmon/skills/release/SKILL.md``.
 """
 
 from __future__ import annotations
@@ -34,23 +34,23 @@ import subprocess
 import sys
 from pathlib import Path
 
-# tools/release/release_check.py → keystone root is two levels up.
+# tools/release/release_check.py → akmon root is two levels up.
 KEYSTONE_ROOT = Path(__file__).resolve().parents[2]
 BIN = KEYSTONE_ROOT / "bin"
-# keystone's own development layer (self-CI runner + tests) lives under meta/.
+# akmon's own development layer (self-CI runner + tests) lives under meta/.
 META = KEYSTONE_ROOT / "meta"
 
 _VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 _UNRELEASED_RE = re.compile(r"^##\s+Unreleased\b", re.MULTILINE | re.IGNORECASE)
 
-SUBJECTS = ("keystone", "package")
-_RELEASE_CHARTER = "_forge/agents/release/README.md"
+SUBJECTS = ("akmon", "package")
+_RELEASE_CHARTER = "_aitna/agents/release/README.md"
 
 
 def _find_project_root(start: Path) -> Path:
-    """The consuming project root: a parent holding AGENTS.md and _forge/keystone."""
+    """The consuming project root: a parent holding AGENTS.md and _aitna/akmon."""
     for candidate in (start, *start.parents):
-        if (candidate / "AGENTS.md").is_file() and (candidate / "_forge" / "keystone").exists():
+        if (candidate / "AGENTS.md").is_file() and (candidate / "_aitna" / "akmon").exists():
             return candidate
     return start
 
@@ -80,8 +80,8 @@ def _git_status(root: Path) -> str:
     return out if out else "(clean)"
 
 
-def _changelog_summary(keystone: Path) -> list[str]:
-    text = _read(keystone / "CHANGELOG.md")
+def _changelog_summary(akmon: Path) -> list[str]:
+    text = _read(akmon / "CHANGELOG.md")
     if not text:
         return ["CHANGELOG.md: (missing)"]
     lines = ["CHANGELOG.md sections:"]
@@ -109,15 +109,15 @@ def _tasks_summary(tasks_dir: Path) -> list[str]:
 
 
 def run_state(root: Path, subject: str) -> int:
-    keystone = root / "_forge" / "keystone"
-    # The subject decides which working tree a tag is cut from: keystone is the submodule's
-    # own tree; package is the project root. For keystone the backlog lives in its dev layer
-    # (meta/) while the changelog stays at the keystone root; for package both come from the
+    akmon = root / "_aitna" / "akmon"
+    # The subject decides which working tree a tag is cut from: akmon is the submodule's
+    # own tree; package is the project root. For akmon the backlog lives in its dev layer
+    # (meta/) while the changelog stays at the akmon root; for package both come from the
     # project root.
-    if subject == "keystone":
-        tasks_dir = keystone / "meta"
-        changelog_dir = keystone
-        git_dir = keystone if (keystone / ".git").exists() else root
+    if subject == "akmon":
+        tasks_dir = akmon / "meta"
+        changelog_dir = akmon
+        git_dir = akmon if (akmon / ".git").exists() else root
     else:  # package
         tasks_dir = root
         changelog_dir = root
@@ -148,8 +148,8 @@ def run_state(root: Path, subject: str) -> int:
 # --------------------------------------------------------------------------------------
 
 
-def _read_keystone_toml(path: Path) -> dict:
-    """Read `_forge/.keystone.toml` into a nested dict (mirrors `sync.read_keystone_toml`).
+def _read_akmon_toml(path: Path) -> dict:
+    """Read `_aitna/.akmon.toml` into a nested dict (mirrors `sync.read_akmon_toml`).
 
     Kept self-contained — this tool does not import `sync` — and stdlib-only: `tomllib` when
     present (3.11+), else a minimal fallback for the record's subset (flat `key = "value"`,
@@ -179,14 +179,14 @@ def _read_keystone_toml(path: Path) -> dict:
 
 
 def _pinned_test_runner(root: Path) -> str | None:
-    """The `[test].runner` recorded in `<root>/_forge/.keystone.toml`, if any.
+    """The `[test].runner` recorded in `<root>/_aitna/.akmon.toml`, if any.
 
     Attach (BOOTSTRAP §A5) pins the project's *existing* test environment here — `uv` may be
     absent, and a Python project usually already has its own manager (poetry/pdm/pip-venv/conda)
     and an env with pytest, so the right move is to *use what is there*, decided once at attach,
-    not to re-guess (or build a second `_forge/.venv`) on every run. Absent → fall back to
+    not to re-guess (or build a second `_aitna/.venv`) on every run. Absent → fall back to
     `_pytest_command`'s discovery for projects that predate this field."""
-    test = _read_keystone_toml(root / "_forge" / ".keystone.toml").get("test")
+    test = _read_akmon_toml(root / "_aitna" / ".akmon.toml").get("test")
     runner = test.get("runner") if isinstance(test, dict) else None
     return runner.strip() if isinstance(runner, str) and runner.strip() else None
 
@@ -194,7 +194,7 @@ def _pinned_test_runner(root: Path) -> str | None:
 def _pytest_command(root: Path, tests: str) -> list[str]:
     """Resolve a test runner: the pinned `test_runner` (attach record) first, else discovery.
 
-    Discovery order: the dev-layer venv BOOTSTRAP §A5 provisions (`_forge/.venv`) → a system
+    Discovery order: the dev-layer venv BOOTSTRAP §A5 provisions (`_aitna/.venv`) → a system
     pytest → `uv` → `python -m pytest`. The dev venv comes first because it is the deliberately-
     provisioned env; `uv` is a fallback, and when used it must install pytest on the fly
     (`--with pytest`) — a bare `uv run pytest` runs in an ephemeral env *without* pytest and fails.
@@ -206,7 +206,7 @@ def _pytest_command(root: Path, tests: str) -> list[str]:
     pinned = _pinned_test_runner(root)
     if pinned:
         return [*pinned.split(), tests]
-    venv_python = root / "_forge" / ".venv" / "bin" / "python"
+    venv_python = root / "_aitna" / ".venv" / "bin" / "python"
     if venv_python.is_file():
         return [str(venv_python), "-m", "pytest", tests]
     if shutil.which("pytest"):
@@ -217,7 +217,7 @@ def _pytest_command(root: Path, tests: str) -> list[str]:
 
 
 def run_check(root: Path, subject: str) -> int:
-    if subject == "keystone":
+    if subject == "akmon":
         commands = [
             [sys.executable, str(BIN / "sync.py"), "--project-root", str(root), "--check"],
             [sys.executable, str(BIN / "verify.py"), "--project-root", str(root), "--strict", "--quiet"],
@@ -225,7 +225,7 @@ def run_check(root: Path, subject: str) -> int:
             _pytest_command(root, str(META / "tests")),
         ]
         failed = _run_commands(root, commands)
-    else:  # package — the project's own suite. Keep verify (the keystone contract still
+    else:  # package — the project's own suite. Keep verify (the akmon contract still
         # applies), then defer to the project's documented commands rather than guessing.
         commands = [
             [sys.executable, str(BIN / "verify.py"), "--project-root", str(root), "--strict", "--quiet"],
@@ -273,9 +273,9 @@ def run_plan(version: str, subject: str) -> int:
     print("# Stage files EXPLICITLY — never `git add -A` — so untracked noise")
     print("# (e.g. __pycache__/) is not swept into the release commit.")
     print()
-    if subject == "keystone":
-        print("cd _forge/keystone            # tag is cut from the submodule's own tree")
-        commit_subject = "keystone"
+    if subject == "akmon":
+        print("cd _aitna/akmon            # tag is cut from the submodule's own tree")
+        commit_subject = "akmon"
     else:  # package — run from the project root.
         commit_subject = "release"
     print()
@@ -286,7 +286,7 @@ def run_plan(version: str, subject: str) -> int:
     print(f"git tag {version}              # the tag points at THIS commit, not a prior HEAD")
     print("git push origin main --tags")
     if subject == "package":
-        print("\n# package also: build + publish per _forge/agents/release/README.md (owner-run).")
+        print("\n# package also: build + publish per _aitna/agents/release/README.md (owner-run).")
     print()
     print("# This tool does not run any of the above. The owner executes them.")
     return 0
@@ -298,8 +298,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--subject",
         choices=SUBJECTS,
-        default="keystone",
-        help="Release subject: keystone (the standard's tag, default) or package (the project's own version).",
+        default="akmon",
+        help="Release subject: akmon (the standard's tag, default) or package (the project's own version).",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--state", action="store_true", help="Summarize TASKS / CHANGELOG / git status.")

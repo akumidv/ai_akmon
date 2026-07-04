@@ -1,8 +1,8 @@
 ---
 name: release
-description: Conduct a keystone-or-project release as the release role — frame the subject, collect state, classify impact, gate with the owner, verify, and hand off owner-run commands (never execute them).
-when_to_use: When the owner wants to cut a release for a subject (a project package, the keystone tag, or a keystone pin bump) or bump a keystone pin in a consuming project.
-owner: keystone
+description: Conduct a akmon-or-project release as the release role — frame the subject, collect state, classify impact, gate with the owner, verify, and hand off owner-run commands (never execute them).
+when_to_use: When the owner wants to cut a release for a subject (a project package, the akmon tag, or a akmon pin bump) or bump a akmon pin in a consuming project.
+owner: akmon
 ---
 
 # release
@@ -23,7 +23,7 @@ CI gate — releases are owner-driven, so nothing here is wired into CI.
 
 A release is cut for **exactly one subject**:
 
-1. **the subject** — a project's **package**, **keystone** (its tag), or a **keystone pin
+1. **the subject** — a project's **package**, **akmon** (its tag), or a **akmon pin
    bump** recorded inside a consuming project. Fix it *first*; everything downstream is
    relative to this choice.
 2. **the impact** — closed work since the last release, grouped into
@@ -37,7 +37,7 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
 
 1. **Frame the subject** *(gate)*. Ask the owner which subject and, when ambiguous, which
    downstream consumers. Do not read anything against the release until this is fixed.
-2. **Collect state.** Run `python3 _forge/keystone/tools/release/release_check.py --state` to read
+2. **Collect state.** Run `python3 _aitna/akmon/tools/release/release_check.py --state` to read
    `TASKS.md`, `TASKS_ARCHIVE.md`, `CHANGELOG.md`, and `git status` in one pass. Read the
    relevant design/ADRs by hand when the summary points at them.
 3. **Classify changes** into the four impact classes. Every `consumer-visible` /
@@ -51,22 +51,22 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
 8. **Prepare release artifacts.** Move `CHANGELOG.md` `Unreleased` → the new version
    heading; keep an empty `Unreleased` so the verify warn stays satisfied. This is the
    **only** file the release role edits — route everything else to its owning role.
-9. **Verify.** Run `python3 _forge/keystone/tools/release/release_check.py --check`. It runs the
+9. **Verify.** Run `python3 _aitna/akmon/tools/release/release_check.py --check`. It runs the
    subject's release suite (pointer sync, contract verify, and the subject's own checks + tests)
    and is resilient to the test runner (`uv` → project `.venv` → system `pytest`). All green
    before handoff.
 10. **Owner handoff** *(gate, D5)*. Run
-    `python3 _forge/keystone/tools/release/release_check.py --plan vX.Y.Z` to print the exact
+    `python3 _aitna/akmon/tools/release/release_check.py --plan vX.Y.Z` to print the exact
     owner-run command set, then present it with the residual risk and **stop**. The owner
     runs the landing commands.
 11. **Propagate** *(only if the owner selected consumers)*. Prepare the per-consumer
     pin/version bump plan; the bump record lives in the **consuming** project, never in
-    keystone's release notes. Skip entirely when the subject is keystone-only.
+    akmon's release notes. Skip entirely when the subject is akmon-only.
 
 ## How to apply it
 
-- **Subject relativity.** Releasing keystone (DEVELOP relative to keystone) does **not**
-  imply touching a consuming project. If the owner says "keystone only", do not prepare any
+- **Subject relativity.** Releasing akmon (DEVELOP relative to akmon) does **not**
+  imply touching a consuming project. If the owner says "akmon only", do not prepare any
   consumer-side change — propagation (step 11) is skipped.
 - **Staged vs committed.** Before printing the tag command, confirm the release work is in
   a **commit**, not just staged — a tag points at a commit. The plan uses explicit
@@ -78,8 +78,8 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
 
 ## Tool contract — `tools/release/release_check.py`
 
-Subject-parameterized via `--subject {keystone,package}` (default `keystone`); the third
-subject — a keystone **pin bump** — is deferred (backlog T18).
+Subject-parameterized via `--subject {akmon,package}` (default `akmon`); the third
+subject — a akmon **pin bump** — is deferred (backlog T18).
 
 | Mode | Does | Writes? |
 |---|---|---|
@@ -87,10 +87,10 @@ subject — a keystone **pin bump** — is deferred (backlog T18).
 | `--check` *(default)* | run the subject's release suite, runner-resilient | no |
 | `--plan vX.Y.Z` | print the exact owner-run commit/tag/push command set | no |
 
-- **`--subject keystone`** runs the keystone suite (pointer sync, contract verify, and
-  keystone's own self-checks + tests); the plan tags from the submodule tree.
-- **`--subject package`** runs the keystone contract check (`verify --strict`) and then
-  **defers to the project's own commands** in [`_forge/agents/release/README.md`](../../../agents/release/README.md)
+- **`--subject akmon`** runs the akmon suite (pointer sync, contract verify, and
+  akmon's own self-checks + tests); the plan tags from the submodule tree.
+- **`--subject package`** runs the akmon contract check (`verify --strict`) and then
+  **defers to the project's own commands** in [`_aitna/agents/release/README.md`](../../../agents/release/README.md)
   (tests / lint / build) — it does not guess them. The plan tags from the project root.
 
 The tool never runs `git commit` / `git tag` / `git push` / publish / pin-bump. It prints;

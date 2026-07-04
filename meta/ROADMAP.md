@@ -1,4 +1,4 @@
-# Roadmap — keystone
+# Roadmap — akmon
 
 The forward-looking plan. The operating model itself is in [CONCEPT.md](CONCEPT.md); this
 file records **what is deliberately not yet formulated** (so the gaps are explicit, not
@@ -13,10 +13,10 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
 
 - **Three axes** — Layer (SHARED/LOCAL/USAGE), Role (architect/engineer/…), Archetype
   (package/service/…). Layer as a decision tree, not a grid (no false "shared usage").
-- **Role vs agent** — role = definition (in keystone); agent = incarnation (in a
+- **Role vs agent** — role = definition (in akmon); agent = incarnation (in a
   project). Axis values are roles; an agent is a point where axes meet.
 - **Learn loop** (README §3a) — CAPTURE → DISTILL → PROMOTE → PROPAGATE; two memories
-  (shared `_forge/memory/` vs provider-private) kept distinct; promotion test
+  (shared `_aitna/memory/` vs provider-private) kept distinct; promotion test
   (general + proven).
 - **Two roles** — architect, engineer (with role files + project-agent charters).
 - **Distribution intent** — submodule now, MCP hybrid later (see below).
@@ -37,12 +37,12 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
 - **Direction.** When formulated, OPERATE becomes a **third branch of the tree**, not a
   layer under DEVELOP — with its own guardrail tier (call it G#) and an orchestrator that
   enforces propose/execute separation. Until then it lives in a *separate* domain/repo,
-  referenced from keystone, not inside it.
+  referenced from akmon, not inside it.
 
 ### O2. Release, versioning & compatibility of the standard — RESOLVED
 
-- **Gap.** keystone is one submodule consumed by N projects. There is no notion of a
-  keystone **release**, **version**, **changelog**, or **breaking-change signal**. A project
+- **Gap.** akmon is one submodule consumed by N projects. There is no notion of a
+  akmon **release**, **version**, **changelog**, or **breaking-change signal**. A project
   that bumps the pin can silently inherit a changed role or guardrail.
 - **Why it matters.** A standard that retunes itself (the learn loop) must let consumers
   know *what changed and whether it breaks them* — otherwise promotion is unsafe at scale.
@@ -98,21 +98,21 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
   safety / eval / owner fields).
 - **Why it matters.** Comparable, evaluable skills are the prerequisite for eval gates and
   for promoting skills between projects with confidence.
-- **Direction.** A minimal `SKILL.md` frontmatter schema + a validator (a keystone tool);
+- **Direction.** A minimal `SKILL.md` frontmatter schema + a validator (a akmon tool);
   later, eval gates in CI before a shared-layer change merges.
 
 ---
 
 ## Distribution — submodule → MCP → product
 
-keystone is built to survive a change of carrier (README §9):
+akmon is built to survive a change of carrier (README §9):
 
 - **Now.** Git submodule — deterministic pinning, PR governance, works offline, no infra.
 - **Next (hybrid).** Governance/docs stay in the submodule; executable `tools/` and
   validators move behind an **MCP server** the assistant mounts. Same contract, new
   carrier. Revisit when executable tooling (sync, validators, fixtures) becomes the
   bottleneck rather than the docs.
-- **Later (product).** A standalone offering — the name `keystone` stands on its own. Only
+- **Later (product).** A standalone offering — the name `akmon` stands on its own. Only
   worth it at cross-project volume that justifies the infra.
 
 ---
@@ -132,7 +132,7 @@ selectively, observability/eval first — never as a dependency the model needs 
 
 1. **O1 direction note + this ROADMAP** — make every gap explicit (cheap, prevents loss).
 2. **Pipelines + guardrails + profiles** — make the roles and the learn loop runnable.
-3. **ARCHETYPES + BOOTSTRAP** — make keystone deployable to a new project.
+3. **ARCHETYPES + BOOTSTRAP** — make akmon deployable to a new project.
 4. **O3 `sync.py`** — make the cross-agent claim real. *(base done — T1; v2 remains.)*
 5. **Harden for scale** — *O2 versioning ✅ resolved (ADR 0001); O5 skill contract ✅ minimal
    done (T2)* → remaining: O5 richer schema/eval gates, O3 v2 (generated AGENTS skill block),

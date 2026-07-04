@@ -59,7 +59,7 @@ Applies to **every role and every agent** (architect and engineer alike).
   what's left, what would you, which is better, take a look, assess* — report the findings and a
   recommendation **in chat first**; do **not** edit files yet.
 - **Write only after a go-ahead.** Mutate backlog (`TASKS.md`), design docs, ADRs, requirements,
-  or keystone process docs only after explicit confirmation (*write it / record it / add it /
+  or akmon process docs only after explicit confirmation (*write it / record it / add it /
   make the change*), or when the original request was itself an edit command (*write, add,
   update, fix, implement*).
 - A rule that says **where** something is recorded (e.g. `TASKS.md` is the backlog sink) applies
@@ -80,7 +80,7 @@ Applies to **every role and every agent** (architect and engineer alike).
 
 ## Reuse over re-implementation
 
-- Use existing project code, keystone `tools/`, and shared skills before writing new code.
+- Use existing project code, akmon `tools/`, and shared skills before writing new code.
 - Put repeatable mechanics into a **tool**, not an ad-hoc script.
 - Match the surrounding code's conventions (naming, idiom, comment density).
 
@@ -95,7 +95,8 @@ Applies to **every role and every agent** (architect and engineer alike).
 - **Do not burn the orchestrator or reasoner tier on mechanical work; route by task kind,
   not by the whole task's prestige.** Every delegable kind has a named delegate
   ([MODEL.md](../MODEL.md) § Capability tiers); the orchestrator keeps only decomposition,
-  routing, synthesis, and owner dialogue.
+  routing, synthesis, and owner dialogue. Name which delegate takes each sub-step **up front**,
+  as part of the plan — delegation is the default, not the fallback.
 - Escalate on signal, not by default: start at the cheapest adequate rung and move up one
   rung only on failure signals (gates red twice, the delegate flags uncertainty, a
   contested fork emerges mid-task).

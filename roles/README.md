@@ -2,9 +2,9 @@
 
 A **role** is the reusable definition of a development agent: its scope, its
 requirements, the pipeline it follows, and the guardrails that bind it. Roles live here
-in keystone so every project's agents inherit one standard.
+in akmon so every project's agents inherit one standard.
 
-> Role ≠ agent. A role is the *definition*; a project's **agent** (in `_forge/agents/`)
+> Role ≠ agent. A role is the *definition*; a project's **agent** (in `_aitna/agents/`)
 > is the *incarnation* — it inherits a role and adds project specifics. One role may
 > have several agents in a project (e.g. two `engineer` agents: backend + data-pipeline).
 
@@ -23,10 +23,10 @@ as-is wastes its budget). `learn` and `release` are cross-cutting.
 | [architect](architect.md) | **synthesis** — design what *should be*: options, trade-offs, contracts, ADRs | [design-flow](../pipelines/design-flow.md) | language `guardrails/` + opted-in `profiles/` |
 | [engineer](engineer.md) | **realization** — code, tests, refactoring | [code-flow](../pipelines/code-flow.md) | language `guardrails/` + opted-in `profiles/` |
 | [learn](learn.md) | the learn loop — memory, distillation, LOCAL→SHARED promotion | [memory-distill](../pipelines/memory-distill.md) + [learning](../pipelines/learning.md) | promotion test (general + proven); one-way-up; PR-only at SHARED boundary |
-| [release](release.md) | release cycle for a subject (package / keystone tag / pin bump) | [release](../pipelines/release.md) | D5 (owner executes landing); coordinator-not-super-role; propose/prepare |
+| [release](release.md) | release cycle for a subject (package / akmon tag / pin bump) | [release](../pipelines/release.md) | D5 (owner executes landing); coordinator-not-super-role; propose/prepare |
 
 `release` is parameterized by a **subject**. DEVELOP / USAGE / OPERATE are relations to the
-chosen subject, not global session modes: a keystone pin bump is a release subject inside the
+chosen subject, not global session modes: a akmon pin bump is a release subject inside the
 consuming project's DEVELOP work, while runtime consumption remains OPERATE and out of scope.
 
 ## A role file states
@@ -71,7 +71,7 @@ existing thing to understand/measure it → `review` · **construct** a new stru
 | Keystone model, role boundaries, guardrails, pipeline semantics, roadmap, bootstrap/sync contract | `architect` |
 | Project architecture, requirements, ADRs, design docs | `architect` |
 | Production code, tests, build config | `engineer` |
-| Executable dev tooling (`_forge/keystone/{bin,tools,hooks}/`, `_forge/tools/`, validators, sync scripts) | `engineer` |
+| Executable dev tooling (`_aitna/akmon/{bin,tools,hooks}/`, `_aitna/tools/`, validators, sync scripts) | `engineer` |
 | Generated pointer output produced by an existing tool | no new role; report what the tool changed |
 
 For a mixed design + tool task: start as `architect`, lock the behaviour/contract, switch
@@ -88,11 +88,11 @@ structure* to *writing code* — is a **gate**, not a relabel. It is the seam wh
 step 1 (Take). **Before the first code edit**, in order:
 
 1. **Land the task** — the locked design is recorded as an implementation task in
-   `_forge/TASKS.md`, **as a one-line index entry linked to its design doc** (design-flow step 8,
+   `_aitna/TASKS.md`, **as a one-line index entry linked to its design doc** (design-flow step 8,
    format: [tasks](../pipelines/tasks.md) — detail by reference, not inlined). A **cold engineer
-   session must be able to pick the work from `_forge/TASKS.md` + the linked doc alone** — do not
+   session must be able to pick the work from `_aitna/TASKS.md` + the linked doc alone** — do not
    carry it only in the current session's head.
-2. **Re-read the backlog** — re-read `_forge/TASKS.md` to **sequence** the task against other
+2. **Re-read the backlog** — re-read `_aitna/TASKS.md` to **sequence** the task against other
    in-flight / planned work and note its dependencies (what it sits on, what it touches) — code-flow
    step 1 Take.
 3. **Declare the build role** — announce `🧭 agent: engineer — <focus>` and pull in its pipeline /
@@ -105,7 +105,7 @@ injects this same checklist — the rule-plus-hook split, as with role declarati
 
 ## Inheritance contract (agent → role)
 
-A project agent charter (`_forge/agents/<role>/README.md`) must:
+A project agent charter (`_aitna/agents/<role>/README.md`) must:
 
 - **Link** the role file here as its source of requirements and pipeline.
 - **Add only project specifics**: which modules/docs/tests it touches, which
@@ -115,7 +115,7 @@ A project agent charter (`_forge/agents/<role>/README.md`) must:
 
 ## Adding / changing a role
 
-- New role or changed requirements → here, via PR into keystone (shared for all
+- New role or changed requirements → here, via PR into akmon (shared for all
   projects). Introduce a **new role** only when the pipeline is *materially* different
   (a distinct ordered cycle and output), not when a profile or a skill would do.
 - A project-only way of working → keep it in the agent charter or a local skill; promote

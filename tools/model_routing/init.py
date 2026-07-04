@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Initialize model routing for a keystone-consuming project.
+"""Initialize model routing for a akmon-consuming project.
 
 Computes the tier→model binding from the registry's semantic selection policy (relative
 to the orchestrating model) and writes the generated artifacts:
@@ -11,7 +11,7 @@ to the orchestrating model) and writes the generated artifacts:
   registry hash (per-user, gitignored like ``.env``).
 
 Stdlib-only and idempotent: re-running with the same inputs changes nothing. The registry
-(``registry.json``) plus the optional project overlay (``<forge-root>/model-routing.json``)
+(``registry.json``) plus the optional project overlay (``<aitna-root>/model-routing.json``)
 are the data to edit — never the generated files.
 """
 
@@ -28,9 +28,9 @@ import routing
 
 
 def _find_project_root(start: Path) -> Path:
-    forge = routing.forge_root_name()
+    aitna = routing.aitna_root_name()
     for candidate in (start, *start.parents):
-        if (candidate / "AGENTS.md").is_file() and (candidate / forge / "keystone").exists():
+        if (candidate / "AGENTS.md").is_file() and (candidate / aitna / "akmon").exists():
             return candidate
     return start
 
@@ -82,8 +82,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = (args.project_root or _find_project_root(Path.cwd())).resolve()
-    keystone_dir = root / routing.forge_root_name() / "keystone"
-    registry = routing.load_registry(keystone_dir, root)
+    akmon_dir = root / routing.aitna_root_name() / "akmon"
+    registry = routing.load_registry(akmon_dir, root)
     vendors = routing.vendors_with_routing_policy(registry)
     if args.vendor not in vendors:
         parser.error(f"--vendor must be one of: {', '.join(vendors)}")
@@ -101,10 +101,11 @@ def main(argv: list[str] | None = None) -> int:
 
     binding = routing.compute_binding(registry, orchestrator, available, args.vendor)
     planned: dict[Path, str] = {
-        root / rel: content for rel, content in routing.generated_agent_files(registry, binding).items()
+        root / rel: content
+        for rel, content in routing.binding_artifacts(
+            registry, binding, second_opinion=second_opinion, available=available
+        ).items()
     }
-    config = routing.local_config(binding, registry, second_opinion=second_opinion, available=available)
-    planned[root / routing.LOCAL_CONFIG_REL] = json.dumps(config, indent=2) + "\n"
 
     write = not args.check and not args.dry_run
     changed = []
@@ -123,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "model routing: "
         f"vendor={binding.vendor} · orchestrator={binding.orchestrator} · reasoner={binding.reasoner} · "
-        f"synthesizer={binding.synthesizer} · "
+        f"auditor={binding.auditor} · "
         f"worker={binding.worker} · mid={binding.mid} · "
         f"second-opinion={binding.second_opinion_cli or '-'}({'on' if second_opinion else 'off'})"
     )
