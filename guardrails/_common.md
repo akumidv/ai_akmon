@@ -90,6 +90,16 @@ Applies to **every role and every agent** (architect and engineer alike).
 - A material design gap goes back to the [architect](../roles/architect.md) role — do not
   improvise load-bearing architecture inside a code task.
 
+## Route by task kind — the tier floor
+
+- **Do not burn the orchestrator or reasoner tier on mechanical work; route by task kind,
+  not by the whole task's prestige.** Every delegable kind has a named delegate
+  ([MODEL.md](../MODEL.md) § Capability tiers); the orchestrator keeps only decomposition,
+  routing, synthesis, and owner dialogue.
+- Escalate on signal, not by default: start at the cheapest adequate rung and move up one
+  rung only on failure signals (gates red twice, the delegate flags uncertainty, a
+  contested fork emerges mid-task).
+
 ## API shape — subject first, then how
 
 - **Every callable reads as `f(subject, *rest)`:** the **first parameter is the data it acts on**

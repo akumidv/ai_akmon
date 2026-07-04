@@ -90,9 +90,60 @@ def _make_project(tmp_path: Path) -> Path:
         "hooks/session-start-agent.py",
         "hooks/role-on-code.py",
         "hooks/analysis-guard.py",
+        "hooks/model-routing.py",
+        "hooks/delegation-log.py",
+        "tools/model_routing/routing.py",
+        "tools/model_routing/init.py",
+        "tools/model_routing/second_opinion.py",
     ):
         text = CHANGELOG_MD if rel == "CHANGELOG.md" else "x\n"
         _write(ks / rel, text)
+    _write(
+        ks / "tools" / "model_routing" / "registry.json",
+        """{
+  "anthropic": {
+    "selection_policy": {
+      "available_order": "weakest-to-strongest",
+      "worker": "lowest",
+      "mid": "next-after-worker",
+      "reasoner": "highest",
+      "orchestrator_floor": "highest"
+    },
+    "second_opinion": {
+      "cli": "claude",
+      "invoke": "claude -p --output-format text",
+      "report_dir": ".codex/second-opinion/"
+    },
+    "semantic_fallback": {
+      "worker": "worker",
+      "mid": "mid",
+      "reasoner": "strongest",
+      "orchestrator": "strongest"
+    }
+  },
+  "openai": {
+    "selection_policy": {
+      "available_order": "weakest-to-strongest",
+      "worker": "lowest",
+      "mid": "next-after-worker",
+      "reasoner": "highest",
+      "orchestrator_floor": "highest"
+    },
+    "second_opinion": {
+      "cli": "codex",
+      "invoke": "codex exec",
+      "report_dir": ".claude/second-opinion/"
+    },
+    "semantic_fallback": {
+      "worker": "worker",
+      "mid": "mid",
+      "reasoner": "strongest",
+      "orchestrator": "strongest"
+    }
+  }
+}
+""",
+    )
 
     # an agent charter that links a keystone role
     _write(root / "_forge" / "agents" / "engineer" / "README.md", "See `_forge/keystone/roles/engineer.md`.\n")

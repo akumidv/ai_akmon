@@ -30,11 +30,14 @@ recording it before agreement.
      **ecosystem practice** (language stdlib, widely-used libraries) and weigh it, rather than
      settling the convention from local code or taste alone. Record the practice you found and
      the rationale for following or departing from it (it becomes part of the decision record).
+   - *Tier:* the survey fan-out delegates to `worker` (`explore-search`).
 3. **Design** — propose the structure; decide **point by point**. For anything
    load-bearing, frame the design space before recommending: include the realistic
    options (including the status quo when viable), the evaluation criteria, trade-offs,
    best-practice principles involved, risks, and revisit-if conditions. Do not present a
-   single option as inevitable.
+   single option as inevitable. *Tier:* drafting options on a load-bearing fork delegates
+   to `reasoner` (`design-fork`); the recommendation and the decision stay with the
+   orchestrator and the owner.
 4. **Confirm recording** *(gate)* — before mutating design docs, ADRs, requirements, or
    backlog files, get explicit owner confirmation that the findings should be recorded.
    This gate is already satisfied when the request itself is an edit command ("write",

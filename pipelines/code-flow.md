@@ -37,13 +37,19 @@ does not decide architecture or process contracts.
      rule. Do not mix the sweep into the change that introduces the rule (keeps each diff
      reviewable and the rule decided before the churn). A wide rename/reshape always lands as
      its own task.
+   - *Tier:* mechanical sub-steps delegate to `worker` (`mech-edit`; a decided contract →
+     `implement-under-spec` on the mid rung).
 3. **Test** — add or extend tests. A behaviour change without a test is **incomplete**.
-   Tests mirror the source layout.
+   Tests mirror the source layout. *Tier:* skeletons/fixtures from a stated spec delegate
+   to `worker` (`test-scaffold`).
 4. **Pre-commit** *(gate)* — run the [pre-commit](pre-commit.md) cycle. Tests are
-   mandatory; **no commit on red**.
+   mandatory; **no commit on red**. *Tier:* the run→parse→fix→re-run loop delegates to
+   `worker` (`validate-loop`); a non-mechanical red escalates back.
 5. **Verify** *(gate)* — for any change to **math, DataFrame/data shape, or
    architecture**, explain it and obtain **owner verification**. Green tests are
-   necessary, not sufficient.
+   necessary, not sufficient. *Tier:* a `reasoner` review plus an optional
+   `second-opinion` advisory may widen what the owner sees — they never replace the
+   owner's verification.
 6. **Close** — mark the task done in `_forge/TASKS.md` *only after* owner verification.
    Capture any reusable insight to `_forge/memory/` (feeds the learn loop).
 

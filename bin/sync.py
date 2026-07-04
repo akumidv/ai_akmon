@@ -200,9 +200,24 @@ def _claude_hooks() -> dict:
                         {"type": "command", "command": cmd("analysis-guard.py")},
                     ],
                 },
+                {
+                    "matcher": "Task|Agent",
+                    "hooks": [{"type": "command", "command": cmd("delegation-log.py")}],
+                },
+                {
+                    # One entry with a combined matcher: _merge_hook_entries dedups by
+                    # command, so the same script must not ride several matcher groups.
+                    "matcher": "Bash|Edit|Write|MultiEdit|Task|Agent",
+                    "hooks": [{"type": "command", "command": cmd("delegation-nudge.py")}],
+                },
             ],
             "SessionStart": [
-                {"hooks": [{"type": "command", "command": cmd("session-start-agent.py")}]}
+                {
+                    "hooks": [
+                        {"type": "command", "command": cmd("session-start-agent.py")},
+                        {"type": "command", "command": cmd("model-routing.py")},
+                    ]
+                }
             ],
         }
     }

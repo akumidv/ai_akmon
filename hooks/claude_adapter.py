@@ -37,4 +37,8 @@ def print_result(result: HookResult | None) -> None:
     if result.permission_reason is not None:
         output["permissionDecisionReason"] = result.permission_reason
 
-    print(json.dumps({"hookSpecificOutput": output}))
+    top_level: dict[str, Any] = {"hookSpecificOutput": output}
+    if result.system_message is not None:
+        top_level["systemMessage"] = result.system_message
+
+    print(json.dumps(top_level))

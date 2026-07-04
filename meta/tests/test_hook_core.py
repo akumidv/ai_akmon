@@ -378,3 +378,91 @@ def test_session_start_reads_custom_dev_root_agents(monkeypatch, tmp_path):
     assert isinstance(result, HookResult)
     assert "architect" in result.additional_context
     assert "tools/ai/memory/" in result.additional_context  # memory hint tracks the root
+
+
+# --------------------------------------------------------------------------------------
+# delegation_nudge_result
+# --------------------------------------------------------------------------------------
+
+
+def _nudge_setup(monkeypatch, tmp_path, threshold=3):
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", str(threshold))
+
+
+def test_delegation_nudge_ignores_non_mutating_kinds(monkeypatch, tmp_path):
+    _nudge_setup(monkeypatch, tmp_path, threshold=1)
+    assert hook_core.delegation_nudge_result("read", "s1") is None
+    assert hook_core.delegation_nudge_result("grep", "s1") is None
+
+
+def test_delegation_nudge_fires_once_without_delegation_between(monkeypatch, tmp_path):
+    _nudge_setup(monkeypatch, tmp_path, threshold=3)
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.SHELL_TOOL, "s1") is None
+    result = hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1")
+    assert isinstance(result, HookResult)
+    assert "Delegation check" in result.additional_context
+    assert "3 consecutive" in result.additional_context
+    assert result.permission_decision is None  # advisory only, never blocks
+    # Past the threshold in the same episode, with no delegation in between → silenced
+    # by the marker, even as mutations keep piling up.
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    # A different session has its own counter and marker.
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s2") is None
+
+
+def test_delegation_nudge_resets_on_subagent_delegation(monkeypatch, tmp_path):
+    _nudge_setup(monkeypatch, tmp_path, threshold=3)
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    # Delegation resets the consecutive-mutation counter...
+    assert hook_core.delegation_nudge_result(hook_core.SUBAGENT_TOOL, "s1") is None
+    # ...so the next two mutations stay under the threshold.
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is not None
+
+
+def test_delegation_nudge_rearms_after_subagent_delegation(monkeypatch, tmp_path):
+    _nudge_setup(monkeypatch, tmp_path, threshold=3)
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    first = hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1")
+    assert isinstance(first, HookResult)
+    # Silenced by the marker until a delegation happens.
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    # A subagent delegation resets the counter AND re-arms the reminder (removes the marker).
+    assert hook_core.delegation_nudge_result(hook_core.SUBAGENT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    second = hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1")
+    assert isinstance(second, HookResult)
+    assert "Delegation check" in second.additional_context
+
+
+def test_delegation_nudge_threshold_env_fallback(monkeypatch):
+    monkeypatch.delenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", raising=False)
+    assert hook_core.delegation_nudge_threshold() == 10
+    monkeypatch.setenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", "not-a-number")
+    assert hook_core.delegation_nudge_threshold() == 10
+    monkeypatch.setenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", "-5")
+    assert hook_core.delegation_nudge_threshold() == 10
+    monkeypatch.setenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", "25")
+    assert hook_core.delegation_nudge_threshold() == 25
+
+
+# --------------------------------------------------------------------------------------
+# system_message field (C21)
+# --------------------------------------------------------------------------------------
+
+
+def test_hook_result_with_system_message():
+    result = HookResult(event_name="PreToolUse", system_message="[keystone] → k-explorer")
+    assert result.system_message == "[keystone] → k-explorer"
+
+
+def test_hook_result_system_message_is_optional():
+    result = HookResult(event_name="SessionStart")
+    assert result.system_message is None

@@ -11,8 +11,6 @@ import builtins
 import importlib.util
 from pathlib import Path
 
-import pytest
-
 _KEYSTONE = next(
     parent
     for parent in Path(__file__).resolve().parents
