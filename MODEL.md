@@ -93,3 +93,45 @@ Never in code, markdown, or commits.
 `bin/sync.py` writes the thin generated vendor pointers (CLAUDE.md, GEMINI.md, …) and hook
 wiring from one source; `bin/verify.py` validates the project contract (it reports, never
 modifies). Both are stdlib-only and run in-tree.
+
+## 10. Capability tiers — model routing
+
+Roles say *who* performs an operation; tiers say *which model rung* runs it. Delegation is
+**by task kind, as a subagent**: the main session (the **orchestrator**) decomposes, routes,
+integrates results, and talks to the owner — those are never delegated.
+
+| Tier | Runs | Bound to |
+|---|---|---|
+| **orchestrator** | decompose · route · synthesize · owner dialogue | the session's own model — never overridden |
+| **reasoner** | load-bearing synthesis: deep debugging, design forks, quant derivation | strongest available local model, as a subagent |
+| **worker** | delegable realization: exploration, summaries, mechanical edits, gate loops | cheapest adequate rung |
+| **second-opinion** | independent review of decisions and code | a *different vendor's* model, opt-in |
+
+The binding surface is the **task-kind matrix** — a finite named list of operations, kept as
+data in the routing registry ([`tools/model_routing/registry.json`](tools/model_routing/registry.json)):
+
+| Task kind | Tier |
+|---|---|
+| `explore-search` · `summarize` · `mech-edit` · `test-scaffold` · `doc-sync` · `validate-loop` | worker |
+| `implement-under-spec` | worker (mid rung) |
+| `debug-deep` · `design-fork` · `quant-derivation` | reasoner |
+| `independent-review` | second-opinion |
+| decompose / route / synthesize / owner dialogue | orchestrator — never delegated |
+
+Two policies make the matrix bite: **delegation is the default** (every kind has a named
+delegate — the question is "which row is this?", not "is it worth delegating?"), and the
+**escalation ladder** (start at the cheapest adequate rung; move up one rung only on failure
+signals: gates red twice, the delegate flags uncertainty, a contested fork emerges).
+
+Model names never enter shared process docs or the committed registry as current truth. The
+registry records a **semantic selection policy per vendor** (weakest→strongest local discovery
+order, worker = lowest, reasoner = highest, orchestrator floor = highest); concrete model aliases
+come from local discovery or an explicit `--available` list and are written only to gitignored
+local config / generated harness files. If discovery is unavailable, the binding falls back to
+semantic labels and warns instead of pretending those labels are real model ids. A SessionStart
+hook displays the binding (with a warning when the orchestrator ranks below the local floor) and
+a PreToolUse hook logs each delegation at zero token cost. Tiers change who *drafts*, never who
+*decides* — owner verification stays with the owner, and a second opinion is advisory input to it,
+not a sign-off. Cross-vendor review uses the opposite configured provider by default: Claude
+sessions ask Codex, Codex sessions ask Claude, unless the project/session explicitly chooses
+another provider.

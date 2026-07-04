@@ -372,8 +372,69 @@ class Verifier:
             "session-start-agent.py",
             "role-on-code.py",
             "analysis-guard.py",
+            "model-routing.py",
+            "delegation-log.py",
         ):
             self.check_path(f"{self.keystone}/hooks/{script}")
+
+    def check_model_routing(self) -> None:
+        """The routing registry and tools must ship with keystone and parse cleanly.
+
+        Freshness of the per-user local config is the SessionStart hook's job (it injects
+        the re-init instruction); verify only guards the committed contract surface.
+        """
+        for relative in (
+            f"{self.keystone}/tools/model_routing/registry.json",
+            f"{self.keystone}/tools/model_routing/routing.py",
+            f"{self.keystone}/tools/model_routing/init.py",
+            f"{self.keystone}/tools/model_routing/second_opinion.py",
+        ):
+            self.check_path(relative)
+        registry_path = self.root / self.keystone / "tools" / "model_routing" / "registry.json"
+        if registry_path.is_file():
+            try:
+                registry = sync_tool._read_json(registry_path)
+                self.ok("model-routing registry parses")
+                self._check_model_routing_registry(registry)
+            except ValueError as exc:
+                self.error(str(exc))
+        overlay = self.root / self.forge / "model-routing.json"
+        if overlay.is_file():
+            try:
+                sync_tool._read_json(overlay)
+                self.ok("model-routing project overlay parses")
+            except ValueError as exc:
+                self.error(str(exc))
+
+    def _check_model_routing_registry(self, registry: dict) -> None:
+        for vendor in ("anthropic", "openai"):
+            spec = registry.get(vendor)
+            if not isinstance(spec, dict):
+                self.error(f"model-routing registry is missing vendor {vendor!r}")
+                continue
+            policy = spec.get("selection_policy")
+            if isinstance(policy, dict) and policy.get("reasoner") == "highest" and policy.get("worker") == "lowest":
+                self.ok(f"model-routing {vendor} semantic selection policy exists")
+            else:
+                self.error(
+                    f"model-routing {vendor} needs semantic selection_policy "
+                    "with worker=lowest/reasoner=highest"
+                )
+            fallback = spec.get("semantic_fallback")
+            fallback_keys = ("worker", "mid", "reasoner", "orchestrator")
+            if isinstance(fallback, dict) and all(fallback.get(key) for key in fallback_keys):
+                self.ok(f"model-routing {vendor} semantic fallback exists")
+            else:
+                self.error(f"model-routing {vendor} semantic_fallback must name worker/mid/reasoner/orchestrator")
+            second = spec.get("second_opinion")
+            if not isinstance(second, dict):
+                self.error(f"model-routing {vendor} second_opinion is missing")
+                continue
+            missing = [key for key in ("cli", "invoke", "report_dir") if not second.get(key)]
+            if missing:
+                self.error(f"model-routing {vendor} second_opinion missing: {', '.join(missing)}")
+            else:
+                self.ok(f"model-routing {vendor} second_opinion is configured")
 
     def check_gitignore(self) -> None:
         path = self.root / ".gitignore"
@@ -481,6 +542,7 @@ class Verifier:
         self.check_skills()
         self.check_generated_pointers()
         self.check_hooks()
+        self.check_model_routing()
         self.check_gitignore()
         self.check_keystone_gitignore()
         self.check_ci()

@@ -63,6 +63,11 @@ current code/docs, and **leaves** with a locked, linked design + ADR(s) + update
 requirement(s) + an implementation task (see Inputs / outputs and Done). The design-concept
 discipline the pipeline produces is spelled out below.
 
+**Default tier routing** (MODEL.md § Capability tiers): survey fan-out delegates to `worker`
+(`explore-search`); option drafting on load-bearing forks goes to `reasoner` (`design-fork`);
+the Align gate may take a `second-opinion` advisory. The decision itself is never delegated —
+it is the owner's, prepared by the orchestrator.
+
 
 
 ---

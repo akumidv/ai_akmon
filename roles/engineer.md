@@ -51,6 +51,11 @@ What the role contributes around the pipeline: it **enters** with a task (goal +
 it implements) and **leaves** with committed, tested, owner-verified code and the task
 closed (see Inputs / outputs and Done).
 
+**Default tier routing** (MODEL.md § Capability tiers): mechanical sub-steps delegate to
+`worker` (`mech-edit`, `implement-under-spec`, `test-scaffold`, `validate-loop`); the Verify
+gate may take `reasoner` review plus a `second-opinion` advisory. Integration and the
+design-gap escalation stay with the orchestrator.
+
 ---
 
 ## Requirements

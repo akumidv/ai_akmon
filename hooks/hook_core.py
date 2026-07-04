@@ -41,6 +41,7 @@ class HookResult:
     additional_context: str | None = None
     permission_decision: str | None = None
     permission_reason: str | None = None
+    system_message: str | None = None
 
 
 _CODE_EXTENSIONS = frozenset(
@@ -91,6 +92,10 @@ def _non_code_segments() -> tuple[str, ...]:
 # token before calling. The core stays vendor-clean — it never names a vendor's tools.
 EDIT_TOOL = "edit"
 _EDIT_TOOL_KINDS = frozenset({EDIT_TOOL})
+# Further neutral kinds for the delegation nudge: a shell/command tool and the vendor's
+# subagent-delegation tool.
+SHELL_TOOL = "shell"
+SUBAGENT_TOOL = "subagent"
 
 
 # Planning / design docs — editing one may be an analysis-only turn that needs confirmation
@@ -285,3 +290,77 @@ def analysis_write_result(tool_name: str, file_path: str | None, session_id: str
         pass
 
     return HookResult(event_name="PreToolUse", additional_context=analysis_before_mutation_message())
+
+
+# Delegation nudge — the routing rule (guardrails/_common.md § Route by task kind + the
+# SessionStart status line) is prose the orchestrator can silently skip mid-task. This counts
+# consecutive orchestrator edit/shell calls since session start or the last subagent
+# delegation and, past the threshold, reminds once per drift episode — a subagent
+# delegation re-arms it. Advisory only — task-kind classification is fuzzy, so it never
+# blocks.
+
+_DELEGATION_NUDGE_THRESHOLD_DEFAULT = 10
+_DELEGATION_NUDGE_TOOL_KINDS = frozenset({EDIT_TOOL, SHELL_TOOL})
+
+
+def delegation_nudge_threshold() -> int:
+    """Mutation count that triggers the nudge (env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`)."""
+    try:
+        value = int(os.environ.get("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", ""))
+    except ValueError:
+        return _DELEGATION_NUDGE_THRESHOLD_DEFAULT
+    return value if value > 0 else _DELEGATION_NUDGE_THRESHOLD_DEFAULT
+
+
+def delegation_nudge_message(count: int) -> str:
+    return (
+        f"[keystone] Delegation check — {count} consecutive orchestrator edit/shell calls "
+        "without a subagent delegation.\n"
+        "Delegation is the default: route by task kind (MODEL.md § Capability tiers; "
+        "guardrails/_common.md § Route by task kind). Exploration/summaries → `k-explorer` · "
+        "mechanical edits / doc-sync / test scaffolds → `k-mechanic` · gate loops → "
+        "`k-validator` · code under a decided contract → `k-implementer` · load-bearing "
+        "analysis → `k-reasoner`.\n"
+        "If this genuinely is orchestrator work (decompose / route / synthesize / owner "
+        "dialogue), carry on — this reminder is advisory and fires once per drift episode "
+        "(a subagent delegation re-arms it)."
+    )
+
+
+def delegation_nudge_result(tool_name: str, session_id: str | None) -> HookResult | None:
+    sid = session_id or "nosession"
+    counter = Path(tempfile.gettempdir()) / f"keystone-delegation-nudge-{sid}.count"
+    marker = Path(tempfile.gettempdir()) / f"keystone-delegation-nudge-{sid}.marker"
+
+    if tool_name == SUBAGENT_TOOL:
+        try:
+            counter.write_text("0", encoding="utf-8")
+        except OSError:
+            pass
+        try:
+            marker.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return None
+    if tool_name not in _DELEGATION_NUDGE_TOOL_KINDS:
+        return None
+
+    try:
+        count = int(counter.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        count = 0
+    count += 1
+    try:
+        counter.write_text(str(count), encoding="utf-8")
+    except OSError:
+        pass
+
+    if count < delegation_nudge_threshold():
+        return None
+    if marker.exists():
+        return None
+    try:
+        marker.write_text("seen", encoding="utf-8")
+    except OSError:
+        pass
+    return HookResult(event_name="PreToolUse", additional_context=delegation_nudge_message(count))

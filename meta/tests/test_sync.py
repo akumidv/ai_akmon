@@ -165,6 +165,18 @@ def test_claude_settings_wires_hooks_into_valid_json(tmp_path):
     text = planned.content
     assert "_forge/keystone/hooks/git-commit-guard.py" in text
     assert "_forge/keystone/hooks/analysis-guard.py" in text
+    # the delegation nudge is one combined-matcher entry (edit + shell + subagent tools):
+    # the merge dedups by command, so the same script must not appear in several groups
+    matchers_with_nudge = {
+        entry["matcher"]
+        for entry in settings["hooks"]["PreToolUse"]
+        if any("delegation-nudge.py" in hook["command"] for hook in entry["hooks"])
+    }
+    assert matchers_with_nudge == {"Bash|Edit|Write|MultiEdit|Task|Agent"}
+    # the pre-existing groups keep their hooks (regression: entry-level dedup must not
+    # swallow them)
+    all_matchers = {entry["matcher"] for entry in settings["hooks"]["PreToolUse"]}
+    assert {"Bash", "Edit|Write|MultiEdit", "Task|Agent"} <= all_matchers
 
 
 def test_codex_hooks_wires_neutral_hook_entrypoint(tmp_path):

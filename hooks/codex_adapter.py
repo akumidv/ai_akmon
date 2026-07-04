@@ -98,9 +98,26 @@ def file_paths(payload: dict[str, Any]) -> list[str]:
     return unique
 
 
+def cwd(payload: dict[str, Any]) -> str:
+    for key in ("cwd", "working_directory", "workingDirectory", "workdir"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
 def print_result(result: HookResult | None) -> None:
     if result is None:
         return
-    parts = [part for part in (result.additional_context, result.permission_reason) if part]
-    if parts:
-        print("\n".join(parts))
+    output: dict[str, str] = {"hookEventName": result.event_name}
+    if result.additional_context is not None:
+        output["additionalContext"] = result.additional_context
+    if result.permission_decision is not None:
+        output["permissionDecision"] = result.permission_decision
+    if result.permission_reason is not None:
+        output["permissionDecisionReason"] = result.permission_reason
+    top_level: dict[str, Any] = {"hookSpecificOutput": output}
+    if result.system_message is not None:
+        # Codex hooks have no documented user-facing channel; pass silently for now.
+        pass
+    print(json.dumps(top_level))

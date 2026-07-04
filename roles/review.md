@@ -54,6 +54,11 @@ What the role contributes around the pipeline: it **enters** with a subject + a 
 **leaves** with a report whose findings and criteria a cold `architect` (or `engineer`, for a
 local fix) can act on without re-discovering the as-is.
 
+**Default tier routing** (MODEL.md § Capability tiers): evidence fan-out delegates to
+`worker` (`explore-search`, `summarize`); adversarial verification of ranked findings goes to
+`reasoner`, plus `second-opinion` when enabled. Framing, calibration, and the report stay
+with the orchestrator.
+
 ---
 
 ## Requirements

@@ -16,6 +16,59 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 
 ## Unreleased
 
+### Added
+- **Model routing — capability tiers** ([MODEL.md](MODEL.md) §10, ADR 0004): task-kind →
+  tier matrix and per-vendor semantic selection policy as data in
+  [`tools/model_routing/registry.json`](tools/model_routing/registry.json) (project overlay:
+  `<forge-root>/model-routing.json`, deep-merged; may add per-agent `briefs`); the
+  idempotent [`tools/model_routing/init.py`](tools/model_routing/init.py) computes the
+  tier→model binding relative to the orchestrating model and generates the `k-*` subagent
+  definitions (`.claude/agents/`, committed) plus `.claude/model-routing.local.json`
+  (per-user — consumers gitignore it, with `.claude/model-routing.log`).
+- **Two routing hooks**, wired by `sync.py` for Claude Code:
+  [`hooks/model-routing.py`](hooks/model-routing.py) (SessionStart — binding status line /
+  init instruction, weak-orchestrator warning) and
+  [`hooks/delegation-log.py`](hooks/delegation-log.py) (PreToolUse `Task|Agent` — one TSV
+  log line per delegation, zero token cost).
+- **Tier floor guardrail** ([guardrails/_common.md](guardrails/_common.md) § Route by task
+  kind) and one-line tier annotations in the triad roles and the review/code/design flows.
+- **Delegation-nudge hook**: [`hooks/delegation-nudge.py`](hooks/delegation-nudge.py)
+  (PreToolUse, combined matcher `Bash|Edit|Write|MultiEdit|Task|Agent`) counts consecutive
+  orchestrator edit/shell calls since session start or the last subagent delegation and,
+  past a threshold (default 10, env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`), injects an
+  advisory reminder to route by task kind to the `k-*` delegates — once per drift episode;
+  a subagent delegation resets the counter and re-arms the reminder. Never blocks. Wired by
+  `sync.py`.
+- **Statistics digest** (`stats-digest` skill + tool, the on-demand counterpart to the
+  zero-token delegation log): [`tools/model_routing/stats.py`](tools/model_routing/stats.py)
+  parses the delegation log and the current session transcript (orchestrator + per-subagent
+  token usage), queries the Claude OAuth usage API for remaining session/week budget
+  (degrades to `unavailable` offline), writes the full report to `.claude/stats/` and prints
+  a compact digest; [`skills/stats-digest/SKILL.md`](skills/stats-digest/SKILL.md) drives it
+  on the owner's chat trigger and gates learn-loop recommendations on owner confirmation.
+  Known limit: the delegation log is append-only across sessions, so delegation counts span
+  the log, while token stats are per-session.
+- **Cross-vendor second-opinion runner**:
+  [`tools/model_routing/second_opinion.py`](tools/model_routing/second_opinion.py) runs an
+  advisory review at a verify/align gate through the registry-selected CLI. Claude-led sessions
+  default to Codex (`codex exec`); Codex-led sessions default to Claude
+  (`claude -p --output-format text`). The runner writes the full report under the configured
+  per-vendor report directory and prints a digest; it is not a blocking hook.
+
+### Migration
+- Re-run `bin/sync.py` (wires the two new hooks into `.claude/settings.json`), run
+  `tools/model_routing/init.py`, and add `.claude/model-routing.local.json` +
+  `.claude/model-routing.log` to the project `.gitignore`.
+- To use Codex-led routing or Claude second-opinion review, keep the OpenAI and Anthropic
+  selection-policy/second-opinion entries in `tools/model_routing/registry.json` or override
+  them in the project overlay (`<forge-root>/model-routing.json`). Concrete model aliases come
+  from local discovery / `--available`, not from committed registry data.
+
+### Fixed
+- **Codex hook output contract**: `hooks/codex-hook.py` now reads the Codex SessionStart `cwd`
+  payload and `hooks/codex_adapter.py` serializes hook results as `hookSpecificOutput` JSON, so
+  Codex CLI 0.142 accepts the generated SessionStart hook instead of reporting hook failure.
+
 ## v0.2.1
 
 ### Added

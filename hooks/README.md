@@ -50,8 +50,29 @@ project-local hook surface.
   analysis-before-mutation reminder: on the first edit to a planning/design doc in a session,
   remind the assistant to stop and ask confirmation if the current turn was analysis-only, and
   to declare the role (assessing the as-is = `review`; constructing the design = `architect`).
+- [`model-routing.py`](model-routing.py) — Claude SessionStart wrapper for **model routing**
+  (MODEL.md § Capability tiers): with a fresh local config it injects one status line — the
+  tier→model binding, a self-check, and a weak-orchestrator warning when the session model
+  ranks below the registry floor; with a missing/stale config it injects the init
+  instruction (run [`../tools/model_routing/init.py`](../tools/model_routing/init.py), then
+  confirm the binding + second-opinion opt-in with the owner). Runs as a **SessionStart**
+  hook; logic in [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).
+- [`delegation-log.py`](delegation-log.py) — Claude PreToolUse wrapper that appends one TSV
+  line (timestamp, subagent, model, description) to `.claude/model-routing.log` per
+  subagent delegation — routing switches are visible at **zero token cost**; the model never
+  narrates them. Runs as a **PreToolUse → Task|Agent** hook; never blocks.
+- [`delegation-nudge.py`](delegation-nudge.py) — Claude PreToolUse wrapper for the
+  **delegation nudge**: counts consecutive orchestrator edit/shell calls since session start
+  or the last subagent delegation (`Task`/`Agent` resets the counter) and, past a threshold
+  (default 10; env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`), injects a **one-time, advisory**
+  reminder that the work may belong to a `k-*` delegate (MODEL.md § Capability tiers). Never
+  blocks — task-kind classification is fuzzy, and a false-positive block would train the
+  reminder to be ignored. Runs as a **PreToolUse → Bash|Edit|Write|MultiEdit|Task|Agent**
+  hook (one combined-matcher entry seeing both the mutations and the delegation resets).
 - [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for the same neutral
-  reminders (`session-start`, `role-on-code`, `analysis-guard`).
+  reminders (`session-start`, `role-on-code`, `analysis-guard`). Model routing is not wired
+  for Codex: a Codex session has no keystone-managed subagent surface to route (the Codex
+  channel is the *second-opinion* direction, driven from the orchestrating session).
 
 > The Role-declaration **rule** also lives in `AGENTS.md` (vendor-neutral), so Codex/Gemini
 > follow it by reading the doc; this hook is only the Claude-side *enforcement* of it.
@@ -71,11 +92,17 @@ The hooks are the source of truth here; each assistant wires them in its own way
             "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/git-commit-guard.py\"" }] },
         { "matcher": "Edit|Write|MultiEdit",
           "hooks": [{ "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/role-on-code.py\"" }] }
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/role-on-code.py\"" }] },
+        { "matcher": "Task|Agent",
+          "hooks": [{ "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/delegation-log.py\"" }] }
       ],
       "SessionStart": [
-        { "hooks": [{ "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/session-start-agent.py\"" }] }
+        { "hooks": [
+            { "type": "command",
+              "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/session-start-agent.py\"" },
+            { "type": "command",
+              "command": "python3 \"$CLAUDE_PROJECT_DIR/_forge/keystone/hooks/model-routing.py\"" }] }
       ]
     }
   }

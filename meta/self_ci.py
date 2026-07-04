@@ -86,6 +86,11 @@ def _make_fixture(root: Path, keystone_root: Path) -> None:
         "hooks/session-start-agent.py",
         "hooks/role-on-code.py",
         "hooks/analysis-guard.py",
+        "hooks/model-routing.py",
+        "hooks/delegation-log.py",
+        "tools/model_routing/registry.json",
+        "tools/model_routing/routing.py",
+        "tools/model_routing/init.py",
     ):
         source = keystone_root / relative
         text = source.read_text(encoding="utf-8") if source.is_file() else "fixture placeholder\n"

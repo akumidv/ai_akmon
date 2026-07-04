@@ -13,9 +13,11 @@ payloads into those neutral functions and prints plain-text reminders for Codex 
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from codex_adapter import (
     command,
+    cwd,
     file_paths,
     load_payload,
     normalize_tool,
@@ -46,8 +48,9 @@ def _role_on_code(payload: dict) -> None:
             return
 
 
-def _session_start() -> None:
-    print_result(session_start_result(find_project_root()))
+def _session_start(payload: dict) -> None:
+    start = Path(cwd(payload)) if cwd(payload) else None
+    print_result(session_start_result(find_project_root(start)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -64,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.hook == "role-on-code":
         _role_on_code(payload)
     elif args.hook == "session-start":
-        _session_start()
+        _session_start(payload)
     elif args.hook == "git-commit-guard":
         # Intentionally not wired by sync.py yet: Codex hard allow/deny output must be verified
         # before keystone claims enforcement. Keep the mode available for protocol spikes.

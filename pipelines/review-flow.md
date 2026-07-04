@@ -23,11 +23,13 @@ thing* goes to code-flow.
 2. **Decompose** — break the subject into parts and relations. Sweep deliberately: top-down
    (does the structure serve the goal?), bottom-up (do the parts add up?), and horizontal (do
    components and their interfaces fit?). Read the code/docs/runtime — verify against source,
-   not memory.
+   not memory. *Tier:* the evidence fan-out delegates to `worker` (`explore-search`).
 3. **Measure** — compare each part against the yardstick. Record divergences as findings, each
    with **evidence** (file/line/behaviour/violated requirement) and the yardstick it fails.
+   *Tier:* condensing bulk evidence delegates to `worker` (`summarize`).
 4. **Calibrate** — rank findings by severity (load-bearing defect vs cosmetic nit) and note
-   blast radius (local / crosses one boundary / crosses several).
+   blast radius (local / crosses one boundary / crosses several). *Tier:* adversarial
+   verification of the ranked findings goes to `reasoner` (+ `second-opinion` when enabled).
 5. **Hand off** *(gate)* — for each finding, state the **criteria a fix must satisfy**, and
    route it: a local fix → `engineer`; a structure/contract decision → `architect`; a wrong
    yardstick or a problem spanning several boundaries → escalate. **Stop at construction** —
