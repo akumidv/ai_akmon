@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Validate keystone's own repository — the dev-layer (META) validator.
+"""Validate akmon's own repository — the dev-layer (META) validator.
 
 Counterpart to ``bin/verify.py``. That tool checks the USE contract a *consuming*
 project must satisfy and is shipped into every consumer; it is deliberately ignorant of
-keystone's own development artifacts. This tool is the other half: it runs only inside
-keystone's own repository and asserts what *keystone itself* must hold —
+akmon's own development artifacts. This tool is the other half: it runs only inside
+akmon's own repository and asserts what *akmon itself* must hold —
 
   1. the dev-layer tree exists (vision, decisions, roadmap, design, reviews, tests, the
      self-CI fixture runner) under ``meta/``;
   2. the operative USE surface still passes its own contract, exercised through the
      synthetic-fixture self-CI (``meta/self_ci.py`` runs ``sync.py`` + ``bin/verify.py``);
-  3. keystone's unit tests pass (``pytest meta/tests``), unless skipped.
+  3. akmon's unit tests pass (``pytest meta/tests``), unless skipped.
 
 It never modifies files. A consuming project does not run this; it runs ``bin/verify.py``.
 """
@@ -24,11 +24,11 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-# meta/bin/validate.py → keystone root is two parents up.
+# meta/bin/validate.py → akmon root is two parents up.
 _KEYSTONE_ROOT = Path(__file__).resolve().parents[2]
 
-# keystone's own dev-layer artifacts (META). These ship with the submodule but are inert
-# for a consumer; here we assert they exist so keystone's own tree stays whole.
+# akmon's own dev-layer artifacts (META). These ship with the submodule but are inert
+# for a consumer; here we assert they exist so akmon's own tree stays whole.
 _DEV_LAYER_FILES = (
     "meta/CONCEPT.md",
     "meta/ROADMAP.md",
@@ -40,7 +40,7 @@ _DEV_LAYER_FILES = (
     "meta/tests/test_sync.py",
 )
 
-# the operative USE-surface source files keystone authors and ships (the contract itself).
+# the operative USE-surface source files akmon authors and ships (the contract itself).
 _USE_SOURCE_FILES = (
     "MODEL.md",
     "BOOTSTRAP.md",
@@ -109,7 +109,7 @@ class Validator:
             return
         tests_dir = self.root / "meta" / "tests"
         if not tests_dir.is_dir():
-            self.error("meta/tests is missing; cannot run keystone unit tests")
+            self.error("meta/tests is missing; cannot run akmon unit tests")
             return
         runner = self._pytest_command()
         if runner is None:
@@ -131,13 +131,13 @@ class Validator:
     def _pytest_command(self) -> list[str] | None:
         """Pick a pytest runner that actually resolves here, else None.
 
-        keystone is stdlib-only and ships no pyproject, so a bare ``uv run pytest`` cannot
+        akmon is stdlib-only and ships no pyproject, so a bare ``uv run pytest`` cannot
         provision pytest — it only works where pytest is already importable (CI, or a
         consuming project's env). Probe before claiming a runner so "pytest absent" surfaces
         as a skip-warning, not a spurious test failure.
 
         On a non-Python host, run this validator with the dev-layer venv interpreter so the
-        ``import pytest`` probe succeeds — e.g. ``_forge/.venv/bin/python`` (provisioned by
+        ``import pytest`` probe succeeds — e.g. ``_aitna/.venv/bin/python`` (provisioned by
         BOOTSTRAP §A; see that step to create it).
         """
         try:

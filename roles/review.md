@@ -57,7 +57,19 @@ local fix) can act on without re-discovering the as-is.
 **Default tier routing** (MODEL.md § Capability tiers): evidence fan-out delegates to
 `worker` (`explore-search`, `summarize`); adversarial verification of ranked findings goes to
 `reasoner`, plus `second-opinion` when enabled. Framing, calibration, and the report stay
-with the orchestrator.
+with the orchestrator. **Plan these delegations up front:** the review plan names *which
+subagent runs each fan-out/verification sub-step before analysis starts* — delegation is the
+default, not the orchestrator sweeping everything itself
+([guardrails](../guardrails/_common.md) § Route by task kind).
+
+**Gate audit** (MODEL.md § Capability tiers; review-flow Calibrate). When a trigger fires — the `review_min_findings`
+count floor or a fan-out that split into ≥2 zones — route a clean-context `audit`
+(`k-auditor`, pinned to the maximal rung) over the gate-pack: it catches
+contradictions between independently-correct findings and **uncovered seams** the per-part
+sweep cannot see. `audit` is a **cross-cutting verification kind** (routable from
+any role, not just review). The invariant holds throughout: the audit **drafts** a verdict,
+it never decides — ranking, the report, and what to act on stay with the orchestrator and the
+owner.
 
 ---
 

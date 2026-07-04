@@ -1,9 +1,9 @@
-"""Unit tests for the keystone layout verifier (``verify``).
+"""Unit tests for the akmon layout verifier (``verify``).
 
 A ``_make_project`` helper builds a fully compliant throwaway tree (clean strict run), and
 each test mutates one thing to assert the matching finding. Nothing touches the real repo.
 
-Run from the keystone root::
+Run from the akmon root::
 
     python3 -m pytest tests
 """
@@ -17,13 +17,13 @@ import verify
 
 AGENTS_MD = """# AGENTS.md
 
-## Dev layer — keystone
+## Dev layer — akmon
 
-Model: `_forge/keystone/README.md`. Archetype: `ARCHETYPES.md`. Roles:
-`_forge/keystone/roles/`. Read `_forge/memory` at session start.
+Model: `_aitna/akmon/README.md`. Archetype: `ARCHETYPES.md`. Roles:
+`_aitna/akmon/roles/`. Read `_aitna/memory` at session start.
 
 Prime directives D2 and D5 are always-on. Secrets come from `.env`.
-Skills live in `_forge/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
+Skills live in `_aitna/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
 """
 
 CI_YML = """name: CI
@@ -32,8 +32,8 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - run: python3 _forge/keystone/bin/sync.py --check
-      - run: python3 _forge/keystone/bin/verify.py --strict
+      - run: python3 _aitna/akmon/bin/sync.py --check
+      - run: python3 _aitna/akmon/bin/verify.py --strict
 """
 
 GITIGNORE = "*.env\n!*.env.example\n"
@@ -42,9 +42,9 @@ CHANGELOG_MD = "# Changelog\n\n## Unreleased\n\n### Added\n- fixture\n"
 
 SKILL_MD = """---
 name: demo
-description: Demonstrates the keystone skill contract.
+description: Demonstrates the akmon skill contract.
 when_to_use: Use for verifier fixture coverage.
-owner: keystone
+owner: akmon
 ---
 
 # demo
@@ -59,9 +59,9 @@ def _write(path: Path, text: str = "x\n") -> None:
 def _make_project(tmp_path: Path) -> Path:
     root = tmp_path
     _write(root / "AGENTS.md", AGENTS_MD)
-    _write(root / "_forge" / "TASKS.md")
+    _write(root / "_aitna" / "TASKS.md")
 
-    ks = root / "_forge" / "keystone"
+    ks = root / "_aitna" / "akmon"
     for rel in (
         "README.md",
         "BOOTSTRAP.md",
@@ -145,15 +145,15 @@ def _make_project(tmp_path: Path) -> Path:
 """,
     )
 
-    # an agent charter that links a keystone role
-    _write(root / "_forge" / "agents" / "engineer" / "README.md", "See `_forge/keystone/roles/engineer.md`.\n")
+    # an agent charter that links a akmon role
+    _write(root / "_aitna" / "agents" / "engineer" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
 
     # a skill (so check_skills is ok, not warn)
     _write(ks / "skills" / "demo" / "SKILL.md", SKILL_MD)
 
     # memory index mentioning its one memory file
-    _write(root / "_forge" / "memory" / "note.md", "fact\n")
-    _write(root / "_forge" / "memory" / "README.md", "# Memory\n- note.md\n")
+    _write(root / "_aitna" / "memory" / "note.md", "fact\n")
+    _write(root / "_aitna" / "memory" / "README.md", "# Memory\n- note.md\n")
 
     _write(root / ".gitignore", GITIGNORE)
     _write(ks / ".gitignore", "__pycache__/\n*.env\n!*.env.example\n")
@@ -197,7 +197,7 @@ def test_main_strict_passes_on_compliant_project(tmp_path):
 
 
 def _use_doc(root: Path) -> Path:
-    return root / "_forge" / "keystone" / "roles" / "architect.md"
+    return root / "_aitna" / "akmon" / "roles" / "architect.md"
 
 
 def _isolation_errors(verifier) -> list[str]:
@@ -274,7 +274,7 @@ def test_missing_agents_md_is_error(tmp_path):
 
 def test_missing_release_role_is_error(tmp_path):
     root = _make_project(tmp_path)
-    (root / "_forge" / "keystone" / "roles" / "release.md").unlink()
+    (root / "_aitna" / "akmon" / "roles" / "release.md").unlink()
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("roles/release.md is missing" in message for message in _messages(verifier.findings, "error"))
@@ -282,7 +282,7 @@ def test_missing_release_role_is_error(tmp_path):
 
 def test_missing_changelog_is_error(tmp_path):
     root = _make_project(tmp_path)
-    (root / "_forge" / "keystone" / "CHANGELOG.md").unlink()
+    (root / "_aitna" / "akmon" / "CHANGELOG.md").unlink()
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("CHANGELOG.md is missing" in message for message in _messages(verifier.findings, "error"))
@@ -293,7 +293,7 @@ def test_agents_md_missing_anchor_is_error(tmp_path):
     (root / "AGENTS.md").write_text("# AGENTS\nno anchors here\n", encoding="utf-8")
     verifier = verify.Verifier(root)
     verifier.run()
-    assert any("keystone block is missing" in message for message in _messages(verifier.findings, "error"))
+    assert any("akmon block is missing" in message for message in _messages(verifier.findings, "error"))
 
 
 
@@ -333,7 +333,7 @@ def test_vendor_pointer_without_agents_link_is_error(tmp_path):
 def test_skills_without_agents_source_root_reference_is_warning(tmp_path):
     root = _make_project(tmp_path)
     agents_without_skills = AGENTS_MD.replace(
-        "Skills live in `_forge/skills/` and root `skills/`; generated vendor skill stubs are pointers only.\n",
+        "Skills live in `_aitna/skills/` and root `skills/`; generated vendor skill stubs are pointers only.\n",
         "",
     )
     (root / "AGENTS.md").write_text(agents_without_skills, encoding="utf-8")
@@ -344,7 +344,7 @@ def test_skills_without_agents_source_root_reference_is_warning(tmp_path):
 
 def test_skill_missing_frontmatter_is_error(tmp_path):
     root = _make_project(tmp_path)
-    (root / "_forge" / "keystone" / "skills" / "demo" / "SKILL.md").write_text("# demo\n", encoding="utf-8")
+    (root / "_aitna" / "akmon" / "skills" / "demo" / "SKILL.md").write_text("# demo\n", encoding="utf-8")
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("missing required frontmatter" in message for message in _messages(verifier.findings, "error"))
@@ -352,8 +352,8 @@ def test_skill_missing_frontmatter_is_error(tmp_path):
 
 def test_skill_missing_required_frontmatter_field_is_error(tmp_path):
     root = _make_project(tmp_path)
-    (root / "_forge" / "keystone" / "skills" / "demo" / "SKILL.md").write_text(
-        SKILL_MD.replace("owner: keystone\n", ""),
+    (root / "_aitna" / "akmon" / "skills" / "demo" / "SKILL.md").write_text(
+        SKILL_MD.replace("owner: akmon\n", ""),
         encoding="utf-8",
     )
     verifier = verify.Verifier(root)
@@ -363,7 +363,7 @@ def test_skill_missing_required_frontmatter_field_is_error(tmp_path):
 
 def test_skill_frontmatter_name_must_match_directory(tmp_path):
     root = _make_project(tmp_path)
-    (root / "_forge" / "keystone" / "skills" / "demo" / "SKILL.md").write_text(
+    (root / "_aitna" / "akmon" / "skills" / "demo" / "SKILL.md").write_text(
         SKILL_MD.replace("name: demo\n", "name: other\n"),
         encoding="utf-8",
     )
@@ -403,7 +403,7 @@ def test_obsolete_generated_skill_stub_is_error(tmp_path):
 
 def test_missing_memory_index_is_error(tmp_path):
     root = _make_project(tmp_path)
-    (root / "_forge" / "memory" / "README.md").unlink()
+    (root / "_aitna" / "memory" / "README.md").unlink()
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("needs README.md index" in message for message in _messages(verifier.findings, "error"))
@@ -422,7 +422,7 @@ def test_main_returns_1_on_error(tmp_path):
 
 def test_legacy_memory_index_is_warning(tmp_path):
     root = _make_project(tmp_path)
-    memory = root / "_forge" / "memory"
+    memory = root / "_aitna" / "memory"
     (memory / "README.md").unlink()
     _write(memory / "MEMORY.md", "# Memory\n- note.md\n")
     verifier = verify.Verifier(root)
@@ -432,7 +432,7 @@ def test_legacy_memory_index_is_warning(tmp_path):
 
 def test_memory_file_missing_from_index_is_warning(tmp_path):
     root = _make_project(tmp_path)
-    _write(root / "_forge" / "memory" / "orphan.md", "unlisted\n")
+    _write(root / "_aitna" / "memory" / "orphan.md", "unlisted\n")
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("not mentioned in index" in message for message in _messages(verifier.findings, "warn"))
@@ -446,7 +446,7 @@ def test_gitignore_without_env_pattern_is_warning(tmp_path):
     assert any("*.env" in message for message in _messages(verifier.findings, "warn"))
 
 
-def test_ci_missing_keystone_commands_is_warning(tmp_path):
+def test_ci_missing_akmon_commands_is_warning(tmp_path):
     root = _make_project(tmp_path)
     (root / ".github" / "workflows" / "ci.yml").write_text("name: CI\non: [push]\n", encoding="utf-8")
     verifier = verify.Verifier(root)
@@ -455,7 +455,7 @@ def test_ci_missing_keystone_commands_is_warning(tmp_path):
 
 
 def _tasks(root: Path) -> Path:
-    return root / "_forge" / "TASKS.md"
+    return root / "_aitna" / "TASKS.md"
 
 
 def test_well_formed_index_tasks_is_ok(tmp_path):
@@ -469,19 +469,19 @@ def test_well_formed_index_tasks_is_ok(tmp_path):
     assert "warn" not in _levels(verifier.findings), _messages(verifier.findings, "warn")
 
 
-def test_missing_keystone_gitignore_is_warning(tmp_path):
+def test_missing_akmon_gitignore_is_warning(tmp_path):
     root = _make_project(tmp_path)
-    (root / "_forge" / "keystone" / ".gitignore").unlink()
+    (root / "_aitna" / "akmon" / ".gitignore").unlink()
     verifier = verify.Verifier(root)
     verifier.run()
     assert any(
-        "_forge/keystone/.gitignore is missing" in message for message in _messages(verifier.findings, "warn")
+        "_aitna/akmon/.gitignore is missing" in message for message in _messages(verifier.findings, "warn")
     )
 
 
-def test_keystone_gitignore_without_pycache_is_warning(tmp_path):
+def test_akmon_gitignore_without_pycache_is_warning(tmp_path):
     root = _make_project(tmp_path)
-    (root / "_forge" / "keystone" / ".gitignore").write_text("*.env\n", encoding="utf-8")
+    (root / "_aitna" / "akmon" / ".gitignore").write_text("*.env\n", encoding="utf-8")
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("should ignore __pycache__/" in message for message in _messages(verifier.findings, "warn"))
@@ -534,7 +534,7 @@ def test_strict_turns_warning_into_failure(tmp_path):
 
 
 def _changelog(root: Path) -> Path:
-    return root / "_forge" / "keystone" / "CHANGELOG.md"
+    return root / "_aitna" / "akmon" / "CHANGELOG.md"
 
 
 def test_changelog_with_unreleased_is_ok(tmp_path):
@@ -555,27 +555,27 @@ def test_changelog_without_unreleased_is_warning(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# integration record (_forge/.keystone.toml) — a consumer artifact, non-gating when absent
+# integration record (_aitna/.akmon.toml) — a consumer artifact, non-gating when absent
 # --------------------------------------------------------------------------------------
 
 _VALID_ATTACH = (
-    'keystone_version = "v0.3.0"\n'
+    'akmon_version = "v0.3.0"\n'
     'attached_archetype = "package/python"\n'
     'last_realign = "v0.3.0"\n'
 )
 
 
 def _attach(root: Path) -> Path:
-    return root / "_forge" / ".keystone.toml"
+    return root / "_aitna" / ".akmon.toml"
 
 
 def test_attach_record_missing_is_non_gating(tmp_path):
-    root = _make_project(tmp_path)  # _make_project never writes .keystone.toml
+    root = _make_project(tmp_path)  # _make_project never writes .akmon.toml
     verifier = verify.Verifier(root)
     verifier.check_attach_record()
     assert "warn" not in _levels(verifier.findings)
     assert "error" not in _levels(verifier.findings)
-    assert any(".keystone.toml not present" in m for m in _messages(verifier.findings, "ok"))
+    assert any(".akmon.toml not present" in m for m in _messages(verifier.findings, "ok"))
 
 
 def test_attach_record_valid_is_ok(tmp_path):
@@ -583,22 +583,22 @@ def test_attach_record_valid_is_ok(tmp_path):
     _attach(root).write_text(_VALID_ATTACH, encoding="utf-8")
     verifier = verify.Verifier(root)
     verifier.check_attach_record()
-    assert any("records keystone version v0.3.0" in m for m in _messages(verifier.findings, "ok"))
+    assert any("records akmon version v0.3.0" in m for m in _messages(verifier.findings, "ok"))
 
 
 def test_attach_record_malformed_is_error(tmp_path):
     root = _make_project(tmp_path)
-    _attach(root).write_text('keystone_version = "v0.3.0"\n', encoding="utf-8")  # missing the other keys
+    _attach(root).write_text('akmon_version = "v0.3.0"\n', encoding="utf-8")  # missing the other keys
     verifier = verify.Verifier(root)
     verifier.check_attach_record()
     errors = _messages(verifier.findings, "error")
     assert any("missing required key" in m for m in errors)
 
 
-def test_attach_record_skipped_without_keystone_submodule(tmp_path):
-    # No _forge/keystone/ mounted (e.g. verify run against the keystone repo itself): skip entirely.
+def test_attach_record_skipped_without_akmon_submodule(tmp_path):
+    # No _aitna/akmon/ mounted (e.g. verify run against the akmon repo itself): skip entirely.
     root = tmp_path
-    _write(root / "_forge" / "TASKS.md")
+    _write(root / "_aitna" / "TASKS.md")
     verifier = verify.Verifier(root)
     verifier.check_attach_record()
     assert verifier.findings == []

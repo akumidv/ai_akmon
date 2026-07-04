@@ -85,3 +85,47 @@ function is quality per unit of **tokens + owner attention**; only tokens had a 
 - Rejected branches (v1 no-new-tier, static top-rung reasoner, vendor-only diversity,
   mandatory-at-every-gate, judgment-only trigger, raw transcripts, other-vendor-as-
   synthesizer) stay on record in the design §9.8 with revisit-if conditions.
+
+## Addendum — A7: cross-cutting verification kinds (role-matrix coherence)
+
+Decision #9 above gave each role a `role_task_kinds` row, and #6 lets the orchestrator invoke
+an on-signal `synthesis-verify` audit for high-leverage code. Those two collided: the audit is
+an *engineer*-side signal, yet a per-row copy of `synthesis-verify` into every role that might
+audit would be redundant and drift-prone, and the design §10.2 matrix had omitted it from the
+`engineer` row (the **auditor seam**). Resolved in **A7 (b)**, recorded in design §9.4/§10.2:
+
+- **`independent-review` and `synthesis-verify` become cross-cutting verification kinds**
+  (`audit` is the V2 name for the latter). They are **not role-gated**: any role may route
+  them, and *when* they apply is the **structural trigger** (a fan-out touched ≥2 zones) or a
+  count floor (§9.5), **not** the producing role. The auditor is a role-agnostic *verification
+  capability*, not engineer-specific work — so it belongs to no single matrix row and is exempt
+  from the role-matrix advisory. Consequence: `learn`/`release` may route them too
+  (advisory-only — verification is never role-inappropriate).
+- **Implementation (C18):** a `cross_cutting_kinds` registry list, unioned into every role's
+  allowed set inside `role_matrix_warning`, so the C20 advisory no longer warns against the
+  very audit routing this enables; a test that the exemption is driven by `cross_cutting_kinds`
+  (not by a kind silently re-entering a row); and the doc half — the MODEL.md §10 leverage
+  principle + tier/matrix update, the review-flow/design-flow synthesizer anchors (post-fan-out
+  audit + the pre-fan-out plan check) with loop-back edges, and the roles/*.md deltas carrying
+  the **drafts-not-decides** invariant.
+- **Deferred sub-fork:** auto-triggering `plan-draft` on un-decomposed high-leverage work
+  (design §9.3 item 5) — kept open, not decided here.
+
+## Addendum — V2: synthesizer → auditor rename (applied)
+
+The forward reference above ("`audit` is the V2 name") has now landed. The name did not fit:
+"synthesizer" reads as a *compose* operation, but the tier's job is a **clean-context audit of a
+whole gate's material** — and "review" was already taken by the DEVELOP analysis role. Owner-locked
+name trio, applied across all live code and docs:
+
+| was | now |
+|---|---|
+| tier `synthesizer` | tier **`auditor`** |
+| task kind `synthesis-verify` | task kind **`audit`** |
+| agent `k-synthesizer` | agent **`k-auditor`** |
+
+The generic verb *synthesize* / noun *synthesis* (the orchestrator's own compose step and the
+architect's synthesis operation) is a **different concept and was deliberately kept**. This ADR's
+body above preserves the original vocabulary as the historical record; the normative source is the
+design doc's live §2 tier table and `registry.json`, both now on the new names. This is a rename
+only — no decision from the body is reopened.

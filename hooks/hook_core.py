@@ -1,4 +1,4 @@
-"""Vendor-neutral keystone hook decisions.
+"""Vendor-neutral akmon hook decisions.
 
 This module contains the guardrail logic only. Vendor entrypoints adapt their incoming
 payload and serialize ``HookResult`` into the shape their runtime expects.
@@ -11,28 +11,29 @@ import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from pathlib import Path
 
-# The dev-layer (LOCAL) root is configurable: ``_forge`` is the default, but a project may
-# relocate it by declaring ``FORGE_ROOT`` (a path relative to the project root, e.g.
-# ``tools/ai``). keystone is always mounted at ``<forge-root>/keystone``. Tooling derives every
-# dev-layer path from this one resolver instead of hard-coding ``_forge/``.
-_FORGE_ROOT_DEFAULT = "_forge"
+# The dev-layer (LOCAL) root is configurable: ``_aitna`` is the default, but a project may
+# relocate it by declaring ``AITNA_ROOT`` (a path relative to the project root, e.g.
+# ``tools/ai``). akmon is always mounted at ``<aitna-root>/akmon``. Tooling derives every
+# dev-layer path from this one resolver instead of hard-coding ``_aitna/``.
+_AITNA_ROOT_DEFAULT = "_aitna"
 
 
-def forge_root_name() -> str:
-    """The configured dev-layer root, as a project-root-relative POSIX path (default ``_forge``)."""
-    return (os.environ.get("FORGE_ROOT") or _FORGE_ROOT_DEFAULT).strip("/") or _FORGE_ROOT_DEFAULT
+def aitna_root_name() -> str:
+    """The configured dev-layer root, as a project-root-relative POSIX path (default ``_aitna``)."""
+    return (os.environ.get("AITNA_ROOT") or _AITNA_ROOT_DEFAULT).strip("/") or _AITNA_ROOT_DEFAULT
 
 
-def forge_root(project_root: Path) -> Path:
-    """Absolute dev-layer root for ``project_root`` (``<project_root>/<FORGE_ROOT>``)."""
-    return project_root / forge_root_name()
+def aitna_root(project_root: Path) -> Path:
+    """Absolute dev-layer root for ``project_root`` (``<project_root>/<AITNA_ROOT>``)."""
+    return project_root / aitna_root_name()
 
 
-def keystone_root(project_root: Path) -> Path:
-    """Absolute keystone mount for ``project_root`` (``<forge-root>/keystone``)."""
-    return forge_root(project_root) / "keystone"
+def akmon_root(project_root: Path) -> Path:
+    """Absolute akmon mount for ``project_root`` (``<aitna-root>/akmon``)."""
+    return aitna_root(project_root) / "akmon"
 
 
 @dataclass(frozen=True)
@@ -81,33 +82,34 @@ _CODE_EXTENSIONS = frozenset(
     }
 )
 # Path-classification segments are derived from the configured dev-layer root (default
-# ``_forge``) so relocating it via FORGE_ROOT keeps the code/planning-doc detection correct.
+# ``_aitna``) so relocating it via AITNA_ROOT keeps the code/planning-doc detection correct.
 # These match lowercased path *substrings*, so the segment uses the lowercased root name.
 def _non_code_segments() -> tuple[str, ...]:
-    forge = forge_root_name().lower()
-    return ("/docs/", f"/{forge}/design/", f"/{forge}/memory/", f"/{forge}/keystone/", "/.claude/")
+    aitna = aitna_root_name().lower()
+    return ("/docs/", f"/{aitna}/design/", f"/{aitna}/memory/", f"/{aitna}/akmon/", "/.claude/")
 
 
 # Neutral tool-kind: each vendor adapter normalizes its own file-editing tool name(s) to this
 # token before calling. The core stays vendor-clean — it never names a vendor's tools.
 EDIT_TOOL = "edit"
 _EDIT_TOOL_KINDS = frozenset({EDIT_TOOL})
-# Further neutral kinds for the delegation nudge: a shell/command tool and the vendor's
-# subagent-delegation tool.
+# Further neutral kinds for the delegation nudge: a shell/command tool, a read/sweep tool
+# (Read/Grep/Glob), and the vendor's subagent-delegation tool.
 SHELL_TOOL = "shell"
+READ_TOOL = "read"
 SUBAGENT_TOOL = "subagent"
 
 
 # Planning / design docs — editing one may be an analysis-only turn that needs confirmation
 # first (see guardrails/_common.md § Analysis before mutation).
 def _planning_doc_segments() -> tuple[str, ...]:
-    forge = forge_root_name().lower()
-    return (f"/{forge}/design/", "/docs/dev/", f"/{forge}/keystone/")
+    aitna = aitna_root_name().lower()
+    return (f"/{aitna}/design/", "/docs/dev/", f"/{aitna}/akmon/")
 
 
 def _planning_doc_files() -> tuple[str, ...]:
-    forge = forge_root_name().lower()
-    return (f"/{forge}/tasks.md", f"/{forge}/tasks_archive.md")
+    aitna = aitna_root_name().lower()
+    return (f"/{aitna}/tasks.md", f"/{aitna}/tasks_archive.md")
 
 
 def current_git_branch() -> str:
@@ -124,10 +126,10 @@ def current_git_branch() -> str:
 
 
 def find_project_root(start: Path | None = None) -> Path:
-    """Walk up from ``start`` (or cwd) to the first dir holding AGENTS.md + <forge-root>/keystone."""
+    """Walk up from ``start`` (or cwd) to the first dir holding AGENTS.md + <aitna-root>/akmon."""
     current = (start or Path.cwd()).resolve()
     for candidate in (current, *current.parents):
-        if (candidate / "AGENTS.md").is_file() and keystone_root(candidate).exists():
+        if (candidate / "AGENTS.md").is_file() and akmon_root(candidate).exists():
             return candidate
     return current
 
@@ -180,13 +182,13 @@ def agent_names(directory: Path) -> list[str]:
 
 
 def session_start_result(root: Path) -> HookResult | None:
-    dev = agent_names(forge_root(root) / "agents")
+    dev = agent_names(aitna_root(root) / "agents")
     desk = agent_names(root / "agents")
     if not dev and not desk:
         return None
 
     lines = [
-        "[keystone] Active-agent declaration",
+        "[akmon] Active-agent declaration",
         "Before doing project work, state which agent you are operating as, and restate it "
         "whenever you switch. Format: `\U0001f9ed agent: <name> — <focus>`.",
     ]
@@ -205,7 +207,7 @@ def session_start_result(root: Path) -> HookResult | None:
         )
     else:
         lines.append("Pick the one the task calls for; if unclear, ask.")
-    lines.append(f"Also: read `{forge_root_name()}/memory/` at session start (project memory).")
+    lines.append(f"Also: read `{aitna_root_name()}/memory/` at session start (project memory).")
     return HookResult(event_name="SessionStart", additional_context="\n".join(lines))
 
 
@@ -217,9 +219,9 @@ def is_code_path(file_path: str) -> bool:
 
 
 def role_on_code_message() -> str:
-    tasks = f"{forge_root_name()}/TASKS.md"
+    tasks = f"{aitna_root_name()}/TASKS.md"
     return (
-        "[keystone] Role check — you are editing project code.\n"
+        "[akmon] Role check — you are editing project code.\n"
         "Editing code is **realization** → the `engineer` role. Discriminator: decompose an "
         "existing thing → `review` · construct a new structure/decision → `architect` · "
         "realize a decided structure in code → `engineer`. If you were assessing (`review`) or "
@@ -240,7 +242,7 @@ def role_on_code_result(tool_name: str, file_path: str | None, session_id: str |
     if not isinstance(file_path, str) or not is_code_path(file_path):
         return None
 
-    marker = Path(tempfile.gettempdir()) / f"keystone-role-on-code-{session_id or 'nosession'}.marker"
+    marker = Path(tempfile.gettempdir()) / f"akmon-role-on-code-{session_id or 'nosession'}.marker"
     if marker.exists():
         return None
     try:
@@ -262,8 +264,8 @@ def is_planning_doc(file_path: str) -> bool:
 
 def analysis_before_mutation_message() -> str:
     return (
-        "[keystone] Analysis-before-mutation check — you are editing a planning/design doc "
-        "(backlog / design / ADR / requirements / keystone process).\n"
+        "[akmon] Analysis-before-mutation check — you are editing a planning/design doc "
+        "(backlog / design / ADR / requirements / akmon process).\n"
         "Role: **assessing what is** (problems, state, conformance) is `review`; **constructing "
         "the design** (options, contracts, the chosen structure) is `architect`. Declare the role "
         "(`\U0001f9ed agent: <name> — <focus>`) and restate it on a switch (roles/README.md).\n"
@@ -281,7 +283,7 @@ def analysis_write_result(tool_name: str, file_path: str | None, session_id: str
     if not isinstance(file_path, str) or not is_planning_doc(file_path):
         return None
 
-    marker = Path(tempfile.gettempdir()) / f"keystone-analysis-guard-{session_id or 'nosession'}.marker"
+    marker = Path(tempfile.gettempdir()) / f"akmon-analysis-guard-{session_id or 'nosession'}.marker"
     if marker.exists():
         return None
     try:
@@ -292,19 +294,175 @@ def analysis_write_result(tool_name: str, file_path: str | None, session_id: str
     return HookResult(event_name="PreToolUse", additional_context=analysis_before_mutation_message())
 
 
+# D2 ledger reminder — an edit to a project-declared D2-sensitive path (math / data shape /
+# architecture; the owner-verify guardrail) should be logged in the ledger so the point survives
+# to commit time, where Verify is caught (design meta/design/d2-ledger.md §2.2, phase 2 of C11).
+# PreToolUse reminds once per session on the first such edit. The sensitive-path globs are the
+# project's, read from ``<aitna>/.akmon.toml`` ``[d2_ledger] sensitive_paths`` (§5.A). When
+# unconfigured the hook stays silent — a per-edit reminder can't guess what's sensitive without
+# fatiguing every edit; the coarse `check` gate and the session counter are the nets there.
+# Advisory only — task classification is the agent's call, so it never blocks.
+
+
+def d2_sensitive_paths(root: Path) -> list[str]:
+    """The project's ``[d2_ledger] sensitive_paths`` globs from ``<aitna>/.akmon.toml`` (``[]`` if unset).
+
+    ``tomllib`` is 3.11+ stdlib; on an older host the reminder simply degrades to silent rather
+    than adding a dependency (matches the ledger tool's config reader)."""
+    config = aitna_root(root) / ".akmon.toml"
+    if not config.is_file():
+        return []
+    try:
+        import tomllib
+    except ImportError:
+        return []
+    try:
+        with config.open("rb") as handle:
+            data = tomllib.load(handle)
+    except (OSError, ValueError):
+        return []
+    section = data.get("d2_ledger")
+    globs = section.get("sensitive_paths") if isinstance(section, dict) else None
+    return [g for g in globs if isinstance(g, str)] if isinstance(globs, list) else []
+
+
+def _project_relative_posix(file_path: str, root: Path) -> str:
+    """``file_path`` as a ``root``-relative POSIX path (unchanged if it lies outside ``root``)."""
+    path = Path(file_path)
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except (ValueError, OSError):
+        return path.as_posix()
+
+
+def _segments_match(pattern_segments: list[str], path_segments: list[str]) -> bool:
+    """Recursive ``/``-aware glob match: ``**`` spans zero or more whole segments, ``*``/``?`` stay
+    within one segment (via ``fnmatchcase``). Mirrors ``PurePath.full_match`` but runs on any
+    Python 3.x — the hooks execute under the *system* ``python3`` (often older than the ledger
+    tool's ``uv`` interpreter), so ``full_match`` (3.13+) is not available here."""
+    if not pattern_segments:
+        return not path_segments
+    head, *rest = pattern_segments
+    if head == "**":
+        return any(_segments_match(rest, path_segments[i:]) for i in range(len(path_segments) + 1))
+    if not path_segments:
+        return False
+    if fnmatchcase(path_segments[0], head):
+        return _segments_match(rest, path_segments[1:])
+    return False
+
+
+def is_d2_sensitive_path(file_path: str, root: Path, globs: list[str]) -> bool:
+    """Whether ``file_path`` matches one of the project's D2-sensitive ``globs`` (``**``-aware)."""
+    path_segments = [s for s in _project_relative_posix(file_path, root).split("/") if s]
+    return any(_segments_match([s for s in glob.split("/") if s], path_segments) for glob in globs)
+
+
+def d2_ledger_reminder_message() -> str:
+    tool = f"{aitna_root_name()}/akmon/tools/d2_ledger/d2_ledger.py"
+    ledger = f"{aitna_root_name()}/D2_LEDGER.md"
+    return (
+        "[akmon] D2 ledger check — you are editing a D2-sensitive path (math / data shape / "
+        "architecture).\n"
+        "D2 (guardrails/_common.md § Verify against reality) means the owner verifies this class "
+        "of change — passing tests are necessary, not sufficient. If you have not already logged "
+        "it, add a ledger entry so the point survives to commit time:\n"
+        f"  python3 {tool} add --ledger {ledger} \\\n"
+        '      --kind {math|data-shape|architecture} --what "<what changed>" --anchor "<file:line>"\n'
+        "The owner (or you on their word) closes it with `verify <id> --commit <sha>`. Fires once "
+        "per session; `list` shows what is still pending."
+    )
+
+
+def d2_ledger_reminder_result(
+    tool_name: str, file_path: str | None, session_id: str | None, project_root: Path | None = None
+) -> HookResult | None:
+    if tool_name not in _EDIT_TOOL_KINDS:
+        return None
+    if not isinstance(file_path, str):
+        return None
+    root = project_root or find_project_root()
+    globs = d2_sensitive_paths(root)
+    if not globs or not is_d2_sensitive_path(file_path, root, globs):
+        return None
+
+    marker = Path(tempfile.gettempdir()) / f"akmon-d2-ledger-{session_id or 'nosession'}.marker"
+    if marker.exists():
+        return None
+    try:
+        marker.write_text("seen", encoding="utf-8")
+    except OSError:
+        pass
+
+    return HookResult(event_name="PreToolUse", additional_context=d2_ledger_reminder_message())
+
+
+# D2 ledger session counter — at SessionStart the model-routing status block gains a
+# ``D2 ledger: N pending`` line (design meta/design/d2-ledger.md §2.3, phase 3 of C11) so the open
+# verify points are visible up front, next to the routing status. Owner-addressed (dual-channel
+# systemMessage, ADR 0006) only when ``N > 0`` — nothing to verify keeps the host UI quiet. The
+# authoritative ledger parse lives in the ledger tool; here we only *count* pending rows, tolerantly.
+
+
+def _count_pending_rows(ledger_text: str) -> int:
+    """Pending-table data rows in the ledger — rows starting ``| D2-`` under ``## Pending`` (before
+    ``## Verified``). A deliberately minimal read (not the tool's full parser) for a cheap counter."""
+    in_pending = False
+    count = 0
+    for line in ledger_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_pending = stripped == "## Pending"
+            continue
+        if in_pending and stripped.startswith("| D2-"):
+            count += 1
+    return count
+
+
+def d2_pending_count(root: Path) -> int:
+    """Number of pending entries in the project's D2 ledger (``0`` if absent/unreadable)."""
+    ledger = aitna_root(root) / "D2_LEDGER.md"
+    if not ledger.is_file():
+        return 0
+    try:
+        return _count_pending_rows(ledger.read_text(encoding="utf-8"))
+    except OSError:
+        return 0
+
+
+def d2_tracking_active(root: Path) -> bool:
+    """Whether D2 tracking is in use here (sensitive paths configured, or a ledger file exists) —
+    so a project that hasn't adopted the ledger never sees the counter line."""
+    return bool(d2_sensitive_paths(root)) or (aitna_root(root) / "D2_LEDGER.md").is_file()
+
+
+def d2_status_line(count: int) -> str:
+    return f"D2 ledger: {count} pending"
+
+
 # Delegation nudge — the routing rule (guardrails/_common.md § Route by task kind + the
 # SessionStart status line) is prose the orchestrator can silently skip mid-task. This counts
-# consecutive orchestrator edit/shell calls since session start or the last subagent
-# delegation and, past the threshold, reminds once per drift episode — a subagent
-# delegation re-arms it. Advisory only — task-kind classification is fuzzy, so it never
-# blocks.
+# consecutive orchestrator edit/shell/read calls since session start or the last subagent
+# delegation and, past the advisory threshold, reminds once per drift episode — a subagent
+# delegation re-arms it. Task-kind classification is fuzzy, so the advisory never blocks; but
+# on *sustained* drift past a second, higher threshold it graduates to a hard `ask` (its own
+# once-per-episode marker, also cleared by a delegation) — the read/sweep class (Read/Grep/
+# Glob) is exactly the class the advisory used to miss.
+#
+# C28d: Claude Code gives a subagent's tool calls the *same* ``session_id`` as the main
+# chain, so without an exemption a subagent's Read/Grep/Glob/Bash calls would charge the
+# shared counter and could trip the advisory or the hard `ask` inside a k-* delegate — which
+# has no ``Task`` tool and so cannot act on the nudge at all. Subagent-originated calls are
+# detected via the payload's ``agent_id`` (present only inside a subagent) and are exempted
+# entirely: no counter touch, no advisory, no ask.
 
 _DELEGATION_NUDGE_THRESHOLD_DEFAULT = 10
-_DELEGATION_NUDGE_TOOL_KINDS = frozenset({EDIT_TOOL, SHELL_TOOL})
+_DELEGATION_ASK_THRESHOLD_DEFAULT = 20
+_DELEGATION_NUDGE_TOOL_KINDS = frozenset({EDIT_TOOL, SHELL_TOOL, READ_TOOL})
 
 
 def delegation_nudge_threshold() -> int:
-    """Mutation count that triggers the nudge (env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`)."""
+    """Mutation count that triggers the advisory nudge (env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`)."""
     try:
         value = int(os.environ.get("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", ""))
     except ValueError:
@@ -312,9 +470,22 @@ def delegation_nudge_threshold() -> int:
     return value if value > 0 else _DELEGATION_NUDGE_THRESHOLD_DEFAULT
 
 
+def delegation_ask_threshold() -> int:
+    """Mutation count that graduates the nudge to a hard `ask` (env
+    `KEYSTONE_DELEGATION_ASK_THRESHOLD`). Clamped so it never falls below the advisory
+    threshold — an ask below the advisory would be reachable before the advisory itself."""
+    try:
+        value = int(os.environ.get("KEYSTONE_DELEGATION_ASK_THRESHOLD", ""))
+    except ValueError:
+        value = _DELEGATION_ASK_THRESHOLD_DEFAULT
+    if value <= 0:
+        value = _DELEGATION_ASK_THRESHOLD_DEFAULT
+    return max(value, delegation_nudge_threshold())
+
+
 def delegation_nudge_message(count: int) -> str:
     return (
-        f"[keystone] Delegation check — {count} consecutive orchestrator edit/shell calls "
+        f"[akmon] Delegation check — {count} consecutive orchestrator edit/shell/read calls "
         "without a subagent delegation.\n"
         "Delegation is the default: route by task kind (MODEL.md § Capability tiers; "
         "guardrails/_common.md § Route by task kind). Exploration/summaries → `k-explorer` · "
@@ -327,10 +498,33 @@ def delegation_nudge_message(count: int) -> str:
     )
 
 
-def delegation_nudge_result(tool_name: str, session_id: str | None) -> HookResult | None:
+def delegation_ask_message(count: int) -> str:
+    return (
+        f"[akmon] Sustained delegation drift — {count} consecutive orchestrator "
+        "edit/shell/read calls with no subagent delegation. The read/sweep class "
+        "(Read/Grep/Glob) is exactly the drift the tier floor targets "
+        "(guardrails/_common.md § Route by task kind).\n"
+        "Route the next steps to a `k-*` delegate — exploration/summaries → `k-explorer` · "
+        "mechanical edits / doc-sync / test scaffolds → `k-mechanic` · gate loops → "
+        "`k-validator` · code under a decided contract → `k-implementer` · load-bearing "
+        "analysis → `k-reasoner` — or confirm this is genuinely one of the orchestrator's "
+        "reserved four (decompose · route · synthesize · owner dialogue) to proceed.\n"
+        "Fires once per drift episode (a subagent delegation re-arms it)."
+    )
+
+
+def delegation_nudge_result(tool_name: str, session_id: str | None, *, is_subagent: bool = False) -> HookResult | None:
+    # C28d: subagent-originated calls (agent_id present in the payload) must never touch
+    # the counter. k-* delegates can't delegate (no Task tool), so nudging/asking them is
+    # noise and the hard ask blocks their legit reads. The session_id is shared with the
+    # main chain, so without this guard a subagent's reads charge the orchestrator's counter.
+    if is_subagent:
+        return None
+
     sid = session_id or "nosession"
-    counter = Path(tempfile.gettempdir()) / f"keystone-delegation-nudge-{sid}.count"
-    marker = Path(tempfile.gettempdir()) / f"keystone-delegation-nudge-{sid}.marker"
+    counter = Path(tempfile.gettempdir()) / f"akmon-delegation-nudge-{sid}.count"
+    marker = Path(tempfile.gettempdir()) / f"akmon-delegation-nudge-{sid}.marker"
+    ask_marker = Path(tempfile.gettempdir()) / f"akmon-delegation-nudge-{sid}.ask-marker"
 
     if tool_name == SUBAGENT_TOOL:
         try:
@@ -339,6 +533,10 @@ def delegation_nudge_result(tool_name: str, session_id: str | None) -> HookResul
             pass
         try:
             marker.unlink(missing_ok=True)
+        except OSError:
+            pass
+        try:
+            ask_marker.unlink(missing_ok=True)
         except OSError:
             pass
         return None
@@ -355,12 +553,24 @@ def delegation_nudge_result(tool_name: str, session_id: str | None) -> HookResul
     except OSError:
         pass
 
-    if count < delegation_nudge_threshold():
-        return None
-    if marker.exists():
-        return None
-    try:
-        marker.write_text("seen", encoding="utf-8")
-    except OSError:
-        pass
-    return HookResult(event_name="PreToolUse", additional_context=delegation_nudge_message(count))
+    if count >= delegation_ask_threshold():
+        if ask_marker.exists():
+            return None
+        try:
+            ask_marker.write_text("seen", encoding="utf-8")
+        except OSError:
+            pass
+        return HookResult(
+            event_name="PreToolUse",
+            permission_decision="ask",
+            permission_reason=delegation_ask_message(count),
+        )
+    if count >= delegation_nudge_threshold():
+        if marker.exists():
+            return None
+        try:
+            marker.write_text("seen", encoding="utf-8")
+        except OSError:
+            pass
+        return HookResult(event_name="PreToolUse", additional_context=delegation_nudge_message(count))
+    return None

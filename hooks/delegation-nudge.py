@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Claude PreToolUse wrapper for the keystone delegation nudge.
+"""Claude PreToolUse wrapper for the akmon delegation nudge.
 
 Counts consecutive orchestrator edit/shell calls since session start or the last subagent
 delegation (``Task``/``Agent`` resets the counter and re-arms the reminder) and, past the
 threshold, injects a soft reminder — once per drift episode — that the work may belong to
 a ``k-*`` delegate (MODEL.md § Capability tiers). Advisory only — nothing is ever blocked.
-The decision logic lives in ``hook_core.py``; this entrypoint only adapts Claude Code's
-payload.
+This fires only for main-chain calls: a subagent call (detected via the payload's
+``agent_id``, present only inside a subagent) is exempt, since Claude Code shares the
+``session_id`` between the main chain and its subagents and a k-* delegate has no ``Task``
+tool to act on the nudge anyway. The decision logic lives in ``hook_core.py``; this
+entrypoint only adapts Claude Code's payload.
 """
 
 from __future__ import annotations
@@ -27,9 +30,11 @@ def main() -> int:
         name = str(payload.get("tool_name") or "")
         kind = _TOOL_KINDS.get(name) or normalize_tool(name)
         session_id = payload.get("session_id")
-        print_result(delegation_nudge_result(kind, session_id if isinstance(session_id, str) else None))
+        is_subagent = bool(payload.get("agent_id"))
+        sid = session_id if isinstance(session_id, str) else None
+        print_result(delegation_nudge_result(kind, sid, is_subagent=is_subagent))
     except Exception as exc:
-        print(f"keystone delegation-nudge hook: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"akmon delegation-nudge hook: {type(exc).__name__}: {exc}", file=sys.stderr)
     return 0
 
 

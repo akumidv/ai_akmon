@@ -49,7 +49,7 @@ problem (analysis) and building the solution (synthesis) are separate modes.
 | domain knowledge (`profiles/`, project knowledge) | a **rejected-branches register** (why + revisit-if) |
 | the engineer's questions / friction | updated requirement docs (R#) |
 | | a **design backlog**, separate from the implementation backlog |
-| | an implementation task in `_forge/TASKS.md` (once the design is locked) |
+| | an implementation task in `_aitna/TASKS.md` (once the design is locked) |
 
 ---
 
@@ -64,9 +64,21 @@ requirement(s) + an implementation task (see Inputs / outputs and Done). The des
 discipline the pipeline produces is spelled out below.
 
 **Default tier routing** (MODEL.md § Capability tiers): survey fan-out delegates to `worker`
-(`explore-search`); option drafting on load-bearing forks goes to `reasoner` (`design-fork`);
-the Align gate may take a `second-opinion` advisory. The decision itself is never delegated —
-it is the owner's, prepared by the orchestrator.
+(`explore-search`); option drafting on load-bearing forks goes to `reasoner` (`design-fork`),
+and a decomposition/zone plan to `reasoner` (`plan-draft`); the Align gate may take a
+`second-opinion` advisory. The decision itself is never delegated — it is the owner's,
+prepared by the orchestrator. **Plan these delegations up front:** the decomposition/design
+plan names *which subagent runs each sub-step* — delegation is the default, only the
+decision, framing, and synthesis stay in-orchestrator ([guardrails](../guardrails/_common.md)
+§ Route by task kind).
+
+**Gate audit** (MODEL.md § Capability tiers; design-flow). Two clean-context `audit` anchors bracket the
+fan-out: a cheap **plan check** *before* it (when the zone plan names ≥2 zones — the plan is
+checked against the goal so the later coverage map is not built on an unchecked plan), and a
+whole-concept **audit** at Consolidate *after* it (`architect_min_options` floor or ≥2 zones)
+before folding into an ADR. `audit` and `plan-draft` are delegable, but the
+invariant is strict: the reasoner **drafts** the plan and the auditor **drafts** the
+verdict — *adopting* a plan, the recommendation, and the decision are never delegated.
 
 
 
@@ -84,7 +96,7 @@ it is the owner's, prepared by the orchestrator.
   testability, and owner-verification risk. Recommend one option and state why it is better
   for this project now.
 - **Separate best practice from local constraint.** When invoking a best practice, name the
-  underlying principle and label its authority: general ecosystem practice, keystone rule,
+  underlying principle and label its authority: general ecosystem practice, akmon rule,
   project requirement, or pragmatic local trade-off. Do not present taste or familiarity as
   architecture.
 - **Analysis before mutation.** An analysis / review / options request produces findings in
@@ -151,5 +163,5 @@ it is the owner's, prepared by the orchestrator.
 - The recommendation includes alternatives/trade-offs and the rationale for the selected
   option, or the change is explicitly small enough that alternatives were not material.
 - Every non-trivial decision has an ADR.
-- The implementing task exists in `_forge/TASKS.md` with a clear goal and the design link.
+- The implementing task exists in `_aitna/TASKS.md` with a clear goal and the design link.
 - The owner has agreed to any architecture/data-model decision.

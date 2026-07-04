@@ -15,15 +15,24 @@ on every project regardless of role.
 4. **Docs in sync** — if code or behaviour changed, update the doc that **owns** the
    affected fact (API, env vars, package layout, requirements). Never leave docs stale
    after a code change.
-5. **Generated pointers in sync** — run `python3 _forge/keystone/bin/sync.py --check`
-   when the project uses keystone. If it reports drift, run `python3 _forge/keystone/bin/sync.py`,
+5. **D2 ledger** *(advisory — warn-first, not a blocking gate)* — when the project tracks
+   owner-verification points, run
+   `python3 _aitna/akmon/tools/d2_ledger/d2_ledger.py check --ledger _aitna/D2_LEDGER.md --changed $(git diff --cached --name-only)`.
+   It **warns** (never blocks) when the staged diff touches a D2-sensitive path
+   (`[d2_ledger] sensitive_paths` in `_aitna/.akmon.toml`) while the ledger still holds
+   `pending` entries — a prompt to log or close the verify point before the owner commits, so
+   Verify stops being skippable by momentum. Advisory until the fill-habit holds, then promoted
+   to red with `--strict`. A *forgotten* entry (sensitive edit never logged) is
+   caught earlier, per-edit, by the reminder hook — this step covers open `pending` points.
+6. **Generated pointers in sync** — run `python3 _aitna/akmon/bin/sync.py --check`
+   when the project uses akmon. If it reports drift, run `python3 _aitna/akmon/bin/sync.py`,
    review the generated files, and include the deterministic pointers in the owner's commit.
-6. **Keystone verify** — run `python3 _forge/keystone/bin/verify.py --strict` to validate
+7. **Keystone verify** — run `python3 _aitna/akmon/bin/verify.py --strict` to validate
    AGENTS anchors, generated pointers, hooks, skills, memory, secrets ignore rules, and
    CI/preflight wiring.
-7. **Secrets check** — no real key/token/credential in the diff (code, config, fixtures,
+8. **Secrets check** — no real key/token/credential in the diff (code, config, fixtures,
    markdown). Config comes from `.env` only; `*.env.example` carries empty placeholders.
-8. **Scope check** — the diff contains only what the task needs; no stray files, no
+9. **Scope check** — the diff contains only what the task needs; no stray files, no
    generated artifacts that should be gitignored.
 
 ## Hard rules
@@ -43,5 +52,5 @@ pipeline defines the **gate**; the project supplies the **commands**.
 ## Done
 
 All steps pass; docs that own changed facts are updated; generated pointers have no drift;
-keystone verify is clean; no secrets are in the diff. Only then is the change ready for
+akmon verify is clean; no secrets are in the diff. Only then is the change ready for
 the owner to commit.

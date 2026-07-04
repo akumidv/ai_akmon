@@ -1,23 +1,28 @@
-# Archived tasks — keystone
+# Archived tasks — akmon
 
-Completed keystone work, one terse line each. Format: [`pipelines/tasks.md`](../pipelines/tasks.md).
+Completed akmon work, one terse line each. Format: [`pipelines/tasks.md`](../pipelines/tasks.md).
 Active backlog: [`TASKS.md`](TASKS.md).
 
 ## Done
 
+- C11 · D2 ledger · done · architect/engineer · 5 phases shipped ([ADR 0007](decisions/0007-d2-ledger.md), [design](design/d2-ledger.md)): `d2_ledger.py` add/list/verify/check (stdlib-only, never git) + PreToolUse reminder hook + SessionStart `D2: N pending` counter + warn-first pre-commit step; akmon mechanism, project `.akmon.toml` `[d2_ledger] sensitive_paths`; ledger entry = unit of verify gate for reasoner/second-opinion attachments (feeds C16 gate-pack, per A5); ADR wording reconciled to the build
+- A5 · synthesizer + roles design: owner lock · done · architect · §9.7 + §10.4 locked by owner → [ADR 0005](decisions/0005-synthesizer-gate-audit-and-role-routing.md) (extends 0004); unblocks C15–C20 · [design §9.7+§10.4](design/model-routing.md)
+- C24 · tasks-archive tool · done · engineer · `tools/tasks/archive.py` moves `· done ·` entries (bullet + indented continuation) from TASKS.md into TASKS_ARCHIVE.md `## Done`; `--check` dry-run (exit 1, CI-usable) / `--apply`; verbatim move, never git; 13 tests. Mechanizes the tasks-pipeline archive step (was hand-editing) · [pipelines/tasks.md](../pipelines/tasks.md)
+- C21 · delegation indication in the host UI · done · engineer · delegation-log hook emits a one-line `systemMessage` per subagent call (`[akmon] → <agent> (<model>): <description>`) — UI-visible at zero token cost, TSV log kept as the record; `_format_system_message` + 3 tests (test_adapters.py) · owner request 2026-07
+- C15 · registry/binding: synthesizer tier · done · engineer · pinned-max `synthesizer` policy + `synthesis-verify`/`plan-draft` rows + dynamic reasoner (orchestrator rung + per-kind floors) + `role_task_kinds` + diversity-ladder registry data; compute_binding, init, generated `k-synthesizer` (read-only, pinned max) — all binding-side, reality-verified; downstream consumers: ladder+`second_opinion_fallback_model`→C16, `role_task_kinds`→C20, `gate_triggers`→C16 · [ADR 0005](decisions/0005-synthesizer-gate-audit-and-role-routing.md)
 - T0 · tooling test coverage · done · engineer · `tests/` for `hook_core`/`sync`/`verify`; +sync drops stale hook entries on rename; +session-start logs swallowed errors to stderr
 - T1 · cross-agent contract · done · architect · AGENTS.md remains hand-reviewed source; verify checks vendor pointers/imports and source skill-root linkage
 - T2 · skill contract (minimal) · done · architect · `name/description/when_to_use/owner` frontmatter + verify check
 - T5 · audit attached project (alphavar) for drift · done · architect · `sync --check` + `verify --strict` pass
 - T7 · prune orphaned generated files · done · engineer · sync deletes stale banner-marked stubs; verify flags them
-- T8 · keystone self-CI · done · engineer · own `tests/` + fixture `verify --strict` run in CI
+- T8 · akmon self-CI · done · engineer · own `tests/` + fixture `verify --strict` run in CI
 - T3 · release/versioning standard · done · architect · design consolidated + locked in ADR 0001; resolves ROADMAP O2; impl phased T10–T15
 - T10 · extract `learn` role · done · architect · roles/learn.md + README row; learning/memory-distill pipelines wired to the role
 - T11 · `release` role + pipeline · done · architect · roles/release.md + pipelines/release.md (lightweight cut vs cadence, subject gate, anti-super-role routing)
 - T12 · versioning + CHANGELOG · done · architect · v0.x.y convention + CHANGELOG.md (Unreleased); BOOTSTRAP pull-bump references release notes + downstream record
 - T13 · verify CHANGELOG Unreleased warn · done · engineer · verify.check_changelog warns when CHANGELOG lacks `Unreleased`; +3 tests
 - T15 · subject-relativity in layer model · done · architect · README §2: DEVELOP/USAGE/OPERATE relative to a subject; USAGE-vs-OPERATE by consequence
-- T14 · release skill/tool (propose/prepare) · done · engineer · skills/release/SKILL.md + tools/release/release_check.py (--state/--check/--plan, --subject keystone|package, runner-resilient, never executes); +verify check_keystone_gitignore; pin-bump split to T18
+- T14 · release skill/tool (propose/prepare) · done · engineer · skills/release/SKILL.md + tools/release/release_check.py (--state/--check/--plan, --subject akmon|package, runner-resilient, never executes); +verify check_akmon_gitignore; pin-bump split to T18
 - A5 · review role + review-flow pipeline · done · roles/review.md + pipelines/review-flow.md; analysis (decompose→measure→report), criteria as hand-off · [ADR 0003](decisions/0003-role-triad-and-develop-use-separation.md)
 - A6 · narrow architect to synthesis; engineer escalation; roles/README routing · done · triad + discriminator + "why separate mode" in role docs · [ADR 0003](decisions/0003-role-triad-and-develop-use-separation.md)
 - A7 · review task-id letter `N` · done · pipelines/tasks.md table + ADR 0002 amendment + interim memory note · [ADR 0003](decisions/0003-role-triad-and-develop-use-separation.md)
@@ -27,8 +32,8 @@ Active backlog: [`TASKS.md`](TASKS.md).
 - C4 · verify.py develop-boundary check + path updates · done · forbids USE→develop links; tooling paths + fixtures updated; self_ci + 96 tests green · [ADR 0003](decisions/0003-role-triad-and-develop-use-separation.md)
 - C5 · triad-aware role hooks · done · review/architect/engineer nudges in role-on-code + analysis-guard; per-direction markers; `OPERATE` label fixed · [ADR 0003](decisions/0003-role-triad-and-develop-use-separation.md)
 - C7 · develop→meta rename + USE/dev verify split · done · folder `develop/`→`meta/`; `bin/verify.py` USE-only; new `meta/bin/validate.py` runs dev-layer self-checks + self_ci + tests; strict USE-surface isolation (no `meta/` path, no numbered-ADR/ROADMAP/dev-path/bare-name citations); ADR 0003 §5–§6a + CHANGELOG; 102 tests green · [ADR 0003](decisions/0003-role-triad-and-develop-use-separation.md)
-- C8 · BOOTSTRAP: dev-layer venv on non-Python projects · done · attach step 5 provisions `_forge/.venv` (uv-first, caveated stdlib fallback) + installs pytest when language≠python/mixed; §D gitignores it; validate.py docstring points at it; CHANGELOG Unreleased
-- A4 · `_forge/` path is configurable, not fixed · done · `FORGE_ROOT` env (default `_forge`) configures the dev-layer root; sync.py/verify.py/hook_core derive every path (pointers, hook commands, banner, classifiers) from it; MODEL.md §2 + BOOTSTRAP §A; +13 tests
+- C8 · BOOTSTRAP: dev-layer venv on non-Python projects · done · attach step 5 provisions `_aitna/.venv` (uv-first, caveated stdlib fallback) + installs pytest when language≠python/mixed; §D gitignores it; validate.py docstring points at it; CHANGELOG Unreleased
+- A4 · `_aitna/` path is configurable, not fixed · done · `AITNA_ROOT` env (default `_aitna`) configures the dev-layer root; sync.py/verify.py/hook_core derive every path (pointers, hook commands, banner, classifiers) from it; MODEL.md §2 + BOOTSTRAP §A; +13 tests
 - C10 · model routing — capability tiers · done · engineer · registry (semantic selection policy + task-kind matrix) + idempotent init tool + SessionStart/delegation-log hooks + second-opinion runner; MODEL.md §10/guardrail/role/pipeline edits; alphavar consumed (init, overlay, gitignore); live-verified end-to-end (k-explorer delegation, log line, staleness→refresh) · owner-verified (D2) · [ADR 0004](decisions/0004-model-routing-capability-tiers.md) · [design](design/model-routing.md)
 - A10 · SessionStart discriminator routing-hint · done · session hint carries the DEVELOP discriminator (decompose→review · construct→architect · realize→engineer) up front when dev agents exist; OPERATE-only keeps generic line; +2 tests · [ADR 0003](decisions/0003-role-triad-and-develop-use-separation.md)
 - C14 · delegation-nudge hook · done · engineer · `hooks/delegation-nudge.py` + `hook_core.delegation_nudge_result` (counter/marker in tempdir per session; `Task`/`Agent` resets the counter and re-arms the reminder — once per drift episode; threshold 10, env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`; advisory, never blocks); wired by sync as one combined-matcher entry — fixed an entry-level dedup bug in `_merge_hook_entries` wiring that swallowed matcher groups sharing a command; +6 tests; fired live in-session · owner-verified

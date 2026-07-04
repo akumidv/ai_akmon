@@ -1,4 +1,4 @@
-# Design: keystone release and versioning standard
+# Design: akmon release and versioning standard
 
 > **Locked.** The decisions in this concept are folded into
 > [ADR 0001](../decisions/0001-release-and-roles-model.md) (resolves ROADMAP O2). This document
@@ -7,19 +7,19 @@
 
 ## Frame
 
-keystone is now consumed by multiple projects, and bumping the `_forge/keystone` submodule
+akmon is now consumed by multiple projects, and bumping the `_aitna/akmon` submodule
 pin is a recurring operation. The release/versioning model must therefore be a shared
-keystone standard, not a one-off `CHANGELOG.md` in one repository.
+akmon standard, not a one-off `CHANGELOG.md` in one repository.
 
 Good outcome:
 
-- a project maintainer can decide whether to bump a keystone pin without reading raw task
+- a project maintainer can decide whether to bump an akmon pin without reading raw task
   archives or every commit;
-- keystone maintainers can cut a release using one repeatable pipeline;
+- akmon maintainers can cut a release using one repeatable pipeline;
 - a release agent can guide the owner through the release, ask for decisions at the right
   gates, and stop before owner-owned actions such as commits, tags, pushes, and pin bumps;
-- the same release model works for keystone releases and for ordinary project releases that
-  adopt keystone;
+- the same release model works for akmon releases and for ordinary project releases that
+  adopt akmon;
 - `TASKS.md`, `TASKS_ARCHIVE.md`, release notes, version tags, and consuming-project bump
   records each have one job and do not duplicate each other;
 - periodic hygiene is part of the cycle: backlog cleanup, memory review, learning/promotion,
@@ -31,7 +31,7 @@ Good outcome:
 - `TASKS.md` is the active backlog index.
 - `TASKS_ARCHIVE.md` is the internal done-task ledger.
 - `ROADMAP.md` tracks not-yet-formulated model gaps, including O2 versioning.
-- Consuming projects pin keystone as a git submodule.
+- Consuming projects pin akmon as a git submodule.
 - `sync.py`, `verify.py`, `self_ci.py`, and pytest now provide a runnable validation spine.
 - D5 still applies: the owner owns commits, tags, pushes, and release landing actions.
 
@@ -49,12 +49,12 @@ consumer-facing impact log. It says what changed, what may break, what to run, a
 downstream project must review before accepting a new pin.
 
 Version / tag:
-published identity of a keystone state. A submodule pin can point anywhere, but a release tag
+published identity of a akmon state. A submodule pin can point anywhere, but a release tag
 is the reviewed state projects should normally consume.
 
 Downstream bump record:
-the consuming project's record that it accepted a keystone version/pin and refreshed generated
-files. This belongs in the consuming project, not in keystone's own release notes.
+the consuming project's record that it accepted a akmon version/pin and refreshed generated
+files. This belongs in the consuming project, not in akmon's own release notes.
 
 ## Role / Agent Shape
 
@@ -128,7 +128,7 @@ bump records, release plan files).
 - architecture / requirement / ADR drift → **architect** task;
 - code / tooling / executable gap → **engineer** task;
 - memory / learning / promotion candidate → **learn** task (hand off to the learn loop);
-- `release` never edits ADRs, production code, or `_forge/memory/` in-cycle.
+- `release` never edits ADRs, production code, or `_aitna/memory/` in-cycle.
 
 Extracting `learn` as its own role (above) is what makes this invariant mechanically true
 rather than aspirational: without a `learn` role, "review memory and promote" has nowhere to
@@ -136,11 +136,11 @@ go but back into `release`.
 
 Project agent incarnation:
 
-- keystone defines the reusable roles in `roles/release.md` and `roles/learn.md`, and the
+- akmon defines the reusable roles in `roles/release.md` and `roles/learn.md`, and the
   pipeline in `pipelines/release.md`;
-- each consuming project may add `_forge/agents/release/README.md` with local release commands,
+- each consuming project may add `_aitna/agents/release/README.md` with local release commands,
   package registry details, project-specific verification, and downstream propagation policy,
-  and `_forge/agents/learn/README.md` for project-specific learning sinks.
+  and `_aitna/agents/learn/README.md` for project-specific learning sinks.
 
 ### Role-axis placement
 
@@ -150,8 +150,8 @@ They place on the three orthogonal axes the same way every role does (see `roles
 | Axis | `release` | `learn` |
 |---|---|---|
 | **Role** (definition = pipeline + requirements + guardrails) | `pipelines/release.md` + impact/version vocabulary + D5 guardrail | `pipelines/learning.md` + `memory-distill.md` + "promote only via explicit task" guardrail |
-| **Layer** (where the artifact lives / whom it serves) | definition SHARED (`roles/release.md`); incarnation LOCAL (`_forge/agents/release/`); keystone's own release notes SHARED, a consuming project's LOCAL | definition SHARED (`roles/learn.md`); incarnation LOCAL (`_forge/agents/learn/`) |
-| **Project type** (what the project exposes) | first-class input: `package` → build/publish + tag; keystone → pin-bump across consumers; `service` → deploy artifact | mostly invariant across project types |
+| **Layer** (where the artifact lives / whom it serves) | definition SHARED (`roles/release.md`); incarnation LOCAL (`_aitna/agents/release/`); akmon's own release notes SHARED, a consuming project's LOCAL | definition SHARED (`roles/learn.md`); incarnation LOCAL (`_aitna/agents/learn/`) |
+| **Project type** (what the project exposes) | first-class input: `package` → build/publish + tag; akmon → pin-bump across consumers; `service` → deploy artifact | mostly invariant across project types |
 
 An agent is the meeting point of the three axes, e.g. *alphavar's release agent* = `release`
 (role) × LOCAL (incarnation) × `package` (project type). Both roles are **DEVELOP**; neither
@@ -165,30 +165,30 @@ each is a **relation between the actor and a chosen subject project**. One sessi
 once:
 
 - developing alphavar = **DEVELOP** relative to *alphavar*, and simultaneously **USAGE**
-  relative to *keystone* (we consume the mounted standard);
-- evolving the standard = **DEVELOP** relative to *keystone* (this design, T3/T10–T13);
+  relative to *akmon* (we consume the mounted standard);
+- evolving the standard = **DEVELOP** relative to *akmon* (this design, T3/T10–T13);
 - running alphavar against a live market = **OPERATE** relative to *alphavar*
-  (out of keystone scope for now — ROADMAP O1).
+  (out of akmon scope for now — ROADMAP O1).
 
 Two **consumption** relations, split by consequence — do not conflate:
 
 - **USAGE consumption** — build/dev-time, deterministic, reversible: using a library, or
-  mounting and following keystone. "Developing alphavar with keystone" is the USAGE relation to
-  keystone, **not** OPERATE, even though colloquially we "operate with keystone."
+  mounting and following akmon. "Developing alphavar with akmon" is the USAGE relation to
+  akmon, **not** OPERATE, even though colloquially we "operate with akmon."
 - **OPERATE consumption** — runtime with real, often irreversible consequences (orders, money).
   Reserved for a runtime actor; its guardrails differ in kind from D#/USAGE rules.
 
-The recursion to keep in mind: **keystone's USAGE relation *is* the consuming project's DEVELOP
-relation** — the same activity seen from two subjects. That is why mounting keystone feels like
-"using keystone while developing alphavar": both are true, because each names a different
+The recursion to keep in mind: **akmon's USAGE relation *is* the consuming project's DEVELOP
+relation** — the same activity seen from two subjects. That is why mounting akmon feels like
+"using akmon while developing alphavar": both are true, because each names a different
 subject.
 
 Consequence for `release`: the role is **parameterized by subject**, not split into variants.
 Its first gate (Frame, step 1) selects exactly one subject — *this project's package*, or
-*keystone* (its tag), or *a keystone pin bump recorded inside this project*. One role definition
-in keystone, incarnated per subject. When this standard travels into a developed project, that
+*akmon* (its tag), or *an akmon pin bump recorded inside this project*. One role definition
+in akmon, incarnated per subject. When this standard travels into a developed project, that
 project's release agent inherits the same subject choice: it can cut the project's own version
-**or** bump its keystone pin — different release subjects, not different roles.
+**or** bump its akmon pin — different release subjects, not different roles.
 
 ## Release Cycle
 
@@ -209,7 +209,7 @@ Steps (a loop with gates; the mode selects which run):
 
 1. **Frame release scope** — select the release **subject** (see
    [Subject relativity](#subject-relativity--developoperateusage-are-relative-to-a-subject)):
-   keystone itself, the project package, or a keystone pin bump inside a consuming project. Ask
+   akmon itself, the project package, or an akmon pin bump inside a consuming project. Ask
    for target consumers when ambiguous.
 2. **Collect state** — read `TASKS.md`, `TASKS_ARCHIVE.md`, relevant design docs/ADRs,
    requirements, memory index, skills/tools, CI config, and current git status.
@@ -227,8 +227,8 @@ Steps (a loop with gates; the mode selects which run):
    role declarations, D#/R# compliance, secrets policy, generated pointer drift, and CI coverage.
 8. **Prepare release artifacts** — update release notes/changelog, optional release manifest,
    and downstream bump notes. Keep task archive as traceability, not release prose.
-9. **Verify** — run the project's release check set. For keystone: `sync --check`,
-   `verify --strict`, `self_ci.py`, and `pytest _forge/keystone/tests`.
+9. **Verify** — run the project's release check set. For akmon: `sync --check`,
+   `verify --strict`, `self_ci.py`, and `pytest _aitna/akmon/tests`.
 10. **Owner handoff** — present exact commit/tag/publish/pin-bump commands and the residual risk.
     Stop before D5-owned actions. The owner runs the landing commands.
 11. **Propagate** — for each selected consuming project, bump the pin/version, run local sync and
@@ -279,7 +279,7 @@ Out of scope for the release role:
 ## Sensible Release Checks
 
 These checks belong in the release role vocabulary, but individual projects can tailor the exact
-commands in their `_forge/agents/release/README.md`.
+commands in their `_aitna/agents/release/README.md`.
 
 Common checks:
 
@@ -290,7 +290,7 @@ Common checks:
 - generated assets: generated pointers or docs are current;
 - secrets: no new secret-bearing files are staged or referenced in docs;
 - architecture: requirement docs and ADR pointers are not obviously stale;
-- memory: `_forge/memory/` is indexed, and release friction is captured;
+- memory: `_aitna/memory/` is indexed, and release friction is captured;
 - learning: promotion candidates are listed as tasks, not silently copied;
 - skills/tools: source skills satisfy the shared contract; obsolete generated stubs are pruned;
 - packaging/distribution: version metadata, package build, docs build, or artifact checks run
@@ -300,10 +300,10 @@ Common checks:
 
 Keystone-specific checks:
 
-- `python3 _forge/keystone/bin/sync.py --check`;
-- `python3 _forge/keystone/bin/verify.py --strict`;
-- `python3 _forge/keystone/bin/self_ci.py`;
-- `uv run pytest _forge/keystone/tests`;
+- `python3 _aitna/akmon/bin/sync.py --check`;
+- `python3 _aitna/akmon/bin/verify.py --strict`;
+- `python3 _aitna/akmon/bin/self_ci.py`;
+- `uv run pytest _aitna/akmon/tests`;
 - review changes to roles, pipelines, guardrails, hooks, and generated pointer contracts as
   consumer-visible by default.
 
@@ -334,7 +334,7 @@ Owner-run command plan example:
 # prepared by release agent/tool, executed by owner
 git status
 git add <reviewed files>
-git commit -m "release keystone vX.Y.Z"
+git commit -m "release akmon vX.Y.Z"
 git tag vX.Y.Z
 git push origin main --tags
 ```
@@ -361,7 +361,7 @@ Cons:
 
 ### B. Release role + pipeline plus changelog
 
-Add a keystone `release` role and pipeline that defines:
+Add an akmon `release` role and pipeline that defines:
 
 - when a closed task must produce a release-note entry;
 - how `TASKS_ARCHIVE.md` feeds release notes without replacing them;
@@ -404,7 +404,7 @@ explicit extension points for option C.
 
 ## Proposed Shape
 
-New/updated keystone artifacts:
+New/updated akmon artifacts:
 
 - `roles/release.md` — shared release role definition (lightweight cut + periodic cadence).
 - `roles/learn.md` — shared learn role, extracted from the existing learn-loop pipelines so
@@ -413,7 +413,7 @@ New/updated keystone artifacts:
   [Role-axis placement](#role-axis-placement)).
 - `pipelines/release.md` — shared release pipeline; references `learning.md`/`memory-distill.md`
   for the learning gate rather than restating them.
-- `CHANGELOG.md` — consumer-facing release notes for keystone itself, with an `Unreleased`
+- `CHANGELOG.md` — consumer-facing release notes for akmon itself, with an `Unreleased`
   section.
 - `BOOTSTRAP.md` — downstream bump procedure references release notes and release pipeline.
 - `bin/verify.py` — low-risk structural checks only, not semantic release correctness. One
@@ -425,7 +425,7 @@ Possible later artifacts:
 
 - `RELEASES.md` or `releases/<version>.md` if tag-to-task traceability becomes too dense for
   `CHANGELOG.md`.
-- release-note fragments under `_forge/changes/` if multiple agents frequently land changes
+- release-note fragments under `_aitna/changes/` if multiple agents frequently land changes
   before a release cut.
 
 ## Release Vocabulary
@@ -441,10 +441,10 @@ Version classes:
 
 - `patch` — fixes or internal process changes with no consuming-project migration.
 - `minor` — new capabilities or stricter checks that are backward-compatible.
-- `major` — breaking changes to keystone layout, required files, role/pipeline contracts, or
+- `major` — breaking changes to akmon layout, required files, role/pipeline contracts, or
   generated artifacts.
 
-**Decision — `v0.x.y` until the standard stabilizes.** While keystone is pre-1.0, the compat
+**Decision — `v0.x.y` until the standard stabilizes.** While akmon is pre-1.0, the compat
 signal is carried by `x`: bump `x` for any **breaking** change to layout, required files, or a
 role/pipeline contract; bump `y` for `minor`/`patch`. This is the cheapest signal that lets a
 consumer decide whether to bump a pin without reading commits — the stated goal in §Frame.
@@ -454,14 +454,14 @@ Promote to strict SemVer (`1.0.0`) only once the role/pipeline contracts stop mo
 
 - How much release metadata belongs in `CHANGELOG.md` versus a separate release manifest?
 - Should every archived task carry an impact class, or only release-relevant tasks?
-- How should consuming projects record a keystone bump: archive entry, dedicated ledger, or
+- How should consuming projects record an akmon bump: archive entry, dedicated ledger, or
   ordinary project changelog entry?
 - Should `sync.py` eventually print "what changed since your pin", and if so does it compare
   git tags, commits, or a release manifest?
 - What exact owner prompts are mandatory before a release agent proceeds past classify,
   verify, and publish gates?
-- Which architecture checks are generic enough for keystone, and which must stay project-local
-  in each `_forge/agents/release/README.md`?
+- Which architecture checks are generic enough for akmon, and which must stay project-local
+  in each `_aitna/agents/release/README.md`?
 
 Resolved in this revision (were open points): two-mode cycle (lightweight cut vs periodic
 cadence), `v0.x.y` versioning, the `Unreleased` changelog warn, and extracting `learn` as a
@@ -474,4 +474,4 @@ Single `CHANGELOG.md` as the whole solution.
 Why: it does not define how tasks feed release notes, how releases are cut, or how multiple
 consuming projects perform and record pin bumps.
 
-Revisit if keystone stays single-consumer or releases become rare.
+Revisit if akmon stays single-consumer or releases become rare.

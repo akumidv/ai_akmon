@@ -24,12 +24,12 @@ _spec.loader.exec_module(release_check)
 
 
 def _attach(root: Path, body: str) -> None:
-    (root / "_forge").mkdir(parents=True, exist_ok=True)
-    (root / "_forge" / ".keystone.toml").write_text(body, encoding="utf-8")
+    (root / "_aitna").mkdir(parents=True, exist_ok=True)
+    (root / "_aitna" / ".akmon.toml").write_text(body, encoding="utf-8")
 
 
 def test_pinned_runner_is_used_verbatim_with_test_path(tmp_path):
-    _attach(tmp_path, 'keystone_version = "v9"\n\n[test]\nrunner = "poetry run pytest"\n')
+    _attach(tmp_path, 'akmon_version = "v9"\n\n[test]\nrunner = "poetry run pytest"\n')
     assert release_check._pytest_command(tmp_path, "TESTS") == ["poetry", "run", "pytest", "TESTS"]
 
 
@@ -39,7 +39,7 @@ def test_pinned_runner_ignores_comments_and_blank_value(tmp_path):
 
 
 def test_no_attach_record_falls_back_to_discovery(tmp_path):
-    # No .keystone.toml at all: discovery must still yield a runnable pytest invocation.
+    # No .akmon.toml at all: discovery must still yield a runnable pytest invocation.
     assert release_check._pinned_test_runner(tmp_path) is None
     cmd = release_check._pytest_command(tmp_path, "TESTS")
     assert cmd[-1] == "TESTS" and "pytest" in " ".join(cmd)
@@ -47,7 +47,7 @@ def test_no_attach_record_falls_back_to_discovery(tmp_path):
 
 def test_dev_venv_discovered_as_python_dash_m(tmp_path):
     # A discovered dev venv must be invoked as `<venv>/bin/python -m pytest`, never bin/pytest.
-    venv_python = tmp_path / "_forge" / ".venv" / "bin" / "python"
+    venv_python = tmp_path / "_aitna" / ".venv" / "bin" / "python"
     venv_python.parent.mkdir(parents=True)
     venv_python.write_text("#!/bin/sh\n", encoding="utf-8")
     cmd = release_check._pytest_command(tmp_path, "TESTS")
@@ -56,7 +56,7 @@ def test_dev_venv_discovered_as_python_dash_m(tmp_path):
 
 def test_toml_read_falls_back_when_tomllib_absent(tmp_path, monkeypatch):
     # Host Python < 3.11 has no tomllib: the stdlib line-parser fallback must still read the record.
-    _attach(tmp_path, 'keystone_version = "v9"\n\n[test]\nrunner = "poetry run pytest"\n')
+    _attach(tmp_path, 'akmon_version = "v9"\n\n[test]\nrunner = "poetry run pytest"\n')
     real_import = builtins.__import__
 
     def no_tomllib(name, *args, **kwargs):

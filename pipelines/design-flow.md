@@ -30,7 +30,14 @@ recording it before agreement.
      **ecosystem practice** (language stdlib, widely-used libraries) and weigh it, rather than
      settling the convention from local code or taste alone. Record the practice you found and
      the rationale for following or departing from it (it becomes part of the decision record).
-   - *Tier:* the survey fan-out delegates to `worker` (`explore-search`).
+   - *Gate — plan check (pre-fan-out):* when the decomposition (zone plan) names **≥2 zones**,
+     run a minimal `audit` pass (`k-auditor`) over a **plan-check pack**
+     (the Frame yardstick + the zone plan) *before* spending the survey/design fan-out — it
+     checks the plan against the **goal**, closing the circularity where the later audit's
+     coverage map derives from an unchecked plan. Cheap (yardstick + plan, no artifacts).
+   - *Tier:* the survey fan-out delegates to `worker` (`explore-search`); drafting the zone
+     plan itself delegates to `reasoner` (`plan-draft`) — but *adopting* the plan and routing
+     the fan-out stay with the orchestrator.
 3. **Design** — propose the structure; decide **point by point**. For anything
    load-bearing, frame the design space before recommending: include the realistic
    options (including the status quo when viable), the evaluation criteria, trade-offs,
@@ -50,11 +57,19 @@ recording it before agreement.
    until the open points are resolved.
 7. **Consolidate** — a coherence pass across the whole concept; **then** fold the locked
    decisions into an **ADR** (the options, the choice, the rationale, the consequences).
+   - *Gate — audit (post-fan-out):* when a trigger fires — a **count floor**
+     (`architect_min_options`, registry data) or the **structural trigger** (the design
+     fan-out spanned ≥2 independently-decomposed zones) — route an `audit` pass
+     (`k-auditor`, clean context) over the **gate-pack** (the concept + the Frame
+     yardstick + the coverage map) **before** folding into an ADR. It checks for
+     contradictions between independently-correct options, uncovered seams between zones,
+     re-ranking deltas, and a level verdict. Advisory; skip above the floor is
+     silent-but-logged. One bounded **loop-back** re-round on a material gap, then the owner.
 8. **Align** *(gate)* — get **explicit owner agreement** on any architecture / data-model
    / math-shaping decision *before* it is written as a requirement. Plausibility and
    passing examples are not agreement.
 9. **Hand off** — a task in the **design backlog**; an implementation task in
-   `_forge/TASKS.md` (goal + design link) only **once the design is locked**.
+   `_aitna/TASKS.md` (goal + design link) only **once the design is locked**.
 
 ## Gates (must hold to advance)
 
@@ -67,7 +82,9 @@ recording it before agreement.
   backlog, requirement, ADR, or process file unless the original request was already an
   edit command.
 - **Before Consolidate→ADR:** the open-point register has no blocking `pending`; dead-ends
-  are in the rejected register, not deleted.
+  are in the rejected register, not deleted; and — when a trigger fired (count floor or ≥2
+  zones) — the audit ran on the gate-pack (or the skip above the floor is logged),
+  with one bounded loop-back re-round on a material gap.
 - **Before a requirement (Align):** the owner has explicitly agreed to load-bearing
   decisions.
 - **At Hand off:** the design is locked and linked; an ADR exists for every non-trivial
@@ -87,4 +104,4 @@ recording it before agreement.
 
 A locked, linked design with alternatives/trade-offs and recommendation rationale; an ADR
 per non-trivial decision; the updated requirement(s); and an implementation task in
-`_forge/TASKS.md`. Code is **not** part of this pipeline — it is [code-flow](code-flow.md).
+`_aitna/TASKS.md`. Code is **not** part of this pipeline — it is [code-flow](code-flow.md).

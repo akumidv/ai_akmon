@@ -1,7 +1,7 @@
 # Pipeline: release
 
 The cycle the [release](../roles/release.md) role follows to cut a release for one **subject** —
-keystone itself, a consuming project's package, or a keystone pin bump inside a consuming project.
+akmon itself, a consuming project's package, or an akmon pin bump inside a consuming project.
 
 > A pipeline is a **declarative, ordered cycle** — the steps and their gates, not a script.
 > Release tooling defaults to **propose/prepare**: it may print commands, validate state, or draft
@@ -10,7 +10,7 @@ keystone itself, a consuming project's package, or a keystone pin bump inside a 
 ## When
 
 When accepted work has accumulated for a subject and the owner wants to publish a reviewed state —
-or to bump a keystone pin. **Not** every commit. Pick the mode:
+or to bump an akmon pin. **Not** every commit. Pick the mode:
 
 - **lightweight cut** (default) — the everyday path; steps 1–4, 8–11.
 - **periodic cadence** (deliberate, not every tag) — the lightweight cut **plus** the sweeps
@@ -18,7 +18,7 @@ or to bump a keystone pin. **Not** every commit. Pick the mode:
 
 ## Steps (a loop with gates; the mode selects which run)
 
-1. **Frame the subject** *(gate)* — select exactly one subject (package / keystone tag / pin bump)
+1. **Frame the subject** *(gate)* — select exactly one subject (package / akmon tag / pin bump)
    and, when ambiguous, the target consumers. Everything downstream is relative to this choice.
 2. **Collect state** — read `TASKS.md`, `TASKS_ARCHIVE.md`, relevant design/ADRs, requirements,
    the memory index, skills/tools, CI config, and current `git status`.
@@ -61,7 +61,7 @@ or to bump a keystone pin. **Not** every commit. Pick the mode:
 the owning role — architecture/ADR → [architect](../roles/architect.md), code/tooling →
 [engineer](../roles/engineer.md), memory/promotion → [learn](../roles/learn.md) — and `release`
 edits only release artifacts (release notes, changelog, bump records, release plan files). It never
-edits ADRs, production code, or `_forge/memory/` in-cycle.
+edits ADRs, production code, or `_aitna/memory/` in-cycle.
 
 ## Done
 

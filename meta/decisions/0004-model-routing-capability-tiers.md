@@ -7,14 +7,14 @@
   [pipelines/{review,code,design}-flow](../../pipelines/) (gain step tier annotations) ·
   [hooks/](../../hooks/) (`session-start-agent.py` wiring contract, `claude_adapter` /
   `codex_adapter`) · design concept in [`meta/design/model-routing.md`](../design/model-routing.md)
-  (options, rejected branches, examples) · keystone backlog task [C10](../TASKS.md).
+  (options, rejected branches, examples) · akmon backlog task [C10](../TASKS.md).
 
 ## Context
 
 A session runs on one model that does everything — decomposition, deep reasoning, and
 mechanical edits alike. That burns the strongest model on boilerplate and re-consumes the
 orchestrator's context on work a cheap delegate could isolate. Harnesses expose multiple
-models and subagents, but keystone had no standard for *which work goes to which model*:
+models and subagents, but akmon had no standard for *which work goes to which model*:
 routing was per-session judgment, model names threatened to leak into process docs, and
 model releases would rot any hardcoded mapping. The owner's requirements: the running
 session orchestrates; bindings come from recorded knowledge, computed automatically
@@ -48,7 +48,7 @@ observability are code, not prose; cross-vendor review is offered opt-in.
    session-start status line names it; if it ranks below the local highest rung, the hook
    adds a warning and suggests switching up. Advice only —
    the user's choice stands.
-5. **Mechanism is three code components** in keystone: `tools/model_routing/`
+5. **Mechanism is three code components** in akmon: `tools/model_routing/`
    (`registry.json` + idempotent init tool that computes the binding and generates the
    per-vendor subagent definitions and a gitignored local config), a **SessionStart
    hook** (fresh config → one status line; missing/stale → init instruction + two owner
@@ -71,7 +71,7 @@ observability are code, not prose; cross-vendor review is offered opt-in.
 Locked points: worker floor = cheapest locally discovered adequate rung; ask-on-stale only (status line
 otherwise); generated agents grouped by brief and **namespaced `k-`** (`k-explorer`,
 `k-mechanic`, `k-validator`, `k-implementer`, `k-reasoner`) — lowercase-kebab,
-keystone-managed, collision-free against harness built-ins; second-opinion opt-in per
+akmon-managed, collision-free against harness built-ins; second-opinion opt-in per
 project with per-session override.
 
 ## Consequences

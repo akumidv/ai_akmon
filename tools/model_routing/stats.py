@@ -81,7 +81,9 @@ def _sum_usage(usages: Iterable[TokenUsage]) -> TokenUsage:
 
 
 # --------------------------------------------------------------------------------------
-# Delegation log — ``.claude/model-routing.log`` (TSV: timestamp, subagent, model, description)
+# Delegation log — ``.claude/model-routing.log``
+# TSV: timestamp · session_id · subagent · model · zone · description (legacy: timestamp,
+# subagent, model, description). Column ownership: routing.delegation_log_line.
 # --------------------------------------------------------------------------------------
 
 
@@ -106,16 +108,23 @@ class DelegationStats:
 
 
 def aggregate_delegation_lines(lines: Iterable[str]) -> DelegationStats:
-    """Aggregate TSV delegation-log lines; a malformed line (fewer than 3 fields) is skipped."""
+    """Aggregate TSV delegation-log lines; a malformed line (fewer than 3 fields) is skipped.
+
+    Current schema has subagent/model at fields 2/3 (>= 6 fields); a legacy 4-field line
+    (timestamp · subagent · model · description) keeps them at 1/2 and is still counted.
+    """
     stats = DelegationStats()
     for raw in lines:
         line = raw.rstrip("\n")
         if not line:
             continue
         parts = line.split("\t")
-        if len(parts) < 3:
+        if len(parts) >= 6:
+            subagent, model = parts[2], parts[3]
+        elif len(parts) >= 3:
+            subagent, model = parts[1], parts[2]
+        else:
             continue
-        _timestamp, subagent, model = parts[0], parts[1], parts[2]
         stats.total += 1
         stats.per_pair[(subagent, model)] += 1
     return stats

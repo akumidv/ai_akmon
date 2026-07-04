@@ -30,6 +30,14 @@ thing* goes to code-flow.
 4. **Calibrate** — rank findings by severity (load-bearing defect vs cosmetic nit) and note
    blast radius (local / crosses one boundary / crosses several). *Tier:* adversarial
    verification of the ranked findings goes to `reasoner` (+ `second-opinion` when enabled).
+   - *Gate — audit (post-fan-out):* when a trigger fires — a **count floor**
+     (`review_min_findings`, registry data) or the **structural trigger** (the Decompose
+     fan-out split into ≥2 independently-checked zones) — route an `audit` pass
+     (`k-auditor`, clean context) over the **gate-pack** (findings + the Frame yardstick +
+     the coverage map). It looks for contradictions between independently-correct findings,
+     **uncovered seams** between zones, re-ranking deltas, and a level verdict. Advisory; the
+     orchestrator may skip above the floor (silent-but-logged). One bounded **loop-back**
+     re-round on a material gap, then the owner decides.
 5. **Hand off** *(gate)* — for each finding, state the **criteria a fix must satisfy**, and
    route it: a local fix → `engineer`; a structure/contract decision → `architect`; a wrong
    yardstick or a problem spanning several boundaries → escalate. **Stop at construction** —
@@ -39,6 +47,9 @@ thing* goes to code-flow.
 
 ## Gates (must hold to advance)
 
+- **At Calibrate:** when a trigger fires (count floor or ≥2 zones), the audit
+  ran on the gate-pack, or the orchestrator's skip above the floor is logged; a material gap
+  gets one bounded loop-back re-round before Hand off.
 - **At Hand off:** every finding carries evidence + criteria and is routed; nothing is
   "fixed in place" inside the review.
 - **At Report:** findings reported before anything is recorded; recording is owner-agreed.

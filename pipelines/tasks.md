@@ -1,6 +1,6 @@
 # Pipeline — task backlog convention
 
-How every project (and keystone itself) keeps its backlog. The goal is a backlog any cold
+How every project (and akmon itself) keeps its backlog. The goal is a backlog any cold
 agent can load cheaply and act on: **`TASKS.md` is an index, not a document.**
 
 Why it matters: agents re-read the backlog at session start (code-flow step 1). A paragraph
@@ -34,7 +34,7 @@ One task = **one line**:
   was added for the `review` role.
 - **GitHub link (optional)** — when a task has a tracker issue, append it to the id in brackets:
   `C2[#134]` for an issue in **this** repo (GitHub autolinks `#134`), or `C2[owner/repo#134]`
-  across repos (e.g. a project task referencing a keystone issue). The local id stays canonical;
+  across repos (e.g. a project task referencing an akmon issue). The local id stays canonical;
   `[#…]` is provenance, not the id. Distinct from the trailing `[detail](link)`.
 - **status** — exactly one of `active | blocked | deferred | done`. `blocked` = waiting on an
   external dependency; `deferred` = a deliberate not-now (still a real intent, just parked).
@@ -52,7 +52,10 @@ scheme applies to the live backlog and every new task. Don't renumber history.
 
 - **`TASKS.md`** — `active` + `blocked` + `deferred` only. Capped; see thresholds.
 - **`TASKS_ARCHIVE.md`** — `done`, one terse line each. Move an entry here **in the same
-  session it lands** — done work never accumulates in the live file.
+  session it lands** — done work never accumulates in the live file. The move is mechanized by
+  `tools/tasks/archive.py` (`--tasks <path>`; `--done <id>…` closes named entries then sweeps,
+  `--apply` to write) — it works on **any** `TASKS.md` in this format, akmon's or a consuming
+  project's `_aitna/TASKS.md`.
 - **Detail** — lives in `design/` docs, `decisions/` ADRs, or a verification ledger. `TASKS.md`
   links; it does not duplicate.
 - An optional **Status** block at the top of `TASKS.md` is fine: ≤5 lines, current focus only.
@@ -77,7 +80,7 @@ detail link exists:
 - turns out to be a *decision*, not a fix → write an ADR / short design note now and link it —
   implementation may **originate** a design artifact, design need not precede code.
 
-Reusable *knowledge* found mid-task goes to `_forge/memory/` via the learn loop, **not** here.
+Reusable *knowledge* found mid-task goes to `_aitna/memory/` via the learn loop, **not** here.
 
 ## Detail by reference (where things go)
 
@@ -92,7 +95,7 @@ Reusable *knowledge* found mid-task goes to `_forge/memory/` via the learn loop,
 
 Do **not** write dates in `TASKS.md`, `TASKS_ARCHIVE.md`, design docs, or ADRs. The commit
 history is the authoritative timeline — a date in the prose is redundant, goes stale, and burns
-tokens. Need "when did X land"? `git log`. (This rule is keystone-wide, not task-only; design
+tokens. Need "when did X land"? `git log`. (This rule is akmon-wide, not task-only; design
 docs and `decisions/` ADRs follow it too — order ADRs by their number, not a date.)
 
 ## Thresholds (enforced by `verify.py`)

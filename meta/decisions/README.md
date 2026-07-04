@@ -34,3 +34,23 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   gates, level verdict); reasoner goes dynamic (orchestrator rung + per-kind floors);
   second-opinion = model diversity ladder; `plan-draft` row + pre-fan-out plan check;
   gate-pack protocol; `role_task_kinds` routing rights; owner-attention budget. Extends 0004.
+- [0006 — Transcript-driven orchestrator detection, corridor warning, context pressure](0006-orchestrator-detection-corridor-context-pressure.md)
+  — orchestrator detected from the session transcript (never chosen), subagents follow a
+  mid-session `/model` switch; generated `k-*` defs gitignored + regenerated (revises 0004);
+  floor warning becomes a named-floor corridor (`opus ≤ orchestrator < top`, silent collapse
+  when the ladder tops out at the floor); owner-facing warnings dual-channel
+  (`systemMessage` + context); context-pressure detection from transcript `usage`.
+  Extends 0004/0005.
+- [0007 — D2 ledger: mechanical tracking of owner-verification points](0007-d2-ledger.md)
+  — mechanizes the owner-verify guardrail as data + hooks: `_aitna/D2_LEDGER.md` (one entry
+  per verify point, ids `D2-<n>`, `pending → verified` by deliberate command); PreToolUse
+  reminder on project-configured (`.keystone.toml`) sensitive paths; SessionStart `D2: N
+  pending` counter; warn-first pre-commit `check` kept separate from commit-guard; entry is
+  the unit routing verify gates / second-opinion digests attach to. Implementation C11.
+- [0008 — Mythological naming: `_aitna` / `akmon` / Kyklōpes](0008-mythological-naming-aitna-akmon-kyklopes.md)
+  — seats the whole system in one myth cluster (Hephaestus's forge beneath Etna): the workspace
+  `_aitna/` → `_aitna/` (the volcano-forge, begins with **ai**), the standard `keystone` → `akmon`
+  (the anvil, mounted `_aitna/akmon/`), the `k-*` subagents re-read as *Kyklōpes* (prefix kept, no
+  migration). Containment (anvil inside volcano = `akmon/` inside `_aitna/`) fixes the mapping;
+  reservoir for future entities (keraunos, Hephaistos, …). Supersedes V1's English `anvil`; execution
+  in V1. Grandfathers older ADRs.

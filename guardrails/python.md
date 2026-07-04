@@ -3,13 +3,13 @@
 Python-specific hard rules. Layered on top of [_common.md](_common.md); applied
 automatically to any project whose language profile includes Python.
 
-> Defaults below are the keystone baseline. A project's **exact** commands, versions, and
+> Defaults below are the akmon baseline. A project's **exact** commands, versions, and
 > config live in its `pyproject.toml` and `AGENTS.md` — this file defines the rules; the
 > project supplies the specifics.
 
 ## Toolchain (baseline)
 
-- **Environment & runner:** a single, declared manager (the keystone default is **uv**).
+- **Environment & runner:** a single, declared manager (the akmon default is **uv**).
   Run commands through it — e.g. `uv run <cmd>` — no manual venv activation.
 - **Lint / format:** **ruff** (`ruff check`, `ruff format`). Config in `pyproject.toml`
   `[tool.ruff]`. Lint runs on the source, tests, and tool dirs.

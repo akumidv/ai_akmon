@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Validate a keystone-consuming project's USE contract.
+"""Validate a akmon-consuming project's USE contract.
 
 This is the USE-layer verifier: it checks the structural contract a *consuming* project
 must satisfy — AGENTS.md, generated vendor pointers, hooks, skills, memory, the local
-_forge layout, and the USE-surface isolation rule. It deliberately knows nothing about
-keystone's own development artifacts; keystone's self-checks live in the dev-layer
-validator (run in-tree from keystone's own repo, not shipped as part of the contract a
+_aitna layout, and the USE-surface isolation rule. It deliberately knows nothing about
+akmon's own development artifacts; akmon's self-checks live in the dev-layer
+validator (run in-tree from akmon's own repo, not shipped as part of the contract a
 consumer follows). It does not modify files; run ``sync.py`` for generated pointer fixes.
 """
 
@@ -25,7 +25,7 @@ _GENERATED_MARKER = sync_tool.GENERATED_MARKER
 _SKILL_REQUIRED_FRONTMATTER = ("name", "description", "when_to_use", "owner")
 
 # USE-surface isolation: the documentary surface a consumer reads as guidance must be
-# self-contained and must not even *name* keystone's own development artifacts. A deployed
+# self-contained and must not even *name* akmon's own development artifacts. A deployed
 # external agent should not learn they exist — naming them costs tokens and invites it to chase
 # inert files. The rule forbids three things, while leaving generic process vocabulary ("file an
 # ADR", "run sync and verify") intact:
@@ -33,7 +33,7 @@ _SKILL_REQUIRED_FRONTMATTER = ("name", "description", "when_to_use", "owner")
 #      roadmap item/file, even in plain prose;
 #   2. any link or inline-code *path* into the development tree or its artifacts;
 #   3. an unambiguous dev-artifact name in plain prose (e.g. "self_ci") — names that mean nothing
-#      but a keystone dev file, unlike generic words ("sync", "verify", "pytest").
+#      but a akmon dev file, unlike generic words ("sync", "verify", "pytest").
 # Scanned surface = the documentary USE docs only. tools/ *executables* (.py) are NOT scanned:
 # the release tool legitimately operates on the dev tree (it runs meta/self_ci.py) — that is code
 # doing its job, not guidance naming an inert artifact. Only README.md and CHANGELOG.md may bridge
@@ -48,19 +48,19 @@ _USE_OPERATIVE_GLOBS = (
 )
 _USE_OPERATIVE_FILES = ("ARCHETYPES.md", "BOOTSTRAP.md", "MODEL.md")
 
-# Citations that pin a specific keystone development artifact, even in plain prose:
+# Citations that pin a specific akmon development artifact, even in plain prose:
 #  - a numbered decision record ("ADR 0001", "ADR-12") — the bare word "ADR" as a concept is fine;
 #  - a roadmap item or file ("ROADMAP O1", "ROADMAP.md") — the generic word "roadmap" is fine.
 _NUMBERED_DR_RE = re.compile(r"\bADR[\s-]?\d{2,4}\b")
 _ROADMAP_CITE_RE = re.compile(r"\bROADMAP(?:\.md|\s+O\d+)")
 # Unambiguous dev-artifact names that leak even in plain prose. Kept deliberately narrow: only
-# tokens that can mean nothing *but* a keystone dev file. Generic words a consumer legitimately
+# tokens that can mean nothing *but* a akmon dev file. Generic words a consumer legitimately
 # uses ("sync", "verify", "pytest", "design", "decisions") are excluded.
 _DEV_NAME_RE = re.compile(r"\bself_ci\b|\bCONCEPT\.md\b")
 # Markdown link target and inline-code span — the two ways a path is written in these docs.
 _LINK_RE = re.compile(r"\]\(([^)]+)\)")
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
-# Path fragments that only ever point into keystone's own development tree / artifacts. A path
+# Path fragments that only ever point into akmon's own development tree / artifacts. A path
 # (link target or inline code) containing any of these is a leak; the same word in free prose
 # (e.g. "detail in decisions/ ADRs") is not, because it is not written as a path here.
 _DEV_PATH_TOKENS = ("meta/", "decisions/", "reviews/", "ROADMAP", "CONCEPT", "self_ci")
@@ -83,10 +83,10 @@ class Verifier:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.findings: list[Finding] = []
-        # The dev-layer root is configurable (FORGE_ROOT, default _forge); keystone mounts at
-        # <forge>/keystone. Every path below derives from these so a relocated layer still verifies.
-        self.forge = sync_tool.forge_root_name()
-        self.keystone = f"{self.forge}/keystone"
+        # The dev-layer root is configurable (AITNA_ROOT, default _aitna); akmon mounts at
+        # <aitna>/akmon. Every path below derives from these so a relocated layer still verifies.
+        self.aitna = sync_tool.aitna_root_name()
+        self.akmon = f"{self.aitna}/akmon"
 
     def ok(self, message: str) -> None:
         self.findings.append(Finding("ok", message))
@@ -107,36 +107,36 @@ class Verifier:
         return False
 
     def check_basic_layout(self) -> None:
-        forge, keystone = self.forge, self.keystone
+        aitna, akmon = self.aitna, self.akmon
         for relative in (
             "AGENTS.md",
-            f"{forge}/TASKS.md",
-            f"{keystone}/README.md",
-            f"{keystone}/BOOTSTRAP.md",
-            f"{keystone}/ARCHETYPES.md",
-            f"{keystone}/CHANGELOG.md",
-            f"{keystone}/MODEL.md",
-            f"{keystone}/roles/README.md",
-            f"{keystone}/roles/review.md",
-            f"{keystone}/roles/architect.md",
-            f"{keystone}/roles/engineer.md",
-            f"{keystone}/roles/learn.md",
-            f"{keystone}/roles/release.md",
-            f"{keystone}/guardrails/_common.md",
-            f"{keystone}/pipelines/pre-commit.md",
-            f"{keystone}/pipelines/code-flow.md",
-            f"{keystone}/pipelines/design-flow.md",
-            f"{keystone}/pipelines/release.md",
-            f"{keystone}/pipelines/tasks.md",
-            f"{keystone}/bin/sync.py",
-            f"{keystone}/bin/verify.py",
+            f"{aitna}/TASKS.md",
+            f"{akmon}/README.md",
+            f"{akmon}/BOOTSTRAP.md",
+            f"{akmon}/ARCHETYPES.md",
+            f"{akmon}/CHANGELOG.md",
+            f"{akmon}/MODEL.md",
+            f"{akmon}/roles/README.md",
+            f"{akmon}/roles/review.md",
+            f"{akmon}/roles/architect.md",
+            f"{akmon}/roles/engineer.md",
+            f"{akmon}/roles/learn.md",
+            f"{akmon}/roles/release.md",
+            f"{akmon}/guardrails/_common.md",
+            f"{akmon}/pipelines/pre-commit.md",
+            f"{akmon}/pipelines/code-flow.md",
+            f"{akmon}/pipelines/design-flow.md",
+            f"{akmon}/pipelines/release.md",
+            f"{akmon}/pipelines/tasks.md",
+            f"{akmon}/bin/sync.py",
+            f"{akmon}/bin/verify.py",
         ):
             self.check_path(relative)
-        for relative in (f"{forge}/agents", f"{forge}/memory"):
+        for relative in (f"{aitna}/agents", f"{aitna}/memory"):
             self.check_path(relative, kind="dir")
 
     def check_use_surface_isolation(self) -> None:
-        """The operative USE surface must not name keystone's own development artifacts.
+        """The operative USE surface must not name akmon's own development artifacts.
 
         A consumer follows roles/pipelines/guardrails/profiles/skills/tools +
         ARCHETYPES/BOOTSTRAP/MODEL; those must be self-contained, so a deployed agent never
@@ -145,14 +145,14 @@ class Verifier:
         artifacts. Generic process vocabulary ("file an ADR") stays allowed. README.md and
         CHANGELOG.md are the deliberate bridges and are not in this surface.
         """
-        keystone = self.root / self.keystone
-        if not keystone.is_dir():
+        akmon = self.root / self.akmon
+        if not akmon.is_dir():
             return
         sources: list[Path] = []
         for pattern in _USE_OPERATIVE_GLOBS:
-            sources.extend(sorted(keystone.glob(pattern)))
+            sources.extend(sorted(akmon.glob(pattern)))
         for name in _USE_OPERATIVE_FILES:
-            candidate = keystone / name
+            candidate = akmon / name
             if candidate.is_file():
                 sources.append(candidate)
 
@@ -161,11 +161,11 @@ class Verifier:
             violations.extend(self._isolation_violations(source))
         if violations:
             self.error(
-                "USE surface names keystone development artifacts (keep it self-contained so a "
+                "USE surface names akmon development artifacts (keep it self-contained so a "
                 f"consumer never reads the dev tree): {'; '.join(violations)}"
             )
         else:
-            self.ok("USE surface names no keystone development artifacts")
+            self.ok("USE surface names no akmon development artifacts")
 
     def _isolation_violations(self, source: Path) -> list[str]:
         text = source.read_text(encoding="utf-8")
@@ -188,20 +188,20 @@ class Verifier:
         if _GENERATED_MARKER in text:
             self.error("AGENTS.md must be a hand-reviewed source document, not generated by sync.py")
         required = {
-            "keystone block": "## Dev layer — keystone",
-            "model link": f"{self.keystone}/README.md",
+            "akmon block": "## Dev layer — akmon",
+            "model link": f"{self.akmon}/README.md",
             "archetype link": "ARCHETYPES.md",
-            "role link": f"{self.keystone}/roles/",
-            "memory rule": f"{self.forge}/memory",
+            "role link": f"{self.akmon}/roles/",
+            "memory rule": f"{self.aitna}/memory",
             "owner verifies directive": "D2",
             "owner owns commits directive": "D5",
             "secrets rule": ".env",
         }
         missing = [name for name, snippet in required.items() if snippet not in text]
         if missing:
-            self.error(f"AGENTS.md keystone block is missing: {', '.join(missing)}")
+            self.error(f"AGENTS.md akmon block is missing: {', '.join(missing)}")
         else:
-            self.ok("AGENTS.md keystone block contains required anchors")
+            self.ok("AGENTS.md akmon block contains required anchors")
 
     def check_cross_agent_contract(self) -> None:
         """Validate the source-to-pointer contract without generating AGENTS.md."""
@@ -230,19 +230,19 @@ class Verifier:
 
         skill_sources, _ = sync_tool._skill_sources(self.root)
         if skill_sources:
-            skill_roots = ("skills/", f"{self.forge}/skills", f"{self.keystone}/skills")
+            skill_roots = ("skills/", f"{self.aitna}/skills", f"{self.akmon}/skills")
             if any(root_hint in agents_text for root_hint in skill_roots):
                 self.ok("AGENTS.md references source skill roots")
             else:
                 self.warn("skills exist, but AGENTS.md does not mention source skill roots")
 
     def check_agent_charters(self) -> None:
-        agents_dir = self.root / self.forge / "agents"
+        agents_dir = self.root / self.aitna / "agents"
         if not agents_dir.is_dir():
             return
         agents = sorted(path for path in agents_dir.iterdir() if path.is_dir())
         if not agents:
-            self.warn(f"{self.forge}/agents has no agent charters")
+            self.warn(f"{self.aitna}/agents has no agent charters")
             return
         for agent in agents:
             readme = agent / "README.md"
@@ -250,25 +250,25 @@ class Verifier:
                 self.error(f"{readme.relative_to(self.root)} is missing")
                 continue
             text = readme.read_text(encoding="utf-8")
-            if f"{self.keystone}/roles" in text or "keystone/roles" in text:
-                self.ok(f"{readme.relative_to(self.root)} links a keystone role")
+            if f"{self.akmon}/roles" in text or "akmon/roles" in text:
+                self.ok(f"{readme.relative_to(self.root)} links a akmon role")
             else:
-                self.warn(f"{readme.relative_to(self.root)} does not link a keystone role")
+                self.warn(f"{readme.relative_to(self.root)} does not link a akmon role")
 
     def check_memory(self) -> None:
-        memory_dir = self.root / self.forge / "memory"
+        memory_dir = self.root / self.aitna / "memory"
         if not memory_dir.is_dir():
             return
         index = memory_dir / "README.md"
         legacy_index = memory_dir / "MEMORY.md"
         if index.is_file():
             index_text = index.read_text(encoding="utf-8")
-            self.ok(f"{self.forge}/memory/README.md exists")
+            self.ok(f"{self.aitna}/memory/README.md exists")
         elif legacy_index.is_file():
             index_text = legacy_index.read_text(encoding="utf-8")
-            self.warn(f"{self.forge}/memory/MEMORY.md exists; README.md is the preferred index")
+            self.warn(f"{self.aitna}/memory/MEMORY.md exists; README.md is the preferred index")
         else:
-            self.error(f"{self.forge}/memory needs README.md index")
+            self.error(f"{self.aitna}/memory needs README.md index")
             return
 
         missing_from_index = []
@@ -326,7 +326,7 @@ class Verifier:
             for source in sources:
                 self.check_skill_contract(source)
         else:
-            self.warn("no SKILL.md files found in keystone/local/usage skill roots")
+            self.warn("no SKILL.md files found in akmon/local/usage skill roots")
 
     def check_generated_pointers(self) -> None:
         files, errors = sync_tool._planned_files(self.root)
@@ -341,13 +341,13 @@ class Verifier:
             self.ok("generated pointers match sync.py")
 
     def check_tasks(self) -> None:
-        path = self.root / self.forge / "TASKS.md"
+        path = self.root / self.aitna / "TASKS.md"
         if not path.is_file():
             return  # basic layout already reports a missing TASKS.md
         lines = path.read_text(encoding="utf-8").splitlines()
         if len(lines) > _TASKS_MAX_LINES:
             self.warn(
-                f"{self.forge}/TASKS.md is {len(lines)} lines; keep it an index "
+                f"{self.aitna}/TASKS.md is {len(lines)} lines; keep it an index "
                 "(pipelines/tasks.md) — detail by reference, not inlined"
             )
         entries = [line for line in lines if line.lstrip().startswith("- ") and " · " in line]
@@ -360,7 +360,7 @@ class Verifier:
             if not without_status:
                 self.ok("TASKS.md uses well-formed index entries")
         if _DATE_RE.search("\n".join(lines)):
-            self.warn(f"{self.forge}/TASKS.md contains dates; dates are noise — derive them from git history")
+            self.warn(f"{self.aitna}/TASKS.md contains dates; dates are noise — derive them from git history")
 
     def check_hooks(self) -> None:
         for script in (
@@ -375,22 +375,22 @@ class Verifier:
             "model-routing.py",
             "delegation-log.py",
         ):
-            self.check_path(f"{self.keystone}/hooks/{script}")
+            self.check_path(f"{self.akmon}/hooks/{script}")
 
     def check_model_routing(self) -> None:
-        """The routing registry and tools must ship with keystone and parse cleanly.
+        """The routing registry and tools must ship with akmon and parse cleanly.
 
         Freshness of the per-user local config is the SessionStart hook's job (it injects
         the re-init instruction); verify only guards the committed contract surface.
         """
         for relative in (
-            f"{self.keystone}/tools/model_routing/registry.json",
-            f"{self.keystone}/tools/model_routing/routing.py",
-            f"{self.keystone}/tools/model_routing/init.py",
-            f"{self.keystone}/tools/model_routing/second_opinion.py",
+            f"{self.akmon}/tools/model_routing/registry.json",
+            f"{self.akmon}/tools/model_routing/routing.py",
+            f"{self.akmon}/tools/model_routing/init.py",
+            f"{self.akmon}/tools/model_routing/second_opinion.py",
         ):
             self.check_path(relative)
-        registry_path = self.root / self.keystone / "tools" / "model_routing" / "registry.json"
+        registry_path = self.root / self.akmon / "tools" / "model_routing" / "registry.json"
         if registry_path.is_file():
             try:
                 registry = sync_tool._read_json(registry_path)
@@ -398,7 +398,7 @@ class Verifier:
                 self._check_model_routing_registry(registry)
             except ValueError as exc:
                 self.error(str(exc))
-        overlay = self.root / self.forge / "model-routing.json"
+        overlay = self.root / self.aitna / "model-routing.json"
         if overlay.is_file():
             try:
                 sync_tool._read_json(overlay)
@@ -443,29 +443,29 @@ class Verifier:
             return
         text = path.read_text(encoding="utf-8")
         if "*.env" in text and "!*.env.example" in text:
-            self.ok(".gitignore has the keystone env secret pattern")
+            self.ok(".gitignore has the akmon env secret pattern")
         else:
             self.warn(".gitignore should include '*.env' and '!*.env.example'")
 
-    def check_keystone_gitignore(self) -> None:
-        """Warn when the keystone submodule has no .gitignore ignoring __pycache__.
+    def check_akmon_gitignore(self) -> None:
+        """Warn when the akmon submodule has no .gitignore ignoring __pycache__.
 
         The bin/ and tools/ Python is run in-tree, so without this a release commit cut from
         the submodule sweeps in __pycache__/ noise (surfaced as a manual finding during the
-        v0.1.0 cut). A missing keystone .gitignore is a warning, not an error — keystone may
+        v0.1.0 cut). A missing akmon .gitignore is a warning, not an error — akmon may
         be vendored read-only — but a present one should ignore the bytecode caches.
         """
-        keystone = self.root / self.keystone
-        if not keystone.is_dir():
+        akmon = self.root / self.akmon
+        if not akmon.is_dir():
             return
-        path = keystone / ".gitignore"
+        path = akmon / ".gitignore"
         if not path.is_file():
-            self.warn(f"{self.keystone}/.gitignore is missing; add one ignoring __pycache__/")
+            self.warn(f"{self.akmon}/.gitignore is missing; add one ignoring __pycache__/")
             return
         if "__pycache__" in path.read_text(encoding="utf-8"):
-            self.ok("keystone .gitignore ignores __pycache__")
+            self.ok("akmon .gitignore ignores __pycache__")
         else:
-            self.warn(f"{self.keystone}/.gitignore should ignore __pycache__/")
+            self.warn(f"{self.akmon}/.gitignore should ignore __pycache__/")
 
     def check_ci(self) -> None:
         workflow_dir = self.root / ".github" / "workflows"
@@ -475,23 +475,23 @@ class Verifier:
             return
         workflow_text = "\n".join(path.read_text(encoding="utf-8") for path in workflows)
         required = (
-            f"python3 {self.keystone}/bin/sync.py --check",
-            f"python3 {self.keystone}/bin/verify.py --strict",
+            f"python3 {self.akmon}/bin/sync.py --check",
+            f"python3 {self.akmon}/bin/verify.py --strict",
         )
         missing = [command for command in required if command not in workflow_text]
         if missing:
             self.warn(f"CI should run: {', '.join(missing)}")
         else:
-            self.ok("CI checks keystone generated pointers and verify")
+            self.ok("CI checks akmon generated pointers and verify")
 
     def check_changelog(self) -> None:
-        """Warn when keystone's CHANGELOG.md exists without an `Unreleased` section.
+        """Warn when akmon's CHANGELOG.md exists without an `Unreleased` section.
 
         Keeps the "consumer-visible change ⇒ changelog entry" discipline mechanical rather than
         trust-based (ADR 0001 §9). A missing CHANGELOG.md is not an error here — only a present
         one that has nowhere to record pending changes.
         """
-        path = self.root / self.keystone / "CHANGELOG.md"
+        path = self.root / self.akmon / "CHANGELOG.md"
         if not path.is_file():
             return
         text = path.read_text(encoding="utf-8")
@@ -501,35 +501,35 @@ class Verifier:
             self.warn("CHANGELOG.md has no `## Unreleased` section; add one for pending changes")
 
     def check_attach_record(self) -> None:
-        """Validate the `_forge/.keystone.toml` integration record *of a consuming project*.
+        """Validate the `_aitna/.akmon.toml` integration record *of a consuming project*.
 
-        It is the "where the project is" anchor that BOOTSTRAP §B2 diffs against keystone's
+        It is the "where the project is" anchor that BOOTSTRAP §B2 diffs against akmon's
         CHANGELOG to compute which Breaking/migration entries a realign still needs to verify.
         The agent writes it on attach/realign (sync.py is stdlib-only and cannot run `git describe`).
 
-        It is a **consumer** artifact, so this check applies only when keystone is mounted as a
-        submodule (`<FORGE_ROOT>/keystone/` present) — verify run against the keystone repo itself
+        It is a **consumer** artifact, so this check applies only when akmon is mounted as a
+        submodule (`<AITNA_ROOT>/akmon/` present) — verify run against the akmon repo itself
         skips it. Even on a consumer, a *missing* record is a non-gating note (the project may
         predate this contract; the fix is a realign), so it never fails `--strict`; only a
         *present but malformed* record — missing the required top-level keys — is an error.
         """
-        if not (self.root / self.keystone).is_dir():
-            return  # keystone repo itself, or not a keystone consumer — no integration record expected
-        name = f"{self.forge}/.keystone.toml"
-        path = self.root / self.forge / ".keystone.toml"
+        if not (self.root / self.akmon).is_dir():
+            return  # akmon repo itself, or not a akmon consumer — no integration record expected
+        name = f"{self.aitna}/.akmon.toml"
+        path = self.root / self.aitna / ".akmon.toml"
         if not path.is_file():
             self.ok(
                 f"{name} not present (optional; a realign writes it so future "
                 "bumps can diff the CHANGELOG — BOOTSTRAP §B2)"
             )
             return
-        fields = sync_tool.read_keystone_toml(path)
-        required = ("keystone_version", "attached_archetype", "last_realign")
+        fields = sync_tool.read_akmon_toml(path)
+        required = ("akmon_version", "attached_archetype", "last_realign")
         missing = [key for key in required if not fields.get(key)]
         if missing:
             self.error(f"{name} is missing required key(s): {', '.join(missing)}")
         else:
-            self.ok(f"{name} records keystone version {fields['keystone_version']}")
+            self.ok(f"{name} records akmon version {fields['akmon_version']}")
 
     def run(self) -> None:
         self.check_basic_layout()
@@ -544,7 +544,7 @@ class Verifier:
         self.check_hooks()
         self.check_model_routing()
         self.check_gitignore()
-        self.check_keystone_gitignore()
+        self.check_akmon_gitignore()
         self.check_ci()
         self.check_changelog()
         self.check_attach_record()

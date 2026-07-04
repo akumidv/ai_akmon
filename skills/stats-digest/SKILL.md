@@ -2,7 +2,7 @@
 name: stats-digest
 description: On-demand session statistics digest — delegation/tier stats from the routing log, tokens per role from the transcript, remaining session/week budget from the Claude API, plus learn-loop recommendations gated on owner confirmation. Digest to chat, full report to a file.
 when_to_use: When the owner asks for work statistics in chat — "статистика работы", "session stats", "work statistics", "usage report", "сколько потратили".
-owner: keystone
+owner: akmon
 ---
 
 # stats-digest
@@ -23,7 +23,7 @@ never in the orchestrator.
 1. **Run the tool** (orchestrator, one cheap call — its stdout *is* the digest):
 
    ```bash
-   python3 _forge/keystone/tools/model_routing/stats.py
+   python3 _aitna/akmon/tools/model_routing/stats.py
    ```
 
    It parses the delegation log (`.claude/model-routing.log`) and the current session

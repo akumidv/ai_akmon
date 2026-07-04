@@ -32,7 +32,7 @@ IDs are immutable contract values (tooling/templates depend on them).
 ## Required per archetype (beyond the universal set)
 
 **Universal (every archetype):** the Layer/Role/Archetype declaration in `AGENTS.md`; the
-secrets policy; the `_forge/` layout + `bin/sync.py`; archetype ID + owner; the language
+secrets policy; the `_aitna/` layout + `bin/sync.py`; archetype ID + owner; the language
 profile + matching [guardrails/](guardrails/); any opted-in [profiles/](profiles/).
 
 The USAGE column above says *whether*; this says *what each must document on top of the
@@ -46,7 +46,7 @@ universal set*. Where an archetype exports a USAGE skill, its **shape** follows 
 | `mcp` | the MCP tool contract (names / IO / errors); how a consumer mounts it; unit + tool-contract tests |
 | `frontend` | UI/state conventions; build/test/lint in pre-commit; client-side secrets boundary |
 | `job` | the orchestration target; inputs/outputs, idempotency, retry/replay; data + secrets boundary |
-| `platform` | the runtime agent layer kept **separate** from `_forge/`; which consumed USAGE contracts it relies on; agent isolation/safety. *(A runtime platform that hosts OPERATE actors is out of keystone scope.)* |
+| `platform` | the runtime agent layer kept **separate** from `_aitna/`; which consumed USAGE contracts it relies on; agent isolation/safety. *(A runtime platform that hosts OPERATE actors is out of akmon scope.)* |
 | `custom` | scope, toolchain, runtime, risk profile, USAGE placement, mandatory checks |
 
 ## USAGE requirement: the domain-concept → function map (`package`, and any archetype with a domain API)
@@ -70,11 +70,11 @@ use it* — not a bare API reference.
   lives in the SKILL.md (short) + the function docstring (shorter).
 - A concept that is **implemented** gets a USAGE skill (and a `knowledge/` leaf if rich).
 - A concept that is **planned but not yet coded** is documented (in `knowledge/` if rich,
-  else just catalogued) with an impl task in `_forge/TASKS.md`, but gets **no** skill until
+  else just catalogued) with an impl task in `_aitna/TASKS.md`, but gets **no** skill until
   the code lands.
 - A concept that is **neither implemented nor planned** is not stored at all.
 
-**Why a keystone requirement, not a per-project choice.** It keeps domain knowledge
+**Why an akmon requirement, not a per-project choice.** It keeps domain knowledge
 *honest* (every usage skill points at real, verified code), makes USAGE travel into a
 consumer without re-deriving the domain, and is the natural seam to an MCP knowledge server
 later. It is **mandatory for `package`** and for any archetype that exposes a domain API

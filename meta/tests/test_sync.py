@@ -1,8 +1,8 @@
-"""Unit tests for the keystone pointer/hook-wiring generator (``sync``).
+"""Unit tests for the akmon pointer/hook-wiring generator (``sync``).
 
 These build throwaway project trees under ``tmp_path``; nothing touches the real repo.
 
-Run from the keystone root::
+Run from the akmon root::
 
     python3 -m pytest tests
 """
@@ -23,7 +23,7 @@ import sync
 def _make_root(tmp_path: Path) -> Path:
     """A minimal tree that _find_project_root accepts."""
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
-    (tmp_path / "_forge" / "keystone").mkdir(parents=True)
+    (tmp_path / "_aitna" / "akmon").mkdir(parents=True)
     return tmp_path
 
 
@@ -67,49 +67,49 @@ def test_read_json_non_object_raises_value_error(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# hook-entry merge (incl. the keystone-managed rewrite fix)
+# hook-entry merge (incl. the akmon-managed rewrite fix)
 # --------------------------------------------------------------------------------------
 
 
-def _keystone_entry(path: str, matcher: str = "Bash") -> dict:
+def _akmon_entry(path: str, matcher: str = "Bash") -> dict:
     return {"matcher": matcher, "hooks": [{"type": "command", "command": f'python3 "{path}"'}]}
 
 
 def test_merge_replaces_non_list_existing_with_wanted():
-    wanted = [_keystone_entry("_forge/keystone/hooks/git-commit-guard.py")]
+    wanted = [_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")]
     assert sync._merge_hook_entries("garbage", wanted) == wanted
 
 
 def test_merge_preserves_user_hooks_and_adds_wanted():
     user = {"matcher": "Bash", "hooks": [{"type": "command", "command": "my-own-hook.sh"}]}
-    wanted = [_keystone_entry("_forge/keystone/hooks/git-commit-guard.py")]
+    wanted = [_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")]
     merged = sync._merge_hook_entries([user], wanted)
     assert user in merged
     assert wanted[0] in merged
 
 
 def test_merge_is_idempotent():
-    wanted = [_keystone_entry("_forge/keystone/hooks/git-commit-guard.py")]
+    wanted = [_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")]
     once = sync._merge_hook_entries([], wanted)
     twice = sync._merge_hook_entries(once, wanted)
     assert once == twice
 
 
-def test_merge_drops_stale_keystone_entry_on_rename():
+def test_merge_drops_stale_akmon_entry_on_rename():
     # A previous sync wrote the hook at an old path; the wanted set now uses a new path.
-    stale = _keystone_entry("_forge/keystone/hooks/old-name.py")
-    wanted = [_keystone_entry("_forge/keystone/hooks/git-commit-guard.py")]
+    stale = _akmon_entry("_aitna/akmon/hooks/old-name.py")
+    wanted = [_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")]
     merged = sync._merge_hook_entries([stale], wanted)
-    assert stale not in merged  # stale keystone entry removed, not duplicated
+    assert stale not in merged  # stale akmon entry removed, not duplicated
     assert merged == wanted
 
 
-def test_merge_keeps_mixed_entry_that_is_not_purely_keystone():
-    # An entry combining a keystone command with a user command is not "keystone-owned".
+def test_merge_keeps_mixed_entry_that_is_not_purely_akmon():
+    # An entry combining a akmon command with a user command is not "akmon-owned".
     mixed = {
         "matcher": "Bash",
         "hooks": [
-            {"type": "command", "command": 'python3 "_forge/keystone/hooks/git-commit-guard.py"'},
+            {"type": "command", "command": 'python3 "_aitna/akmon/hooks/git-commit-guard.py"'},
             {"type": "command", "command": "user-extra.sh"},
         ],
     }
@@ -117,10 +117,10 @@ def test_merge_keeps_mixed_entry_that_is_not_purely_keystone():
     assert mixed in merged
 
 
-def test_is_keystone_entry_recognises_marker():
-    assert sync._is_keystone_entry(_keystone_entry("x/_forge/keystone/hooks/h.py"))
-    assert not sync._is_keystone_entry({"matcher": "Bash", "hooks": [{"command": "other.sh"}]})
-    assert not sync._is_keystone_entry({"matcher": "Bash", "hooks": []})
+def test_is_akmon_entry_recognises_marker():
+    assert sync._is_akmon_entry(_akmon_entry("x/_aitna/akmon/hooks/h.py"))
+    assert not sync._is_akmon_entry({"matcher": "Bash", "hooks": [{"command": "other.sh"}]})
+    assert not sync._is_akmon_entry({"matcher": "Bash", "hooks": []})
 
 
 # --------------------------------------------------------------------------------------
@@ -135,7 +135,7 @@ def _make_skill(base: Path, root_rel: str, name: str) -> None:
 
 
 def test_skill_sources_finds_skills_across_roots(tmp_path):
-    _make_skill(tmp_path, "_forge/keystone/skills", "alpha")
+    _make_skill(tmp_path, "_aitna/akmon/skills", "alpha")
     _make_skill(tmp_path, "skills", "beta")
     sources, errors = sync._skill_sources(tmp_path)
     names = sorted(source.parent.name for source in sources)
@@ -144,7 +144,7 @@ def test_skill_sources_finds_skills_across_roots(tmp_path):
 
 
 def test_skill_sources_reports_duplicate_names(tmp_path):
-    _make_skill(tmp_path, "_forge/keystone/skills", "dup")
+    _make_skill(tmp_path, "_aitna/akmon/skills", "dup")
     _make_skill(tmp_path, "skills", "dup")
     _, errors = sync._skill_sources(tmp_path)
     assert any("duplicate skill name" in error for error in errors)
@@ -161,10 +161,10 @@ def test_claude_settings_wires_hooks_into_valid_json(tmp_path):
     settings = json.loads(planned.content)
     assert "PreToolUse" in settings["hooks"]
     assert "SessionStart" in settings["hooks"]
-    # commands point at the keystone hook scripts
+    # commands point at the akmon hook scripts
     text = planned.content
-    assert "_forge/keystone/hooks/git-commit-guard.py" in text
-    assert "_forge/keystone/hooks/analysis-guard.py" in text
+    assert "_aitna/akmon/hooks/git-commit-guard.py" in text
+    assert "_aitna/akmon/hooks/analysis-guard.py" in text
     # the delegation nudge is one combined-matcher entry (edit + shell + subagent tools):
     # the merge dedups by command, so the same script must not appear in several groups
     matchers_with_nudge = {
@@ -172,7 +172,7 @@ def test_claude_settings_wires_hooks_into_valid_json(tmp_path):
         for entry in settings["hooks"]["PreToolUse"]
         if any("delegation-nudge.py" in hook["command"] for hook in entry["hooks"])
     }
-    assert matchers_with_nudge == {"Bash|Edit|Write|MultiEdit|Task|Agent"}
+    assert matchers_with_nudge == {"Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob"}
     # the pre-existing groups keep their hooks (regression: entry-level dedup must not
     # swallow them)
     all_matchers = {entry["matcher"] for entry in settings["hooks"]["PreToolUse"]}
@@ -188,7 +188,7 @@ def test_codex_hooks_wires_neutral_hook_entrypoint(tmp_path):
     assert "PreToolUse" in hooks
     assert "SessionStart" in hooks
     text = planned.content
-    assert "_forge/keystone/hooks/codex-hook.py" in text
+    assert "_aitna/akmon/hooks/codex-hook.py" in text
     assert "analysis-guard" in text
     assert "role-on-code" in text
     assert "session-start" in text
@@ -307,69 +307,69 @@ def test_main_check_and_dry_run_are_mutually_exclusive(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# configurable dev-layer root (FORGE_ROOT) — A4
+# configurable dev-layer root (AITNA_ROOT) — A4
 # --------------------------------------------------------------------------------------
 
 
-def _make_root_at(tmp_path: Path, forge: str) -> Path:
-    """A minimal tree whose dev-layer root is ``forge`` (e.g. ``tools/ai``)."""
+def _make_root_at(tmp_path: Path, aitna: str) -> Path:
+    """A minimal tree whose dev-layer root is ``aitna`` (e.g. ``tools/ai``)."""
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
-    (tmp_path / forge / "keystone").mkdir(parents=True)
+    (tmp_path / aitna / "akmon").mkdir(parents=True)
     return tmp_path
 
 
-def test_forge_root_name_defaults_to_forge(monkeypatch):
-    monkeypatch.delenv("FORGE_ROOT", raising=False)
-    assert sync.forge_root_name() == "_forge"
+def test_aitna_root_name_defaults_to_aitna(monkeypatch):
+    monkeypatch.delenv("AITNA_ROOT", raising=False)
+    assert sync.aitna_root_name() == "_aitna"
 
 
-def test_forge_root_name_reads_env_and_strips_slashes(monkeypatch):
-    monkeypatch.setenv("FORGE_ROOT", "/tools/ai/")
-    assert sync.forge_root_name() == "tools/ai"
+def test_aitna_root_name_reads_env_and_strips_slashes(monkeypatch):
+    monkeypatch.setenv("AITNA_ROOT", "/tools/ai/")
+    assert sync.aitna_root_name() == "tools/ai"
 
 
-def test_forge_root_name_blank_env_falls_back_to_default(monkeypatch):
-    monkeypatch.setenv("FORGE_ROOT", "")
-    assert sync.forge_root_name() == "_forge"
+def test_aitna_root_name_blank_env_falls_back_to_default(monkeypatch):
+    monkeypatch.setenv("AITNA_ROOT", "")
+    assert sync.aitna_root_name() == "_aitna"
 
 
-def test_keystone_root_derives_from_configured_forge(monkeypatch, tmp_path):
-    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
-    assert sync.keystone_root(tmp_path) == tmp_path / "tools" / "ai" / "keystone"
+def test_akmon_root_derives_from_configured_aitna(monkeypatch, tmp_path):
+    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+    assert sync.akmon_root(tmp_path) == tmp_path / "tools" / "ai" / "akmon"
 
 
-def test_find_project_root_detects_via_custom_forge_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+def test_find_project_root_detects_via_custom_aitna_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     root = _make_root_at(tmp_path, "tools/ai")
     nested = root / "src" / "pkg"
     nested.mkdir(parents=True)
     assert sync._find_project_root(nested) == root
 
 
-def test_generated_hook_commands_use_custom_forge_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+def test_generated_hook_commands_use_custom_aitna_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     root = _make_root_at(tmp_path, "tools/ai")
     claude = sync._claude_settings(root).content
-    assert "tools/ai/keystone/hooks/git-commit-guard.py" in claude
-    assert "_forge/keystone/hooks" not in claude
+    assert "tools/ai/akmon/hooks/git-commit-guard.py" in claude
+    assert "_aitna/akmon/hooks" not in claude
     files, errors = sync._planned_files(root)
     assert errors == []
     codex = next(f for f in files if f.path.name == "hooks.json").content
-    assert "tools/ai/keystone/hooks/codex-hook.py" in codex
-    assert "_forge/keystone/hooks" not in codex
+    assert "tools/ai/akmon/hooks/codex-hook.py" in codex
+    assert "_aitna/akmon/hooks" not in codex
 
 
-def test_keystone_hook_marker_tracks_custom_forge_root(monkeypatch):
-    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
-    entry = _keystone_entry("x/tools/ai/keystone/hooks/h.py")
-    assert sync._is_keystone_entry(entry)
-    # an entry at the default path is no longer "keystone-owned" under the custom root
-    assert not sync._is_keystone_entry(_keystone_entry("x/_forge/keystone/hooks/h.py"))
+def test_akmon_hook_marker_tracks_custom_aitna_root(monkeypatch):
+    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+    entry = _akmon_entry("x/tools/ai/akmon/hooks/h.py")
+    assert sync._is_akmon_entry(entry)
+    # an entry at the default path is no longer "akmon-owned" under the custom root
+    assert not sync._is_akmon_entry(_akmon_entry("x/_aitna/akmon/hooks/h.py"))
 
 
-def test_skill_sources_search_custom_forge_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
-    _make_skill(tmp_path, "tools/ai/keystone/skills", "alpha")
+def test_skill_sources_search_custom_aitna_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+    _make_skill(tmp_path, "tools/ai/akmon/skills", "alpha")
     _make_skill(tmp_path, "tools/ai/skills", "beta")
     sources, errors = sync._skill_sources(tmp_path)
     assert errors == []
@@ -377,9 +377,9 @@ def test_skill_sources_search_custom_forge_root(monkeypatch, tmp_path):
 
 
 def test_full_generation_under_custom_root_is_idempotent(monkeypatch, tmp_path):
-    monkeypatch.setenv("FORGE_ROOT", "tools/ai")
+    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     root = _make_root_at(tmp_path, "tools/ai")
     assert sync.main(["--project-root", str(root)]) == 0  # write
     assert sync.main(["--project-root", str(root), "--check"]) == 0  # clean second pass
     banner = (root / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "tools/ai/keystone/bin/sync.py" in banner  # GENERATED banner tracks the root
+    assert "tools/ai/akmon/bin/sync.py" in banner  # GENERATED banner tracks the root

@@ -7,7 +7,7 @@
 
 ## Frame
 
-keystone claims to be **LLM-agnostic**: one source of truth, vendors get generated pointers. T1
+akmon claims to be **LLM-agnostic**: one source of truth, vendors get generated pointers. T1
 made the *base* of that real — vendor pointers import `AGENTS.md`, and `verify.py` checks the
 source-to-pointer linkage. But the cross-agent surface today is **thin**: nothing single-sources
 the *inventory* of skills and roles. So a new skill or role, or a changed description, can drift
@@ -50,7 +50,7 @@ forces the central decision below: we cannot simply "generate AGENTS.md".
 
 ### A. Managed region inside `AGENTS.md`
 
-A marker-delimited block (e.g. `<!-- keystone:skills:start -->` … `<!-- keystone:skills:end -->`,
+A marker-delimited block (e.g. `<!-- akmon:skills:start -->` … `<!-- akmon:skills:end -->`,
 likewise for roles) that `sync.py` rewrites from the single source; everything outside the markers
 stays hand-owned.
 
@@ -72,7 +72,7 @@ Keep `AGENTS.md` fully hand-written, but make `verify.py` enforce the inventory:
 
 ### C. Separate generated include
 
-The inventory lives in its own generated file (e.g. `_forge/keystone/…` or a project file) that
+The inventory lives in its own generated file (e.g. `_aitna/akmon/…` or a project file) that
 `AGENTS.md` links/points to; `AGENTS.md` stays prose-only.
 
 - **Pros:** `AGENTS.md` untouched and hand-owned; the generated part is cleanly isolated and can

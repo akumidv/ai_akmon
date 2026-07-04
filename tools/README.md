@@ -1,4 +1,4 @@
-# `tools/` — keystone SHARED executable tools
+# `tools/` — akmon SHARED executable tools
 
 Cross-project executable tools that ship *with* the standard (the SHARED dev layer, see
 [MODEL.md](../MODEL.md)). A **skill calls a tool** ([MODEL.md](../MODEL.md)): the tool
@@ -9,7 +9,7 @@ is the executable; the skill is the know-how that drives it.
 > **role/skill drives on demand** — not CI gates. A release is owner-driven, so the release
 > tool lives here, not in `bin/`, and is not wired into CI.
 
-> **Propose / prepare, never execute (D5).** A keystone tool defaults to read-only and
+> **Propose / prepare, never execute (D5).** An akmon tool defaults to read-only and
 > dry-run. It may print commands, validate state, or draft files; owner-owned landing actions
 > (commit / tag / push / publish / pin-bump) are run by the owner.
 
@@ -18,6 +18,6 @@ is the executable; the skill is the know-how that drives it.
 | Tool | Driven by | Does |
 |---|---|---|
 | [`release/release_check.py`](release/release_check.py) | the [`release`](../skills/release/SKILL.md) skill / role | `--state` (collect), `--check` (run the release suite, runner-resilient), `--plan vX.Y.Z` (owner-run command set). Never commits/tags/pushes. |
-| [`model_routing/init.py`](model_routing/init.py) | the SessionStart routing hook's init instruction (MODEL.md § Capability tiers) | computes the tier→model binding from [`model_routing/registry.json`](model_routing/registry.json) (+ the project overlay `<forge-root>/model-routing.json`) relative to the orchestrating model; writes the generated `k-*` subagent definitions (committed) and `.claude/model-routing.local.json` (per-user, gitignored). Idempotent; `--check`/`--dry-run`. |
+| [`model_routing/init.py`](model_routing/init.py) | the SessionStart routing hook's init instruction (MODEL.md § Capability tiers) | computes the tier→model binding from [`model_routing/registry.json`](model_routing/registry.json) (+ the project overlay `<aitna-root>/model-routing.json`) relative to the orchestrating model; writes the generated `k-*` subagent definitions (committed) and `.claude/model-routing.local.json` (per-user, gitignored). Idempotent; `--check`/`--dry-run`. |
 
-Run a tool with `python3 _forge/keystone/tools/<path>` (stdlib-only; no install step).
+Run a tool with `python3 _aitna/akmon/tools/<path>` (stdlib-only; no install step).

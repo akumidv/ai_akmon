@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude PreToolUse wrapper for the keystone commit guard.
+"""Claude PreToolUse wrapper for the akmon commit guard.
 
 The guardrail logic lives in ``hook_core.py`` and returns a vendor-neutral ``HookResult``.
 This entrypoint only adapts Claude Code's JSON payload/output shape so existing

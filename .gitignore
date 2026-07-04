@@ -1,4 +1,4 @@
-# Python bytecode caches — keystone tooling (bin/, tools/, hooks/, tests/) runs in-tree.
+# Python bytecode caches — akmon tooling (bin/, tools/, hooks/, tests/) runs in-tree.
 __pycache__/
 *.py[cod]
 

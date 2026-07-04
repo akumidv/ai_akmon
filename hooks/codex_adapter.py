@@ -1,4 +1,4 @@
-"""Codex adapter helpers for neutral keystone hook results.
+"""Codex adapter helpers for neutral akmon hook results.
 
 Codex command-hook payload details may evolve, so this adapter accepts several common
 field spellings and degrades to plain-text reminders. Hard allow/deny decisions should
@@ -14,7 +14,7 @@ from typing import Any
 
 from hook_core import EDIT_TOOL, HookResult
 
-# Codex's file-editing tool name(s) → keystone's neutral edit-tool kind.
+# Codex's file-editing tool name(s) → akmon's neutral edit-tool kind.
 EDIT_TOOLS = frozenset({"apply_patch"})
 
 _PATCH_PATH_RE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.MULTILINE)
