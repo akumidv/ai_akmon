@@ -910,14 +910,22 @@ Claude and Codex payloads carry a `permission_mode` field with the identical enu
 (`default|acceptEdits|plan|dontAsk|bypassPermissions`), which a hook could read to decide
 `ask` vs `deny` instead of emitting an `ask` that may be a no-op in non-default modes.
 
-**Background/child-session gap (C31, new).** The same live test showed the emitted `ask`
-was **not enforced** — for either `Read` or `Bash` — in a Claude Code background/child
-session (`CLAUDE_CODE_CHILD_SESSION=1`): both tool calls completed normally with no
-permission gate, even though the hook's stdout carried `permissionDecision: "ask"` for
-both. This means the "known-good `git-commit-guard` path" assumption above may hold only
-for interactive/foreground sessions — in a background job, the hard `ask` this section
-relies on for sustained-drift enforcement (and D5's commit guard) may be a no-op. Not yet
-tested from a foreground session. See [D2 ledger](../D2_LEDGER.md) D2-10.
+**Background/child-session gap (C31) — resolved by escalation, owner decision.** The same
+live test showed the emitted `ask` was **not enforced** — for either `Read` or `Bash` — in a
+Claude Code background/child session (`CLAUDE_CODE_CHILD_SESSION=1`): both tool calls
+completed normally with no permission gate, even though the hook's stdout carried
+`permissionDecision: "ask"` for both. Rather than spend more cycles isolating background-vs-
+`acceptEdits` as the exact trigger, the owner chose the stricter posture over the diagnostic
+one: **`delegation_nudge_result` and `git_commit_guard_result` now both escalate any `ask`
+to a hard `deny` whenever `permission_mode` is not the interactive `default`** (including the
+field being absent, the worst case) — `_escalate_unattended_ask` in `hook_core.py`. `deny` is
+the one decision every vendor is confirmed (C28b) to enforce unconditionally, so a session
+that cannot be trusted to answer `ask` gets a real stop instead of a silent pass-through; the
+owner watches how this behaves in practice (fatigue vs. missed real confirmations) rather
+than gating the fix on a foreground/background repro first. Both Claude wrappers
+(`git-commit-guard.py`, `delegation-nudge.py`) read `permission_mode` straight off the
+PreToolUse payload and thread it through; Codex is unaffected for now — its `.codex/hooks.json`
+does not wire either of these two hooks. See [D2 ledger](../D2_LEDGER.md) D2-11.
 
 ### 13.3 The subagent exemption (C28d) — why a shared session_id is a trap
 

@@ -30,6 +30,18 @@ the user's last message, not from the language of your own reasoning.
   Secrets come from `.env` (gitignored); `*.env.example` carries empty placeholders.
 - A secret in a diff fails [pre-commit](../pipelines/pre-commit.md).
 
+## Privilege escalation
+
+- **Never run `sudo`, or otherwise try to elevate privileges.** The agent operates as an
+  unprivileged user by design. Hitting a permission boundary (a root-owned file, a denied
+  write) is information, not an obstacle to route around — explain it to the owner and stop;
+  do not `sudo`, `chown`, `chmod` the way past it, or otherwise reach for elevated access.
+
+> **Enforced** (not just documented) by
+> [`../hooks/hook_core.py::privilege_escalation_guard_result`](../hooks/hook_core.py) — a
+> PreToolUse hook that denies any Bash command containing `sudo` outright, wired through the
+> same entrypoint as the commit guard ([`git-commit-guard.py`](../hooks/git-commit-guard.py)).
+
 ## Commits & ownership
 
 - **Never `git add` / `commit` / `push` on the owner's behalf** unless explicitly told.

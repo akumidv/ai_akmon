@@ -4,8 +4,10 @@
 Counts consecutive orchestrator edit/shell calls since session start or the last subagent
 delegation (``Task``/``Agent`` resets the counter and re-arms the reminder) and, past the
 threshold, injects a soft reminder — once per drift episode — that the work may belong to
-a ``k-*`` delegate (MODEL.md § Capability tiers). Advisory only — nothing is ever blocked.
-This fires only for main-chain calls: a subagent call (detected via the payload's
+a ``k-*`` delegate (MODEL.md § Capability tiers). Below the ask threshold, advisory only —
+nothing is blocked; past it, a hard ``ask`` fires and escalates to ``deny`` outside the
+interactive default permission mode (C31/D2-10 — an unattended ``ask`` was observed to be a
+silent no-op). This fires only for main-chain calls: a subagent call (detected via the payload's
 ``agent_id``, present only inside a subagent) is exempt, since Claude Code shares the
 ``session_id`` between the main chain and its subagents and a k-* delegate has no ``Task``
 tool to act on the nudge anyway. The decision logic lives in ``hook_core.py``; this
@@ -32,7 +34,15 @@ def main() -> int:
         session_id = payload.get("session_id")
         is_subagent = bool(payload.get("agent_id"))
         sid = session_id if isinstance(session_id, str) else None
-        print_result(delegation_nudge_result(kind, sid, is_subagent=is_subagent))
+        permission_mode = payload.get("permission_mode")
+        print_result(
+            delegation_nudge_result(
+                kind,
+                sid,
+                is_subagent=is_subagent,
+                permission_mode=permission_mode if isinstance(permission_mode, str) else None,
+            )
+        )
     except Exception as exc:
         print(f"akmon delegation-nudge hook: {type(exc).__name__}: {exc}", file=sys.stderr)
     return 0

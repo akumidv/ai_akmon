@@ -142,7 +142,7 @@ signals: gates red twice, the delegate flags uncertainty, a contested fork emerg
 
 Model names never enter shared process docs or the committed registry as current truth. The
 registry records a **semantic selection policy per vendor** (weakest→strongest local discovery
-order, worker = lowest, reasoner = highest, orchestrator floor = highest); concrete model aliases
+order, worker = lowest, reasoner = the orchestrator's rung, orchestrator floor = highest); concrete model aliases
 come from local discovery or an explicit `--available` list and are written only to gitignored
 local config / generated harness files. If discovery is unavailable, the binding falls back to
 semantic labels and warns instead of pretending those labels are real model ids. A SessionStart
@@ -154,3 +154,30 @@ who *drafts*, never who *decides* — owner verification stays with the owner, a
 is advisory input to it, not a sign-off. Cross-vendor review uses the opposite configured provider by default: Claude
 sessions ask Codex, Codex sessions ask Claude, unless the project/session explicitly chooses
 another provider.
+
+## 11. Principles — the shape in seven lines
+
+The named invariants behind the model, so a proposed change can be tested against them.
+Each line is the index entry; the linked artifact owns the full statement.
+
+1. **Leverage** — quality investment ∝ artifact leverage: the strongest model, the freshest
+   context, and the closest owner check go where downstream error/evolution cost
+   concentrates (§10).
+2. **Enforced, not documented** — a rule that must always hold ships with a forcing
+   function (a hook), because prose alone decays out of context
+   ([README](README.md) — "the smiths are used, not just named"; the commit and analysis
+   guards in [guardrails/_common.md](guardrails/_common.md)).
+3. **Data over prose** — a binding contract lives as machine-checked data
+   ([registry.json](tools/model_routing/registry.json), the sync/verify contracts);
+   docs link the owner instead of restating it.
+4. **Drafts vs decides** — a tier changes who *drafts*, never who *decides*: owner
+   verification stays with the owner; audits and second opinions are advisory input to it
+   (§10).
+5. **Two budgets** — the goal function is quality per unit of **tokens + owner attention**;
+   both are finite, measured, and spent deliberately, not by default (§10).
+6. **Isolation by construction** — a delegate's limits are structural, not prompt trust:
+   clean context (the auditor receives only a gate-pack) and tool-set rights (audit tiers
+   hold no write tools) (§10; worked example: [examples/gate-anatomy.md](examples/gate-anatomy.md)).
+7. **One owner per fact** — every table, flow, and rule has exactly one owning artifact;
+   everything else links it, so change propagates instead of drifting
+   ([guardrails/_common.md](guardrails/_common.md) § Documentation hygiene).

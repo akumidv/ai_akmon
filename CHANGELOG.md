@@ -54,6 +54,26 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   default to Codex (`codex exec`); Codex-led sessions default to Claude
   (`claude -p --output-format text`). The runner writes the full report under the configured
   per-vendor report directory and prints a digest; it is not a blocking hook.
+- **Onboarding surface**: README rewritten as one coherent top-level document — why akmon
+  exists (the failure modes it counters + the two-budget goal function), the three axes in
+  brief, the "How a session runs" walkthrough (orchestrator + `k-*` smiths flow diagram,
+  routing-is-data, hooks), an annotated repository map, the consumer lifecycle
+  (attach → stay current → learn-loop give-back), and start-here pointers for consumers
+  (BOOTSTRAP) vs akmon developers (meta/); [MODEL.md §11](MODEL.md#11-principles--the-shape-in-seven-lines)
+  names the seven design principles (index lines linking each fact's owner);
+  [`examples/gate-anatomy.md`](examples/gate-anatomy.md) walks a real gate end to end
+  (yardstick → zone fan-out → synthesis → gate-pack → clean-context audit → validate-loop
+  evidence), sourced from the 2026-07-05 self-audit.
+
+### Changed
+- **Guardrail posture in unattended sessions (C31/D2-11)**: a hook-forced `ask` was found to
+  be a silent no-op in a Claude Code background/child session — no block, no prompt. The
+  commit guard (`git-commit-guard.py`) and the delegation nudge's hard rung
+  (`delegation-nudge.py`) now escalate any `ask` to a hard `deny` whenever the PreToolUse
+  payload's `permission_mode` is not the interactive `default` (a missing field escalates
+  too — treated as the worst case). Consumers may see a `deny` where they previously saw a
+  silently-passed `ask` in `acceptEdits`/`plan`/`dontAsk`/`bypassPermissions` sessions or
+  automation that omits `permission_mode`.
 
 ### Migration
 - Re-run `bin/sync.py` (wires the two new hooks into `.claude/settings.json`), run
@@ -65,6 +85,17 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   from local discovery / `--available`, not from committed registry data.
 
 ### Fixed
+- **README `develop/` links** (README.md:52,54) pointed at a directory that had been renamed
+  to `meta/`; MODEL.md §10 restated the pre-ADR-0006 selection policy ("reasoner = highest")
+  against the registry's dynamic `reasoner: "orchestrator"` — both now match the tree/registry.
+- **`bin/verify.py` / `meta/self_ci.py` drift (C26)**: the same reasoner-policy drift as above
+  had also reached the *checker code*, not just docs — `_check_model_routing_registry` asserted
+  `reasoner == "highest"` only, false-erroring on the registry's own ADR 0005/0006 dynamic
+  default (`"orchestrator"`); `self_ci.py`'s fixture copy-list separately omitted
+  `second_opinion.py`. Both made every verify-touching CI leg deterministically red on a clean
+  tree. Now accepts `reasoner` in `("orchestrator", "highest")`, copies `second_opinion.py` into
+  the self-CI fixture, and a new test asserts the checker passes against the *live* registry
+  (not just a fixture that happened to still say `"highest"`).
 - **Codex hook output contract**: `hooks/codex-hook.py` now reads the Codex SessionStart `cwd`
   payload and `hooks/codex_adapter.py` serializes hook results as `hookSpecificOutput` JSON, so
   Codex CLI 0.142 accepts the generated SessionStart hook instead of reporting hook failure.
