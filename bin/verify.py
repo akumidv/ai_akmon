@@ -36,8 +36,12 @@ _SKILL_REQUIRED_FRONTMATTER = ("name", "description", "when_to_use", "owner")
 #      but a akmon dev file, unlike generic words ("sync", "verify", "pytest").
 # Scanned surface = the documentary USE docs only. tools/ *executables* (.py) are NOT scanned:
 # the release tool legitimately operates on the dev tree (it runs meta/self_ci.py) — that is code
-# doing its job, not guidance naming an inert artifact. Only README.md and CHANGELOG.md may bridge
-# to the dev tree, and they are not in this surface.
+# doing its job, not guidance naming an inert artifact. README.md, CHANGELOG.md, and examples/
+# are deliberate bridges and are not in this surface: examples/ is meta-documentation *about* the
+# mechanism (worked examples with provenance citations into meta/reviews/, meta/design/, etc.), read
+# by a maintainer studying how akmon works — not operative guidance a deployed consumer agent
+# executes. Same class as README/CHANGELOG citing dev history; a consumer never attaches examples/.
+# (C35: decided explicitly rather than left as an accidental gap in _USE_OPERATIVE_GLOBS below.)
 _USE_OPERATIVE_GLOBS = (
     "roles/*.md",
     "pipelines/*.md",
@@ -413,12 +417,22 @@ class Verifier:
                 self.error(f"model-routing registry is missing vendor {vendor!r}")
                 continue
             policy = spec.get("selection_policy")
-            if isinstance(policy, dict) and policy.get("reasoner") == "highest" and policy.get("worker") == "lowest":
+            # "orchestrator" is the ADR 0005/0006 dynamic default (reasoner rides the
+            # orchestrator's own model, tools/model_routing/routing.py::compute_binding);
+            # "highest" is the pre-ADR-0005 static default, still a valid fallback for any
+            # non-"orchestrator" value there. Keep this set in sync with routing.py, not with
+            # whichever one the registry happened to say last (C26).
+            _REASONER_POLICY_VALUES = ("orchestrator", "highest")
+            if (
+                isinstance(policy, dict)
+                and policy.get("reasoner") in _REASONER_POLICY_VALUES
+                and policy.get("worker") == "lowest"
+            ):
                 self.ok(f"model-routing {vendor} semantic selection policy exists")
             else:
                 self.error(
-                    f"model-routing {vendor} needs semantic selection_policy "
-                    "with worker=lowest/reasoner=highest"
+                    f"model-routing {vendor} needs semantic selection_policy with "
+                    f"worker=lowest and reasoner in {_REASONER_POLICY_VALUES}"
                 )
             fallback = spec.get("semantic_fallback")
             fallback_keys = ("worker", "mid", "reasoner", "orchestrator")

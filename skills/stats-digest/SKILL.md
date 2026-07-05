@@ -7,9 +7,9 @@ owner: akmon
 
 # stats-digest
 
-The on-demand counterpart to the zero-token delegation log
-([design](../../meta/design/model-routing.md#44-routing-observability-code--delegation-log-at-zero-token-cost),
-task C13). All *parsing* is code — the
+The on-demand counterpart to the zero-token delegation log: that log is written by a hook
+at zero model cost on every delegation, and this skill turns it into an on-request digest.
+All *parsing* is code — the
 [`tools/model_routing/stats.py`](../../tools/model_routing/stats.py) tool — so it costs no
 model tokens; the only model work is the learn-loop pass, which runs **in a subagent**,
 never in the orchestrator.

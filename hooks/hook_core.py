@@ -134,7 +134,60 @@ def find_project_root(start: Path | None = None) -> Path:
     return current
 
 
-def git_commit_guard_result(command: str, branch: str | None = None) -> HookResult | None:
+
+# ask->deny escalation for unattended sessions (C31/D2-10, owner decision). A live test
+# showed a hook-forced `ask` is a silent no-op — no prompt, no block — in a Claude Code
+# background/child session running in `acceptEdits` mode; the PreToolUse payload carries a
+# `permission_mode` field (same enum on Codex) that tells a hook whether an interactive
+# owner is actually there to answer. Only the strict `default` mode is known to gate on
+# `ask`; everywhere else (or the field missing outright) the owner asked to be stricter
+# rather than silently pass through, so the decision is escalated to a hard `deny` — the one
+# decision every vendor is confirmed to enforce unconditionally.
+_INTERACTIVE_DEFAULT_PERMISSION_MODE = "default"
+
+
+def _escalate_unattended_ask(result: HookResult, permission_mode: str | None) -> HookResult:
+    if result.permission_decision != "ask" or permission_mode == _INTERACTIVE_DEFAULT_PERMISSION_MODE:
+        return result
+    return HookResult(
+        event_name=result.event_name,
+        additional_context=result.additional_context,
+        permission_decision="deny",
+        permission_reason=(
+            f"{result.permission_reason} [escalated ask→deny: permission_mode="
+            f"{permission_mode!r} is not the interactive default, so 'ask' cannot be trusted "
+            "to reach the owner (D2-10/C31) — re-run from an attended default-mode session if "
+            "this was genuinely intended.]"
+        ),
+        system_message=result.system_message,
+    )
+
+
+_SUDO_RE = re.compile(r"\bsudo\b")
+
+
+def privilege_escalation_guard_result(command: str) -> HookResult | None:
+    """Deny any Bash command that invokes ``sudo``, unconditionally.
+
+    The agent runs as an unprivileged user by design; a command reaching for ``sudo`` is
+    either probing for elevated access or trying to route around a permission boundary that
+    exists on purpose (e.g. a root-owned file). Neither is something the agent decides for
+    itself — if elevated access is genuinely needed, the owner runs it themselves. No ask:
+    the answer does not depend on session attentiveness, so there is nothing to escalate.
+    """
+    if not _SUDO_RE.search(command):
+        return None
+    return HookResult(
+        event_name="PreToolUse",
+        permission_decision="deny",
+        permission_reason="Privilege-escalation guardrail: 'sudo' is never run by the agent. "
+        "If elevated access is genuinely required, ask the owner to run the command themselves.",
+    )
+
+
+def git_commit_guard_result(
+    command: str, branch: str | None = None, *, permission_mode: str | None = None
+) -> HookResult | None:
     if "git" not in command:
         return None
 
@@ -150,22 +203,28 @@ def git_commit_guard_result(command: str, branch: str | None = None) -> HookResu
         return re.search(r"\bgit\b[^|&;]*\b" + subcommand + r"\b", command) is not None
 
     if is_git("push") or is_git("tag") or is_git("merge"):
-        return HookResult(
-            event_name="PreToolUse",
-            permission_decision="ask",
-            permission_reason="Commit guardrail: the owner owns commits. push/tag/merge land history "
-            "— confirm this is explicitly requested.",
+        return _escalate_unattended_ask(
+            HookResult(
+                event_name="PreToolUse",
+                permission_decision="ask",
+                permission_reason="Commit guardrail: the owner owns commits. push/tag/merge land "
+                "history — confirm this is explicitly requested.",
+            ),
+            permission_mode,
         )
 
     if is_git("commit"):
         resolved_branch = current_git_branch() if branch is None else branch
         if resolved_branch in ("main", "master") or not resolved_branch:
-            return HookResult(
-                event_name="PreToolUse",
-                permission_decision="ask",
-                permission_reason=f"Commit guardrail: the owner owns commits. A commit on "
-                f"'{resolved_branch or 'detached HEAD'}' is a landing commit — confirm "
-                "explicitly, or branch to backup/* first.",
+            return _escalate_unattended_ask(
+                HookResult(
+                    event_name="PreToolUse",
+                    permission_decision="ask",
+                    permission_reason=f"Commit guardrail: the owner owns commits. A commit on "
+                    f"'{resolved_branch or 'detached HEAD'}' is a landing commit — confirm "
+                    "explicitly, or branch to backup/* first.",
+                ),
+                permission_mode,
             )
 
     return None
@@ -513,7 +572,13 @@ def delegation_ask_message(count: int) -> str:
     )
 
 
-def delegation_nudge_result(tool_name: str, session_id: str | None, *, is_subagent: bool = False) -> HookResult | None:
+def delegation_nudge_result(
+    tool_name: str,
+    session_id: str | None,
+    *,
+    is_subagent: bool = False,
+    permission_mode: str | None = None,
+) -> HookResult | None:
     # C28d: subagent-originated calls (agent_id present in the payload) must never touch
     # the counter. k-* delegates can't delegate (no Task tool), so nudging/asking them is
     # noise and the hard ask blocks their legit reads. The session_id is shared with the
@@ -560,10 +625,13 @@ def delegation_nudge_result(tool_name: str, session_id: str | None, *, is_subage
             ask_marker.write_text("seen", encoding="utf-8")
         except OSError:
             pass
-        return HookResult(
-            event_name="PreToolUse",
-            permission_decision="ask",
-            permission_reason=delegation_ask_message(count),
+        return _escalate_unattended_ask(
+            HookResult(
+                event_name="PreToolUse",
+                permission_decision="ask",
+                permission_reason=delegation_ask_message(count),
+            ),
+            permission_mode,
         )
     if count >= delegation_nudge_threshold():
         if marker.exists():

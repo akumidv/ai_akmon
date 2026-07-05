@@ -68,33 +68,37 @@ def test_co_authored_check_precedes_branch_check():
 
 def test_push_tag_merge_ask_for_confirmation():
     for sub in ("push", "tag", "merge"):
-        result = git_commit_guard_result(f"git {sub} origin main", branch="feature/x")
+        result = git_commit_guard_result(
+            f"git {sub} origin main", branch="feature/x", permission_mode="default"
+        )
         assert result is not None, sub
         assert result.permission_decision == "ask", sub
         assert "owner owns commits" in result.permission_reason
 
 
 def test_push_with_inline_config_is_still_caught():
-    result = git_commit_guard_result("git -c user.name=x push origin main", branch="feature/x")
+    result = git_commit_guard_result(
+        "git -c user.name=x push origin main", branch="feature/x", permission_mode="default"
+    )
     assert result is not None
     assert result.permission_decision == "ask"
 
 
 def test_commit_on_main_asks():
-    result = git_commit_guard_result('git commit -m "x"', branch="main")
+    result = git_commit_guard_result('git commit -m "x"', branch="main", permission_mode="default")
     assert result is not None
     assert result.permission_decision == "ask"
     assert "main" in result.permission_reason
 
 
 def test_commit_on_master_asks():
-    result = git_commit_guard_result('git commit -m "x"', branch="master")
+    result = git_commit_guard_result('git commit -m "x"', branch="master", permission_mode="default")
     assert result is not None
     assert result.permission_decision == "ask"
 
 
 def test_commit_on_empty_branch_asks_with_detached_head_wording():
-    result = git_commit_guard_result('git commit -m "x"', branch="")
+    result = git_commit_guard_result('git commit -m "x"', branch="", permission_mode="default")
     assert result is not None
     assert result.permission_decision == "ask"
     assert "detached HEAD" in result.permission_reason
@@ -117,9 +121,45 @@ def test_word_boundary_avoids_substring_match():
 
 def test_resolved_branch_uses_live_git_when_branch_is_none(monkeypatch):
     monkeypatch.setattr(hook_core, "current_git_branch", lambda: "main")
-    result = git_commit_guard_result('git commit -m "x"')  # branch defaults to live lookup
+    result = git_commit_guard_result(
+        'git commit -m "x"', permission_mode="default"
+    )  # branch defaults to live lookup
     assert result is not None
     assert result.permission_decision == "ask"
+
+
+# --------------------------------------------------------------------------------------
+# ask -> deny escalation for unattended sessions (C31/D2-10)
+# --------------------------------------------------------------------------------------
+
+
+def test_ask_escalates_to_deny_outside_interactive_default():
+    for mode in (None, "acceptEdits", "plan", "dontAsk", "bypassPermissions", "somethingUnknown"):
+        result = git_commit_guard_result(
+            "git commit -m 'x'", branch="main", permission_mode=mode
+        )
+        assert result is not None, mode
+        assert result.permission_decision == "deny", mode
+        assert "escalated ask" in result.permission_reason, mode
+        assert "main" in result.permission_reason, mode  # original reason text preserved
+
+
+def test_ask_stays_ask_in_interactive_default_mode():
+    result = git_commit_guard_result('git commit -m "x"', branch="main", permission_mode="default")
+    assert result is not None
+    assert result.permission_decision == "ask"
+    assert "escalated" not in result.permission_reason
+
+
+def test_escalation_does_not_touch_deny_decisions():
+    # The co-authored-by guard is already a `deny` — escalation logic should leave it alone
+    # (no double-escalation wording) regardless of permission_mode.
+    result = git_commit_guard_result(
+        'git commit -m "Co-authored-by: x"', branch="feature/x", permission_mode="acceptEdits"
+    )
+    assert result is not None
+    assert result.permission_decision == "deny"
+    assert "escalated" not in result.permission_reason
 
 
 def test_current_git_branch_returns_string():
@@ -657,8 +697,9 @@ def test_delegation_nudge_graduates_to_ask_on_sustained_drift(monkeypatch, tmp_p
     assert "Delegation check" in advisory.additional_context
     # Silenced by the advisory marker while under the ask threshold.
     assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
-    # At the ask threshold, a hard `ask` fires — with a non-empty reason.
-    ask = hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1")
+    # At the ask threshold, a hard `ask` fires — with a non-empty reason — in an interactive
+    # default-mode session.
+    ask = hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1", permission_mode="default")
     assert isinstance(ask, HookResult)
     assert ask.permission_decision == "ask"
     assert ask.permission_reason
@@ -671,6 +712,19 @@ def test_delegation_nudge_graduates_to_ask_on_sustained_drift(monkeypatch, tmp_p
     reprised_advisory = hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1")
     assert isinstance(reprised_advisory, HookResult)
     assert reprised_advisory.permission_decision is None
+
+
+def test_delegation_nudge_ask_escalates_to_deny_outside_interactive_default(monkeypatch, tmp_path):
+    # C31/D2-10: a background/child session (or any non-default permission_mode) was observed
+    # to silently no-op a hook-forced `ask` — escalate to `deny` there instead.
+    _nudge_setup(monkeypatch, tmp_path, threshold=2, ask_threshold=4)
+    for _ in range(3):
+        hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1")
+    result = hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1", permission_mode="acceptEdits")
+    assert isinstance(result, HookResult)
+    assert result.permission_decision == "deny"
+    assert "escalated ask" in result.permission_reason
+    assert "4 consecutive" in result.permission_reason
 
 
 # --------------------------------------------------------------------------------------

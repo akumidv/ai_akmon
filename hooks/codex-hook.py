@@ -90,9 +90,10 @@ def main(argv: list[str] | None = None) -> int:
     elif args.hook == "git-commit-guard":
         # Intentionally not wired by sync.py yet: Codex hard allow/deny output must be verified
         # before akmon claims enforcement. Keep the mode available for protocol spikes.
-        from hook_core import git_commit_guard_result
+        from hook_core import git_commit_guard_result, privilege_escalation_guard_result
 
-        print_result(git_commit_guard_result(command(payload)))
+        cmd = command(payload)
+        print_result(privilege_escalation_guard_result(cmd) or git_commit_guard_result(cmd))
     return 0
 
 

@@ -192,6 +192,58 @@ def test_main_strict_passes_on_compliant_project(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
+# model-routing registry — reasoner policy (C26): the checker drifted from the live
+# registry (asserted reasoner=="highest" only) after ADR 0005/0006 made it dynamic
+# (reasoner=="orchestrator"), silently red-lining every verify-touching CI leg. Test
+# against the *live* registry, not just a fixture that happens to still say "highest".
+# --------------------------------------------------------------------------------------
+
+_AKMON_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_live_registry_reasoner_policy_passes_the_checker():
+    import json
+
+    registry = json.loads(
+        (_AKMON_ROOT / "tools" / "model_routing" / "registry.json").read_text(encoding="utf-8")
+    )
+    verifier = verify.Verifier(_AKMON_ROOT)
+    verifier._check_model_routing_registry(registry)
+    errors = _messages(verifier.findings, "error")
+    assert not errors, errors
+
+
+def test_reasoner_policy_accepts_dynamic_orchestrator_value(tmp_path):
+    root = _make_project(tmp_path)
+    registry_path = root / "_aitna" / "akmon" / "tools" / "model_routing" / "registry.json"
+    import json
+
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    for vendor in ("anthropic", "openai"):
+        registry[vendor]["selection_policy"]["reasoner"] = "orchestrator"
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert "error" not in _levels(verifier.findings), _messages(verifier.findings, "error")
+
+
+def test_reasoner_policy_rejects_unknown_value(tmp_path):
+    root = _make_project(tmp_path)
+    registry_path = root / "_aitna" / "akmon" / "tools" / "model_routing" / "registry.json"
+    import json
+
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry["anthropic"]["selection_policy"]["reasoner"] = "lowest"
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+
+    verifier = verify.Verifier(root)
+    verifier.run()
+    errors = _messages(verifier.findings, "error")
+    assert any("semantic selection_policy" in message for message in errors), errors
+
+
+# --------------------------------------------------------------------------------------
 # USE-surface isolation (ADR 0003 §6): the surface must not name dev artifacts
 # --------------------------------------------------------------------------------------
 
@@ -256,6 +308,31 @@ def test_generic_dev_vocabulary_is_allowed(tmp_path):
     )
     verifier = verify.Verifier(root)
     verifier.run()
+    assert not _isolation_errors(verifier), _isolation_errors(verifier)
+
+
+def test_live_tree_use_surface_isolation_passes():
+    """Regression for C35: skills/stats-digest/SKILL.md cited meta/design/model-routing.md,
+    a real leak on the live tree that the fixture-only tests above could not catch."""
+    verifier = verify.Verifier(_AKMON_ROOT.parent.parent)
+    verifier.check_use_surface_isolation()
+    assert not _isolation_errors(verifier), _isolation_errors(verifier)
+
+
+def test_examples_dir_is_deliberately_not_scanned_for_use_surface(tmp_path):
+    """C35: examples/ bridges to the dev tree the same way README/CHANGELOG do (worked
+    examples with provenance citations for a maintainer, not operative consumer guidance) —
+    confirmed deliberate, not an accidental gap in _USE_OPERATIVE_GLOBS."""
+    root = _make_project(tmp_path)
+    akmon = root / "_aitna" / "akmon"
+    examples_dir = akmon / "examples"
+    examples_dir.mkdir()
+    (examples_dir / "gate-anatomy.md").write_text(
+        "# example\n\nSee [the audit](../meta/reviews/review-20260705.md).\n",
+        encoding="utf-8",
+    )
+    verifier = verify.Verifier(root)
+    verifier.check_use_surface_isolation()
     assert not _isolation_errors(verifier), _isolation_errors(verifier)
 
 

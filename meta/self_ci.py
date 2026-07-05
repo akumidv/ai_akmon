@@ -91,6 +91,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "tools/model_routing/registry.json",
         "tools/model_routing/routing.py",
         "tools/model_routing/init.py",
+        "tools/model_routing/second_opinion.py",
     ):
         source = akmon_root / relative
         text = source.read_text(encoding="utf-8") if source.is_file() else "fixture placeholder\n"
