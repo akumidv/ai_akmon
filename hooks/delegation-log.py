@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 from claude_adapter import load_payload, print_result
-from hook_core import HookResult, find_project_root, akmon_root
+from hook_core import HookResult, akmon_root, find_project_root
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools" / "model_routing"))
 
