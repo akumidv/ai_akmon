@@ -10,9 +10,11 @@ Run from the akmon root::
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import hook_core
+import pytest
 from hook_core import (
     HookResult,
     agent_names,
@@ -26,9 +28,40 @@ from hook_core import (
     is_code_path,
     is_d2_sensitive_path,
     is_planning_doc,
+    privilege_escalation_guard_result,
     role_on_code_result,
     session_start_result,
 )
+
+# The D2 config readers use ``tomllib`` (3.11+ stdlib) and degrade to silent on older
+# hosts by design (see hook_core's own comment) — these tests assert the full behaviour.
+requires_tomllib = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="tomllib is 3.11+ stdlib; .akmon.toml reading degrades to silent on older hosts by design",
+)
+
+# --------------------------------------------------------------------------------------
+# privilege_escalation_guard_result
+# --------------------------------------------------------------------------------------
+
+
+def test_sudo_command_is_denied():
+    for command in ("sudo rm -rf /", "sudo -n true", "apt-get update && sudo apt-get install x"):
+        result = privilege_escalation_guard_result(command)
+        assert result is not None
+        assert result.permission_decision == "deny"
+        assert "sudo" in result.permission_reason
+
+
+def test_command_without_sudo_is_ignored():
+    assert privilege_escalation_guard_result("ls -la") is None
+    assert privilege_escalation_guard_result("git commit -m x") is None
+
+
+def test_sudo_as_substring_of_another_word_is_not_matched():
+    # word boundary: a path/name that merely contains "sudo" must not trip the guard.
+    assert privilege_escalation_guard_result("ls /opt/pseudo-tool") is None
+
 
 # --------------------------------------------------------------------------------------
 # git_commit_guard_result
@@ -334,6 +367,7 @@ def _make_d2_project(tmp_path: Path, *, globs: str | None = '["src/**/lib/**"]')
     return root
 
 
+@requires_tomllib
 def test_d2_sensitive_paths_reads_configured_globs(tmp_path):
     root = _make_d2_project(tmp_path)
     assert d2_sensitive_paths(root) == ["src/**/lib/**"]
@@ -371,6 +405,7 @@ def test_d2_ledger_reminder_silent_on_non_sensitive_path(monkeypatch, tmp_path):
     assert d2_ledger_reminder_result(hook_core.EDIT_TOOL, str(root / "README.md"), "s1", root) is None
 
 
+@requires_tomllib
 def test_d2_ledger_reminder_fires_once_per_session(monkeypatch, tmp_path):
     _isolate_marker_dir(monkeypatch, tmp_path)
     root = _make_d2_project(tmp_path)
@@ -429,6 +464,7 @@ def test_d2_pending_count_reads_pending_rows(tmp_path):
     assert d2_pending_count(root) == 2
 
 
+@requires_tomllib
 def test_d2_tracking_active_with_config(tmp_path):
     assert d2_tracking_active(_make_d2_project(tmp_path)) is True
 

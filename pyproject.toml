@@ -1,0 +1,72 @@
+[project]
+name = "akmon"
+version = "0.3.0.dev0"
+description = "akmon — the akmon AI-agent development standard, as an installable package."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+authors = [
+    {name = "Andrei Kuminov", email = "akuminov@gmail.com"}
+]
+# Zero runtime dependencies is a locked contract (ADR 0009 §1) — everything under
+# src/akmon/ is stdlib only; verify should assert this stays true.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/akumidv/ai_akmon"
+Repository = "https://github.com/akumidv/ai_akmon"
+
+[project.scripts]
+akmon = "akmon.cli:main"
+
+# Dev-only tooling (the runtime stays zero-dep — ADR 0009 §1). `uv sync` installs the
+# `dev` group by default; CI runs `uv run pytest` / `uv run ruff` through it.
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/akmon"]
+
+# The standard tree ships as package data (ADR 0009 §1 — full tree incl. meta/, for parity
+# with the submodule mount). Force-include each top-level member explicitly (not "." ) so the
+# embedded copy never recurses into src/ or this pyproject.toml itself.
+[tool.hatch.build.targets.wheel.force-include]
+"ARCHETYPES.md" = "akmon/_tree/ARCHETYPES.md"
+"BOOTSTRAP.md" = "akmon/_tree/BOOTSTRAP.md"
+"CHANGELOG.md" = "akmon/_tree/CHANGELOG.md"
+"LICENSE" = "akmon/_tree/LICENSE"
+"MODEL.md" = "akmon/_tree/MODEL.md"
+"README.md" = "akmon/_tree/README.md"
+"bin" = "akmon/_tree/bin"
+"examples" = "akmon/_tree/examples"
+"guardrails" = "akmon/_tree/guardrails"
+"hooks" = "akmon/_tree/hooks"
+"meta" = "akmon/_tree/meta"
+"pipelines" = "akmon/_tree/pipelines"
+"profiles" = "akmon/_tree/profiles"
+"roles" = "akmon/_tree/roles"
+"skills" = "akmon/_tree/skills"
+"tools" = "akmon/_tree/tools"
+
+[tool.hatch.build]
+exclude = [
+    "**/__pycache__",
+    "**/*.py[cod]",
+    "**/.pytest_cache",
+    "**/.git",
+    "**/.git/**",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "UP", "B"]

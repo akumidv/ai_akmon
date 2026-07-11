@@ -1,0 +1,37 @@
+name: CI
+
+# Every branch commit runs the full gate; no separate pull_request trigger — same-repo
+# PR heads are already covered by their push runs.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the package floor (pyproject requires-python); 3.13 is current.
+        # tomllib-dependent d2 tests self-skip below 3.11 (see meta/tests markers).
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Installs the dev group (pytest, ruff) and builds/installs akmon itself —
+      # a wheel-build smoke test on every push.
+      - name: Sync environment
+        run: uv sync
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Tests
+        run: uv run pytest meta/tests
+
+      - name: Self CI (synthetic consumer fixture)
+        run: uv run python meta/self_ci.py

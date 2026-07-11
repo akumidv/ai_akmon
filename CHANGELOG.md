@@ -64,6 +64,12 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   [`examples/gate-anatomy.md`](examples/gate-anatomy.md) walks a real gate end to end
   (yardstick → zone fan-out → synthesis → gate-pack → clean-context audit → validate-loop
   evidence), sourced from the 2026-07-05 self-audit.
+- **Privilege-escalation guardrail** ([guardrails/_common.md](guardrails/_common.md) §
+  Privilege escalation): `hooks/hook_core.py::privilege_escalation_guard_result` denies any
+  Bash command containing `sudo` outright — no ask, unconditional — composed into the same
+  PreToolUse entrypoint as the commit guard (`git-commit-guard.py`, and the Codex
+  `git-commit-guard` hook mode). A permission boundary (a root-owned file, a denied write) is
+  something the agent reports to the owner, never routes around.
 
 ### Changed
 - **Guardrail posture in unattended sessions (C31/D2-11)**: a hook-forced `ask` was found to
