@@ -91,6 +91,11 @@ class Verifier:
         # <aitna>/akmon. Every path below derives from these so a relocated layer still verifies.
         self.aitna = sync_tool.aitna_root_name()
         self.akmon = f"{self.aitna}/akmon"
+        # The standard tree this project actually operates against: the mount for mounted
+        # modes, the embedded tree for package mode (ADR 0009 §4) — may live outside
+        # ``self.root`` entirely. Used by ``check_standard_path`` and the checks that
+        # validate the standard's own shipped content rather than the consumer's use of it.
+        self.standard_root = sync_tool.standard_tree_root(self.root)
 
     def ok(self, message: str) -> None:
         self.findings.append(Finding("ok", message))
@@ -110,32 +115,61 @@ class Verifier:
         self.error(f"{relative} is missing")
         return False
 
+    def _display_path(self, path: Path) -> str:
+        """``path`` rendered relative to the consumer root when possible (mounted mode: the
+        standard tree lives under ``self.root``, so this matches ``check_path``'s wording
+        exactly — byte-identical output for existing mounted consumers). Package mode's
+        embedded tree can live outside ``self.root`` entirely, so this falls back to a
+        ``standard tree:``-prefixed path relative to ``self.standard_root``.
+        """
+        try:
+            return str(path.relative_to(self.root))
+        except ValueError:
+            return f"standard tree:{path.relative_to(self.standard_root)}"
+
+    def check_standard_path(self, relative: str, *, kind: str = "file") -> bool:
+        """Like ``check_path``, resolved against ``self.standard_root`` instead of
+        ``self.root`` — for content that ships with the standard itself (roles, pipelines,
+        model-routing tools, …) rather than being generated into the consumer repo.
+        """
+        path = self.standard_root / relative
+        exists = path.is_dir() if kind == "dir" else path.is_file()
+        display = self._display_path(path)
+        if exists:
+            self.ok(f"{display} exists")
+            return True
+        self.error(f"{display} is missing")
+        return False
+
     def check_basic_layout(self) -> None:
-        aitna, akmon = self.aitna, self.akmon
+        aitna = self.aitna
         for relative in (
             "AGENTS.md",
             f"{aitna}/TASKS.md",
-            f"{akmon}/README.md",
-            f"{akmon}/BOOTSTRAP.md",
-            f"{akmon}/ARCHETYPES.md",
-            f"{akmon}/CHANGELOG.md",
-            f"{akmon}/MODEL.md",
-            f"{akmon}/roles/README.md",
-            f"{akmon}/roles/review.md",
-            f"{akmon}/roles/architect.md",
-            f"{akmon}/roles/engineer.md",
-            f"{akmon}/roles/learn.md",
-            f"{akmon}/roles/release.md",
-            f"{akmon}/guardrails/_common.md",
-            f"{akmon}/pipelines/pre-commit.md",
-            f"{akmon}/pipelines/code-flow.md",
-            f"{akmon}/pipelines/design-flow.md",
-            f"{akmon}/pipelines/release.md",
-            f"{akmon}/pipelines/tasks.md",
-            f"{akmon}/bin/sync.py",
-            f"{akmon}/bin/verify.py",
         ):
             self.check_path(relative)
+        for relative in (
+            "README.md",
+            "BOOTSTRAP.md",
+            "ARCHETYPES.md",
+            "CHANGELOG.md",
+            "MODEL.md",
+            "roles/README.md",
+            "roles/review.md",
+            "roles/architect.md",
+            "roles/engineer.md",
+            "roles/learn.md",
+            "roles/release.md",
+            "guardrails/_common.md",
+            "pipelines/pre-commit.md",
+            "pipelines/code-flow.md",
+            "pipelines/design-flow.md",
+            "pipelines/release.md",
+            "pipelines/tasks.md",
+            "bin/sync.py",
+            "bin/verify.py",
+        ):
+            self.check_standard_path(relative)
         for relative in (f"{aitna}/agents", f"{aitna}/memory"):
             self.check_path(relative, kind="dir")
 
@@ -149,7 +183,7 @@ class Verifier:
         artifacts. Generic process vocabulary ("file an ADR") stays allowed. README.md and
         CHANGELOG.md are the deliberate bridges and are not in this surface.
         """
-        akmon = self.root / self.akmon
+        akmon = self.standard_root
         if not akmon.is_dir():
             return
         sources: list[Path] = []
@@ -173,7 +207,7 @@ class Verifier:
 
     def _isolation_violations(self, source: Path) -> list[str]:
         text = source.read_text(encoding="utf-8")
-        relative = source.relative_to(self.root)
+        relative = self._display_path(source)
         found: list[str] = []
         for cite_re in (_NUMBERED_DR_RE, _ROADMAP_CITE_RE):
             found.extend(f"{relative} → cites {cite}" for cite in cite_re.findall(text))
@@ -191,16 +225,35 @@ class Verifier:
         text = path.read_text(encoding="utf-8")
         if _GENERATED_MARKER in text:
             self.error("AGENTS.md must be a hand-reviewed source document, not generated by sync.py")
-        required = {
-            "akmon block": "## Dev layer — akmon",
-            "model link": f"{self.akmon}/README.md",
-            "archetype link": "ARCHETYPES.md",
-            "role link": f"{self.akmon}/roles/",
-            "memory rule": f"{self.aitna}/memory",
-            "owner verifies directive": "D2",
-            "owner owns commits directive": "D5",
-            "secrets rule": ".env",
-        }
+        if sync_tool.is_package_mode(self.root):
+            # Provisional package-mode contract (ADR 0009 §4-5, pinned by the owner ahead of
+            # C37 slice B's verify.py adaptation): no mounted tree to link, so the
+            # load-bearing anchor is the materialized guardrails import (the always-on
+            # surface `akmon sync` writes to `.akmon/`); `akmon path` is how an agent reaches
+            # the rest of the standard (roles, MODEL.md) locally. Revisit this exact wording
+            # once the alphavar pilot's findings fold back, before the first PyPI publish
+            # (packaging-uvx-init.md §Open points).
+            required = {
+                "akmon block": "## Dev layer — akmon",
+                "guardrails import": f"@{self.aitna}/.akmon/guardrails/_common.md",
+                "akmon path pointer": "akmon path",
+                "archetype link": "ARCHETYPES.md",
+                "memory rule": f"{self.aitna}/memory",
+                "owner verifies directive": "D2",
+                "owner owns commits directive": "D5",
+                "secrets rule": ".env",
+            }
+        else:
+            required = {
+                "akmon block": "## Dev layer — akmon",
+                "model link": f"{self.akmon}/README.md",
+                "archetype link": "ARCHETYPES.md",
+                "role link": f"{self.akmon}/roles/",
+                "memory rule": f"{self.aitna}/memory",
+                "owner verifies directive": "D2",
+                "owner owns commits directive": "D5",
+                "secrets rule": ".env",
+            }
         missing = [name for name, snippet in required.items() if snippet not in text]
         if missing:
             self.error(f"AGENTS.md akmon block is missing: {', '.join(missing)}")
@@ -288,7 +341,7 @@ class Verifier:
 
     def _skill_frontmatter(self, source: Path) -> dict[str, str] | None:
         lines = source.read_text(encoding="utf-8").splitlines()
-        relative = source.relative_to(self.root)
+        relative = self._display_path(source)
         if not lines or lines[0].strip() != "---":
             self.error(f"{relative} is missing required frontmatter")
             return None
@@ -307,7 +360,7 @@ class Verifier:
         return None
 
     def check_skill_contract(self, source: Path) -> None:
-        relative = source.relative_to(self.root)
+        relative = self._display_path(source)
         fields = self._skill_frontmatter(source)
         if fields is None:
             return
@@ -367,6 +420,12 @@ class Verifier:
             self.warn(f"{self.aitna}/TASKS.md contains dates; dates are noise — derive them from git history")
 
     def check_hooks(self) -> None:
+        if sync_tool.is_package_mode(self.root):
+            # Redundant with check_generated_pointers in package mode: that check already
+            # verifies the materialized .akmon/hooks/*.py exist *and* match content exactly
+            # (this check only verifies mounted-tree source existence).
+            self.ok("package mode: mounted-tree checks skipped (covered by generated-pointers)")
+            return
         for script in (
             "hook_core.py",
             "claude_adapter.py",
@@ -388,13 +447,13 @@ class Verifier:
         the re-init instruction); verify only guards the committed contract surface.
         """
         for relative in (
-            f"{self.akmon}/tools/model_routing/registry.json",
-            f"{self.akmon}/tools/model_routing/routing.py",
-            f"{self.akmon}/tools/model_routing/init.py",
-            f"{self.akmon}/tools/model_routing/second_opinion.py",
+            "tools/model_routing/registry.json",
+            "tools/model_routing/routing.py",
+            "tools/model_routing/init.py",
+            "tools/model_routing/second_opinion.py",
         ):
-            self.check_path(relative)
-        registry_path = self.root / self.akmon / "tools" / "model_routing" / "registry.json"
+            self.check_standard_path(relative)
+        registry_path = self.standard_root / "tools" / "model_routing" / "registry.json"
         if registry_path.is_file():
             try:
                 registry = sync_tool._read_json(registry_path)
@@ -488,10 +547,15 @@ class Verifier:
             self.warn("no GitHub Actions workflows found")
             return
         workflow_text = "\n".join(path.read_text(encoding="utf-8") for path in workflows)
-        required = (
-            f"python3 {self.akmon}/bin/sync.py --check",
-            f"python3 {self.akmon}/bin/verify.py --strict",
-        )
+        if sync_tool.is_package_mode(self.root):
+            # Pinned package-mode contract: the CLI, not a path into a mount that doesn't
+            # exist (ADR 0009 §4). Substring match so `uv run akmon sync --check` etc. pass.
+            required = ("akmon sync --check", "akmon verify --strict")
+        else:
+            required = (
+                f"python3 {self.akmon}/bin/sync.py --check",
+                f"python3 {self.akmon}/bin/verify.py --strict",
+            )
         missing = [command for command in required if command not in workflow_text]
         if missing:
             self.warn(f"CI should run: {', '.join(missing)}")
@@ -505,6 +569,11 @@ class Verifier:
         trust-based (ADR 0001 §9). A missing CHANGELOG.md is not an error here — only a present
         one that has nowhere to record pending changes.
         """
+        if sync_tool.is_package_mode(self.root):
+            # Standard-internal discipline concern (the standard's own changelog, not this
+            # consumer's integration surface) — not meaningful to re-check per consumer.
+            self.ok("package mode: mounted-tree checks skipped (covered by generated-pointers)")
+            return
         path = self.root / self.akmon / "CHANGELOG.md"
         if not path.is_file():
             return
@@ -521,16 +590,19 @@ class Verifier:
         CHANGELOG to compute which Breaking/migration entries a realign still needs to verify.
         The agent writes it on attach/realign (sync.py is stdlib-only and cannot run `git describe`).
 
-        It is a **consumer** artifact, so this check applies only when akmon is mounted as a
-        submodule (`<AITNA_ROOT>/akmon/` present) — verify run against the akmon repo itself
-        skips it. Even on a consumer, a *missing* record is a non-gating note (the project may
-        predate this contract; the fix is a realign), so it never fails `--strict`; only a
-        *present but malformed* record — missing the required top-level keys — is an error.
+        It is a **consumer** artifact, so this check applies when akmon is mounted as a
+        submodule (`<AITNA_ROOT>/akmon/` present) *or* the record itself exists (package
+        mode has no mount at all, ADR 0009 §4 — `.akmon.toml` is the only trace a
+        package-mode consumer leaves) — verify run against the akmon repo itself (no mount,
+        no record) skips it. Even on a consumer, a *missing* record is a non-gating note (the
+        project may predate this contract; the fix is a realign), so it never fails
+        `--strict`; only a *present but malformed* record — missing the required top-level
+        keys — is an error.
         """
-        if not (self.root / self.akmon).is_dir():
-            return  # akmon repo itself, or not a akmon consumer — no integration record expected
         name = f"{self.aitna}/.akmon.toml"
         path = self.root / self.aitna / ".akmon.toml"
+        if not (self.root / self.akmon).is_dir() and not path.is_file():
+            return  # akmon repo itself, or not a akmon consumer — no integration record expected
         if not path.is_file():
             self.ok(
                 f"{name} not present (optional; a realign writes it so future "

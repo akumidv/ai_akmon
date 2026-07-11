@@ -54,3 +54,9 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   migration). Containment (anvil inside volcano = `akmon/` inside `_aitna/`) fixes the mapping;
   reservoir for future entities (keraunos, Hephaistos, …). Supersedes V1's English `anvil`; execution
   in V1. Grandfathers older ADRs.
+- [0009 — Packaging: the `akmon` package as carrier, four mount modes incl. `package`](0009-packaging-package-carrier-and-mount-modes.md)
+  — one distribution (thin CLI + full tree as package data, hatchling, zero runtime deps, floor 3.9,
+  PyPI name `akmon`); mount modes `submodule|vendored|subtree|package`; `package` = dev-group pin +
+  `<AITNA_ROOT>/.akmon/` materialization of the always-on surface (hooks, guardrails), no tree in the
+  repo, no skew by construction; init pins the latest tag (`--ref` to override); V1 sweep before first
+  publish. Pilot: alphavar.

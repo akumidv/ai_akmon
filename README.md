@@ -8,7 +8,11 @@ project**. It is mounted into every project as a git submodule at `_aitna/akmon/
 [`ai_akmon`](https://github.com/akumidv/ai_akmon)) and is **LLM-agnostic**: plain
 Markdown/JSON that any assistant (Claude, Codex,
 Gemini, Copilot, …) or a human can read. No vendor's tooling is privileged; the single
-entry point in a consuming project is its root `AGENTS.md`.
+entry point in a consuming project is its root `AGENTS.md`. The submodule is the default
+mount mode; a tree-less **`package`** mode — akmon installed as a pinned dev dependency,
+only hooks/guardrails materialized into the repo — is designed and pending implementation
+([ADR 0009](meta/decisions/0009-packaging-package-carrier-and-mount-modes.md),
+[BOOTSTRAP.md §F](BOOTSTRAP.md)).
 
 **New consumer? Start at [BOOTSTRAP.md](BOOTSTRAP.md)** — it attaches akmon to a project.
 Already attached? **[MODEL.md](MODEL.md)** is the operative rulebook.
@@ -204,3 +208,14 @@ does **not** load it; the operative standard above is self-contained
 ([meta/CONCEPT.md](meta/CONCEPT.md) holds the full rationale). Separation locked in meta
 ADR 0003. **Working on akmon itself? Start there** — constitution first, then the ADRs and
 [meta/TASKS.md](meta/TASKS.md).
+
+The dev bench is a **plain clone of this repo**: akmon is self-hosted, so a session opened
+in the clone develops the standard under the standard. To validate a change against a real
+consumer before tagging, point the consumer at the working copy — work directly in its
+mounted submodule (it *is* a checkout of `ai_akmon`), or, for a `package`-mode uv consumer,
+override the pin with a local editable install: `[tool.uv.sources] akmon = { path =
+"../ai_akmon", editable = true }` in its `pyproject.toml` (or ephemerally
+`uv pip install -e ../ai_akmon`, which lasts until the next `uv sync`); `akmon sync` then
+re-materializes hooks/guardrails from the working copy. When done: commit + tag here, drop
+the override, return the consumer to the tag pin. (This workflow lives here on purpose —
+BOOTSTRAP is consumer-only: developing *with* akmon, never akmon itself.)

@@ -37,6 +37,16 @@ def akmon_root(project_root: Path) -> Path:
     return aitna_root(project_root) / "akmon"
 
 
+# This file's own tree root (``bin/``'s parent) — in a mounted checkout that is the mount
+# itself; in package mode it is whatever copy of the standard is actually running this
+# script (an installed wheel's embedded ``akmon/_tree``, or a plain source checkout during
+# akmon's own development). A plain ``Path(__file__)`` derivation, not ``importlib.resources``
+# or an import of the ``akmon`` package: bin/ must stay runnable standalone
+# (``python3 <tree>/bin/sync.py``) in mounted mode, where no Python package is installed at
+# all (ADR 0009 §4).
+_TREE_ROOT = Path(__file__).resolve().parent.parent
+
+
 def read_akmon_toml(path: Path) -> dict:
     """Read ``_aitna/.akmon.toml`` (the integration record) into a nested dict.
 
@@ -68,6 +78,42 @@ def read_akmon_toml(path: Path) -> dict:
             continue
         section[key.strip()] = value.strip().strip('"').strip("'")
     return data
+
+
+def read_mount_mode(project_root: Path) -> str:
+    """The recorded ``mount`` value from ``<AITNA_ROOT>/.akmon.toml`` (ADR 0009 §3):
+    ``"submodule" | "vendored" | "subtree" | "package"``. An absent record or key defaults
+    to ``"submodule"`` — the traditional mounted-tree default, kept for backward
+    compatibility with every project that predates this field.
+    """
+    fields = read_akmon_toml(aitna_root(project_root) / ".akmon.toml")
+    return fields.get("mount") or "submodule"
+
+
+def is_package_mode(project_root: Path) -> bool:
+    """Whether ``project_root`` is governed by mount mode ``package`` (ADR 0009 §4).
+
+    Driven solely by the recorded ``.akmon.toml`` ``mount`` field, never by whether
+    ``<AITNA_ROOT>/akmon`` happens to exist on disk: a stale mount directory left over from
+    a prior mode must not shadow a project that has since switched to package mode (and,
+    symmetrically, an absent record must not be misread as package mode just because no
+    mount exists yet — see ``read_mount_mode``'s backward-compatible default).
+    """
+    return read_mount_mode(project_root) == "package"
+
+
+def standard_tree_root(project_root: Path) -> Path:
+    """The standard-tree content this script operates against for ``project_root``.
+
+    The mount at ``<AITNA_ROOT>/akmon`` for mounted modes; this script's own tree
+    (``_TREE_ROOT``) in package mode — the installed package *is* the pin, so a lingering
+    stale mount directory from a prior mode must not shadow it (ADR 0009 §4-5, mirrored from
+    the CLI's dispatch rule).
+    """
+    mounted = akmon_root(project_root)
+    if not is_package_mode(project_root) and mounted.exists():
+        return mounted
+    return _TREE_ROOT
 
 
 def _generated_banner() -> str:
@@ -134,17 +180,31 @@ instructions here.
 
 # The hooks dir lives under the configured dev-layer root; the leading project-root anchor is
 # vendor-specific (Codex: git toplevel · Claude: $CLAUDE_PROJECT_DIR). Both are templated below.
-def _hooks_dir() -> str:
-    """``<aitna-root>/akmon/hooks`` as a POSIX suffix appended after a vendor's root anchor."""
-    return f"{aitna_root_name()}/akmon/hooks"
+def _hooks_dir(root: Path) -> str:
+    """``<aitna-root>/akmon/hooks`` (mounted modes) or ``<aitna-root>/.akmon/hooks``
+    (package mode — the materialization destination, ADR 0009 §4), as a POSIX suffix
+    appended after a vendor's root anchor."""
+    aitna = aitna_root_name()
+    if is_package_mode(root):
+        return f"{aitna}/.akmon/hooks"
+    return f"{aitna}/akmon/hooks"
 
 
-def _codex_hook_command() -> str:
-    return f'python3 "$(git rev-parse --show-toplevel)/{_hooks_dir()}/codex-hook.py"'
+# Both possible hook-dir markers (mounted + package mode), independent of the project's
+# *current* mode: recognising an entry as akmon-managed must not depend on which mode wrote
+# it, so switching modes drops the other mode's stale entries instead of leaving them
+# unrecognised and orphaned (ADR 0009 §4).
+def _akmon_hook_markers() -> tuple[str, str]:
+    aitna = aitna_root_name()
+    return (f"{aitna}/akmon/hooks/", f"{aitna}/.akmon/hooks/")
 
 
-def _codex_hooks() -> dict:
-    base = _codex_hook_command()
+def _codex_hook_command(root: Path) -> str:
+    return f'python3 "$(git rev-parse --show-toplevel)/{_hooks_dir(root)}/codex-hook.py"'
+
+
+def _codex_hooks(root: Path) -> dict:
+    base = _codex_hook_command(root)
     return {
         "hooks": {
             "PreToolUse": [
@@ -185,8 +245,8 @@ def _codex_hooks() -> dict:
     }
 
 
-def _claude_hooks() -> dict:
-    hooks_dir = _hooks_dir()
+def _claude_hooks(root: Path) -> dict:
+    hooks_dir = _hooks_dir(root)
 
     def cmd(script: str) -> str:
         return f'python3 "$CLAUDE_PROJECT_DIR/{hooks_dir}/{script}"'
@@ -255,8 +315,15 @@ class Result:
 
 
 def _find_project_root(start: Path) -> Path:
+    """Walk up from ``start`` for a project ``AGENTS.md`` plus either a mounted tree
+    (``<AITNA_ROOT>/akmon``) or an integration record (``<AITNA_ROOT>/.akmon.toml`` —
+    the only marker package-mode projects have, since they carry no mounted tree at all;
+    ADR 0009 §4)."""
     for candidate in (start, *start.parents):
-        if (candidate / "AGENTS.md").is_file() and akmon_root(candidate).exists():
+        if not (candidate / "AGENTS.md").is_file():
+            continue
+        aitna = aitna_root(candidate)
+        if (aitna / "akmon").exists() or (aitna / ".akmon.toml").is_file():
             return candidate
     return start
 
@@ -271,12 +338,6 @@ def _read_json(path: Path) -> dict:
     if not isinstance(value, dict):
         raise ValueError(f"{path}: expected a JSON object")
     return value
-
-
-# Any hook command pointing into the akmon hooks dir is akmon-managed: sync owns it and may
-# rewrite it. Derived from the configured root so a relocated dev layer still matches its own hooks.
-def _akmon_hook_marker() -> str:
-    return f"{_hooks_dir()}/"
 
 
 def _hook_commands(entry: object) -> set[str]:
@@ -294,8 +355,8 @@ def _hook_commands(entry: object) -> set[str]:
 
 def _is_akmon_entry(entry: object) -> bool:
     commands = _hook_commands(entry)
-    marker = _akmon_hook_marker()
-    return bool(commands) and all(marker in command for command in commands)
+    markers = _akmon_hook_markers()
+    return bool(commands) and all(any(marker in command for marker in markers) for command in commands)
 
 
 def _merge_hook_entries(existing: object, wanted: list[dict]) -> list[object]:
@@ -320,7 +381,7 @@ def _claude_settings(root: Path) -> PlannedFile:
     hooks = settings.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise ValueError(f"{path}: expected hooks to be a JSON object")
-    for event_name, wanted_entries in _claude_hooks()["hooks"].items():
+    for event_name, wanted_entries in _claude_hooks(root)["hooks"].items():
         hooks[event_name] = _merge_hook_entries(hooks.get(event_name), wanted_entries)
     return PlannedFile(path, json.dumps(settings, indent=2) + "\n")
 
@@ -328,7 +389,7 @@ def _claude_settings(root: Path) -> PlannedFile:
 def _skill_sources(root: Path) -> tuple[list[Path], list[str]]:
     aitna = aitna_root(root)
     search_roots = (
-        aitna / "akmon" / "skills",
+        standard_tree_root(root) / "skills",
         aitna / "skills",
         root / "skills",
     )
@@ -363,6 +424,124 @@ Read and follow the source SKILL.md. Do not duplicate its contents here.
     return PlannedFile(path, content)
 
 
+def _materialized_python_content(source_text: str) -> str:
+    """``source_text`` with the generated-pointer banner inserted as a ``#`` comment.
+
+    Placed right after a leading shebang line when present (keeping the materialized copy
+    directly executable via ``python3 <path>``, with no venv — the same property the
+    mounted tree gives today, ADR 0009 §4), else at the very top.
+    """
+    banner_line = f"# {_generated_banner()}"
+    lines = source_text.splitlines(keepends=True)
+    if lines and lines[0].startswith("#!"):
+        return lines[0] + banner_line + "\n" + "".join(lines[1:])
+    return banner_line + "\n" + source_text
+
+
+def _materialized_markdown_content(source_text: str) -> str:
+    """``source_text`` with the generated-pointer banner inserted as an HTML comment
+    (matching the convention the other generated ``.md`` pointers already use), right after
+    a leading top-level heading when present, else at the very top.
+    """
+    banner_line = f"<!-- {_generated_banner()} -->"
+    lines = source_text.splitlines(keepends=True)
+    if lines and lines[0].lstrip().startswith("#"):
+        return lines[0] + banner_line + "\n\n" + "".join(lines[1:])
+    return banner_line + "\n\n" + source_text
+
+
+def _materialized_files(root: Path) -> list[PlannedFile]:
+    """Package-mode materialization (ADR 0009 §4): the always-on surface — ``hooks/*.py``
+    and ``guardrails/`` — copied into ``<AITNA_ROOT>/.akmon/`` with the generated banner, so
+    it is present as plain files before any venv is guaranteed (hooks) or wherever a
+    consumer's ``AGENTS.md`` ``@``-imports it (guardrails). A no-op outside package mode.
+    """
+    if not is_package_mode(root):
+        return []
+    source = standard_tree_root(root)
+    dest = aitna_root(root) / ".akmon"
+    files: list[PlannedFile] = []
+
+    hooks_source = source / "hooks"
+    if hooks_source.is_dir():
+        for hook_path in sorted(hooks_source.glob("*.py")):
+            content = _materialized_python_content(hook_path.read_text(encoding="utf-8"))
+            files.append(PlannedFile(dest / "hooks" / hook_path.name, content))
+
+    guardrails_source = source / "guardrails"
+    if guardrails_source.is_dir():
+        for guardrail_path in sorted(p for p in guardrails_source.iterdir() if p.is_file()):
+            content = _materialized_markdown_content(guardrail_path.read_text(encoding="utf-8"))
+            files.append(PlannedFile(dest / "guardrails" / guardrail_path.name, content))
+
+    return files
+
+
+def _upsert_toml_key(text: str, key: str, value: str) -> str:
+    """Set a top-level ``key = "value"`` line in TOML-ish ``text``, preserving everything
+    else verbatim (comments, other keys, ``[section]``s).
+
+    Updates an existing top-level (pre-first-``[section]``) line for ``key`` in place; else
+    inserts one just before the first ``[section]`` header (or appends at the end if none).
+    A minimal, comment-preserving alternative to a full parse+rewrite — ``.akmon.toml`` mixes
+    generated fields (this one) with hand-written ones (``attached_archetype``,
+    ``last_realign``, ``[test]``…) that a full round-trip would risk losing.
+    """
+    lines = text.splitlines()
+    new_line = f'{key} = "{value}"'
+    section_index = next((i for i, line in enumerate(lines) if line.strip().startswith("[")), None)
+    top_lines = lines[:section_index] if section_index is not None else lines
+    for i, line in enumerate(top_lines):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        found_key, sep, _ = stripped.partition("=")
+        if sep and found_key.strip() == key:
+            lines[i] = new_line
+            break
+    else:
+        insert_at = section_index if section_index is not None else len(lines)
+        lines[insert_at:insert_at] = [new_line]
+    trailing_newline = "\n" if text.endswith("\n") or not text else ""
+    return "\n".join(lines) + trailing_newline
+
+
+def _installed_akmon_version() -> str | None:
+    """The installed ``akmon`` package's version, via metadata lookup only (no import of the
+    ``akmon`` package itself — bin/ must stay standalone-runnable with zero dependency on
+    ``akmon`` being importable, e.g. when this file is the mounted-submodule copy with no
+    package installed at all). ``None`` when not installed (mounted modes, or a raw
+    embedded/editable checkout with no ``pip``/``uv`` install)."""
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        return version("akmon")
+    except PackageNotFoundError:
+        return None
+
+
+def _package_mode_akmon_toml(root: Path) -> PlannedFile | None:
+    """Package-mode ``.akmon.toml`` stamping (ADR 0009 §4): the installed package version
+    *is* the pin (no separate realign step the way a submodule pin-bump needs one), so sync
+    keeps ``akmon_version`` in sync with reality on every run. Only the ``mount``/
+    ``akmon_version`` keys are touched; every other field is preserved verbatim (see
+    ``_upsert_toml_key``). ``None`` outside package mode, when the record does not exist yet
+    (``init`` — a later slice — creates it), or when the installed version cannot be
+    determined.
+    """
+    if not is_package_mode(root):
+        return None
+    version = _installed_akmon_version()
+    if version is None:
+        return None
+    path = aitna_root(root) / ".akmon.toml"
+    if not path.is_file():
+        return None
+    text = _upsert_toml_key(path.read_text(encoding="utf-8"), "mount", "package")
+    text = _upsert_toml_key(text, "akmon_version", version)
+    return PlannedFile(path, text)
+
+
 def _planned_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
     errors: list[str] = []
     files = [
@@ -370,7 +549,7 @@ def _planned_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
         PlannedFile(root / ".github" / "copilot-instructions.md", _copilot_md()),
         PlannedFile(root / "GEMINI.md", _gemini_md()),
         PlannedFile(root / ".codex" / "README.md", _codex_readme()),
-        PlannedFile(root / ".codex" / "hooks.json", json.dumps(_codex_hooks(), indent=2) + "\n"),
+        PlannedFile(root / ".codex" / "hooks.json", json.dumps(_codex_hooks(root), indent=2) + "\n"),
     ]
     try:
         files.append(_claude_settings(root))
@@ -379,6 +558,10 @@ def _planned_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
     sources, skill_errors = _skill_sources(root)
     errors.extend(skill_errors)
     files.extend(_claude_skill_stub(root, source) for source in sources)
+    files.extend(_materialized_files(root))
+    toml_plan = _package_mode_akmon_toml(root)
+    if toml_plan is not None:
+        files.append(toml_plan)
     return files, errors
 
 

@@ -679,3 +679,207 @@ def test_attach_record_skipped_without_akmon_submodule(tmp_path):
     verifier = verify.Verifier(root)
     verifier.check_attach_record()
     assert verifier.findings == []
+
+
+def test_attach_record_fires_for_package_mode_without_mount_dir(tmp_path):
+    # No mount at all, but .akmon.toml exists (the only trace a package-mode consumer
+    # leaves) — the gate must fire, not skip (ADR 0009 §4).
+    root = tmp_path
+    _write(_attach(root), 'akmon_version = "v0.3.0"\n')  # missing attached_archetype/last_realign
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert any("missing required key" in m for m in _messages(verifier.findings, "error"))
+
+
+def test_attach_record_valid_for_package_mode_without_mount_dir(tmp_path):
+    root = tmp_path
+    _write(_attach(root), 'mount = "package"\n' + _VALID_ATTACH)
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert "error" not in _levels(verifier.findings)
+    assert any("records akmon version v0.3.0" in m for m in _messages(verifier.findings, "ok"))
+
+
+# --------------------------------------------------------------------------------------
+# mount mode "package" (ADR 0009 §4, C37 slice B): a synthetic package-mode project that
+# goes end-to-end green after a real sync run, plus the individual re-pointed/re-rooted/
+# skipped checks. Mounted-mode fixtures/tests above are untouched and must still pass
+# unchanged — that is the byte-identical regression guard for existing consumers.
+# --------------------------------------------------------------------------------------
+
+PACKAGE_AGENTS_MD = """# AGENTS.md
+
+## Dev layer — akmon
+
+Read `akmon path` to find the standard tree locally (roles, MODEL.md). Archetype:
+`ARCHETYPES.md`. Read `_aitna/memory` at session start.
+
+@_aitna/.akmon/guardrails/_common.md
+
+Prime directives D2 and D5 are always-on. Secrets come from `.env`.
+Skills live in `_aitna/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
+"""
+
+PACKAGE_CI_YML = """name: CI
+on: [push]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - run: uv run akmon sync --check
+      - run: uv run akmon verify --strict
+"""
+
+PACKAGE_AKMON_TOML = (
+    'mount = "package"\n'
+    'akmon_version = "0.3.0.dev0"\n'
+    'attached_archetype = "package"\n'
+    'last_realign = "2026-01-01"\n'
+)
+
+
+def _make_package_mode_project(tmp_path: Path) -> Path:
+    """A minimal package-mode project: no mounted tree at all. ``standard_tree_root``
+    resolves to this checkout's own akmon tree (the dev-bench "embedded tree" fallback —
+    the same property slice A's/B's sync.py tests already rely on), so the standard-tree
+    content checks (basic layout, USE-surface isolation, model-routing, skills) validate
+    against real, already-compliant content with no extra fixture setup needed.
+    """
+    root = tmp_path
+    _write(root / "AGENTS.md", PACKAGE_AGENTS_MD)
+    _write(root / "_aitna" / "TASKS.md")
+    _write(root / "_aitna" / ".akmon.toml", PACKAGE_AKMON_TOML)
+
+    _write(root / "_aitna" / "agents" / "engineer" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
+    _write(root / "_aitna" / "memory" / "note.md", "fact\n")
+    _write(root / "_aitna" / "memory" / "README.md", "# Memory\n- note.md\n")
+
+    _write(root / ".gitignore", GITIGNORE)
+    _write(root / ".github" / "workflows" / "ci.yml", PACKAGE_CI_YML)
+
+    # a real sync run: materializes .akmon/hooks + .akmon/guardrails and writes the vendor
+    # pointers, exactly as attaching for real would.
+    files, errors = sync._planned_files(root)
+    assert errors == []
+    result = sync._apply(files, write=True, root=root)
+    assert not result.errors
+    return root
+
+
+def test_package_mode_project_verifies_green_after_real_sync(tmp_path):
+    root = _make_package_mode_project(tmp_path)
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert "error" not in _levels(verifier.findings), _messages(verifier.findings, "error")
+    assert "warn" not in _levels(verifier.findings), _messages(verifier.findings, "warn")
+
+
+def test_main_strict_passes_on_package_mode_project(tmp_path):
+    root = _make_package_mode_project(tmp_path)
+    assert verify.main(["--project-root", str(root), "--strict"]) == 0
+
+
+def test_check_hooks_skips_in_package_mode_with_note(tmp_path):
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    verifier = verify.Verifier(root)
+    verifier.check_hooks()
+    assert len(verifier.findings) == 1
+    assert verifier.findings[0].level == "ok"
+    assert "package mode" in verifier.findings[0].message
+
+
+def test_check_hooks_still_checks_mounted_paths_when_not_package_mode(tmp_path):
+    root = tmp_path
+    (root / "_aitna" / "akmon" / "hooks").mkdir(parents=True)
+    verifier = verify.Verifier(root)
+    verifier.check_hooks()
+    assert _levels(verifier.findings) == {"error"}  # hook scripts missing -> errors, not skipped
+
+
+def test_check_changelog_skips_in_package_mode_with_note(tmp_path):
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    verifier = verify.Verifier(root)
+    verifier.check_changelog()
+    assert len(verifier.findings) == 1
+    assert verifier.findings[0].level == "ok"
+    assert "package mode" in verifier.findings[0].message
+
+
+def test_check_ci_package_mode_accepts_cli_invocation(tmp_path):
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    _write(
+        root / ".github" / "workflows" / "ci.yml",
+        "steps:\n  - run: uv run akmon sync --check\n  - run: uv run akmon verify --strict\n",
+    )
+    verifier = verify.Verifier(root)
+    verifier.check_ci()
+    assert _levels(verifier.findings) == {"ok"}
+
+
+def test_check_ci_package_mode_rejects_mounted_style_command(tmp_path):
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    _write(root / ".github" / "workflows" / "ci.yml", "steps:\n  - run: python3 _aitna/akmon/bin/sync.py --check\n")
+    verifier = verify.Verifier(root)
+    verifier.check_ci()
+    assert _levels(verifier.findings) == {"warn"}
+
+
+def test_check_agents_md_package_mode_contract(tmp_path):
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    _write(
+        root / "AGENTS.md",
+        "## Dev layer — akmon\n\n"
+        "@_aitna/.akmon/guardrails/_common.md\n\n"
+        "Read `akmon path`. Archetype: ARCHETYPES.md. Memory: _aitna/memory.\n"
+        "D2 and D5 always-on. Secrets from .env.\n",
+    )
+    verifier = verify.Verifier(root)
+    verifier.check_agents_md()
+    assert _levels(verifier.findings) == {"ok"}
+
+
+def test_check_agents_md_package_mode_does_not_accept_mounted_snippets_alone(tmp_path):
+    # A mounted-style AGENTS.md (no guardrails @-import, no "akmon path" mention) must still
+    # fail the package-mode contract even though it satisfies the mounted one.
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    _write(
+        root / "AGENTS.md",
+        "## Dev layer — akmon\n\n"
+        "Model: `_aitna/akmon/README.md`. Roles: `_aitna/akmon/roles/`.\n"
+        "Archetype: ARCHETYPES.md. Memory: _aitna/memory.\n"
+        "D2 and D5 always-on. Secrets from .env.\n",
+    )
+    verifier = verify.Verifier(root)
+    verifier.check_agents_md()
+    assert _levels(verifier.findings) == {"error"}
+
+
+def test_mounted_mode_standard_root_matches_akmon_mount(tmp_path):
+    # The invariant that keeps mounted-mode verify output byte-identical: re-rooting onto
+    # standard_root must resolve to exactly the same directory the old hardcoded path used.
+    root = _make_project(tmp_path)
+    verifier = verify.Verifier(root)
+    assert verifier.standard_root == sync.akmon_root(root)
+
+
+def test_check_standard_path_message_matches_check_path_wording_in_mounted_mode(tmp_path):
+    root = _make_project(tmp_path)
+    verifier = verify.Verifier(root)
+    verifier.findings.clear()
+    verifier.check_standard_path("README.md")
+    assert verifier.findings[-1].message == f"{verifier.akmon}/README.md exists"
+
+
+def test_check_standard_path_falls_back_to_standard_tree_label_in_package_mode(tmp_path):
+    root = _make_package_mode_project(tmp_path)
+    verifier = verify.Verifier(root)
+    verifier.findings.clear()
+    verifier.check_standard_path("README.md")
+    assert verifier.findings[-1].message.startswith("standard tree:")
+    assert verifier.findings[-1].message.endswith("README.md exists")

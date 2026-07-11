@@ -9,6 +9,10 @@ map). Note: akmon does **not** exist in the target project until step 1 — the 
 layer lives only in the repo `ai_akmon` and must be cloned in as a submodule **first**.
 The agent reads `README.md` only after the submodule is attached.
 
+The submodule is the default **mount mode**; a tree-less `package` mode — akmon installed
+as a pinned dev dependency, no standard tree in the repo — is designed and pending
+implementation, see §F.
+
 ---
 
 ## A. What the agent does on attach
@@ -348,3 +352,33 @@ Move it from `_aitna/{skills,tools}/` into `_aitna/akmon/{skills,tools}/` (or a
 role/guardrail/profile into the matching akmon dir), commit + push in `ai_akmon`,
 then bump the pin in consuming projects. Apply the **promotion test** first: general *and*
 proven (see [learning](pipelines/learning.md)).
+
+---
+
+## F. Mount mode `package` — no standard tree in the repo *(designed, pending implementation)*
+
+> **Status:** designed, pending implementation — ships with the `akmon` CLI; pilot
+> consumer: alphavar. Until it ships, attach via the submodule (§A). The decision record
+> and mechanics live in the standard's own development tree (linked from
+> [README.md](README.md), the deliberate bridge).
+
+Alongside the mounted modes (`submodule` — this document's default — plus `vendored` and
+`subtree`), akmon will install as an ordinary dev dependency, with **no tree at
+`<AITNA_ROOT>/akmon`**:
+
+- The consumer pins akmon in its manifest's **dev group** (never a runtime dep) — a
+  git-tag pin `akmon @ git+https://github.com/akumidv/ai_akmon@vX.Y.Z` until the first
+  PyPI publish, the `akmon` PyPI package after. A version bump becomes an ordinary
+  dependency bump, delta-checked against [CHANGELOG.md](CHANGELOG.md) as usual.
+- `akmon sync` materializes the **always-on surface only** into `<AITNA_ROOT>/.akmon/`:
+  `hooks/` (self-contained, stdlib-only — vendor hooks keep running venv-free via
+  `python3`) and `guardrails/` (the `@`-import targets for AGENTS.md). The copies are
+  banner-marked and drift-checked by `sync --check`.
+- Everything else (MODEL.md, roles, pipelines, skills) is read from the installed
+  package's embedded tree — `akmon path` prints its root; consumer docs link the standard
+  by GitHub-tag URL instead of relative mount paths.
+- `.akmon.toml` records `mount = "package"`; the CLI and the standard share one version
+  cut from the release tag, so there is **no version skew by construction**.
+- Checked in: `_aitna/{local assets}` + `_aitna/.akmon/{hooks,guardrails}` +
+  `.akmon.toml` — no 90-file tree. Consumer CI runs `uv run akmon sync --check` and
+  `uv run akmon verify --strict`; the standard's own self-tests stay in ai_akmon's CI.

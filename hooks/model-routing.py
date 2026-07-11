@@ -35,12 +35,12 @@ from pathlib import Path
 from claude_adapter import load_payload, print_result
 from hook_core import (
     HookResult,
+    aitna_root_name,
+    akmon_root,
     d2_pending_count,
     d2_status_line,
     d2_tracking_active,
     find_project_root,
-    aitna_root_name,
-    akmon_root,
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools" / "model_routing"))
