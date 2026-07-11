@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
+import pytest
+
 _KEYSTONE = Path(__file__).resolve().parents[2]
+
+# The ``.akmon.toml`` reader uses ``tomllib`` (3.11+ stdlib) and degrades to ``{}`` on
+# older hosts by design (see d2_ledger's own docstring) — these tests assert the full
+# behaviour.
+requires_tomllib = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="tomllib is 3.11+ stdlib; .akmon.toml reading degrades to silent on older hosts by design",
+)
 
 
 def _load():
@@ -181,6 +192,7 @@ def test_matches_any_double_star_spans_zero_segments():
     assert not d2._matches_any("a/b.txt", ["a/**/*.py"])  # extension differs → no match
 
 
+@requires_tomllib
 def test_sensitive_paths_for_reads_akmon_toml(tmp_path):
     (tmp_path / ".akmon.toml").write_text('[d2_ledger]\nsensitive_paths = ["src/**/lib/**"]\n', encoding="utf-8")
     ledger = tmp_path / "sub" / "D2_LEDGER.md"
@@ -289,6 +301,7 @@ def test_main_check_strict_exits_1_on_would_warn(tmp_path, capsys):
     assert "D2-1" in capsys.readouterr().err
 
 
+@requires_tomllib
 def test_main_check_changed_paths_filtered_by_sensitive_globs(tmp_path, capsys):
     (tmp_path / ".akmon.toml").write_text('[d2_ledger]\nsensitive_paths = ["src/**/lib/**"]\n', encoding="utf-8")
     ledger = tmp_path / "D2_LEDGER.md"
