@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 from claude_adapter import load_payload, print_result
-from hook_core import HookResult, akmon_root, find_project_root
+from hook_core import HookResult, akmon_runtime_root, find_project_root
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools" / "model_routing"))
 
@@ -86,7 +86,7 @@ def main() -> int:
             # Emit system message for UI visibility (zero token cost).
             messages = [_format_system_message(line)]
             # C20 — advise when the routed agent is outside the active role's task-kind row.
-            registry = routing.load_registry(akmon_root(root), root)
+            registry = routing.load_registry(akmon_runtime_root(root), root)
             role = routing.active_role(payload.get("transcript_path"))
             warning = routing.role_matrix_warning(registry, subagent_type, role)
             if warning:

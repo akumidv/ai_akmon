@@ -11,7 +11,7 @@ from importlib.metadata import PackageNotFoundError, version
 # The release pipeline cuts the real version from the git tag (package version == standard
 # version, ADR 0009 §1); this placeholder is only used when the package is not installed
 # (e.g. run from a source checkout without `pip install` / `uv pip install -e`).
-_STATIC_VERSION = "0.3.0.dev0"
+_STATIC_VERSION = "0.4.0.dev0"
 
 try:
     __version__ = version("akmon")

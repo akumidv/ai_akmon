@@ -17,6 +17,9 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 ## Unreleased
 
 ### Added
+- **Codex runtime contract (C39):** self-hosted `AGENTS.md` for akmon itself, a direct
+  delegation-default clause in the consumer template, SessionStart defense in depth, and
+  verifier coverage that rejects an import-only delegation contract.
 - **Model routing — capability tiers** ([MODEL.md](MODEL.md) §10, ADR 0004): task-kind →
   tier matrix and per-vendor semantic selection policy as data in
   [`tools/model_routing/registry.json`](tools/model_routing/registry.json) (project overlay:
@@ -82,6 +85,10 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   automation that omits `permission_mode`.
 
 ### Migration
+- **Breaking v0.4 consumer realign:** put the direct phrase `delegation is the default`
+  in the root `AGENTS.md` akmon block, run `akmon sync`, then `akmon verify --strict`.
+  A nested `@.../_common.md` line remains a pointer for compatible harnesses but does not
+  deliver load-bearing instructions to Codex.
 - Re-run `bin/sync.py` (wires the two new hooks into `.claude/settings.json`), run
   `tools/model_routing/init.py`, and add `.claude/model-routing.local.json` +
   `.claude/model-routing.log` to the project `.gitignore`.
@@ -91,6 +98,10 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   from local discovery / `--available`, not from committed registry data.
 
 ### Fixed
+- **Release check subject scoping (C9):** `--subject akmon` now runs upstream self-CI and meta tests from the akmon source root instead of running consumer-only `sync`/`verify` against the wrong layout.
+- Package-mode hooks now discover the project from nested working directories through
+  `<AITNA_ROOT>/.akmon.toml`, use `<AITNA_ROOT>/.akmon` as their runtime root, and
+  materialize the stdlib model-routing/D2 tool dependencies used by wired hooks.
 - **README `develop/` links** (README.md:52,54) pointed at a directory that had been renamed
   to `meta/`; MODEL.md §10 restated the pre-ADR-0006 selection policy ("reasoner = highest")
   against the registry's dynamic `reasoner: "orchestrator"` — both now match the tree/registry.
@@ -129,6 +140,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   required keys) is an error. Adopting the record is optional — a realign writes it.
 
 ### Fixed
+- **Release check subject scoping (C9):** `--subject akmon` now runs upstream self-CI and meta tests from the akmon source root instead of running consumer-only `sync`/`verify` against the wrong layout.
 - `verify.py` now checks `roles/review.md` exists (it was added as a role but left out of the
   required-files list).
 - `tools/release/release_check.py` test-runner resolution: it now prefers the dev-layer venv

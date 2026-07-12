@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import builtins
 import importlib.util
+import sys
 from pathlib import Path
 
 _KEYSTONE = next(
@@ -26,6 +27,33 @@ _spec.loader.exec_module(release_check)
 def _attach(root: Path, body: str) -> None:
     (root / "_aitna").mkdir(parents=True, exist_ok=True)
     (root / "_aitna" / ".akmon.toml").write_text(body, encoding="utf-8")
+
+
+def test_akmon_check_runs_only_upstream_gates(monkeypatch, tmp_path):
+    pytest_command = ["pytest", str(release_check.META / "tests")]
+    captured = {}
+
+    def fake_pytest_command(root, tests):
+        assert root == release_check.KEYSTONE_ROOT
+        assert tests == str(release_check.META / "tests")
+        return pytest_command
+
+    def fake_run_commands(root, commands):
+        captured["root"] = root
+        captured["commands"] = commands
+        return []
+
+    monkeypatch.setattr(release_check, "_pytest_command", fake_pytest_command)
+    monkeypatch.setattr(release_check, "_run_commands", fake_run_commands)
+
+    assert release_check.run_check(tmp_path, "akmon") == 0
+    assert captured == {
+        "root": release_check.KEYSTONE_ROOT,
+        "commands": [
+            [sys.executable, str(release_check.META / "self_ci.py")],
+            pytest_command,
+        ],
+    }
 
 
 def test_pinned_runner_is_used_verbatim_with_test_path(tmp_path):

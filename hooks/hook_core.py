@@ -36,6 +36,12 @@ def akmon_root(project_root: Path) -> Path:
     return aitna_root(project_root) / "akmon"
 
 
+def akmon_runtime_root(project_root: Path) -> Path:
+    """Runtime files used by hooks: mounted tree, else package materialization."""
+    mounted = akmon_root(project_root)
+    return mounted if mounted.exists() else aitna_root(project_root) / ".akmon"
+
+
 @dataclass(frozen=True)
 class HookResult:
     event_name: str
@@ -86,7 +92,14 @@ _CODE_EXTENSIONS = frozenset(
 # These match lowercased path *substrings*, so the segment uses the lowercased root name.
 def _non_code_segments() -> tuple[str, ...]:
     aitna = aitna_root_name().lower()
-    return ("/docs/", f"/{aitna}/design/", f"/{aitna}/memory/", f"/{aitna}/akmon/", "/.claude/")
+    return (
+        "/docs/",
+        f"/{aitna}/design/",
+        f"/{aitna}/memory/",
+        f"/{aitna}/akmon/",
+        f"/{aitna}/.akmon/",
+        "/.claude/",
+    )
 
 
 # Neutral tool-kind: each vendor adapter normalizes its own file-editing tool name(s) to this
@@ -104,7 +117,12 @@ SUBAGENT_TOOL = "subagent"
 # first (see guardrails/_common.md § Analysis before mutation).
 def _planning_doc_segments() -> tuple[str, ...]:
     aitna = aitna_root_name().lower()
-    return (f"/{aitna}/design/", "/docs/dev/", f"/{aitna}/akmon/")
+    return (
+        f"/{aitna}/design/",
+        "/docs/dev/",
+        f"/{aitna}/akmon/",
+        f"/{aitna}/.akmon/",
+    )
 
 
 def _planning_doc_files() -> tuple[str, ...]:
@@ -126,10 +144,13 @@ def current_git_branch() -> str:
 
 
 def find_project_root(start: Path | None = None) -> Path:
-    """Walk up from ``start`` (or cwd) to the first dir holding AGENTS.md + <aitna-root>/akmon."""
+    """Walk up to AGENTS.md plus either a mounted tree or package integration record."""
     current = (start or Path.cwd()).resolve()
     for candidate in (current, *current.parents):
-        if (candidate / "AGENTS.md").is_file() and akmon_root(candidate).exists():
+        if not (candidate / "AGENTS.md").is_file():
+            continue
+        aitna = aitna_root(candidate)
+        if (aitna / "akmon").exists() or (aitna / ".akmon.toml").is_file():
             return candidate
     return current
 
@@ -266,6 +287,13 @@ def session_start_result(root: Path) -> HookResult | None:
         )
     else:
         lines.append("Pick the one the task calls for; if unclear, ask.")
+    lines.append(
+        "Delegation is the default for non-atomic work: before the first repository sweep, edit, "
+        "or test run, decompose the task and delegate every independent sub-step to available "
+        "subagents. Keep only decomposition, routing, synthesis, and owner dialogue in the "
+        "orchestrator. Skip delegation only when the task is atomic or the harness exposes no "
+        "subagents; state the reason."
+    )
     lines.append(f"Also: read `{aitna_root_name()}/memory/` at session start (project memory).")
     return HookResult(event_name="SessionStart", additional_context="\n".join(lines))
 
@@ -417,8 +445,13 @@ def is_d2_sensitive_path(file_path: str, root: Path, globs: list[str]) -> bool:
     return any(_segments_match([s for s in glob.split("/") if s], path_segments) for glob in globs)
 
 
-def d2_ledger_reminder_message() -> str:
-    tool = f"{aitna_root_name()}/akmon/tools/d2_ledger/d2_ledger.py"
+def d2_ledger_reminder_message(root: Path) -> str:
+    runtime = akmon_runtime_root(root)
+    try:
+        runtime_display = runtime.resolve().relative_to(root.resolve()).as_posix()
+    except (ValueError, OSError):
+        runtime_display = runtime.as_posix()
+    tool = f"{runtime_display}/tools/d2_ledger/d2_ledger.py"
     ledger = f"{aitna_root_name()}/D2_LEDGER.md"
     return (
         "[akmon] D2 ledger check — you are editing a D2-sensitive path (math / data shape / "
@@ -453,7 +486,7 @@ def d2_ledger_reminder_result(
     except OSError:
         pass
 
-    return HookResult(event_name="PreToolUse", additional_context=d2_ledger_reminder_message())
+    return HookResult(event_name="PreToolUse", additional_context=d2_ledger_reminder_message(root))
 
 
 # D2 ledger session counter — at SessionStart the model-routing status block gains a

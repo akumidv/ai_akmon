@@ -171,6 +171,12 @@ This project uses the akmon dev layer. Model & notation:
   [akmon/roles/](_aitna/akmon/roles/). **Declare the active agent** before doing work
   and restate it on switch (`🧭 agent: <name> — <focus>`) — see
   [Role declaration](_aitna/akmon/roles/README.md#role-declaration-announce-the-active-agent).
+- **Delegation (always-on, direct):** **delegation is the default.** For every non-trivial
+  task, before the first repository sweep, edit, or test run, decompose the work and delegate
+  every independent mechanical sub-step to available subagents without waiting for an owner
+  prompt. The orchestrator retains decomposition, routing, synthesis, and owner dialogue. Skip
+  only when the task is atomic or the harness exposes no subagents; state the reason. This clause
+  is direct because Codex does not expand nested `@` imports in `AGENTS.md`.
 - **Guardrails (always-on, by language):** the common guardrail is **imported** (not just
   linked) so its always-on rules load into context at session start. Put each `@`-import on its
   own line, blank-line-separated; akmon is the single owner — do not restate the rules here.
@@ -195,8 +201,10 @@ This project uses the akmon dev layer. Model & notation:
   `TASKS_ARCHIVE.md`). **Secrets:** from `.env` (gitignored).
 ```
 
-For **Codex/Gemini** this AGENTS.md block is enough — they read `AGENTS.md` directly.
-**Claude Code does not** read `AGENTS.md` automatically; it only auto-loads `CLAUDE.md`. So
+For **Codex/Gemini**, the direct text in this AGENTS.md block is the operative surface.
+Do not assume nested `@path` lines are expanded by either harness; load-bearing rules such as
+delegation must be stated directly and verified. **Claude Code does not** read `AGENTS.md`
+automatically; it only auto-loads `CLAUDE.md`. So
 `CLAUDE.md` must **import** AGENTS.md rather than just prose-point at it — otherwise the
 always-on rules (D2/D5) sit one hop behind a pointer the agent may never follow in a session
 that jumps straight to a task:
