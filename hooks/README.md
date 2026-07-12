@@ -83,10 +83,11 @@ project-local hook surface.
   once-per-episode marker, also cleared by a delegation. Runs as a **PreToolUse →
   Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob** hook (one combined-matcher entry
   seeing the mutations, the reads/sweeps, and the delegation resets).
-- [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for the same neutral
-  reminders (`session-start`, `role-on-code`, `analysis-guard`). Model routing is not wired
-  for Codex: a Codex session has no akmon-managed subagent surface to route (the Codex
-  channel is the *second-opinion* direction, driven from the orchestrating session).
+- [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for SessionStart,
+  role-on-code, analysis, and D2 reminders. It emits Codex `hookSpecificOutput` context.
+  Commit enforcement, delegation log/nudge, named-agent generation, and model routing are
+  deliberately not wired: generic Codex subagents exist, but their hook payloads, child identity,
+  permission enforcement, and child-model selection are not yet proven by live protocol tests.
 
 > The Role-declaration **rule** also lives in `AGENTS.md` (vendor-neutral), so Codex/Gemini
 > follow it by reading the doc; this hook is only the Claude-side *enforcement* of it.
@@ -126,11 +127,11 @@ The hooks are the source of truth here; each assistant wires them in its own way
     }
   }
   ```
-- **Codex / Gemini** — they read `AGENTS.md`, so the rules carried there (commit ownership,
-  role declaration) apply by convention. Where an assistant exposes pre-execution /
-  session hooks, add a small adapter that imports `hook_core.py` and emits that vendor's
-  expected payload. Until then the AGENTS.md rules stand on their own (the Claude adapter
-  adds enforcement on top).
+- **Codex** — reads direct `AGENTS.md` text and runs the generated SessionStart/edit reminder
+  hooks. Nested `@path` lines are not an instruction import mechanism, so load-bearing policy
+  such as delegation must appear directly in `AGENTS.md`. D5 and delegation enforcement remain
+  unsupported until live payload and permission tests justify wiring them.
+- **Gemini** — pointer-only and unverified; do not infer hook parity from the shared policy.
 
 A project may point the wiring at the akmon copy (above) or at a local copy under
 `.claude/hooks/` — prefer the akmon path so submodule updates propagate the fix.

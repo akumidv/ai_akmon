@@ -21,6 +21,7 @@ import sync as sync_tool
 _TASKS_MAX_LINES = 200
 _TASK_STATUS_RE = re.compile(r"\b(active|blocked|deferred|done)\b")
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_DELEGATION_DEFAULT_RE = re.compile(r"\bdelegation\s+is\s+the\s+default\b", re.IGNORECASE)
 _GENERATED_MARKER = sync_tool.GENERATED_MARKER
 _SKILL_REQUIRED_FRONTMATTER = ("name", "description", "when_to_use", "owner")
 
@@ -255,6 +256,8 @@ class Verifier:
                 "secrets rule": ".env",
             }
         missing = [name for name, snippet in required.items() if snippet not in text]
+        if not _DELEGATION_DEFAULT_RE.search(text):
+            missing.append("direct delegation-default rule")
         if missing:
             self.error(f"AGENTS.md akmon block is missing: {', '.join(missing)}")
         else:

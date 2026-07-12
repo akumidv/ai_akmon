@@ -36,7 +36,7 @@ from claude_adapter import load_payload, print_result
 from hook_core import (
     HookResult,
     aitna_root_name,
-    akmon_root,
+    akmon_runtime_root,
     d2_pending_count,
     d2_status_line,
     d2_tracking_active,
@@ -75,7 +75,7 @@ def _load_config(root: Path) -> dict:
 
 
 def model_routing_result(root: Path, payload: dict) -> HookResult | None:
-    akmon = akmon_root(root)
+    akmon = akmon_runtime_root(root)
     if not routing.registry_path(akmon).is_file():
         return None  # akmon without model routing (older pin) — stay silent
 

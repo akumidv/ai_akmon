@@ -161,3 +161,28 @@ def test_delegation_log_system_message_without_description():
     line = "2026-07-04T10:00:00+0000\tsess-1\tk-reasoner\treasoner\t-\t"
     msg = deleg_log._format_system_message(line)
     assert msg == "[akmon] → k-reasoner (reasoner)"
+
+
+def test_find_project_root_in_package_mode_from_nested_directory(tmp_path):
+    project = tmp_path / "project"
+    (project / "_aitna").mkdir(parents=True)
+    (project / "_aitna" / ".akmon.toml").write_text('mount = "package"\n', encoding="utf-8")
+    (project / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    nested = project / "src" / "pkg"
+    nested.mkdir(parents=True)
+
+    assert hook_core.find_project_root(nested) == project.resolve()
+    assert hook_core.akmon_runtime_root(project) == project / "_aitna" / ".akmon"
+
+
+def test_session_start_contains_capability_neutral_delegation_rule(tmp_path):
+    project = tmp_path / "project"
+    (project / "_aitna" / "agents" / "review").mkdir(parents=True)
+    (project / "_aitna" / "agents" / "review" / "README.md").write_text("# review\n", encoding="utf-8")
+
+    result = hook_core.session_start_result(project)
+
+    assert result is not None
+    assert result.additional_context is not None
+    assert "Delegation is the default for non-atomic work" in result.additional_context
+    assert "harness exposes no subagents" in result.additional_context

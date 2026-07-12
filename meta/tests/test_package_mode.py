@@ -119,6 +119,9 @@ def test_materialized_files_copies_hooks_and_guardrails_with_banner(tmp_path):
     assert "_aitna/.akmon/hooks/git-commit-guard.py" in paths
     assert "_aitna/.akmon/guardrails/_common.md" in paths
     assert "_aitna/.akmon/guardrails/python.md" in paths
+    assert "_aitna/.akmon/tools/model_routing/routing.py" in paths
+    assert "_aitna/.akmon/tools/model_routing/registry.json" in paths
+    assert "_aitna/.akmon/tools/d2_ledger/d2_ledger.py" in paths
     # hooks/*.py only — hooks/README.md is not a hook script and must not be materialized.
     assert not any(p.endswith("hooks/README.md") for p in paths)
 

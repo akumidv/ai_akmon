@@ -23,6 +23,7 @@ Model: `_aitna/akmon/README.md`. Archetype: `ARCHETYPES.md`. Roles:
 `_aitna/akmon/roles/`. Read `_aitna/memory` at session start.
 
 Prime directives D2 and D5 are always-on. Secrets come from `.env`.
+Delegation is the default.
 Skills live in `_aitna/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
 """
 
@@ -717,6 +718,7 @@ Read `akmon path` to find the standard tree locally (roles, MODEL.md). Archetype
 @_aitna/.akmon/guardrails/_common.md
 
 Prime directives D2 and D5 are always-on. Secrets come from `.env`.
+Delegation is the default.
 Skills live in `_aitna/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
 """
 
@@ -836,11 +838,27 @@ def test_check_agents_md_package_mode_contract(tmp_path):
         "## Dev layer — akmon\n\n"
         "@_aitna/.akmon/guardrails/_common.md\n\n"
         "Read `akmon path`. Archetype: ARCHETYPES.md. Memory: _aitna/memory.\n"
-        "D2 and D5 always-on. Secrets from .env.\n",
+        "D2 and D5 always-on. Secrets from .env. Delegation is the default.\n",
     )
     verifier = verify.Verifier(root)
     verifier.check_agents_md()
     assert _levels(verifier.findings) == {"ok"}
+
+
+def test_check_agents_md_requires_direct_delegation_rule(tmp_path):
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    _write(
+        root / "AGENTS.md",
+        "## Dev layer — akmon\n\n"
+        "@_aitna/.akmon/guardrails/_common.md\n\n"
+        "Read `akmon path`. Archetype: ARCHETYPES.md. Memory: _aitna/memory.\n"
+        "D2 and D5 always-on. Secrets from .env.\n",
+    )
+    verifier = verify.Verifier(root)
+    verifier.check_agents_md()
+    assert _levels(verifier.findings) == {"error"}
+    assert any("direct delegation-default rule" in message for message in _messages(verifier.findings, "error"))
 
 
 def test_check_agents_md_package_mode_does_not_accept_mounted_snippets_alone(tmp_path):

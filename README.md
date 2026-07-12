@@ -4,22 +4,21 @@
 > standard on top of `AGENTS.md`.
 
 The cross-project standard for **how an AI assistant helps develop, and helps use, each
-project**. It is mounted into every project as a git submodule at `_aitna/akmon/` (repo
-[`ai_akmon`](https://github.com/akumidv/ai_akmon)) and is **LLM-agnostic**: plain
-Markdown/JSON that any assistant (Claude, Codex,
-Gemini, Copilot, …) or a human can read. No vendor's tooling is privileged; the single
-entry point in a consuming project is its root `AGENTS.md`. The submodule is the default
-mount mode; a tree-less **`package`** mode — akmon installed as a pinned dev dependency,
-only hooks/guardrails materialized into the repo — is designed and pending implementation
-([ADR 0009](meta/decisions/0009-packaging-package-carrier-and-mount-modes.md),
-[BOOTSTRAP.md §F](BOOTSTRAP.md)).
+project**. A consumer either mounts the repository at `_aitna/akmon/` or pins the
+`akmon` package as a development dependency and materializes its runtime surface at
+`_aitna/.akmon/` ([ADR 0009](meta/decisions/0009-packaging-package-carrier-and-mount-modes.md)).
+The standard is **LLM-agnostic** at the policy layer: plain Markdown/JSON that any assistant
+or human can read. Enforcement depth remains vendor-specific, and the single entry point in
+a consuming project is its root `AGENTS.md`. Package-mode `sync`, `verify`, `path`, and
+materialization are implemented; automated `akmon init` and public PyPI publication remain
+pending.
 
 **New consumer? Start at [BOOTSTRAP.md](BOOTSTRAP.md)** — it attaches akmon to a project.
 Already attached? **[MODEL.md](MODEL.md)** is the operative rulebook.
 
 ## The simple idea
 
-Attach one submodule — get a working discipline for AI-assisted development:
+Attach one supported carrier — get a working discipline for AI-assisted development:
 
 - **One entry point.** The root `AGENTS.md` is the single source of guidance; thin
   generated pointers (`CLAUDE.md`, `GEMINI.md`, …) keep every assistant reading it.
@@ -80,10 +79,12 @@ experiment against the real harness, not from vendor docs):
 | Capability | Claude Code | Codex CLI | Gemini CLI | Copilot |
 |---|---|---|---|---|
 | `AGENTS.md` entry point via generated pointer (`sync.py`) | ✅ `CLAUDE.md` | ✅ native `AGENTS.md` | ✅ `GEMINI.md` | ❓ |
-| Session-start context (agent roster, memory rule) | ✅ SessionStart hook | ⚠️ plain-text reminders only | ❓ | ❓ |
-| Commit guard — hard `ask`/`deny` at the tool boundary | ✅ PreToolUse hook | ⚠️ needs a verified output contract | ❓ | ❓ |
-| Delegation log + nudge (the smiths are *used*) | ✅ PreToolUse hook | ❓ | ❓ | ❓ |
-| Model routing — `k-*` generation + local discovery | ✅ | ❓ | ❓ | ❓ |
+| Session-start context (agent roster, memory, delegation) | ✅ SessionStart hook | ✅ `hookSpecificOutput` context | ❓ | ❓ |
+| Commit guard — hard `ask`/`deny` at the tool boundary | ✅ PreToolUse hook | ❌ not wired; live enforcement unverified | ❓ | ❓ |
+| Delegation policy reaches the orchestrator | ✅ direct AGENTS + hook | ✅ direct AGENTS + SessionStart | ❓ | ❓ |
+| Delegation log + nudge | ✅ PreToolUse hook | ❌ subagent hook payload unverified | ❓ | ❓ |
+| Generic subagent launch | ✅ | ✅ live Codex 0.144.1 capability | ❓ | ❓ |
+| Named `k-*` agents and child-model routing | ✅ Claude agent files | ❌ no proven Codex backend/model pin | ❓ | ❓ |
 | Second opinion (cross-vendor review) | ✅ asks Codex | ✅ asks Claude | ❓ | ❓ |
 
 ## What's in this repository
@@ -109,12 +110,12 @@ experiment against the real harness, not from vendor docs):
 
 Three movements, each defined once here and reused by every project:
 
-1. **Attach** ([BOOTSTRAP.md](BOOTSTRAP.md)). Add the submodule; classify the project's
-   archetype and language; resolve its guardrails and profiles; create the LOCAL layout
+1. **Attach** ([BOOTSTRAP.md](BOOTSTRAP.md)). Select a mounted or package carrier; classify
+   the project's archetype and language; resolve its guardrails and profiles; create the LOCAL layout
    (`_aitna/{agents,skills,tools,memory}` + `TASKS.md`); write the akmon block into the
    project's `AGENTS.md` and the machine-readable integration record `.akmon.toml`; wire
-   the hooks into vendor config; run `sync.py` (generated pointers) and
-   `verify.py --strict` (contract check). The agent prepares everything — **the owner
+   the hooks into vendor config; run `akmon sync` (generated pointers/materialization) and
+   `akmon verify --strict` (contract check). The agent prepares everything — **the owner
    commits**.
 2. **Stay current.** A project pins an akmon version; a bump is a **delta-check** against
    [CHANGELOG.md](CHANGELOG.md) — only `Breaking`/`migration` lines in the version window
@@ -122,7 +123,7 @@ Three movements, each defined once here and reused by every project:
    project's CI, so pointer and contract drift fail before merge, not months later.
 3. **Give back — the learn loop.** CAPTURE a session fact into `_aitna/memory/` → DISTILL
    recurring facts into a LOCAL skill/tool/requirement → PROMOTE what is general *and*
-   proven into akmon via PR → PROPAGATE to every project on the next submodule update.
+   proven into akmon via PR → PROPAGATE to every project on the next version update.
    Flow is one-way **up** ([MODEL.md §6](MODEL.md#6-the-learn-loop-how-the-standard-evolves)).
 
 This is the whole point of the SHARED layer: a lesson paid for once, in one project,

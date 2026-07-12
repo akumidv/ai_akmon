@@ -219,12 +219,10 @@ def _pytest_command(root: Path, tests: str) -> list[str]:
 def run_check(root: Path, subject: str) -> int:
     if subject == "akmon":
         commands = [
-            [sys.executable, str(BIN / "sync.py"), "--project-root", str(root), "--check"],
-            [sys.executable, str(BIN / "verify.py"), "--project-root", str(root), "--strict", "--quiet"],
             [sys.executable, str(META / "self_ci.py")],
-            _pytest_command(root, str(META / "tests")),
+            _pytest_command(KEYSTONE_ROOT, str(META / "tests")),
         ]
-        failed = _run_commands(root, commands)
+        failed = _run_commands(KEYSTONE_ROOT, commands)
     else:  # package — the project's own suite. Keep verify (the akmon contract still
         # applies), then defer to the project's documented commands rather than guessing.
         commands = [

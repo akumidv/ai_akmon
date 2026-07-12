@@ -1,6 +1,33 @@
 # Python bytecode caches — akmon tooling (bin/, tools/, hooks/, tests/) runs in-tree.
 __pycache__/
 *.py[cod]
+.review/
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+
+/.idea/
+/venv/
+/.venv/
+/.vscode/
+__pycache__
+.pytest_cache
+/.tmp
+.ipynb_checkpoints
+scripts/_*
+/data
+*.tar
+/dist/
+/build/
+*.egg-info/
+TODO.txt
+/demo/**/_*.*
+node_modules/
+.next/
+*.svg
+
+
 
 # Local env / secrets (never committed; see README §8).
 *.env

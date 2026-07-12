@@ -451,10 +451,11 @@ def _materialized_markdown_content(source_text: str) -> str:
 
 
 def _materialized_files(root: Path) -> list[PlannedFile]:
-    """Package-mode materialization (ADR 0009 §4): the always-on surface — ``hooks/*.py``
-    and ``guardrails/`` — copied into ``<AITNA_ROOT>/.akmon/`` with the generated banner, so
-    it is present as plain files before any venv is guaranteed (hooks) or wherever a
-    consumer's ``AGENTS.md`` ``@``-imports it (guardrails). A no-op outside package mode.
+    """Package-mode materialization (ADR 0009 §4): the always-on surface and every
+    stdlib-only runtime dependency of its hooks, copied into ``<AITNA_ROOT>/.akmon/``.
+
+    Python and Markdown files carry the generated banner. JSON must remain parseable, but is
+    still drift-checked because it is part of the planned file set. A no-op outside package mode.
     """
     if not is_package_mode(root):
         return []
@@ -473,6 +474,23 @@ def _materialized_files(root: Path) -> list[PlannedFile]:
         for guardrail_path in sorted(p for p in guardrails_source.iterdir() if p.is_file()):
             content = _materialized_markdown_content(guardrail_path.read_text(encoding="utf-8"))
             files.append(PlannedFile(dest / "guardrails" / guardrail_path.name, content))
+
+    runtime_files = (
+        *sorted((source / "tools" / "model_routing").glob("*.py")),
+        source / "tools" / "model_routing" / "registry.json",
+        source / "tools" / "d2_ledger" / "d2_ledger.py",
+    )
+    for runtime_path in runtime_files:
+        if not runtime_path.is_file():
+            continue
+        relative = runtime_path.relative_to(source)
+        source_text = runtime_path.read_text(encoding="utf-8")
+        content = (
+            _materialized_python_content(source_text)
+            if runtime_path.suffix == ".py"
+            else source_text
+        )
+        files.append(PlannedFile(dest / relative, content))
 
     return files
 
