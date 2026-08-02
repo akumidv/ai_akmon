@@ -95,6 +95,19 @@ verdict — *adopting* a plan, the recommendation, and the decision are never de
   as correctness, layer fit, coupling, operability, migration cost, reversibility,
   testability, and owner-verification risk. Recommend one option and state why it is better
   for this project now.
+- **Describe a change essence-first.** Every owner-facing description of a proposed change —
+  a walkthrough item, a design-concept section, an ADR option block — follows one fixed
+  order: (1) the **essence**: what the change is about and why it exists, in plain terms,
+  before any mechanism detail; (2) the **as-is**: how it works today, with its pros *and*
+  cons — the status quo is a real option and gets an honest ledger, not a prosecution;
+  (3) the **proposed solution**: what it solves and the drawbacks it keeps or introduces —
+  no proposal is drawback-free; (4) the **alternatives**: each viable option with why it
+  lost and which part of it, if any, is absorbed; (5) the **recommendation**: stated
+  explicitly — one named option, with the grounds for choosing it spelled out (which
+  criteria decided it, on what evidence) — never left implicit in the alternatives'
+  phrasing. The owner should be able to stop reading
+  after any step and still hold a true picture. (`review` uses the same pattern truncated
+  at the analysis seam — steps 1–2 plus fix criteria.)
 - **Separate best practice from local constraint.** When invoking a best practice, name the
   underlying principle and label its authority: general ecosystem practice, akmon rule,
   project requirement, or pragmatic local trade-off. Do not present taste or familiarity as
