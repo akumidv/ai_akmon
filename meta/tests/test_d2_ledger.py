@@ -91,6 +91,46 @@ def test_table_bounds_empty_table_has_no_rows():
     assert start == end
 
 
+LEDGER_WITH_BLANK_ROW_GAP = """\
+# D2 ledger — owner-verification points
+
+## Pending
+
+| id | kind | what | anchor | draft | second_opinion |
+|----|------|------|--------|-------|----------------|
+| D2-1 | math | reprice formula | src/x.py:42 |  |  |
+
+| D2-3 | data-shape | new column | src/y.py:10 |  |  |
+
+## Verified
+
+| id | kind | what | anchor | commit |
+|----|------|------|--------|--------|
+"""
+
+
+def test_table_bounds_tolerates_blank_line_within_pending_table():
+    # A blank line used as a visual break between rows must not truncate the data range —
+    # regression for the duplicate-id bug (D2-14's own ledger entry).
+    lines = LEDGER_WITH_BLANK_ROW_GAP.splitlines()
+    start, end = d2.table_bounds(lines, d2.PENDING_HEADER)
+    ids = [row[0] for line in lines[start:end] if (row := d2._split_row(line)) is not None]
+    assert ids == ["D2-1", "D2-3"]
+
+
+def test_next_id_sees_rows_past_a_blank_line_gap():
+    pending, verified = d2.parse_ledger(LEDGER_WITH_BLANK_ROW_GAP)
+    assert [r[0] for r in pending] == ["D2-1", "D2-3"]
+    assert d2.next_id(pending, verified) == "D2-4"
+
+
+def test_add_entry_increments_past_a_blank_line_gap():
+    new_text, new_id = d2.add_entry(LEDGER_WITH_BLANK_ROW_GAP, kind="architecture", what="x", anchor="z.py:1")
+    assert new_id == "D2-4"
+    pending, _ = d2.parse_ledger(new_text)
+    assert [r[0] for r in pending] == ["D2-1", "D2-3", "D2-4"]
+
+
 def test_table_bounds_missing_section_raises():
     try:
         d2.table_bounds(["# nope"], d2.PENDING_HEADER)

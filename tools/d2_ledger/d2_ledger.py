@@ -88,7 +88,14 @@ def _section_header_index(lines: list[str], header: str) -> int:
 
 
 def table_bounds(lines: list[str], header: str) -> tuple[int, int]:
-    """``[start, end)`` line range of a section's data rows (after the header + separator rows)."""
+    """``[start, end)`` line range of a section's data rows (after the header + separator rows).
+
+    Blank lines *within* the data range (used in practice as a visual grouping break between
+    rows) do not end the table — only a non-blank, non-row line (the next section header, or
+    any other content) does. ``end`` is trimmed back to just past the last real row, so a blank
+    run trailing the last row is never counted as part of the range (was: a duplicate-id bug —
+    the old first-blank-line cutoff made ``add``/``next_id`` blind to any row past a mid-table
+    blank line)."""
     section_at = _section_header_index(lines, header)
     i = section_at + 1
     n = len(lines)
@@ -100,9 +107,16 @@ def table_bounds(lines: list[str], header: str) -> tuple[int, int]:
     if i >= n or not _is_separator_row(_split_row(lines[i]) or []):
         raise ValueError(f"malformed ledger: '{header}' table has no separator row")
     data_start = i + 1
+    cursor = data_start
     data_end = data_start
-    while data_end < n and _split_row(lines[data_end]) is not None:
-        data_end += 1
+    while cursor < n:
+        if _split_row(lines[cursor]) is not None:
+            cursor += 1
+            data_end = cursor
+        elif lines[cursor].strip() == "":
+            cursor += 1
+        else:
+            break
     return data_start, data_end
 
 

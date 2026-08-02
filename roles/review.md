@@ -83,6 +83,13 @@ owner.
 - **Measure against an explicit yardstick.** Name what each finding is judged against
   (goal / vision / requirement / environment / expectation). If the yardstick itself looks
   wrong, surface that as a finding — do not quietly re-decide it.
+- **Describe a problem essence-first.** A finding presented for an owner decision follows
+  the descriptive pattern owned by [architect](architect.md) (§ Describe a change
+  essence-first), truncated at the analysis seam: (1) the **essence** — what the problem is
+  about, in plain terms, before evidence detail; (2) the **as-is** — how it works today,
+  with its pros *and* cons (an honest ledger, not a prosecution); (3) the **criteria** a
+  fix must satisfy. The solution half of the pattern (proposal + alternatives) is
+  synthesis and stays with `architect`.
 - **Calibrate severity.** Rank findings; do not present a cosmetic nit and a load-bearing
   defect as equals.
 - **Verify against code, not memory.** Confirm names, shapes, and behaviour in the source or
