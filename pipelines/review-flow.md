@@ -33,7 +33,7 @@ thing* goes to code-flow.
    - *Gate — audit (post-fan-out):* when a trigger fires — a **count floor**
      (`review_min_findings`, registry data) or the **structural trigger** (the Decompose
      fan-out split into ≥2 independently-checked zones) — route an `audit` pass
-     (`k-auditor`, clean context) over the **gate-pack** (findings + the Frame yardstick +
+     (`k_auditor`, clean context) over the **gate-pack** (findings + the Frame yardstick +
      the coverage map). It looks for contradictions between independently-correct findings,
      **uncovered seams** between zones, re-ranking deltas, and a level verdict. Advisory; the
      orchestrator may skip above the floor (silent-but-logged). One bounded **loop-back**

@@ -626,7 +626,7 @@ def test_delegation_nudge_counts_read_kind(monkeypatch, tmp_path):
 
 def test_delegation_nudge_suppressed_in_subagent(monkeypatch, tmp_path):
     # C28d: a subagent call (agent_id present in the payload) must never nudge or ask, even
-    # well past both thresholds — k-* delegates have no Task tool to act on the reminder.
+    # well past both thresholds — k_* delegates have no Task tool to act on the reminder.
     _nudge_setup(monkeypatch, tmp_path, threshold=3, ask_threshold=5)
     for _ in range(25):
         assert hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1", is_subagent=True) is None
@@ -769,8 +769,8 @@ def test_delegation_nudge_ask_escalates_to_deny_outside_interactive_default(monk
 
 
 def test_hook_result_with_system_message():
-    result = HookResult(event_name="PreToolUse", system_message="[akmon] → k-explorer")
-    assert result.system_message == "[akmon] → k-explorer"
+    result = HookResult(event_name="PreToolUse", system_message="[akmon] → k_explorer")
+    assert result.system_message == "[akmon] → k_explorer"
 
 
 def test_hook_result_system_message_is_optional():

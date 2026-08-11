@@ -61,7 +61,7 @@ inside each project's own forge-workspace. The vocabulary maps one-to-one onto t
 |--------------|---------------|------|
 | **AItna** (Αἴτνη) — the volcano the forge sits under | each project's **dev-layer workspace** — the fire where the project is built; begins with **ai** | `_aitna/` |
 | **akmon** (ἄκμων) — the AnvIl in the forge | this **shared standard/engine**, mounted inside the workspace | `akmon` / repo `ai_akmon`, at `_aitna/akmon/` |
-| **Kyklōpes** (Κύκλωπες) — Zeus's smiths | the **subagents** — the `k-` prefix (`k-explorer`, `k-implementer`, …) | `k-*` (prefix kept) |
+| **Kyklōpes** (Κύκλωπες) — Zeus's smiths | the **subagents** — the `k-` prefix (`k_explorer`, `k_implementer`, …) | `k_*` (prefix kept) |
 
 Containment is literal: the anvil sits **inside** the volcano-forge, exactly as `akmon/`
 sits inside `_aitna/`; the `k-` prefix of the subagents reads as *Kyklōpes*.
@@ -74,17 +74,21 @@ sits inside `_aitna/`; the `k-` prefix of the subagents reads as *Kyklōpes*.
 akmon is LLM-agnostic by design, but *enforcement depth* differs per vendor harness — a
 pointer file is universal, hooks are not. The honest current state; ❓ cells are
 unverified and tracked as task **N1** in [meta/TASKS.md](meta/TASKS.md) (fill from
-experiment against the real harness, not from vendor docs):
+experiment against the real harness, not from vendor docs). The Claude and Codex columns
+were measured live under **N2** — Claude Code 2.1.221 and codex-cli 0.146.0 — and ⚠️ marks
+a capability that exists but is narrower than the ✅ next to it; details in the
+[N2 findings](meta/reviews/alternatives/n2-stage0-probes-inventory-20260807.md):
 
 | Capability | Claude Code | Codex CLI | Gemini CLI | Copilot |
 |---|---|---|---|---|
 | `AGENTS.md` entry point via generated pointer (`sync.py`) | ✅ `CLAUDE.md` | ✅ native `AGENTS.md` | ✅ `GEMINI.md` | ❓ |
-| Session-start context (agent roster, memory, delegation) | ✅ SessionStart hook | ✅ `hookSpecificOutput` context | ❓ | ❓ |
-| Commit guard — hard `ask`/`deny` at the tool boundary | ✅ PreToolUse hook | ❌ not wired; live enforcement unverified | ❓ | ❓ |
+| Always-on guardrails via `@`-import from `AGENTS.md` | ✅ imports expanded | ❌ `@` lines delivered as literal text (0.146.0) — the guardrails never load | ❓ | ❓ |
+| Session-start context (agent roster, memory, delegation) | ✅ SessionStart hook | ⚠️ `hookSpecificOutput` reaches the **parent only** — no `SubagentStart` dispatch in 0.146.0 | ❓ | ❓ |
+| Commit guard — hard `ask`/`deny` at the tool boundary | ✅ PreToolUse hook | ⚠️ deny enforced per **route** (0.146.0): blocked `apply_patch` is reachable via the shell unless the `Bash` matcher is emitted too | ❓ | ❓ |
 | Delegation policy reaches the orchestrator | ✅ direct AGENTS + hook | ✅ direct AGENTS + SessionStart | ❓ | ❓ |
 | Delegation log + nudge | ✅ PreToolUse hook | ❌ subagent hook payload unverified | ❓ | ❓ |
 | Generic subagent launch | ✅ | ✅ live Codex 0.144.1 capability | ❓ | ❓ |
-| Named `k-*` agents and child-model routing | ✅ Claude agent files | ❌ no proven Codex backend/model pin | ❓ | ❓ |
+| Named `k_*` agents and child-model routing | ✅ Claude agent files | ⚠️ model pin **and** named identity proven live (0.146.0); `.codex/agents/*.toml` exists as a carrier but akmon emits none | ❓ | ❓ |
 | Second opinion (cross-vendor review) | ✅ asks Codex | ✅ asks Claude | ❓ | ❓ |
 
 ## What's in this repository
@@ -163,7 +167,7 @@ as `quant`, attached only where the project has that concern).
 ### How a session runs — the model in one picture
 
 One session = one **orchestrator** (the main assistant, on the session's own model) plus
-the `k-*` smiths it delegates to. The orchestrator keeps only what cannot be delegated —
+the `k_*` smiths it delegates to. The orchestrator keeps only what cannot be delegated —
 decompose, route, synthesize, owner dialogue — and hands every named **task kind** to the
 smith bound to it:
 
@@ -171,11 +175,11 @@ smith bound to it:
 owner ──► orchestrator (session model)
             │   decompose · route · synthesize · owner dialogue
             │
-            ├─► k-explorer / k-mechanic / k-validator   worker     cheapest adequate rung
-            ├─► k-implementer                           worker     mid rung
-            ├─► k-reasoner                              reasoner   the orchestrator's rung
+            ├─► k_explorer / k_mechanic / k_validator   worker     cheapest adequate rung
+            ├─► k_implementer                           worker     mid rung
+            ├─► k_reasoner                              reasoner   the orchestrator's rung
             │         …results return; the orchestrator synthesizes…
-            ├─► k-auditor  ─ clean context, gate-pack ─ auditor    maximal rung, always
+            ├─► k_auditor  ─ clean context, gate-pack ─ auditor    maximal rung, always
             └─► second opinion                          other vendor, opt-in
             │
 owner ◄── synthesis + audit verdict + the items only the owner can verify
@@ -183,22 +187,22 @@ owner ◄── synthesis + audit verdict + the items only the owner can verify
 
 - **Routing is data.** The task-kind → tier matrix and the per-vendor selection policy live
   in [`tools/model_routing/registry.json`](tools/model_routing/registry.json) — the single
-  owner; `init.py` binds tiers to locally available models and generates the `k-*` agent
+  owner; `init.py` binds tiers to locally available models and generates the `k_*` agent
   definitions. Operative rules: [MODEL.md §10](MODEL.md#10-capability-tiers--model-routing).
 - **Quality concentrates where leverage is highest.** Cheap models fan out to sweep and
   edit; the maximal model runs at a few low-token points — plan checks and the **gate
-  audit**, where a clean-context `k-auditor` judges a whole gate's collected material
+  audit**, where a clean-context `k_auditor` judges a whole gate's collected material
   against a yardstick. Worked, real example: [examples/gate-anatomy.md](examples/gate-anatomy.md).
 - **Hooks keep it true at runtime.** SessionStart shows the binding; a PreToolUse hook logs
   every delegation at zero token cost; the delegation nudge pushes a drifting orchestrator
   back to the smiths; the commit guard enforces owner-owned commits.
 
-> **The smiths are used, not just named.** Delegation to the `k-*` smiths is **enforced**,
+> **The smiths are used, not just named.** Delegation to the `k_*` smiths is **enforced**,
 > not merely documented — because restating "delegate by task kind" in prose did not stop
 > the orchestrator from doing everything itself. A PreToolUse forcing-function counts the
 > orchestrator's own consecutive delegable calls (read/sweep, edit, shell) with no
 > delegation and, past a threshold, nudges — then hard-asks — to hand the work to a smith.
-> The smiths themselves are exempt (a `k-*` delegate has no delegation tool of its own).
+> The smiths themselves are exempt (a `k_*` delegate has no delegation tool of its own).
 > Mechanism + motivation: [model-routing §13](meta/design/model-routing.md).
 
 ## akmon's own development

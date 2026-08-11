@@ -54,7 +54,7 @@ project-local hook surface.
   Capability tiers). Runs on **SessionStart** and **UserPromptSubmit**: both read the session
   transcript (`transcript_path`) to detect the model the main chain actually runs on, and
   when it differs from the recorded orchestrator (a session on another model, or a mid-session
-  `/model` switch) recompute the binding and regenerate the `k-*` subagent defs so delegates
+  `/model` switch) recompute the binding and regenerate the `k_*` subagent defs so delegates
   follow the live model — the orchestrator itself is never overridden, only detected.
   SessionStart injects the status line (binding + self-check + the **corridor warning** when
   the orchestrator sits below the orchestration floor or on the auditor's reserved top
@@ -76,7 +76,7 @@ project-local hook surface.
   normalize to the same read kind) since session start or the last subagent delegation
   (`Task`/`Agent` resets the counter) and, past a threshold (default 10; env
   `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`), injects a **one-time, advisory** reminder that the
-  work may belong to a `k-*` delegate (MODEL.md § Capability tiers). Task-kind classification
+  work may belong to a `k_*` delegate (MODEL.md § Capability tiers). Task-kind classification
   is fuzzy, so the advisory never blocks; but on *sustained* drift past a second, higher
   threshold (default 20; env `KEYSTONE_DELEGATION_ASK_THRESHOLD`, clamped to at least the
   advisory threshold) it graduates to a hard `ask` permission decision — its own

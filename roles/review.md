@@ -64,7 +64,7 @@ default, not the orchestrator sweeping everything itself
 
 **Gate audit** (MODEL.md § Capability tiers; review-flow Calibrate). When a trigger fires — the `review_min_findings`
 count floor or a fan-out that split into ≥2 zones — route a clean-context `audit`
-(`k-auditor`, pinned to the maximal rung) over the gate-pack: it catches
+(`k_auditor`, pinned to the maximal rung) over the gate-pack: it catches
 contradictions between independently-correct findings and **uncovered seams** the per-part
 sweep cannot see. `audit` is a **cross-cutting verification kind** (routable from
 any role, not just review). The invariant holds throughout: the audit **drafts** a verdict,

@@ -222,7 +222,7 @@ class SubagentRecord:
 
 
 def agent_tier_map() -> dict[str, str]:
-    """Map ``k-*`` agent name → tier, from the routing registry's generated-agent specs."""
+    """Map ``k_*`` agent name → tier, from the routing registry's generated-agent specs."""
     return {spec.name: spec.tier for spec in routing.AGENT_SPECS}
 
 

@@ -12,9 +12,7 @@ import uuid
 from pathlib import Path
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 _ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
@@ -148,7 +146,7 @@ def test_binding_without_available_uses_semantic_fallback_and_omits_agent_models
     assert binding.reasoner == "strongest"
     assert binding.auditor == "strongest"
     assert binding.warning is not None
-    assert "model:" not in files[".claude/agents/k-explorer.md"]
+    assert "model:" not in files[".claude/agents/k_explorer.md"]
 
 
 def test_task_kind_floors_resolves_highest():
@@ -211,14 +209,14 @@ def test_overlay_deep_merges_and_changes_hash(tmp_path):
 
     overlay = {
         "anthropic": {"semantic_fallback": {"worker": "local-worker"}},
-        "briefs": {"k-explorer": "Project note."},
+        "briefs": {"k_explorer": "Project note."},
     }
     routing.overlay_path(root).write_text(json.dumps(overlay), encoding="utf-8")
     merged = routing.load_registry(akmon_dir, root)
 
     assert merged["anthropic"]["semantic_fallback"]["worker"] == "local-worker"
     assert merged["anthropic"]["selection_policy"] == REGISTRY["anthropic"]["selection_policy"]  # untouched by merge
-    assert merged["briefs"]["k-explorer"] == "Project note."
+    assert merged["briefs"]["k_explorer"] == "Project note."
     assert routing.registry_hash(merged) != base_hash
 
 
@@ -231,17 +229,17 @@ def test_generated_agents_cover_all_specs_with_models():
     binding = routing.compute_binding(REGISTRY, "large", available=["small", "medium", "large"])
     files = routing.generated_agent_files(REGISTRY, binding)
     assert set(files) == {
-        ".claude/agents/k-explorer.md",
-        ".claude/agents/k-mechanic.md",
-        ".claude/agents/k-validator.md",
-        ".claude/agents/k-implementer.md",
-        ".claude/agents/k-reasoner.md",
-        ".claude/agents/k-auditor.md",
+        ".claude/agents/k_explorer.md",
+        ".claude/agents/k_mechanic.md",
+        ".claude/agents/k_validator.md",
+        ".claude/agents/k_implementer.md",
+        ".claude/agents/k_reasoner.md",
+        ".claude/agents/k_auditor.md",
     }
-    assert "model: small" in files[".claude/agents/k-explorer.md"]
-    assert "model: medium" in files[".claude/agents/k-implementer.md"]
-    assert "model: large" in files[".claude/agents/k-reasoner.md"]
-    assert "model: large" in files[".claude/agents/k-auditor.md"]
+    assert "model: small" in files[".claude/agents/k_explorer.md"]
+    assert "model: medium" in files[".claude/agents/k_implementer.md"]
+    assert "model: large" in files[".claude/agents/k_reasoner.md"]
+    assert "model: large" in files[".claude/agents/k_auditor.md"]
     for content in files.values():
         assert content.startswith("---\n")
         assert routing.GENERATED_BANNER in content
@@ -250,23 +248,21 @@ def test_generated_agents_cover_all_specs_with_models():
 def test_generated_k_auditor_is_read_only():
     binding = routing.compute_binding(REGISTRY, "large", available=["small", "medium", "large"])
     files = routing.generated_agent_files(REGISTRY, binding)
-    content = files[".claude/agents/k-auditor.md"]
+    content = files[".claude/agents/k_auditor.md"]
     assert "tools: Read, Grep, Glob, Bash" in content
 
 
 def test_generated_agent_appends_overlay_brief():
     binding = routing.compute_binding(REGISTRY, "large", available=["small", "medium", "large"])
-    registry = dict(REGISTRY, briefs={"k-implementer": "Use the project data dictionary."})
+    registry = dict(REGISTRY, briefs={"k_implementer": "Use the project data dictionary."})
     files = routing.generated_agent_files(registry, binding)
-    assert "Use the project data dictionary." in files[".claude/agents/k-implementer.md"]
-    assert "project data dictionary" not in files[".claude/agents/k-mechanic.md"]
+    assert "Use the project data dictionary." in files[".claude/agents/k_implementer.md"]
+    assert "project data dictionary" not in files[".claude/agents/k_mechanic.md"]
 
 
 def test_agent_specs_cover_every_delegable_task_kind():
     delegable = {
-        kind
-        for kind, spec in REGISTRY["task_kinds"].items()
-        if spec["tier"] in ("worker", "reasoner", "auditor")
+        kind for kind, spec in REGISTRY["task_kinds"].items() if spec["tier"] in ("worker", "reasoner", "auditor")
     }
     covered = {kind for spec in routing.AGENT_SPECS for kind in spec.kinds}
     assert covered == delegable
@@ -314,7 +310,7 @@ def test_staleness_missing_config():
 
 
 def test_staleness_on_registry_change():
-    changed = dict(REGISTRY, briefs={"k-explorer": "new"})
+    changed = dict(REGISTRY, briefs={"k_explorer": "new"})
     assert "changed since init" in routing.staleness(_fresh_config(), changed, None)
 
 
@@ -377,23 +373,23 @@ def test_local_config_carries_fallback_model_when_provider_equals_vendor(tmp_pat
 def test_delegation_log_line_for_subagent_tools():
     line = routing.delegation_log_line(
         "Agent",
-        {"subagent_type": "k-explorer", "model": "small", "description": "find  X"},
+        {"subagent_type": "k_explorer", "model": "small", "description": "find  X"},
         "T0",
         "sess-1",
     )
     # timestamp · session_id · subagent · model · zone · description
-    assert line == "T0\tsess-1\tk-explorer\tsmall\t-\tfind X"
+    assert line == "T0\tsess-1\tk_explorer\tsmall\t-\tfind X"
     assert routing.delegation_log_line("Task", {}, "T0") == "T0\t-\t-\t-\t-\t"
 
 
 def test_delegation_log_line_parses_zone_marker():
     line = routing.delegation_log_line(
         "Agent",
-        {"subagent_type": "k-explorer", "model": "small", "description": "[zone:auth]  check tokens"},
+        {"subagent_type": "k_explorer", "model": "small", "description": "[zone:auth]  check tokens"},
         "T0",
         "sess-1",
     )
-    assert line == "T0\tsess-1\tk-explorer\tsmall\tauth\tcheck tokens"
+    assert line == "T0\tsess-1\tk_explorer\tsmall\tauth\tcheck tokens"
 
 
 def test_parse_zone():
@@ -405,15 +401,15 @@ def test_parse_zone():
 def test_parse_delegation_entries_current_and_legacy():
     entries = routing.parse_delegation_entries(
         [
-            "T0\tsess-1\tk-explorer\tsmall\tauth\tcheck tokens",
-            "T1\tk-explorer\tsmall\tlegacy line",  # legacy 4-col: no session/zone
+            "T0\tsess-1\tk_explorer\tsmall\tauth\tcheck tokens",
+            "T1\tk_explorer\tsmall\tlegacy line",  # legacy 4-col: no session/zone
             "too\tshort",  # skipped
             "",  # skipped
         ]
     )
     assert len(entries) == 2
-    assert entries[0] == routing.DelegationEntry("T0", "sess-1", "k-explorer", "small", "auth", "check tokens")
-    assert entries[1] == routing.DelegationEntry("T1", None, "k-explorer", "small", None, "legacy line")
+    assert entries[0] == routing.DelegationEntry("T0", "sess-1", "k_explorer", "small", "auth", "check tokens")
+    assert entries[1] == routing.DelegationEntry("T1", None, "k_explorer", "small", None, "legacy line")
 
 
 def test_delegation_log_ignores_other_tools():
@@ -431,30 +427,28 @@ _BINDING_CONFIG = {
 
 
 def test_bound_model_for_derives_from_binding_by_tier():
-    assert routing.bound_model_for(_BINDING_CONFIG, "k-explorer") == "haiku"  # worker
-    assert routing.bound_model_for(_BINDING_CONFIG, "k-implementer") == "sonnet"  # mid
-    assert routing.bound_model_for(_BINDING_CONFIG, "k-reasoner") == "opus"  # reasoner
-    assert routing.bound_model_for(_BINDING_CONFIG, "k-auditor") == "fable"  # auditor
+    assert routing.bound_model_for(_BINDING_CONFIG, "k_explorer") == "haiku"  # worker
+    assert routing.bound_model_for(_BINDING_CONFIG, "k_implementer") == "sonnet"  # mid
+    assert routing.bound_model_for(_BINDING_CONFIG, "k_reasoner") == "opus"  # reasoner
+    assert routing.bound_model_for(_BINDING_CONFIG, "k_auditor") == "fable"  # auditor
     assert routing.bound_model_for(_BINDING_CONFIG, "general-purpose") is None  # host built-in
-    assert routing.bound_model_for({}, "k-explorer") is None  # no binding
+    assert routing.bound_model_for({}, "k_explorer") is None  # no binding
 
 
 def test_bound_model_for_skips_semantic_fallback_token():
     # A tier value that is not a real alias (semantic-fallback) -> None, mirroring _agent_model.
     config = {"binding": {"worker": "worker"}, "available": ["haiku", "sonnet"]}
-    assert routing.bound_model_for(config, "k-explorer") is None
+    assert routing.bound_model_for(config, "k_explorer") is None
 
 
 def test_delegation_log_line_uses_bound_model_and_call_override():
-    line = routing.delegation_log_line(
-        "Agent", {"subagent_type": "k-explorer", "description": "d"}, "T0", "s", "haiku"
-    )
-    assert line == "T0\ts\tk-explorer\thaiku\t-\td"
+    line = routing.delegation_log_line("Agent", {"subagent_type": "k_explorer", "description": "d"}, "T0", "s", "haiku")
+    assert line == "T0\ts\tk_explorer\thaiku\t-\td"
     # An explicit model on the call overrides the bound one.
     override = routing.delegation_log_line(
-        "Agent", {"subagent_type": "k-explorer", "model": "opus", "description": "d"}, "T0", "s", "haiku"
+        "Agent", {"subagent_type": "k_explorer", "model": "opus", "description": "d"}, "T0", "s", "haiku"
     )
-    assert override == "T0\ts\tk-explorer\topus\t-\td"
+    assert override == "T0\ts\tk_explorer\topus\t-\td"
 
 
 # --------------------------------------------------------------------------------------
@@ -463,30 +457,30 @@ def test_delegation_log_line_uses_bound_model_and_call_override():
 
 
 def test_subagent_kinds():
-    assert routing.subagent_kinds("k-explorer") == ("explore-search", "summarize")
+    assert routing.subagent_kinds("k_explorer") == ("explore-search", "summarize")
     assert routing.subagent_kinds("general-purpose") == ()
 
 
 def test_role_matrix_warning_against_the_real_registry():
     registry = routing.load_registry(_KEYSTONE)
     # Edit agents under the analysis-only review role -> warn (no kind intersects).
-    assert routing.role_matrix_warning(registry, "k-mechanic", "review") is not None
-    assert routing.role_matrix_warning(registry, "k-implementer", "review") is not None
-    # k-reasoner shares debug-deep/plan-draft with review -> no warn.
-    assert routing.role_matrix_warning(registry, "k-reasoner", "review") is None
+    assert routing.role_matrix_warning(registry, "k_mechanic", "review") is not None
+    assert routing.role_matrix_warning(registry, "k_implementer", "review") is not None
+    # k_reasoner shares debug-deep/plan-draft with review -> no warn.
+    assert routing.role_matrix_warning(registry, "k_reasoner", "review") is None
     # engineer may route implementation.
-    assert routing.role_matrix_warning(registry, "k-implementer", "engineer") is None
-    # Cross-cutting verification (A7 (b)): k-auditor's only kind is audit, a
+    assert routing.role_matrix_warning(registry, "k_implementer", "engineer") is None
+    # Cross-cutting verification (A7 (b)): k_auditor's only kind is audit, a
     # cross_cutting_kind -> routable from ANY role, never warns (incl. roles whose row omits it).
     for role in ("review", "architect", "engineer", "learn", "release"):
-        assert routing.role_matrix_warning(registry, "k-auditor", role) is None
+        assert routing.role_matrix_warning(registry, "k_auditor", role) is None
     # The exemption is driven by cross_cutting_kinds, not the per-role rows: drop it and the
     # same routing warns again (guards against the kind silently re-entering a row instead).
     gated = {**registry, "cross_cutting_kinds": []}
-    assert routing.role_matrix_warning(gated, "k-auditor", "engineer") is not None
+    assert routing.role_matrix_warning(gated, "k_auditor", "engineer") is not None
     # No/unknown role, or a host built-in with no kinds -> no check.
-    assert routing.role_matrix_warning(registry, "k-mechanic", None) is None
-    assert routing.role_matrix_warning(registry, "k-mechanic", "no-such-role") is None
+    assert routing.role_matrix_warning(registry, "k_mechanic", None) is None
+    assert routing.role_matrix_warning(registry, "k_mechanic", "no-such-role") is None
     assert routing.role_matrix_warning(registry, "general-purpose", "review") is None
 
 
@@ -526,25 +520,28 @@ def test_init_writes_agents_and_config_and_is_idempotent(tmp_path, capsys):
     root = _make_project(tmp_path)
     init = _load_init()
 
-    assert init.main(
-        [
-            "--project-root",
-            str(root),
-            "--orchestrator",
-            "large",
-            "--available",
-            "small,medium,large",
-            "--second-opinion",
-            "on",
-        ]
-    ) == 0
+    assert (
+        init.main(
+            [
+                "--project-root",
+                str(root),
+                "--orchestrator",
+                "large",
+                "--available",
+                "small,medium,large",
+                "--second-opinion",
+                "on",
+            ]
+        )
+        == 0
+    )
     config = json.loads((root / ".claude" / "model-routing.local.json").read_text(encoding="utf-8"))
     assert config["orchestrator"] == "large"
     assert config["binding"]["worker"] == "small"
     assert config["second_opinion"] is True
     assert config["registry_hash"] == routing.registry_hash(routing.load_registry(root / "_aitna" / "akmon", root))
-    assert (root / ".claude" / "agents" / "k-reasoner.md").is_file()
-    auditor_file = root / ".claude" / "agents" / "k-auditor.md"
+    assert (root / ".claude" / "agents" / "k_reasoner.md").is_file()
+    auditor_file = root / ".claude" / "agents" / "k_auditor.md"
     assert auditor_file.is_file()
     auditor_content = auditor_file.read_text(encoding="utf-8")
     assert "model: large" in auditor_content
@@ -552,59 +549,71 @@ def test_init_writes_agents_and_config_and_is_idempotent(tmp_path, capsys):
 
     capsys.readouterr()
     # Second run: everything already matches; --check agrees.
-    assert init.main(
-        [
-            "--project-root",
-            str(root),
-            "--orchestrator",
-            "large",
-            "--available",
-            "small,medium,large",
-            "--second-opinion",
-            "on",
-        ]
-    ) == 0
+    assert (
+        init.main(
+            [
+                "--project-root",
+                str(root),
+                "--orchestrator",
+                "large",
+                "--available",
+                "small,medium,large",
+                "--second-opinion",
+                "on",
+            ]
+        )
+        == 0
+    )
     assert "updated:" not in capsys.readouterr().out
-    assert init.main(
-        [
-            "--project-root",
-            str(root),
-            "--orchestrator",
-            "large",
-            "--available",
-            "small,medium,large",
-            "--second-opinion",
-            "on",
-            "--check",
-        ]
-    ) == 0
+    assert (
+        init.main(
+            [
+                "--project-root",
+                str(root),
+                "--orchestrator",
+                "large",
+                "--available",
+                "small,medium,large",
+                "--second-opinion",
+                "on",
+                "--check",
+            ]
+        )
+        == 0
+    )
 
 
 def test_init_check_flags_stale_agents(tmp_path, capsys):
     root = _make_project(tmp_path)
     init = _load_init()
     assert init.main(["--project-root", str(root), "--orchestrator", "large", "--available", "small,medium,large"]) == 0
-    (root / ".claude" / "agents" / "k-explorer.md").write_text("hand-edited\n", encoding="utf-8")
-    assert init.main(
-        ["--project-root", str(root), "--orchestrator", "large", "--available", "small,medium,large", "--check"]
-    ) == 1
+    (root / ".claude" / "agents" / "k_explorer.md").write_text("hand-edited\n", encoding="utf-8")
+    assert (
+        init.main(
+            ["--project-root", str(root), "--orchestrator", "large", "--available", "small,medium,large", "--check"]
+        )
+        == 1
+    )
 
 
 def test_init_preserves_second_opinion_when_flag_omitted(tmp_path):
     root = _make_project(tmp_path)
     init = _load_init()
-    assert init.main(
-        [
-            "--project-root",
-            str(root),
-            "--orchestrator",
-            "large",
-            "--available",
-            "small,medium,large",
-            "--second-opinion",
-            "on",
-        ]
-    ) == 0
+    assert (
+        init.main(
+            [
+                "--project-root",
+                str(root),
+                "--orchestrator",
+                "large",
+                "--available",
+                "small,medium,large",
+                "--second-opinion",
+                "on",
+            ]
+        )
+        == 0
+    )
     assert init.main(["--project-root", str(root), "--orchestrator", "large", "--available", "small,medium,large"]) == 0
     config = json.loads((root / ".claude" / "model-routing.local.json").read_text(encoding="utf-8"))
     assert config["second_opinion"] is True
@@ -692,11 +701,57 @@ def test_rebind_to_recomputes_binding_and_regenerates_artifacts(tmp_path):
     assert changed  # files were rewritten
     new_config = json.loads((root / routing.LOCAL_CONFIG_REL).read_text(encoding="utf-8"))
     assert new_config["orchestrator"] == "opus"
-    assert "model: opus" in (root / ".claude" / "agents" / "k-reasoner.md").read_text(encoding="utf-8")
+    assert "model: opus" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
 
     # Idempotent: rebinding to the same orchestrator rewrites nothing.
     _, changed_again = routing.rebind_to(root, registry, new_config, "opus")
     assert changed_again == []
+
+
+def test_rebind_prunes_renamed_generated_agents_but_keeps_hand_written_ones(tmp_path):
+    root = _make_project(tmp_path)
+    init = _load_init()
+    assert init.main(["--project-root", str(root), "--orchestrator", "opus", "--available", ",".join(AVAILABLE)]) == 0
+    agents = root / routing.AGENTS_DIR_REL
+
+    # A definition left behind by a previous agent name (carries the generated banner) …
+    stale = agents / "k-oldname.md"
+    stale.write_text(f"---\nname: k-oldname\n---\n\n{routing.GENERATED_BANNER}\n", encoding="utf-8")
+    # … and one the project wrote by hand, which must survive untouched.
+    handwritten = agents / "my-own-agent.md"
+    handwritten.write_text("---\nname: my-own-agent\n---\n\nmine, not generated\n", encoding="utf-8")
+
+    registry = routing.load_registry(root / "_aitna" / "akmon", root)
+    config = json.loads((root / routing.LOCAL_CONFIG_REL).read_text(encoding="utf-8"))
+    routing.rebind_to(root, registry, config, "fable")
+
+    assert not stale.exists()
+    assert handwritten.read_text(encoding="utf-8") == "---\nname: my-own-agent\n---\n\nmine, not generated\n"
+    assert (agents / "k_explorer.md").is_file()  # a planned agent is never a deletion target
+
+
+def test_obsolete_agent_files_reports_without_deleting_in_dry_run(tmp_path):
+    root = _make_project(tmp_path)
+    init = _load_init()
+    assert init.main(["--project-root", str(root), "--orchestrator", "opus", "--available", ",".join(AVAILABLE)]) == 0
+    stale = root / routing.AGENTS_DIR_REL / "k-gone.md"
+    stale.write_text(f"{routing.GENERATED_BANNER}\n", encoding="utf-8")
+
+    planned = [
+        root / rel
+        for rel in routing.generated_agent_files(
+            routing.load_registry(root / "_aitna" / "akmon", root),
+            routing.compute_binding(
+                routing.load_registry(root / "_aitna" / "akmon", root), "opus", AVAILABLE, "anthropic"
+            ),
+        )
+    ]
+    assert routing.remove_obsolete_agents(root, planned, write=False) == [stale]
+    assert stale.exists()  # dry-run reports the deletion it would make, and makes none
+
+
+def test_obsolete_agent_files_empty_when_agents_dir_missing(tmp_path):
+    assert routing.obsolete_agent_files(tmp_path, []) == []
 
 
 def test_rebind_notice_names_binding_and_warns_when_weak():
@@ -726,9 +781,12 @@ def _load_hook():
 
 def _init_project(tmp_path: Path, orchestrator: str = "fable") -> Path:
     root = _make_project(tmp_path)
-    assert _load_init().main(
-        ["--project-root", str(root), "--orchestrator", orchestrator, "--available", ",".join(AVAILABLE)]
-    ) == 0
+    assert (
+        _load_init().main(
+            ["--project-root", str(root), "--orchestrator", orchestrator, "--available", ",".join(AVAILABLE)]
+        )
+        == 0
+    )
     return root
 
 
@@ -749,7 +807,7 @@ def test_hook_session_start_rebinds_to_detected_model(tmp_path):
     assert "orchestrator=opus" in result.additional_context  # detected + rebound
     config = json.loads((root / routing.LOCAL_CONFIG_REL).read_text(encoding="utf-8"))
     assert config["orchestrator"] == "opus"
-    assert "model: opus" in (root / ".claude" / "agents" / "k-reasoner.md").read_text(encoding="utf-8")
+    assert "model: opus" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
 
 
 def test_hook_user_prompt_submit_silent_without_change(tmp_path):
@@ -771,7 +829,7 @@ def test_hook_user_prompt_submit_notice_on_switch(tmp_path):
     )
     assert result.event_name == "UserPromptSubmit"
     assert "orchestrator model changed → opus" in result.additional_context
-    assert "model: opus" in (root / ".claude" / "agents" / "k-reasoner.md").read_text(encoding="utf-8")
+    assert "model: opus" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
     # Owner-addressed → dual-channel (requirement 11): the notice also reaches the UI.
     assert "orchestrator model changed → opus" in result.system_message
 

@@ -5,7 +5,7 @@ Runs on **SessionStart** and **UserPromptSubmit**. Both read the session transcr
 (``transcript_path`` in the payload) to detect the model the main chain is actually
 running on, map it to an alias, and — when it differs from the recorded orchestrator (a
 session launched on another model, or a mid-session ``/model`` switch) — recompute the
-binding and regenerate the ``k-*`` subagent definitions so delegates follow the live
+binding and regenerate the ``k_*`` subagent definitions so delegates follow the live
 model. The orchestrator itself is never overridden: it is the owner's explicit choice,
 only *detected* here.
 

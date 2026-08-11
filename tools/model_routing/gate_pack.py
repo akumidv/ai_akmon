@@ -9,7 +9,7 @@ deterministic script").
 
 Two pack kinds:
 - ``full`` — post-fan-out audit pack: artifacts + yardstick + coverage map (+ optional
-  decisions register / dependency-graph excerpt), ending in the k-auditor output
+  decisions register / dependency-graph excerpt), ending in the k_auditor output
   contract (§9.3 item 4).
 - ``plan-check`` — the pre-fan-out anchor (§9.3 item 5): yardstick + zone plan only, no
   artifacts, checking the plan against the goal rather than against its own coverage map.
@@ -207,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--stdout",
         action="store_true",
-        help="Also print the full pack, so the orchestrator can paste it into the k-auditor Agent call.",
+        help="Also print the full pack, so the orchestrator can paste it into the k_auditor Agent call.",
     )
     args = parser.parse_args(argv)
 

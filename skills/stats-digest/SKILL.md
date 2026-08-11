@@ -32,7 +32,7 @@ never in the orchestrator.
    `.claude/stats/stats-<timestamp>.md`, and prints the digest. The report write is the
    tool's own output file — sanctioned, not a project mutation.
 
-2. **Delegate the learn-loop pass** to `k-explorer` (task kind `summarize`; read-only):
+2. **Delegate the learn-loop pass** to `k_explorer` (task kind `summarize`; read-only):
    read the full report and skim the session transcript for learn-loop candidates —
    corrections the owner made, facts worth persisting to `memory/`, repeated mechanics
    worth a tool, know-how worth a skill. It returns a short list of *proposals with
