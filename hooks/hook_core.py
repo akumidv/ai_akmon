@@ -543,7 +543,7 @@ def d2_status_line(count: int) -> str:
 #
 # C28d: Claude Code gives a subagent's tool calls the *same* ``session_id`` as the main
 # chain, so without an exemption a subagent's Read/Grep/Glob/Bash calls would charge the
-# shared counter and could trip the advisory or the hard `ask` inside a k-* delegate — which
+# shared counter and could trip the advisory or the hard `ask` inside a k_* delegate — which
 # has no ``Task`` tool and so cannot act on the nudge at all. Subagent-originated calls are
 # detected via the payload's ``agent_id`` (present only inside a subagent) and are exempted
 # entirely: no counter touch, no advisory, no ask.
@@ -580,10 +580,10 @@ def delegation_nudge_message(count: int) -> str:
         f"[akmon] Delegation check — {count} consecutive orchestrator edit/shell/read calls "
         "without a subagent delegation.\n"
         "Delegation is the default: route by task kind (MODEL.md § Capability tiers; "
-        "guardrails/_common.md § Route by task kind). Exploration/summaries → `k-explorer` · "
-        "mechanical edits / doc-sync / test scaffolds → `k-mechanic` · gate loops → "
-        "`k-validator` · code under a decided contract → `k-implementer` · load-bearing "
-        "analysis → `k-reasoner`.\n"
+        "guardrails/_common.md § Route by task kind). Exploration/summaries → `k_explorer` · "
+        "mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → "
+        "`k_validator` · code under a decided contract → `k_implementer` · load-bearing "
+        "analysis → `k_reasoner`.\n"
         "If this genuinely is orchestrator work (decompose / route / synthesize / owner "
         "dialogue), carry on — this reminder is advisory and fires once per drift episode "
         "(a subagent delegation re-arms it)."
@@ -596,10 +596,10 @@ def delegation_ask_message(count: int) -> str:
         "edit/shell/read calls with no subagent delegation. The read/sweep class "
         "(Read/Grep/Glob) is exactly the drift the tier floor targets "
         "(guardrails/_common.md § Route by task kind).\n"
-        "Route the next steps to a `k-*` delegate — exploration/summaries → `k-explorer` · "
-        "mechanical edits / doc-sync / test scaffolds → `k-mechanic` · gate loops → "
-        "`k-validator` · code under a decided contract → `k-implementer` · load-bearing "
-        "analysis → `k-reasoner` — or confirm this is genuinely one of the orchestrator's "
+        "Route the next steps to a `k_*` delegate — exploration/summaries → `k_explorer` · "
+        "mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → "
+        "`k_validator` · code under a decided contract → `k_implementer` · load-bearing "
+        "analysis → `k_reasoner` — or confirm this is genuinely one of the orchestrator's "
         "reserved four (decompose · route · synthesize · owner dialogue) to proceed.\n"
         "Fires once per drift episode (a subagent delegation re-arms it)."
     )
@@ -613,7 +613,7 @@ def delegation_nudge_result(
     permission_mode: str | None = None,
 ) -> HookResult | None:
     # C28d: subagent-originated calls (agent_id present in the payload) must never touch
-    # the counter. k-* delegates can't delegate (no Task tool), so nudging/asking them is
+    # the counter. k_* delegates can't delegate (no Task tool), so nudging/asking them is
     # noise and the hard ask blocks their legit reads. The session_id is shared with the
     # main chain, so without this guard a subagent's reads charge the orchestrator's counter.
     if is_subagent:

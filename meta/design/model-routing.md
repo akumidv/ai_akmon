@@ -6,7 +6,7 @@
 > (`akmon/tools/model_routing/`), the SessionStart status-line hook
 > (`hooks/model-routing.py`) and the delegation-log hook (`hooks/delegation-log.py`)
 > wired by `sync.py`, the §6 doc edits landed, and alphavar consumed (init run —
-> generated `k-*` agents supersede the hand-written set; project overlay
+> generated `k_*` agents supersede the hand-written set; project overlay
 > `_aitna/model-routing.json` carries the alphavar brief extras; local config/log
 > gitignored). **Implementation owner-verified (D2) — C10 closed.** Remaining follow-ups
 > live as their own tasks in akmon's backlog: statistics digest (C13) —
@@ -158,7 +158,7 @@ read as code — no owner action per session after the one-time setup):
    and maps the concrete id to an alias — pure code;
 2. when the detected alias differs from the recorded orchestrator — a session launched on a
    different model, or a mid-session `/model` switch — the hook recomputes the binding and
-   **regenerates the `k-*` defs** so subagents follow the live model. SessionStart carries it
+   **regenerates the `k_*` defs** so subagents follow the live model. SessionStart carries it
    plus the status line; **UserPromptSubmit** re-runs the same check each turn (silent unless a
    switch just landed), which is what makes a mid-session `/model` propagate to delegates;
 3. the orchestrator itself is **never overridden** — it is the owner's explicit choice; the
@@ -167,7 +167,7 @@ read as code — no owner action per session after the one-time setup):
    recorded config when the transcript names no model yet (a fresh session's first turn). The
    status line keeps a self-check as the belt-and-suspenders fallback. **Per-user by
    construction:** the `model:` frontmatter tracks the local orchestrator, so the generated
-   `k-*` defs are gitignored and regenerated, not committed (they would otherwise churn across
+   `k_*` defs are gitignored and regenerated, not committed (they would otherwise churn across
    users/models).
 
 > **First-run boundary.** Only the one-time setup is explicit — the owner runs `init.py` once
@@ -228,9 +228,9 @@ Run as `python _aitna/akmon/tools/model_routing/init.py [--orchestrator <alias>]
 2. Computes the tier→model binding from the semantic policy (§3), local available list,
    and the task-kind matrix.
 3. Emits generated artifacts (banner: *generated — edit registry/config, not this file*):
-   - `.claude/agents/k-*.md` — subagent definitions with concrete `model:` frontmatter only
+   - `.claude/agents/k_*.md` — subagent definitions with concrete `model:` frontmatter only
      when local discovery / `--available` provides aliases, plus a role brief carrying the
-     task kinds each serves; includes `k-auditor` for the auditor tier. **Gitignored and regenerated**
+     task kinds each serves; includes `k_auditor` for the auditor tier. **Gitignored and regenerated**
      (the model is per-user; §3), by init here and by the hook each time the orchestrator
      moves;
    - `.claude/model-routing.local.json` — the resolved binding, second-opinion opt-in,
@@ -242,7 +242,7 @@ Wired beside the existing `session-start-agent.py`, by `bin/sync.py` through the
 adapter contract (`claude_adapter` / `codex_adapter`). One entrypoint, two events: it runs on
 **SessionStart** (the status line below) and on **UserPromptSubmit** (per-turn orchestrator
 re-detection + rebind, silent unless a `/model` switch just landed). Both first apply the
-transcript detection of §3 — detect the live orchestrator, and rebind the `k-*` defs when it
+transcript detection of §3 — detect the live orchestrator, and rebind the `k_*` defs when it
 moved — before producing their output:
 
 - **Config present and fresh** (registry hash matches, orchestrator matches settings) →
@@ -278,7 +278,7 @@ injected into context; the harness UI already shows subagent calls live. The mod
 narrates a switch.
 
 On demand — the owner asks in chat (e.g. "статистика работы") — a **statistics digest**
-runs **in a subagent** (a `k-*` reporter, not the orchestrator, so parsing the transcript
+runs **in a subagent** (a `k_*` reporter, not the orchestrator, so parsing the transcript
 and the log costs the orchestrator no context). It parses the session transcript (JSONL)
 plus the delegation log and reports:
 
@@ -347,7 +347,7 @@ SessionStart hook (code)
 During work (orchestrator):
 ├─ sub-task matches a matrix row  → Agent(<delegate>)   [default path; hook logs it]
 │    └─ failure signal            → escalate one rung up the ladder
-├─ gate-pack audit + trigger fires → Agent(k-auditor, gate-pack)
+├─ gate-pack audit + trigger fires → Agent(k_auditor, gate-pack)
 ├─ verify gate + opt-in on        → /codex:review (advisory → owner)
 └─ decompose / synthesize / owner dialogue → stays in main session
 ```
@@ -419,8 +419,8 @@ All former open points are **locked** (owner verification of this design; record
 | 2 | ask every session vs on-stale | **status-line + ask-on-stale**; the self-check line (§3) covers mid-session model switches |
 | 3 | generated `.claude/agents/*.md` | ~~commit~~ **revised by [ADR 0006](../decisions/0006-orchestrator-detection-corridor-context-pressure.md): gitignored + regenerated** — the `model:` frontmatter follows the local orchestrator (per-user by construction, §3), so committed copies churn across users/models; the registry + overlay are the committed source, init/hook regenerate |
 | 4 | second-opinion opt-in scope | **per project with per-session override** — recorded in local config; re-asked on staleness |
-| 5 | granularity of generated agents | **few agents grouped by brief**; the bootstrap set is `k-explorer`, `k-mechanic`, `k-validator` (worker tier), `k-implementer` (mid rung — `implement-under-spec` needs its own model, so it splits from mechanic), `k-reasoner` (top rung); split further only if briefs diverge |
-| 5a | agent naming | **`k-` prefix (akmon namespace)**, lowercase-kebab — avoids collision with harness built-ins (`Explore`, `Plan`, …) and marks provenance: `k-*` agents are akmon-managed, later owned by the generator |
+| 5 | granularity of generated agents | **few agents grouped by brief**; the bootstrap set is `k_explorer`, `k_mechanic`, `k_validator` (worker tier), `k_implementer` (mid rung — `implement-under-spec` needs its own model, so it splits from mechanic), `k_reasoner` (top rung); split further only if briefs diverge |
+| 5a | agent naming | **`k_` prefix (akmon namespace)**, lowercase with underscores — avoids collision with harness built-ins (`Explore`, `Plan`, …) and marks provenance: `k_*` agents are akmon-managed, later owned by the generator. Originally locked as lowercase-**kebab**; renamed under [ADR 0011](../decisions/0011-agent-name-notation-k-underscore.md) because codex rejects hyphens in agent names |
 | 6 | home of this design doc | **`ai_akmon` (`meta/design/`)** — revised post-lock: the mechanism is a akmon standard artifact end to end, design doc included, not just its ADR/doc edits; moved out of alphavar's LOCAL `_aitna/design/` once the model-routing and D2-ledger work settled |
 | 7 | top rung / orchestrator display | **local-discovery-driven, never a hardcoded name**; status line always names the orchestrator; warn + suggest switching when below the local highest rung (§3, requirement 9) |
 
@@ -428,8 +428,8 @@ All former open points are **locked** (owner verification of this design; record
 worker-tier analysts classified the transcripts; findings: exploration
 and summarizing dominate the orchestrator's burn (~35–40%), and all three independently
 surfaced an uncovered *run gate → parse output → fix → re-run* loop (10–25% of work).
-Hence: the `validate-loop` matrix row + `k-validator` bootstrap agent; read-only Bash
-for `k-explorer` (git log/diff inspection was a visible share of exploration); the
+Hence: the `validate-loop` matrix row + `k_validator` bootstrap agent; read-only Bash
+for `k_explorer` (git log/diff inspection was a visible share of exploration); the
 subject-scoped and owner-loop agent candidates went to the rejected register (§7).
 The same mining validated the worker tier itself: reliable extraction/classification,
 weak arithmetic and subject-vs-operation confusion — calibration stays with the
@@ -518,13 +518,13 @@ opinion varies the **priors** (different model). Verification depth scales with 
 criticality: an ordinary Calibrate gets the auditor alone; a load-bearing Align gets
 auditor + second opinion.
 
-4. **Generated agent `k-auditor`** — the tier's concrete artifact, joining the
-   bootstrap set (§8.5: `k-explorer`, `k-mechanic`, `k-validator`, `k-implementer`,
-   `k-reasoner`, now `k-auditor`). Registry deltas: an `auditor` selection policy
+4. **Generated agent `k_auditor`** — the tier's concrete artifact, joining the
+   bootstrap set (§8.5: `k_explorer`, `k_mechanic`, `k_validator`, `k_implementer`,
+   `k_reasoner`, now `k_auditor`). Registry deltas: an `auditor` selection policy
    (`"auditor": "highest"` — pinned max, unlike the now-dynamic reasoner) and a
    task-kind row `"audit": {"tier": "auditor"}`. Definition contract:
    - **frontmatter:** `model:` = the maximal locally available rung; **tools read-only**
-     (Read/Grep/Glob + read-only Bash) — like `k-reasoner`, it drafts and audits, never
+     (Read/Grep/Glob + read-only Bash) — like `k_reasoner`, it drafts and audits, never
      edits;
    - **input:** a gate-pack (§9.4), nothing else — no session history; the clean context
      *is* the mechanism;
@@ -751,9 +751,9 @@ tool and its quality patterns). Verified against the live tool surface, not memo
 
 | akmon | Closest host built-in | Note |
 |---|---|---|
-| `k-explorer` | **Explore** (fast read-only search, "conclusions not file dumps", breadth parameter) | same shape, independently converged — including enforcement *by tool set*, not prompt trust |
-| `k-reasoner` | **Plan** ("software architect for implementation plans, trade-offs") | partial: Plan is the "tech-lead-shaped" built-in, scoped to implementation planning; k-reasoner is wider (debug-deep, quant) |
-| `k-mechanic` / `k-validator` / `k-implementer` | `general-purpose` / `claude` (catch-alls) | no per-kind split in the host — akmon's task-kind granularity is finer |
+| `k_explorer` | **Explore** (fast read-only search, "conclusions not file dumps", breadth parameter) | same shape, independently converged — including enforcement *by tool set*, not prompt trust |
+| `k_reasoner` | **Plan** ("software architect for implementation plans, trade-offs") | partial: Plan is the "tech-lead-shaped" built-in, scoped to implementation planning; k_reasoner is wider (debug-deep, quant) |
+| `k_mechanic` / `k_validator` / `k_implementer` | `general-purpose` / `claude` (catch-alls) | no per-kind split in the host — akmon's task-kind granularity is finer |
 | `auditor` | **Workflow "completeness critic"** pattern ("what's missing — claim unverified, modality not run?") + "adversarial verify" | the closest prior art to `audit` — but in the host it is a *workflow stage pattern*, not a standing agent with a pinned model |
 | second-opinion | — | absent (single-vendor harness); akmon addition |
 | level-hypothesis check, owner-attention budget (D2 ledger) | — | absent; akmon additions |
@@ -761,8 +761,8 @@ tool and its quality patterns). Verified against the live tool surface, not memo
 
 Adopted into this design from the comparison:
 
-- **Enforcement by tool set** (Explore has no write tools; `k-explorer`/`k-reasoner`/
-  `k-auditor` likewise) — already aligned, keep as the rule for audit-tier agents.
+- **Enforcement by tool set** (Explore has no write tools; `k_explorer`/`k_reasoner`/
+  `k_auditor` likewise) — already aligned, keep as the rule for audit-tier agents.
 - **Deterministic orchestration for the gate fan-out:** the host's `Workflow` runs
   fan-out/pipeline/verify loops as *code*, not model judgment — exactly akmon's D4
   instinct. The gate-pack assembly + fan-out + auditor call (C16/C17) should be
@@ -862,7 +862,7 @@ Missing/malformed `usage` → silent (never block a turn, the hook's standing ru
 Every routing artifact already tells the orchestrator to delegate by task kind
 (MODEL.md § Capability tiers, §9.1 leverage, the roles, the guardrails). The observed
 behaviour was the opposite: **the orchestrator did everything itself** — reads, sweeps,
-edits, shell — and only the owner's manual `k-*` calls produced any delegation. The
+edits, shell — and only the owner's manual `k_*` calls produced any delegation. The
 delegation log (§4.4) confirmed it: healthy-looking entries were *all* owner-initiated,
 so the autonomous self-delegation the standard asks for was effectively zero.
 
@@ -880,7 +880,7 @@ tool calls with no delegation between them**, keyed per session in the temp dir 
 - **What counts** — edit (`Write/Edit/MultiEdit`), shell (`Bash`), **and read
   (`Read/Grep/Glob`)**. Reads count because the actual drift symptom *is* the read/sweep:
   pulling a wide `git diff`, grepping the tree, reading many files inline is exactly the
-  work a `k-explorer` should absorb so the dump never enters orchestrator context. An
+  work a `k_explorer` should absorb so the dump never enters orchestrator context. An
   edit-only counter would have missed the dominant failure mode.
 - **Graduation** — advisory `additionalContext` at the nudge threshold (default 10,
   `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`); a hard PreToolUse **`ask`** on *sustained* drift
@@ -932,7 +932,7 @@ does not wire either of these two hooks. See [D2 ledger](../D2_LEDGER.md) D2-11.
 Claude Code gives a subagent's tool calls the **same `session_id`** as the main chain.
 The counter is keyed by `session_id`, so without a guard a subagent's reads charged the
 **orchestrator's** counter — and worse, tripped the nudge (and the hard `ask`) *inside* a
-`k-*` delegate that has **no `Task` tool and cannot delegate at all*. Demonstrated live: a
+`k_*` delegate that has **no `Task` tool and cannot delegate at all*. Demonstrated live: a
 read-only audit subagent tripped the nudge at its tenth read. The advisory wasted the
 delegate's context; the `ask` was un-actionable and blocked its legitimate reads.
 

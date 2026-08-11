@@ -17,7 +17,7 @@ pipelines.
 
 A **gate** is the point where a body of drafted work is judged as a whole before it
 reaches the owner: the orchestrator assembles everything produced so far into a
-**gate-pack**, and a clean-context **k-auditor** — pinned to the maximal available model —
+**gate-pack**, and a clean-context **k_auditor** — pinned to the maximal available model —
 judges it against a **yardstick**. The auditor drafts a verdict; the owner still decides.
 This is the leverage principle in action: the strongest model spends a few thousand tokens
 exactly where one missed contradiction would poison everything downstream.
@@ -35,7 +35,7 @@ plan, synthesis, verdict — is judged against this file, so scope cannot silent
 
 The orchestrator split the tree into **five zones** — R (roles+pipelines), H (hooks),
 T (tools+registry), A (consumer attachment), M (meta: ADRs/backlog/prior gates) — and
-delegated each to a **k-explorer** on the worker rung (haiku in that session). Five
+delegated each to a **k_explorer** on the worker rung (haiku in that session). Five
 parallel read-only sweeps returned conclusions with file:line citations; the orchestrator
 window stayed lean (~337k tokens burned in subagents, near-zero in the main context).
 
@@ -68,7 +68,7 @@ see not only what was found but **where nobody looked**.
 
 ## 5. The audit — clean context, maximal model
 
-A **k-auditor** was spawned with *only* the gate-pack — no session history, no
+A **k_auditor** was spawned with *only* the gate-pack — no session history, no
 accumulated framing. The clean context *is* the mechanism: an auditor that shared the
 orchestrator's context would inherit the orchestrator's blind spots. Its tool set is
 read-only (no write tools) — isolation by construction, not by instruction. It returned a
@@ -94,7 +94,7 @@ structured verdict with four required parts, and every part earned its place:
 ## 6. Execution evidence — closing the seam the audit found
 
 The verdict's "nothing was executed" seam had a named task kind waiting for it:
-`validate-loop`. A **k-validator** ran the meta test suite and the verification tools and
+`validate-loop`. A **k_validator** ran the meta test suite and the verification tools and
 produced the single sharpest fact of the whole audit — **tests green (338 passed) while
 `verify --strict` and the self-CI were red** — a split that is *statically invisible*: no
 amount of reading files could have surfaced it. Static sweeps and execution runs are

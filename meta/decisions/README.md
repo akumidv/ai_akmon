@@ -60,3 +60,9 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   `<AITNA_ROOT>/.akmon/` materialization of the always-on surface (hooks, guardrails), no tree in the
   repo, no skew by construction; init pins the latest tag (`--ref` to override); V1 sweep before first
   publish. Pilot: alphavar.
+- [0011 — Agent name notation: `k_*`, one notation for every vendor](0011-agent-name-notation-k-underscore.md)
+  — A12 lock: the six generated delegates rename `k-*` → `k_*`, forced by codex's `agent_name` rule
+  (lowercase, digits, underscores only) and verified legal on Claude Code before deciding; the ADR 0008
+  prefix and its *Kyklōpes* reading survive. Historical records keep the hyphen. Migration ships with it
+  (`obsolete_agent_files` prunes stale generated defs on init/rebind); C46 still owns the general
+  mechanism — this removes one instance, not the class.

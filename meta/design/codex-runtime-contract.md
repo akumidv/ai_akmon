@@ -34,7 +34,7 @@ This selects **verify-only** over:
   not expand the include into model-visible context.
 
 The SessionStart hook repeats a capability-neutral reminder as defense in depth. It names task
-kinds, not Claude-specific `k-*` files: a harness may provide generic subagents without named
+kinds, not Claude-specific `k_*` files: a harness may provide generic subagents without named
 agent definitions or child-model selection.
 
 ### Package runtime is self-contained
@@ -55,7 +55,7 @@ The vendor-neutral policy remains mandatory; enforcement depth is vendor-specifi
 - edit reminders remain wired;
 - D5, delegation log/nudge, model binding, named subagents, and child-model selection are not
   marked supported until live payload and enforcement probes prove their exact contracts;
-- generic subagent capability may satisfy delegation even when `k-*` names/model pins are not
+- generic subagent capability may satisfy delegation even when `k_*` names/model pins are not
   available.
 
 The compatibility matrix distinguishes policy delivery, advisory hooks, hard enforcement,

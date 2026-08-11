@@ -4,7 +4,7 @@
 Computes the tier→model binding from the registry's semantic selection policy (relative
 to the orchestrating model) and writes the generated artifacts:
 
-- ``.claude/agents/k-*.md`` — subagent definitions (committed; concrete ``model:``
+- ``.claude/agents/k_*.md`` — subagent definitions (committed; concrete ``model:``
   frontmatter is emitted only when local model discovery / ``--available`` provides
   concrete aliases);
 - ``.claude/model-routing.local.json`` — the resolved binding + second-opinion opt-in +
@@ -120,6 +120,10 @@ def main(argv: list[str] | None = None) -> int:
         if write:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
+
+    for path in routing.remove_obsolete_agents(root, planned, write=write):
+        changed.append(path)
+        print(f"{'would delete' if not write else 'deleted'}: {path.relative_to(root)}")
 
     print(
         "model routing: "

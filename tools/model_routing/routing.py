@@ -282,9 +282,7 @@ class SecondOpinionTarget:
     model: str | None  # None = the provider CLI's default model (other-vendor case)
 
 
-def resolve_second_opinion(
-    registry: dict, config: dict, orchestrator_vendor: str
-) -> SecondOpinionTarget | None:
+def resolve_second_opinion(registry: dict, config: dict, orchestrator_vendor: str) -> SecondOpinionTarget | None:
     """Walk `second_opinion_policy.diversity_ladder` to a (provider, model) target.
 
     Diversity is about *model priors* (design §9.3 item 3): the reviewer must differ
@@ -337,6 +335,7 @@ def resolve_second_opinion(
 # Generated subagent definitions (the `k-` akmon namespace)
 # --------------------------------------------------------------------------------------
 
+
 # Each agent groups the task kinds whose briefs coincide; the tier picks its model from
 # the binding. Bodies are project-neutral (this is SHARED); project specifics are appended
 # via the overlay's "briefs" map.
@@ -352,7 +351,7 @@ class AgentSpec:
 
 AGENT_SPECS: tuple[AgentSpec, ...] = (
     AgentSpec(
-        name="k-explorer",
+        name="k_explorer",
         tier="worker",
         kinds=("explore-search", "summarize"),
         description=(
@@ -376,7 +375,7 @@ AGENT_SPECS: tuple[AgentSpec, ...] = (
   short paragraph instead of guessing. The orchestrator escalates on that signal.""",
     ),
     AgentSpec(
-        name="k-mechanic",
+        name="k_mechanic",
         tier="worker",
         kinds=("mech-edit", "test-scaffold", "doc-sync"),
         description=(
@@ -401,7 +400,7 @@ AGENT_SPECS: tuple[AgentSpec, ...] = (
   stop and return a short report saying exactly what is undecided. Do not improvise.""",
     ),
     AgentSpec(
-        name="k-validator",
+        name="k_validator",
         tier="worker",
         kinds=("validate-loop",),
         description=(
@@ -428,7 +427,7 @@ AGENT_SPECS: tuple[AgentSpec, ...] = (
   mechanical scope — stop and return the diagnosis; the orchestrator escalates.""",
     ),
     AgentSpec(
-        name="k-implementer",
+        name="k_implementer",
         tier="mid",
         kinds=("implement-under-spec",),
         description=(
@@ -456,7 +455,7 @@ AGENT_SPECS: tuple[AgentSpec, ...] = (
   find.""",
     ),
     AgentSpec(
-        name="k-reasoner",
+        name="k_reasoner",
         tier="reasoner",
         kinds=("debug-deep", "design-fork", "quant-derivation", "plan-draft"),
         description=(
@@ -489,7 +488,7 @@ a draft for the owner's verification, never a decision.
   ask rather than an assumption dressed as analysis.""",
     ),
     AgentSpec(
-        name="k-auditor",
+        name="k_auditor",
         tier="auditor",
         kinds=("audit",),
         description=(
@@ -591,7 +590,7 @@ def subagent_kinds(name: str) -> tuple[str, ...]:
 
 
 def bound_model_for(config: dict, subagent_type: str) -> str | None:
-    """Model a generated ``k-*`` agent is pinned to — its tier's binding alias, or None.
+    """Model a generated ``k_*`` agent is pinned to — its tier's binding alias, or None.
 
     The generated agent frontmatter carries ``model: <alias>`` (see ``_agent_model``), but an
     ``Agent`` call rarely echoes it — so the delegation record shows ``-`` and the console
@@ -626,9 +625,7 @@ def _assistant_text(entry: dict) -> str:
         return content
     if isinstance(content, list):
         return " ".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
+            block.get("text", "") for block in content if isinstance(block, dict) and block.get("type") == "text"
         )
     return ""
 
@@ -673,13 +670,13 @@ def role_matrix_warning(registry: dict, subagent_type: str, role: str | None) ->
     Subagent granularity — the call carries the agent, not the specific kind — so warn only
     when *none* of the agent's kinds intersect the role's allowed row. That catches an edit
     agent routed under the analysis-only ``review`` role without false-flagging a multi-kind
-    agent (e.g. ``k-reasoner``) that shares one legitimate kind. None when the role is
+    agent (e.g. ``k_reasoner``) that shares one legitimate kind. None when the role is
     unknown/undeclared or the agent is a host built-in (no kinds).
 
     **Cross-cutting verification kinds** (``cross_cutting_kinds`` — ``independent-review`` and
     ``audit``) are *not* role-gated (A7 (b), §10.2): any role may route them and *when* they
     apply is the structural trigger (§9.5), not the producing role. They join every role's
-    allowed set, so an agent whose only kinds are cross-cutting (e.g. ``k-auditor``) never
+    allowed set, so an agent whose only kinds are cross-cutting (e.g. ``k_auditor``) never
     warns under any role.
     """
     if not role:
@@ -780,10 +777,7 @@ def context_fill(usage: dict | None) -> int | None:
     """
     if not isinstance(usage, dict):
         return None
-    components = [
-        usage.get(key)
-        for key in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
-    ]
+    components = [usage.get(key) for key in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")]
     if not any(isinstance(value, int) for value in components):
         return None
     return sum(value for value in components if isinstance(value, int))
@@ -802,9 +796,7 @@ def context_window(registry: dict, model_id: str | None) -> int:
     return default
 
 
-def _context_fill_metrics(
-    registry: dict, transcript_path: str | Path | None
-) -> tuple[int, int, float] | None:
+def _context_fill_metrics(registry: dict, transcript_path: str | Path | None) -> tuple[int, int, float] | None:
     """``(fill, window, ratio)`` for the last main-chain turn; ``None`` if unavailable.
 
     Shared by ``context_pressure_notice`` (banded warnings) and ``context_fill_ratio``
@@ -892,7 +884,7 @@ def binding_artifacts(
 ) -> dict[str, str]:
     """Every generated routing artifact as ``project-root-relative path → content``.
 
-    The generated ``k-*`` subagent definitions plus the local config — the single set the
+    The generated ``k_*`` subagent definitions plus the local config — the single set the
     init tool and the SessionStart/UserPromptSubmit hook both write, so a rebind from
     either path produces byte-identical files.
     """
@@ -900,6 +892,40 @@ def binding_artifacts(
     config = local_config(binding, registry, second_opinion=second_opinion, available=available)
     files[LOCAL_CONFIG_REL] = json.dumps(config, indent=2) + "\n"
     return files
+
+
+def obsolete_agent_files(root: Path, planned_paths: Iterable[Path]) -> list[Path]:
+    """Generated subagent definitions on disk that the current ``AGENT_SPECS`` no longer plan.
+
+    Only files carrying ``GENERATED_BANNER`` are candidates, so a hand-written agent living in
+    the same directory is never a deletion target. Without this, renaming an agent leaves its
+    old definition behind as a live duplicate — the harness keeps offering both, the stale one
+    still pinned to a model, and nothing warns (``bin/sync.py`` prunes only skills, ADR 0011).
+    """
+    agents_dir = root / AGENTS_DIR_REL
+    if not agents_dir.is_dir():
+        return []
+    planned = set(planned_paths)
+    obsolete: list[Path] = []
+    for path in sorted(agents_dir.glob("*.md")):
+        if path in planned:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if GENERATED_BANNER in text:
+            obsolete.append(path)
+    return obsolete
+
+
+def remove_obsolete_agents(root: Path, planned_paths: Iterable[Path], *, write: bool = True) -> list[Path]:
+    """Delete the generated agent definitions no longer planned; return their paths."""
+    removed = obsolete_agent_files(root, planned_paths)
+    if write:
+        for path in removed:
+            path.unlink(missing_ok=True)
+    return removed
 
 
 def write_artifacts(root: Path, files: dict[str, str], *, write: bool = True) -> list[Path]:
@@ -931,7 +957,9 @@ def rebind_to(
     vendor = str(config.get("vendor") or "anthropic")
     binding = compute_binding(registry, orchestrator, available, vendor)
     files = binding_artifacts(registry, binding, second_opinion=second_opinion, available=available)
-    return binding, write_artifacts(root, files, write=write)
+    changed = write_artifacts(root, files, write=write)
+    remove_obsolete_agents(root, (root / rel for rel in files), write=write)
+    return binding, changed
 
 
 def local_config(binding: Binding, registry: dict, *, second_opinion: bool, available: list[str] | None) -> dict:
@@ -986,8 +1014,8 @@ def status_lines(config: dict, registry: dict, aitna: str) -> list[str]:
         f"worker={binding.get('worker', '?')} · mid={binding.get('mid', '?')} · "
         f"second-opinion={second_cli}({second})",
         "Delegation is the default — route by task kind (MODEL.md § Capability tiers): "
-        "k-explorer/k-mechanic/k-validator (worker) · k-implementer (mid) · k-reasoner · "
-        "k-auditor (audit at gates); escalate one rung only on failure signals.",
+        "k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · "
+        "k_auditor (audit at gates); escalate one rung only on failure signals.",
         f"Self-check: if your actual model is not '{orchestrator}', re-run "
         f"`python3 {aitna}/akmon/tools/model_routing/init.py --orchestrator <alias>`.",
     ]
@@ -1011,7 +1039,7 @@ def rebind_notice(config: dict, registry: dict) -> list[str]:
         f"[akmon] orchestrator model changed → {orchestrator}; subagent binding updated: "
         f"reasoner={binding.get('reasoner', '?')} · auditor={binding.get('auditor', '?')} · "
         f"worker={binding.get('worker', '?')} · mid={binding.get('mid', '?')}. "
-        "Regenerated k-* agents follow the new model.",
+        "Regenerated k_* agents follow the new model.",
     ]
     warning = compute_binding(registry, orchestrator, config.get("available"), vendor).warning
     if warning:

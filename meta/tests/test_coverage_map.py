@@ -22,7 +22,7 @@ import coverage_map  # noqa: E402
 import routing  # noqa: E402
 
 
-def _entry(zone, subagent="k-explorer", model="small", ts="T0", session="sess-1", desc="d"):
+def _entry(zone, subagent="k_explorer", model="small", ts="T0", session="sess-1", desc="d"):
     return routing.DelegationEntry(ts, session, subagent, model, zone, desc)
 
 
@@ -47,14 +47,14 @@ def test_empty_scope():
 
 def test_groups_by_zone_distinct_workers_and_count():
     entries = [
-        _entry("auth", "k-explorer", "small"),
-        _entry("auth", "k-reasoner", "big"),
-        _entry("auth", "k-explorer", "small"),  # duplicate worker -> count 3, one entry
-        _entry("pricing", "k-explorer", "small"),
+        _entry("auth", "k_explorer", "small"),
+        _entry("auth", "k_reasoner", "big"),
+        _entry("auth", "k_explorer", "small"),  # duplicate worker -> count 3, one entry
+        _entry("pricing", "k_explorer", "small"),
     ]
     out = coverage_map.build_coverage_map(entries)
-    assert "| auth | k-explorer/small, k-reasoner/big | 3 |" in out
-    assert "| pricing | k-explorer/small | 1 |" in out
+    assert "| auth | k_explorer/small, k_reasoner/big | 3 |" in out
+    assert "| pricing | k_explorer/small | 1 |" in out
 
 
 def test_unlabelled_zone_when_no_marker():
@@ -64,7 +64,7 @@ def test_unlabelled_zone_when_no_marker():
 
 def test_worker_without_model():
     out = coverage_map.build_coverage_map([_entry("auth", model=None)])
-    assert "| auth | k-explorer | 1 |" in out
+    assert "| auth | k_explorer | 1 |" in out
 
 
 def test_zone_plan_flags_uncovered_and_off_plan():
@@ -99,8 +99,8 @@ def test_cli_scopes_by_session_and_writes(tmp_path, capsys):
     log = root / routing.DELEGATION_LOG_REL
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(
-        "T0\tsess-1\tk-explorer\tsmall\tauth\tcheck tokens\n"
-        "T1\tsess-2\tk-explorer\tsmall\tpricing\tother session\n",
+        "T0\tsess-1\tk_explorer\tsmall\tauth\tcheck tokens\n"
+        "T1\tsess-2\tk_explorer\tsmall\tpricing\tother session\n",
         encoding="utf-8",
     )
     out = root / "cov.md"

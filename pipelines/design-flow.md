@@ -31,7 +31,7 @@ recording it before agreement.
      settling the convention from local code or taste alone. Record the practice you found and
      the rationale for following or departing from it (it becomes part of the decision record).
    - *Gate — plan check (pre-fan-out):* when the decomposition (zone plan) names **≥2 zones**,
-     run a minimal `audit` pass (`k-auditor`) over a **plan-check pack**
+     run a minimal `audit` pass (`k_auditor`) over a **plan-check pack**
      (the Frame yardstick + the zone plan) *before* spending the survey/design fan-out — it
      checks the plan against the **goal**, closing the circularity where the later audit's
      coverage map derives from an unchecked plan. Cheap (yardstick + plan, no artifacts).
@@ -60,7 +60,7 @@ recording it before agreement.
    - *Gate — audit (post-fan-out):* when a trigger fires — a **count floor**
      (`architect_min_options`, registry data) or the **structural trigger** (the design
      fan-out spanned ≥2 independently-decomposed zones) — route an `audit` pass
-     (`k-auditor`, clean context) over the **gate-pack** (the concept + the Frame
+     (`k_auditor`, clean context) over the **gate-pack** (the concept + the Frame
      yardstick + the coverage map) **before** folding into an ADR. It checks for
      contradictions between independently-correct options, uncovered seams between zones,
      re-ranking deltas, and a level verdict. Advisory; skip above the floor is

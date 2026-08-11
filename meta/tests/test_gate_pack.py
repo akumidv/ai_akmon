@@ -51,7 +51,7 @@ def test_full_pack_review_header_and_sections():
     assert "## Coverage map" in pack
     assert "zone A: checked by worker-a" in pack
 
-    # k-auditor output contract footer (design §9.3 item 4).
+    # k_auditor output contract footer (design §9.3 item 4).
     assert "## What to return" in pack
     assert "Contradictions between independently-correct findings/options" in pack
     assert "Uncovered seams" in pack

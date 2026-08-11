@@ -85,14 +85,14 @@ def test_find_project_root_falls_back_to_start(tmp_path):
 def test_claude_print_result_with_system_message(capsys):
     result = hook_core.HookResult(
         event_name="PreToolUse",
-        system_message="[akmon] → k-explorer (small): find X",
+        system_message="[akmon] → k_explorer (small): find X",
     )
     claude_adapter.print_result(result)
 
     payload = json.loads(capsys.readouterr().out)
     assert payload == {
         "hookSpecificOutput": {"hookEventName": "PreToolUse"},
-        "systemMessage": "[akmon] → k-explorer (small): find X",
+        "systemMessage": "[akmon] → k_explorer (small): find X",
     }
     # systemMessage is top-level, not inside hookSpecificOutput
     assert "systemMessage" in payload
@@ -126,9 +126,9 @@ def test_delegation_log_system_message_with_model_and_description():
     spec.loader.exec_module(deleg_log)
 
     # Line format: timestamp\tsession_id\tsubagent\tmodel\tzone\tdescription
-    line = "2026-07-04T10:00:00+0000\tsess-1\tk-explorer\tsmall\tauth\tfind X in codebase"
+    line = "2026-07-04T10:00:00+0000\tsess-1\tk_explorer\tsmall\tauth\tfind X in codebase"
     msg = deleg_log._format_system_message(line)
-    assert msg == "[akmon] → k-explorer (small) [auth]: find X in codebase"
+    assert msg == "[akmon] → k_explorer (small) [auth]: find X in codebase"
 
 
 def test_delegation_log_system_message_without_model():
@@ -142,9 +142,9 @@ def test_delegation_log_system_message_without_model():
     deleg_log = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(deleg_log)
 
-    line = "2026-07-04T10:00:00+0000\tsess-1\tk-mechanic\t-\t-\treformat code"
+    line = "2026-07-04T10:00:00+0000\tsess-1\tk_mechanic\t-\t-\treformat code"
     msg = deleg_log._format_system_message(line)
-    assert msg == "[akmon] → k-mechanic: reformat code"
+    assert msg == "[akmon] → k_mechanic: reformat code"
 
 
 def test_delegation_log_system_message_without_description():
@@ -158,9 +158,9 @@ def test_delegation_log_system_message_without_description():
     deleg_log = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(deleg_log)
 
-    line = "2026-07-04T10:00:00+0000\tsess-1\tk-reasoner\treasoner\t-\t"
+    line = "2026-07-04T10:00:00+0000\tsess-1\tk_reasoner\treasoner\t-\t"
     msg = deleg_log._format_system_message(line)
-    assert msg == "[akmon] → k-reasoner (reasoner)"
+    assert msg == "[akmon] → k_reasoner (reasoner)"
 
 
 def test_find_project_root_in_package_mode_from_nested_directory(tmp_path):

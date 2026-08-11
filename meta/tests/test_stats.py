@@ -80,25 +80,25 @@ def test_parse_delegation_log_missing_file_returns_none(tmp_path):
 
 def test_aggregate_delegation_lines_counts_and_skips_malformed():
     lines = [
-        "T0\tk-explorer\tsmall\tfind X",
-        "T1\tk-explorer\tsmall\tfind Y",
-        "T2\tk-implementer\tmedium\timplement Z",
+        "T0\tk_explorer\tsmall\tfind X",
+        "T1\tk_explorer\tsmall\tfind Y",
+        "T2\tk_implementer\tmedium\timplement Z",
         "not-a-valid-line",
         "",
     ]
     result = stats.aggregate_delegation_lines(lines)
     assert result.total == 3
-    assert result.per_subagent == {"k-explorer": 2, "k-implementer": 1}
+    assert result.per_subagent == {"k_explorer": 2, "k_implementer": 1}
     assert result.per_model == {"small": 2, "medium": 1}
-    assert result.per_pair[("k-explorer", "small")] == 2
+    assert result.per_pair[("k_explorer", "small")] == 2
 
 
 def test_parse_delegation_log_reads_real_file(tmp_path):
     log_path = tmp_path / "model-routing.log"
-    log_path.write_text("T0\tk-explorer\tsmall\tfind X\n", encoding="utf-8")
+    log_path.write_text("T0\tk_explorer\tsmall\tfind X\n", encoding="utf-8")
     result = stats.parse_delegation_log(log_path)
     assert result.total == 1
-    assert result.per_subagent["k-explorer"] == 1
+    assert result.per_subagent["k_explorer"] == 1
 
 
 # --------------------------------------------------------------------------------------
@@ -163,9 +163,9 @@ def test_parse_main_transcript_reads_real_file(tmp_path):
 
 def test_agent_tier_map_covers_generated_specs():
     tier_map = stats.agent_tier_map()
-    assert tier_map["k-explorer"] == "worker"
-    assert tier_map["k-implementer"] == "mid"
-    assert tier_map["k-reasoner"] == "reasoner"
+    assert tier_map["k_explorer"] == "worker"
+    assert tier_map["k_implementer"] == "mid"
+    assert tier_map["k_reasoner"] == "reasoner"
 
 
 def test_collect_subagent_stats_missing_dir_returns_empty(tmp_path):
@@ -181,22 +181,22 @@ def test_collect_subagent_stats_reads_meta_and_falls_back_to_attribution(tmp_pat
         encoding="utf-8",
     )
     (subagents / "agent-aaa.meta.json").write_text(
-        json.dumps({"agentType": "k-explorer", "description": "recon"}), encoding="utf-8"
+        json.dumps({"agentType": "k_explorer", "description": "recon"}), encoding="utf-8"
     )
 
     # No meta.json for this one — falls back to the record's attributionAgent field.
     record = _assistant_record("claude-haiku-5", 3, 1)
-    record["attributionAgent"] = "k-mechanic"
+    record["attributionAgent"] = "k_mechanic"
     (subagents / "agent-bbb.jsonl").write_text(json.dumps(record) + "\n", encoding="utf-8")
 
     records = stats.collect_subagent_stats(subagents)
     by_id = {record.agent_id: record for record in records}
 
-    assert by_id["agent-aaa"].label == "k-explorer"
+    assert by_id["agent-aaa"].label == "k_explorer"
     assert by_id["agent-aaa"].tier == "worker"
     assert by_id["agent-aaa"].usage.input_tokens == 10
 
-    assert by_id["agent-bbb"].label == "k-mechanic"
+    assert by_id["agent-bbb"].label == "k_mechanic"
     assert by_id["agent-bbb"].tier == "worker"
     assert by_id["agent-bbb"].usage.input_tokens == 3
 
@@ -296,8 +296,8 @@ def test_budget_summary_fetch_failure_is_unavailable(tmp_path):
 def _sample_pieces():
     delegation = stats.aggregate_delegation_lines(
         [
-            "T0\tk-explorer\tsmall\tfind X",
-            "T1\tk-implementer\tmedium\timplement Z",
+            "T0\tk_explorer\tsmall\tfind X",
+            "T1\tk_implementer\tmedium\timplement Z",
         ]
     )
     transcript_stats = stats.aggregate_transcript_lines(
@@ -306,7 +306,7 @@ def _sample_pieces():
     subagents = [
         stats.SubagentRecord(
             agent_id="agent-aaa",
-            label="k-explorer",
+            label="k_explorer",
             tier="worker",
             usage=stats.TokenUsage(input_tokens=10, output_tokens=5, cache_read_tokens=0, cache_creation_tokens=0),
         )
@@ -321,8 +321,8 @@ def test_render_report_contains_key_numbers(tmp_path):
         "session-stem", tmp_path / "session-stem.jsonl", delegation, transcript_stats, subagents, budget
     )
     assert "session-stem" in report
-    assert "k-explorer" in report and "small" in report
-    assert "k-implementer" in report and "medium" in report
+    assert "k_explorer" in report and "small" in report
+    assert "k_implementer" in report and "medium" in report
     assert "100" in report and "20" in report  # orchestrator token totals
     assert "87.5%" in report  # session remaining
     assert "60.0%" in report  # week remaining
@@ -345,7 +345,7 @@ def test_render_digest_is_compact_and_contains_key_numbers(tmp_path):
 
     assert 4 <= len(lines) <= 12
     assert any("delegations: 2 total" in line for line in lines)
-    assert any("k-explorer=1" in line for line in lines)
+    assert any("k_explorer=1" in line for line in lines)
     assert any("orchestrator tokens" in line and "in=100" in line for line in lines)
     assert any("subagent tokens" in line for line in lines)
     assert any("87.5%" in line for line in lines)
@@ -374,7 +374,7 @@ def test_main_end_to_end_writes_report_and_prints_digest(tmp_path, capsys, monke
     (root / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
     log_path = root / routing.DELEGATION_LOG_REL
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.write_text("T0\tk-explorer\tsmall\tfind X\n", encoding="utf-8")
+    log_path.write_text("T0\tk_explorer\tsmall\tfind X\n", encoding="utf-8")
 
     fake_home = tmp_path / "home"
     claude_dir = fake_home / ".claude"
@@ -407,5 +407,5 @@ def test_main_end_to_end_writes_report_and_prints_digest(tmp_path, capsys, monke
     report_files = list(report_dir.glob("stats-*.md"))
     assert len(report_files) == 1
     content = report_files[0].read_text(encoding="utf-8")
-    assert "k-explorer" in content
+    assert "k_explorer" in content
     assert "42" in content

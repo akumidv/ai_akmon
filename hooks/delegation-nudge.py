@@ -4,12 +4,12 @@
 Counts consecutive orchestrator edit/shell calls since session start or the last subagent
 delegation (``Task``/``Agent`` resets the counter and re-arms the reminder) and, past the
 threshold, injects a soft reminder — once per drift episode — that the work may belong to
-a ``k-*`` delegate (MODEL.md § Capability tiers). Below the ask threshold, advisory only —
+a ``k_*`` delegate (MODEL.md § Capability tiers). Below the ask threshold, advisory only —
 nothing is blocked; past it, a hard ``ask`` fires and escalates to ``deny`` outside the
 interactive default permission mode (C31/D2-10 — an unattended ``ask`` was observed to be a
 silent no-op). This fires only for main-chain calls: a subagent call (detected via the payload's
 ``agent_id``, present only inside a subagent) is exempt, since Claude Code shares the
-``session_id`` between the main chain and its subagents and a k-* delegate has no ``Task``
+``session_id`` between the main chain and its subagents and a k_* delegate has no ``Task``
 tool to act on the nudge anyway. The decision logic lives in ``hook_core.py``; this
 entrypoint only adapts Claude Code's payload.
 """
