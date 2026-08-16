@@ -22,7 +22,9 @@ from pathlib import Path
 _AITNA_ROOT_DEFAULT = "_aitna"
 
 # Committed, per-project overlay (same shape as the registry, deep-merged over it; may add
-# a "briefs" map with per-agent markdown appended to the generated subagent bodies).
+# a "briefs" map with per-agent markdown appended to the generated subagent bodies — keyed
+# by agent name, matched notation-insensitively, unmatched key is an error: see
+# `resolve_briefs`).
 OVERLAY_NAME = "model-routing.json"
 # Per-user resolved binding (gitignored, like .env) — written by init, read by the hook.
 LOCAL_CONFIG_REL = ".claude/model-routing.local.json"
@@ -571,9 +573,119 @@ def _wrap(text: str, width: int) -> list[str]:
     return chunks
 
 
+class BriefError(ValueError):
+    """A project overlay's ``briefs`` map cannot be applied to the current agent specs.
+
+    Raised instead of defaulting to an empty brief: an overlay brief is hand-authored
+    project instruction, and a key that matches no agent means those instructions would
+    silently vanish from the generated definition — no diff to look at, no warning. That is
+    the tolerance-degrades-to-silence shape C48 argues against, and ADR 0011's ``k-*`` →
+    ``k_*`` rename made it live (C50).
+    """
+
+
+def agent_key(name: str) -> str:
+    """Normal form of an agent name for overlay lookups — folds case, ``-``/``_`` and surrounding
+    whitespace.
+
+    Overlay brief keys are a public contract written by hand in a consumer's repository, so
+    a change of *notation* (ADR 0011) must not orphan them. The tolerance line, owner-verified
+    at D2-16(b): invisible and notational differences are forgiven — surrounding whitespace does
+    not survive a diff, so failing on it costs more to diagnose than the tolerance costs to hold
+    — while any difference in significant characters, an internal space included, still fails
+    (see ``resolve_briefs``).
+    """
+    return name.strip().lower().replace("-", "_")
+
+
+def resolve_briefs(registry: dict) -> dict[str, str]:
+    """Overlay briefs re-keyed by the **current** spec names; raises ``BriefError`` otherwise."""
+    briefs = registry["briefs"] if "briefs" in registry else {}
+    if not isinstance(briefs, dict):
+        raise BriefError(f"overlay 'briefs' must be an object, got {type(briefs).__name__}")
+    by_key = {agent_key(spec.name): spec.name for spec in AGENT_SPECS}
+    resolved: dict[str, str] = {}
+    source: dict[str, str] = {}
+    for key, text in sorted(briefs.items()):
+        if not isinstance(text, str):
+            raise BriefError(f"overlay brief '{key}' must be a string, got {type(text).__name__}")
+        name = by_key.get(agent_key(str(key)))
+        if name is None:
+            known = ", ".join(sorted(by_key.values()))
+            raise BriefError(f"overlay brief key '{key}' matches no agent (known: {known})")
+        if name in resolved:
+            raise BriefError(f"overlay brief keys '{source[name]}' and '{key}' both resolve to '{name}'")
+        source[name] = str(key)
+        resolved[name] = text
+    return resolved
+
+
+def brief_warning(registry: dict, aitna: str | None = None) -> str | None:
+    """Owner-addressed line naming an unusable overlay ``briefs`` map, or None when it is fine."""
+    try:
+        resolve_briefs(registry)
+    except BriefError as exc:
+        root = aitna or aitna_root_name()
+        return f"⚠ {exc} — fix {root}/{OVERLAY_NAME}; k_* definitions are not regenerated until it resolves"
+    return None
+
+
+def suppressed_rebind_warning(
+    warning: str | None,
+    detected_model: str | None,
+    session_id: str | None,
+    *,
+    marker_dir: Path | None = None,
+) -> list[str]:
+    """Emit one warning per session/model/error episode; reset when the condition clears.
+
+    A refused rebind leaves the recorded orchestrator unchanged, so comparing the next
+    transcript against that config reports the same switch on every prompt. The marker is
+    deliberately temporary rather than project state: it remembers only which warning the
+    current session already saw. A changed model or error produces a new digest and re-arms
+    the notice; a cleared condition removes the marker so a later recurrence speaks again.
+
+    Delivery here is **best-effort, and this is the one place akmon accepts fail-quiet**
+    (D2-22). A stale marker hides the switch-time notice only when three things coincide: a
+    session id that survived a crash or was reused, the same detected model, and the same
+    warning text. It is tolerable only because the same condition is reported loudly
+    elsewhere — SessionStart's ``BriefError`` and a direct ``init.py`` run — so this must not
+    be read as licence to go quiet in general. The acceptance ends with C36(a): once the
+    marker moves onto the atomic hook helper and gains an age-out, exactly-once per episode
+    becomes the contract.
+    """
+    # Without a reliable session identity, never let one anonymous invocation silence
+    # another session. Repeating the warning is safer than a process-global ``nosession``
+    # marker that hides an unresolved lossy-rebind condition from an unrelated owner.
+    if not session_id:
+        return [warning] if warning is not None and detected_model is not None else []
+
+    session = str(session_id)
+    marker_name = hashlib.sha256(session.encode()).hexdigest()[:20]
+    marker = (marker_dir or Path(tempfile.gettempdir())) / f"akmon-suppressed-rebind-{marker_name}"
+    if warning is None or detected_model is None:
+        try:
+            marker.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return []
+
+    condition = hashlib.sha256(f"{detected_model}\0{warning}".encode()).hexdigest()
+    try:
+        if marker.read_text(encoding="utf-8") == condition:
+            return []
+    except OSError:
+        pass
+    try:
+        marker.write_text(condition, encoding="utf-8")
+    except OSError:
+        pass
+    return [warning]
+
+
 def generated_agent_files(registry: dict, binding: Binding) -> dict[str, str]:
     """Map of ``.claude/agents/<name>.md`` relative paths → generated content."""
-    briefs = registry.get("briefs", {})
+    briefs = resolve_briefs(registry)
     return {
         f"{AGENTS_DIR_REL}/{spec.name}.md": agent_file_content(spec, binding, briefs.get(spec.name, ""))
         for spec in AGENT_SPECS

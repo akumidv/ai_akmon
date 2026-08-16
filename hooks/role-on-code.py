@@ -8,7 +8,7 @@ This entrypoint only adapts Claude Code's JSON payload/output shape so existing
 
 from __future__ import annotations
 
-from claude_adapter import load_payload, normalize_tool, print_result
+from claude_adapter import load_payload, normalize_tool, print_result, project_root
 from hook_core import role_on_code_result
 
 
@@ -20,6 +20,7 @@ def main() -> int:
             tool_name=normalize_tool(str(payload.get("tool_name") or "")),
             file_path=tool_input.get("file_path"),
             session_id=str(payload.get("session_id") or "nosession"),
+            project_root=project_root(payload),
         )
     )
     return 0

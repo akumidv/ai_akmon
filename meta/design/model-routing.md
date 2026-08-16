@@ -218,6 +218,28 @@ The single owner of model-selection policy *and* task-kind knowledge (requiremen
 A project may overlay this with a local override file (same shape, deep-merged) for
 project-specific kinds or a pinned dated id when behaviour must be frozen.
 
+The overlay may also add a `briefs` map — per-agent markdown appended to the generated
+subagent body. Its keys are agent names, so they are a **public contract** written by hand
+in the consumer's repository, and akmon owns two rules about them (C50):
+
+- **Notation is forgiven, spelling is not.** Keys match case-, `-` and `_`-insensitively,
+  so a notation change on akmon's side (ADR 0011's `k-*` → `k_*`) needs no migration in the
+  consumer. A key naming no agent — a typo, or an agent that no longer exists — is an
+  **error**, never an empty brief.
+- **A broken `briefs` map stops regeneration rather than degrading it.** `init.py` writes
+  nothing and exits non-zero; the hook refuses the rebind and states the bad key on the
+  owner channel. The cost is a stale model pin until the overlay is fixed — preferred to a
+  regeneration that drops hand-authored instructions and then deletes the older files that
+  still carried them.
+- **Presence determines validation.** An absent `briefs` member means an empty map; every
+  present non-object value is invalid, including JSON falsey values (`null`, `false`, `0`,
+  `""`, and `[]`). No falsey coercion may turn malformed policy into an empty valid map.
+- **A refused mid-session rebind warns once per episode.** The episode is scoped by session,
+  detected model, and the exact brief error. Repeating the same unresolved condition stays
+  quiet; a changed target/error or a cleared condition re-arms it. Without a reliable
+  session id the hook repeats the warning rather than letting one anonymous invocation
+  silence another session.
+
 ### 4.2 Init tool (code) — `_aitna/akmon/tools/model_routing/`
 
 Run as `python _aitna/akmon/tools/model_routing/init.py [--orchestrator <alias>]
@@ -621,7 +643,7 @@ The owner is the apex decision node; the framework's goal is quality per unit of
   owner opens one entry and sees the change, the drafted rationale, the whole-picture
   audit, and where the independent review disagrees, then decides.
 - **attention metrics:** the stats digest (C13) reports owner load next to token spend —
-  D2 entries pending/verified, decisions taken per session — so both halves of the goal
+  D2 entries pending/approved/verified, decisions taken per session — so both halves of the goal
   function are measured.
 
 ### 9.7 Decided register (A5 owner lock)

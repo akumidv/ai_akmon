@@ -19,16 +19,18 @@ delegated; the mechanism is **data + hooks**.
 
 1. **Ledger (data)** — `_aitna/D2_LEDGER.md`: one entry = one verify point:
    *what* changed (file/function/formula, with a `file:line` anchor), *kind*
-   (math / data-shape / architecture), *status* `pending → verified` (verified entries
-   carry the commit that landed the change; no dates — git history is the timeline).
+   (math / data-shape / architecture), and an owner-gate state independent of task lifecycle:
+   `pending → approved → verified`. `pending` means the owner has not accepted the exact point;
+   `approved` means the owner accepted it but no landing SHA exists; `verified` means the approved
+   change landed and the row carries that commit. No dates — git history is the timeline.
    This file is the page where Verify is caught — not the dialogue's memory.
 2. **Fill rule** — the agent adds an entry the moment it makes a D2-sensitive change
    (the rule); a **PreToolUse hook** on edits to D2-sensitive paths reminds when an edit
    arrives without a ledger entry this session (the enforcement — same
    rule-plus-hook split as commit-guard and analysis-guard).
-3. **Session status** — the SessionStart hook adds a counter to the same status line as
-   model routing: `D2: 3 pending`. One command (`python …/d2_ledger.py list`) prints the
-   open entries.
+3. **Session status** — the SessionStart hook adds counters to the same status line as model
+   routing: `D2 ledger: 3 pending, 2 approved`. One command
+   (`python …/d2_ledger.py list`) prints both open states explicitly.
 4. **Pre-commit gate** — the diff touches D2-sensitive paths while the ledger has
    pending (or missing) entries → warn (strictness open, §4). Verify stops being
    skippable by momentum.
@@ -62,10 +64,13 @@ Four points §4 left implicit, resolved so the build has no open forks:
 - **A — config home.** The sensitive-path globs live in the project's `.akmon.toml`
   (new `[d2_ledger] sensitive_paths = [...]` key), read by the tool and both hooks —
   the same file model routing already reads. No new config surface.
-- **B — how an entry becomes `verified`.** The owner (or the agent on the owner's word)
-  runs `python …/d2_ledger.py verify D2-3 --commit <sha>`: the tool moves `D2-3` to
-  `## Verified` and stamps the landing commit. Status never flips by a bare file edit —
-  the transition is a deliberate act, matching D2 ("owner verifies").
+- **B — approval and landing are separate transitions.** The owner (or the agent on the owner's
+  word) runs `python …/d2_ledger.py approve D2-3`: the tool moves the row from `## Pending`
+  to `## Approved` without a commit. Only an approved row may then move through
+  `verify D2-3 --commit <sha>` into `## Verified`. Both transitions are deliberate; a bare edit
+  never changes state. Because the tool never runs git, `approved → verified` is necessarily
+  post-landing metadata: the landing SHA must already exist, so the ledger move is recorded in a
+  follow-up closure commit rather than pretending it can be part of the commit it names.
 - **C — gate placement.** The pre-commit check is a **separate** `d2_ledger.py check`
   (warn-first), *not* folded into `git-commit-guard` — commit-guard owns the D5
   push/commit-ownership veto and must stay single-purpose; the D2 warn is advisory and
@@ -77,13 +82,13 @@ Four points §4 left implicit, resolved so the build has no open forks:
 
 ## 6. Build phases (C11)
 
-1. **Ledger + tool** — `tools/d2_ledger/d2_ledger.py`: `add` / `list` / `verify` / `check`
+1. **Ledger + tool** — `tools/d2_ledger/d2_ledger.py`: `add` / `approve` / `list` / `verify` / `check`
    over `_aitna/D2_LEDGER.md`; stdlib-only, never git (D5); tests mirror the archive tool.
 2. **Reminder hook** — PreToolUse on edits to `.akmon.toml`-configured sensitive paths;
    reminds once/session when an edit lands with no matching pending entry (marker in tempdir,
    same throttle pattern as delegation-nudge).
-3. **SessionStart counter** — `D2: N pending` appended to the model-routing status line;
-   owner-addressed (dual-channel `systemMessage`, per ADR 0006) when `N > 0`.
+3. **SessionStart counter** — pending and approved counts appended to the model-routing status
+   line; owner-addressed (dual-channel `systemMessage`, per ADR 0006) when either is non-zero.
 4. **Pre-commit `check`** — warn-first gate (§4#4, §5C); wired into the pre-commit pipeline
    doc, not commit-guard.
 5. **ADR** — [ADR 0007](../decisions/0007-d2-ledger.md) records the locked model (written

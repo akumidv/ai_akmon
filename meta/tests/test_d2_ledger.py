@@ -60,6 +60,18 @@ def test_split_row_parses_cells():
     assert d2._split_row("| a | b | c |") == ["a", "b", "c"]
 
 
+def test_split_row_keeps_escaped_pipe_inside_cell():
+    row = r"| D2-1 | architecture | Bash\|apply_patch routes | hooks/x.py:1 |  |  |"
+    assert d2._split_row(row) == [
+        "D2-1",
+        "architecture",
+        r"Bash\|apply_patch routes",
+        "hooks/x.py:1",
+        "",
+        "",
+    ]
+
+
 def test_split_row_none_for_non_table_line():
     assert d2._split_row("## Pending") is None
     assert d2._split_row("") is None
@@ -119,15 +131,15 @@ def test_table_bounds_tolerates_blank_line_within_pending_table():
 
 
 def test_next_id_sees_rows_past_a_blank_line_gap():
-    pending, verified = d2.parse_ledger(LEDGER_WITH_BLANK_ROW_GAP)
+    pending, approved, verified = d2.parse_ledger(LEDGER_WITH_BLANK_ROW_GAP)
     assert [r[0] for r in pending] == ["D2-1", "D2-3"]
-    assert d2.next_id(pending, verified) == "D2-4"
+    assert d2.next_id(pending, approved, verified) == "D2-4"
 
 
 def test_add_entry_increments_past_a_blank_line_gap():
     new_text, new_id = d2.add_entry(LEDGER_WITH_BLANK_ROW_GAP, kind="architecture", what="x", anchor="z.py:1")
     assert new_id == "D2-4"
-    pending, _ = d2.parse_ledger(new_text)
+    pending, _, _ = d2.parse_ledger(new_text)
     assert [r[0] for r in pending] == ["D2-1", "D2-3", "D2-4"]
 
 
@@ -148,9 +160,10 @@ def test_parse_table_returns_cell_lists():
     ]
 
 
-def test_parse_ledger_splits_pending_and_verified():
-    pending, verified = d2.parse_ledger(LEDGER)
+def test_parse_ledger_reads_legacy_ledger_without_approved_section():
+    pending, approved, verified = d2.parse_ledger(LEDGER)
     assert [r[0] for r in pending] == ["D2-1", "D2-3"]
+    assert approved == []
     assert [r[0] for r in verified] == ["D2-2"]
 
 
@@ -159,14 +172,15 @@ def test_parse_ledger_splits_pending_and_verified():
 # --------------------------------------------------------------------------------------
 
 
-def test_next_id_is_one_past_max_across_both_tables():
-    pending, verified = d2.parse_ledger(LEDGER)
-    assert d2.next_id(pending, verified) == "D2-4"
+def test_next_id_is_one_past_max_across_all_states():
+    approved_text = d2.approve_entry(LEDGER.replace("D2-3", "D2-9"), "D2-9")
+    pending, approved, verified = d2.parse_ledger(approved_text)
+    assert d2.next_id(pending, approved, verified) == "D2-10"
 
 
 def test_next_id_starts_at_one_on_empty_ledger():
-    pending, verified = d2.parse_ledger(d2.SKELETON)
-    assert d2.next_id(pending, verified) == "D2-1"
+    pending, approved, verified = d2.parse_ledger(d2.SKELETON)
+    assert d2.next_id(pending, approved, verified) == "D2-1"
 
 
 # --------------------------------------------------------------------------------------
@@ -177,24 +191,74 @@ def test_next_id_starts_at_one_on_empty_ledger():
 def test_add_entry_appends_pending_row_with_new_id():
     new_text, new_id = d2.add_entry(d2.SKELETON, kind="math", what="thing", anchor="a.py:1")
     assert new_id == "D2-1"
-    pending, verified = d2.parse_ledger(new_text)
+    pending, approved, verified = d2.parse_ledger(new_text)
     assert pending == [["D2-1", "math", "thing", "a.py:1", "", ""]]
+    assert approved == []
     assert verified == []
 
 
 def test_add_entry_increments_across_existing_entries():
     new_text, new_id = d2.add_entry(LEDGER, kind="architecture", what="split", anchor="b.py:9")
     assert new_id == "D2-4"
-    pending, _ = d2.parse_ledger(new_text)
+    pending, _, _ = d2.parse_ledger(new_text)
     assert pending[-1] == ["D2-4", "architecture", "split", "b.py:9", "", ""]
 
 
-def test_verify_entry_moves_row_to_top_of_verified():
-    new_text = d2.verify_entry(LEDGER, "D2-1", commit="deadbee")
-    pending, verified = d2.parse_ledger(new_text)
+def test_approve_entry_lazily_adds_section_to_legacy_ledger():
+    new_text = d2.approve_entry(LEDGER, "D2-1")
+    pending, approved, verified = d2.parse_ledger(new_text)
     assert [r[0] for r in pending] == ["D2-3"]
+    assert approved == [["D2-1", "math", "reprice formula", "src/x.py:42", "", ""]]
+    assert [r[0] for r in verified] == ["D2-2"]
+    assert new_text.index(d2.APPROVED_HEADER) < new_text.index(d2.VERIFIED_HEADER)
+
+
+def test_approve_entry_preserves_escaped_pipe_row_exactly():
+    original_row = r"| D2-1 | architecture | Bash\|apply_patch routes | hooks/x.py:1 | draft\|note | review |"
+    ledger = LEDGER.replace("| D2-1 | math | reprice formula | src/x.py:42 |  |  |", original_row)
+    new_text = d2.approve_entry(ledger, "D2-1")
+    pending, approved, _ = d2.parse_ledger(new_text)
+    assert [row[0] for row in pending] == ["D2-3"]
+    assert approved[0][2] == r"Bash\|apply_patch routes"
+    assert approved[0][4] == r"draft\|note"
+    assert new_text.splitlines().count(original_row) == 1
+
+
+def test_add_approve_verify_round_trip_escapes_pipe_delimiters():
+    added, entry_id = d2.add_entry(
+        d2.SKELETON,
+        kind="architecture",
+        what="Bash|apply_patch routes",
+        anchor="hooks/a|b.py:1",
+    )
+    pending, _, _ = d2.parse_ledger(added)
+    assert pending == [
+        [entry_id, "architecture", r"Bash\|apply_patch routes", r"hooks/a\|b.py:1", "", ""]
+    ]
+
+    approved = d2.approve_entry(added, entry_id)
+    verified_text = d2.verify_entry(approved, entry_id, commit="abc|123")
+    pending, approved_rows, verified = d2.parse_ledger(verified_text)
+    assert pending == []
+    assert approved_rows == []
+    assert verified == [
+        [entry_id, "architecture", r"Bash\|apply_patch routes", r"hooks/a\|b.py:1", r"abc\|123"]
+    ]
+
+
+def test_verify_entry_moves_approved_row_to_top_of_verified():
+    approved_text = d2.approve_entry(LEDGER, "D2-1")
+    new_text = d2.verify_entry(approved_text, "D2-1", commit="deadbee")
+    pending, approved, verified = d2.parse_ledger(new_text)
+    assert [r[0] for r in pending] == ["D2-3"]
+    assert approved == []
     assert verified[0] == ["D2-1", "math", "reprice formula", "src/x.py:42", "deadbee"]
-    assert verified[1][0] == "D2-2"  # pre-existing verified entry stays, pushed down
+    assert verified[1][0] == "D2-2"
+
+
+def test_verify_entry_rejects_pending_entry():
+    with pytest.raises(ValueError, match="no such approved entry: D2-1"):
+        d2.verify_entry(LEDGER, "D2-1", commit="deadbee")
 
 
 def test_verify_entry_missing_id_raises():
@@ -208,9 +272,11 @@ def test_verify_entry_missing_id_raises():
 
 def test_add_then_verify_round_trip_removes_from_pending():
     added_text, new_id = d2.add_entry(d2.SKELETON, kind="math", what="t", anchor="a.py:1")
-    verified_text = d2.verify_entry(added_text, new_id, commit="c0ffee")
-    pending, verified = d2.parse_ledger(verified_text)
+    approved_text = d2.approve_entry(added_text, new_id)
+    verified_text = d2.verify_entry(approved_text, new_id, commit="c0ffee")
+    pending, approved, verified = d2.parse_ledger(verified_text)
     assert pending == []
+    assert approved == []
     assert [r[0] for r in verified] == [new_id]
 
 
@@ -280,11 +346,11 @@ def test_main_add_creates_ledger_and_prints_id(tmp_path, capsys):
     assert ledger.is_file()
 
 
-def test_main_list_reports_no_pending_on_fresh_ledger(tmp_path, capsys):
+def test_main_list_reports_no_open_entries_on_fresh_ledger(tmp_path, capsys):
     ledger = tmp_path / "D2_LEDGER.md"
     rc = d2.main(["list", "--ledger", str(ledger)])
     assert rc == 0
-    assert "no pending D2 entries" in capsys.readouterr().out
+    assert "no open D2 entries" in capsys.readouterr().out
 
 
 def test_main_add_list_verify_round_trip(tmp_path, capsys):
@@ -295,7 +361,17 @@ def test_main_add_list_verify_round_trip(tmp_path, capsys):
     rc = d2.main(["list", "--ledger", str(ledger)])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "D2-1" in out and "new col" in out and "y.py:5" in out
+    assert "Pending: D2-1" in out and "new col" in out and "y.py:5" in out
+
+    rc = d2.main(["approve", "D2-1", "--ledger", str(ledger)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "approved D2-1" in out
+
+    rc = d2.main(["list", "--ledger", str(ledger)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "Approved: D2-1" in out
 
     rc = d2.main(["verify", "D2-1", "--ledger", str(ledger), "--commit", "abc1234"])
     out = capsys.readouterr().out
@@ -304,7 +380,16 @@ def test_main_add_list_verify_round_trip(tmp_path, capsys):
 
     rc = d2.main(["list", "--ledger", str(ledger)])
     assert rc == 0
-    assert "no pending D2 entries" in capsys.readouterr().out
+    assert "no open D2 entries" in capsys.readouterr().out
+
+
+def test_main_verify_rejects_pending_entry(tmp_path, capsys):
+    ledger = tmp_path / "D2_LEDGER.md"
+    d2.main(["add", "--ledger", str(ledger), "--kind", "math", "--what", "t", "--anchor", "a.py:1"])
+    capsys.readouterr()
+    rc = d2.main(["verify", "D2-1", "--ledger", str(ledger), "--commit", "abc1234"])
+    assert rc == 2
+    assert "no such approved entry: D2-1" in capsys.readouterr().err
 
 
 def test_main_verify_missing_id_errors(tmp_path, capsys):
@@ -330,6 +415,16 @@ def test_main_check_warns_when_pending_and_no_changed_filter(tmp_path, capsys):
     rc = d2.main(["check", "--ledger", str(ledger)])
     assert rc == 0  # warn-first: still exits 0 without --strict
     assert "D2-1" in capsys.readouterr().err
+
+
+def test_main_check_ignores_approved_entries(tmp_path, capsys):
+    ledger = tmp_path / "D2_LEDGER.md"
+    d2.main(["add", "--ledger", str(ledger), "--kind", "math", "--what", "t", "--anchor", "a.py:1"])
+    d2.main(["approve", "D2-1", "--ledger", str(ledger)])
+    capsys.readouterr()
+    rc = d2.main(["check", "--ledger", str(ledger), "--strict"])
+    assert rc == 0
+    assert "D2 ledger clean" in capsys.readouterr().out
 
 
 def test_main_check_strict_exits_1_on_would_warn(tmp_path, capsys):

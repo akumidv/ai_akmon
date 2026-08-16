@@ -61,6 +61,73 @@ The vendor-neutral policy remains mandatory; enforcement depth is vendor-specifi
 The compatibility matrix distinguishes policy delivery, advisory hooks, hard enforcement,
 subagent launch, and model selection instead of collapsing them into one checkmark.
 
+### PreToolUse routes (measured, codex 0.146.0 — C49)
+
+Codex normalizes tool names into Claude's matcher vocabulary, so a matcher names a **route**,
+not a tool spelling. Two routes reach the filesystem:
+
+| route | fires on matcher | payload `tool_name` | payload carries |
+|---|---|---|---|
+| patch | `Edit`, `Write`, `apply_patch` (three aliases, one call) | `apply_patch` | the patch body in `tool_input.command` |
+| shell | `Bash` | `Bash` | a command string in `tool_input.command` |
+
+`exec_command` and `shell` — the names the model-facing tool surface uses — match nothing.
+The emitted matcher is therefore `Bash|apply_patch`: one name per route, and deliberately not
+`.*`, which would put an unconditional hook on the hottest tool for no added precision.
+
+That matcher is minimal by measurement and therefore **silent on drift** (D2-19 a): every
+diagnostic below runs inside the hook process, so a codex release that unfolds the three
+aliases into separate routes would stop the hooks with nothing to report it. It is not patched
+locally by padding the matcher with `Edit|Write` — that asserts as routes two names never
+measured as routes. The fix is a version-stamped harness inventory, which is C46's mechanism.
+
+Two consequences akmon states rather than papers over:
+
+- **One narrow Bash exception is path-classified.** Only a command containing a recognized
+  `apply_patch` invocation **and** a valid patch envelope is treated as an edit. C48 then extracts
+  its paths and C47 normalizes them. A path read from the measured patch body is stated as
+  measured; a path produced only by one of the tolerated but unmeasured payload keys still drives
+  the advisories and is reported as unmeasured on stderr, because a guess that matches would
+  otherwise classify in silence (D2-18 a). Both halves are owner-verified: D2-17 and
+  D2-18, 2026-08-15. Recognized means *in command position* — the start of the command string, after a
+  `;`/`&&`/`||`/`|` separator, at the head of a subshell `(`/`$(` or a `{ ` group, or inside a
+  `sh -c`/`bash -lc` wrapper — but never after a bare newline, which is how a heredoc carries a
+  line of quoted data. Anchoring on the string start alone would let one token in front of the
+  call (`cd sub && apply_patch …`) undo the classification, and a bypass is spelled, not typed;
+  the set therefore has to cover the ordinary ways a shell opens a command rather than the two
+  that happened to be written down first. The width is affordable because the narrowing lives
+  elsewhere: the match must also sit on the **first line**, **outside shell quoting**, and open
+  the patch heredoc **directly**, so a false positive needs a real invocation rather than a
+  lucky character. A brace counts only when a space follows it — `{apply_patch` is one word
+  naming a different command. Patch-shaped text without the invocation, and an invocation whose
+  envelope lines are not lines of their own, stay on the unclassified Bash route. The width is
+  affordable because **every unrecognized form degrades to the reported route, never to
+  silence** (D2-19 b): `apply_patch < p.txt`, `env apply_patch <<EOF` and an invocation on the
+  second line of a script all stay Bash and draw the diagnostic below, so a false negative
+  costs one line of precision in a message that still fires. Chasing further prefixes would go
+  back to enumerating spellings, which the `shlex` fork closed.
+- **Every other Bash call is unclassified and reported generically.** A command string does not
+  reliably reveal either its affected paths or whether it mutates, so akmon guesses neither.
+  The three separately launched path-keyed hook processes share one atomic marker for a combined
+  stderr diagnostic that the route **may mutate files unseen**. With a reliable `session_id`,
+  exactly the first process to claim the marker emits once for the session; without one, the
+  diagnostic repeats rather than using a global `nosession` marker that could hide later gaps.
+  This is a hook-process diagnostic only: whether Codex surfaces stderr to the owner is unverified.
+  The throttle domains differ on purpose (D2-19 c): a **route-level** diagnostic states what a
+  route can do and is said once per session; an **event-level** one reports a defect in a single
+  call and throttles by session/tool-use pair, so the next defect stays visible.
+- **The blind spot is not Codex's** (D2-19 e, owner decision). On Claude the advisories sit on
+  `Edit|Write|MultiEdit`, so a write arriving through `Bash` — `python3 - <<EOF`, `cat > f <<EOF`
+  — was not merely unclassified there but *unreported*. The diagnostic therefore lives in
+  `hook_core.report_unclassified_shell_route`, one implementation and one wording for both
+  vendors, and Claude emits it from the `Bash` commit-guard process that was already wired: no
+  extra process on the hottest tool. What is **not** carried across is the `apply_patch`
+  classification itself — it is measured on codex only, and guessing a second vendor's shell
+  idiom is the failure D2-18(a) rejects.
+
+The exact patch-heredoc route is now observable to the advisories, not enforcement. The hard-deny
+bypass remains open: these hooks are advisory, and no matcher makes a denied effect unbypassable.
+
 ### Release class
 
 This changes an operative role/delegation contract and is therefore a breaking `v0.x` release:
@@ -83,7 +150,8 @@ immutable. Commit, tag, push, publish, and consumer pin updates remain owner-run
 
 The following require a live Codex protocol spike and stay explicitly unsupported until proven:
 
-- exact PreToolUse names/payloads for shell, read/search, and subagent calls;
+- exact PreToolUse names/payloads for read/search and subagent calls (**shell is now
+  measured** — see the route contract below);
 - whether subagent calls are observable by project hooks and expose parent/child identity;
 - attended and non-interactive `ask`/`deny` behavior;
 - user-visible hook output and child model selection.

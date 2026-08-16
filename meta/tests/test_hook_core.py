@@ -22,6 +22,7 @@ from hook_core import (
     d2_ledger_reminder_result,
     d2_pending_count,
     d2_sensitive_paths,
+    d2_status_counts,
     d2_status_line,
     d2_tracking_active,
     git_commit_guard_result,
@@ -299,16 +300,150 @@ def test_is_code_path_false_for_excluded_segments():
     assert not is_code_path("/repo/.claude/settings.py")
 
 
-def test_is_code_path_segment_match_requires_surrounding_slashes():
-    # Documents a sharp edge: a *top-level relative* path has no leading slash, so the
-    # "/docs/" segment does not match and the file is treated as code. Harmless in
-    # practice (Claude passes absolute paths) but worth pinning.
-    assert is_code_path("docs/dev/x.py")
-
-
 def test_is_code_path_handles_backslash_separators():
     assert is_code_path("src\\alphavar\\foo.py")
     assert not is_code_path("C:\\repo\\docs\\foo.py")
+
+
+# --------------------------------------------------------------------------------------
+# path-form invariant (C47): every predicate answers the same for both forms of a path
+# --------------------------------------------------------------------------------------
+
+# Claude Code always sends an absolute `file_path`; Codex passes through what the patch
+# body carried (`*** Add File: note.txt`), which is repo-relative. A predicate that answers
+# differently for the two forms is a guardrail that exists for one vendor only — and says
+# nothing when it does not match, so the gap is invisible until a live probe finds it.
+_PATH_FORM_CORPUS = (
+    "src/alphavar/option_class.py",
+    "docs/dev/x.py",
+    "_aitna/design/probe-n2-hookfire.md",
+    "_aitna/design/forecast/README.md",
+    "_aitna/TASKS.md",
+    "_aitna/TASKS_ARCHIVE.md",
+    "_aitna/akmon/hooks/hook_core.py",
+    "_aitna/akmon/pipelines/tasks.md",
+    "_aitna/memory/note.md",
+    ".claude/settings.py",
+    "README.md",
+    "pkg/mod.ts",
+    "notes.txt",
+)
+
+_D2_GLOBS = ["src/**/*.py", "_aitna/design/**", "**/TASKS.md"]
+
+
+@pytest.mark.parametrize("relative", _PATH_FORM_CORPUS)
+def test_path_predicates_agree_on_relative_and_absolute_forms(tmp_path, relative):
+    absolute = str(tmp_path / relative)
+    assert is_code_path(relative, tmp_path) == is_code_path(absolute, tmp_path)
+    assert is_planning_doc(relative, tmp_path) == is_planning_doc(absolute, tmp_path)
+    assert is_d2_sensitive_path(relative, tmp_path, _D2_GLOBS) == is_d2_sensitive_path(absolute, tmp_path, _D2_GLOBS)
+
+
+def test_relative_paths_get_the_right_answer_not_merely_a_consistent_one(tmp_path):
+    # Equality alone would also hold if both forms were wrong; these pin the answers.
+    # The first is the exact path probe G2 edited in alphavar, where the guard stayed mute.
+    assert is_planning_doc("_aitna/design/probe-n2-hookfire.md", tmp_path)
+    assert is_planning_doc("_aitna/TASKS.md", tmp_path)
+    assert is_code_path("src/alphavar/option_class.py", tmp_path)
+    assert not is_code_path("docs/dev/x.py", tmp_path)  # a doc tree is not code, in either form
+    assert not is_code_path("_aitna/akmon/hooks/hook_core.py", tmp_path)
+
+
+def test_project_root_is_stripped_before_segments_are_matched(tmp_path):
+    # The other half of "normalize first": a repository that happens to live under a
+    # directory called `docs` used to have every file in it classified as a non-code path.
+    root = tmp_path / "docs" / "myproject"
+    (root / "src").mkdir(parents=True)
+    assert is_code_path(str(root / "src" / "x.py"), root)
+    assert not is_code_path(str(root / "docs" / "dev" / "x.py"), root)  # its own docs tree still excluded
+
+
+@pytest.mark.parametrize(
+    "relative, canonical",
+    (
+        ("./_aitna/design/./probe.md", "_aitna/design/probe.md"),
+        ("src/pkg/../x.py", "src/x.py"),
+        ("src//pkg///x.py", "src/pkg/x.py"),
+    ),
+)
+def test_path_predicates_canonicalize_relative_dot_dot_and_duplicate_separators(tmp_path, relative, canonical):
+    absolute = str((tmp_path / canonical).resolve(strict=False))
+    assert is_code_path(relative, tmp_path) == is_code_path(absolute, tmp_path)
+    assert is_planning_doc(relative, tmp_path) == is_planning_doc(absolute, tmp_path)
+    assert is_d2_sensitive_path(relative, tmp_path, _D2_GLOBS) == is_d2_sensitive_path(
+        absolute, tmp_path, _D2_GLOBS
+    )
+
+
+@pytest.mark.parametrize(
+    "outside",
+    (
+        "../_aitna/design/probe.md",
+        "../src/pkg/x.py",
+        "../TASKS.md",
+    ),
+)
+def test_path_predicates_reject_relative_traversal_outside_project(tmp_path, outside):
+    assert not is_code_path(outside, tmp_path)
+    assert not is_planning_doc(outside, tmp_path)
+    assert not is_d2_sensitive_path(outside, tmp_path, _D2_GLOBS)
+
+
+def test_path_predicates_reject_absolute_targets_outside_project(tmp_path):
+    outside = tmp_path.parent / "_aitna" / "design" / "probe.md"
+    assert not is_code_path(str(outside), tmp_path)
+    assert not is_planning_doc(str(outside), tmp_path)
+    assert not is_d2_sensitive_path(str(outside), tmp_path, ["**"])
+
+
+def test_a_symlinked_subtree_is_still_a_project_target(tmp_path):
+    # The traversal guard must reject a path that *leaves* the project without rejecting one
+    # that is merely *linked*. Anchoring through `Path.resolve()` followed the symlink and put
+    # both of these outside the root, silencing every predicate underneath — a silent
+    # non-match, which is the failure C47 exists to remove, re-entered through the guard.
+    # Real shapes: an `_aitna` dev layer kept outside the repo, a monorepo's shared source,
+    # an `_aitna/akmon` linked at a developer's own akmon checkout.
+    project = tmp_path / "proj"
+    (project / "src").mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "aitna" / "design").mkdir(parents=True)
+    (elsewhere / "shared").mkdir()
+    (project / "_aitna").symlink_to(elsewhere / "aitna")
+    (project / "src" / "shared").symlink_to(elsewhere / "shared")
+
+    assert is_planning_doc("_aitna/TASKS.md", project)
+    assert is_planning_doc("_aitna/design/probe.md", project)
+    assert is_code_path("src/shared/x.py", project)
+    assert is_d2_sensitive_path("src/shared/x.py", project, _D2_GLOBS)
+    # The absolute form through the same link agrees — the C47 invariant, on linked paths.
+    assert is_planning_doc(str(project / "_aitna" / "TASKS.md"), project)
+    assert is_code_path(str(project / "src" / "shared" / "x.py"), project)
+
+
+def test_a_root_named_through_a_symlinked_alias_still_matches(tmp_path):
+    # The opposite case, and the reason the resolved comparison is kept as a fallback: the
+    # discovered root and the payload may name one directory through different aliases
+    # (`/tmp` vs `/private/tmp`, a checkout reached through a linked home).
+    real = tmp_path / "real"
+    (real / "_aitna").mkdir(parents=True)
+    alias = tmp_path / "alias"
+    alias.symlink_to(real)
+
+    assert is_planning_doc(str(alias / "_aitna" / "TASKS.md"), real)
+    assert is_planning_doc(str(real / "_aitna" / "TASKS.md"), alias)
+
+
+def test_analysis_guard_fires_on_the_relative_form_codex_delivers(monkeypatch, tmp_path):
+    # C47 end to end at the decision level: the same edit, spelled the way each vendor
+    # spells it, must reach the same reminder.
+    _isolate_marker_dir(monkeypatch, tmp_path)
+    root = tmp_path / "repo"
+    absolute_form = str(root / "_aitna" / "design" / "probe.md")
+    relative = analysis_write_result(hook_core.EDIT_TOOL, "_aitna/design/probe.md", "sess-rel", root)
+    absolute = analysis_write_result(hook_core.EDIT_TOOL, absolute_form, "sess-abs", root)
+    assert isinstance(relative, HookResult)
+    assert relative.additional_context == absolute.additional_context
 
 
 # --------------------------------------------------------------------------------------
@@ -440,6 +575,15 @@ _LEDGER_TWO_PENDING = (
     "| D2-2 | architecture | c | z:1 | abc1234 |\n"
 )
 
+_LEDGER_PENDING_AND_APPROVED = _LEDGER_TWO_PENDING.replace(
+    "## Verified",
+    "## Approved\n\n"
+    "| id | kind | what | anchor | draft | second_opinion |\n"
+    "|----|------|------|--------|-------|----------------|\n"
+    "| D2-4 | architecture | d | q.py:1 | draft | review |\n\n"
+    "## Verified",
+)
+
 
 def test_count_pending_rows_counts_only_the_pending_section():
     # The verified row also starts with "| D2-", so the counter must stop at "## Verified".
@@ -448,6 +592,10 @@ def test_count_pending_rows_counts_only_the_pending_section():
 
 def test_count_pending_rows_zero_on_empty_tables():
     assert hook_core._count_pending_rows("## Pending\n\n## Verified\n") == 0
+
+
+def test_count_d2_rows_reports_pending_and_approved():
+    assert hook_core._count_d2_rows(_LEDGER_PENDING_AND_APPROVED) == (2, 1)
 
 
 def _write_ledger(root: Path, text: str) -> None:
@@ -462,6 +610,12 @@ def test_d2_pending_count_reads_pending_rows(tmp_path):
     root = _make_d2_project(tmp_path)
     _write_ledger(root, _LEDGER_TWO_PENDING)
     assert d2_pending_count(root) == 2
+
+
+def test_d2_status_counts_reads_both_open_states(tmp_path):
+    root = _make_d2_project(tmp_path)
+    _write_ledger(root, _LEDGER_PENDING_AND_APPROVED)
+    assert d2_status_counts(root) == (2, 1)
 
 
 @requires_tomllib
@@ -480,8 +634,8 @@ def test_d2_tracking_active_false_when_unused(tmp_path):
 
 
 def test_d2_status_line_format():
-    assert d2_status_line(3) == "D2 ledger: 3 pending"
-    assert d2_status_line(0) == "D2 ledger: 0 pending"
+    assert d2_status_line(3, 2) == "D2 ledger: 3 pending, 2 approved"
+    assert d2_status_line(0, 0) == "D2 ledger: 0 pending, 0 approved"
 
 
 def test_core_names_no_vendor_tools():

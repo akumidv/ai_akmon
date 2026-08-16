@@ -43,9 +43,10 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   Extends 0004/0005.
 - [0007 — D2 ledger: mechanical tracking of owner-verification points](0007-d2-ledger.md)
   — mechanizes the owner-verify guardrail as data + hooks: `_aitna/D2_LEDGER.md` (one entry
-  per verify point, ids `D2-<n>`, `pending → verified` by deliberate command); PreToolUse
+  per verify point, ids `D2-<n>`, `pending → approved → verified` by deliberate commands);
+  PreToolUse
   reminder on project-configured (`.keystone.toml`) sensitive paths; SessionStart `D2: N
-  pending` counter; warn-first pre-commit `check` kept separate from commit-guard; entry is
+  pending/approved` counter; warn-first pre-commit `check` kept separate from commit-guard; entry is
   the unit routing verify gates / second-opinion digests attach to. Implementation C11.
 - [0008 — Mythological naming: `_aitna` / `akmon` / Kyklōpes](0008-mythological-naming-aitna-akmon-kyklopes.md)
   — seats the whole system in one myth cluster (Hephaestus's forge beneath Etna): the workspace

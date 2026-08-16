@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
-from hook_core import EDIT_TOOL, READ_TOOL, HookResult
+from hook_core import EDIT_TOOL, READ_TOOL, HookResult, find_project_root
 
 # Claude Code's file-editing tool names → akmon's neutral edit-tool kind.
 EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit"})
@@ -29,6 +30,17 @@ def load_payload() -> dict[str, Any]:
     except (json.JSONDecodeError, ValueError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def project_root(payload: dict[str, Any]) -> Path:
+    """The project root the payload's paths belong to — from its ``cwd``, not the process's.
+
+    Mirrors ``codex-hook``'s ``_payload_root``. The path predicates normalize against this
+    root (C47), so it has to describe the session's project rather than wherever the hook
+    process happens to have been started.
+    """
+    cwd = payload.get("cwd")
+    return find_project_root(Path(cwd) if isinstance(cwd, str) and cwd else None)
 
 
 def print_result(result: HookResult | None) -> None:

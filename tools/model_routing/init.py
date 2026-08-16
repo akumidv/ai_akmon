@@ -100,12 +100,16 @@ def main(argv: list[str] | None = None) -> int:
         second_opinion = args.second_opinion == "on"
 
     binding = routing.compute_binding(registry, orchestrator, available, args.vendor)
-    planned: dict[Path, str] = {
-        root / rel: content
-        for rel, content in routing.binding_artifacts(
-            registry, binding, second_opinion=second_opinion, available=available
-        ).items()
-    }
+    try:
+        artifacts = routing.binding_artifacts(registry, binding, second_opinion=second_opinion, available=available)
+    except routing.BriefError as exc:
+        # Nothing is written: generating the definitions without the overlay's briefs would
+        # drop hand-authored project instructions, and the sweep below would then delete the
+        # only files still carrying them (C50).
+        print(f"error: {exc}", file=sys.stderr)
+        print(f"error: fix {routing.overlay_path(root).relative_to(root)}; no files were written", file=sys.stderr)
+        return 2
+    planned: dict[Path, str] = {root / rel: content for rel, content in artifacts.items()}
 
     write = not args.check and not args.dry_run
     changed = []

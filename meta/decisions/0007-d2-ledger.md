@@ -24,7 +24,8 @@ design (§4/§5); the load-bearing choices:
 
 1. **Ledger data** — `_aitna/D2_LEDGER.md`, a markdown table (owner-read first, tool-parsed
    second): one entry per verify point — *what* changed (`file:line` anchor), *kind*
-   (math / data-shape / architecture), *status* `pending → verified`; ids `D2-<n>`, monotonic, so
+   (math / data-shape / architecture), owner-gate state `pending → approved → verified`; ids
+   `D2-<n>`, monotonic, so
    chat and commits can cite one point. No dates — the landing commit is the timeline. The tool is
    stdlib-only and **never runs git**: the caller supplies the landing sha (D5 — the owner owns
    commits), so the ledger stays a pure data file the tool only reads and rewrites.
@@ -33,8 +34,9 @@ design (§4/§5); the load-bearing choices:
    SHARED mechanism / LOCAL config, as model routing) reminds once/session when an edit lands with
    no matching pending entry — and stays **silent when the project has configured no sensitive
    paths** (nothing to scope the reminder to; a project opts in before the per-edit nudge starts).
-3. **Session status** — the SessionStart hook appends `D2: N pending` to the model-routing status
-   line, owner-addressed (dual-channel `systemMessage`, per [0006](0006-orchestrator-detection-corridor-context-pressure.md)) when `N > 0`.
+3. **Session status** — the SessionStart hook appends pending and approved counts to the
+   model-routing status line, owner-addressed (dual-channel `systemMessage`, per
+   [0006](0006-orchestrator-detection-corridor-context-pressure.md)) when either count is non-zero.
 4. **Warn-first gate** — a **separate** `d2_ledger.py check` (not folded into commit-guard, which
    stays single-purpose for the D5 veto) warns when the ledger holds **pending** entries and the
    staged diff touches a sensitive path (project configured none → any pending warns; the owner
@@ -42,10 +44,12 @@ design (§4/§5); the load-bearing choices:
    A *missing* (never-logged) entry is **not** `check`'s job — it can only see the ledger's pending
    rows, so the per-edit reminder (decision 2) catches the forgotten entry while `check` covers open
    pending at commit time.
-5. **Verified transition + routing attachment** — an entry becomes `verified` only by a deliberate
-   `d2_ledger.py verify D2-<n> --commit <sha>`, never a bare file edit (matching D2 = *owner*
-   verifies); the entry carries optional `draft:` / `second_opinion:` fields so a reasoner
-   rationale and independent review attach to the same unit (feeds C16's gate-pack).
+5. **Two deliberate transitions + routing attachment** — `approve D2-<n>` records the owner's
+   acceptance without inventing a commit; `verify D2-<n> --commit <sha>` accepts only an approved
+   row and records that its change landed. Neither transition is a bare file edit. Since the tool
+   never runs git, the verified move is post-landing metadata in a follow-up closure commit. The
+   entry carries optional `draft:` / `second_opinion:` fields so a reasoner rationale and
+   independent review attach to the same unit (feeds C16's gate-pack).
 
 ## Consequences
 
@@ -55,6 +59,9 @@ design (§4/§5); the load-bearing choices:
   forms, so it does not become friction agents route around.
 - The ledger entry is the unit other mechanisms attach to (routing verify gate, second-opinion
   digest, owner-attention metrics C19) — one durable anchor rather than scattered chat remarks.
+- Task lifecycle stays orthogonal: an implementation whose D2 row is approved remains `blocked`
+  while it awaits owner landing; only a landed, verified change can become `done` and leave the
+  live task index.
 - Build is phased (design §6): tool → reminder hook → session counter → warn-first check — all four
   landed, and this ADR's wording was reconciled to what shipped: the reminder/`check` division of
   labour (forgotten vs. open-pending), the unconfigured behaviour (reminder silent, `check` warns),

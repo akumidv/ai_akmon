@@ -209,7 +209,13 @@ def _codex_hooks(root: Path) -> dict:
         "hooks": {
             "PreToolUse": [
                 {
-                    "matcher": "Edit|Write|apply_patch",
+                    # Routes, not spellings. Measured on codex 0.146.0: `Edit`, `Write` and
+                    # `apply_patch` are three live aliases for the same patch call, while the
+                    # shell — the route its model took when a denied patch was refused —
+                    # matches as `Bash` and was named by nothing here (C49). Not widened to
+                    # `.*`: an unconditional hook on every shell call costs latency and noise
+                    # on the hottest tool and buys precision nowhere.
+                    "matcher": "Bash|apply_patch",
                     "hooks": [
                         {
                             "type": "command",
@@ -255,6 +261,11 @@ def _claude_hooks(root: Path) -> dict:
         "hooks": {
             "PreToolUse": [
                 {
+                    # This one process also carries the unclassified-shell-route diagnostic
+                    # (C49, D2-19 e): the advisories below sit on the edit tools, so a write
+                    # that arrives through Bash is invisible to them on Claude too. Reusing
+                    # the already-wired guard keeps that statement free — no second process
+                    # on the hottest tool.
                     "matcher": "Bash",
                     "hooks": [{"type": "command", "command": cmd("git-commit-guard.py")}],
                 },
