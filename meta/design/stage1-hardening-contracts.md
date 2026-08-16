@@ -1,8 +1,8 @@
 # Design: stage 1 — deterministic hardening contracts (A12 proposed lock)
 
-> **Status: the register below is walked in full (F1–F12; F8–F12 decided 2026-08-16), D2-20 is
+> **Status: the register below is walked in full (F1–F12; F8–F12 decided), D2-20 is
 > split from D2-23, the internal contradictions are repaired and every shape now carries a
-> seeded-violation contract (2026-08-16). What remains before the lock is the
+> seeded-violation contract. What remains before the lock is the
 > [A17](../TASKS.md) tail — the coherence audit and the two ADRs F12 names — then owner
 > verification at [D2-20](../D2_LEDGER.md). Not locked.**
 > Scope: plan items **P1.1–P1.7** plus the **P0.2 / P0.4 declarations** the stage-0 probes
@@ -45,18 +45,18 @@ for coherence, the decision set is recorded in ADR(s), and D2-20 is owner-verifi
 
 | # | fork | owner choice | status |
 |---|---|---|---|
-| F1 | shared finding field vocabulary | **B — canonical `severity`; no `level` alias** | decided 2026-08-09 |
-| F2 | machine-readable finding rendering | **C — schema in C51; public JSON output in C59** | decided 2026-08-09 |
-| F3 | hook crash posture, including deny-class guards | **C — crash-open now; measured gate before deny-class fail-closed** | decided 2026-08-09 |
-| F4 | Codex hook timeout | **C — N1 live probe gates C52 emission** | decided 2026-08-09 |
-| F5 | hook timeout budget for Claude and a supported Codex route | **C — measurement-derived budgets by hook class** | decided 2026-08-09 |
-| F6 | timeout support envelope for currently unbounded valid inputs | **C — bounded fast path; fail-visible/open oversize** | decided 2026-08-09 |
-| F7 | invariant declaration owner and check direction | **B — stable policy IDs in prose and callable metadata; bidirectional** | decided 2026-08-15 |
-| F8 | initial policy-ID and operational classification table | **six policy IDs + `session_start_result` operational; `role.declaration` gains guardrail prose; D2 coverage declared as the consumer's, defaulted narrow at a future `init`** | decided 2026-08-16 |
-| F9 | version/changelog consistent-state repair | **`0.4.0.dev0` + `## Unreleased`, repaired inside C54; two literals joined by an equality check; PEP 440 non-final grammar; missing source and history gaps stay visible, not fatal** | decided 2026-08-16 |
-| F10 | execution-ledger scope (§9) | **dispatch-only now; the completion half spawns its own probe ([N4](../TASKS.md))** | decided 2026-08-16 |
-| F11 | does the acceptance yardstick admit an exemption class | **no — for an aggregating shape the seeded violation is *fidelity to its sources*** | decided 2026-08-16 |
-| F12 | ADR shape for stage 1 | **two: contracts/vocabulary (F1, F2, F7, F8) separate from survivability/crash posture (F3–F6)** | decided 2026-08-16 |
+| F1 | shared finding field vocabulary | **B — canonical `severity`; no `level` alias** | decided |
+| F2 | machine-readable finding rendering | **C — schema in C51; public JSON output in C59** | decided |
+| F3 | hook crash posture, including deny-class guards | **C — crash-open now; measured gate before deny-class fail-closed** | decided |
+| F4 | Codex hook timeout | **C — N1 live probe gates C52 emission** | decided |
+| F5 | hook timeout budget for Claude and a supported Codex route | **C — measurement-derived budgets by hook class** | decided |
+| F6 | timeout support envelope for currently unbounded valid inputs | **C — bounded fast path; fail-visible/open oversize** | decided |
+| F7 | invariant declaration owner and check direction | **B — stable policy IDs in prose and callable metadata; bidirectional** | decided |
+| F8 | initial policy-ID and operational classification table | **six policy IDs + `session_start_result` operational; `role.declaration` gains guardrail prose; D2 coverage declared as the consumer's, defaulted narrow at a future `init`** | decided |
+| F9 | version/changelog consistent-state repair | **`0.4.0.dev0` + `## Unreleased`, repaired inside C54; two literals joined by an equality check; PEP 440 non-final grammar; missing source and history gaps stay visible, not fatal** | decided |
+| F10 | execution-ledger scope (§9) | **dispatch-only now; the completion half spawns its own probe ([N4](../TASKS.md))** | decided |
+| F11 | does the acceptance yardstick admit an exemption class | **no — for an aggregating shape the seeded violation is *fidelity to its sources*** | decided |
+| F12 | ADR shape for stage 1 | **two: contracts/vocabulary (F1, F2, F7, F8) separate from survivability/crash posture (F3–F6)** | decided |
 
 **What enters this register** (the counting rule the `F10+` placeholder lacked, locked with F10–F12):
 a fork is registered when **all three** hold — it has two or more defensible answers; the answer
@@ -80,7 +80,7 @@ to this document and its ledger row:
   timeout literals move to **D2-23**, which blocks only C52. The former `Verify (c)` premise is
   obsolete because the F8 table now exists; that table is verified normally as part of the
   consolidated D2-20 architecture gate.
-- **Seeded-violation contracts are completed — done 2026-08-16** for §7 (C57) and §8 (the C46
+- **Seeded-violation contracts are completed — done** for §7 (C57) and §8 (the C46
   tool-name half); §10 (C59) had left this item earlier via F11. Neither was a missing paragraph.
   §7 had nothing to check in the required form — every cell of today's matrix is a checkmark —
   so the contract carries three additions: `CAPABILITIES.md` as the axis-complete home with
@@ -101,7 +101,7 @@ The closure also produces **two ADRs, not one** (**F12**): the contract/vocabula
 measurement should not carry the stable vocabulary along with it, or every timing number formally
 disturbs a decision that has already been built on. The cost is a boundary to maintain and two
 references where one would do.
-- **The internal contradictions are repaired — done 2026-08-16** ([A17](../TASKS.md) (f)). Five
+- **The internal contradictions are repaired — done** ([A17](../TASKS.md) (f)). Five
   were listed and a sixth surfaced while repairing them; none was purely editorial, so each is
   recorded with what it changed. (1) The order table's C53 row now names the **F8 table**, marked
   as a decision rather than a task to wait for. (2) The C55 row read `P0.4 declaration (§6)`,
@@ -167,7 +167,7 @@ tree. Adopted by `verify.py`, `meta/bin/validate.py`, `sync --check`, and `meta/
 the last one imports the module directly for its own findings rather than parsing subprocess
 output.
 
-**Owner choice F1 (2026-08-09) — B: rename `level` to `severity`.** `severity` is the sole
+**Owner choice F1 — B: rename `level` to `severity`.** `severity` is the sole
 canonical field; C51 does not add a property alias, constructor alias, or serialization alias.
 Any later JSON form uses only `severity`. This deliberately accepts a breaking Python API change
 for callers constructing or reading `Finding` objects. The rendered values
@@ -179,7 +179,7 @@ attribute read, fixture, and test in one change, including the independent Findi
 `meta/bin/validate.py`. Contract tests assert that `severity` exists, `level` does not, and the
 constructor rejects `level=`; positional construction alone is insufficient migration evidence.
 
-**Owner choice F2 (2026-08-09) — C: schema in C51, public JSON output in C59.** C51 owns a
+**Owner choice F2 — C: schema in C51, public JSON output in C59.** C51 owns a
 stdlib-only `Finding.to_dict()` or equivalent pure serializer and pins the exact object keys and
 values with contract tests. This keeps serialization beside the shared envelope and makes F1's
 absence of `level` testable. C51 does not add `--json` to `verify.py`, `sync --check`,
@@ -225,7 +225,7 @@ empty valid `target`; a local field mapping in an adopter is rejected by the sha
 4. **`timeout` in the generated Claude wiring**, plus the contract written into
    `hooks/README.md`.
 
-**Owner choice F3 (2026-08-09) — C: crash-open now; gate deny-class fail-closed.** C52 makes
+**Owner choice F3 — C: crash-open now; gate deny-class fail-closed.** C52 makes
 every unexpected wrapper/adapter/handler exception exit 0 after one loud diagnostic, including
 exceptions in deny-class hooks such as `git-commit-guard`. A healthy handler's explicit deny
 continues to use the vendor's deny route; crash posture and decision enforcement are separate
@@ -242,7 +242,7 @@ files by hand. Until all three exist, crash-open remains the contract. This acce
 deny on an akmon crash in exchange for not allowing an unmeasured hook failure to brick every
 commit in a consumer repository.
 
-**Owner choice F4 (2026-08-09) — C: probe-gated Codex timeout.** Terminal N1 evidence is a
+**Owner choice F4 — C: probe-gated Codex timeout.** Terminal N1 evidence is a
 prerequisite to C52 as a whole; C52 is not partially runnable before it. The evidence artifact
 records the exact Codex build/version, invocation mode, configuration source, event, matcher,
 hook entry, tested literal and units. Each entry scope that C52 would modify is probed separately
@@ -260,7 +260,7 @@ version; later versions inherit neither claim and trigger N1 re-probe. `Unmeasur
 terminal result. F4 does not choose the duration: F5 owns explicit timeout evidence and budget
 for Claude and any supported Codex route.
 
-**Owner choice F5 (2026-08-09) — C: measurement-derived budgets by hook class.** N1 inventories
+**Owner choice F5 — C: measurement-derived budgets by hook class.** N1 inventories
 every generated Claude entry and every Codex entry scope found supported by F4. The initial class
 table follows dominant workload, not vendor or filename: payload/marker; project/config scan; git
 subprocess; transcript/routing I/O. Every generated command entry maps to exactly one class; the
@@ -291,7 +291,7 @@ harness; after C52, that corpus is rerun, and exceeding a literal re-blocks the 
 silently raising the budget. `hooks/README.md` records the table, evidence environment and scope,
 and states that the budget is an operational bound, not a cross-machine latency SLA.
 
-**Owner choice F6 (2026-08-09) — C: bounded synchronous fast path.** Before F5 derives timeout
+**Owner choice F6 — C: bounded synchronous fast path.** Before F5 derives timeout
 literals, N1 inventories and measures every valid input axis that can grow with a consumer:
 raw stdin bytes before decode/JSON plus JSON depth/item/string bounds; command and description
 bytes; extracted patch path count and per-path bytes/depth; transcript total/line bytes and
@@ -345,7 +345,7 @@ spawned entry points rather than demonstrated on one representative.
 
 ## 3. Invariant canary (P1.2 → C53)
 
-**Owner choice F7 (2026-08-15) — B: stable policy IDs join prose and code.** A guardrail section
+**Owner choice F7 — B: stable policy IDs join prose and code.** A guardrail section
 with runtime behavior carries `Runtime check: <stable.dotted-policy-id>`. It never says bare
 `Enforced by`, because F3 requires normal-path route, crash posture and input envelope to remain
 separate claims. The policy prose remains the rule owner; the marker is its stable join key.
@@ -368,7 +368,7 @@ no `INVARIANTS.md`, central mapping constant, decorator registry or generated an
 fact lives either with the policy prose or with the callable it classifies. Function names and
 paths are not policy identity; a rename that preserves the stable ID preserves the join.
 
-**Owner choice F8 (2026-08-16) — the initial table, exhaustive over the seven current public
+**Owner choice F8 — the initial table, exhaustive over the seven current public
 `hook_core.*_result` callables.** Six policy IDs and one operational classification. C53 checks
 this set; a callable added later joins it the same way or the check fails.
 
@@ -468,7 +468,7 @@ The cost lands on the consumer: package mode stamps `akmon_version` from install
 computes its window from CHANGELOG headings. `0.3.0.dev0` matches no heading, so the window is
 uncomputable and the consumer reads nothing before accepting a pin.
 
-**Decision (owner-locked as register fork F9, 2026-08-16).** In
+**Decision (owner-locked as register fork F9).** In
 `tools/release/release_check.py`:
 
 - a **non-final** version **requires** a `## Unreleased` heading in CHANGELOG. Non-final is the
@@ -724,7 +724,7 @@ behind A15/C42 by ADR 0010; the agent-name half is closed by ADR 0011.
 
 ## 9. Execution ledger (P1.5 → C58)
 
-**Scope (owner-locked as register fork F10, 2026-08-16): dispatch-only.** The completion half —
+**Scope (owner-locked as register fork F10): dispatch-only.** The completion half —
 which event marks a dispatch finished, what a completion line contains, and what key correlates
 it back to its dispatch — is unknown on both vendors today, so it leaves this lock and becomes
 its own probe, [N4](../TASKS.md). Locking a ledger whose second half is guessed is the failure
@@ -768,7 +768,7 @@ the same exit/strict semantics.
 
 **Fork — mutable status levels.** Parked by **D1** in ADR 0010; unchanged by this proposal.
 
-**Seeded violation — fidelity, not a new check (owner-locked as register fork F11, 2026-08-16).**
+**Seeded violation — fidelity, not a new check (owner-locked as register fork F11).**
 C59 is the stage's hard case for its own yardstick: a shape that adds no check appears to have
 nothing to seed. It gets **no exemption**. For an aggregating shape the contract is fidelity to
 its sources, and that is seedable: mutate the source finding set and the aggregate must change

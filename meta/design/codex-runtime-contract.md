@@ -89,7 +89,7 @@ Two consequences akmon states rather than papers over:
   measured; a path produced only by one of the tolerated but unmeasured payload keys still drives
   the advisories and is reported as unmeasured on stderr, because a guess that matches would
   otherwise classify in silence (D2-18 a). Both halves are owner-verified: D2-17 and
-  D2-18, 2026-08-15. Recognized means *in command position* — the start of the command string, after a
+  D2-18. Recognized means *in command position* — the start of the command string, after a
   `;`/`&&`/`||`/`|` separator, at the head of a subshell `(`/`$(` or a `{ ` group, or inside a
   `sh -c`/`bash -lc` wrapper — but never after a bare newline, which is how a heredoc carries a
   line of quoted data. Anchoring on the string start alone would let one token in front of the
