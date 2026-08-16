@@ -91,11 +91,28 @@ non-existent tools of C46, with nothing warning.
 - **Delegation history does not migrate.** `agent_tier_map()` keys tiers by the live
   `AGENT_SPECS` names, so delegation-log rows and subagent transcripts written before the
   rename carry `k-*` names that no longer resolve to a tier. Per-agent stats therefore split
-  across the rename boundary. Accepted: the log is an append-only record of what actually
-  ran, and rewriting it to make a chart continuous would be the same falsification the scope
-  boundary above rejects.
+  across the rename boundary. Accepted (owner, D2-15 clause 3, 2026-08-15): the log is an
+  append-only record of what actually ran, and rewriting it to make a chart continuous would
+  be the same falsification the scope boundary above rejects. **Folding the notation in the
+  stats path is rejected with it** — `resolve_briefs` folds case and `-`/`_` through
+  `agent_key`, and applying that same fold in `stats.py::label_and_tier` would close the split
+  without touching the log. It is rejected because the two lookups answer different questions:
+  a brief key is a consumer's address for a *live* agent and must survive a rename, while a
+  log label names *what ran*, under a name that no longer exists. Folding it would join
+  pre- and post-rename runs into one continuous per-agent series — falsifying the chart
+  instead of the file, which is the same loss one layer up. The asymmetry is therefore the
+  decision, not a half-done migration, and a reader who wants the joined view states the
+  mapping explicitly at read time.
 - A prompt or brief that names a delegate literally must use the new form; the old name is
   no longer a valid subagent type once the stale definition is pruned.
+- **Consumer overlay `briefs` keys do *not* have to be migrated.** They were matched against
+  the spec name exactly, so the rename orphaned them silently — the generated definition
+  shipped without the project's hand-authored instructions and the sweep above then deleted
+  the `k-*.md` that still carried them. Found in review, carried as
+  [C50](../TASKS.md) and fixed there: the lookup now folds case and `-`/`_`, and a brief key
+  matching no agent is a hard error that stops the regeneration instead of an empty string.
+  The general lesson for the scope boundary above: a rename reaches further than the files
+  akmon generates, into the keys by which a consumer addresses them.
 - The rename buys a shared *notation*, not a shared *mechanism*. C46 remains open and still
   owns the real fix — declare capabilities and identities neutrally, map them per vendor, and
   fail loudly on a name the target harness does not know. This ADR removes one instance of

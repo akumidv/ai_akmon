@@ -69,7 +69,7 @@ function is quality per unit of **tokens + owner attention**; only tokens had a 
    `review` routing `debug-deep` stays legitimate: diagnosis is analysis, the fix is not.
 10. **Owner attention is the second budget:** the synthesizer report attaches to the D2
     ledger entry (one place: change + rationale + audit + disagreement), and the stats
-    digest gains attention metrics (D2 pending/verified, decisions per session).
+    digest gains attention metrics (D2 pending/approved/verified, decisions per session).
 
 ## Consequences
 

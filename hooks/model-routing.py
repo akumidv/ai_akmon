@@ -37,7 +37,7 @@ from hook_core import (
     HookResult,
     aitna_root_name,
     akmon_runtime_root,
-    d2_pending_count,
+    d2_status_counts,
     d2_status_line,
     d2_tracking_active,
     find_project_root,
@@ -83,11 +83,17 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     config = _load_config(root)
     event = payload.get("hook_event_name") or "SessionStart"
 
+    aitna = aitna_root_name()
+    # An overlay `briefs` key matching no agent makes every regeneration lossy, so the
+    # rebind is refused rather than run — and the reason is stated instead of swallowed (C50).
+    brief_warn = routing.brief_warning(registry, aitna)
+
     # Detect the model the main chain actually runs on (authoritative over settings) and
     # rebind the subagents when it moved. Needs an existing config for the `available`
     # ladder + opt-ins; first-time setup stays explicit (the init instruction below).
     detected = routing.detect_orchestrator(payload.get("transcript_path"), config.get("available"))
-    rebound = bool(detected and config and detected != config.get("orchestrator"))
+    switched = bool(detected and config and detected != config.get("orchestrator"))
+    rebound = switched and brief_warn is None
     if rebound:
         routing.rebind_to(root, registry, config, detected)
         config = _load_config(root)  # reload the freshly-written binding
@@ -95,12 +101,18 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     pressure = routing.context_pressure_notice(
         registry, payload.get("transcript_path"), payload.get("session_id")
     )
+    suppressed = routing.suppressed_rebind_warning(
+        brief_warn if switched else None,
+        detected,
+        payload.get("session_id"),
+    )
 
-    aitna = aitna_root_name()
     if event != "SessionStart":
         # Per-turn: silent unless a switch or a pressure-band crossing just landed — zero
         # token cost otherwise. Both are owner-addressed → dual-channel (requirement 11).
-        lines = (routing.rebind_notice(config, registry) if rebound else []) + pressure
+        # A suppressed rebind speaks up here too: the delegates stay pinned to the old model
+        # until the overlay is fixed, which the owner has to know at the moment it happens.
+        lines = (routing.rebind_notice(config, registry) if rebound else []) + suppressed + pressure
         if not lines:
             return None
         text = "\n".join(lines)
@@ -110,26 +122,27 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     # weaker settings-model staleness signal once we have detected + bound to it.
     settings_model = None if detected else _settings_model(root)
     reason = routing.staleness(config, registry, settings_model)
+    overlay = [brief_warn] if brief_warn else []
     if reason is not None:
-        lines = routing.init_instruction(reason, aitna) + pressure
+        lines = routing.init_instruction(reason, aitna) + overlay + pressure
         return HookResult(
             event_name="SessionStart",
             additional_context="\n".join(lines),
-            system_message="\n".join([lines[0], *pressure]),
+            system_message="\n".join([lines[0], *overlay, *pressure]),
         )
-    lines = routing.status_lines(config, registry, aitna) + pressure
+    lines = routing.status_lines(config, registry, aitna) + overlay + pressure
     # Owner-addressed subset: warnings (corridor/pressure) and the fact of a rebind; the
     # steady-state status line itself stays context-only so the UI is quiet when healthy.
     owner = [line for line in lines if line.startswith("⚠")]
     if rebound:
         owner.insert(0, routing.rebind_notice(config, registry)[0])
     # D2 ledger counter (phase 3 of C11): appended to the status block when tracking is in use;
-    # owner-addressed only when there are pending points to verify.
+    # owner-addressed while either pending decisions or approved landings remain open.
     if d2_tracking_active(root):
-        d2_count = d2_pending_count(root)
-        d2_line = d2_status_line(d2_count)
+        d2_pending, d2_approved = d2_status_counts(root)
+        d2_line = d2_status_line(d2_pending, d2_approved)
         lines.append(d2_line)
-        if d2_count > 0:
+        if d2_pending > 0 or d2_approved > 0:
             owner.append(d2_line)
     return HookResult(
         event_name="SessionStart",

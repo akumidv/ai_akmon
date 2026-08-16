@@ -31,7 +31,10 @@ project-local hook surface.
   commit guard; enforces
   [`../guardrails/_common.md`](../guardrails/_common.md) "Commits & ownership": denies an AI
   `Co-Authored-By` trailer; asks the owner before `push`/`tag`/`merge` and before a `commit`
-  on the default branch (landing history). Runs as a **PreToolUse → Bash** hook.
+  on the default branch (landing history). Runs as a **PreToolUse → Bash** hook, and carries the
+  neutral **unclassified-shell-route diagnostic** (C49/D2-19): the advisories below key off a
+  file path, so a write that arrives through the shell is invisible to them on Claude as well —
+  said once per session on the hook process's stderr, never blocking, never model context.
 - [`session-start-agent.py`](session-start-agent.py) — Claude SessionStart wrapper for the
   neutral active-agent reminder: injects a
   reminder to declare the active agent (and restate it on switch) plus the project's
@@ -85,9 +88,23 @@ project-local hook surface.
   seeing the mutations, the reads/sweeps, and the delegation resets).
 - [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for SessionStart,
   role-on-code, analysis, and D2 reminders. It emits Codex `hookSpecificOutput` context.
+  Its PreToolUse matcher is **`Bash|apply_patch`** — one name per *route*, measured on codex
+  0.146.0, where `Edit`/`Write`/`apply_patch` are three aliases for the same patch call and
+  the shell matches as `Bash`. A Bash command is classified as an edit only when a recognized
+  `apply_patch` invocation carries a valid patch envelope (and therefore depends on C47/C48).
+  Every other Bash call stays unclassified. The three separately launched hooks share one atomic
+  marker, so exactly the first process emits one combined stderr diagnostic per reliable session
+  id that the route **may mutate files unseen**; the diagnostic repeats when the id is missing.
+  A malformed edit payload is louder per event but not per handler: the three handlers share an
+  atomic marker for a reliable session/tool-use pair, the next bad event emits again, and missing
+  identity repeats fail-visible.
+  Whether Codex surfaces that stderr to the owner is unverified (design
+  [codex-runtime-contract.md](../meta/design/codex-runtime-contract.md) § PreToolUse routes).
   Commit enforcement, delegation log/nudge, named-agent generation, and model routing are
-  deliberately not wired: generic Codex subagents exist, but their hook payloads, child identity,
-  permission enforcement, and child-model selection are not yet proven by live protocol tests.
+  deliberately not wired. N2 proved hard `deny` on the headless patch route, but the exact
+  Bash+git `deny`/`ask` matrix, `permission_mode` delivery, and TUI/headless equivalence remain
+  C28(b) evidence gates; generic Codex subagents and their child hook payloads remain separate
+  N1/A12 work.
 
 > The Role-declaration **rule** also lives in `AGENTS.md` (vendor-neutral), so Codex/Gemini
 > follow it by reading the doc; this hook is only the Claude-side *enforcement* of it.

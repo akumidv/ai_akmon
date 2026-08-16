@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 
-from claude_adapter import load_payload, normalize_tool, print_result
+from claude_adapter import load_payload, normalize_tool, print_result, project_root
 from hook_core import d2_ledger_reminder_result
 
 
@@ -26,6 +26,7 @@ def main() -> int:
                 normalize_tool(str(payload.get("tool_name") or "")),
                 tool_input.get("file_path"),
                 session_id if isinstance(session_id, str) else None,
+                project_root(payload),
             )
         )
     except Exception as exc:

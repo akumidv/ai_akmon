@@ -3,20 +3,22 @@
 
 D2 (guardrails/_common.md "Owner-verify any change to math, data shape, or architecture")
 is born mid-dialogue and easily drowns before commit time. This tool gives the point a
-durable, tool-parsed home: a markdown file with two tables, `## Pending` and `## Verified`.
+durable, tool-parsed home: a markdown file with `## Pending`, `## Approved`, and
+`## Verified` tables.
 Full design: `_aitna/akmon/meta/design/d2-ledger.md` (phase 1 of C11 — this tool; the
 reminder hook, session counter, and pre-commit wiring are later phases).
 
     python3 .../tools/d2_ledger/d2_ledger.py add --ledger <path> \\
         --kind math --what "reprice formula" --anchor "src/x.py:42"
     python3 .../tools/d2_ledger/d2_ledger.py list --ledger <path>
+    python3 .../tools/d2_ledger/d2_ledger.py approve D2-3 --ledger <path>
     python3 .../tools/d2_ledger/d2_ledger.py verify D2-3 --ledger <path> --commit abc1234
     python3 .../tools/d2_ledger/d2_ledger.py check --ledger <path> [--strict] [--changed PATH ...]
 
 Every entry gets a monotonic `D2-<n>` id so chat and commit messages can cite one verify
 point ("verified in D2-3"). `add` creates the ledger (from the skeleton below) if it does
-not exist yet; `verify` is the only way an entry moves to `## Verified` — status never
-flips by a bare file edit, matching D2 ("owner verifies"). `check` is a warn-first
+not exist yet; `approve` records the owner's decision and `verify` records the landing
+commit — status never flips by a bare file edit. `check` is a warn-first
 pre-commit gate: exit 0 by default (it only warns to stderr), `--strict` promotes a would-warn
 to exit 1 (design §4 decision 4 — the later red-promotion switch).
 
@@ -34,6 +36,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 
 PENDING_HEADER = "## Pending"
+APPROVED_HEADER = "## Approved"
 VERIFIED_HEADER = "## Verified"
 KINDS = ("math", "data-shape", "architecture")
 
@@ -41,10 +44,15 @@ SKELETON = """\
 # D2 ledger — owner-verification points
 
 > One entry per owner-verify point (guardrails/_common.md "Owner-verify any change to
-> math, data shape, or architecture"). Pending on top; verified below. No dates — the
+> math, data shape, or architecture"). Pending on top; approved next; verified below. No dates — the
 > landing commit is the timeline (D5: the tool never runs git; the owner supplies the sha).
 
 ## Pending
+
+| id | kind | what | anchor | draft | second_opinion |
+|----|------|------|--------|-------|----------------|
+
+## Approved
 
 | id | kind | what | anchor | draft | second_opinion |
 |----|------|------|--------|-------|----------------|
@@ -60,7 +68,7 @@ _SEPARATOR_CELL_RE = re.compile(r"^:?-+:?$")
 
 
 # --------------------------------------------------------------------------------------
-# markdown table parsing (hand-rolled: split on "|", skip header + separator rows)
+# markdown table parsing (hand-rolled: split on unescaped "|", skip header + separator rows)
 # --------------------------------------------------------------------------------------
 
 
@@ -69,11 +77,37 @@ def _split_row(line: str) -> list[str] | None:
     stripped = line.strip()
     if not stripped.startswith("|"):
         return None
-    return [cell.strip() for cell in stripped.strip("|").split("|")]
+    cells = [""]
+    backslashes = 0
+    for char in stripped:
+        if char == "|" and backslashes % 2 == 0:
+            cells.append("")
+        else:
+            cells[-1] += char
+        backslashes = backslashes + 1 if char == "\\" else 0
+    # The leading delimiter always produces an empty first segment; a closing delimiter,
+    # when present, produces the empty last segment. Escaped pipes remain inside the cell,
+    # including their backslash, so formatting and later mutations cannot corrupt Markdown.
+    cells.pop(0)
+    if cells and cells[-1] == "":
+        cells.pop()
+    return [cell.strip() for cell in cells]
+
+
+def _escape_cell(cell: str) -> str:
+    """Escape Markdown delimiters while preserving pipes that are already escaped."""
+    escaped: list[str] = []
+    backslashes = 0
+    for char in cell:
+        if char == "|" and backslashes % 2 == 0:
+            escaped.append("\\")
+        escaped.append(char)
+        backslashes = backslashes + 1 if char == "\\" else 0
+    return "".join(escaped)
 
 
 def _format_row(cells: list[str]) -> str:
-    return "| " + " | ".join(cells) + " |"
+    return "| " + " | ".join(_escape_cell(cell) for cell in cells) + " |"
 
 
 def _is_separator_row(cells: list[str]) -> bool:
@@ -127,9 +161,23 @@ def parse_table(text: str, header: str) -> list[list[str]]:
     return [row for line in lines[start:end] if (row := _split_row(line)) is not None]
 
 
-def parse_ledger(text: str) -> tuple[list[list[str]], list[list[str]]]:
-    """``(pending_rows, verified_rows)``, each a list of cell lists."""
-    return parse_table(text, PENDING_HEADER), parse_table(text, VERIFIED_HEADER)
+def _parse_optional_table(text: str, header: str) -> list[list[str]]:
+    """Rows under ``header``, or ``[]`` when reading a ledger from before that state existed."""
+    try:
+        return parse_table(text, header)
+    except ValueError as exc:
+        if f"no '{header}' section" not in str(exc):
+            raise
+        return []
+
+
+def parse_ledger(text: str) -> tuple[list[list[str]], list[list[str]], list[list[str]]]:
+    """``(pending_rows, approved_rows, verified_rows)``, including old two-section ledgers."""
+    return (
+        parse_table(text, PENDING_HEADER),
+        _parse_optional_table(text, APPROVED_HEADER),
+        parse_table(text, VERIFIED_HEADER),
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -150,28 +198,61 @@ def next_id(*row_groups: list[list[str]]) -> str:
 def add_entry(text: str, *, kind: str, what: str, anchor: str) -> tuple[str, str]:
     """Append a new pending row; returns ``(new_text, new_id)``."""
     lines = text.splitlines()
-    pending_rows = parse_table(text, PENDING_HEADER)
-    verified_rows = parse_table(text, VERIFIED_HEADER)
-    new_id = next_id(pending_rows, verified_rows)
+    pending_rows, approved_rows, verified_rows = parse_ledger(text)
+    new_id = next_id(pending_rows, approved_rows, verified_rows)
     _, p_end = table_bounds(lines, PENDING_HEADER)
     lines.insert(p_end, _format_row([new_id, kind, what, anchor, "", ""]))
     return "\n".join(lines).rstrip("\n") + "\n", new_id
 
 
-def verify_entry(text: str, entry_id: str, *, commit: str) -> str:
-    """Move ``entry_id`` from ``## Pending`` to the top of ``## Verified``, stamping ``commit``.
+def _insert_approved_section(lines: list[str]) -> None:
+    """Lazily add ``## Approved`` before Verified in a legacy two-section ledger."""
+    verified_at = _section_header_index(lines, VERIFIED_HEADER)
+    lines[verified_at:verified_at] = [
+        APPROVED_HEADER,
+        "",
+        "| id | kind | what | anchor | draft | second_opinion |",
+        "|----|------|------|--------|-------|----------------|",
+        "",
+    ]
 
-    Raises ``ValueError`` if ``entry_id`` is not a pending entry."""
+
+def approve_entry(text: str, entry_id: str) -> str:
+    """Move ``entry_id`` from ``## Pending`` to the top of ``## Approved``."""
     lines = text.splitlines()
     p_start, p_end = table_bounds(lines, PENDING_HEADER)
-    match_at, row_cells = None, None
+    match_at, row_line = None, None
     for i in range(p_start, p_end):
+        cells = _split_row(lines[i])
+        if cells and cells[0] == entry_id:
+            match_at, row_line = i, lines[i]
+            break
+    if match_at is None:
+        raise ValueError(f"no such pending entry: {entry_id}")
+    del lines[match_at]
+    if not any(line.strip() == APPROVED_HEADER for line in lines):
+        _insert_approved_section(lines)
+    a_start, _ = table_bounds(lines, APPROVED_HEADER)
+    lines.insert(a_start, row_line)
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def verify_entry(text: str, entry_id: str, *, commit: str) -> str:
+    """Move ``entry_id`` from ``## Approved`` to the top of ``## Verified``, stamping ``commit``.
+
+    Raises ``ValueError`` if ``entry_id`` is not an approved entry."""
+    lines = text.splitlines()
+    if not any(line.strip() == APPROVED_HEADER for line in lines):
+        raise ValueError(f"no such approved entry: {entry_id}")
+    a_start, a_end = table_bounds(lines, APPROVED_HEADER)
+    match_at, row_cells = None, None
+    for i in range(a_start, a_end):
         cells = _split_row(lines[i])
         if cells and cells[0] == entry_id:
             match_at, row_cells = i, cells
             break
     if match_at is None:
-        raise ValueError(f"no such pending entry: {entry_id}")
+        raise ValueError(f"no such approved entry: {entry_id}")
     del lines[match_at]
     v_start, _ = table_bounds(lines, VERIFIED_HEADER)
     verified_row = _format_row([row_cells[0], row_cells[1], row_cells[2], row_cells[3], commit])
@@ -260,13 +341,27 @@ def _cmd_add(args: argparse.Namespace) -> int:
 
 
 def _cmd_list(args: argparse.Namespace) -> int:
-    pending_rows = parse_table(_read_or_skeleton(Path(args.ledger)), PENDING_HEADER)
-    if not pending_rows:
-        print("no pending D2 entries")
+    pending_rows, approved_rows, _ = parse_ledger(_read_or_skeleton(Path(args.ledger)))
+    if not pending_rows and not approved_rows:
+        print("no open D2 entries")
         return 0
-    for cells in pending_rows:
-        entry_id, kind, what, anchor = cells[0], cells[1], cells[2], cells[3]
-        print(f"{entry_id} [{kind}] {what} ({anchor})")
+    for label, rows in (("Pending", pending_rows), ("Approved", approved_rows)):
+        for cells in rows:
+            entry_id, kind, what, anchor = cells[0], cells[1], cells[2], cells[3]
+            print(f"{label}: {entry_id} [{kind}] {what} ({anchor})")
+    return 0
+
+
+def _cmd_approve(args: argparse.Namespace) -> int:
+    ledger_path = Path(args.ledger)
+    text = _read_or_skeleton(ledger_path)
+    try:
+        new_text = approve_entry(text, args.id)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    ledger_path.write_text(new_text, encoding="utf-8")
+    print(f"approved {args.id}")
     return 0
 
 
@@ -316,6 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, builder in (
         ("add", _cmd_add),
         ("list", _cmd_list),
+        ("approve", _cmd_approve),
         ("verify", _cmd_verify),
         ("check", _cmd_check),
     ):
@@ -326,8 +422,9 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--kind", required=True, choices=KINDS)
             p.add_argument("--what", required=True)
             p.add_argument("--anchor", required=True)
-        elif name == "verify":
-            p.add_argument("id", help="The entry id to verify, e.g. D2-3.")
+        elif name in {"approve", "verify"}:
+            p.add_argument("id", help=f"The entry id to {name}, e.g. D2-3.")
+        if name == "verify":
             p.add_argument("--commit", required=True, help="The landing commit sha.")
         elif name == "check":
             p.add_argument("--strict", action="store_true", help="Exit 1 on a would-warn (default: warn-only).")

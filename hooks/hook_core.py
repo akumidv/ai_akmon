@@ -6,9 +6,11 @@ payload and serialize ``HookResult`` into the shape their runtime expects.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
@@ -111,6 +113,72 @@ _EDIT_TOOL_KINDS = frozenset({EDIT_TOOL})
 SHELL_TOOL = "shell"
 READ_TOOL = "read"
 SUBAGENT_TOOL = "subagent"
+
+
+def claim_diagnostic_marker(kind: str, identity: str | None) -> bool:
+    """Atomically claim one stderr diagnostic for ``identity``; True means "emit now".
+
+    Two throttle domains, deliberately different and stated here because the difference reads
+    as an inconsistency otherwise (D2-19 c, D2-21 a):
+
+    - **route-level** diagnostics describe what a *route* can do, so they throttle by session
+      id — one statement per session, even though a later call on the same route is silent;
+    - **event-level** diagnostics report a defect in one call, so they throttle by a
+      session/tool-use pair — a second malformed call stays visible.
+
+    An absent or unreliable identity repeats instead of claiming a shared ``nosession``
+    marker, which would let one early session hide every later gap. The name is hashed so a
+    session id containing ``/`` cannot escape the tempdir — not for secrecy: the three
+    advisory markers in this module still carry a literal session id, which is the convention
+    gap C36(a) owns (D2-21 b). Marker lifecycle — stale files outliving their session, and
+    migrating those three onto this helper — is the rest of C36(a).
+    """
+    if not identity or identity == "nosession":
+        return True  # no identity to throttle by: repeat rather than hide the diagnostic
+    digest = hashlib.sha256(identity.encode()).hexdigest()[:20]
+    marker = Path(tempfile.gettempdir()) / f"akmon-{kind}-{digest}"
+    try:
+        descriptor = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return False
+    except OSError:
+        return True  # marker failure must make the diagnostic noisier, never invisible
+    try:
+        os.close(descriptor)
+    except OSError:
+        try:
+            marker.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return True
+    return True
+
+
+UNCLASSIFIED_SHELL_ROUTE_NOTICE = (
+    "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot "
+    "classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard "
+    "and the D2 reminder receive no inferred target"
+)
+
+
+def report_unclassified_shell_route(session_id: str | None) -> None:
+    """Say once per session that a shell call has effects the advisories cannot classify.
+
+    The advisories key off a path; a shell call carries a command, and reading a path out of a
+    command string is a guess — so this route is *reported*, never classified. It states the
+    route's capability, not a guessed effect (C49).
+
+    Vendor-neutral by owner decision at D2-19(e): the blind spot is not Codex's. On Claude the
+    same effect reaches the filesystem through ``Bash`` while the advisories sit on the edit
+    tools, so the route was not merely unclassified there — it was unreported. Both vendors now
+    emit one message from one implementation, because two copies of a diagnostic are two things
+    that can drift into disagreeing about what akmon can see.
+
+    Never blocks and never becomes model context: every caller keeps its exit code. Whether a
+    harness surfaces hook stderr to the owner is unverified on both vendors and is not claimed.
+    """
+    if claim_diagnostic_marker("shell-route", session_id):
+        print(UNCLASSIFIED_SHELL_ROUTE_NOTICE, file=sys.stderr)
 
 
 # Planning / design docs — editing one may be an analysis-only turn that needs confirmation
@@ -298,11 +366,89 @@ def session_start_result(root: Path) -> HookResult | None:
     return HookResult(event_name="SessionStart", additional_context="\n".join(lines))
 
 
-def is_code_path(file_path: str) -> bool:
-    lowered = file_path.replace("\\", "/").lower()
-    if any(segment in lowered for segment in _non_code_segments()):
+def _relative_within(candidate: Path, root: Path) -> str | None:
+    """``candidate`` as a ``root``-relative POSIX path, or ``None`` when it is not under it."""
+    try:
+        return candidate.relative_to(root).as_posix()
+    except ValueError:
+        return None
+
+
+def _project_relative_posix(file_path: str, root: Path) -> str | None:
+    """Return a canonical project-relative POSIX path, or ``None`` outside ``root``.
+
+    Relative hook paths are project-relative (Codex patch bodies), not relative to the hook
+    process, so both forms are anchored to the supplied project root — ``.``, ``..`` and
+    duplicate separators then classify identically. A path that leaves the project is not a
+    project target and must not accidentally match a local planning or D2 pattern.
+
+    The collapse is **lexical** (``os.path.normpath``), not ``Path.resolve()``: resolving
+    follows symlinks, so any symlinked subtree pointing outside the repo — an ``_aitna``
+    kept elsewhere, a monorepo's shared source, an ``_aitna/akmon`` linked at a developer's
+    akmon checkout — landed outside the root and silenced every predicate underneath it.
+    That is the same "did not match is indistinguishable from matched and stayed quiet"
+    failure C47 exists to remove, re-entered through the traversal guard. The resolved
+    comparison survives only as a fallback, for the opposite case: root and payload naming
+    one directory through different symlinked aliases (``/tmp`` vs ``/private/tmp``, a
+    checkout reached through a linked home). A traversal escapes both, so the guard holds.
+
+    That guard is **advisory-grade, not containment** (D2-17 d): it stops ``..``, but a link
+    inside the tree pointing out of the repository stays lexically inside the root and still
+    classifies as a project target. Catching it would require resolving, which is the
+    silencing failure above. Harmless for reminders — one extra reminder at worst — and not
+    to be inherited as a security property by any deny-class consumer.
+    """
+    path = Path(file_path)
+    anchored = path if path.is_absolute() else root / path
+    lexical = _relative_within(Path(os.path.normpath(anchored)), Path(os.path.normpath(root)))
+    if lexical is not None:
+        return lexical
+    try:
+        resolved_root = root.resolve(strict=False)
+        candidate = path if path.is_absolute() else resolved_root / path
+        return _relative_within(candidate.resolve(strict=False), resolved_root)
+    except OSError:
+        return None
+
+
+def classify_target(file_path: str, root: Path | None = None) -> str:
+    """``file_path`` in the one form every classifier matches on: project-relative POSIX,
+    lowercased, with a leading ``/``.
+
+    The classification segments (``/docs/``, ``/<aitna>/design/``) are written with
+    surrounding slashes, so matching them against the *raw* string answered "no" for every
+    relative path — and a silent "no" is indistinguishable from "matched and stayed quiet"
+    (C47). The two forms are not hypothetical: Claude Code always sends an absolute
+    ``file_path``, while Codex passes through what the patch body carried
+    (``*** Add File: note.txt``), which is repo-relative. Normalizing first makes the answer
+    a property of the file rather than of the vendor's spelling. Stripping the project root
+    also drops a second failure mode — a repo living under a directory called ``docs`` no
+    longer makes every file in it a non-code path.
+    """
+    text = file_path.replace("\\", "/")
+    path = Path(text)
+    # Preserve the core helper's standalone absolute-path API when no project root was
+    # supplied. Real hook wrappers always pass the payload-derived root; callers without
+    # one cannot safely decide whether an arbitrary absolute fixture lies outside a project.
+    # The pre-C47 unstripped behaviour therefore survives behind this default, and a payload
+    # with no `cwd` still reaches `find_project_root(None)` → `Path.cwd()`. Both are accepted
+    # (D2-17 a): no wired path takes either branch, and a mandatory `root` would change three
+    # signatures without changing a single answer.
+    if root is None and path.is_absolute():
+        normalized = path.as_posix()
+    else:
+        normalized = _project_relative_posix(text, root if root is not None else find_project_root())
+    if normalized is None:
+        return "/__outside_project__"
+    lowered = normalized.lower()
+    return lowered if lowered.startswith("/") else f"/{lowered}"
+
+
+def is_code_path(file_path: str, root: Path | None = None) -> bool:
+    target = classify_target(file_path, root)
+    if any(segment in target for segment in _non_code_segments()):
         return False
-    return Path(lowered).suffix in _CODE_EXTENSIONS
+    return Path(target).suffix in _CODE_EXTENSIONS
 
 
 def role_on_code_message() -> str:
@@ -323,10 +469,12 @@ def role_on_code_message() -> str:
     )
 
 
-def role_on_code_result(tool_name: str, file_path: str | None, session_id: str | None) -> HookResult | None:
+def role_on_code_result(
+    tool_name: str, file_path: str | None, session_id: str | None, project_root: Path | None = None
+) -> HookResult | None:
     if tool_name not in _EDIT_TOOL_KINDS:
         return None
-    if not isinstance(file_path, str) or not is_code_path(file_path):
+    if not isinstance(file_path, str) or not is_code_path(file_path, project_root):
         return None
 
     marker = Path(tempfile.gettempdir()) / f"akmon-role-on-code-{session_id or 'nosession'}.marker"
@@ -340,13 +488,13 @@ def role_on_code_result(tool_name: str, file_path: str | None, session_id: str |
     return HookResult(event_name="PreToolUse", additional_context=role_on_code_message())
 
 
-def is_planning_doc(file_path: str) -> bool:
-    lowered = file_path.replace("\\", "/").lower()
-    if lowered.endswith(_planning_doc_files()):
+def is_planning_doc(file_path: str, root: Path | None = None) -> bool:
+    target = classify_target(file_path, root)
+    if target.endswith(_planning_doc_files()):
         return True
-    if not lowered.endswith(".md"):
+    if not target.endswith(".md"):
         return False
-    return any(segment in lowered for segment in _planning_doc_segments())
+    return any(segment in target for segment in _planning_doc_segments())
 
 
 def analysis_before_mutation_message() -> str:
@@ -364,10 +512,12 @@ def analysis_before_mutation_message() -> str:
     )
 
 
-def analysis_write_result(tool_name: str, file_path: str | None, session_id: str | None) -> HookResult | None:
+def analysis_write_result(
+    tool_name: str, file_path: str | None, session_id: str | None, project_root: Path | None = None
+) -> HookResult | None:
     if tool_name not in _EDIT_TOOL_KINDS:
         return None
-    if not isinstance(file_path, str) or not is_planning_doc(file_path):
+    if not isinstance(file_path, str) or not is_planning_doc(file_path, project_root):
         return None
 
     marker = Path(tempfile.gettempdir()) / f"akmon-analysis-guard-{session_id or 'nosession'}.marker"
@@ -413,15 +563,6 @@ def d2_sensitive_paths(root: Path) -> list[str]:
     return [g for g in globs if isinstance(g, str)] if isinstance(globs, list) else []
 
 
-def _project_relative_posix(file_path: str, root: Path) -> str:
-    """``file_path`` as a ``root``-relative POSIX path (unchanged if it lies outside ``root``)."""
-    path = Path(file_path)
-    try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
-    except (ValueError, OSError):
-        return path.as_posix()
-
-
 def _segments_match(pattern_segments: list[str], path_segments: list[str]) -> bool:
     """Recursive ``/``-aware glob match: ``**`` spans zero or more whole segments, ``*``/``?`` stay
     within one segment (via ``fnmatchcase``). Mirrors ``PurePath.full_match`` but runs on any
@@ -441,7 +582,10 @@ def _segments_match(pattern_segments: list[str], path_segments: list[str]) -> bo
 
 def is_d2_sensitive_path(file_path: str, root: Path, globs: list[str]) -> bool:
     """Whether ``file_path`` matches one of the project's D2-sensitive ``globs`` (``**``-aware)."""
-    path_segments = [s for s in _project_relative_posix(file_path, root).split("/") if s]
+    relative = _project_relative_posix(file_path.replace("\\", "/"), root)
+    if relative is None:
+        return False
+    path_segments = [s for s in relative.split("/") if s]
     return any(_segments_match([s for s in glob.split("/") if s], path_segments) for glob in globs)
 
 
@@ -461,8 +605,8 @@ def d2_ledger_reminder_message(root: Path) -> str:
         "it, add a ledger entry so the point survives to commit time:\n"
         f"  python3 {tool} add --ledger {ledger} \\\n"
         '      --kind {math|data-shape|architecture} --what "<what changed>" --anchor "<file:line>"\n'
-        "The owner (or you on their word) closes it with `verify <id> --commit <sha>`. Fires once "
-        "per session; `list` shows what is still pending."
+        "The owner (or you on their word) records the decision with `approve <id>`; after landing, "
+        "`verify <id> --commit <sha>` closes it. Fires once per session; `list` shows both open states."
     )
 
 
@@ -490,25 +634,29 @@ def d2_ledger_reminder_result(
 
 
 # D2 ledger session counter — at SessionStart the model-routing status block gains a
-# ``D2 ledger: N pending`` line (design meta/design/d2-ledger.md §2.3, phase 3 of C11) so the open
-# verify points are visible up front, next to the routing status. Owner-addressed (dual-channel
-# systemMessage, ADR 0006) only when ``N > 0`` — nothing to verify keeps the host UI quiet. The
-# authoritative ledger parse lives in the ledger tool; here we only *count* pending rows, tolerantly.
+# ``D2 ledger: N pending, M approved`` line so both owner-decision and landing state are visible
+# up front, next to the routing status. Owner-addressed (dual-channel
+# systemMessage, ADR 0006) when either count is non-zero — no open state keeps the host UI quiet.
+# The authoritative ledger parse lives in the ledger tool; here we only count rows tolerantly.
 
 
-def _count_pending_rows(ledger_text: str) -> int:
-    """Pending-table data rows in the ledger — rows starting ``| D2-`` under ``## Pending`` (before
-    ``## Verified``). A deliberately minimal read (not the tool's full parser) for a cheap counter."""
-    in_pending = False
-    count = 0
+def _count_d2_rows(ledger_text: str) -> tuple[int, int]:
+    """``(pending, approved)`` data-row counts from either a two- or three-section ledger."""
+    section = None
+    counts = {"## Pending": 0, "## Approved": 0}
     for line in ledger_text.splitlines():
         stripped = line.strip()
         if stripped.startswith("## "):
-            in_pending = stripped == "## Pending"
+            section = stripped if stripped in counts else None
             continue
-        if in_pending and stripped.startswith("| D2-"):
-            count += 1
-    return count
+        if section is not None and stripped.startswith("| D2-"):
+            counts[section] += 1
+    return counts["## Pending"], counts["## Approved"]
+
+
+def _count_pending_rows(ledger_text: str) -> int:
+    """Backward-compatible pending-only view used by existing hook consumers."""
+    return _count_d2_rows(ledger_text)[0]
 
 
 def d2_pending_count(root: Path) -> int:
@@ -522,14 +670,25 @@ def d2_pending_count(root: Path) -> int:
         return 0
 
 
+def d2_status_counts(root: Path) -> tuple[int, int]:
+    """Pending and approved entry counts (``(0, 0)`` if the ledger is absent/unreadable)."""
+    ledger = aitna_root(root) / "D2_LEDGER.md"
+    if not ledger.is_file():
+        return 0, 0
+    try:
+        return _count_d2_rows(ledger.read_text(encoding="utf-8"))
+    except OSError:
+        return 0, 0
+
+
 def d2_tracking_active(root: Path) -> bool:
     """Whether D2 tracking is in use here (sensitive paths configured, or a ledger file exists) —
     so a project that hasn't adopted the ledger never sees the counter line."""
     return bool(d2_sensitive_paths(root)) or (aitna_root(root) / "D2_LEDGER.md").is_file()
 
 
-def d2_status_line(count: int) -> str:
-    return f"D2 ledger: {count} pending"
+def d2_status_line(pending: int, approved: int = 0) -> str:
+    return f"D2 ledger: {pending} pending, {approved} approved"
 
 
 # Delegation nudge — the routing rule (guardrails/_common.md § Route by task kind + the

@@ -194,6 +194,21 @@ def test_codex_hooks_wires_neutral_hook_entrypoint(tmp_path):
     assert "session-start" in text
 
 
+def test_codex_pretooluse_matcher_names_routes_not_spellings(tmp_path):
+    # C49: measured on codex 0.146.0 — `Edit`, `Write` and `apply_patch` are three aliases
+    # for one patch call, and the shell (the route its model took when the patch was denied)
+    # matches as `Bash`. The matcher must therefore name two routes, and must not widen to
+    # `.*`, which would put an unconditional hook on the hottest tool.
+    root = _make_root(tmp_path)
+    files, _ = sync._planned_files(root)
+    planned = next(item for item in files if item.path.relative_to(root).as_posix() == ".codex/hooks.json")
+    matchers = [entry["matcher"] for entry in json.loads(planned.content)["hooks"]["PreToolUse"]]
+
+    assert matchers == ["Bash|apply_patch"]
+    for spelling in ("Edit", "Write", "MultiEdit", ".*"):
+        assert spelling not in matchers[0]
+
+
 def test_planned_files_include_all_vendor_pointers(tmp_path):
     root = _make_root(tmp_path)
     files, errors = sync._planned_files(root)

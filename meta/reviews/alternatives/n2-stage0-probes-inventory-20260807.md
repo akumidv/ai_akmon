@@ -1,4 +1,4 @@
-# N2 — stage 0: vendor delivery probes & inventory (2026-08-07)
+# N2 — stage 0: vendor delivery probes & inventory (2026-08-09)
 
 > **Point-in-time findings report** (review role, no code changes). Covers plan items
 > **P0.1** (live delivery probes, Claude arm incl. the D4 built-in comparison), **P0.3**
@@ -77,9 +77,9 @@ All six dispatches across both sessions were recorded by `delegation-log.py` in
 `alphavar/.claude/model-routing.log`, built-ins included:
 
 ```
-2026-08-07T05:25:11+0000  ee0ebee1…  k-explorer       haiku  -  Context self-report probe
-2026-08-07T05:25:25+0000  ee0ebee1…  Explore          -      -  Context self-report probe
-2026-08-07T05:25:33+0000  ee0ebee1…  general-purpose  -      -  Context self-report probe
+2026-08-09T05:25:11+0000  ee0ebee1…  k-explorer       haiku  -  Context self-report probe
+2026-08-09T05:25:25+0000  ee0ebee1…  Explore          -      -  Context self-report probe
+2026-08-09T05:25:33+0000  ee0ebee1…  general-purpose  -      -  Context self-report probe
 ```
 
 So the delegation log is **not** blind to non-`k-*` dispatch — a pre-existing line from
@@ -129,7 +129,7 @@ rule rather than against it.
 
 ---
 
-## 1A. P0.1 — Codex arm (measured 2026-08-08 … 2026-08-11)
+## 1A. P0.1 — Codex arm (measured 2026-08-08 … 2026-08-09)
 
 Added after the report's first date; numbering of §2–§6 is left untouched so existing
 references stay valid. Harness **codex-cli 0.146.0**, same pilot consumer `alphavar`, same

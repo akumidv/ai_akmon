@@ -20,6 +20,62 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 - **Codex runtime contract (C39):** self-hosted `AGENTS.md` for akmon itself, a direct
   delegation-default clause in the consumer template, SessionStart defense in depth, and
   verifier coverage that rejects an import-only delegation contract.
+
+### Changed
+- **D2 owner gate (C63):** the ledger now distinguishes `Pending` owner review, `Approved`
+  work awaiting a landing commit, and `Verified` work with a recorded landing sha. Use
+  `d2_ledger.py approve <id>` before landing and `verify <id> --commit <sha>` afterward;
+  pre-commit checks warn only for still-pending entries.
+
+### Migration
+- **Breaking v0.4 consumer realign:** put the direct phrase `delegation is the default`
+  in the root `AGENTS.md` akmon block, run `akmon sync`, then `akmon verify --strict`.
+  A nested `@.../_common.md` line remains a pointer for compatible harnesses but does not
+  deliver load-bearing instructions to Codex.
+
+### Fixed
+- **Release check subject scoping (C9):** `--subject akmon` now runs upstream self-CI and meta tests from the akmon source root instead of running consumer-only `sync`/`verify` against the wrong layout.
+- Package-mode hooks now discover the project from nested working directories through
+  `<AITNA_ROOT>/.akmon.toml`, use `<AITNA_ROOT>/.akmon` as their runtime root, and
+  materialize the stdlib model-routing/D2 tool dependencies used by wired hooks.
+- **The Codex advisory hooks now actually fire (C48 + C47).** `role-on-code`,
+  `analysis-guard` and `d2-ledger-reminder` had produced no output in any Codex session since
+  they were wired, for two independent reasons: `codex_adapter.file_paths` looked for the patch
+  body under a `patch` key that the measured 0.146.0 payload does not send (it puts it in
+  `tool_input.command`), and the planning-doc/code path predicates matched only absolute paths
+  while patch bodies carry repo-relative ones. Both are fixed and verified against the payload
+  captured from codex 0.146.0. A Codex consumer will start seeing these reminders where it
+  previously saw none — no configuration change is needed. New failure signal: when an edit
+  matcher fires and no path can be read from the payload, the hook says so on stderr instead of
+  staying silent, so the next vendor payload change is visible rather than inert.
+- **Codex malformed-edit diagnostic loudness (C36(c)/D2-21):** the defect signal is emitted
+  once across the three handlers for each reliable session/tool-use pair, repeats for a later
+  bad event, and repeats fail-visible when either identity is unavailable. Marker lifecycle
+  remains open under C36(a), so this item is not an exactly-once-per-session guarantee.
+- **Codex PreToolUse matcher now names routes, not spellings (C49).** The generated
+  `.codex/hooks.json` matcher changes from `Edit|Write|apply_patch` to **`Bash|apply_patch`**:
+  measured on codex 0.146.0, the first three are aliases for one patch call, while the shell
+  matches as `Bash` and was named by nothing — so every mutation made through the shell
+  (`apply_patch` heredoc, `sed -i`, redirection, `python3 -c`) was invisible to all wired
+  hooks. Consumers re-run `sync` to pick the new matcher up. A Bash command is classified as an
+  edit only when a recognized `apply_patch` invocation carries a valid patch envelope; this
+  path depends on the C47/C48 fixes above. Every other Bash call stays unclassified. The three
+  separately launched path-keyed hooks share one atomic marker, so exactly the first process emits
+  one combined stderr diagnostic per reliable session id that the route **may mutate files unseen**;
+  it repeats if no id is available. Whether Codex shows that stderr to the owner is unverified.
+  The exact heredoc route is now observable to advisories;
+  the original hard-deny bypass remains open because these hooks are advisory and no matcher
+  makes a denied effect unbypassable.
+- **Overlay brief validation (C50):** per-agent `briefs` keys now match agent names
+  case-insensitively and treat `-`/`_` as the same notation, so an unmigrated consumer overlay
+  survives the `k-*` → `k_*` rename. An unknown, colliding, or malformed key is now a hard
+  error: `init.py` writes nothing and exits 2, and the routing hook refuses a rebind. The
+  deliberate cost is that generated agents and their model pin stay stale until the broken
+  overlay is fixed, instead of being regenerated after silently dropping project instructions.
+
+## v0.3.0
+
+### Added
 - **Model routing — capability tiers** ([MODEL.md](MODEL.md) §10, ADR 0004): task-kind →
   tier matrix and per-vendor semantic selection policy as data in
   [`tools/model_routing/registry.json`](tools/model_routing/registry.json) (project overlay:
@@ -85,10 +141,6 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   automation that omits `permission_mode`.
 
 ### Migration
-- **Breaking v0.4 consumer realign:** put the direct phrase `delegation is the default`
-  in the root `AGENTS.md` akmon block, run `akmon sync`, then `akmon verify --strict`.
-  A nested `@.../_common.md` line remains a pointer for compatible harnesses but does not
-  deliver load-bearing instructions to Codex.
 - Re-run `bin/sync.py` (wires the two new hooks into `.claude/settings.json`), run
   `tools/model_routing/init.py`, and add `.claude/model-routing.local.json` +
   `.claude/model-routing.log` to the project `.gitignore`.
@@ -98,10 +150,6 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   from local discovery / `--available`, not from committed registry data.
 
 ### Fixed
-- **Release check subject scoping (C9):** `--subject akmon` now runs upstream self-CI and meta tests from the akmon source root instead of running consumer-only `sync`/`verify` against the wrong layout.
-- Package-mode hooks now discover the project from nested working directories through
-  `<AITNA_ROOT>/.akmon.toml`, use `<AITNA_ROOT>/.akmon` as their runtime root, and
-  materialize the stdlib model-routing/D2 tool dependencies used by wired hooks.
 - **README `develop/` links** (README.md:52,54) pointed at a directory that had been renamed
   to `meta/`; MODEL.md §10 restated the pre-ADR-0006 selection policy ("reasoner = highest")
   against the registry's dynamic `reasoner: "orchestrator"` — both now match the tree/registry.
@@ -140,7 +188,6 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   required keys) is an error. Adopting the record is optional — a realign writes it.
 
 ### Fixed
-- **Release check subject scoping (C9):** `--subject akmon` now runs upstream self-CI and meta tests from the akmon source root instead of running consumer-only `sync`/`verify` against the wrong layout.
 - `verify.py` now checks `roles/review.md` exists (it was added as a role but left out of the
   required-files list).
 - `tools/release/release_check.py` test-runner resolution: it now prefers the dev-layer venv
