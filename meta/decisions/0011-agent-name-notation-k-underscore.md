@@ -91,7 +91,7 @@ non-existent tools of C46, with nothing warning.
 - **Delegation history does not migrate.** `agent_tier_map()` keys tiers by the live
   `AGENT_SPECS` names, so delegation-log rows and subagent transcripts written before the
   rename carry `k-*` names that no longer resolve to a tier. Per-agent stats therefore split
-  across the rename boundary. Accepted (owner, D2-15 clause 3, 2026-08-15): the log is an
+  across the rename boundary. Accepted (owner, D2-15 clause 3): the log is an
   append-only record of what actually ran, and rewriting it to make a chart continuous would
   be the same falsification the scope boundary above rejects. **Folding the notation in the
   stats path is rejected with it** — `resolve_briefs` folds case and `-`/`_` through
