@@ -1,12 +1,7 @@
 # 0012 — Stage 1 contracts and vocabulary: findings, policy IDs, ownership, load caps, capabilities, and the seeded-violation yardstick
 
-- **Status:** Proposed — the stable half of the A12 stage-1 lock, written as the object of its own
-  owner gate. Owner-verify point: **D2-20**, whose clause (b) verifies this two-ADR boundary. It
-  becomes Accepted when that row moves to Verified, and not before: an ADR that called itself
-  accepted while its gate sat Pending would be the status-disagreement defect this stage exists to
-  remove. `Proposed` is not an exception taken here: it is the single case the
-  [convention](README.md) admits, written into the convention because this pair forced the
-  question.
+- **Status:** Accepted — owner-verified at **D2-20** and landed at `e89f3fe`. This is the stable
+  half of the A12 stage-1 lock; D2-20 clause (b) verifies its boundary with ADR 0013.
 - **Owner:** akuminov@gmail.com
 - **References:** [design lock `stage1-hardening-contracts`](../design/stage1-hardening-contracts.md)
   (the full rationale, per-shape contracts and the owner walkthrough register F1–F22) ·
