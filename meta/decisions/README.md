@@ -15,9 +15,8 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
 - **One exception, stated rather than improvised:** when the decision's own owner-verify gate
   verifies the **ADR boundary itself**, the ADR has to exist before the gate can run. Such an ADR
   carries `Status: Proposed`, names the ledger row that will flip it to `Accepted`, and adds nothing
-  the design doc has not already settled. Nothing else is written ahead of its lock. (ADRs 0012 and
-  0013 at D2-20 — the case that forced this clause to be written down instead of explained per
-  file.)
+  the design doc has not already settled. Nothing else is written ahead of its lock. ADRs 0012 and
+  0013 were the case that forced this clause; they remained Proposed until D2-20 was Verified.
 
 ## Index
 
@@ -85,11 +84,11 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   transcript-owned active role left explicit as unavailable to the separate status process;
   and the stage's acceptance yardstick — the
   seeding unit is the **independently violable rule**, split rather than waived, with no exemption
-  class. **Proposed**; owner-verify point D2-20.
+  class. **Accepted**; owner-verified at D2-20 (`e89f3fe`).
 - [0013 — Hook survivability and crash posture](0013-hook-survivability-and-crash-posture.md) — the
   measurement-amendable half: top-level guard in all nine spawned entry points with **crash-open**
   posture including deny-class hooks (fail-closed gated on a live probe + test + tested recovery),
   **probe-gated** Codex timeout support where parse acceptance is not support, timeout budgets
   derived by hook class from measured worst cases, and a **bounded input envelope** whose oversize
   path degrades fail-open with exactly one safe diagnostic. Caps are compatibility boundaries, not
-  tuning constants. **Proposed**; owner-verify point D2-20, literals at D2-23.
+  tuning constants. **Accepted** at D2-20 (`e89f3fe`); literals remain gated by D2-23.

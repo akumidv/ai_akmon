@@ -1,18 +1,14 @@
-# Design: stage 1 — deterministic hardening contracts (A12 proposed lock)
+# Design: stage 1 — deterministic hardening contracts (A12 locked)
 
-> **Status: the register below is walked in full (F1–F22; F8–F22 decided), D2-20 is
-> split from D2-23, the internal contradictions are repaired, the clean-context coherence audit
-> has run and its findings are repaired here, and the two ADRs F12 names are written —
-> [0012](../decisions/0012-stage1-contracts-and-vocabulary.md) (contracts and vocabulary) and
-> [0013](../decisions/0013-hook-survivability-and-crash-posture.md) (survivability and crash
-> posture), both **Proposed** rather than Accepted, because their gate is the verification that
-> has not happened yet. What remains before the lock is owner
-> verification at [D2-20](../D2_LEDGER.md). Not locked.**
+> **Status: locked.** The register below is walked in full (F1–F22; F8–F22 decided), its
+> clean-context coherence findings are repaired, and [D2-20](../D2_LEDGER.md) is Verified at
+> `e89f3fe`. ADRs [0012](../decisions/0012-stage1-contracts-and-vocabulary.md) and
+> [0013](../decisions/0013-hook-survivability-and-crash-posture.md) are Accepted. D2-23 remains
+> the separate gate for C52's measured literals.
 > Scope: plan items **P1.1–P1.7** plus the **P0.2 / P0.4 declarations** the stage-0 probes
-> made fillable, plus the **tool-name half of [C46](../TASKS.md)**. The draft proposes splitting
+> made fillable, plus the **tool-name half of [C46](../TASKS.md)**. The lock splits
 > implementation per shape into **C51–C59** (+ C46; C60 carries the later cap reduction, outside
-> this lock); the umbrella
-> C40 would be superseded only after D2-20 owner verification. Sources:
+> this lock); the umbrella C40 is superseded and archived after D2-20 owner verification. Sources:
 > [plan §Phase 0–1](../reviews/alternatives/plan-akmon-from-alternatives-20260718.md),
 > [ADR 0010](../decisions/0010-alternatives-adoption-a11-verdicts.md),
 > [N2 findings](../reviews/alternatives/n2-stage0-probes-inventory-20260807.md).
@@ -28,7 +24,7 @@ and the other not at all. Each was a rule akmon states and nothing verified.
 
 So the yardstick for every **rule** below is not "is the rule written down" but **"what seeded
 violation makes this check fail, and where is that test"**. A rule that cannot answer is not
-in this proposed lock. The unit is the rule and not the shape — **F13**, decided after the
+in this lock. The unit is the rule and not the shape — **F13**, decided after the
 A17(g) audit found the two readings disagreeing across this document; `## Acceptance` states the
 consequence in full.
 
@@ -283,8 +279,9 @@ disturbs a decision that has already been built on. The cost is a boundary to ma
 references where one would do. **Both are written** —
 [0012](../decisions/0012-stage1-contracts-and-vocabulary.md) and
 [0013](../decisions/0013-hook-survivability-and-crash-posture.md) — and both carry
-**Status: Proposed**, against this repository's habit of writing an ADR only once a decision is
-locked. **The convention is amended with one bounded case rather than excepted for this pair**
+**Status: Proposed** before the gate, against this repository's habit of writing an ADR only once a
+decision is locked; both are now Accepted after D2-20 verification. **The convention is amended
+with one bounded case rather than excepted for this pair**
 ([decisions/README](../decisions/README.md)): an ADR whose own owner-verify gate verifies the *ADR
 boundary itself* has to exist before that gate can run, so it carries `Proposed` and names the row
 that will flip it. Here that row is D2-20, whose clause (b) verifies the two-ADR boundary — which
@@ -324,11 +321,12 @@ it is stable and it governs how every contract in both ADRs is written.
   which did not distinguish the declaration from C56's implementation; it now names the
   always-loaded *definition* explicitly, and the consequence is that **C55's only task dependency
   is C51** — it was never waiting for C56. (3) **C60 is removed from the order table**, whose own
-  caption limits it to dependencies internal to the proposed package; the `C56 → C60` edge moves
-  to *Not in this proposed lock* so it survives the deletion. (4) **A16 becomes `blocked (after
+  caption limits it to dependencies internal to the lock; the `C56 → C60` edge moves
+  to *Not in this lock* so it survives the deletion. (4) **A16 became `blocked (after
   D2-20)`** in TASKS.md: it cannot settle a vocabulary that inherits F3's axes before F3 is
   locked, and its first job — consuming C57's cells — sits behind the same gate, so the honest
-  status costs nothing. A third status level for *decided but not locked* would be more precise
+  status cost nothing at that stage; after the lock it remains blocked on C57. A third status
+  level for *decided but not locked* would be more precise
   and is deliberately **not** invented here: that is D1, and it is parked. (5) §2's guard is
   scoped to the **nine spawned entry points**; adapters and `hook_core` are imported, have no top
   level, and are covered by the caller's guard — which turns their single-write output into a
@@ -1616,7 +1614,7 @@ bring the parked JSON option spelling or D1 mutable levels into this lock.
   both; and the transcript-only active-role residual stated rather than synthesized;
 - README, `hooks/README.md`, `CAPABILITIES.md` and CHANGELOG agree with the code that shipped.
 
-## Not in this proposed lock
+## Not in this lock
 
 Doc gardening (dead links, staleness); matrix as data (A16/C44); MCP transport (P4.3);
 mutable status levels (D1); Codex dispatch **completion** observability ([N4](../TASKS.md), the

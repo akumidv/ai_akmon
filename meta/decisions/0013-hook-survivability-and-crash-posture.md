@@ -1,10 +1,8 @@
 # 0013 — Hook survivability: crash-open posture, measured timeouts, bounded input envelope
 
-- **Status:** Proposed — the measurement-amendable half of the A12 stage-1 lock. Owner-verify
-  point: **D2-20** for the protocol below; the concrete literals it produces are a separate gate,
-  **D2-23**. It becomes Accepted when D2-20 is Verified; D2-23 stays Pending after that, by design,
-  and blocks only [C52](../TASKS.md). On why a `Proposed` ADR exists at all, see the
-  [convention](README.md) clause it is written under.
+- **Status:** Accepted — the stable protocol was owner-verified at **D2-20** and landed at
+  `e89f3fe`. Concrete literals remain gated by **D2-23**, which stays Pending and blocks only
+  [C52](../TASKS.md).
 - **Owner:** akuminov@gmail.com
 - **References:** [design lock `stage1-hardening-contracts` §2, §7](../design/stage1-hardening-contracts.md)
   (full contracts and the F3–F6 rationale) ·
