@@ -10,7 +10,7 @@
   policy-ID join) · [codex-runtime-contract](../design/codex-runtime-contract.md) ·
   [ADR 0010](0010-alternatives-adoption-a11-verdicts.md) ·
   [N2 findings](../reviews/alternatives/n2-stage0-probes-inventory-20260807.md) ·
-  carriers [C52](../TASKS.md), [C57](../TASKS.md), N1 (the measurement campaign) ·
+  carriers [C52](../TASKS.md), [C57](../TASKS.md), N1/F4, N5/F6 and N6/F5 ·
   ledger rows D2-20, D2-23.
 
 ## Context
@@ -101,7 +101,7 @@ its loud-diagnostic requirement.
 
 ### F5 — budgets are derived from measurement, by hook class
 
-N1 inventories every generated Claude entry and every Codex entry scope F4 found supported. The
+N6 inventories every generated Claude entry and every Codex entry scope F4 found supported. The
 initial class table follows **dominant workload, not vendor or filename**: payload/marker;
 project/config scan; git subprocess; transcript/routing I/O. Every generated command entry maps to
 exactly one class; entries share a class only where their supported work envelope and measured
@@ -115,7 +115,7 @@ floor and proposed production literal. The git-subprocess class must account for
 not pre-empt the healthy fallback by accident.
 
 The apparent cycle is broken by sequence: F4 proves mechanics with disposable scratch wiring and a
-sentinel literal; F6 bounds supported inputs; N1 measures entry points directly with no host
+sentinel literal; F6 bounds supported inputs; N6 measures entry points directly with no host
 timeout; F5 derives the literals; scratch wiring live-verifies them; the owner verifies the
 class/literal table; only then may C52 implement it. **The sentinel is not the production budget.**
 That live validation covers **two** things, not one: individual entry expiry, and the aggregate
@@ -133,7 +133,7 @@ cross-machine latency SLA.
 
 ### F6 — a bounded synchronous fast path, with fail-visible oversize degradation
 
-N1 first inventories and measures every valid input axis that can grow with a consumer: raw stdin
+N5 first inventories and measures every valid input axis that can grow with a consumer: raw stdin
 bytes before decode plus JSON depth/item/string bounds; command and description bytes; extracted
 patch path count and per-path bytes/depth; transcript total/line bytes and matching-record count;
 D2 ledger bytes/rows; D2 config bytes, glob count/length/depth and `**` complexity; registry,
@@ -251,8 +251,8 @@ either process is review-visible rather than mechanically impossible.
   document, never a prefix — because a guard cannot un-write truncated stdout.
 - **A performance regression re-blocks C52** instead of quietly raising a literal, so the budget
   keeps meaning what it meant when the owner verified it.
-- **This ADR is the one expected to move.** N1's results amend F4's support verdicts, F5's literals
-  and F6's caps.
+- **This ADR is the one expected to move.** N1/F4 results amend support verdicts, N5/F6 results
+  amend caps, and N6/F5 results amend literals.
 
 ## Alternatives
 

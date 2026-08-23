@@ -75,7 +75,7 @@ changes what a stage-1 task implements or what the lock claims; and it cannot be
 task without the lock asserting something unverified. Failing the first makes it a **repair**
 ([A17](../TASKS.md) (d) and (f)); failing the third makes it an **in-task decision** (C60's
 relocation-vs-deletion, C57's git-dependency trigger); failing the second makes it **parked
-elsewhere** (D1 mutable status levels, A16 matrix-as-data, N1 measurement, the public
+elsewhere** (D1 mutable status levels, A16 matrix-as-data, N1/N5/N6 measurement, the public
 `akmon status` option name). Measurement gates — the F4/F5/F6 literals — are not forks at all:
 there is a number to obtain, not an answer to choose. Under this rule the register is **walked in
 full**; the placeholder row is not "empty", it was three.
@@ -273,7 +273,7 @@ The closure also produces **two ADRs, not one** (**F12**): the contract/vocabula
 (F1, F2, F7, F8, later amended by F14, F15, F17, F18, F19, F20, F21 and F22) plus the F11/F13 yardstick — what other work
 will cite — kept separate from
 survivability and crash posture
-(F3–F6), which N1's measurements are expected to amend. An ADR that must be revised by
+(F3–F6), which the N1/F4, N5/F6 and N6/F5 measurements are expected to amend. An ADR that must be revised by
 measurement should not carry the stable vocabulary along with it, or every timing number formally
 disturbs a decision that has already been built on. The cost is a boundary to maintain and two
 references where one would do. **Both are written** —
@@ -570,7 +570,7 @@ version; later versions inherit neither claim and trigger N1 re-probe. `Unmeasur
 terminal result. F4 does not choose the duration: F5 owns explicit timeout evidence and budget
 for Claude and any supported Codex route.
 
-**Owner choice F5 — C: measurement-derived budgets by hook class.** N1 inventories
+**Owner choice F5 — C: measurement-derived budgets by hook class.** N6 inventories
 every generated Claude entry and every Codex entry scope found supported by F4. The initial class
 table follows dominant workload, not vendor or filename: payload/marker; project/config scan; git
 subprocess; transcript/routing I/O. Every generated command entry maps to exactly one class; the
@@ -587,7 +587,7 @@ floor, and proposed production literal. The git-subprocess class must account fo
 not pre-empt the healthy fallback accidentally.
 
 The sequence breaks the apparent cycle: F4 proves mechanics with disposable scratch wiring and a
-sentinel literal; F6 bounds supported inputs; N1 measures entrypoints directly without a host
+sentinel literal; F6 bounds supported inputs; N6 measures entrypoints directly without a host
 timeout; F5 derives exact literals; scratch wiring live-verifies them; the owner verifies the
 class/literal table; only then may C52 implement it. Live validation covers both individual entry
 expiry and aggregate latency/behavior where a single event schedules a group of hook processes.
@@ -602,7 +602,7 @@ silently raising the budget. `hooks/README.md` records the table, evidence envir
 and states that the budget is an operational bound, not a cross-machine latency SLA.
 
 **Owner choice F6 — C: bounded synchronous fast path.** Before F5 derives timeout
-literals, N1 inventories and measures every valid input axis that can grow with a consumer:
+literals, N5 inventories and measures every valid input axis that can grow with a consumer:
 raw stdin bytes before decode/JSON plus JSON depth/item/string bounds; command and description
 bytes; extracted patch path count and per-path bytes/depth; transcript total/line bytes and
 matching-record count; D2 ledger bytes/rows; D2 config bytes, glob count/length/depth and `**`
@@ -1618,6 +1618,6 @@ bring the parked JSON option spelling or D1 mutable levels into this lock.
 
 Doc gardening (dead links, staleness); matrix as data (A16/C44); MCP transport (P4.3);
 mutable status levels (D1); Codex dispatch **completion** observability ([N4](../TASKS.md), the
-probe F10 spawned — this named N1 until A17(g), and N1 is the separate F4/F5/F6 measurement
-campaign parked above); the caps *reduction* (C60, which
+probe F10 spawned — this named N1 until A17(g), and N1/F4, N5/F6 and N6/F5 are the separate
+measurement carriers parked above); the caps *reduction* (C60, which
 runs after C56 lands — the edge is kept here because C60 is no longer a row in the order table).
