@@ -578,7 +578,71 @@ def test_entry_without_status_is_warning(tmp_path):
     _tasks(root).write_text("- T1 · vague · engineer · no status token here\n", encoding="utf-8")
     verifier = verify.Verifier(root)
     verifier.run()
-    assert any("lack a status token" in message for message in _messages(verifier.findings, "warn"))
+    warnings = _messages(verifier.findings, "warn")
+    assert any("status outside" in message and "T1" in message for message in warnings), warnings
+
+
+def test_free_form_status_is_warning_even_when_the_prose_says_blocked(tmp_path):
+    """The defect the old whole-line search could not see: the status field is what is checked."""
+    root = _make_project(tmp_path)
+    _tasks(root).write_text(
+        "- T1 · a thing · code-complete & D2-pending (D2-1) · engineer · nothing here is blocked\n",
+        encoding="utf-8",
+    )
+    verifier = verify.Verifier(root)
+    verifier.run()
+    warnings = _messages(verifier.findings, "warn")
+    assert any("status outside" in message and "T1" in message for message in warnings), warnings
+
+
+def test_prose_containing_done_is_not_reported_as_a_done_entry(tmp_path):
+    """The mirror defect: `done` anywhere in the line used to mean the entry was finished."""
+    root = _make_project(tmp_path)
+    _tasks(root).write_text(
+        "- T1 · a thing · active · engineer · the previous attempt is done with; this one is not\n",
+        encoding="utf-8",
+    )
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert not any("TASKS_ARCHIVE.md" in message for message in _messages(verifier.findings, "warn"))
+
+
+def test_status_qualifier_and_emphasis_stay_valid(tmp_path):
+    root = _make_project(tmp_path)
+    _tasks(root).write_text(
+        "- T1 · a thing · blocked (after T9) · engineer · waits on T9\n"
+        "- T2 · another · **deferred** · engineer · parked on purpose\n",
+        encoding="utf-8",
+    )
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert "warn" not in _levels(verifier.findings), _messages(verifier.findings, "warn")
+
+
+def test_indented_note_under_an_entry_is_not_an_entry(tmp_path):
+    """A note under an entry is not held to the entry grammar (pipelines/tasks.md)."""
+    root = _make_project(tmp_path)
+    _tasks(root).write_text(
+        "- T1 · a thing · active · engineer · ship it\n"
+        "    - **finding A · the sub-bullet that used to be read as an entry**\n",
+        encoding="utf-8",
+    )
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert "warn" not in _levels(verifier.findings), _messages(verifier.findings, "warn")
+
+
+def test_done_entry_is_named_in_the_archive_warning(tmp_path):
+    root = _make_project(tmp_path)
+    _tasks(root).write_text(
+        "- T1 · old work · done · engineer · finished\n"
+        "- T2 · live work · active · engineer · ongoing\n",
+        encoding="utf-8",
+    )
+    verifier = verify.Verifier(root)
+    verifier.run()
+    warnings = [message for message in _messages(verifier.findings, "warn") if "TASKS_ARCHIVE.md" in message]
+    assert warnings and "T1" in warnings[0] and "T2" not in warnings[0], warnings
 
 
 def test_dates_in_tasks_are_warning(tmp_path):

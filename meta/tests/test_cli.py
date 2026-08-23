@@ -216,6 +216,47 @@ def test_skew_notice_printed_when_versions_differ(tmp_path):
     assert "not-a-real-version" in notice
 
 
+def test_skew_notice_absent_when_the_pin_carries_a_v_prefix(tmp_path):
+    """The spelling that made the notice fire on every command in a mounted consumer."""
+    root = _mounted_project(tmp_path)
+    _write(root / "_aitna" / ".akmon.toml", f'akmon_version = "v{__version__}"\n')
+    assert cli._skew_notice(root / "_aitna" / "akmon") is None
+
+
+def test_skew_notice_reports_distance_when_the_pin_has_a_describe_suffix(tmp_path):
+    """A `git describe` distance is a separate fact from a version mismatch."""
+    root = _mounted_project(tmp_path)
+    pin = f"v{__version__}-5-gdeadbee"
+    _write(root / "_aitna" / ".akmon.toml", f'akmon_version = "{pin}"\n')
+    notice = cli._skew_notice(root / "_aitna" / "akmon")
+    assert notice is not None
+    assert pin in notice
+    assert "5 commits past the tag this CLI matches" in notice
+    assert "CLI is" not in notice  # not the mismatch sentence
+
+
+def test_skew_notice_renders_the_pin_as_recorded(tmp_path):
+    """The old form re-prefixed an already-prefixed pin and printed "v v0.3.0"."""
+    root = _mounted_project(tmp_path)
+    _write(root / "_aitna" / ".akmon.toml", 'akmon_version = "v0.3.0"\n')
+    notice = cli._skew_notice(root / "_aitna" / "akmon")
+    assert notice is not None
+    assert "v0.3.0" in notice
+    assert "v v0.3.0" not in notice
+    assert "vv0.3.0" not in notice
+    assert f"CLI is {__version__}," in notice
+
+
+def test_split_version_normalizes_only_the_two_recorded_spellings():
+    assert cli._split_version("v0.3.0") == ("0.3.0", None)
+    assert cli._split_version("0.3.0") == ("0.3.0", None)
+    assert cli._split_version("v0.3.0-5-gdeadbee") == ("0.3.0", "5")
+    assert cli._split_version("v0.3.0-5-gdeadbee-dirty") == ("0.3.0", "5")
+    # A PEP 440 segment names a different version, not another spelling of the same one.
+    assert cli._split_version("0.4.0.dev0") == ("0.4.0.dev0", None)
+    assert cli._split_version("0.4.0") != cli._split_version("0.4.0.dev0")
+
+
 def test_dispatch_prints_skew_notice_to_stderr(tmp_path, capfd):
     root = _mounted_project(tmp_path)
     _write(root / "_aitna" / ".akmon.toml", 'akmon_version = "not-a-real-version"\n')

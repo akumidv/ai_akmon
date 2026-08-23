@@ -53,6 +53,25 @@ _USE_SOURCE_FILES = (
 )
 
 
+def _uv_default_groups(data: dict, groups: dict) -> list[str]:
+    """The dependency-groups ``uv run`` installs without being asked: ``dev`` unless configured."""
+    configured = data.get("tool", {}).get("uv", {}).get("default-groups")
+    if configured == "all":
+        return list(groups)
+    if isinstance(configured, list):
+        return [name for name in configured if isinstance(name, str)]
+    return ["dev"]
+
+
+def _requirement_name(requirement: str) -> str:
+    """The distribution name heading a PEP 508 requirement string (``pytest>=8`` → ``pytest``)."""
+    head = requirement.strip().split(";", 1)[0]
+    for index, char in enumerate(head):
+        if not (char.isalnum() or char in "-_."):
+            return head[:index].lower()
+    return head.lower()
+
+
 @dataclass(frozen=True)
 class Finding:
     level: str
@@ -111,9 +130,9 @@ class Validator:
         if not tests_dir.is_dir():
             self.error("meta/tests is missing; cannot run akmon unit tests")
             return
-        runner = self._pytest_command()
+        runner, reason = self._pytest_command()
         if runner is None:
-            self.warn("no pytest runner found (uv / python -m pytest); skipping unit tests")
+            self.warn(f"unit tests skipped: {reason}")
             return
         result = subprocess.run(
             [*runner, str(tests_dir), "-q"],
@@ -128,27 +147,69 @@ class Validator:
             tail = detail[-1] if detail else f"exit {result.returncode}"
             self.error(f"unit tests failed: {tail}")
 
-    def _pytest_command(self) -> list[str] | None:
-        """Pick a pytest runner that actually resolves here, else None.
+    def _pytest_command(self) -> tuple[list[str] | None, str]:
+        """Pick a pytest runner that actually resolves here, else ``None`` and the reason why.
 
-        akmon is stdlib-only and ships no pyproject, so a bare ``uv run pytest`` cannot
-        provision pytest — it only works where pytest is already importable (CI, or a
-        consuming project's env). Probe before claiming a runner so "pytest absent" surfaces
-        as a skip-warning, not a spurious test failure.
+        Probe before claiming a runner, so "pytest absent" stays a skip-warning and never becomes
+        a spurious test failure. Two ways it resolves:
 
-        On a non-Python host, run this validator with the dev-layer venv interpreter so the
-        ``import pytest`` probe succeeds — e.g. ``_aitna/.venv/bin/python`` (provisioned by
-        BOOTSTRAP §A; see that step to create it).
+        1. **pytest is importable** under this interpreter — the certain case, and the one a
+           non-Python host hits when the validator is run with the dev-layer venv interpreter,
+           e.g. ``_aitna/.venv/bin/python`` (provisioned by BOOTSTRAP §A; see that step to
+           create it).
+        2. **``uv`` plus a manifest that declares pytest** in a group ``uv run`` installs by
+           default. That is the real distinction, and it is about *this root*, not about the
+           host: ``uv run`` provisions from the project it resolves, so it works exactly where
+           such a manifest exists. akmon's own root has had one since C37 (``[dependency-groups]
+           dev``); a consumer's dev layer may not.
+
+        The guard used to be ``which("uv") and which("pytest")``, from an era when akmon shipped
+        no ``pyproject.toml`` and a bare ``uv run pytest`` therefore had nothing to provision
+        from. That stopped being true at C37, and the test built on it was the wrong one twice
+        over: it refused the runner in exactly the case ``uv`` now handles (no pytest installed,
+        manifest resolvable) and accepted it only where pytest was already installed — where the
+        import probe above has usually answered already.
         """
         try:
             import pytest  # noqa: F401
 
-            return [sys.executable, "-m", "pytest"]
+            return [sys.executable, "-m", "pytest"], ""
         except ImportError:
             pass
-        if shutil.which("uv") and shutil.which("pytest"):
-            return ["uv", "run", "pytest"]
-        return None
+        if not shutil.which("uv"):
+            return None, "pytest is not importable and uv is not on PATH"
+        resolvable, why = self._manifest_declares_pytest()
+        if resolvable:
+            return ["uv", "run", "pytest"], ""
+        return None, f"pytest is not importable and {why}"
+
+    def _manifest_declares_pytest(self) -> tuple[bool, str]:
+        """Whether this root's ``pyproject.toml`` names pytest where ``uv run`` will install it.
+
+        ``uv run`` syncs the project's dependencies plus its default dependency-groups, so the
+        question is whether pytest is *declared* in one of those — not whether it is installed
+        right now. Anything unreadable answers no: a skip-warning is the safe direction, and a
+        runner claimed on a guess is the failure mode this method exists to avoid.
+        """
+        manifest = self.root / "pyproject.toml"
+        if not manifest.is_file():
+            return False, "this root has no pyproject.toml for uv run to provision from"
+        try:
+            import tomllib
+        except ImportError:
+            return False, "its pyproject.toml cannot be read here (tomllib needs Python 3.11+)"
+        try:
+            with manifest.open("rb") as handle:
+                data = tomllib.load(handle)
+        except (OSError, ValueError):
+            return False, "its pyproject.toml does not parse"
+        groups = data.get("dependency-groups") or {}
+        requirements = list(data.get("project", {}).get("dependencies") or [])
+        for name in _uv_default_groups(data, groups):
+            requirements.extend(groups.get(name) or [])
+        if any(_requirement_name(item) == "pytest" for item in requirements if isinstance(item, str)):
+            return True, ""
+        return False, "its pyproject.toml declares no pytest in a group uv installs by default"
 
     def run(self) -> None:
         self.check_dev_layout()

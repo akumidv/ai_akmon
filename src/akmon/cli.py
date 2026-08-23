@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,8 @@ from akmon import __version__, _tree
 
 _DISPATCHED_COMMANDS = {"sync", "verify"}
 _AITNA_ROOT_DEFAULT = "_aitna"
+# ``git describe --tags`` distance from the tag: ``-<N>-g<sha>``, optionally ``-dirty``.
+_DESCRIBE_SUFFIX = re.compile(r"-(\d+)-g[0-9a-f]+(?:-dirty)?$")
 
 
 def _load_module_from_path(path: Path, name: str) -> ModuleType:
@@ -115,19 +118,61 @@ def _mounted_akmon_root(start: Path) -> Path | None:
     return None
 
 
+def _split_version(recorded: str) -> tuple[str, str | None]:
+    """Split a recorded version into the part to compare and its ``git describe`` distance.
+
+    The two carriers spell the same standard differently by construction: mounted mode records
+    ``git describe --tags`` (``v0.3.0``, optionally ``-N-g<sha>``, optionally ``-dirty``), package
+    mode records installed metadata (``0.4.0.dev0`` — PEP 440, no ``v``). Only those two
+    spellings are normalized away. A PEP 440 pre/post/dev segment is **not** a spelling: it names a
+    different version and must keep comparing unequal.
+
+    Returns ``(base, commits_ahead)``; ``commits_ahead`` is ``None`` when the recorded string names
+    a tag exactly.
+    """
+    base = recorded.strip()
+    ahead = None
+    match = _DESCRIBE_SUFFIX.search(base)
+    if match:
+        ahead = match.group(1)
+        base = base[: match.start()]
+    if base[:1] == "v":
+        base = base[1:]
+    return base, ahead
+
+
 def _skew_notice(mounted_root: Path) -> str | None:
     """One-line notice when the CLI's own version differs from the mounted tree's pin.
 
     Reads ``<AITNA_ROOT>/.akmon.toml``'s ``akmon_version`` (the consumer's recorded pin).
     Absent for a project that has not realigned yet — nothing to compare, no notice.
+
+    Comparison normalizes first (F9/6): the pin and ``__version__`` reach this function in
+    different spellings by construction, so a raw equality fires on every command in a mounted
+    consumer. A ``git describe`` distance is a **separate** notice — the mounted tree is past the
+    tag this CLI matches, which is not the same fact as a version mismatch — and both notices
+    render each version as it was recorded rather than re-prefixing it.
     """
     sync_mod = _load_embedded_sync(_tree.embedded_tree_root())
     aitna = mounted_root.parent
     fields = sync_mod.read_akmon_toml(aitna / ".akmon.toml")
     pinned = fields.get("akmon_version")
-    if not pinned or pinned == __version__:
+    if not pinned:
         return None
-    return f"akmon: CLI is v{__version__}, mounted/pinned standard is v{pinned} — the mounted tree governs."
+    pinned_base, ahead = _split_version(pinned)
+    cli_base, _ = _split_version(__version__)
+    if pinned_base != cli_base:
+        return (
+            f"akmon: CLI is {__version__}, mounted/pinned standard is {pinned} "
+            "— the mounted tree governs."
+        )
+    if ahead is not None:
+        commits = "commit" if ahead == "1" else "commits"
+        return (
+            f"akmon: mounted/pinned standard is {pinned}, {ahead} {commits} past the tag this CLI "
+            "matches — the mounted tree governs."
+        )
+    return None
 
 
 def _run_mounted(script: str, mounted_root: Path, argv: list[str]) -> int:

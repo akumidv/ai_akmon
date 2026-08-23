@@ -19,8 +19,15 @@ from pathlib import Path
 import sync as sync_tool
 
 _TASKS_MAX_LINES = 200
-_TASK_STATUS_RE = re.compile(r"\b(active|blocked|deferred|done)\b")
+_TASK_STATUSES = ("active", "blocked", "deferred", "done")
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+
+
+def _sample(ids: list[str], limit: int = 4) -> str:
+    """Name the offenders, not just their count — a finding a reader cannot locate is half a finding."""
+    shown = ", ".join(ids[:limit])
+    return shown if len(ids) <= limit else f"{shown}, +{len(ids) - limit} more"
+
 _DELEGATION_DEFAULT_RE = re.compile(r"\bdelegation\s+is\s+the\s+default\b", re.IGNORECASE)
 _GENERATED_MARKER = sync_tool.GENERATED_MARKER
 _SKILL_REQUIRED_FRONTMATTER = ("name", "description", "when_to_use", "owner")
@@ -400,6 +407,33 @@ class Verifier:
         else:
             self.ok("generated pointers match sync.py")
 
+    @staticmethod
+    def _entry_id(entry: str) -> str:
+        """The id heading a backlog entry, for naming it in a finding."""
+        head = entry.split(" · ", 1)[0]
+        return head.removeprefix("- ").strip().strip("*") or "?"
+
+    @staticmethod
+    def _entry_status(entry: str) -> str | None:
+        """The status of one backlog entry: the head word of its third ``·`` field, or ``None``.
+
+        Read the *field*, not the line. This check used to search the whole entry for one of the
+        four status words, which cannot fail on the defect it names: an entry whose prose happens
+        to contain "blocked" passed with any status text at all, and an entry whose prose
+        contained "done" was reported as needing archiving. Both directions were wrong, and the
+        first is how a backlog drifts into free-form statuses under a green check.
+
+        The head word is what is checked, so the house form ``blocked (after C51)`` — a valid
+        status plus a qualifier naming what it waits on — stays valid, as does ``**active**``.
+        """
+        fields = entry.split(" · ")
+        if len(fields) < 3:
+            return None
+        status = fields[2].strip().strip("*").strip()
+        if not status:
+            return None
+        return status.split()[0].strip("*:,;").lower() or None
+
     def check_tasks(self) -> None:
         path = self.root / self.aitna / "TASKS.md"
         if not path.is_file():
@@ -410,14 +444,24 @@ class Verifier:
                 f"{self.aitna}/TASKS.md is {len(lines)} lines; keep it an index "
                 "(pipelines/tasks.md) — detail by reference, not inlined"
             )
-        entries = [line for line in lines if line.lstrip().startswith("- ") and " · " in line]
+        # Entries are top-level list items. An indented bullet is a note *under* an entry
+        # (pipelines/tasks.md), and holding one to the entry grammar reports a defect that is not
+        # there — which `lstrip()` here used to do.
+        entries = [line for line in lines if line.startswith("- ") and " · " in line]
         if entries:
-            without_status = [line for line in entries if not _TASK_STATUS_RE.search(line)]
-            if without_status:
-                self.warn(f"{len(without_status)} TASKS.md entry(ies) lack a status token")
-            if any(re.search(r"\bdone\b", line) for line in entries):
-                self.warn("TASKS.md has 'done' entries; move them to TASKS_ARCHIVE.md")
-            if not without_status:
+            statuses = [(self._entry_id(line), self._entry_status(line)) for line in entries]
+            bad = [entry_id for entry_id, status in statuses if status not in _TASK_STATUSES]
+            if bad:
+                self.warn(
+                    f"{len(bad)} TASKS.md entry(ies) carry a status outside "
+                    f"{' | '.join(_TASK_STATUSES)}: {_sample(bad)}"
+                )
+            finished = [entry_id for entry_id, status in statuses if status == "done"]
+            if finished:
+                self.warn(
+                    f"TASKS.md has 'done' entries; move them to TASKS_ARCHIVE.md: {_sample(finished)}"
+                )
+            if not bad:
                 self.ok("TASKS.md uses well-formed index entries")
         if _DATE_RE.search("\n".join(lines)):
             self.warn(f"{self.aitna}/TASKS.md contains dates; dates are noise — derive them from git history")

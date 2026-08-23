@@ -1,9 +1,12 @@
 # Design: stage 1 — deterministic hardening contracts (A12 proposed lock)
 
-> **Status: the register below is walked in full (F1–F12; F8–F12 decided), D2-20 is
-> split from D2-23, the internal contradictions are repaired and every shape now carries a
-> seeded-violation contract. What remains before the lock is the
-> [A17](../TASKS.md) tail — the coherence audit and the two ADRs F12 names — then owner
+> **Status: the register below is walked in full (F1–F22; F8–F22 decided), D2-20 is
+> split from D2-23, the internal contradictions are repaired, the clean-context coherence audit
+> has run and its findings are repaired here, and the two ADRs F12 names are written —
+> [0012](../decisions/0012-stage1-contracts-and-vocabulary.md) (contracts and vocabulary) and
+> [0013](../decisions/0013-hook-survivability-and-crash-posture.md) (survivability and crash
+> posture), both **Proposed** rather than Accepted, because their gate is the verification that
+> has not happened yet. What remains before the lock is owner
 > verification at [D2-20](../D2_LEDGER.md). Not locked.**
 > Scope: plan items **P1.1–P1.7** plus the **P0.2 / P0.4 declarations** the stage-0 probes
 > made fillable, plus the **tool-name half of [C46](../TASKS.md)**. The draft proposes splitting
@@ -23,9 +26,11 @@ to silence.** That is the failure class the whole C47–C50 repair wave just pai
 payload key, a path predicate that never matched, a matcher that named one route three times
 and the other not at all. Each was a rule akmon states and nothing verified.
 
-So the yardstick for every shape below is not "is the rule written down" but **"what seeded
-violation makes this check fail, and where is that test"**. A shape that cannot answer is not
-in this proposed lock.
+So the yardstick for every **rule** below is not "is the rule written down" but **"what seeded
+violation makes this check fail, and where is that test"**. A rule that cannot answer is not
+in this proposed lock. The unit is the rule and not the shape — **F13**, decided after the
+A17(g) audit found the two readings disagreeing across this document; `## Acceptance` states the
+consequence in full.
 
 Two boundaries this proposal holds deliberately:
 
@@ -56,7 +61,17 @@ for coherence, the decision set is recorded in ADR(s), and D2-20 is owner-verifi
 | F9 | version/changelog consistent-state repair | **`0.4.0.dev0` + `## Unreleased`, repaired inside C54; two literals joined by an equality check; PEP 440 non-final grammar; missing source and history gaps stay visible, not fatal** | decided |
 | F10 | execution-ledger scope (§9) | **dispatch-only now; the completion half spawns its own probe ([N4](../TASKS.md))** | decided |
 | F11 | does the acceptance yardstick admit an exemption class | **no — for an aggregating shape the seeded violation is *fidelity to its sources*** | decided |
-| F12 | ADR shape for stage 1 | **two: contracts/vocabulary (F1, F2, F7, F8) separate from survivability/crash posture (F3–F6)** | decided |
+| F12 | ADR shape for stage 1 | **two: contracts/vocabulary (F1, F2, F7, F8, the F14/F15/F17/F18/F19/F20/F21/F22 amendments, and the F11/F13 yardstick) separate from survivability/crash posture (F3–F6)** | decided |
+| F13 | the seeding unit — a shape or a rule | **the independently violable rule; a rule whose seed needs unmeasured evidence is split, not waived** | decided |
+| F14 | how `code` stability survives a removed check (§1) | **a retired-name record in `findings.py`; a live code that appears in it fails** | decided |
+| F15 | what pins the F8 classification set (§3) | **a contract test binding the seven shipped callable classifications — six callable↔policy-ID pairs plus one operational assignment — a regression pin, not a join mechanism** | decided |
+| F16 | what the runtime binary declaration is joined to (§7) | **two populations — generated wiring and akmon's own tooling — each compared against its own source, with modality declared and checked** | decided |
+| F17 | how one generator declaration represents files it fully owns, structured files that cannot carry comments, and fields inside hand-owned files (§5) | **A — typed `PlannedFile` ownership modes: `bannered-file`, `structured-file`, and `field-owned`; no parallel exception or ownership list** | decided |
+| F18 | how the always-loaded ratchet separates akmon-owned context from the whole consumer context (§6) | **A — two inclusive decimal line/byte caps: shipped ≤210 / 12,000 is a `self_ci` error; consumer total ≤460 / 25,000 is a `verify.py` warn whose strict-mode exit is non-zero** | decided |
+| F19 | where the axis-complete vendor capability matrix lives (§7) | **A — shipped top-level `CAPABILITIES.md`; README keeps a claim-free delivery summary; A16 later replaces C57's prose cells with generated data** | decided |
+| F20 | how C46 makes neutral and vendor tool-name ownership exhaustive (§8) | **A — one exact neutral vocabulary and agent population; one version-stamped vendor tool/matcher inventory consumed by frontmatter, hook generation and adapters; exact findings and isolated two-direction carrier checks** | decided |
+| F21 | how C58 makes a dispatch ledger trustworthy within a bounded local-file contract (§9) | **A — observed Claude dispatch-request event; versioned seven-field records at one neutral path; one writer and two readers; serialized bounded append; explicit migration, failure and no-authenticity/no-rotation boundaries** | decided |
+| F22 | what `akmon status` may observe and touch (§10) | **A — fresh `verify` then `sync --check` owner streams; D2/caps once through verify; read-only exact equality with no cache, direct re-read or persisted active-role fiction** | decided |
 
 **What enters this register** (the counting rule the `F10+` placeholder lacked, locked with F10–F12):
 a fork is registered when **all three** hold — it has two or more defensible answers; the answer
@@ -69,21 +84,179 @@ elsewhere** (D1 mutable status levels, A16 matrix-as-data, N1 measurement, the p
 there is a number to obtain, not an answer to choose. Under this rule the register is **walked in
 full**; the placeholder row is not "empty", it was three.
 
+**F13 arrived from the A17(g) audit, and it is a fork by the rule above rather than a repair.**
+The yardstick had no stated *unit*. `## Acceptance` bound the seed to a **shape** ("every shape
+above ships with **a** test"); the Frame bound it to a **check** ("what seeded violation makes
+*this check* fail"). The gap is not theoretical: §2 states four numbered rules, and two of them —
+`utf-8-sig` decoding and `timeout` in the generated wiring — had no mutation, no expected failure
+and no test anywhere in this document. Two defensible answers, each changing what five tasks
+implement, neither deferrable without the lock claiming a coverage it does not have. **Owner
+choice: the unit is the independently violable rule.** Rules that cannot fail separately may share
+one seed; a rule that can be violated on its own carries its own; and where a seed needs evidence
+that does not exist yet the rule is **split** rather than waived — the checkable part is checked
+now and the remainder names its gate. **Rejected: per shape**, as written — the cheapest answer,
+and it locks §2 with half its rules unverified, which is the exact defect this stage exists to
+remove, sitting inside the stage's own acceptance criterion. **Rejected: per rule with a declared
+exemption list** — visible holes beat hidden ones, but F11 has already ruled that *no exemption
+class exists*, and a list of exemptions is that class under another name. Accepted cost: roughly
+six to ten additional tests across the stage, and a boundary ("independently violable") that will
+be argued at implementation time — argued, by standing rule, in favour of the separate seed,
+because a redundant test is cheaper than an unnoticed rule.
+
+**The yardstick governs claims presented as mechanically enforced.** A semantic or process-owned
+obligation is not allowed to masquerade as a passing check: it must be labelled `review-owned` or
+`process-owned`, state the mechanical subset that is tested, and state the residual cost. This is
+accounting, not an exemption for a mechanical rule — every rule the lock calls checked still needs
+its own seed. In §1 the imperative mood is review-owned, while presence and sentence shape are
+mechanical; the manual append to the F14 retired-code record is process-owned, while live reuse of
+an already recorded code is mechanical.
+
+**F14–F16 arrived the same way F13 did**, from the architect pass over D2-20's clause (d), and
+each clears the counting rule above rather than being a repair: two defensible answers, a change
+to what C51, C53 and C57 respectively implement, and a lock that would otherwise claim a coverage
+it does not have. **F14** — `code` is "never reused after a check is removed", which a
+duplicate-code seed cannot see, because two live checks never share the slug; the retired-name
+record is the smallest thing that can. *Rejected: dropping the never-reused clause*, which is the
+half a consumer greps for. Accepted cost, stated because it is real: the record is appended by
+whoever deletes a check and nothing forces the append — a forgotten one restores today's state
+rather than making it worse. **F15** — every §3 mutation is structural, so an ID renamed
+consistently on both sides passes, and *unknown* has nothing to be unknown against because F7
+rejects a central mapping constant; the pin is a test fixture, not a constant the checker consults,
+so the join still runs prose→docstring and nothing stands between the two sides. *Rejected:
+leaving the set unpinned*, which leaves F8's "C53 checks this set" as prose. Accepted cost: it is a
+second list of the same seven callable classifications, and the difference from the registry F7
+rejected has to be argued each time someone reads it. **F16** — `claude` and `codex` are invoked
+by `sync` itself and
+appear in no generated command, so a join reading only the emitted strings warns that the two
+optional binaries §8 depends on are stale prose; the populations make the modality checkable
+instead of prose. *Rejected: dropping the optional pair from the declaration*, which restores the
+silence §7 exists to remove. Accepted cost: the second population's source is a declarative query
+map from which akmon builds its own subprocess calls and which the checker also reads. That single
+owner adds indirection and is weaker evidence than extracting the first population's literal
+emitted strings, so the cost is named here rather than discovered later. **F14, F15, F17, F18,
+F19, F20, F21 and F22 are
+carried into [0012](../decisions/0012-stage1-contracts-and-vocabulary.md)** with the stable
+contracts they amend;
+**F16 stays here**, with F9 and F10, because neither ADR carries §7's runtime declaration.
+
+**F17 arrived from the final clean-context pass over §5 and clears the same counting rule.** The
+untyped `PlannedFile` population contains three materially different claims: a text file wholly
+owned by `sync` and able to carry a banner; a wholly owned structured file whose grammar admits no
+comment; and selected fields inside a hand-owned structured file. Treating all three as
+"sync-owned file" makes a clean `.codex/hooks.json`, `.claude/settings.json` or `.akmon.toml` fail
+the universal-banner rule; exempting them in a second list creates the second owner this section
+exists to remove. **Owner choice F17/A:** each `PlannedFile` carries exactly one ownership mode —
+`bannered-file`, `structured-file`, or `field-owned` — and a field-owned entry also carries its
+owned selectors. The plan remains the single declaration consumed by write, check and boundary
+inspection. *Rejected: a universal banner requirement*, which is invalid JSON and falsely claims
+whole-file ownership over merged settings. *Rejected: a banner-exemption or field-owner allowlist
+beside the plan*, which can drift independently and restores the original defect. Accepted cost:
+every planned output must be classified and field selectors add machinery to the declaration;
+reverse stale-file discovery is mechanically complete only for `bannered-file`, whose marker is
+searchable after its declaration disappears. Structured whole-file and field ownership remain
+exactly drift-checked while declared, but do not acquire a fabricated stale marker their formats
+cannot safely carry. **F17 is carried into 0012** because the three-mode vocabulary and its
+one-declaration rule are stable contracts; no N1 measurement can amend them.
+
+**F18 closes the §6 fork exposed by the same final pass.** One cap over the whole always-loaded
+surface either makes akmon dictate the size of a consumer-owned `AGENTS.md`, or reduces akmon's own
+fully controlled guardrail budget to an advisory. **Owner choice F18/A:** keep two populations and
+two strengths. The akmon-shipped population has an inclusive cap of 210 lines and 12,000 decimal
+bytes and is an error in `self_ci`; the whole consumer population has an inclusive cap of 460 lines
+and 25,000 decimal bytes and emits a warn in `verify.py`, with the existing strict policy turning
+that warning into a non-zero exit without changing its severity. Both use the stable C51 code
+`caps.always-loaded`. *Rejected: one hard consumer-total cap*, which lets akmon fail a project over
+hand-owned prose. *Rejected: one warn-only cap*, which makes growth of akmon-owned context
+advisory. *Rejected: adopting the borrowed 150-line reference now*, which ships red and teaches
+that the first response to a cap is a waiver. *Rejected: deferring every cap to C60*, which leaves
+C60 without a counter or ratchet to lower. Accepted cost: two populations and two dimensions mean
+four dynamic measurements and a severity/strict matrix; the consumer can remain above its cap in a
+non-strict run, and the initial shipped cap deliberately blesses today's shape. **F18 is carried
+into 0012** as the stable scope, unit, code and severity contract. Current measurements populate the
+report, while C60 owns justifying and shipping a later reduction.
+
+**F19 closes the §7 location fork.** The six-axis matrix is a consumer contract, but its full
+vendor/version/event/matcher coordinates and evidence do not fit README's delivery table without
+compressing the axes back into the overloaded grade C57 removes. **Owner choice F19/A:** ship the
+axis-complete prose matrix at top-level `CAPABILITIES.md`; keep only a short delivery summary in
+README, with no enforcement claim; and let A16 later replace C57's prose cells with generated data
+in that same file. *Rejected: a compact README matrix plus a legend*, because the legend is a
+compression and recreates the checkmark under a new spelling. *Rejected: placing the matrix under
+`meta/`*, because consumers, not only maintainers, are its audience. Accepted cost: one more shipped
+top-level document and a bounded duplication window in which C57 owns prose cells while A16 owns
+the future schema, ownership and generation. **F19 is carried into 0012** as stable location and
+consumer-vocabulary contract; N1 evidence populates cells but does not choose their home.
+
+**F20 closes the §8 ownership-and-population fork.** A one-owner claim can mean only that
+`AGENT_SPECS` stops spelling Claude names, or it can mean that every executable declaration of a
+vendor tool or matcher — generated agent frontmatter, generated hook matchers and adapter
+normalization — consumes one inventory. **Owner choice F20/A:** take the exhaustive reading. The
+neutral vocabulary is exactly `edit` / `shell` / `read` / `subagent`, owned by `hook_core`;
+`k_explorer`, `k_reasoner` and `k_auditor` are exactly the restricted `{read, shell}` population,
+while `k_mechanic`, `k_validator` and `k_implementer` carry the explicit unrestricted sentinel.
+One version-stamped data inventory is the sole owner of vendor tool and matcher names for all three
+consumer classes. Rejected: repairing only agent frontmatter, which leaves hook matchers and adapter
+sets as independent owners; a source scan over vendor spellings without an exact consumer
+population, which can pass after a consumer disappears; and leaving the neutral or agent population
+open for the engineer to infer from filenames or today's strings. Accepted cost: adapters and both
+generators gain a dependency on the shared inventory, the contract suite pins current populations,
+and adding a capability, consumer class or harness version requires an explicit data-and-test update.
+The detection, fallback and unknown-version choices already made below remain unchanged. **F20 is
+carried into 0012** as a stable ownership/vocabulary amendment; measured inventory rows remain
+versioned evidence rather than a new architectural fork.
+
+**F21 closes the §9 event, record and durability fork without reopening F10.** F10 decides that the
+ledger records dispatch only; it does not decide whether “dispatch” means a request observed before
+launch, a confirmed launch, or a completed run, nor what makes one local line safe to trust after
+compaction. **Owner choice F21/A:** record the observed Claude `PreToolUse` dispatch **request** after
+C46 normalizes it to `subagent`; make no launch or completion claim. Write versioned seven-field TSV
+records to `<AITNA_ROOT>/model-routing.log`; retain `.claude/model-routing.log` as the read-only
+legacy path. `delegation-log.py` is the sole writer; statistics and coverage-map are the exact default
+readers. Serialize bounded appends and keep migration, gitignore, prose/path and schema joins under
+`self_ci`. Rejected: treating PreToolUse as proof of launch, because the harness can still refuse or
+abort after the request; retaining the vendor path as the primary ledger, because the record is not
+Claude-owned; unversioned records, because later readers cannot distinguish a schema change from
+corruption; lock-free best-effort append, because parallel dispatch is the normal workload; and
+silent repair, deduplication or rotation, because each rewrites local evidence under a policy this
+lock has not designed. Accepted cost: the ledger is a request journal rather than an execution
+history; old then new can count duplicate-looking records twice; a structurally valid manually
+written row is indistinguishable from hook output; and a full or unwritable ledger fails open with
+the C52 diagnostic instead of preserving the dispatch. Completion remains N4. **F21 is carried into
+0012** as the stable event/schema/ownership contract.
+
+**F22 closes §10's source and state-observation fork without reopening F2 or F11.** The earlier
+contract required fidelity to “its sources” but did not select whether C59 composes the existing
+owners' live streams, caches their last result, or re-reads their files into status-specific facts;
+nor did it say whether a standalone process should persist an active role that exists only in the
+harness transcript. **Owner choice F22/A:** invoke the fresh consumer `verify` stream and then the
+fresh `sync --check` stream, with C53's D2 state and C56's caps state present exactly once through
+verify; preserve exact ordered equality; write nothing; add no direct read or status cache; and state
+the transcript-only active-role residual instead of inventing persistence. Rejected: a cached status
+snapshot, because it can be green after materialized state drifts; direct reparsing, because it makes
+C59 a second owner; a synthesized summary, sorting or deduplication, because each breaks source
+fidelity; and a persisted active-role marker created only to make the CLI claim session visibility.
+Accepted cost: the provider population and order become contract surface, each status run pays for
+fresh checks, and a standalone `akmon status` cannot report the active role. **F22 is carried into
+0012** as the stable source/read-only/actual-state contract; detailed mutations remain in §10/C59.
+
 ### Pre-lock closure ([A17](../TASKS.md))
 
-The register is not the whole gate. Before D2-20 can be verified, A17 also owns four repairs
+The register is not the whole gate. Before D2-20 can be verified, A17 also owns five repairs
 to this document and its ledger row:
 
 - **D2-20 is split.** D2-20 retains the architectural F4–F6 protocol alongside F1–F3 and
-  F7–F12: what counts as terminal timeout evidence, how budgets are derived, and the bounded
+  F7–F22: what counts as terminal timeout evidence, how budgets are derived, and the bounded
   fast-path/oversize semantics. Concrete vendor results, caps, entry mappings, measurements and
   timeout literals move to **D2-23**, which blocks only C52. The former `Verify (c)` premise is
   obsolete because the F8 table now exists; that table is verified normally as part of the
   consolidated D2-20 architecture gate.
-- **Seeded-violation contracts are completed — done** for §7 (C57) and §8 (the C46
-  tool-name half); §10 (C59) had left this item earlier via F11. Neither was a missing paragraph.
-  §7 had nothing to check in the required form — every cell of today's matrix is a checkmark —
-  so the contract carries three additions: `CAPABILITIES.md` as the axis-complete home with
+- **Seeded-violation contracts are completed — done, in two rounds** for §7 (C57) and §8 (the C46
+  tool-name half); §10 (C59) had left this item earlier at shape level via F11, and its later
+  F22/F13 pass supersedes that conclusion with exact source, read-only, actual-state and exit
+  carriers. Neither was merely a missing paragraph.
+  §7 had nothing to check in the required form — the current tree has no `CAPABILITIES.md`, and
+  README's legacy capability rows carry none of the six mandatory axes — so the contract carries
+  three additions: `CAPABILITIES.md` as the axis-complete home with
   README reduced to a claim-free summary, a stated scope boundary against akmon's own checkers
   and against C53's guardrail prose, and a **join from the runtime declaration to the generator**
   so that half of §7 stops being unverified prose. §8's version stamp had nothing to compare
@@ -91,16 +264,59 @@ to this document and its ledger row:
   present, an unknown version warns and stamps the generated banner rather than failing, and the
   mechanism is seeded against its **root cause**, a second owner naming vendor tools outside the
   map. Both shapes are observed **red before green**: neither `README.md:200` nor
-  `routing.py:364`/`:470`/`:503` is repaired ahead of its task.
+  `routing.py:364`/`:470`/`:503` is repaired ahead of its task. **"Completed" was true of the
+  paragraph each section lacked and false of its rule set**: the architect pass over D2-20's clause
+  (d) found rules with no seed in all three sections named here and in six more. They are closed in
+  the sections themselves and recorded in A17(g); the wording stands with its correction rather
+  than being narrowed after the fact, because a completeness claim a later pass disproves is the
+  defect class this stage removes.
 - **§9 (C58) is scoped** — settled by **F10**: dispatch-only, completion half spawned as
   [N4](../TASKS.md). The bullet remains here as the record of what the repair was.
 
 The closure also produces **two ADRs, not one** (**F12**): the contract/vocabulary decisions
-(F1, F2, F7, F8) — what other work will cite — kept separate from survivability and crash posture
+(F1, F2, F7, F8, later amended by F14, F15, F17, F18, F19, F20, F21 and F22) plus the F11/F13 yardstick — what other work
+will cite — kept separate from
+survivability and crash posture
 (F3–F6), which N1's measurements are expected to amend. An ADR that must be revised by
 measurement should not carry the stable vocabulary along with it, or every timing number formally
 disturbs a decision that has already been built on. The cost is a boundary to maintain and two
-references where one would do.
+references where one would do. **Both are written** —
+[0012](../decisions/0012-stage1-contracts-and-vocabulary.md) and
+[0013](../decisions/0013-hook-survivability-and-crash-posture.md) — and both carry
+**Status: Proposed**, against this repository's habit of writing an ADR only once a decision is
+locked. **The convention is amended with one bounded case rather than excepted for this pair**
+([decisions/README](../decisions/README.md)): an ADR whose own owner-verify gate verifies the *ADR
+boundary itself* has to exist before that gate can run, so it carries `Proposed` and names the row
+that will flip it. Here that row is D2-20, whose clause (b) verifies the two-ADR boundary — which
+cannot be verified from a description of two files that do not exist, so the ADRs are the object of
+the gate rather than its output. An earlier draft of this paragraph said the habit was *not*
+amended while the convention file already carried the new clause; a rule and its exception
+disagreeing across two files is the defect this stage removes, so the disagreement is recorded
+rather than silently fixed. Four register rows are
+**decided here and not re-decided in either ADR**, and D2-20 verifies them in this document:
+**F9** is internal to C54 and nothing else cites it, **F10**'s record is the probe it spawned
+([N4](../TASKS.md)), **F12** is the ADR pair's own shape — each ADR states once why its scope
+is what it is, with the rationale living in 0012 and 0013 pointing at it, which is F12 applied
+rather than F12 duplicated — and **F16** owns §7's runtime declaration, which neither ADR carries.
+0012 keeps a pointer to F9, F10 and F16 so their absence does not read as an omission. **The
+criterion itself was replaced, deliberately and once.** It first read that the four
+rows must not appear in either ADR at all; the second audit held the documents to it and was right
+to. The strict form is now rejected on implementation grounds: an implementer who finds no trace of
+a neighbouring decision cannot distinguish deliberate absence from a lost requirement, and
+re-deciding it is the cheaper mistake to make. The rule that replaces it is **not uniform over the
+four rows, because F12 is not like the other three**: F9, F10 and F16 are decisions *about other
+work*,
+while F12 is the decision that gives each ADR its scope, and an ADR that cannot say why its scope
+is what it is fails at being an ADR. So — **F9, F10 and F16: identifier and navigational pointer
+only, never the choice, its mechanism or its consequences. F12: its scope rationale is stated once, in
+0012; 0013 carries a pointer to that rationale and no argument of its own.** Either ADR may still
+state plainly *what* it covers, which is self-description rather than a repetition of F12. The
+first version of this rule was uniform and therefore contradicted the sentence three lines above
+that permits the rationale in 0012; the contradiction was found in the pass after the replacement,
+which is the argument for writing a criterion down rather than holding it. The replacement is on
+the record because an unrecorded change of criterion is how the next audit legitimately reports the
+same finding again. The stage-wide yardstick (F11, F13) travels with 0012, because
+it is stable and it governs how every contract in both ADRs is written.
 - **The internal contradictions are repaired — done** ([A17](../TASKS.md) (f)). Five
   were listed and a sixth surfaced while repairing them; none was purely editorial, so each is
   recorded with what it changed. (1) The order table's C53 row now names the **F8 table**, marked
@@ -120,6 +336,37 @@ references where one would do.
   **writes into the surface C56 caps**, an edge the graph omitted. The numbers do not collide
   today (+1…+2 lines against 13 lines of slack), which is the reason to record the edge rather
   than to skip it — nothing else would show when they begin to.
+- **The clean-context coherence audit has run — done** ([A17](../TASKS.md) (g)). It was run
+  deliberately outside the context that wrote this document, because an author checking a document
+  against their memory of what they meant is not checking the document. Twenty-four findings, of
+  which four landed on repairs made earlier in A17 — the surest sign the separation was worth its
+  cost. The full finding-by-finding record with verdicts lives in A17(g); what changed *here* is:
+  **F13** entered the register (above); §7's red-state premise was false and is rewritten, together
+  with the **evidence axis** the matrix vocabulary needed for its own seed to be mechanical; §8's
+  claim to reuse an existing `hook_core` vocabulary named a token that does not exist and is
+  corrected to the real set; §1's "text rendering *remains*" described a form the tree does not
+  print and now records a **change**; §5 gained the checker it never named; §9's guardrail clause
+  gained a real check instead of a canary that could not reach it; §10's "no new data source" and
+  F8/3's coverage report are reconciled; §2 gained separate seeds for its BOM, `timeout` and
+  single-write rules, the last because the coverage it claimed was asserted but never exercised;
+  §4 and §8 gained the seeds F13 requires; and the order graph gained C58's collision with the
+  always-loaded caps — the twin of the C53 edge found at (f), missed by the same reading.
+- **The seeded-violation contracts are audited against F13 — done** ([A17](../TASKS.md) (g), the
+  architect pass over D2-20's clause (d)). **Twenty-one rules across nine of the ten sections were
+  declared normative here and reachable by no named mutation.** F13 makes the independently
+  violable rule the seeding unit, so the shape-level reading under which this document would have
+  passed is no longer available to it. Six reported items resolve to thirteen findings here; seven
+  more came from sweeping every section and both ADRs instead of the ones handed over, three of
+  those in sections that pass had declared clean — the lesson I8 recorded about coordinates, in a
+  second domain. **Three repairs close a fork rather than add a test**: the retired-code list (§1),
+  the shipped-classification pin (§3), and §7's two binary populations — **all three put to the
+  owner and accepted**,
+  and registered as **F14–F16** above. The last repairs a **false finding this
+  document would have shipped** — `claude` and `codex` appear in no generated command, so the
+  declaration-to-generator join as written warns that the two optional binaries §8 depends on are
+	  stale prose. Under that pass's coarse contract, §9 (C58) was the one section that needed
+	  nothing; F21's later owner walkthrough supersedes that conclusion with the C46 → C58 edge and
+	  exact carriers.
 
 ## Order and dependencies
 
@@ -131,23 +378,34 @@ references where one would do.
 | 4 | version ↔ changelog cross-check | P1.3 | C54 | C51 |
 | 5 | source/generated boundary check | P1.7 | C55 | C51; always-loaded set definition (§6 declaration — not C56's cap check) |
 | 6 | always-loaded caps | P0.4 | C56 | C51 |
-| 7 | OS contract + matrix vocabulary | P0.2 | C57 | — |
+| 7 | OS contract + matrix vocabulary | P0.2 | C57 | C51 |
 | 8 | tool names: neutral capability + vendor map | — | C46 | C51, C57; emits a provenance banner line C55 checks |
-| 9 | execution ledger | P1.5 | C58 | C57 (matrix cell for the Codex gap) |
-| 10 | `akmon status` | P1.4 | C59 | all of the above |
+| 9 | execution ledger | P1.5 | C58 | C46, C57 (normalized dispatch event + matrix cell for the Codex gap); writes into the always-loaded surface C56 caps |
+| 10 | `akmon status` | P1.4 | C59 | rows 1–9, **C46 included** |
 
 Every implementation edge below also depends on owner verification of D2-20; the table shows
 only dependencies internal to the proposed package. C52 alone has the additional D2-23 evidence
 gate, so missing runtime numbers cannot hold C51 or C57 behind an unrelated measurement campaign.
 
-Two edges in the table are not task dependencies and are spelled out so they are not read as
-such. C53's F8 edge is a **decision** it must have before code, not a task to wait for. C53's
-second edge is a **collision**, not an order: C53 replaces three `> **Enforced**` blocks with
+Four entries in the depends-on column are not task dependencies and are spelled out so they are
+not read as such (three of them counted at A17(f), the fourth found at A17(g); the paragraph said
+"two" and claimed completeness over a column the audit reads as the lock's contents).
+
+C53's F8 edge is a **decision** it must have before code, not a task to wait for. C53's second
+edge is a **collision**, not an order: C53 replaces three `> **Enforced**` blocks with
 six markers and writes the new `## Role declaration` section, all inside the surface C56 caps —
 an estimated +1…+2 lines against a measured slack of 13 (§6: ~197 shipped against a 210 cap), so
 the two are compatible today and the edge is recorded because a graph that omits it cannot show
-when they stop being compatible. C55 needs the always-loaded *definition*, which §6 already
+when they stop being compatible. **C58 carries the same collision**: its guardrail clause is added
+to `guardrails/_common.md`, which §6 counts as always-loaded in full, so it draws on the same
+slack — one line, against the same 13. C46's entry points the other way and is an **outgoing**
+annotation rather than an edge into C46: C46 emits the provenance banner line C55 checks, while
+C55's own row lists only C51. C55 needs the always-loaded *definition*, which §6 already
 carries; its only task dependency is C51.
+
+Row 10 spells its range out because "all of the above" was read two ways: C59 aggregates the
+finding stream `sync --check` surfaces, and C46 emits findings into it (the degrade warn, the
+unknown-version warn), so **C46 is inside C59's range** and TASKS' `C51–C58` was one shape short.
 
 P1.6 leads because eight of the nine remaining shapes emit findings. P1.1 shares no findings
 dependency and can be engineered in parallel with C51 only after D2-23 is verified. P1.4 is last
@@ -159,11 +417,14 @@ instead of inventing one.
 **Decision.** Extend the existing `bin/verify.py::Finding` into one shared stdlib-only module
 `bin/findings.py`, with fields `severity · code · message · target · fix`. `severity` carries the
 `ok / warn / error` vocabulary and preserves the current exit-code contract (errors exit 1;
-warnings exit 1 only under `--strict`). `code` is a stable dotted slug naming the check (`boundary.hand-edited`,
+warnings exit 1 only under `--strict`). `code` is a stable dotted slug naming the check (`boundary.missing-banner`,
 `caps.always-loaded`, `invariant.orphan-hook`) — unique, never reused after a check is removed.
-`target` is the file or artifact the finding is about. `fix` is one sentence in the imperative,
-and it is **required**: a finding a reader cannot act on is a defect of the check, not of the
-tree. Adopted by `verify.py`, `meta/bin/validate.py`, `sync --check`, and `meta/self_ci.py` —
+A dotted slug matches `[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+` — at least two
+lowercase ASCII segments, dots between segments and single hyphens only inside them. Whitespace,
+uppercase, empty segments and a slug with no dot are invalid. `target` is the file or artifact the
+finding is about; whether it names the correct artifact is review-owned. `fix` is **required**, non-empty, one sentence and one line;
+its imperative mood is review-owned. A finding a reader cannot act on is a defect of the check,
+not of the tree. Adopted by `verify.py`, `meta/bin/validate.py`, `sync --check`, and `meta/self_ci.py` —
 the last one imports the module directly for its own findings rather than parsing subprocess
 output.
 
@@ -184,9 +445,15 @@ stdlib-only `Finding.to_dict()` or equivalent pure serializer and pins the exact
 values with contract tests. This keeps serialization beside the shared envelope and makes F1's
 absence of `level` testable. C51 does not add `--json` to `verify.py`, `sync --check`,
 `meta/bin/validate.py`, or `self_ci`; C59 introduces the public JSON rendering when `akmon status`
-becomes its first process-boundary consumer. Text rendering remains
-`SEVERITY code target: message → fix`, one line per finding. There is exactly one canonical
-serializer (method or shared pure function, not both); adopters and C59 must call it rather than
+becomes its first process-boundary consumer. Text rendering **changes**, and C51 owns the change:
+`verify.py` prints `[{level}] {message}` today (`bin/verify.py:690`), while the canonical form
+this envelope introduces is `SEVERITY code target: message → fix`, one line per finding. It is
+recorded as a change rather than a continuation because the audit at A17(g) found the word
+*remains* describing a form the tree does not print — every adopter's text output moves in the
+same commit as the `level`→`severity` rename, and the tests pinning the old form move with it.
+There is exactly one canonical
+serializer (method or shared pure function, not both); here `pure` means a deterministic mapping
+of the Finding's fields that does not mutate it, with no broader functional-purity claim. Adopters and C59 must call it rather than
 repeat the field mapping. Its output uses JSON-safe stdlib values, preserves Unicode, does not
 mutate the Finding, and passes `json.dumps` directly.
 
@@ -198,6 +465,41 @@ channel whose visibility is unverified.
 adopters fails a test; serialization missing a canonical field, adding `level`, or changing a
 value fails the exact-schema contract test. The serializer is also tested with Unicode and an
 empty valid `target`; a local field mapping in an adopter is rejected by the shared-owner test.
+**Text rendering carries its own seed** (A17(g), per F13): a rendering that drops `code`, `target`
+or `fix`, or emits them in another order, fails an exact-output test — without it the whole text
+half of this envelope could regress while every schema test stayed green.
+
+**Three rules of this envelope were declared above and seeded nowhere** (A17(g), per F13).
+**Code stability:** `code` is unique and *never reused after a check is removed*, which the
+duplicate seed cannot see — at no moment do two live checks share the slug. `findings.py`
+therefore carries a **retired-code list**, and a live `code` that appears in it fails. This is not
+the central registry F7 rejects in §3: that rule forbids a constant that *carries the
+prose↔callable join*, while this list carries no join and is a record of names already spent.
+Rejected: dropping the never-reused clause, which is the half a consumer greps for. Appending a
+removed code is explicitly **process-owned**: F14's accepted cost is that the checker cannot detect
+an omitted append; it guarantees non-reuse for codes present in the record and does not pretend to
+mechanize the deletion review.
+**`fix` shape:** the seed above proves only that `fix` exists, while the rule is *one sentence in
+the imperative*. Split per F13 — non-empty, single sentence, no line break is checked now, and
+**the imperative mood is review-owned and stated here as not machine-checked**, the same fence F8's
+table puts around its non-checkable clauses, so that a later audit reads it as a property of the
+claim rather than a gap. **Exit and strict semantics:** F1 rewrites every adopter's `Finding`
+construction, and "errors exit 1; warnings exit 1 only under `--strict`" is preserved by nothing
+but intent. Each adopter carries a seed over both severities and both strict states: a warn that
+exits 1 without `--strict` fails, and so does an error that exits 0.
+
+**The remaining §1 triples are explicit and population-wide.** The C51 contract suite runs over
+all four adopters. An out-of-vocabulary severity such as `fatal`, an invalid dotted slug, a stale
+`.level` read or local `Finding`, or an adopter that retains the old renderer fails. The `fix`
+shape fails on empty, multi-line or multi-sentence text; imperative wording remains review-owned.
+The serializer test compares the Finding before and after the call, calls `json.dumps` directly on
+the result, calls it twice to require the same mapping, and fails on mutation, nondeterminism or a
+non-JSON-safe value. An AST import check on `findings.py` fails on a dependency outside the Python
+standard library. The shared-owner check fails if a
+second canonical serializer exists, not only when an adopter copies the mapping. Adding `--json`
+to any C51 adopter before C59 fails its CLI contract. Exact rendering and the full
+severity × strict-state exit matrix are parameterized over every adopter, so a representative
+implementation cannot hide a stale one.
 
 ## 2. Hook survivability (P1.1 → C52)
 
@@ -212,8 +514,18 @@ empty valid `target`; a local field mapping in an adopter is rejected by the sha
    generated Claude entries (`git-commit-guard`, `role-on-code`, `analysis-guard`,
    `d2-ledger-reminder`, `delegation-log`, `delegation-nudge`, `session-start-agent`,
    `model-routing`; `bin/sync.py:270`–`:306`) and the single Codex entry `codex-hook.py`, which
-   carries the route as an argument (`:203`, `:222`–`:244`). It prints the exception class and
-   the hook name to stderr and exits 0. **The adapters and `hook_core` get no guard of their
+   carries the route as an argument (emitted at `bin/sync.py:203` and `:222`–`:244` — the file
+   is named explicitly because the bare form read as coordinates inside `codex-hook.py`, which
+   has no such lines). It prints the exception class and
+   the hook name to stderr and exits 0. **Five of the nine already carry such a guard and four do
+   not** (found at the ADR audit, and measured rather than assumed): `d2-ledger-reminder`,
+   `delegation-log`, `delegation-nudge`, `session-start-agent` and `model-routing` wrap the whole of
+   `main()`; `git-commit-guard` — the deny-class hook — `role-on-code`, `analysis-guard` and
+   `codex-hook.py` do not. C52 therefore **changes five entries and adds four**, and the five that
+   exist are red against this contract rather than compliant with it: they print
+   `{type(exc).__name__}: {exc}`, disclosing the exception *message* that the diagnostic rule below
+   forbids, and they catch `Exception`, so an `argparse` `SystemExit` in the Codex entry passes
+   through. The seeded test is observed red on today's five as well as on the missing four. **The adapters and `hook_core` get no guard of their
    own**: they are imported, never spawned, so they have no top level — an exception inside
    `claude_adapter.load_payload` propagates into the wrapper's `main()` and is caught there.
    They are covered *by* the guard, not *with* it, which is also why F5 below states that the
@@ -335,13 +647,79 @@ source, full processing at cap, a handler spy never called at cap+1, zero earlie
 when a later source overflows, safe diagnostics, healthy deny at cap and fail-open above it, and
 failure when a new synchronous input axis or generated command entry lacks an envelope declaration.
 
-**Seeded violation.** A wrapper without the guard fails a test that feeds it a payload
-engineered to raise inside the handler and asserts exit 0 + exactly one stderr diagnostic. A
-deny-class fixture proves both halves: an explicit handled deny remains deny, while an exception
+**Seeded violation.** Per F13 the unit is the rule, so the four top-level wrapper additions above
+decompose into the independently violable contracts below rather than receiving one representative
+seed. A17(g) first exposed the gap; the D2-20(d) walkthrough completed the decomposition.
+
+**Guard.** A wrapper without it fails a test that feeds it a payload
+engineered to raise inside the handler and asserts exit 0 + exactly one stderr diagnostic. The
+same matrix is parameterized over all nine entries and injects the failure at each applicable
+wrapper, adapter and handler layer, so coverage through the wrapper is proved rather than inferred
+from one call site. A separate `SystemExit` injection at the Codex argument boundary proves that
+the top-level posture covers the non-`Exception` exit already named above. A deny-class fixture
+proves both halves: an explicit handled deny remains deny, while an exception
 on the same route exits 0 and is reported. The crash path emits no deny/ask, malformed JSON, or
 partial stdout. Its stderr names only the hook and exception class — never payload values,
 commands, file content, session ids, or secrets. This contract is parameterized over all nine
-spawned entry points rather than demonstrated on one representative.
+spawned entry points rather than demonstrated on one representative — and it is **red on five of
+them today** for the disclosure clause alone, which is what makes this seed meet the tree rather
+than a fixture in the five places a reader would assume were already done.
+
+**Single write.** The guard seed crashes *before* anything is rendered, so it cannot tell a
+one-shot write from a prefix-then-crash: the assertion "no partial stdout" passes whether or not
+the adapter honours the contract. A second seed places the failure **mid-render** and asserts the
+wrapper's stdout is either empty or a complete document, never a prefix. Recorded plainly because
+the claim this repairs was not a gap but a false one — §2 said the precondition was "precisely
+what C52's seeded crash tests forbid", and the named mutation never reached it.
+
+**BOM.** A valid payload prefixed with a byte-order mark must reach the handler; decoding it as
+`utf-8` instead of `utf-8-sig` routes it to the malformed-JSON fallback and fails the test.
+
+**`timeout`.** Split, because the literal and the presence have different gates: a generated
+Claude entry emitted **without** a `timeout` key fails `sync --check` now, while the literal's
+correctness stays behind the D2-23 evidence gate and is pinned there by C52's entry→class→literal
+table. The split is F13's rule applied rather than an exception to it — the half that is
+checkable today is checked today, and the remainder names the gate it waits on instead of
+disappearing into prose. Deleting the timeout contract from `hooks/README.md`, omitting its table,
+evidence environment/scope or operational-bound-not-SLA statement, or making its
+entry→class→literal table disagree with the generated wiring, fails `self_ci`. The git-subprocess
+mapping also has a relational regression: an outer literal that can expire before the existing
+healthy 5-second git fallback fails without a wall-clock assertion.
+
+**Bounded input** uses more than a static cap−1/cap/cap+1 corpus. An instrumented stdin/file
+reader fails if the implementation requests more than cap+1 bytes or attempts decode after an
+overflow. An instrumented collection fails if cap+2 is requested and asserts that overflow
+discards the whole collection rather than dispatching a prefix. Structural overflow injects a
+handler spy and side-effect sentinels at every pre-dispatch boundary; any handler call or earlier
+stdout, marker, log, config or artifact mutation fails. **The growth race has its own seed**
+(A17(g), per F13). The static corpus cannot reach it: a preflight-then-read
+implementation passes every cell of it while still reading a file that grew between the two calls —
+the case the runtime rule above names in its own sentence. A seam whose size probe returns a value
+below the cap and whose read then yields content above it must produce the oversize contract:
+fail-open, empty stdout, no handler invoked. An implementation that trusts the preflight result
+fails.
+
+**The oversize diagnostic** carries rules that the corpus above must not compress into "safe
+diagnostics". It gets **its own stable code**, distinct from the existing no-path diagnostic —
+reusing that code is the
+mislabelling the rule forbids, and a reader cannot tell an over-cap input from a hook that found
+no path. There is **exactly one per invocation**: one fixture presents multiple oversized sources
+and fails if more than one line is emitted. A second invokes the same process contract repeatedly
+and fails if a session or tool-use throttle suppresses a later invocation. The exact diagnostic
+oracle admits only hook, input dimension, cap and remediation; unique sentinel path, payload,
+command, session and secret values make any disclosure fail. Each mutation fails its own test.
+
+**Entry independence** is seeded at the generated event boundary: one entry receives an oversized
+source while a healthy sibling receives supported input, and the sibling must still complete.
+Cancelling the group, sharing the overflowing entry's state, or suppressing the sibling output
+fails the fixture.
+
+Two obligations remain explicitly **process-owned**, not silently exempted from F13. Raising a cap
+requires the separate architecture/evidence and owner-verification process above; C52 mechanically
+pins the verified literal but cannot prove that a future author opened that process. Likewise the
+reproducible D2-23 performance corpus, not ordinary CI, decides whether measured runtime has
+regressed and must re-block C52. The residual cost is that bypassing either process can only be
+caught in review; no wall-clock or intent checker is claimed.
 
 ## 3. Invariant canary (P1.2 → C53)
 
@@ -375,10 +753,10 @@ this set; a callable added later joins it the same way or the check fails.
 | callable | classification | prose owner and the subset the marker claims |
 |---|---|---|
 | `privilege_escalation_guard_result` | `privilege.no-escalation` | `guardrails/_common.md` § Privilege escalation — the whole rule: any `sudo` in a Bash command is denied |
-| `git_commit_guard_result` | `commits.owner-owned` | § Commits & ownership — **subset**: the AI `Co-Authored-By` trailer (deny) and `push`/`tag`/`merge` or a commit on the default branch (ask). "Tests pass before a commit is offered" and "branch for non-trivial work" are **not** machine-checked and the marker must not imply they are |
+| `git_commit_guard_result` | `commits.owner-owned` | § Commits & ownership — **subset**: the AI `Co-Authored-By` trailer (deny) and `push`/`tag`/`merge`, or a commit on the default branch or detached/unresolved HEAD (ask in interactive default mode; deny when `permission_mode` is missing or non-default because the ask cannot be trusted to reach the owner). "Tests pass before a commit is offered" and "branch for non-trivial work" are **not** machine-checked and the marker must not imply they are |
 | `analysis_write_result` | `analysis.before-mutation` | § Analysis before mutation — **subset**: the first edit to a planning/design document in a session raises a reminder. The rule's substance (was this turn analysis-only?) is not decidable by a hook |
 | `d2_ledger_reminder_result` | `verify.owner-verify-d2` | § Verify against reality, not memory, the **Owner-verify** bullet — **subset**: an edit matching the consumer's configured `[d2_ledger] sensitive_paths` globs (see F8/3 below) |
-| `delegation_nudge_result` | `delegation.tier-floor` | § Route by task kind — the tier floor — **subset**: uninterrupted read/shell/edit volume without a delegation raises a nudge, then an ask |
+| `delegation_nudge_result` | `delegation.tier-floor` | § Route by task kind — the tier floor — **subset**: uninterrupted read/shell/edit volume without a delegation raises a nudge, then an ask in interactive default mode; a missing or non-default `permission_mode` escalates that ask to deny |
 | `role_on_code_result` | `role.declaration` | § Role declaration — **new prose, written by C53** (see F8/1) — **subset**: the first edit to a code file in a session, which is the design→code switch the SessionStart reminder cannot catch |
 | `session_start_result` | `Runtime classification: operational` | — see F8/2 for the required rationale |
 
@@ -419,7 +797,7 @@ the limit neither option removes: `tomllib` is 3.11+ stdlib, so on an older host
 empty however they are configured, and only the marker's wording describes that state.
 
 **F8/4 — marker line grammar (locked).** `Runtime check: <id>` — the ID is the **first token**;
-anything after ` — ` is human prose the parser ignores. The tail is not decoration: three of the
+anything after ` — ` is human prose the parser ignores. The tail is not decoration: five of the
 six markers claim a *subset*, and a subset can only be described in words.
 
 **F8/5 — two namespaces, one shape (locked).** Policy IDs (`commits.owner-owned`) and F1 finding
@@ -442,6 +820,41 @@ the draft no longer assumes a fixed nine-line cost or that it fits before measur
 public result without classification; operational classification with empty rationale or a prose
 marker; dual classification; malformed ID; legacy live `Enforced by`/`**Enforced**` declaration;
 or delete on either side makes `self_ci` fail.
+
+**Five rules above are not reachable from that list** (A17(g) plus the D2-20(d) owner walkthrough,
+per F13). **The F8 set itself is unpinned:** every mutation there is structural, so an ID renamed
+consistently on both sides preserves the one-to-one join and passes, and *unknown* has nothing to be
+unknown against, because F7 rejects a central mapping constant. C53 therefore ships a **contract
+test pinning the seven shipped callable classifications: six callable↔policy-ID pairs plus
+`session_start_result`'s operational assignment**; a coordinated ID rename or a changed operational
+assignment fails there. It is a regression pin, not a join mechanism — the join still runs
+prose→docstring at check time, and what F7 forbids is a constant standing *between* the two sides.
+
+**F8/2's rationale has a required substance,** and the empty-rationale seed proves only that a
+string exists. The rationale F8/2 dictates — delivery is not ownership, and on Codex this is the
+delegation rule's only delivery channel — is pinned as shipped text; replacing it with a non-empty
+but substantively wrong rationale fails the contract fixture. For any operational classification
+added later, only non-emptiness is mechanical and review owns the substance, which is stated rather
+than left to be inferred.
+
+**F8/3's coverage finding needs its own emitting seam and seed.** C53 extends the existing
+`tools/d2_ledger/d2_ledger.py` check path with a C51 `Finding`; coverage is evaluated before the
+current no-pending early return, so an empty ledger cannot hide whether `sensitive_paths` is
+configured. A configured fixture must produce `configured`, an unconfigured fixture must produce
+`not configured`, and emitting neither or the wrong state fails the C53 contract suite — otherwise
+C59 reports a state nothing guarantees is emitted.
+
+**The five subset tails are part of the shipped contract even though the join parser ignores their
+human prose.** The contract fixture pins the limitation stated for each subset; deleting that tail
+or replacing it with a whole-section enforcement claim fails. This is deliberately not semantic
+parsing by `self_ci`: the finite shipped set is the F15 regression surface, while review owns the
+substance of later prose.
+
+**The diagnostic coordinates are also a contract.** For each seeded join failure, the contract
+suite asserts that `self_ci` reports the policy ID, callable and prose location, explicitly naming
+the absent side where the violated relation has no coordinate. A detector that fails without those
+coordinates fails the test; a red result that cannot lead the reader to both sides does not satisfy
+the canary's purpose.
 
 ## 4. Version ↔ changelog cross-check (P1.3 → C54)
 
@@ -471,8 +884,9 @@ uncomputable and the consumer reads nothing before accepting a pin.
 **Decision (owner-locked as register fork F9).** In
 `tools/release/release_check.py`:
 
-- a **non-final** version **requires** a `## Unreleased` heading in CHANGELOG. Non-final is the
-  full PEP 440 set — `.devN`, `aN`/`bN`/`rcN`, `.postN`, `+local` — not `.devN` alone; final is
+- a **non-final** version **requires** `## Unreleased` as the topmost CHANGELOG heading.
+  Non-final is the full PEP 440 set — `.devN`, `aN`/`bN`/`rcN`, `.postN`, `+local` — not `.devN`
+  alone; final is
   exactly `X.Y.Z` (**F9/3**);
 - a final version **requires** the topmost released heading to equal it;
 - a final version that already has a matching git tag is a **warn** (a re-release), not an
@@ -536,235 +950,573 @@ notice on every command and renders it "v v0.3.0". That is a defect with a right
 fork the owner should have to vote on; F9 fixes only the *rule* (normalize before comparing) and
 [C61](../TASKS.md) owns the code.
 
-**Seeded violation.** A fixture with a mismatched version/heading pair fails `release_check`;
-both consistent states pass; disagreeing `pyproject`/`_STATIC_VERSION` literals fail; a tag with
-no heading warns without failing; a fixture with no version source at all produces a skip finding
-rather than a pass.
+**Seeded violation.** The two consistent states pass. Their negatives are separate: a non-final
+version whose topmost CHANGELOG heading is not `## Unreleased` fails `release_check`, and a final
+version whose topmost released heading is absent or does not equal that version fails. The
+non-final case is parameterized over the full supported PEP 440 non-final corpus — `.devN`, `aN`,
+`bN`, `rcN`, `.postN`, `+local`, and
+their accepted combinations — rather than proving only `.devN`; every member requires topmost
+`## Unreleased`. A CHANGELOG fixture with the matching released heading below a different topmost
+released heading fails, so searching for a match anywhere is not sufficient. Disagreeing
+`pyproject`/`_STATIC_VERSION` literals fail. Tag coverage is checked across the complete tag set:
+with several `vX.Y.Z` tags, any tag lacking its heading warns without failing, even when the newest
+tag has one. A fixture with no version source at all produces an explicit skip finding rather than
+a pass, and a fixture where `git` is unavailable produces the same explicit skip for each
+git-dependent rule rather than silence or failure. **The two repairs outside the checker are seeded
+too** (A17(g), per F13): a `run_plan` that stages `CHANGELOG.md` without both version literals
+fails, and one that reaches `git add` before the bump step fails. Their absence is what makes this
+shape's own defect reproducible — a checker that reports a mismatch the procedure keeps re-creating
+is the theatre this section already rejects, and leaving the procedure unseeded left that door open.
+
+**That claim was wider than what it seeded, and two checker rules had no mutation either**
+(A17(g), per F13). Both named mutations are `run_plan` mutations, so the second repair outside the
+checker — the `__init__.py` comment asserting that the release pipeline cuts the real version from
+the git tag — was covered by a sentence and by nothing else. It is a literal string in a source
+file, and the false form is half of why the defect reproduces, so the `release_check` contract suite
+in `meta/tests/test_release_check.py` pins it: a tree whose comment still claims the tag produces
+the number fails that contract test. **F9/6 and the re-release warn:** a
+checker comparing raw strings passes every fixture listed above while failing on the `v`-prefixed
+and `git describe` forms F9/6 exists for, and one that *errors* on a final version with a matching
+tag passes them too, because no fixture there distinguishes warn from error. Normalization is
+seeded over `v0.4.0`, `0.4.0` and a `git describe` suffix; the re-release case asserts **warn**,
+not merely non-clean.
 
 ## 5. Source/generated boundary (P1.7 → C55)
 
-**Decision.** **The generator is the declaration.** `sync.py`'s owned-file set is the boundary —
-there is no hand-maintained second list to drift. The check is two-way:
+**Decision (owner-locked as register fork F17/A).** **The generator is the one declaration.** Every
+`PlannedFile` produced by `sync.py` carries exactly one required ownership mode; the mode and any
+selector live on that object and are consumed by write, `sync --check`, `verify.py` and the
+contract suite. There is no banner-exception list, field-owner list or second path inventory.
 
-- a file `sync` owns that carries no generated banner → **error** (someone hand-created or
-  hand-stripped it);
-- a banner on a file `sync` no longer owns → **error, stale artifact** (a generator's leftover
-  that now looks authoritative to a reader and to `sync --check`).
+| ownership mode | declaration and check |
+|---|---|
+| `bannered-file` | `sync` owns the whole text file; the planned content must carry the exact akmon generated banner in its permitted prefix, and content drift remains checked exactly |
+| `structured-file` | `sync` owns the whole file, but the format cannot safely carry a comment; exact planned content is the ownership proof while the declaration exists, with no fabricated banner |
+| `field-owned` | the surrounding file is hand-owned; the `PlannedFile` declares the exact keys or entries `sync` owns, merge preserves everything else, and checking compares only those selectors |
 
-**Fork — content-hash drift detection instead of banner presence.** Rejected as a duplicate:
-`sync --check` already compares content. This shape is about *ownership declaration*, which is
-what nobody checks today, and the stale-artifact direction is reachable only from ownership.
+The current population is classified in the same declaration. Generated Markdown and Python
+pointers/materializations are `bannered-file`; wholly generated JSON such as `.codex/hooks.json`
+and the package-mode routing registry is `structured-file`; merged `.claude/settings.json` hook
+entries and package-mode `.akmon.toml`'s `mount` / `akmon_version` keys are `field-owned`. Adding a
+fourth implicit state is forbidden: a constructor with no mode, a field-owned entry with no
+selector, or one path declared in two modes fails the contract suite.
+
+The forward and reverse banner checks are deliberately limited to the population for which both
+claims are mechanically true:
+
+- a planned `bannered-file` whose planned content lacks the exact banner produces an **error**
+  C51 `Finding` with code **`boundary.missing-banner`**;
+- a file carrying that exact banner inside the scanner boundary, but absent from the current
+  `bannered-file` planned paths, produces an **error** C51 `Finding` with code
+  **`boundary.stale-generated`**.
+
+**Scanner boundary.** The reverse scanner covers only generator-declared bannered output surfaces:
+the root vendor-pointer population (`CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`,
+`.codex/README.md`), generated `.claude/skills/*/SKILL.md` stubs, and banner-capable package
+materialization below the configured `<aitna>/.akmon/`. It does not turn those parent directories
+into general scan roots. Arbitrary consumer-root paths and subtrees are out, as are `AGENTS.md`,
+the mounted standard source tree `<aitna>/akmon/`, VCS/cache paths, and every `structured-file` or
+`field-owned` output. Do not follow symlinks; inspect regular UTF-8 files only. A candidate must
+carry, within its first four logical lines, either the HTML-comment or `#`-comment form of
+`Generated by <root>/akmon/bin/sync.py. Do not edit this file by hand.`; a bare `Generated by ` or
+the exact marker later in a file is not ownership evidence. The `<root>` segment is accepted
+independent of the current configured root so a stale artifact written before a root rename remains
+visible. Structured and field-owned entries remain checked through exact content or selectors
+while declared; after their declaration disappears they carry no safe, truthful marker by which a
+generic scanner can identify them.
+
+`AGENTS.md` is a separate split-ownership case, not an untyped fourth `PlannedFile` mode. The
+consumer owns the file; akmon owns the contract of the marked akmon block for attach/verification
+and §6 counts that block as shipped context, but `sync` does not materialize the file. Therefore
+`AGENTS.md` is outside the generated-banner population and retains its existing verification that
+the whole file must not carry an akmon generated banner. In §6, “one artifact with split
+ownership” means the one **always-loaded** artifact of that kind; `.claude/settings.json` and
+`.akmon.toml` remain the field-owned generator cases declared above.
+
+**Fork — content-hash drift detection instead of ownership modes.** Rejected as a duplicate:
+`sync --check` already compares planned content. It cannot find a bannered artifact after the path
+has left the plan, and a whole-file comparison falsely claims ownership over hand-written JSON/TOML
+fields. This shape checks the declaration and the reachable stale direction rather than renaming
+content drift.
 
 **Deferred, explicitly rather than silently.** The plan folds doc gardening (dead links,
 staleness) into P1.7 "as the same sweep". It is not the same sweep — link checking needs its own
-traversal and its own noise budget — so it leaves stage 1 and is carried in **C60**'s
-neighborhood as a later item, not dropped.
+traversal and its own noise budget — so it leaves stage 1 and is carried in **C60**'s neighborhood
+as a later item, not dropped.
 
-**Seeded violation.** Stripping a banner fails; renaming a generated file so `sync` stops owning
-it, without deleting the old one, fails.
+**F13 carriers.** **The consumer checker is `verify.py`**, through the C51 finding envelope; the
+boundary is a property of a tree `sync` has run in. The contract suite keeps each rule isolated:
+
+- **forward:** mutate a `bannered-file` renderer to omit its banner, run `sync` so disk and planned
+  content agree, then require `verify.py` to emit exactly one error
+  `boundary.missing-banner`; content comparison is green, so this cannot pass through the old
+  drift check;
+- **reverse:** write a bannered path from the old declaration, remove that path from the new plan
+  without deleting the file, and require exactly one error `boundary.stale-generated`; no planned
+  path is stale or missing, so only the scanner can fail it;
+- **population:** parameterize mounted and package-mode `_planned_files` and pin every shipped path
+  to its mode and, for `field-owned`, its selectors. An unclassified path, a dual mode, a missing
+  selector, `.codex/hooks.json` classified as bannered, or merged settings classified as whole-file
+  fails the contract test;
+- **scanner kinds:** separate fixtures present the same marker through a symlink, a non-regular
+  entry and a non-UTF-8 regular file; each produces no boundary finding, while changing the scanner
+  to follow, decode or classify that kind fails its exact empty-finding oracle;
+- **banner position and root:** an otherwise stale in-scope artifact with the exact marker on
+  logical line four produces exactly one error `boundary.stale-generated`; moving that same marker
+  to logical line five produces no finding. A separate stale artifact carrying the exact marker
+  with a previous configured root in its `<root>` segment produces exactly one error
+  `boundary.stale-generated`. Moving the position limit or matching only the current root fails the
+  corresponding isolated fixture;
+- **scanner population:** three positive stale fixtures independently exercise a root vendor
+  pointer, a generated `.claude/skills/*/SKILL.md` stub and a banner-capable package materialization;
+  each must emit exactly one error `boundary.stale-generated`. Separate negative fixtures put the
+  exact head marker in `AGENTS.md`, the mounted akmon source tree, an arbitrary root user file, an
+  arbitrary file under `.github/`, `.codex/` or `.claude/`, a VCS path and a cache path; each must
+  emit no boundary finding. Dropping or widening any one scope boundary therefore fails without
+  another zone masking it;
+- **non-banner modes:** representatives of `structured-file` and `field-owned` omit the banner and
+  produce no boundary finding while their exact-content or selector checks remain green. Treating
+  either mode as banner-required or reverse-scannable fails its isolated empty-finding oracle;
+- **self-CI seam:** `meta/self_ci.py` runs the same boundary implementation over fixtures generated
+  from akmon's own mounted- and package-mode declarations. A fixture whose renderer omits a banner
+  must make `self_ci` fail with `boundary.missing-banner`; removing that invocation therefore
+  cannot leave akmon exempt while consumer tests stay green;
+- **severity and code:** the forward and reverse fixtures assert C51 `severity == error` and the
+  exact codes above, not merely a non-clean exit. Changing either to warn, swapping the codes, or
+  emitting an unstructured diagnostic fails its own parameterized oracle.
+
+Rejected: `self_ci` alone — it proves akmon's declaration and fixtures, not an attached consumer
+tree. C55's only task dependency remains C51; the §6 always-loaded definition is a declaration it
+consumes, not C56 work it waits for.
 
 ## 6. Always-loaded caps (P0.4 → C56, reduction in C60)
 
-**Declaration.** This block is the shared definition, consumed by C55 as well: the
-source/generated boundary has to know that `AGENTS.md` is hand-owned by the consumer while
-carrying a generated akmon block — the one artifact with split ownership. C55 depends on the
-definition, not on C56's cap check. Always-loaded = every artifact that reaches the model's
-context without the model asking: the akmon block in `AGENTS.md`, the guardrail chain it imports, and the
-per-language guardrail. Measured on the attached consumer (N2, P0.4): **433 lines / 23 613 bytes**
-total, of which **AGENTS.md is 232 lines and hand-owned**, and akmon's own shipped share is
-`_common.md` 133 lines / 7 689 B + `python.md` 52 / 2 637 B + the ~12-line pointer ≈ **197 lines /
-~10.8 KB**.
+**Declaration — the two exact populations (owner-locked as F18/A).** This definition is also
+consumed by C55; it is not a C56 task edge. `AGENTS.md` is hand-owned, `sync` does not generate it,
+and only its marked akmon block belongs to the shipped population. The block begins at
+`## Dev layer — akmon` and ends before the next peer `##` heading or EOF. Resolve its always-loaded
+guardrail imports transitively; the chain includes `guardrails/_common.md`. Add the selected
+language guardrail, then count the union once so an imported selected file is never doubled.
 
-**Decision — a ratchet, in two different strengths:**
+- **akmon-shipped always-loaded** = the marked `AGENTS.md` block + the imported guardrail chain +
+  the selected language guardrail;
+- **consumer total always-loaded** = the whole consumer `AGENTS.md` + that same resolved guardrail
+  chain and language guardrail.
 
-| scope | cap | severity | where | current |
-|---|---|---|---|---|
-| akmon-shipped always-loaded | ≤ **210 lines / 12 KB** | error | `self_ci` | ~197 / ~10.8 KB |
-| consumer total chain | ≤ **460 lines / 25 KB** | warn (error under `--strict`) | `verify.py` | 433 / 23.6 KB |
+Vendor pointers, hook wiring, roles, pipelines, skills and every on-demand document are outside
+both populations. The line unit is `len(text.splitlines())`; the byte unit is
+`len(text.encode("utf-8"))`. Counts are summed per member with no synthetic separator. Byte caps are
+decimal bytes, not KiB, and both dimensions are inclusive.
 
-The two differ because the largest single item is not akmon's to shrink: `AGENTS.md` is
-hand-owned by the consumer, so failing their build over it would be akmon dictating content it
-does not own. akmon's own share is an error, because that one is entirely ours.
+Measured on the attached consumer (N2, P0.4): **433 lines / 23,613 bytes** consumer-total, of which
+the whole hand-owned `AGENTS.md` is 232 lines; the then-current shipped population is approximately
+**197 lines / 10,800 bytes**. These are evidence and report inputs, not replacement thresholds;
+C53 and C58 both write into the measured chain and C56 reports the post-change values.
 
-**Fork — adopt the borrowed ≤150-line reference immediately.** Rejected *here*, adopted as
-separate work. A cap that fails on the day it ships either blocks the stage or gets waived, and
-a waived cap teaches everyone that caps are advisory. **Stated drawback, since it is the real
-one: a ratchet blesses the status quo.** That is exactly why the reduction is a task with its own
-id — **C60** — and not a "later we'll tighten it" sentence. C60 also has to *justify* the target
-rather than inherit it: ≤150 is wshobson's number for a differently-shaped artifact, and akmon
-must argue its own.
+**Decision — one stable code, two strengths:**
 
-**Seeded violation.** A fixture guardrail padded past the cap fails `self_ci`; a padded consumer
-fixture warns under `verify` and fails under `verify --strict`.
+| scope | inclusive cap | finding when over cap | checker |
+|---|---|---|---|
+| akmon-shipped always-loaded | **210 lines / 12,000 bytes** | `error`, code `caps.always-loaded` | `self_ci` |
+| consumer total always-loaded | **460 lines / 25,000 bytes** | `warn`, code `caps.always-loaded`; severity remains `warn` under strict mode | `verify.py` (`--strict` exits non-zero) |
+
+The strengths differ because the largest consumer-total member is hand-owned: a normal verify run
+must not fail a project over its own `AGENTS.md`. Akmon's shipped population is wholly ours, so its
+growth is an error. Strict mode applies the shared exit policy to the consumer warning; it does not
+rewrite the finding as an error.
+
+**Rejected here, preserved as separate work.** A single hard consumer-total cap dictates
+hand-owned content; a single warn-only cap makes akmon-owned growth advisory. Adopting the borrowed
+≤150-line reference immediately ships a red cap that will be waived, and inheriting that number
+would confuse a differently shaped artifact with evidence about akmon. Deferring every cap leaves
+the reduction without an instrument. The accepted ratchet deliberately blesses today's shape;
+therefore reduction has its own task, **C60**, which must justify its target before it moves content
+and lowers the caps. C60's relocation-versus-deletion fork remains in-task and outside this lock.
+
+**F13 carriers.** Each rule is isolated:
+
+- **population include/exclude:** parameterized fixtures add and remove, one at a time, the marked
+  akmon block, an imported common guardrail and the selected language guardrail; the shipped count
+  must change by that member's exact lines and bytes. Replacing the marked block with the whole
+  `AGENTS.md` fails the shipped oracle. The consumer-total oracle changes by the whole `AGENTS.md`
+  and the same chain. Adding a vendor pointer, hook wiring, role, pipeline, skill or on-demand file
+  to either population fails, as does omitting or double-counting a transitive import;
+- **inclusive line boundaries:** for each scope, fixtures measure exactly 209/210/211 shipped lines
+  or 459/460/461 consumer-total lines while bytes remain below their cap. Cap−1 and cap pass; cap+1
+  alone emits exactly one `caps.always-loaded` finding with the scope's declared severity;
+- **inclusive byte boundaries:** for each scope, fixtures measure exactly
+  11,999/12,000/12,001 shipped bytes or 24,999/25,000/25,001 consumer-total bytes while lines remain
+  below their cap. Cap−1 and cap pass; cap+1 alone emits exactly one `caps.always-loaded` finding
+  with the scope's declared severity;
+- **severity and strict matrix:** shipped cap+1 is one `error caps.always-loaded` and makes
+  `self_ci` fail. Consumer cap+1 is one `warn caps.always-loaded`; normal `verify.py` remains zero,
+  while `verify.py --strict` exits non-zero with the same warn finding. A changed code, downgraded
+  shipped severity, upgraded consumer severity, duplicate finding or wrong exit fails the exact
+  matrix oracle;
+- **dynamic report:** both checkers report, for their own scope, the exact dynamic
+  `lines=<actual>/<cap>` and `bytes=<actual>/<cap>` plus the scope name and code
+  `caps.always-loaded`. The line-only mutation replaces one one-byte non-newline character with a
+  newline, changing the line actual while holding the byte actual fixed. The byte-only mutation
+  adds one byte within an existing logical line, changing the byte actual while holding the line
+  actual fixed. Separate line-cap and byte-cap mutations change only their corresponding rendered
+  cap while holding both actuals and the other cap fixed. Omitting a dimension, printing the other scope, reporting a stale constant or swapping
+  actual and cap fails the exact-output fixture.
 
 ## 7. OS contract and matrix vocabulary (P0.2 → C57)
 
-**Declaration (runtime).** akmon requires **a POSIX shell and `python3` on PATH**. The Codex
-route additionally requires **git on PATH**: the generated Codex wiring resolves the project root
-through `$(git rev-parse --show-toplevel)` (`bin/sync.py:203`), where the Claude wiring uses the
-harness-provided `$CLAUDE_PROJECT_DIR` (`:252`). **`claude` and `codex` are optional**: §8's
-inventory check queries whichever is on PATH and falls back to the declared version when neither
-is — so they are declared as optional binaries rather than left unnamed. **Windows is not
-supported** — stated as unsupported, not as "untested", because a hedge is what lets a broken
-path stay ambiguous.
+**Declaration (runtime).** Akmon requires **a POSIX shell and `python3` on PATH**. The Codex route
+additionally requires **git on PATH**: generated Codex wiring resolves the project root through
+`$(git rev-parse --show-toplevel)` (`bin/sync.py:203`), while Claude wiring uses the
+harness-provided `$CLAUDE_PROJECT_DIR` (`:258`). **`claude` and `codex` are optional**: §8 queries
+each one found on PATH and, independently for each absent harness, falls back to and discloses its
+declared version. **Windows is unsupported**, not merely untested.
 
-**The runtime declaration is joined to the generator, not left as prose.** C57 extracts the
-external binary names from the command strings `sync.py` emits — they are few and literal — and
-compares them against the declared set. An **undeclared** binary in generated wiring is an
-**error**; a declared binary no longer used anywhere is a **warn**. The asymmetry is F9's: an
-under-declaration breaks a path in a consumer's repository, an over-declaration is only stale
-prose. Without this join, half of §7 is a rule akmon states and nothing verifies — the exact
-defect class stage 1 exists to remove.
+**F16 — one declaration, two population-specific joins.** Every runtime entry declares its
+population and modality. *Generated wiring* contains the implicit POSIX-shell carrier plus literal
+`python3` and route-scoped `git`; C57 derives that population from the emitted command entries.
+*Akmon's own tooling* contains optional `claude` and `codex`; one declarative query map is read by
+the checker and is also the sole source from which `sync` constructs those subprocess calls. The
+modalities are `required`, `optional`, and `required-on:<route>`; the exact assignments are POSIX
+shell=`required`, `python3`=`required`, `git`=`required-on:codex`, and `claude`/`codex`=`optional`.
+The map is the single owner, never a manually synchronized copy beside the calls.
 
-**Declaration (matrix vocabulary).** A capability records independent axes rather than one
-overloaded grade: `documented`, `delivered`, the exact vendor/version/event/matcher route, the
-observed normal-path effect (`none / advisory / ask / deny`), and crash posture
-(`fail-open / fail-closed / unmeasured`). Bare `enforced` and checkmarks are invalid. A normal-path
-`ask` or `deny` claim must name its exact route and crash posture — the C49/F3 lesson: an effect
-exists only on the route measured, and crash behavior is a different fact. C57 adds a static
-check rejecting bare `enforced` and enforcement-like entries missing either qualifier.
+The pure runtime checker reports through C51 with this exact mapping:
 
-**Where the matrix lives.** Five axes over nine capabilities and four vendors do not fit a
-README table. The axis-complete matrix moves to a shipped top-level **`CAPABILITIES.md`**,
-beside `MODEL.md` and `ARCHETYPES.md`; `README.md` keeps a short delivery summary that makes
-**no enforcement claim at all**. A16 then generates one file rather than a section inside
-another, which is the cheapest form the seam can take. Rejected: a compact cell notation plus a
-legend — a legend is a compression, and a compression reintroduces the checkmark under a new
-name; also rejected: hiding the matrix in `meta/`, since it is addressed to consumers.
+| violation | severity and code | normal exit |
+|---|---|---|
+| source invokes an undeclared runtime | `error runtime.undeclared-binary` | non-zero |
+| declaration is unused by its declared population | `warn runtime.unused-binary` | zero |
+| runtime is assigned to the wrong population | `error runtime.wrong-population` | non-zero |
+| runtime has the wrong modality or route condition | `error runtime.wrong-modality` | non-zero |
+| a second query owner or call-site literal bypasses the query map | `error runtime.duplicate-query-owner` | non-zero |
 
-**What the check covers, and what it deliberately does not.** The subject is **claims about a
-vendor harness**. Inside `CAPABILITIES.md`'s marked regions the five axes are mandatory; outside
-them, a closed vocabulary (`enforced`, `enforces`, and `✅`/`⚠️` adjacent to a vendor or harness
-event name) is rejected in shipped docs. Two boundaries are stated so the audit does not read
-them as gaps: **akmon's own checkers are out of scope** — `pipelines/tasks.md`'s "Thresholds
-(enforced by `verify.py`)" is an accurate claim about an in-process check, where "route" and
-"crash posture" mean nothing — and **guardrail prose belongs to C53**, whose F7/F8 markers
-already own `guardrails/_common.md`'s three `> **Enforced**` blocks.
+The error/warn asymmetry is F9's: an under-declaration breaks a consumer path, while an unused
+entry is stale prose. F16's accepted cost is the indirection and weaker extraction evidence of the
+own-tool query map; its rejected alternative is dropping `claude` and `codex` from the declaration,
+which restores silence around the binaries §8 uses. **Windows support is a fenced scope declaration,
+not a mechanically checked rule**; its lack of a seed is explicit rather than an exemption claimed
+for a check.
 
-**The conversion happens inside C57, and the tree is the red state.** Every cell of today's
-matrix (`README.md:82`–`:92`) is a checkmark, so the check fails on the whole table the day it
-exists; converting first would leave it with a fixture where it could have had the tree — F9's
-rule for C54, applied unchanged. The live defect it must catch is already visible one screen
-below: `README.md:200` claims delegation is **enforced** without qualification, while the
-matrix's own delegation-log row records `❌ subagent hook payload unverified` for Codex. The
-claim is global; the measurement is one route on one vendor.
+**Declaration (matrix vocabulary).** A capability records exactly **six independent axes**:
+`documented`; `delivered`; the complete `vendor / version / event / matcher` route coordinate; the
+observed normal-path effect (`none / advisory / ask / deny`); crash posture
+(`fail-open / fail-closed / unmeasured`); and `evidence`, the probe or report behind the claim.
+Every axis is present. C57 chooses the concrete prose encoding for `documented`, `delivered`, route
+and evidence as an in-task decision; this lock pins their presence and the evidence relation, not a
+closed spelling for their values. Only effect and crash posture have closed value vocabularies here.
+An `ask` or `deny` effect requires all four route coordinates to be present and measured, and a
+measured crash posture. A measured assertion requires non-empty evidence; an `unmeasured` assertion
+requires empty evidence. Requiring a citation only in free prose is rejected because a pattern
+cannot distinguish evidence from decoration.
 
-**Fork — remove the git dependency now** (resolve the root through `python3` instead, reusing
-the discovery already implemented for package mode). Not now, and the trigger is recorded: it
-is the right fix, but it rewrites generated wiring that C52 is already touching in the same
-stage, and no consumer has hit it. Revisit when a consumer reports it or when P4.2's plugin
-carrier changes the wiring anyway.
+**F19/A — where the matrix lives.** C57 creates shipped top-level `CAPABILITIES.md`, beside
+`MODEL.md` and `ARCHETYPES.md`, and writes the six-axis cells as prose. README retains a short
+delivery summary with **no vendor enforcement claim**. A16 later owns schema, data ownership and
+generation and consumes these cells into the same file; until then, the acknowledged cost is one
+top-level document and a bounded prose/data duplication window. Rejected: compact README cells plus
+a legend, which compress the axes back into an overloaded grade; and a matrix under `meta/`, which
+hides a consumer contract in maintainer material.
 
-**Seam — matrix as data stays A16.** C57 writes cells as prose. A16 owns the schema, ownership
-and generation, and its first job is to consume these cells. The duplication window is
-acknowledged and bounded by A16; it is declared here so A16 does not rediscover it as a defect.
+**Checker scope.** The top-level `CAPABILITIES.md` and its marked matrix region are both required;
+absence of either is `matrix.missing-file`. Only rows inside that region are eligible matrix rows,
+and all six axes, all four route coordinates and the closed effect/crash vocabularies are mandatory
+there. There is no fallback to a legacy
+README table or to a six-axis matrix anywhere else. In shipped docs outside the marked region,
+`enforced`, `enforces`, and `✅`/`⚠️` adjacent to a vendor or harness event are rejected. A retained
+detailed README capability table is therefore a second authority and fails as
+`matrix.bare-claim`, even if `CAPABILITIES.md` is valid. Two exclusions are exact: claims about
+akmon's own in-process checkers remain valid (`pipelines/tasks.md` may say a threshold is enforced
+by `verify.py`), and guardrail runtime prose remains C53's F7/F8 surface rather than a second C57
+scan.
 
-**Seeded violation.** The checker is `self_ci` — the matrix and the generated wiring are akmon's
-own, and a consumer writes no vendor claims — reporting through the P1.6 envelope. A bare `✅` or
-the word `enforced` inside a marked region fails (`matrix.bare-claim`); a `deny`/`ask` cell
-missing its exact route or its crash posture fails (`matrix.unqualified-effect`); replacing an
-`unmeasured` cell with an assertion that cites no evidence fails, which is the measured-only rule
-made mechanical. On the runtime half: adding a binary such as `jq` to a generated command without
-declaring it fails (`runtime.undeclared-binary`); removing `git` from the declaration while the
-Codex wiring still calls it fails the same way from the other direction; a declared binary that
-no generated command uses warns rather than fails.
+**Red before green.** The current tree has no `CAPABILITIES.md`, so `self_ci` first emits
+`error matrix.missing-file`. Its legacy README capability glyphs (`README.md:82`–`:92`) and the
+unqualified delegation claim at `README.md:200` independently emit `error matrix.bare-claim`.
+Those legacy rows are forbidden second-authority prose, not candidate matrix rows, and therefore
+produce no `matrix.missing-axis` finding.
+C57 observes those failures before creating `CAPABILITIES.md` and replacing the legacy README
+matrix with the claim-free summary; the repaired tree and fixtures then pass. Converting first is
+rejected because it would discard the executable current red state.
+
+**The git dependency stays for now.** Replacing `git rev-parse` with the Python root discovery used
+by package mode is the right later repair, but it overlaps generated wiring C52 changes and no
+consumer has hit it. Revisit when a consumer reports it or P4.2's plugin carrier changes the wiring.
+This trigger is an in-task/future repair boundary, not D2-23 evidence and not a new C57 dependency.
+
+**F13 matrix corpus — checker, mutation, exact failure.** The checker is `self_ci`, through C51.
+Fixtures isolate every rule:
+
+- deleting `CAPABILITIES.md` emits exactly one `error matrix.missing-file`; deleting only its
+  marked matrix region is a separate fixture and emits that same exact finding;
+- moving a complete six-axis matrix under `meta/` while leaving no top-level `CAPABILITIES.md`
+  still emits exactly one `error matrix.missing-file`; no alternate-location fallback is accepted;
+- for each of the six axes, deleting only that axis emits exactly one
+  `error matrix.missing-axis`; these axis-presence fixtures use non-enforcement rows. Separate
+  non-enforcement route subfixtures independently delete vendor, version, event and matcher and
+  receive the same exact code;
+- effect and crash-posture fixtures are parameterized over every accepted value plus one value
+  outside the corresponding closed vocabulary; each invalid case emits exactly one
+  `error matrix.invalid-value`. C57's chosen encodings for documented, delivered, route and evidence
+  have no invalid-value oracle in this lock;
+- an otherwise complete `ask` or `deny` cell keeps every axis and route coordinate present but sets,
+  one at a time, each route coordinate or crash posture explicitly to `unmeasured`; every case emits
+  exactly one `error matrix.unqualified-effect`. Deletion is never this code: it is
+  `matrix.missing-axis` as above;
+- a measured assertion with empty evidence and an `unmeasured` assertion with non-empty evidence
+  are separate mutations, each emitting exactly one `error matrix.uncited-claim`;
+- parameterized fixtures place each of `enforced`, `enforces`, `✅` and `⚠️` beside each vendor and
+  harness-event spelling outside the marked regions; every case emits exactly one
+  `error matrix.bare-claim`. A separate transition fixture keeps the detailed legacy README table
+  beside a valid `CAPABILITIES.md` and emits exactly one `error matrix.bare-claim`; it is never
+  parsed as a six-axis fallback and never emits `matrix.missing-axis`. Matching prose about an
+  akmon-owned checker and matching guardrail prose are two separate negative fixtures and emit no
+  C57 finding.
+
+Changing any expected code or severity, combining two violations in one fixture, accepting the
+current red state, or leaving either post-conversion artifact red fails the matrix contract suite.
+
+**F13 runtime corpus — checker, mutation, exact failure.** The same `self_ci` entry calls the pure
+runtime checker. Fixtures independently:
+
+- add an undeclared generated `jq` invocation and an undeclared own-tool query; each emits exactly
+  one `error runtime.undeclared-binary`;
+- leave one declaration unused in each population; each emits exactly one
+  `warn runtime.unused-binary` and keeps non-strict `self_ci` zero;
+- remove the population field from, and assign to the other population, each of POSIX shell,
+  `python3`, `git`, `claude` and `codex`, one entry at a time; each emits exactly one
+  `error runtime.wrong-population`;
+- change POSIX shell or `python3` away from `required`, `git` away from
+  `required-on:codex`, and each of `claude` and `codex` away from `optional`; every isolated case
+  emits exactly one `error runtime.wrong-modality`;
+- add a second query map and, separately, restore a literal `claude` or `codex` subprocess call
+  outside the sole map; each emits exactly one `error runtime.duplicate-query-owner`.
+- remove the implicit POSIX-shell carrier from the derived generated-wiring population while its
+  declaration remains; it emits exactly one `warn runtime.unused-binary` and keeps the normal exit
+  zero.
+
+Deleting either population join, changing the warn/error severity or a code, duplicating a finding,
+or producing the wrong normal exit fails its exact oracle. D2-23 contributes no literal or
+measurement to these fixtures and blocks only C52.
 
 ## 8. Tool names: neutral capability + vendor map (C46, tool-name half)
 
-**Decision.** Agent tool sets are declared as **neutral capabilities** in the same vocabulary
-`hook_core` already uses for tool kinds (`read` / `search` / `shell` / `edit`), and mapped
-**neutral → vendor at generation time**. The harness inventory is **version-stamped data**
-(harness id + version → available tool names), so drift is a data update and staleness is
-visible. Two failure modes, both loud:
+**F20/A decision — exact populations and one owner in both directions.** The neutral vocabulary is
+exactly `edit` / `shell` / `read` / `subagent`, owned by `hook_core`
+(`hooks/hook_core.py:109`–`:115`), where `read` already folds Read/Grep/Glob by that module's own
+comment. The exact restricted-agent population is `k_explorer`, `k_reasoner` and `k_auditor`, each
+with `{read, shell}`; `k_mechanic`, `k_validator` and `k_implementer` carry one explicit
+unrestricted sentinel rather than a vendor-name list. A new capability is added to `hook_core`'s
+vocabulary first. A generator token outside that vocabulary fails with exactly one **error
+`harness.unknown-capability`**; a missing token, a fifth token, the wrong restricted-agent set, a
+wrong member assignment or replacing the unrestricted sentinel with an inferred filename/tool list
+fails the exact population contract.
 
-- a mapped name that is not in the known inventory → **error at `sync`**;
-- a capability the harness has no name for → **explicit degrade to `shell`, plus a warn
-  finding** (P1.6 envelope) that names the widened boundary — because Bash is strictly wider
-  than Grep/Glob, and after the degrade the read-only property rests on the agent body's prose,
-  not on the tool set.
+One **version-stamped data inventory** (harness id + version, with separate tool/payload and matcher
+names where the harness distinguishes them) is the sole declaration owner of vendor names consumed
+by all three classes: generated agent frontmatter, generated Claude/Codex hook matchers, and
+Claude/Codex adapter normalization. Executable code may select or compare an inventory value; it may
+not redeclare a vendor-name set or map beside the inventory. A second declaration owner in any of
+the three classes emits exactly one **error `harness.duplicate-name-owner`**. A missing version,
+duplicate harness/version row, malformed name population or absent required map emits exactly one
+**error `harness.invalid-inventory`**. A neutral mapping that emits a name outside its selected
+inventory emits exactly one **error `harness.unknown-name`**. Thus the check runs in both directions:
+every consumer token belongs to `hook_core`, and every vendor name a consumer declares comes from
+the selected inventory.
 
-**The stamp needs something to compare against, and today there is nothing.** No code in `bin/`,
-`tools/` or `hooks/` reads a harness version — 2.1.221 and 0.146.0 were obtained by hand in N2 —
-so a written stamp would make staleness *printed*, not *visible*. **Decision: detect when the
-binary is present.** `sync` queries `claude`/`codex` if either is on PATH and compares; if
-neither is, it proceeds against the declared version and says which one it assumed. Rejected:
-declaration only (honest but toothless, and §8 would have to stop claiming visibility) and
-mandatory detection (`sync` runs in repositories where no harness is installed). This is what
-adds the two optional binaries to §7's runtime declaration.
+A capability with no vendor name degrades explicitly to the selected inventory's `shell` name and
+emits exactly one **warn `harness.capability-degraded`** naming the capability, harness/version and
+widened boundary. Bash is strictly wider than Grep/Glob, so after this degrade a read-only boundary
+rests on the agent body's prose rather than the tool set. A silent degrade, a different fallback
+name, or a warning that omits the widened boundary fails the contract.
 
-**An unknown harness version warns and stamps; it does not fail.** When detection finds a version
-the inventory does not cover, `sync` generates from the newest known inventory, emits a warn
-finding, and writes the assumption **into the generated artifact's banner** — not only into a
-warning that scrolls away: `generated against claude-code 2.1.221 inventory; detected 2.2.0`.
-Erroring would brick a consumer on the vendor's release schedule, which akmon cannot preempt
-because it cannot ship data for a version that does not exist yet; degrading everything to
-`shell` would dismantle the read-only boundary to preserve a formality. The cost is a provenance
-line in a generated banner, which is C55's surface — recorded there as an edge.
+**Detection and fallback.** The stamp needs something to compare against, and today there is
+nothing: no code in `bin/`, `tools/` or `hooks/` reads a harness version; 2.1.221 and 0.146.0 were
+obtained by hand in N2. `sync` queries the sole C57-owned `claude`/`codex` query map for each binary
+present on PATH. A detected known version selects its exact inventory. For each absent binary,
+generation independently uses the declared version and states that assumption in every affected
+generated artifact. A detected version newer than or otherwise absent from the inventory selects the newest
+known inventory for that harness, emits exactly one **warn `harness.unknown-version`**, and stamps
+both selected and detected versions in every affected banner, for example
+`generated against claude-code 2.1.221 inventory; detected 2.2.0`. Warning and banner are both
+required. Rejected: declaration-only detection, which makes staleness printed but invisible;
+mandatory binaries, which bricks repositories without a harness installed; erroring on a new vendor
+release, which puts availability on the vendor's schedule; and degrading every capability to shell,
+which dismantles the boundary to preserve a formality. Accepted cost: unknown releases proceed on
+possibly stale data, but the warning and durable provenance make that assumption reviewable. The
+banner line is C55's surface, recorded as an outgoing annotation rather than a C46 dependency.
 
-**Fork — encode the map in code (as `AGENT_SPECS` does today).** Rejected: a code map has no
-version stamp, so nothing distinguishes "correct for 2.1.221" from "written in 2025". The
-version stamp is the whole point of moving it to data. The mechanism is also **seeded against
-its own root cause**: the defect was never a wrong name, it was a *second owner* — `AGENT_SPECS`
-naming vendor tools directly instead of going through `hook_core`'s vocabulary. A literal vendor
-tool name in generator code, outside the inventory data, is a static failure, the way C51 rejects
-a local field mapping in an adopter.
+**Checker and caller contract.** One pure C46 inventory/resolution checker is called by both `sync`
+and `sync --check`; every `harness.*` error above exits 1 in both callers. Warn-only operation exits
+0 in normal `sync` and, when there is no independent generated drift, in `sync --check`; C59 later
+aggregates the same ordered warnings. `self_ci` calls the source-owner checker over the exact three
+consumer classes and the neutral/agent population contract. Contract tests exercise the same pure
+resolver and both CLI callers. Deleting any caller's wiring, changing a code or severity, producing
+duplicates, or changing the stated exit behavior fails.
 
-**Seeded violation.** A map emitting `Grep` against a 2.1.221 inventory fails at `sync` and
-`sync --check` — the regression is today's live defect, so it must be observed red before green,
-and `routing.py:364`/`:470`/`:503` are therefore **not** repaired ahead of C46 (F9's rule for
-C54). A capability with no vendor name must produce the shell name **plus** a warn finding naming
-the widened boundary; the same degrade **without** the finding fails the test — the silent
-degrade is the seed, because tolerance that says nothing is indistinguishable from a rule that
-was never there. An inventory entry with no version stamp fails. A detected version outside the
-inventory warns and stamps the banner; generating with no stamp fails. Restoring
-`tools="Read, Grep, Glob, Bash"` into `routing.py` fails the second-owner check.
+**F13 carriers — isolated checker, mutation and exact failure.** The corpus independently:
+
+- adds an unstamped row, a duplicate harness/version row, a malformed name population and a missing
+  required map; each emits exactly one `error harness.invalid-inventory` through `sync` and
+  `sync --check` and exits 1;
+- emits `Grep` against the Claude 2.1.221 inventory; each caller emits exactly one
+  `error harness.unknown-name` and exits 1. This is C46's own live red-before-green transition:
+  `routing.py:364`/`:470`/`:503` remain unchanged until C46 first observes them red, then the same
+  checker passes after conversion. It is not an application of F9, which belongs only to C54;
+- removes a vendor mapping for each neutral capability in turn; every case emits the selected shell
+  name plus exactly one `warn harness.capability-degraded`, names the widened boundary and exits 0.
+  Separate mutations suppress the warning, choose a non-shell fallback or corrupt its disclosure;
+  each fails the exact oracle;
+- detects each known harness version and requires its exact row, then uses a two-version inventory
+  and detects an unknown version to require the newest row, exactly one
+  `warn harness.unknown-version`, both versions in every affected banner and exit 0. Selecting an
+  older row, omitting either stamp, warning twice or failing exits the oracle;
+- removes each binary from PATH separately and then both together; every absent harness requires its
+  declared-version assumption in every affected banner with no warning, while any present harness
+  still uses its detected row. Omitting, cross-assigning or mis-stating either provenance fails;
+- adds a second vendor-name set or map separately in agent-frontmatter generation, Claude hook
+  generation, Codex hook generation, Claude adapter normalization and Codex adapter normalization;
+  each source-owner case emits exactly one `error harness.duplicate-name-owner` in `self_ci` and
+  exits 1. Removing any one consumer from the scanner's pinned population fails before the literal
+  oracle, so a missing consumer cannot look clean;
+- adds an invented neutral token beside `hook_core`, deletes each of the four owned tokens in turn,
+  adds a fifth token, changes each restricted agent's `{read, shell}` assignment, moves each agent
+  across the restricted/unrestricted boundary and replaces the unrestricted sentinel with a local
+  vendor list. An invented or consumer-only token emits exactly one
+  `error harness.unknown-capability`; every exact-population mutation fails the pinned contract.
+
+The same parameterized resolver cases run through `sync` and `sync --check`; the same ownership and
+population cases run through `self_ci`. Wrong finding count, code, severity, target, fallback,
+selected version, provenance, caller exit or non-isolated fixtures fail the suite.
 
 **Out of scope, already decided elsewhere.** Shipping akmon's own tools over MCP is P4.3, gated
 behind A15/C42 by ADR 0010; the agent-name half is closed by ADR 0011.
 
 ## 9. Execution ledger (P1.5 → C58)
 
-**Scope (owner-locked as register fork F10): dispatch-only.** The completion half —
-which event marks a dispatch finished, what a completion line contains, and what key correlates
-it back to its dispatch — is unknown on both vendors today, so it leaves this lock and becomes
-its own probe, [N4](../TASKS.md). Locking a ledger whose second half is guessed is the failure
-class this stage exists to remove; a shape narrowed to what is measurable can be extended by
-evidence, while a shape locked on a guess has to be *unlocked* first.
+**F10 remains unchanged: dispatch-only.** Completion — the event proving a run finished, the
+completion fields and the correlation key — remains unknown on both vendors and belongs to
+[N4](../TASKS.md). **F21/A pins what “dispatch” means now:** one observed Claude `PreToolUse`
+dispatch **request**, after the C46 adapter/inventory normalizes its vendor tool name to the neutral
+`subagent` capability. The record proves that the request crossed the measured hook event; it does
+not prove launch, acceptance, progress or completion. The exact generated Claude matcher and
+`delegation-log.py` wiring are part of the checked population. Non-dispatch PreToolUse calls emit no
+record. Codex remains `delivered: no`; no Codex event is inferred from Claude evidence.
 
-**The drawback, stated because it is real:** a dispatch-only ledger cannot answer "what did I
-send that never came back", which is a large part of what "after compaction, trust the ledger"
-is supposed to buy. Stage 1 therefore ships the smaller promise and says so, rather than writing
-a completion column that no signal fills.
+**Path, writer and readers.** The sole current write path is
+`<AITNA_ROOT>/model-routing.log`, resolved from the consumer's declared dev-layer root. The legacy
+read-only path is `.claude/model-routing.log`. `hooks/delegation-log.py` is the sole production
+writer. The exact default reader population is `tools/model_routing/stats.py` and
+`tools/model_routing/coverage_map.py`; no third reader or second writer silently owns migration or
+schema behavior. Default reads consume the legacy file first and the new file second, preserving
+line order within each file and performing **no deduplication**. Old-only, new-only and both-present
+states are valid. `coverage_map.py --log PATH` reads exactly the supplied path and performs no
+default-path fallback or two-file merge. Writes always target only the new path; there is no copy or
+migration command.
 
-**Decision.** **One ledger, machine-written.** Promote the `delegation-log.py` TSV out of
-`.claude/` to a neutral `_aitna/` path (vendor-neutral, since the ledger is not Claude's), and
-add the clause **"after compaction, trust the ledger and `git log`"** to the orchestration
-guardrail. During migration
-the tool reads both the old and the new path and writes only the new one; the logs are local and
-gitignored, so no migration command is needed.
+**Exact v1 record.** Every new record has exactly seven TSV fields:
+`v1 · timestamp · session_id · subagent · model · zone · description`. `v1` is literal. The six
+data fields are normalized independently as `" ".join(str(value).split())`; an empty result becomes
+the literal sentinel `-`. Timestamp is offset-bearing ISO. Tabs, CR/LF and other whitespace inside
+payload values therefore cannot create a field or record boundary. The new path accepts only v1
+records. The legacy path retains its existing unversioned four- and six-field read compatibility,
+but no writer may emit either legacy form. A malformed or unknown-version line fails the read
+visibly without producing a derived artifact; readers do not rewrite local evidence.
 
-**Fork — a second, model-written ledger** (the plan's line reads as prose appended per completed
-dispatch). Rejected: a ledger the model is asked to maintain degrades exactly when the thing it
-guards against happens — under compaction and context pressure. If it is worth having after
-compaction, it cannot depend on the compacted party to write it.
+`v1` is **format provenance, not authenticity**. A person or model can manually write a
+structurally valid v1 row and it is indistinguishable from hook output. C58 neither signs local rows
+nor claims tamper detection; the residual is accepted because an authenticity mechanism would add
+identity/key ownership absent from this lock. Rejected: a second model-written ledger, silent repair
+of malformed rows, or treating a parseable row as cryptographic proof that a harness emitted it.
 
-**The Codex gap is declared, not papered over.** akmon's delegation-log hook does not fire on
-Codex, and whether Codex dispatch is observable at all is unmeasured (N2: the SessionStart
-channel is parent-only). That becomes a matrix cell (`delivered: no` for the Codex row) rather
-than a claim the ledger is cross-vendor.
+**Serialized bounded append.** The writer resolves the project and new path, encodes one complete
+in-envelope record, opens the log in append mode, takes one exclusive file lock, appends the complete
+newline-terminated record and releases the lock. Parallel dispatch is the normal case: N successful
+in-envelope requests produce exactly N intact parseable records, with no loss, interleaving or
+duplicate row. C58 owns no numeric cap, durability or rollback protocol: F6/C52 preflight the
+per-record and total-ledger inputs before this normal path, and D2-23 owns their concrete literals.
 
-**Seeded violation.** A dispatch with no ledger line fails the hook's test; the guardrail clause
-is covered by the §3 canary once its enforcer exists.
+C58 does **not** rotate, truncate, delete or deduplicate the ledger and makes no exceptional-write
+completeness claim. Total cap+1 and lock/open/write failures belong to C52's exact fail-open
+diagnostic/exit contract; a failed write may leave no record or a malformed trailing record, and the
+ledger is explicitly incomplete after that visible operational failure. Rotation requires its own owner/D2 contract covering
+segment naming, reader order, crash recovery and retention; introducing any rotation owner inside
+C58 fails the source-owner check.
+
+**Gitignore and guardrail join.** Both `.claude/model-routing.log` and the resolved
+`<AITNA_ROOT>/model-routing.log` are local/gitignored throughout migration. The orchestration
+guardrail carries exactly: **“After compaction, trust the dispatch-request ledger at
+`<AITNA_ROOT>/model-routing.log` and `git log`; it records requests, not launches or completions.”**
+One pure C58 contract checker, called by `self_ci`, joins that symbolic path and scope to the writer,
+both default readers, the explicit override, generated hook wiring, schema owner and declared
+gitignore entries. Every isolated contract violation emits exactly one C51 **error** and makes
+`self_ci` exit 1:
+
+- `ledger.wiring-drift` — wrong/missing event, matcher or hook entry;
+- `ledger.owner-drift` — a missing/extra writer or default reader, or a rotation/truncation owner;
+- `ledger.path-drift` — wrong writer/read order, legacy/new path, override fallback or guardrail join;
+- `ledger.schema-drift` — wrong marker, field count/order, normalization, sentinel, timestamp form or
+  legacy/new parser boundary;
+- `ledger.ignore-drift` — either resolved ignore entry is absent or wrong.
+
+**F13 carriers — isolated checker, mutation and exact failure.** The suite independently:
+
+- removes the normalized Claude dispatch matcher, moves it away from `PreToolUse`, wires another
+  script or adds a non-dispatch event; each emits exactly one `error ledger.wiring-drift`. A healthy
+  observed dispatch request writes one record, while each non-dispatch PreToolUse fixture writes none;
+- adds a second writer, removes the sole writer, removes or adds a default reader, or introduces
+  rename/truncate/delete/rotation ownership; each emits exactly one `error ledger.owner-drift`;
+- changes the new or legacy constant, makes the writer target legacy, reverses default read order,
+  adds deduplication, makes either reader omit a path, makes `--log` merge/fallback, deletes the
+  guardrail clause, changes only its path or scope, or changes only the writer path; each emits
+  exactly one `error ledger.path-drift`. Old-only, new-only and both-present fixtures run through
+  stats and coverage; both-present yields old-then-new with duplicate-looking lines retained;
+- deletes, adds or reorders every v1 field separately; changes the literal marker; removes
+  offset-bearing timestamp form; changes `" ".join(str(value).split())` or empty→`-`; injects tab,
+  CR and LF separately into every data field; lets a new-path legacy row pass; or rejects an accepted
+  old-path four-/six-field row. Each emits exactly one `error ledger.schema-drift`. At runtime a
+  malformed or unknown-version row makes either reader emit one safe diagnostic naming only path,
+  line and structural reason, exit 1 and produce no derived artifact; neither file is rewritten;
+- removes the legacy ignore entry, removes the resolved new-path entry, or hard-codes `_aitna` in a
+  relocated-root fixture; each emits exactly one `error ledger.ignore-drift`;
+- runs serialized parallel appends for N in-envelope requests and requires exactly N complete v1
+  rows; lost, interleaved or duplicate rows fail. The separate §2/C52 corpus owns every
+  cap−1/cap/cap+1, lock/open/write failure and exact diagnostic/exit oracle; C58 neither duplicates
+  those seeds nor gains a C52/D2-23 task dependency.
+
+The same pure contract cases run through `self_ci`; deleting its caller wiring, changing any code,
+severity, finding count or exit, combining two mutations, or allowing a fixture to pass through an
+unrelated failure fails the suite. C58 depends on C46 and C57. Its one guardrail line is remeasured by
+C56, but that collision remains an annotation, not a C56 dependency.
 
 ## 10. `akmon status` (P1.4 → C59)
 
-**Decision.** Read-only aggregation of checks that **already exist** — verify findings, `sync
---check` drift, D2 pending count, caps headroom — rendered through the P1.6 envelope. No new
-check, no mutation, no new data source. Sequenced last so it reports a finished vocabulary.
-Per owner choice F2, C59 adds the public JSON rendering by composing C51's already-pinned
-serializer; it does not define a second Finding schema. The public JSON framing and option name
-remain a later `akmon status` fork; text and JSON must contain the same ordered findings and keep
-the same exit/strict semantics.
+**Decision — exact source population and actual-state boundary.** C59 is a read-only aggregation of
+checks that **already exist**. It invokes exactly two source providers against the freshly resolved
+consumer root, in this order: the complete consumer `verify` finding stream, then the complete `sync
+--check` finding stream. The four required logical families are verify findings, sync drift, D2
+pending/configuration state and consumer caps headroom. The latter two are emitted once inside the
+verify stream by their owners, **C53** and **C56** respectively; C59 neither invokes them again nor
+reads their files directly. In particular, F8/3's `configured` / `not configured` coverage state is
+emitted by the existing `d2_ledger` check owned by C53, which also writes the marker that states the
+dependency. (Repaired at A17(g): "no new data source" and F8/3's requirement that C59 report that
+state could not both hold while no task was assigned to emit it — C59 would otherwise have had to
+read `.akmon.toml` itself.) Sequenced last so it reports a finished vocabulary.
+
+C59 preserves provider order and each provider's finding order. It does not sort, deduplicate,
+synthesize a summary finding, cache a status snapshot, create a status file or mutate the consumer
+tree. The source providers read the actual materialized consumer state; a declaration-only or cached
+copy is not a source. This satisfies ADR 0010's actual-state boundary for state the project-local
+checkers can observe. The active role exists only in the harness transcript and a standalone CLI
+process has no truthful source for it: C59 does not introduce a persisted active-role marker or claim
+to report that state. The accepted residual cost is that `akmon status` cannot report the active role
+outside a harness transcript.
+
+Per owner choice F2, C59 adds the public JSON rendering by composing C51's already-pinned canonical
+serializer; C59 enters C51's exhaustive adopter population and defines neither a second Finding
+schema nor a local field mapping. The public JSON framing and option name remain a later `akmon
+status` fork. Text and JSON render the same complete ordered Finding sequence. For both renderings,
+only `ok` exits 0 with or without strict mode; a `warn` exits 0 normally and 1 under strict; an
+`error` exits 1 in both modes.
 
 **Fork — mutable status levels.** Parked by **D1** in ADR 0010; unchanged by this proposal.
 
@@ -778,25 +1530,96 @@ test seam into its source set — a "pure aggregator" that composes real checker
 seam is worth it, because an exemption granted on the first shape that asks for one converts the
 yardstick from a rule into a preference.
 
+One direction of fidelity was missing (A17(g), per F13): every mutation named above removes or
+disturbs a source finding, so an aggregator that copies its sources faithfully and **adds one of
+its own** to both renderings passes all of them while breaking the rule this section opens with.
+The aggregate is therefore asserted **equal** to the composed source set rather than merely
+containing it — a finding present in the output and in no source fails, which is "no data source
+of its own" made mechanical.
+
+**F13 carriers — source population, read-only behavior and exact fidelity.** A C59 contract suite
+injects the two providers at the aggregation seam while integration fixtures run the same aggregator
+against a materialized consumer. The suite independently:
+
+- removes, adds or reorders a provider, or changes either provider's target root; each fails the exact
+  `verify`-then-`sync --check` population/order assertion. Re-emitting C53's D2 finding or C56's caps
+  finding outside verify fails the exactly-once source-set assertion;
+- for each of the four logical source families separately, adds, removes, changes and reorders one
+  source Finding and requires the aggregate to remain exact ordered equality. Dropping a finding,
+  sorting or deduplicating the sequence, adding a synthesized finding, or adding one finding to both
+  renderings but to no source fails that equality assertion;
+- adds one source finding to text only and then JSON only; each fails the rendering-parity assertion.
+  A local JSON field mapping, second serializer or omission of C59 from C51's adopter population fails
+  C51's inherited canonical-owner carrier;
+- runs `ok`, `warn` and `error` source sets independently through strict and non-strict text and JSON
+  modes. Every cell pins the same exit result in both renderings: `ok` is always 0, `warn` is 0/1 and
+  `error` is 1/1;
+- snapshots the complete fixture tree before and after both renderings and instruments write-capable
+  calls; creating a cache/status file, changing an existing file or invoking a writer fails. A source
+  scanner mutation that reads `.akmon.toml`, the D2 ledger, caps inputs or generated hook settings
+  directly from C59 fails the no-own-source assertion;
+- changes the actual attach-record pin and materialized hook wiring while leaving their declarations
+  and any stale snapshot unchanged; the owning provider and aggregate must change. A cached or
+  declaration-only result fails the actual-state integration oracle. The active-role absence fixture
+  invents no role value or transcript provider: the residual is a declared boundary, not a passing
+  mechanical claim.
+
+The exact dependency remains rows 1–9, including C46. These carriers add no new task edge and do not
+bring the parked JSON option spelling or D1 mutable levels into this lock.
+
 ## Acceptance
 
-- every shape above ships with a test that **fails on a seeded violation** and passes on the
-  repaired tree — the yardstick from the Frame, checked per task, not at the end. **No exemption
+- every **independently violable rule** above ships with a test that **fails on a seeded
+  violation** and passes on the repaired tree — the yardstick from the Frame, checked per task,
+  not at the end. **The unit is the rule, not the shape** (F13): rules that cannot fail separately
+  may share one seed, a rule that can be violated on its own carries its own, and a rule whose seed
+  needs evidence that does not exist yet is **split** — the checkable half is checked now and the
+  remainder names the gate it waits on, as §2's `timeout` rule does against D2-23. **No exemption
   class exists** (F11): a shape that adds no check of its own is seeded against its *fidelity*
-  to the sources it composes;
+  to the sources it composes. A semantic or process-owned obligation is outside the mechanical
+  guarantee only when the lock labels it, names the tested subset and states the residual cost;
+  an unlabeled or purportedly checked rule receives no such boundary;
 - `meta/tests` and `ruff` clean; `python3 meta/self_ci.py` exit 0; `bin/verify.py --strict`
   clean against the consumer fixture;
 - three shapes are accepted against the live tree rather than a fixture, each observed red before
   green: P1.3's check fails on today's version/changelog pair before the repair and passes after;
-  C57's fails on the current checkmark matrix and on `README.md:200`'s unqualified enforcement
-  claim; C46's fails on `routing.py`'s `Grep`/`Glob` declaration. None of the three is repaired
+  C57's emits `matrix.missing-file` for the absent `CAPABILITIES.md` and `matrix.bare-claim` for
+  README's legacy glyphs and `README.md:200`'s unqualified enforcement claim before the file and
+  claim-free summary land; C46's fails on `routing.py`'s `Grep`/`Glob` declaration. None is repaired
   ahead of its own task, because a check that never met the defect proves only that it runs;
-- the caps checks report the measured numbers, so a later reduction (C60) can be verified
-  against the same counter;
+- C55's suite pins every shipped path to exactly one ownership mode in both mount populations and,
+  for `field-owned`, its selectors; the forward `boundary.missing-banner` and reverse
+  `boundary.stale-generated` seeds with their `error` severity; the scanner's out-of-scope kinds,
+  position limit and configured-root segment; and the `self_ci` seam that keeps akmon's own
+  declaration inside the same check. Reverse stale discovery is mechanically complete only for
+  `bannered-file`, and that limit is stated rather than papered over;
+- each caps check reports its scope, exact dynamic line and decimal-byte counts, both caps and
+  `caps.always-loaded`, so a later reduction (C60) can be verified against the same counters;
+- C57's matrix suite pins all six axes, every route coordinate, the bidirectional evidence rule,
+  exact value grammars and the shipped-doc vocabulary exclusions; its runtime suite pins both
+  populations, all five modality assignments, the sole query-map owner, exact codes/severities and
+  the non-failing normal exit for `runtime.unused-binary`;
+- C46's suite pins the four-token neutral vocabulary, the six-agent restricted/unrestricted
+  population, all three vendor-name consumer classes, both ownership directions, known-version and
+  newest-known selection, fallback and provenance, exact `harness.*` codes/severities/counts and the
+  error/warn caller exit matrix;
+- C58's suite pins the seven-field versioned v1 record, the sole writer and the exact default-reader
+  population, the neutral `<AITNA_ROOT>` path with the vendor path read-only, the serialized bounded
+  append, the migration and the gitignore/prose/path joins under `self_ci`, plus the safe
+  diagnostic and exit a malformed or unknown-version row produces in either reader. The envelope
+  and write-failure oracle stays with the §2/C52 corpus and C58 does not duplicate it. The record
+  is a dispatch **request** and claims no launch — completion stays with N4;
+- C59's suite pins the exact provider population and order — the fresh `verify` stream, then the
+  fresh `sync --check` stream — with C53's D2 state and C56's caps state present exactly once
+  through verify; exact ordered equality with those sources; no write, no direct re-read and no
+  status cache; rendering parity between text and JSON with one exit result per source set in
+  both; and the transcript-only active-role residual stated rather than synthesized;
 - README, `hooks/README.md`, `CAPABILITIES.md` and CHANGELOG agree with the code that shipped.
 
 ## Not in this proposed lock
 
 Doc gardening (dead links, staleness); matrix as data (A16/C44); MCP transport (P4.3);
-mutable status levels (D1); Codex dispatch observability (N1); the caps *reduction* (C60, which
+mutable status levels (D1); Codex dispatch **completion** observability ([N4](../TASKS.md), the
+probe F10 spawned — this named N1 until A17(g), and N1 is the separate F4/F5/F6 measurement
+campaign parked above); the caps *reduction* (C60, which
 runs after C56 lands — the edge is kept here because C60 is no longer a row in the order table).
