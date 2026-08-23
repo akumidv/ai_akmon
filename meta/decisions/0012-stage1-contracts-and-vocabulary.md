@@ -56,7 +56,7 @@ can fail mechanically before A16 later owns its data schema and generation.
 **Why this is a separate ADR from [0013](0013-hook-survivability-and-crash-posture.md)** (register
 fork **F12**). The decisions below are what other work *cites*: A16's matrix schema, every stage-1
 task, and every later check that emits a finding or claims enforcement. The survivability
-decisions are expected to be amended by N1's measurements. An ADR that must be revised by
+decisions are expected to be amended by the N1/F4, N5/F6 and N6/F5 measurements. An ADR that must be revised by
 measurement should not carry the stable vocabulary along with it, or every timing number formally
 disturbs a decision that has already been built on. The cost is a boundary to maintain and two
 references where one would do.
