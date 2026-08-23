@@ -34,6 +34,23 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **The version-skew notice stops firing on every command (C61).** In a mounted consumer the
+  recorded pin is `git describe --tags` (`v0.3.0`) while the CLI's own version is PEP 440
+  (`0.4.0.dev0`), so a raw string comparison never matched: the notice printed on every `akmon
+  sync` / `akmon verify`, and rendered the pin as `vv0.3.0`. The comparison now normalizes the two
+  recorded spellings — a leading `v`, and a `git describe` distance — before comparing; a tree
+  that is *past* the tag the CLI matches gets its own distinct notice instead of a mismatch claim;
+  and both notices print each version as it was recorded. A PEP 440 pre/post/dev segment is
+  deliberately still a different version rather than another spelling of the same one.
+- **The `TASKS.md` status check reads the status field (C65).** `verify.py` searched the whole
+  entry line for `active|blocked|deferred|done`, which cannot fail on the defect it names: an
+  entry whose *prose* contained "blocked" passed with any status text at all, and one whose prose
+  contained "done" was reported as needing archiving. Both directions are fixed — the check now
+  reads the third `·` field, an indented note under an entry is no longer held to the entry
+  grammar, and both warnings name the offending ids instead of only counting them. A consumer
+  whose `_aitna/TASKS.md` carries free-form statuses will see a new warning naming them; the
+  accepted form is one of the four status words, optionally followed by a qualifier —
+  `blocked (after C51)`.
 - **Release check subject scoping (C9):** `--subject akmon` now runs upstream self-CI and meta tests from the akmon source root instead of running consumer-only `sync`/`verify` against the wrong layout.
 - Package-mode hooks now discover the project from nested working directories through
   `<AITNA_ROOT>/.akmon.toml`, use `<AITNA_ROOT>/.akmon` as their runtime root, and

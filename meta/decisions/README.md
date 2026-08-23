@@ -12,6 +12,12 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
 - **Numbered, not dated** — `NNNN-kebab-title.md`; the commit history is the timeline.
 - Write an ADR only for a **locked, non-trivial** decision (the architect role gate). In-progress
   thinking stays in `design/` until it locks.
+- **One exception, stated rather than improvised:** when the decision's own owner-verify gate
+  verifies the **ADR boundary itself**, the ADR has to exist before the gate can run. Such an ADR
+  carries `Status: Proposed`, names the ledger row that will flip it to `Accepted`, and adds nothing
+  the design doc has not already settled. Nothing else is written ahead of its lock. (ADRs 0012 and
+  0013 at D2-20 — the case that forced this clause to be written down instead of explained per
+  file.)
 
 ## Index
 
@@ -67,3 +73,23 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   prefix and its *Kyklōpes* reading survive. Historical records keep the hyphen. Migration ships with it
   (`obsolete_agent_files` prunes stale generated defs on init/rebind); C46 still owns the general
   mechanism — this removes one instance, not the class.
+- [0012 — Stage 1 contracts and vocabulary](0012-stage1-contracts-and-vocabulary.md) — the stable
+  half of the A12 stage-1 lock: one shared finding envelope (`severity · code · message · target ·
+  fix`, no `level` alias, one canonical serializer, public JSON only at `akmon status`, retired
+  codes recorded so they cannot be reused), stable
+  dotted **policy IDs** joining guardrail prose to `hook_core.*_result` docstrings in both
+  directions with the initial seven-callable table pinned as callable↔ID pairs; explicit generated
+  ownership modes; two-scope always-loaded caps; a top-level six-axis capability matrix; one
+  versioned owner for vendor tool and matcher names; one versioned dispatch-request ledger contract;
+  read-only actual-state status composition through the existing verify→sync providers, with the
+  transcript-owned active role left explicit as unavailable to the separate status process;
+  and the stage's acceptance yardstick — the
+  seeding unit is the **independently violable rule**, split rather than waived, with no exemption
+  class. **Proposed**; owner-verify point D2-20.
+- [0013 — Hook survivability and crash posture](0013-hook-survivability-and-crash-posture.md) — the
+  measurement-amendable half: top-level guard in all nine spawned entry points with **crash-open**
+  posture including deny-class hooks (fail-closed gated on a live probe + test + tested recovery),
+  **probe-gated** Codex timeout support where parse acceptance is not support, timeout budgets
+  derived by hook class from measured worst cases, and a **bounded input envelope** whose oversize
+  path degrades fail-open with exactly one safe diagnostic. Caps are compatibility boundaries, not
+  tuning constants. **Proposed**; owner-verify point D2-20, literals at D2-23.
