@@ -40,6 +40,7 @@ packages = ["src/akmon"]
 [tool.hatch.build.targets.wheel.force-include]
 "ARCHETYPES.md" = "akmon/_tree/ARCHETYPES.md"
 "BOOTSTRAP.md" = "akmon/_tree/BOOTSTRAP.md"
+"CAPABILITIES.md" = "akmon/_tree/CAPABILITIES.md"
 "CHANGELOG.md" = "akmon/_tree/CHANGELOG.md"
 "LICENSE" = "akmon/_tree/LICENSE"
 "MODEL.md" = "akmon/_tree/MODEL.md"

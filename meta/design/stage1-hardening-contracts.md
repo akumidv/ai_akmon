@@ -103,9 +103,10 @@ because a redundant test is cheaper than an unnoticed rule.
 obligation is not allowed to masquerade as a passing check: it must be labelled `review-owned` or
 `process-owned`, state the mechanical subset that is tested, and state the residual cost. This is
 accounting, not an exemption for a mechanical rule — every rule the lock calls checked still needs
-its own seed. In §1 the imperative mood is review-owned, while presence and sentence shape are
-mechanical; the manual append to the F14 retired-code record is process-owned, while live reuse of
-an already recorded code is mechanical.
+its own seed. In §1 imperative mood and residual natural-language sentence boundaries are
+review-owned, while presence and the bounded sentence-shape heuristic are mechanical; the manual
+append to the F14 retired-code record is process-owned, while live reuse of an already recorded
+code is mechanical.
 
 **F14–F16 arrived the same way F13 did**, from the architect pass over D2-20's clause (d), and
 each clears the counting rule above rather than being a repair: two defensible answers, a change
@@ -379,7 +380,7 @@ it is stable and it governs how every contract in both ADRs is written.
 | 7 | OS contract + matrix vocabulary | P0.2 | C57 | C51 |
 | 8 | tool names: neutral capability + vendor map | — | C46 | C51, C57; emits a provenance banner line C55 checks |
 | 9 | execution ledger | P1.5 | C58 | C46, C57 (normalized dispatch event + matrix cell for the Codex gap); writes into the always-loaded surface C56 caps |
-| 10 | `akmon status` | P1.4 | C59 | rows 1–9, **C46 included** |
+| 10 | `akmon status` | P1.4 | C59 | rows 1–9, **C46 included**, plus the D2-27 C70 extension |
 
 Every implementation edge below also depends on owner verification of D2-20; the table shows
 only dependencies internal to the proposed package. C52 alone has the additional D2-23 evidence
@@ -405,6 +406,12 @@ Row 10 spells its range out because "all of the above" was read two ways: C59 ag
 finding stream `sync --check` surfaces, and C46 emits findings into it (the degrade warn, the
 unknown-version warn), so **C46 is inside C59's range** and TASKS' `C51–C58` was one shape short.
 
+**D2-27 post-lock extension.** C70 is not an eleventh stage-1 shape: it repairs the host-delivery
+blind spot measured after this lock. Its task edges are C51 and C57; after those land it can proceed
+in parallel with the C46/C58 branch. C59 additionally waits for C70, receives the C70 finding inside
+the complete `verify` provider, and never gains a third provider or a host query of its own. The
+resulting acyclic path is `C51 → C57 → C70 → C59`.
+
 P1.6 leads because eight of the nine remaining shapes emit findings. P1.1 shares no findings
 dependency and can be engineered in parallel with C51 only after D2-23 is verified. P1.4 is last
 on purpose: it aggregates a finished vocabulary
@@ -414,15 +421,19 @@ instead of inventing one.
 
 **Decision.** Extend the existing `bin/verify.py::Finding` into one shared stdlib-only module
 `bin/findings.py`, with fields `severity · code · message · target · fix`. `severity` carries the
-`ok / warn / error` vocabulary and preserves the current exit-code contract (errors exit 1;
-warnings exit 1 only under `--strict`). `code` is a stable dotted slug naming the check (`boundary.missing-banner`,
+`ok / warn / error` vocabulary and preserves the shared exit-code contract (errors exit 1;
+warnings exit 1 only under `--strict`) in the three strict-capable adopters; `sync --check` carries
+the explicit 0/1/2 exception recorded below. `code` is a stable dotted slug naming the check (`boundary.missing-banner`,
 `caps.always-loaded`, `invariant.orphan-hook`) — unique, never reused after a check is removed.
 A dotted slug matches `[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+` — at least two
 lowercase ASCII segments, dots between segments and single hyphens only inside them. Whitespace,
 uppercase, empty segments and a slug with no dot are invalid. `target` is the file or artifact the
-finding is about; whether it names the correct artifact is review-owned. `fix` is **required**, non-empty, one sentence and one line;
-its imperative mood is review-owned. A finding a reader cannot act on is a defect of the check,
-not of the tree. Adopted by `verify.py`, `meta/bin/validate.py`, `sync --check`, and `meta/self_ci.py` —
+finding is about; whether it names the correct artifact is review-owned. Every rendered field is
+one logical line. `fix` is **required**, non-empty and one sentence. The mechanical heuristic
+rejects a terminator followed by whitespace and the compact uppercase form; residual
+natural-language sentence boundaries and imperative mood are review-owned so ordinary paths stay
+valid. A finding a reader cannot act on is a defect of the check, not of the tree. Adopted by
+`verify.py`, `meta/bin/validate.py`, `sync --check`, and `meta/self_ci.py` —
 the last one imports the module directly for its own findings rather than parsing subprocess
 output.
 
@@ -445,14 +456,15 @@ absence of `level` testable. C51 does not add `--json` to `verify.py`, `sync --c
 `meta/bin/validate.py`, or `self_ci`; C59 introduces the public JSON rendering when `akmon status`
 becomes its first process-boundary consumer. Text rendering **changes**, and C51 owns the change:
 `verify.py` prints `[{level}] {message}` today (`bin/verify.py:690`), while the canonical form
-this envelope introduces is `SEVERITY code target: message → fix`, one line per finding. It is
+this envelope introduces is `SEVERITY code target: message → fix`, one canonical stdout line per finding. It is
 recorded as a change rather than a continuation because the audit at A17(g) found the word
 *remains* describing a form the tree does not print — every adopter's text output moves in the
 same commit as the `level`→`severity` rename, and the tests pinning the old form move with it.
 There is exactly one canonical
 serializer (method or shared pure function, not both); here `pure` means a deterministic mapping
-of the Finding's fields that does not mutate it, with no broader functional-purity claim. Adopters and C59 must call it rather than
-repeat the field mapping. Its output uses JSON-safe stdlib values, preserves Unicode, does not
+of the Finding's fields that does not mutate it, with no broader functional-purity claim. Any
+adopter or later consumer that serializes a Finding must call it rather than repeat the field
+mapping. The C51 adopters render text only; C59 is its first serialization consumer. Its output uses JSON-safe stdlib values, preserves Unicode, does not
 mutate the Finding, and passes `json.dumps` directly.
 
 **Out of scope.** Hooks do not adopt the envelope: they speak the harness's JSON contract on
@@ -478,26 +490,61 @@ removed code is explicitly **process-owned**: F14's accepted cost is that the ch
 an omitted append; it guarantees non-reuse for codes present in the record and does not pretend to
 mechanize the deletion review.
 **`fix` shape:** the seed above proves only that `fix` exists, while the rule is *one sentence in
-the imperative*. Split per F13 — non-empty, single sentence, no line break is checked now, and
-**the imperative mood is review-owned and stated here as not machine-checked**, the same fence F8's
-table puts around its non-checkable clauses, so that a later audit reads it as a property of the
-claim rather than a gap. **Exit and strict semantics:** F1 rewrites every adopter's `Finding`
+the imperative*. Split per F13 — non-empty and no line break are checked; the bounded sentence
+heuristic rejects a terminator followed by whitespace and the compact uppercase form. **Residual
+natural-language sentence boundaries and imperative mood are review-owned and stated here as not
+machine-checked**, the same fence F8's table puts around its non-checkable clauses, so that a later
+audit reads them as properties of the claim rather than gaps. **Exit and strict semantics:** F1
+rewrites every adopter's `Finding`
 construction, and "errors exit 1; warnings exit 1 only under `--strict`" is preserved by nothing
-but intent. Each adopter carries a seed over both severities and both strict states: a warn that
-exits 1 without `--strict` fails, and so does an error that exits 0.
+but intent. Each of the three strict-capable adopters carries a seed over both severities and both
+strict states: a warn that exits 1 without `--strict` fails, and so does an error that exits 0.
+`sync` carries its separate exact 0/1/2 seed below.
+
+**Three C51 build-time owner decisions, recorded because each fixes a clause this section
+left open.** They are decisions inside the approved lock, not a re-lock of it.
+
+1. **`fix` is required at every severity, `ok` included.** The section already declared `fix`
+   required and `target` optionally empty, and the asymmetry is deliberate; the open question was
+   only whether `ok` inherits it, because an `ok` finding has nothing to repair. It does: on an
+   `ok` finding the sentence states **the invariant to keep** (`OK gitignore.env-secrets
+   .gitignore: … → Keep the '*.env' and '!*.env.example' patterns in .gitignore.`), which is what
+   a reader who wants to keep it green actually needs. Rejected: making `fix` optional for `ok`,
+   which would put a severity-dependent branch into the one field the envelope exists to
+   guarantee; and dropping `ok` from the stream, which contradicts the closed vocabulary here and
+   the complete-stream requirement F22 puts on C59.
+2. **`sync` adopts the envelope in `--check` only, and keeps its own exit vocabulary.** `--check`
+   is the non-writing mode F22 names as C59's second stream, and it is the only `sync` output
+   that is a *diagnostic*; `--dry-run` and a real write keep their action log, because "updated
+   this file" records what happened rather than what is wrong. `sync` also keeps **exit 2** for a
+   planning error against **exit 1** for drift, and gains no `--strict`: 2 separates "could not
+   even compute the planned files" from "the plan and the tree disagree", and nothing in that
+   stream warns. This is the one adopter whose exit codes are *not* `exit_code`'s, so it is
+   carried by its own test rather than by the shared matrix. Rejected: collapsing 2 into 1 for
+   contract symmetry, which would spend a live distinction to buy a uniformity no consumer asked
+   for.
+3. **Every rendered field is one logical line.** The section fixes canonical stdout at one line per
+   finding; nothing enforced it, so a line separator in `code`, `message`, `target` or `fix` could
+   crash an adopter or forge another apparent finding. Checked in the envelope across every
+   `str.splitlines()` separator. Subprocess detail may remain multi-line only on stderr; content
+   entering a Finding is reduced to one safe line.
 
 **The remaining §1 triples are explicit and population-wide.** The C51 contract suite runs over
 all four adopters. An out-of-vocabulary severity such as `fatal`, an invalid dotted slug, a stale
 `.level` read or local `Finding`, or an adopter that retains the old renderer fails. The `fix`
-shape fails on empty, multi-line or multi-sentence text; imperative wording remains review-owned.
+shape fails on empty, multi-line, terminator-plus-whitespace or compact-uppercase second-sentence
+text; residual natural-language boundaries and imperative wording remain review-owned.
 The serializer test compares the Finding before and after the call, calls `json.dumps` directly on
 the result, calls it twice to require the same mapping, and fails on mutation, nondeterminism or a
 non-JSON-safe value. An AST import check on `findings.py` fails on a dependency outside the Python
 standard library. The shared-owner check fails if a
 second canonical serializer exists, not only when an adopter copies the mapping. Adding `--json`
-to any C51 adopter before C59 fails its CLI contract. Exact rendering and the full
-severity × strict-state exit matrix are parameterized over every adopter, so a representative
-implementation cannot hide a stale one.
+to any C51 adopter before C59 fails its CLI contract. Exact rendering is exercised over every
+adopter. The full severity × strict-state exit matrix is parameterized over the three
+strict-capable adopters, and `sync --check` carries its separate exact 0/1/2 test, so a
+representative implementation cannot hide a stale one. The self-CI fixture carries `findings.py`,
+executes its mounted launchers, gives successful legs invariant-specific `ok.fix` text, and
+suppresses successful child output so `--quiet` remains quiet.
 
 ## 2. Hook survivability (P1.1 → C52)
 
@@ -1172,11 +1219,51 @@ declared version. **Windows is unsupported**, not merely untested.
 **F16 — one declaration, two population-specific joins.** Every runtime entry declares its
 population and modality. *Generated wiring* contains the implicit POSIX-shell carrier plus literal
 `python3` and route-scoped `git`; C57 derives that population from the emitted command entries.
-*Akmon's own tooling* contains optional `claude` and `codex`; one declarative query map is read by
-the checker and is also the sole source from which `sync` constructs those subprocess calls. The
+*Akmon's own tooling* contains optional `claude` and `codex`; one declarative vendor-command map is
+read by the checker and is also the sole source from which `sync` constructs harness-version
+subprocess calls and downstream adopters obtain optional-harness executable operations. C70 later
+uses that owner for Codex app-server startup while owning the `hooks/list` protocol and evaluation;
+C57 does not wait for its downstream adopter. The
 modalities are `required`, `optional`, and `required-on:<route>`; the exact assignments are POSIX
 shell=`required`, `python3`=`required`, `git`=`required-on:codex`, and `claude`/`codex`=`optional`.
 The map is the single owner, never a manually synchronized copy beside the calls.
+
+**C57 build-time owner decision — the second-opinion command joins the map (owner choice, the
+middle path).** *(Ledger: **D2-30**, pending owner verification — this amends the
+ownership contract D2-20 verified.)* F16 calls the vendor-command map "the sole executable owner and constructor" for
+own-tool operations, and implementation found the one live counter-example: no Python source
+spelled `claude` or `codex` at all, but `tools/model_routing/registry.json` did, in
+`second_opinion.cli` / `invoke`, and `routing.second_opinion_command` built an argv from them.
+The owner's decision splits ownership by *kind* rather than moving everything: the map owns the
+**executable name and every operation**, while the registry keeps second-opinion **policy**
+(`model_flag`, `report_dir`) and refers to the map by harness name — `cli` becomes
+`harness: "claude"`, `invoke` becomes `operation: "review"`. The ownership line is exact: the map
+owns the **executable and the operation prefix**, and `routing.second_opinion_command` appends the
+registry's `model_flag` and the prompt as a **policy tail**. That is not a second constructor — a
+model pin and a prompt are policy the registry owns, not facts about how a vendor's CLI is
+spelled — and stating it as "one place builds the whole command" would be false the moment a
+model flag is inserted. What the map forbids is a second answer to what a harness is called or
+how an operation is spelled. Rejected: folding the whole second-opinion command into the map, which pulls policy out of
+the registry and reopens an ADR 0005 / C15–C16 contour whose D2-1 is still pending; and fencing
+the rule to version/protocol queries only, which would leave `runtime.duplicate-query-owner`
+with no live target — the shape §1 calls a defect of the check. Accepted cost: the registry
+schema changes, so `registry_hash` moves and every consumer's local model-routing config goes
+stale until re-init — the SessionStart hook already reports that, and the CHANGELOG carries it as
+a migration line.
+
+**The duplicate-owner scan is scoped to the operative Python surface** (`bin/`, `hooks/`,
+`tools/`, `src/akmon/`) and looks for a *bare string constant* equal to a harness binary. Tests
+are excluded — a fixture naming a harness describes the map rather than bypassing it — and data
+files are excluded because the registry now refers to the map **by name**, which is the point of
+the decision above. Measured at implementation: after the change, no source outside
+`bin/runtime.py` spells either binary.
+
+**Modality is derived, not restated.** A binary present in every vendor's generated wiring is
+`required`; one present in a single vendor's wiring is `required-on:<that vendor>`. The
+declaration is checked against that derivation, so wiring that stops resolving the root through
+`$(git rev-parse …)` makes the `git` declaration fail rather than quietly outliving the fact it
+described. Measured on the tree at implementation: `claude → {POSIX shell, python3}`,
+`codex → {POSIX shell, python3, git}`, reproducing §7's declaration exactly.
 
 The pure runtime checker reports through C51 with this exact mapping:
 
@@ -1187,6 +1274,7 @@ The pure runtime checker reports through C51 with this exact mapping:
 | runtime is assigned to the wrong population | `error runtime.wrong-population` | non-zero |
 | runtime has the wrong modality or route condition | `error runtime.wrong-modality` | non-zero |
 | a second query owner or call-site literal bypasses the query map | `error runtime.duplicate-query-owner` | non-zero |
+| a generated command uses a construct the parser will not claim to have read | `error runtime.unparsed-command` | non-zero |
 
 The error/warn asymmetry is F9's: an under-declaration breaks a consumer path, while an unused
 entry is stale prose. F16's accepted cost is the indirection and weaker extraction evidence of the
@@ -1227,9 +1315,206 @@ akmon's own in-process checkers remain valid (`pipelines/tasks.md` may say a thr
 by `verify.py`), and guardrail runtime prose remains C53's F7/F8 surface rather than a second C57
 scan.
 
+**C57 build-time owner decision — the crash-posture branch of `matrix.unqualified-effect` is a
+warn.** *(Ledger: **D2-29**, pending owner verification — ADR 0012 still states the
+unsplit rule and carries the matching amendment note. The split is **permanent policy**: after
+C52 measures these two claims, a future `ask`/`deny` claim with no crash measurement still passes
+a non-strict run, and approving D2-29 is approving that.)* The rule above requires an `ask`/`deny` effect to carry a measured crash posture, and
+akmon's only two enforcement claims (the Claude commit guard, `deny`; the Claude delegation
+nudge, `ask`) have no such measurement anywhere in the tree: F3 *decided* crash-open, and N1/F4
+measured it live for **Codex only**. Converting therefore left the repaired tree red on exactly
+two rows, against this section's claim that it then passes. The owner's decision splits the code
+by coordinate — and **weakens it permanently for the crash-posture branch**: an `unmeasured`
+**route coordinate** under `ask`/`deny` stays `error`, while an `unmeasured` **crash posture**
+under `ask`/`deny` is `warn`. Non-strict `self_ci` returns zero and `--strict` still fails, so
+the debt fails somewhere rather than nowhere — but it is not a debt C52 repays: the rule is
+weaker for *every* future claim, and C52 landing the two measurements does not restore `error`.
+The two rows that exist today are owned
+by **C52**, whose D2-23 gate exists to produce exactly these numbers; §Order already states that
+missing runtime numbers must not hold C57 behind an unrelated measurement campaign, and an
+`error` here would have done precisely that. Rejected: citing F3 as the report behind
+`fail-open`, because F3 is a decision plus vendor documentation rather than a measurement of
+akmon's own hooks — the documented/delivered conflation this matrix exists to break, and a
+pre-payment of C52's gate; measuring inside C57, which absorbs the campaign the lock detached it
+from; and lowering the two effects, which is false in the other direction on the normal path.
+When C52 lands the measurement, the two rows record it and the warn disappears with no rule
+change.
+
+**Post-implementation review corrections (N-review of C57).** Three defects in the delivered
+checker, fixed inside C57 rather than deferred, because each one made a rule unenforceable:
+
+* **A checked region had to prove it still holds claims.** Every six-axis rule runs over parsed
+  rows, so any shape yielding zero rows passed silently: the whole matrix could be deleted down
+  to a marker pair and `self_ci` stayed green. An empty region, a region holding only prose, and
+  a second marker pair are now `matrix.missing-file`; a line inside the region that fits no claim
+  form — prose, or a legacy glyph table smuggled into the one place the bare-claim scan
+  deliberately does not read — is `matrix.invalid-value`. Both reuse existing codes rather than
+  adding a seventh: the closed list is ADR text D2-20 verified, and a structural absence is what
+  `matrix.missing-file` already names. A contract fixture pins the shipped claim population
+  (19 claims: 9 Claude Code, 9 Codex CLI, 1 Gemini CLI), so deleting one claim is an edit to that
+  list rather than an invisible loss of coverage.
+* **The runtime join read one binary per command string.** `_binaries_in_command` took the head
+  of the whole string, so `python3 hook.py && jq . | sed …` declared only `python3` and left
+  `jq` and `sed` undeclared *and* unseen — a closed join that was not closed. The string is now
+  split into executable segments on `&&`, `||`, `;`, `|`, `&` and newlines, each segment's head
+  read past `NAME=value` prefixes and shell keywords, with POSIX shell builtins excluded because
+  declaring the shell already covers them. akmon's real wiring has no compound command, so the
+  derivation is unchanged; the fix also stops `cd` being reported as a host binary.
+* **`delivered: yes` stood on a dry-run.** Both second-opinion rows claimed delivery on the
+  evidence of `meta/tests/test_second_opinion_cli.py`, whose own docstring states that no test
+  ever spawns the real `claude`/`codex`. A dry-run establishes what akmon emits, never what the
+  harness accepts, and asserting it across two vendors is exactly the parity claim `AGENTS.md`
+  requires a live probe for. Both rows now read `delivered: unmeasured` and cite nothing, which
+  the evidence relation requires of an unmeasured row. The per-harness probe is **N8** and the
+  regression carriers plus the matrix update are **C72**: a probe produces evidence, and landing
+  a carrier is engineer work, so one task holding both would cross the role boundary the typed-id
+  contract draws.
+
+The declaration's own scope gap is a scope decision rather than a checker fix, and is **A20**
+with its own note: `git` alone appears in four different modalities (route-scoped in generated
+wiring, hard for two of the four mount modes, absent for the other two, and *fail-safe* in the
+branch lookup, where absence makes the commit guard stricter rather than weaker), while
+`uv`/`pytest` are contributor tooling that is not a host requirement in any population.
+
+**Second review pass (same N-review, after the first round of corrections).** Four further
+defects, each one a rule that could be satisfied without being true:
+
+* **The segment splitter was a regex over the raw string.** It divided on operators *inside
+  quoted arguments* (`--arg "a | b"` yielded a binary named `b`), lost the executable after
+  `command` and `exec`, and read `(python3` out of a grouped list. The extractor now tokenizes
+  with `shlex` under `punctuation_chars`, which separates operators while leaving the same
+  characters inside a quoted token alone, then walks segments past `NAME=value` prefixes, shell
+  keywords, wrappers and redirection targets. Constructs it does not read are **refused** as
+  `error runtime.unparsed-command` rather than returning a confident under-count; a refusal also
+  excludes the command from the derived population, since a refusal that silently shrank the
+  population could flip a `required` modality to route-scoped and report a *second* wrong finding.
+
+  **The supported grammar is narrow on purpose, and the refusal set is the honest half of it.**
+  A first attempt skipped a wrapper's *name* and then read its first option as the binary —
+  `env -i …` reported `-i`, `timeout 5 …` reported `5`, `xargs -n1 jq` reported `-n1`. Encoding
+  five wrapper option grammars only relocates that defect to the sixth, so a wrapper is read only
+  when the very next token is a plain word; a wrapper carrying options, or one like `timeout`
+  whose grammar puts a mandatory positional before the command, is refused. Refused with it:
+  backticks, an unbalanced quote, arithmetic expansion (which `$(...)` matching would otherwise
+  read as a command substitution), and the `for`/`case`/`select` constructs, whose word lists are
+  not command lists — `for f in *.py` reported a binary named `f`. `if`/`while`/`until` are
+  *supported*, because each is genuinely followed by a command. An **external** wrapper is also
+  counted as a requirement in its own right: `nice python3 hook.py` needs both binaries on the
+  host, while `command`/`exec` are shell-provided and need only the shell.
+
+  A second review pass found the refusal set still short by a whole class: constructs that open a
+  grammar of their own. `foo() { … ; }` declared `foo` — a *definition* read as an invocation;
+  `(( x = 1 ))` declared `x`; `[[ -f a && -f b ]]` declared `[[` and then, because the `&&`
+  *inside* the brackets restarted the segment walk, `-f`. Each is now refused by token, not only
+  at a head position. `time` joins them for a different reason: it is a shell reserved word in
+  some shells and `/usr/bin/time` in others, so no reading of the command string can say whether
+  a host binary is required — it was previously counted as an external wrapper, which asserted
+  the harder of the two answers. Refusing a token does not narrow the supported surface: the same
+  characters inside a quoted argument, and ordinary `( … )` grouping, stay readable, and a
+  carrier pins that.
+
+  A third pass found the last regex still in the parser doing the same damage one level down.
+  Command substitutions were located with `\$\(([^)]*)\)` over the **raw** string, which knows
+  neither quoting nor nesting: `printf %s '$(jq .)'` declared `jq` out of a literal argument, and
+  `[^)]*` stopped at the first `)`, so in `$(a $(b))` the outer command went unread. The same
+  raw-text blindness applied to the backtick and `$((` refusals — inside single quotes both are
+  data. Substitutions are now lifted out by a **quote-aware scanner** that counts parentheses and
+  tracks quote state, and the two refusals moved inside it, so what is refused is a construct and
+  never a character in a string. Each substitution body is scanned again, so nesting is read to
+  the bottom, and each is replaced in the outer string by a marker word rather than by a blank —
+  blanking silently promoted the *next* word to head, so `$(which python3) a.py` declared `a.py`.
+  A head that is an expansion is refused outright: `$RUNNER hook.py` used to declare a binary
+  named `$RUNNER`, which is not a name the host can be asked for.
+
+  The same pass corrected the opposite error. The keyword refusals were applied to **every**
+  token, so `python3 hook.py --mode case` was unreadable — a construct is a construct only in
+  head position, and an argument opens no grammar. Head-only is also what makes `--sort time`
+  and `--pattern "[["` ordinary again. The one refusal that stays position-independent is the
+  function definition, because `()` is meaningful precisely *after* the word it defines — and it
+  applies to **any** word, since `echo() { jq .; }` and `command() { jq .; }` are valid shell.
+  The first version only remembered a word it had already accepted as a binary, so a function
+  named after a builtin or a wrapper slipped through and its body was read as a command list.
+
+  **A fourth pass, run against the rewritten parser rather than against the old defects, found
+  four more.** Three were confident wrong answers of the same shape as the first: quote removal
+  makes `"&&"` and the operator `&&` the same string, so `python3 a.py "&&" evil.py` declared
+  `evil.py` — the earlier carrier used a *multi-word* quoted argument, which never produces a
+  token equal to an operator and so could not see it; an **empty** token satisfied "made only of
+  separator characters" vacuously, so `python3 "" evil.py` declared `evil.py` too; and a
+  here-document body was consumed as arguments, so `sh <<EOF … EOF` reported `sh` and nothing
+  the script inside it runs. The fourth was dead code: `_SEPARATORS` listed `\n`, but `shlex`
+  treats a newline as whitespace, so it never became a token and the second line of a two-line
+  command was swallowed as arguments of the first. An unquoted newline is rewritten to `;` by the same
+  scanner that lifts substitutions, and `<<` joins the refusal set while `<<<` stays readable, a
+  here-string being one word rather than a body.
+
+  The quoted-operator fix was first attempted with **two `shlex` passes** — one preserving
+  quotes for structure, one removing them for names — required to agree token for token. That
+  reconciliation was itself wrong: the passes disagree on any word that *mixes* the two, which is
+  ordinary shell. `"$DIR"/hook.py` is one word to a shell and two to the raw pass, so a
+  legitimate command was refused and a backslash was blamed for it — found by seeding the real
+  tree, not by reading the code. Tokenization is now done here, over text the scanner has already
+  cleared of substitutions, comments, backticks and unbalanced quotes; what remains is words,
+  quotes, escapes and operator runs. A quoted operator can no longer *become* one, because
+  quoting is resolved in the same pass that decides structure, and an escape now reads as an
+  escape instead of as an unreadable command.
+
+  A fifth pass, against that rewrite, found two more and one dead entry. `shlex` opens a comment
+  at a `#` **anywhere**, while a shell opens one only at a word start, so `python3 a.py#x && jq .`
+  lost everything from the `#` and never reported `jq`; comment handling is now switched off in
+  the tokenizer and done by the scanner, which knows what a word start is and what is inside
+  quotes. An **empty** head — `"" evil.py` — was declared as a runtime whose name is the empty
+  string, and is now refused. The dead entry was `<<-` in the here-document set: `punctuation_chars`
+  splits `<<-EOF` into `<<` and `-EOF`, so the second spelling could never appear and `<<` alone
+  covers both. Each of the five passes found defects of the same two shapes — a confident wrong
+  answer, or a silent under-count — which is the argument for the refusal set rather than for
+  more grammar.
+* **The retired registry keys were never actually refused.** The migration prose claimed a stale
+  config fails, and the test only covered a wholly-old standalone registry. The real upgrade path
+  is a project overlay deep-merged *over* the shipped registry: `harness`/`operation` survive, the
+  retired `cli`/`invoke` ride along beside them, and every presence check passes while the config
+  states one command twice. `second_opinion_spec` now raises on the retired keys in **both** the
+  required and the optional lookup — a stale configuration is not an absent capability, and
+  degrading it to "no second opinion available" would hide the migration behind a quietly weaker
+  run — and `verify` reports the pair against the overlay file, because the merged result no
+  longer shows which file is stale.
+* **The axis list was closed in one direction only.** A repeated axis overwrote the earlier
+  value, so a claim could carry two contradictory readings and report whichever came last; an
+  unknown key was ignored, so a typo cost only the missing-axis finding and left a seventh answer
+  standing in the file. Both are now `matrix.invalid-value`.
+* **A malformed `Finding` was reported as a JSON parse failure.** The new overlay check ran inside
+  the `try` that guards `_read_json`, so the `ValueError` from `Finding.__post_init__` — raised by
+  a two-sentence `fix` — surfaced as `error routing.overlay-parse` against a file that parsed
+  perfectly. The check moved to the `else` branch: a defect in a check must not be reported as a
+  defect in the file it reads.
+
+**C57 encoding decisions (in-task, as §7 delegates).** `documented` is `yes`/`no`; `delivered` is
+`yes`/`no`/`unmeasured`; the route reads `vendor=… ; version=… ; event=… ; matcher=…` with `n/a`
+where a capability is not hook-routed; `evidence` is a citation or empty. A row counts as
+**measured** — and so must cite — when it settles `delivered`, asserts a crash posture, or
+asserts a non-`none` effect; only a row that settles nothing cites nothing. Binding the citation
+to a settled `delivered` is deliberate: "the wiring reaches the harness", or measurably does not,
+is the claim a reader acts on, and letting it stand uncited is how a vendor grid drifts back into
+decoration. One row is one **claim** — one capability on one harness — because `vendor` is a
+route coordinate; a harness with no shipped or measured claim has no row, and absence means
+akmon asserts nothing rather than that the capability is missing.
+
+**Bare-claim adjacency, as implemented.** Adjacency is per **block** (a contiguous run of
+non-blank lines), not per line: a blockquote that says "enforced" and names `PreToolUse` three
+lines down is one claim, and a line-scoped rule cannot see it. Vendors match as **proper nouns**,
+case-sensitively, so a lowercase `claude` inside `.claude/skills/` stays a filesystem path rather
+than a claim. The scan covers shipped documentation and skips `meta/` and `guardrails/`. The
+lock's named allowance is implemented as *attribution*, not mere co-occurrence: the claim must
+name an akmon in-process checker within the same clause, or any page that happens to mention
+`sync.py` would buy itself an exemption.
+
 **Red before green.** The current tree has no `CAPABILITIES.md`, so `self_ci` first emits
-`error matrix.missing-file`. Its legacy README capability glyphs (`README.md:82`–`:92`) and the
-unqualified delegation claim at `README.md:200` independently emit `error matrix.bare-claim`.
+`error matrix.missing-file`. Its legacy README capability glyphs and the unqualified delegation
+claim independently emit `error matrix.bare-claim` — four blocks in all, measured at
+implementation: the glyph legend, the capability table itself, the runtime-hooks bullet claiming
+the commit guard *enforces* beside `PreToolUse`, and the delegation blockquote. (The line numbers
+this paragraph carried before implementation — `README.md:82`–`:92` and `:200` — had drifted; the
+count, not a line, is what this evidence rests on.)
 Those legacy rows are forbidden second-authority prose, not candidate matrix rows, and therefore
 produce no `matrix.missing-axis` finding.
 C57 observes those failures before creating `CAPABILITIES.md` and replacing the legacy README
@@ -1257,9 +1542,11 @@ Fixtures isolate every rule:
   `error matrix.invalid-value`. C57's chosen encodings for documented, delivered, route and evidence
   have no invalid-value oracle in this lock;
 - an otherwise complete `ask` or `deny` cell keeps every axis and route coordinate present but sets,
-  one at a time, each route coordinate or crash posture explicitly to `unmeasured`; every case emits
-  exactly one `error matrix.unqualified-effect`. Deletion is never this code: it is
-  `matrix.missing-axis` as above;
+  one at a time, each **route coordinate** explicitly to `unmeasured`; every case emits exactly one
+  `error matrix.unqualified-effect`. Setting the **crash posture** to `unmeasured` emits exactly one
+  **`warn`** of the same code and keeps the non-strict exit at zero, per D2-29 — pending owner
+  verification, and the one place in this lock where a carrier states the split rather than the
+  original rule. Deletion is never this code: it is `matrix.missing-axis` as above;
 - a measured assertion with empty evidence and an `unmeasured` assertion with non-empty evidence
   are separate mutations, each emitting exactly one `error matrix.uncited-claim`;
 - parameterized fixtures place each of `enforced`, `enforces`, `✅` and `⚠️` beside each vendor and
@@ -1288,6 +1575,8 @@ runtime checker. Fixtures independently:
   emits exactly one `error runtime.wrong-modality`;
 - add a second query map and, separately, restore a literal `claude` or `codex` subprocess call
   outside the sole map; each emits exactly one `error runtime.duplicate-query-owner`.
+- in the downstream C70 corpus, construct the Codex app-server argv outside this map; it emits the
+  same single `error runtime.duplicate-query-owner` without making C57 depend on C70;
 - remove the implicit POSIX-shell carrier from the derived generated-wiring population while its
   declaration remains; it emits exactly one `warn runtime.unused-binary` and keeps the normal exit
   zero.
@@ -1491,10 +1780,11 @@ C56, but that collision remains an annotation, not a C56 dependency.
 **Decision — exact source population and actual-state boundary.** C59 is a read-only aggregation of
 checks that **already exist**. It invokes exactly two source providers against the freshly resolved
 consumer root, in this order: the complete consumer `verify` finding stream, then the complete `sync
---check` finding stream. The four required logical families are verify findings, sync drift, D2
-pending/configuration state and consumer caps headroom. The latter two are emitted once inside the
-verify stream by their owners, **C53** and **C56** respectively; C59 neither invokes them again nor
-reads their files directly. In particular, F8/3's `configured` / `not configured` coverage state is
+--check` finding stream. The five required logical families are verify findings, sync drift, D2
+pending/configuration state, consumer caps headroom and live Codex host-trust state. The latter
+three are emitted once inside the verify stream by their owners, **C53**, **C56** and the D2-27
+extension **C70** respectively; C59 neither invokes them again nor reads their files or host state
+directly. In particular, F8/3's `configured` / `not configured` coverage state is
 emitted by the existing `d2_ledger` check owned by C53, which also writes the marker that states the
 dependency. (Repaired at A17(g): "no new data source" and F8/3's requirement that C59 report that
 state could not both hold while no task was assigned to emit it — C59 would otherwise have had to
@@ -1502,9 +1792,12 @@ read `.akmon.toml` itself.) Sequenced last so it reports a finished vocabulary.
 
 C59 preserves provider order and each provider's finding order. It does not sort, deduplicate,
 synthesize a summary finding, cache a status snapshot, create a status file or mutate the consumer
-tree. The source providers read the actual materialized consumer state; a declaration-only or cached
-copy is not a source. This satisfies ADR 0010's actual-state boundary for state the project-local
-checkers can observe. The active role exists only in the harness transcript and a standalone CLI
+tree. The source providers read the actual materialized consumer state and, for C70, the current
+host state returned by the authoritative vendor query; a declaration-only or cached copy is not a
+source. C59 and C70 write neither the consumer tree nor host config and never grant approval. The
+bounded C70 subprocess may cause vendor-owned cache, log or network activity outside those surfaces;
+D2-27 accepts that operational cost, so it is not part of the no-write claim. This satisfies ADR
+0010's actual-state boundary for state the project-local checkers can observe. The active role exists only in the harness transcript and a standalone CLI
 process has no truthful source for it: C59 does not introduce a persisted active-role marker or claim
 to report that state. The accepted residual cost is that `akmon status` cannot report the active role
 outside a harness transcript.
@@ -1541,8 +1834,9 @@ against a materialized consumer. The suite independently:
 
 - removes, adds or reorders a provider, or changes either provider's target root; each fails the exact
   `verify`-then-`sync --check` population/order assertion. Re-emitting C53's D2 finding or C56's caps
-  finding outside verify fails the exactly-once source-set assertion;
-- for each of the four logical source families separately, adds, removes, changes and reorders one
+  finding outside verify, calling Codex from C59, or re-emitting C70's trust finding outside verify
+  fails the exactly-once source-set assertion;
+- for each of the five logical source families separately, adds, removes, changes and reorders one
   source Finding and requires the aggregate to remain exact ordered equality. Dropping a finding,
   sorting or deduplicating the sequence, adding a synthesized finding, or adding one finding to both
   renderings but to no source fails that equality assertion;
@@ -1552,17 +1846,22 @@ against a materialized consumer. The suite independently:
 - runs `ok`, `warn` and `error` source sets independently through strict and non-strict text and JSON
   modes. Every cell pins the same exit result in both renderings: `ok` is always 0, `warn` is 0/1 and
   `error` is 1/1;
-- snapshots the complete fixture tree before and after both renderings and instruments write-capable
-  calls; creating a cache/status file, changing an existing file or invoking a writer fails. A source
+- snapshots the complete fixture tree and host config before and after both renderings and instruments
+  project/config/approval write-capable calls; creating an akmon-owned cache/status file, changing an
+  existing file or invoking such a writer fails. Vendor-owned cache/log/network effects outside these
+  surfaces are not asserted absent. A source
   scanner mutation that reads `.akmon.toml`, the D2 ledger, caps inputs or generated hook settings
   directly from C59 fails the no-own-source assertion;
-- changes the actual attach-record pin and materialized hook wiring while leaving their declarations
-  and any stale snapshot unchanged; the owning provider and aggregate must change. A cached or
+- changes the actual attach-record pin, materialized hook wiring and injected live Codex trust result
+  independently while leaving their declarations and any stale snapshot unchanged; the owning
+  provider and aggregate must change. The C70 mutation enters only through one `verify` invocation;
+  C59 never makes its own app-server call. A cached or
   declaration-only result fails the actual-state integration oracle. The active-role absence fixture
   invents no role value or transcript provider: the residual is a declared boundary, not a passing
   mechanical claim.
 
-The exact dependency remains rows 1–9, including C46. These carriers add no new task edge and do not
+The exact dependency is rows 1–9, including C46, plus the D2-27 C70 extension. These carriers add no
+other task edge and do not
 bring the parked JSON option spelling or D1 mutable levels into this lock.
 
 ## Acceptance
@@ -1609,8 +1908,9 @@ bring the parked JSON option spelling or D1 mutable levels into this lock.
   is a dispatch **request** and claims no launch — completion stays with N4;
 - C59's suite pins the exact provider population and order — the fresh `verify` stream, then the
   fresh `sync --check` stream — with C53's D2 state and C56's caps state present exactly once
-  through verify; exact ordered equality with those sources; no write, no direct re-read and no
-  status cache; rendering parity between text and JSON with one exit result per source set in
+  through verify and C70's fresh Codex host-trust state present exactly once through the same
+  provider; exact ordered equality with those sources; no project/config/approval write, no direct
+  re-read or host query from C59 and no status cache; rendering parity between text and JSON with one exit result per source set in
   both; and the transcript-only active-role residual stated rather than synthesized;
 - README, `hooks/README.md`, `CAPABILITIES.md` and CHANGELOG agree with the code that shipped.
 

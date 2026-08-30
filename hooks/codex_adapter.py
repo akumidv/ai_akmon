@@ -21,7 +21,20 @@ EDIT_TOOLS = frozenset({"apply_patch"})
 # neither as payload tool names nor as working matchers (C49).
 SHELL_TOOLS = frozenset({"Bash"})
 
-_PATCH_PATH_RE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.MULTILINE)
+# All four measured patch forms, one owner. A rename is spelled `*** Update File: <source>`
+# followed by `*** Move to: <destination>`, so the destination has its own literal and is
+# invisible to a pattern that reads the `File:` lines alone: the file was classified under
+# where it came *from* and never under where it landed, which silently skipped any advisory
+# keyed on the destination — a file moved *into* a D2-sensitive path being the case that
+# costs most (C67). D2-18(a) recorded the rename as unmeasured and refused to widen the
+# pattern on a guess; all four literals here are now observed on codex-cli 0.149.1
+# ([N1/F4](../meta/reviews/n1-f4-codex-timeout-20260825.md)), which is what makes the
+# widening measurement rather than inference. Kept as one alternation because these lines
+# are the single measured source of patch paths, and a second extractor is a second place
+# for the next form to be missing from.
+_PATCH_PATH_RE = re.compile(
+    r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$", re.MULTILINE
+)
 
 # A deliberately narrow recognition rule for the one shell effect we can classify exactly:
 # an apply_patch invocation in *command position*, with the patch body carried inline.
@@ -209,6 +222,11 @@ def unmeasured_path_source(payload: dict[str, Any]) -> bool:
 
 def file_paths(payload: dict[str, Any]) -> list[str]:
     """Every file path the payload names, including those parsed out of a patch body.
+
+    A rename names two: the source on its ``*** Update File:`` line and the destination on
+    the ``*** Move to:`` line that follows it, both returned in patch order (C67). The
+    advisories run over the whole list, so a move *into* a sensitive path is now seen from
+    the destination even though the source is ordinary.
 
     The patch body is read through :func:`command` because on ``apply_patch`` it *is* the
     command: codex 0.146.0 sends the whole patch as ``tool_input.command`` (captured live).

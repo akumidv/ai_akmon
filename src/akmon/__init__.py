@@ -1,7 +1,7 @@
 """akmon — the akmon AI-agent development standard, as an installable package (C37).
 
 Zero runtime dependencies (locked, ADR 0009 §1): everything under ``src/akmon/`` is
-stdlib only. See ``meta/design/packaging-uvx-init.md`` for the operative packaging spec.
+stdlib only. See ``meta/design/packaging/README.md`` for the operative packaging spec.
 """
 
 from __future__ import annotations

@@ -1,16 +1,18 @@
 """``akmon`` console entry point — a thin CLI dispatching to the standard tree.
 
-Slice A (C37 step 1): ``sync`` / ``verify`` / ``path`` / ``version`` per the CLI contract in
-``meta/design/packaging-uvx-init.md``. ``init`` is a later slice (submodule/vendored/subtree/
-package mount modes); the stub here only satisfies ``--help`` discoverability.
+``init`` / ``sync`` / ``verify`` / ``path`` / ``version`` per the CLI contract in
+``meta/design/packaging/README.md``. ``init`` (all four mount modes) lives in
+``akmon._init``; this module keeps only the dispatch rules.
 
 Version-skew rule (design doc, "sync / verify"): when a mounted tree exists at
 ``<AITNA_ROOT>/akmon`` the launcher runs *that* tree's ``bin/sync.py`` / ``bin/verify.py``
 (subprocess, so the pinned standard governs, not whatever CLI version is installed) and
 prints a one-line notice if the CLI's own version differs from the pin recorded in
 ``<AITNA_ROOT>/.akmon.toml``; otherwise it runs the embedded tree's copies (importing their
-``main`` when possible, else subprocess). Only ``init`` (no mount yet) and mode ``package``
-(a later slice — the package *is* the pin) run from the embedded tree unconditionally.
+``main`` when possible, else subprocess). Mode ``package`` has no mount at all — the package
+*is* the pin — so it always resolves to the embedded tree. ``init`` runs before any mount
+exists and therefore starts embedded; once it has mounted the standard, the sync it runs
+goes through this same dispatch, so the freshly pinned tree governs from that point on.
 """
 
 from __future__ import annotations
@@ -54,6 +56,16 @@ def _load_module_from_path(path: Path, name: str) -> ModuleType:
     return module
 
 
+def _load_embedded_findings(tree_root: Path) -> ModuleType:
+    """Load ``tree_root/bin/findings.py`` fresh, registered as ``sys.modules['findings']``.
+
+    Both launchers do a bare ``import findings`` for the shared envelope, so it has to be
+    resolved before either of them is loaded — same pre-registration trick, and the same
+    reason, as :func:`_load_embedded_sync` below.
+    """
+    return _load_module_from_path(tree_root / "bin" / "findings.py", "findings")
+
+
 def _load_embedded_sync(tree_root: Path) -> ModuleType:
     """Load ``tree_root/bin/sync.py`` fresh, registered as ``sys.modules['sync']``.
 
@@ -63,11 +75,36 @@ def _load_embedded_sync(tree_root: Path) -> ModuleType:
     leakage across differing ``tree_root`` values used within one process (e.g. across test
     fixtures that swap the embedded tree).
     """
+    _load_embedded_findings(tree_root)  # sync.py does `import findings`; resolve it first.
     return _load_module_from_path(tree_root / "bin" / "sync.py", "sync")
 
 
 def _aitna_root_name() -> str:
     return (os.environ.get("AITNA_ROOT") or _AITNA_ROOT_DEFAULT).strip("/") or _AITNA_ROOT_DEFAULT
+
+
+def _toml_scalar(raw: str) -> str:
+    """A ``.akmon.toml`` scalar: a quoted string's content, else the bare value up to a ``#``.
+
+    The same rule as ``bin/sync.py::_strip_inline_comment`` + quote stripping, kept local for
+    the reason the reader itself is local (below). Without it the documented shape
+    ``mount = "package"  # materialized`` read back as ``package"  # materialized`` — i.e. not
+    ``package`` — and a package-mode project whose record carried a comment silently fell back
+    to the mounted-tree branch, the exact skew this field exists to prevent.
+    """
+    value = raw.strip()
+    quote = value[:1]
+    if quote not in ('"', "'"):
+        return value.split("#", 1)[0].strip()
+    index = 1
+    while index < len(value):
+        if quote == '"' and value[index] == "\\":
+            index += 2
+            continue
+        if value[index] == quote:
+            return value[1:index]
+        index += 1
+    return value[1:]
 
 
 def _read_top_level_toml_value(path: Path, key: str) -> str | None:
@@ -87,7 +124,7 @@ def _read_top_level_toml_value(path: Path, key: str) -> str | None:
             break
         found_key, sep, value = stripped.partition("=")
         if sep and found_key.strip() == key:
-            return value.strip().strip('"').strip("'")
+            return _toml_scalar(value)
     return None
 
 
@@ -189,6 +226,8 @@ def _run_embedded(script: str, argv: list[str]) -> int:
     try:
         if script == "verify":
             _load_embedded_sync(tree_root)  # verify.py does `import sync`; resolve it first.
+        else:
+            _load_embedded_findings(tree_root)  # every launcher imports the shared envelope.
         module = _load_module_from_path(script_path, f"_akmon_embedded_{script}")
         main = module.main
     except Exception:
@@ -223,13 +262,12 @@ def _cmd_version() -> int:
 
 
 def _cmd_init(argv: list[str]) -> int:
-    print(
-        "akmon init is not implemented yet — attach akmon per BOOTSTRAP.md instead "
-        "(mount the standard, create the _aitna/ local layout, run sync.py and "
-        "tools/model_routing/init.py by hand). See the akmon README for the BOOTSTRAP link.",
-        file=sys.stderr,
-    )
-    return 2
+    """Attach the standard to a project. Imported lazily: ``_init`` imports this module back
+    (for the dev-layer root resolver and the post-mount sync dispatch), and only ``init``
+    pays for loading it."""
+    from akmon import _init
+
+    return _init.main(argv)
 
 
 _COMMANDS = ("init", "sync", "verify", "path", "version")
@@ -239,15 +277,17 @@ _COMMANDS = ("init", "sync", "verify", "path", "version")
 # `command` choice + one REMAINDER positional sidesteps it; per-command help text is
 # supplied via the epilog instead of per-subparser help.
 _EPILOG = """commands:
-  init      attach the standard to a project (not implemented yet)
+  init      attach the standard to a project (mount + layout + sync + routing)
   sync      sync generated agent pointers (bin/sync.py)
   verify    verify a consuming project's USE contract (bin/verify.py)
   path      print the resolved standard-tree root
   version   print the akmon package version
 
 sync/verify/init accept their own flags, passed through verbatim, e.g.:
+  akmon init --mode package
   akmon sync --check
   akmon verify --strict
+  akmon init --help
 """
 
 

@@ -170,6 +170,71 @@ def test_d2_ledger_reminder_fires_on_the_captured_codex_payload(monkeypatch, tmp
     assert "D2" in emitted["hookSpecificOutput"]["additionalContext"]
 
 
+# --------------------------------------------------------------------------------------
+# C67: the rename form — `*** Move to:` names a path the `File:` lines never carry
+# --------------------------------------------------------------------------------------
+
+# The rename literal measured on codex-cli 0.149.1 (N1/F4 §"All four patch forms"): the source
+# stays on its `*** Update File:` line and the destination arrives on `*** Move to:`. Written
+# as the probe observed it, not invented — D2-18(a) is the row that refused to guess this shape.
+_RENAME_BODY = (
+    "*** Begin Patch\n"
+    "*** Update File: notes/plan.md\n"
+    "*** Move to: src/plan.md\n"
+    "@@\n-a\n+b\n"
+    "*** End Patch"
+)
+
+
+def test_patch_body_paths_include_the_rename_destination():
+    # The whole of C67 in one assertion: this returned ["notes/plan.md"] alone, so a rename was
+    # classified under where the file came from and never under where it landed.
+    payload = {"tool_name": "apply_patch", "tool_input": {"command": _RENAME_BODY}}
+    assert codex_adapter.file_paths(payload) == ["notes/plan.md", "src/plan.md"]
+
+
+def test_the_rename_destination_is_a_measured_path_not_a_guessed_one():
+    # `*** Move to:` is observed on 0.149.1, so the destination has to land in the *measured*
+    # half of the provenance split, not be appended alongside the nine tolerated key guesses:
+    # D2-18(a) keys the stderr provenance line on that boundary, and a measured path reported
+    # as a guess is the same kind of false statement as a guess reported as measured.
+    payload = {"tool_name": "apply_patch", "tool_input": {"command": _RENAME_BODY}}
+    unmeasured, measured = codex_adapter._paths_by_source(payload)
+    assert unmeasured == []
+    assert measured == ["notes/plan.md", "src/plan.md"]
+    assert codex_adapter.unmeasured_path_source(payload) is False
+
+
+@requires_tomllib
+def test_a_file_moved_into_a_sensitive_path_reaches_the_d2_advisory(monkeypatch, tmp_path, capsys):
+    # The case the gap cost: neither endpoint is unusual on its own, but the *destination* is
+    # D2-sensitive and the source is not, so reading the `File:` lines alone skipped the
+    # reminder in silence — a hook with nothing to say and a hook that cannot see the path
+    # print the same nothing (C48's shape, one form over).
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    root = _codex_project(tmp_path, sensitive='["src/**"]')
+    payload = dict(
+        _CODEX_0_146_APPLY_PATCH,
+        tool_input={"command": _RENAME_BODY},
+        cwd=str(root),
+        session_id="sess-c67-move",
+    )
+    _run_codex_hook(monkeypatch, "d2-ledger-reminder", payload)
+
+    captured = capsys.readouterr()
+    assert "D2" in json.loads(captured.out)["hookSpecificOutput"]["additionalContext"]
+    assert captured.err == ""
+
+
+def test_a_rename_carried_by_the_shell_is_still_an_edit(monkeypatch, tmp_path):
+    # The C49 route exception recognizes a patch by envelope plus *some* extracted path, and a
+    # rename is a patch like any other: the shell spelling must not lose the classification.
+    command = f"apply_patch <<'PATCH'\n{_RENAME_BODY}\nPATCH"
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}}
+    assert codex_adapter.tool_kind(payload) == hook_core.EDIT_TOOL
+    assert codex_adapter.file_paths(payload) == ["notes/plan.md", "src/plan.md"]
+
+
 def test_a_patch_whose_paths_cannot_be_read_is_reported_as_a_defect(monkeypatch, tmp_path, capsys):
     # The matcher fired on an edit call and nothing could be extracted — that is akmon
     # reading the wrong key, not a quiet turn, and it must stop being indistinguishable

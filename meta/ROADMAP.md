@@ -110,7 +110,7 @@ akmon is built to survive a change of carrier (README §9):
 - **Now.** Git submodule — deterministic pinning, PR governance, works offline, no infra.
   - **Install vehicle (in design):** a pip/uvx package (`uvx akmon init`) that mechanizes
     the attach and makes subtree/vendored real alternatives to the submodule — a carrier
-    for the same contract, not a new one ([design](design/packaging-uvx-init.md), A10/C37).
+    for the same contract, not a new one ([design](design/packaging/README.md), A10/C37).
 - **Next (hybrid).** Governance/docs stay in the submodule; executable `tools/` and
   validators move behind an **MCP server** the assistant mounts. Same contract, new
   carrier. Revisit when executable tooling (sync, validators, fixtures) becomes the

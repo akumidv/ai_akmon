@@ -61,7 +61,7 @@ Every read reachable from an entry, with the site that performs it.
 
 | # | axis | consuming entries | read site |
 |---|---|---|---|
-| 1 | raw stdin bytes before decode | all 9 Claude, all 4 Codex | `hooks/claude_adapter.py:29` (`json.load(sys.stdin)`), `hooks/codex_adapter.py:120` (`sys.stdin.read()`) |
+| 1 | raw stdin bytes before decode | all 9 Claude, all 4 Codex | `hooks/claude_adapter.py:29` (`json.load(sys.stdin)`), `hooks/codex_adapter.py:133` (`sys.stdin.read()`) |
 | 2 | JSON depth / node count / string bytes | same as 1 | same as 1 — parsed with no structural bound |
 | 3 | command and description bytes | 1 (command), 5, 6 (description/tool), 2–4 and 10–12 (`tool_input` paths) | payload fields after decode |
 | 4 | patch path count and per-path bytes | 10–12 only | `hooks/codex_adapter.py::file_paths` / `_paths_by_source` |
@@ -421,10 +421,11 @@ before the byte cap does.
 **The rename form is now in evidence** — `*** Update File: <source>` followed by
 `*** Move to: <destination>` — and it is what makes the path population larger than the
 `Add|Update|Delete File:` lines alone. Across the 345 recorded calls **zero** contained a rename, so
-the live probe was the only way to get it. akmon's current extractor does not read the destination
-at all; that defect is recorded in the F4 evidence and belongs to the C48 successor work, but it
-bears on this axis directly: **the cap has to count destinations too**, or a rename-heavy patch is
-undercounted by exactly the paths a checker most wants to see.
+the live probe was the only way to get it. akmon's extractor did not read the destination at all;
+that defect was recorded in the F4 evidence and is now **repaired in C67**, so the destination is in
+the extracted population this axis counts. The requirement is unchanged: **the cap has to count
+destinations too**, or a rename-heavy patch is undercounted by exactly the paths a checker most
+wants to see.
 
 
 ## 10. Round 3 — the output bounds, the measured peak, and one cap that does not survive its own fixture

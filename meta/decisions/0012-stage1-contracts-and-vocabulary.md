@@ -70,14 +70,20 @@ envelope **`severity · code · message · target · fix`**, adopted by `bin/ver
 `meta/bin/validate.py`, `sync --check` and `meta/self_ci.py` — the last importing the module
 directly rather than parsing subprocess output.
 
-`severity` carries the closed `ok / warn / error` vocabulary and preserves the current exit-code contract
-(errors exit 1; warnings exit 1 only under `--strict`). `code` is a stable dotted slug naming the
+`severity` carries the closed `ok / warn / error` vocabulary. The three strict-capable adopters
+(`verify`, `validate`, `self_ci`) share the exit contract: errors exit 1 and warnings exit 1 only
+under `--strict`. `sync --check` is the recorded exception: clean exits 0, drift exits 1, a planning
+error exits 2, and it has neither `--strict` nor a warning stream. `code` is a stable dotted slug naming the
 check (`boundary.missing-banner`, `caps.always-loaded`), unique and never reused after a check is
 removed — so C51 records the retired names, which no duplicate check can see. It matches
 `[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+`; whitespace, uppercase, empty segments,
 repeated hyphens and a slug with no dot are invalid. `target` is the file or artifact the
-finding is about; semantic correctness of that reference is review-owned. `fix` is required, non-empty, one sentence and one line; imperative mood is
-review-owned. A finding a reader cannot act on is a defect of the check, not of the tree.
+finding is about; semantic correctness of that reference is review-owned. Every rendered field is
+one logical line. `message` is required and non-empty. `fix` is required, non-empty and one
+sentence; on `ok` it states the invariant to keep. The mechanical heuristic rejects a terminator
+followed by whitespace and the compact uppercase form; residual natural-language sentence
+boundaries and imperative mood are review-owned so ordinary paths stay valid. A finding a reader
+cannot act on is a defect of the check, not of the tree.
 
 **`severity` is the sole canonical name.** No property alias, no constructor alias, no
 serialization alias, now or later. This accepts a breaking Python API change for every caller
@@ -89,8 +95,9 @@ constructor rejects `level=`; positional construction alone is not migration evi
 ### F2 — the schema lands with the envelope; the public JSON surface lands with its first consumer
 
 [C51](../TASKS.md) owns exactly **one** canonical pure serializer (`Finding.to_dict()` or one
-shared function, never both) and pins its keys and values with contract tests. Adopters and later
-consumers call that serializer; a local field mapping in an adopter is rejected by test. Its output
+shared function, never both) and pins its keys and values with contract tests. Any adopter or later
+consumer that serializes a Finding calls that serializer; the C51 adopters render text only, and
+C59 is its first serialization consumer. A local field mapping in an adopter is rejected by test. Its output
 uses JSON-safe stdlib values, preserves Unicode, accepts an empty valid `target`, does not mutate
 the Finding, and passes `json.dumps` directly. `Pure` means deterministic field mapping plus input
 non-mutation here; it makes no broader functional-purity claim.
@@ -99,8 +106,9 @@ The contract suite covers every adopter rather than one representative. It rejec
 severity or code grammar, stale `.level` use or a local `Finding`, a second canonical serializer,
 serializer mutation, nondeterminism or non-JSON-safe output, a dependency outside the standard
 library in `findings.py`, and a public `--json` mode before C59. It exercises
-empty, multi-line and multi-sentence `fix` values, exact rendering, and the complete
-severity × strict-state exit matrix for all four adopters.
+empty, multi-line and multi-sentence `fix` values, line separators in every rendered field, and
+exact rendering across all four adopters. The complete severity × strict-state exit matrix covers
+the three strict-capable adopters; `sync --check` has a separate exact 0/1/2 carrier.
 
 C51 adds **no** `--json` mode anywhere. [C59](../TASKS.md) introduces the public JSON rendering
 when `akmon status` becomes the first process-boundary consumer, by composing C51's serializer
@@ -109,7 +117,7 @@ same exit/strict semantics.
 
 **Text rendering changes, and C51 owns the change.** `verify.py` prints `[{level}] {message}`
 today (`bin/verify.py:690`); the canonical form this envelope introduces is
-`SEVERITY code target: message → fix`, one line per finding. Every adopter's text output moves in
+`SEVERITY code target: message → fix`, one canonical stdout line per finding. Every adopter's text output moves in
 the same commit as the `level` → `severity` rename, and the tests pinning the old form move with
 it.
 
@@ -362,6 +370,20 @@ The `self_ci` checker reports through C51 with exact error codes:
 - `matrix.uncited-claim` — either direction of the evidence relation is violated;
 - `matrix.bare-claim` — closed enforcement vocabulary appears in a forbidden location.
 
+> **Amendment pending owner verification — [D2-29].** C57 split `matrix.unqualified-effect` by
+> coordinate: an unmeasured **route** stays an error, an unmeasured **crash posture** is a warn
+> that still fails `--strict`. This is a **permanent weakening of the rule for every claim**, not
+> a suspension until C52 measures the two that exist today: after C52 lands, a future `ask`/`deny`
+> claim with no crash measurement will still pass an ordinary run. The paragraph above states the
+> unsplit rule and the implementation does not match it; on approval this paragraph is rewritten
+> to state the split normatively, and this note is removed with it.
+>
+> Two rules were also **strengthened**, closing holes the paragraph above assumed shut:
+> `matrix.missing-file` now covers a marked region holding no claim or carrying a second marker
+> pair, and `matrix.invalid-value` covers a line inside the region that fits no claim form, an
+> unknown axis key, and a repeated axis. Without those, a gutted matrix passed every rule here by
+> having no rows to check, and a claim could carry two contradictory readings of one axis.
+
 Each axis, route coordinate, value and closed token has its own parameterized mutation; fixtures for
 in-process checker prose and C53 markers assert the scanner's negative boundary. The implementation
 is observed red before conversion: the current tree lacks `CAPABILITIES.md`, and legacy README
@@ -531,8 +553,9 @@ is written rather than what any single one says:
 - **Review/process ownership is an explicit boundary, not a silent pass.** A semantic or
   process-owned obligation must be labelled, name the mechanical subset that is tested and state
   its residual cost. No rule described as mechanically checked receives that boundary. In F1 the
-  imperative mood is review-owned; the F14 append on deletion is process-owned, while sentence
-  shape and live reuse of an already recorded code remain mechanical tests.
+  bounded sentence heuristic is mechanical, while residual natural-language boundaries and
+  imperative mood are review-owned; the F14 append on deletion is process-owned, while live reuse
+  of an already recorded code remains a mechanical test.
 - **No exemption class exists** (F11). The hard case is an aggregating shape that adds no check of
   its own: it is seeded against **fidelity to its sources** — mutate the source finding set and the
   aggregate must change with it; a finding dropped, reordered, or present in one rendering but not

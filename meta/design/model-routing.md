@@ -191,12 +191,12 @@ The single owner of model-selection policy *and* task-kind knowledge (requiremen
       "reasoner": "highest",
       "orchestrator_floor": "highest"
     },
-    "second_opinion": {"cli": "claude", "invoke": "claude -p --output-format text", "report_dir": ".codex/second-opinion/"},
+    "second_opinion": {"harness": "claude", "operation": "review", "report_dir": ".codex/second-opinion/"},
     "semantic_fallback": {"worker": "worker", "mid": "mid", "reasoner": "strongest", "orchestrator": "strongest"}
   },
   "openai": {
     "selection_policy": {"available_order": "weakest-to-strongest", "worker": "lowest", "mid": "next-after-worker", "reasoner": "highest", "orchestrator_floor": "highest"},
-    "second_opinion": {"cli": "codex", "invoke": "codex exec", "report_dir": ".claude/second-opinion/"},
+    "second_opinion": {"harness": "codex", "operation": "review", "report_dir": ".claude/second-opinion/"},
     "semantic_fallback": {"worker": "worker", "mid": "mid", "reasoner": "strongest", "orchestrator": "strongest"}
   },
   "task_kinds": {
@@ -217,6 +217,15 @@ The single owner of model-selection policy *and* task-kind knowledge (requiremen
 
 A project may overlay this with a local override file (same shape, deep-merged) for
 project-specific kinds or a pinned dated id when behaviour must be frozen.
+
+`second_opinion` names a harness and an operation; it does not spell a command. C57 moved the
+executable and its argv into `bin/runtime.py`, the single map of harness commands, so the
+registry carries policy — which harness, which operation, where reports land — and the runtime
+contract carries the invocation. The retired `cli` and `invoke` keys are not accepted: a config
+still using them fails `routing.second-opinion` at `verify`, which names the overlay file. The
+initializer does not repair it — the overlay is hand-owned input it reads, not an artifact it
+writes — so the fix is a hand edit of `<AITNA_ROOT>/model-routing.json`, then a re-`init` to
+regenerate the local config against the moved `registry_hash`.
 
 The overlay may also add a `briefs` map — per-agent markdown appended to the generated
 subagent body. Its keys are agent names, so they are a **public contract** written by hand
@@ -317,7 +326,7 @@ plus the delegation log and reports:
 
 It stays token-efficient: a digest goes to chat, the full report to a file, entering
 context only on request. The digest is the on-demand counterpart to the zero-token log
-above. Scoped as its own task — see [akmon TASKS.md](../akmon/meta/TASKS.md) **C13**.
+above. Scoped as its own task — see [akmon TASKS.md](../TASKS.md) **C13**.
 
 ### 4.5 Pipeline tier annotations (docs — one line per step)
 
@@ -433,7 +442,7 @@ During work (orchestrator):
 ## 8. Decided register (owner-locked) and phasing
 
 All former open points are **locked** (owner verification of this design; recorded in
-[ADR 0004](../akmon/meta/decisions/0004-model-routing-capability-tiers.md)):
+[ADR 0004](../decisions/0004-model-routing-capability-tiers.md)):
 
 | # | Question | Decision |
 |---|---|---|
