@@ -112,6 +112,17 @@ def test_mounted_akmon_root_none_when_akmon_toml_says_package(tmp_path):
     assert cli._mounted_akmon_root(root) is None
 
 
+def test_mount_field_is_read_through_an_inline_comment(tmp_path):
+    """`mount = "package"  # materialized` is the documented shape; without comment stripping it
+    read back as `package"  # materialized`, so the stale mount shadowed the pin after all."""
+    root = _package_mode_project(tmp_path, with_stale_mount=True)
+    (root / "_aitna" / ".akmon.toml").write_text(
+        'mount = "package"  # no tree in the repo (ADR 0009 §4)\n', encoding="utf-8"
+    )
+    assert cli._read_top_level_toml_value(root / "_aitna" / ".akmon.toml", "mount") == "package"
+    assert cli._mounted_akmon_root(root) is None
+
+
 def test_mounted_akmon_root_none_when_akmon_toml_says_package_despite_stale_mount_dir(tmp_path):
     root = _package_mode_project(tmp_path, with_stale_mount=True)
     assert cli._mounted_akmon_root(root) is None
@@ -294,19 +305,29 @@ def test_cmd_version_prints_package_version(capsys):
 
 
 # --------------------------------------------------------------------------------------
-# akmon init (stub — later slice)
+# akmon init — dispatched to akmon._init (behaviour lives in meta/tests/test_init.py)
 # --------------------------------------------------------------------------------------
 
 
-def test_cmd_init_is_a_non_zero_stub(capsys):
-    code = cli._cmd_init([])
-    err = capsys.readouterr().err
-    assert code != 0
-    assert "not implemented yet" in err
+def test_cmd_init_delegates_to_the_init_module(monkeypatch):
+    from akmon import _init
+
+    seen = {}
+
+    def fake_main(argv):
+        seen["argv"] = argv
+        return 0
+
+    monkeypatch.setattr(_init, "main", fake_main)
+    assert cli._cmd_init(["--mode", "vendored"]) == 0
+    assert seen["argv"] == ["--mode", "vendored"]
 
 
-def test_main_init_returns_stub_exit_code(capsys):
-    assert cli.main(["init"]) != 0
+def test_main_passes_init_flags_through(monkeypatch):
+    from akmon import _init
+
+    monkeypatch.setattr(_init, "main", lambda argv: 7 if argv == ["--mode", "package", "--yes"] else 1)
+    assert cli.main(["init", "--mode", "package", "--yes"]) == 7
 
 
 # --------------------------------------------------------------------------------------

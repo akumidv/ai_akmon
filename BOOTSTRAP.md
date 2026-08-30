@@ -3,15 +3,29 @@
 Instructions for the **agent** (Claude / Codex / Gemini) asked to attach or realign the
 akmon layer in a project. Also carries **ready prompts for the user**.
 
+> **`akmon init` does the mechanical half of this document**, in any of the four mount modes:
+> the mount (§A1), the local layout (§A5), the `AGENTS.md` akmon block and the `.akmon.toml`
+> record (§A6), the `.gitignore` entries (§A7), the hook wiring and vendor pointers via `sync`
+> (§A8 + §A9), and model-routing init. It stops at the steps that need judgement — the
+> archetype / guardrail classification (§A3–A4), the `[test].runner` pin (§A5), the root
+> `skills/` a USAGE-exporting archetype needs — and prints each one as a next step, then
+> leaves `verify --strict` and the commit to you (§A10, D5). It **never rewrites project
+> text**: an `AGENTS.md` that already carries an akmon block, an existing `TASKS.md`, memory
+> index or charter are left exactly as they are. Run it first (§B0); read the rest of §A as
+> the reference behind what it wrote, or as the manual path when you would rather attach by
+> hand. One exception is deliberate: `--mode subtree` prints the `git subtree add` command for
+> you to run instead of running it, because that command *commits* (§A10).
+
 Source of rules: [README.md](README.md) (the three axes, the layer decision tree, the
 learn loop) and [ARCHETYPES.md](ARCHETYPES.md) (archetypes + the guardrail/profile
-map). Note: akmon does **not** exist in the target project until step 1 — the shared
-layer lives only in the repo `ai_akmon` and must be cloned in as a submodule **first**.
-The agent reads `README.md` only after the submodule is attached.
+map). Note: in a **mounted** mode akmon does **not** exist in the target project until step 1
+— the shared layer lives only in the repo `ai_akmon` and must be cloned in first, and the
+agent reads `README.md` only after that. In mode `package` the standard is never copied into
+the repo at all: it is read from the installed package (`akmon path` prints its root, §F).
 
-The submodule is the default **mount mode**; a tree-less `package` mode — akmon installed
-as a pinned dev dependency, no standard tree in the repo — is designed and pending
-implementation, see §F.
+The submodule is the default **mount mode**; `vendored`, `subtree`, and the tree-less
+`package` mode (akmon installed as a pinned dev dependency) are equally supported — see §F
+for `package`, and `akmon init --mode <mode>` to choose one.
 
 ---
 
@@ -110,7 +124,10 @@ When the user asks "attach akmon", the agent:
    pointers, run `python3 _aitna/akmon/bin/sync.py` and review the diff. Then run
    `python3 _aitna/akmon/bin/verify.py --strict` to validate the akmon project
    contract.
-10. **Does NOT commit** — reports it is ready for review. The owner commits `.gitmodules`,
+10. **Does NOT commit** — reports it is ready for review. `akmon init` holds the same line:
+    the only index entry it writes is the one `git submodule add` creates for it, corrected to
+    the ref it checked out, and only on the run that creates the submodule; moving an existing
+    pin is a bump left unstaged for the owner. The owner commits `.gitmodules`,
     the akmon pin, hand-reviewed source docs (`AGENTS.md`, role/guardrail/pipeline docs),
     and the generated pointer files covered by §D.
 
@@ -123,6 +140,20 @@ pointer drift and structural contract drift fail before merge.
 ---
 
 ## B. Ready prompts for the user
+
+### B0. Any project — the mechanized attach
+
+```
+Attach akmon to this project with the CLI, then finish the judgement steps:
+  uvx --from git+https://github.com/akumidv/ai_akmon akmon init
+(add `--mode package` for a dependency pin with no tree in the repo, `--mode vendored` for
+an offline copy). Then classify the project per ARCHETYPES.md, add the language guardrail
+import to the AGENTS.md akmon block, pin `[test].runner` in <AITNA_ROOT>/.akmon.toml, and
+run `akmon verify --strict`. Show the diff, do not commit.
+```
+
+The prompts below are the **manual** path — use them when the CLI is unavailable, or when a
+project needs the attach done step by step.
 
 ### B1. New project
 
@@ -363,21 +394,27 @@ proven (see [learning](pipelines/learning.md)).
 
 ---
 
-## F. Mount mode `package` — no standard tree in the repo *(designed, pending implementation)*
+## F. Mount mode `package` — no standard tree in the repo
 
-> **Status:** designed, pending implementation — ships with the `akmon` CLI; pilot
-> consumer: alphavar. Until it ships, attach via the submodule (§A). The decision record
-> and mechanics live in the standard's own development tree (linked from
-> [README.md](README.md), the deliberate bridge).
+> **Status:** implemented — `akmon init --mode package` attaches it, `akmon sync`
+> materializes it, `akmon verify --strict` checks it. Public PyPI publication is still
+> pending, so the pin is a git tag (`akmon @ git+https://github.com/akumidv/ai_akmon@vX.Y.Z`)
+> until then. The decision record and mechanics live in the standard's own development tree
+> (linked from [README.md](README.md), the deliberate bridge).
 
 Alongside the mounted modes (`submodule` — this document's default — plus `vendored` and
-`subtree`), akmon will install as an ordinary dev dependency, with **no tree at
+`subtree`), akmon installs as an ordinary dev dependency, with **no tree at
 `<AITNA_ROOT>/akmon`**:
 
 - The consumer pins akmon in its manifest's **dev group** (never a runtime dep) — a
   git-tag pin `akmon @ git+https://github.com/akumidv/ai_akmon@vX.Y.Z` until the first
-  PyPI publish, the `akmon` PyPI package after. A version bump becomes an ordinary
-  dependency bump, delta-checked against [CHANGELOG.md](CHANGELOG.md) as usual.
+  PyPI publish, the `akmon` PyPI package after. `akmon init --mode package` does not edit
+  the manifest (it cannot know every dialect); it checks for the pin, prints the exact line
+  when it is missing, and **exits 1** — package mode mounts no tree, so that declaration
+  *is* the mount, and an attach without it leaves a project where no `akmon` command can
+  resolve. `verify --strict` reports it for as long as it is missing, and reports a pin in
+  the wrong class (runtime dependency or extra) as an error. A version bump is then an
+  ordinary dependency bump, delta-checked against [CHANGELOG.md](CHANGELOG.md) as usual.
 - `akmon sync` materializes the **always-on surface only** into `<AITNA_ROOT>/.akmon/`:
   `hooks/` (self-contained, stdlib-only — vendor hooks keep running venv-free via
   `python3`) and `guardrails/` (the `@`-import targets for AGENTS.md). The copies are
@@ -390,3 +427,8 @@ Alongside the mounted modes (`submodule` — this document's default — plus `v
 - Checked in: `_aitna/{local assets}` + `_aitna/.akmon/{hooks,guardrails}` +
   `.akmon.toml` — no 90-file tree. Consumer CI runs `uv run akmon sync --check` and
   `uv run akmon verify --strict`; the standard's own self-tests stay in ai_akmon's CI.
+- **Codex only, after every bump:** the bump re-runs `akmon sync`, so `.codex/hooks.json`
+  may change — and any change to an approved entry, *including a `matcher` the commands do
+  not touch*, voids that group's host approval. Measured on codex-cli 0.149.1: such entries
+  keep reporting `enabled: true`, run nothing, and say nothing. Review and re-approve them
+  with `/hooks` after every bump; no akmon check reports this state.

@@ -122,7 +122,7 @@ def test_unresolvable_runner_warns_and_never_fails(tmp_path, monkeypatch):
     _uv_on_path(monkeypatch, uv=False)
     validator = validate.Validator(tmp_path)
     validator.run_tests()
-    assert [finding.level for finding in validator.findings] == ["warn"]
+    assert [finding.severity for finding in validator.findings] == ["warn"]
     assert "unit tests skipped: pytest is not importable" in validator.findings[0].message
 
 

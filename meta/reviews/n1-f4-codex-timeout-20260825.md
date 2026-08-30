@@ -140,12 +140,22 @@ starve the others — each is killed on its own clock.
   contract — but it bears directly on delivery: if a freshly attached consumer's Codex hooks stay
   inert until something grants trust, `sync` writing a correct `hooks.json` is not sufficient for
   the hooks to run, and no akmon check would notice. Worth its own probe.
+  **Cause since isolated — see [N7](n7-codex-hook-delivery-20260825.md).** The `-c` override quoted
+  above never applied: for the path tested there, `projects."<path>".trust_level="trusted"` — the
+  quoted spelling — is accepted and silently does nothing, while the unquoted
+  `projects.<path>.trust_level="trusted"` grants discovery. So read the parenthetical as "the
+  override I wrote did not take", not "trust was granted and did not help", and these three dead
+  runs are explained by the missing project-trust entry alone. N7 measured both host-side grants
+  that gate the ordinary persisted path and spawned C70; the delivery gap this bullet called for
+  is now owned there, not here.
 - **Real Codex payload sizes**, captured incidentally by the fixture: `SessionStart` **328 bytes**,
   `PreToolUse` **469 bytes**. Both are three orders of magnitude below N5's proposed 4,000,000-byte
   payload cap.
 - **alphavar's wiring is stale.** Its `PreToolUse` matcher is `Edit|Write|apply_patch`, while the
   current generator emits `Bash|apply_patch` (the C49 widening). The consumer has not been re-synced
-  since. Outside this probe's scope; recorded because the probe read the file.
+  since. Outside this probe's scope; recorded because the probe read the file. [N7](n7-codex-hook-delivery-20260825.md)
+  measured what re-syncing costs there: the change is matcher-only against an approved group, which
+  flips all three of alphavar's `PreToolUse` entries to `modified`.
 
 ## What this unblocks, and what it does not
 
@@ -210,12 +220,16 @@ _PATCH_PATH_RE.findall(patch)  ->  ['_f4a.txt', '_f4b.txt']
 destination '_f4renamed.txt' seen:  False
 ```
 
-`hooks/codex_adapter.py:24` matches `Add|Update|Delete File:` only, so a renamed file is classified
-under its **source** path and its **destination** is not seen at all. An advisory keyed on the
-destination — a file moved *into* a D2-sensitive path, for instance — is silently skipped. This is
-C48's own silent shape, one form over, and it is now observed rather than inferred. The repair
-belongs to the C48 successor work, not to F4; recorded here because the probe that closed F4 is what
-produced the evidence.
+`hooks/codex_adapter.py::_PATCH_PATH_RE` matched `Add|Update|Delete File:` only, so a renamed file
+was classified under its **source** path and its **destination** was not seen at all. An advisory
+keyed on the destination — a file moved *into* a D2-sensitive path, for instance — is silently
+skipped. This is C48's own silent shape, one form over, and it is now observed rather than inferred.
+The repair belongs to the C48 successor work, not to F4; recorded here because the probe that closed
+F4 is what produced the evidence.
+
+**Repaired in C67**, on this measurement: the one extraction pattern now covers all four forms, and
+a rename yields source and destination in patch order. This section stays in the past tense above
+because it records what the probe found, not what the code does now.
 
 **Why it stayed unmeasured so long:** across **345 recorded real `apply_patch` calls** on this
 machine, **zero** contained a rename. The form is rare in practice, which is precisely why inference

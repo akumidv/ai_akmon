@@ -17,23 +17,184 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 ## Unreleased
 
 ### Added
+- **`akmon init` (C37):** one command attaches the standard to a project in any of the four
+  mount modes — `submodule` (default when the project is a git repo that can reach the akmon
+  repository, pinned at the latest release tag unless `--ref` says otherwise), `vendored`
+  (an offline copy of the same tree the wheel ships), `subtree`, and `package` (no tree in the
+  repo; the pin lives in the consumer's dev group). It creates the `<AITNA_ROOT>/` layout
+  (`agents/{review,architect,engineer}`, `skills/`, `tools/`, `memory/` + index, `TASKS.md`
+  seeded in the typed one-line entry grammar), writes the `AGENTS.md` akmon block and the
+  `.akmon.toml` integration record, adds the `.gitignore` entries, writes a CI workflow when
+  the project has none, then runs `sync` and the model-routing initializer. Judgement steps
+  stay with the owner and are printed as next steps: the archetype/guardrail classification and
+  the `[test].runner` pin.
+  - **Commits stay the owner's (D5).** `init` creates no commit. The only index write is git's
+    own: `git submodule add` stages `.gitmodules` and the gitlink, and `init` corrects *that*
+    entry to the ref it checked out instead of the commit git happened to clone — on the run
+    that creates the submodule and only there. Moving an **existing** pin with `--ref` is a
+    bump: the worktree moves, the index is left alone, and staging it is printed as a step.
+    Mode `subtree` is *refused* while the subtree is absent — `git subtree add` writes a squash
+    commit and a merge commit — and prints the command to run, plus the
+    `akmon init --mode subtree --ref <ref>` to run after it. Retiring a mount is a deletion of
+    tracked files, so switching between two mounted modes is refused while the old mount is
+    still on disk, with the removal commands printed for the owner to run.
+  - **A re-run realigns, and refuses what a realign is not.** Existing project text is never
+    rewritten (akmon block, backlog, memory index, charters); `.akmon.toml` keys are upserted
+    one at a time; an existing submodule pin is not bumped (`--ref` moves it). Which mount a
+    project has is answered by **git**, not by the files at the path — a vendored copy and a
+    subtree carry the same `bin/sync.py` a submodule does — and a directory is adopted as an
+    akmon tree only when it carries several of the standard's markers, never one. Changing the
+    *mount mode* is a migration, not a realign, and needs `--switch-mode`, after which the
+    edits `init` must not make — re-pointing the akmon block, removing the dead mount, updating
+    the CI commands — are printed as steps. Mode `vendored` **replaces** each tree member
+    rather than merging into it, so files a later akmon version dropped do not survive forever,
+    and it refuses to copy over a directory that is not an akmon tree.
+  - **Pins are honest per mode.** `--ref` pins submodule and subtree mounts and selects the
+    manifest line printed for package mode; without it package mode queries the requested
+    repository and uses its highest existing release tag, never a tag synthesized from the
+    installed version. If that tag cannot be proved, `init` asks for an explicit `--ref`.
+    `vendored` refuses `--ref` outright, because its pin *is* the installed package's version.
+    In package mode the manifest is scanned for the akmon requirement and its dependency class
+    (`bin/sync.py::package_pin_status`, shared with `verify` so the two cannot disagree): every
+    declaration is read and the worst answer wins; distribution-name matching is case-insensitive;
+    a `[tool.uv.sources]` entry is a source override rather than a declaration; and an `akmon` key
+    in an unrelated tool table or a bare mention in prose is not a pin. Mode `package` mounts no
+    tree, so that declaration *is* the
+    mount: `init` **exits 1** while it is missing or sits in runtime dependencies/an extra,
+    rather than reporting success over a project where no `akmon` command can resolve
+    (ADR 0009 §4).
+  - **The dev-layer root must stay inside the project.** `AITNA_ROOT` is a project-root-relative
+    path by contract; an absolute path or one climbing out with `..` is refused — whether it
+    arrives as `--aitna-root` or from the environment — instead of scattering the dev layer,
+    the integration record and the mount outside the project.
+  - New flags: `--mode`, `--aitna-root`, `--project-root`, `--repo`, `--ref`, `--archetype`,
+    `--language`, `--no-ci`, `--switch-mode`, `--yes`.
 - **Codex runtime contract (C39):** self-hosted `AGENTS.md` for akmon itself, a direct
   delegation-default clause in the consumer template, SessionStart defense in depth, and
   verifier coverage that rejects an import-only delegation contract.
 
+- **`verify`: the package-mode pin is now a contract check.** In mount mode `package` with a
+  `pyproject.toml` present, `verify` errors on a akmon pin declared as a runtime dependency or
+  an extra (dev tooling must not reach the consumer's own users) and warns — so `--strict`
+  fails — when there is no dev-group pin at all. Projects with no Python manifest are not
+  checked; non-Python consumers stay a design open point.
+- **`CAPABILITIES.md` — the vendor capability matrix, six axes per claim (C57).** A new top-level
+  document, shipped and mounted beside `MODEL.md`, replaces the glyph grid that used to live in
+  `README.md`. Each claim — one capability on one harness — answers six questions separately:
+  `documented`, `delivered`, the complete `vendor / version / event / matcher` route, the
+  boundary `effect`, the `crash-posture`, and the `evidence` behind whatever it measured. An
+  `ask`/`deny` effect over an unmeasured route coordinate is now an error, and any enforcement
+  claim standing beside a vendor or harness event *outside* the marked region is rejected as a
+  second authority. The conversion demoted claims that were never measured: the Gemini pointer
+  now reads `delivered: unmeasured` rather than a bare check-mark, and two Claude enforcement
+  rows carry a warning until C52 measures their crash posture. **The second-opinion rows on both
+  harnesses also read `delivered: unmeasured`:** akmon builds the argv and its tests pin it, but
+  they run only `--dry-run`, so nothing has yet observed the command reaching a harness. A
+  dry-run says what akmon emits, not what the harness accepts (probe tracked as N8).
+- **A declared runtime contract (C57).** `bin/runtime.py` states what akmon needs on a host —
+  POSIX shell and `python3` always, `git` on the Codex route because the generated Codex wiring
+  resolves the project root through `$(git rev-parse --show-toplevel)`, `claude` and `codex`
+  optional — and Windows is declared unsupported rather than merely untested. The declaration is
+  checked against what akmon actually emits, so wiring that stops needing a binary makes the
+  declaration fail instead of outliving it. The check tokenizes a generated command as a shell
+  would, so a binary behind a `&&`, `;` or `|` cannot stay undeclared, an operator inside a
+  quoted argument is not mistaken for one, and a wrapper such as `nice` counts as a requirement
+  alongside the command it runs. Command substitutions are read the same way — quoting decides
+  whether a `$(…)` is a command or a literal, nesting is counted rather than cut at the first
+  `)`, and a head the string does not actually spell (`$RUNNER hook.py`) is refused instead of
+  being reported as a binary called `$RUNNER`. The supported grammar is deliberately narrow: a construct
+  outside it — a wrapper carrying its own options, a loop, a backtick, arithmetic, a function
+  definition, a `[[ … ]]` conditional, or the shell-dependent `time` — is refused outright rather
+  than read incompletely, or confidently wrongly, and reported as clean. What the declaration does *not* yet cover is deliberate and
+  tracked as **A20**: `git` is needed by `akmon init --mode submodule` and `--mode subtree` — not
+  by `vendored` or `package` — while the declaration scopes it to the Codex route.
+
 ### Changed
+- **One finding shape across every akmon check (C51).** `akmon verify`, `akmon sync --check`
+  and akmon's own dev-layer checks now report through a single envelope —
+  `severity · code · message · target · fix` — and print one canonical stdout line per finding in the form
+  `SEVERITY code target: message → fix`. **The output format changed**: `verify` used to print
+  `[warn] some message`, and it now prints e.g.
+  `WARN gitignore.env-secrets .gitignore: .gitignore should include '*.env' and '!*.env.example' → Add '*.env' and '!*.env.example' to .gitignore.`
+  Anything grepping that output has to move with it — match on the stable `code` slug rather
+  than on message prose, which stays review-owned and may be reworded. `sync --check` moves
+  from its `ok: <path>` / `would update: <path>` lines to the same envelope; `sync` in write
+  and `--dry-run` modes keeps its `updated:` / `would update:` action log unchanged. Exit codes
+  are unchanged: the strict-capable checks return 1 for errors and strict warnings; `sync` keeps
+  2 for a planning error against 1 for drift and has no warning/strict stream. Child-process
+  detail remains available on stderr after failure, while only a line-safe Finding enters stdout.
 - **D2 owner gate (C63):** the ledger now distinguishes `Pending` owner review, `Approved`
   work awaiting a landing commit, and `Verified` work with a recorded landing sha. Use
   `d2_ledger.py approve <id>` before landing and `verify <id> --commit <sha>` afterward;
   pre-commit checks warn only for still-pending entries.
+- **The vendor matrix now separates Codex capability from Codex delivery (C39/N7).** The
+  table reports shipped akmon support, so the measured raw-harness route-level deny remains
+  explicitly unshipped while D5 is not wired. Host-delivered Codex cells carry a `†`, and the
+  note under the table records what the ordinary persisted, non-bypass path on codex-cli 0.149.1
+  requires: a `[projects."<abs root>"]` entry for that exact root
+  (trust does not inherit from an ancestor) plus a current `trusted_hash` per entry. Nothing
+  in akmon changes — the claim does. Consumer-actionable half: a `sync` that changes an
+  approved entry, *including a `matcher` its commands do not touch*, voids that group's
+  approval, and the entries then report `enabled: true` while running nothing, silently.
+  Re-approve with `/hooks` after every bump; the step is now in the package-mode procedure
+  ([BOOTSTRAP](BOOTSTRAP.md) §F) as well as the mounted one. `akmon verify` still does not
+  inspect that host state ([N7 evidence](meta/reviews/n7-codex-hook-delivery-20260825.md)).
 
 ### Migration
+- **`registry.json` second-opinion keys moved (C57).** `second_opinion.cli` is now
+  `second_opinion.harness` and `second_opinion.invoke` is now `second_opinion.operation`; both
+  refer by name into the single command owner in `bin/runtime.py`, which spells the executable
+  and the operation prefix. The ownership is that narrow on purpose: `model_flag` and `report_dir`
+  stay in the registry and are unchanged, and `routing.second_opinion_command` still appends the
+  model flag and the prompt after the prefix, because a model pin is policy rather than a fact
+  about how a vendor's CLI is invoked. A project that overrides
+  either key in `<AITNA_ROOT>/model-routing.json` must rename it. Because the change moves
+  `registry_hash`, **every consumer's local model-routing config goes stale**: re-run the
+  routing initializer (`python3 <tree>/tools/model_routing/init.py`) after the bump — the
+  SessionStart hook reports the staleness until you do.
+  - **A project routing overlay carrying the retired `cli`/`invoke` keys is now refused, not ignored.** The overlay is deep-merged *over* the shipped registry, so the retired pair does not displace `harness`/`operation` — it sits beside them and the config looks complete while stating one command twice. `verify` names the overlay file and the vendor. **The initializer does not fix this for you** — the overlay is hand-owned input it reads, not an artifact it writes. Edit `<AITNA_ROOT>/model-routing.json` by hand: delete the `cli` and `invoke` keys from each `second_opinion` object and leave the rest of it alone. The merge is recursive, so an overlay never replaces a whole object — `harness`, `operation` and `report_dir` are inherited from the shipped registry unless the overlay deliberately overrides one, and copying them in creates a local pin that silently stops tracking akmon. Keep only the values you mean to override, *then* re-run the initializer to regenerate the local config against the new `registry_hash`.
 - **Breaking v0.4 consumer realign:** put the direct phrase `delegation is the default`
   in the root `AGENTS.md` akmon block, run `akmon sync`, then `akmon verify --strict`.
   A nested `@.../_common.md` line remains a pointer for compatible harnesses but does not
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **On Codex, a renamed file is now seen at its destination, not only at its source (C67).**
+  `apply_patch` spells a rename as `*** Update File: <source>` followed by
+  `*** Move to: <destination>`, and akmon's patch-path extraction read the
+  `Add|Update|Delete File:` lines only. A file **moved into** a path a consumer lists in
+  `[d2_ledger] sensitive_paths` — or into planning or code territory — therefore drew no
+  advisory at all: the reminder was skipped in silence, since a hook with nothing to say and a
+  hook that cannot see the path both print nothing. All three path-keyed PreToolUse advisories
+  (role-on-code, analysis-guard, d2-ledger-reminder) now run over both endpoints of a rename.
+  The rename literal is measured on codex-cli 0.149.1, not guessed
+  ([N1/F4 evidence](meta/reviews/n1-f4-codex-timeout-20260825.md)); it was rare enough that
+  zero of 345 recorded real `apply_patch` calls contained one, which is why it went unseen.
+- **Model-routing recovery names a tree that exists in package mode (C37).** The SessionStart
+  status line and the "routing needs initialization" instruction both told the session to run
+  `python3 <AITNA_ROOT>/akmon/tools/model_routing/init.py` — a path a package-mode consumer does
+  not have, so the one instruction that unblocks a stale or missing routing config was
+  unusable there. Both now name the mounted tree in a mounted project and the materialized
+  `<AITNA_ROOT>/.akmon/` tree in an ordinary package-mode project. **Known C69 gap:** hook-core
+  still chooses by directory existence, so a stale mount left beside a package-mode record wins
+  until the recorded-mount owner is locked and implemented.
+- **`.akmon.toml` inline comments no longer end up inside the value (C37).** Three readers
+  parsed that file and all three kept a trailing `# comment` as part of the value.
+  `read_akmon_toml`'s pre-3.11 fallback made the exact shape BOOTSTRAP §C documents
+  (`runner = "poetry run pytest"  # optional`) yield a different `[test].runner` on a 3.9/3.10
+  host than on 3.11+, and the release check would have run the comment as part of the command.
+  The two narrow mount readers — the CLI's dispatch and the model-routing initializer's tree
+  resolution — read `mount = "package"  # …` back as `package"  # …`, i.e. not `package`, so a
+  stale mount directory shadowed the very pin that field exists to protect. A quoted value now
+  ends at its real closing quote in all three (a `#` inside it stays data, and `\"` is an escape,
+  not the end of the string) and a bare value is cut at the first `#`, matching `tomllib`.
+- **Model-routing init works without a mounted tree (C37).** `tools/model_routing/init.py`
+  resolved its registry at `<AITNA_ROOT>/akmon/tools/model_routing/registry.json`, which does
+  not exist in mount mode `package` — the attach step crashed there. It now resolves the
+  standard tree the same way `bin/sync.py` does (the mount for mounted modes, its own tree
+  otherwise, with the recorded `mount` field deciding so a stale mount directory cannot shadow
+  a package-mode pin), and finds the project root through `<AITNA_ROOT>/.akmon.toml` as well as
+  through the mount.
 - **The version-skew notice stops firing on every command (C61).** In a mounted consumer the
   recorded pin is `git describe --tags` (`v0.3.0`) while the CLI's own version is PEP 440
   (`0.4.0.dev0`), so a raw string comparison never matched: the notice printed on every `akmon
@@ -61,10 +222,19 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   body under a `patch` key that the measured 0.146.0 payload does not send (it puts it in
   `tool_input.command`), and the planning-doc/code path predicates matched only absolute paths
   while patch bodies carry repo-relative ones. Both are fixed and verified against the payload
-  captured from codex 0.146.0. A Codex consumer will start seeing these reminders where it
-  previously saw none — no configuration change is needed. New failure signal: when an edit
+  captured from codex 0.146.0. An already project-trusted consumer whose affected hook entries
+  are approved will start seeing these reminders where it previously saw none — no akmon
+  configuration change is needed. Codex host trust remains separate: a fresh consumer must trust
+  the project and approve its hooks, and any later `sync` change to an approved `.codex/hooks.json`
+  entry invalidates the affected approval and requires review and re-approval through `/hooks`
+  ([N7 evidence](meta/reviews/n7-codex-hook-delivery-20260825.md)). New failure signal: when an edit
   matcher fires and no path can be read from the payload, the hook says so on stderr instead of
-  staying silent, so the next vendor payload change is visible rather than inert.
+  staying silent, so the next vendor payload change is visible rather than inert. **Known 3.9
+  gap:** the package declares `requires-python >=3.9`, but `hooks/codex-hook.py` evaluates a
+  PEP 604 union (`HookResult | None`) at **import** time, which needs 3.10 — so on a 3.9 host
+  every wired Codex entry (these three plus `session-start`) exits before any advisory runs. The
+  paragraph above holds as written on 3.10+; a 3.9 consumer sees no Codex hooks at all until the
+  floor is repaired or the declared floor is raised.
 - **Codex malformed-edit diagnostic loudness (C36(c)/D2-21):** the defect signal is emitted
   once across the three handlers for each reliable session/tool-use pair, repeats for a later
   bad event, and repeats fail-visible when either identity is unavailable. Marker lifecycle
@@ -74,7 +244,10 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   measured on codex 0.146.0, the first three are aliases for one patch call, while the shell
   matches as `Bash` and was named by nothing — so every mutation made through the shell
   (`apply_patch` heredoc, `sed -i`, redirection, `python3 -c`) was invisible to all wired
-  hooks. Consumers re-run `sync` to pick the new matcher up. A Bash command is classified as an
+  hooks. Consumers re-run `sync` to pick the new matcher up — on Codex that re-sync is a
+  matcher-only change to an already approved group, so it flips every `PreToolUse` entry in that
+  group to `modified`, and those entries stay inert until re-approved through `/hooks`
+  ([N7 evidence](meta/reviews/n7-codex-hook-delivery-20260825.md)). A Bash command is classified as an
   edit only when a recognized `apply_patch` invocation carries a valid patch envelope; this
   path depends on the C47/C48 fixes above. Every other Bash call stays unclassified. The three
   separately launched path-keyed hooks share one atomic marker, so exactly the first process emits

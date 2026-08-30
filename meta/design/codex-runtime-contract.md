@@ -1,7 +1,8 @@
 # Design: Codex runtime contract and package-mode hardening
 
-> Implementation task: [C39](../TASKS.md). This design is pending owner verification in
-> [D2-13](../D2_LEDGER.md).
+> Implementation task: [C39](../TASKS.md). Owner-verified in
+> [D2-13](../D2_LEDGER.md) (clauses a–c, **Approved**), with the capability-matrix clause signed
+> against the delivery caveat N7 added to the matrix.
 
 ## Frame
 
@@ -14,7 +15,8 @@ vendor through `AGENTS.md`. The alphavar package-mode pilot disproved two assump
   exist in package mode, so SessionStart becomes silent from a nested working directory.
 
 Good means that a fresh Codex session receives the operative delegation rule without an owner
-prompt, materialized hooks work from any directory below the project root, and documentation
+prompt, materialized hooks work from any directory below the project root once Codex's host-side
+project and entry trust grants delivery, and documentation
 claims no enforcement or model-routing capability that has not been proven against the live
 Codex harness.
 
@@ -127,6 +129,29 @@ Two consequences akmon states rather than papers over:
 
 The exact patch-heredoc route is now observable to the advisories, not enforcement. The hard-deny
 bypass remains open: these hooks are advisory, and no matcher makes a denied effect unbypassable.
+
+### Host-side hook trust verification (C70, D2-27)
+
+N7 measured a delivery precondition outside generated wiring: on the ordinary persisted,
+non-bypass path, project trust controls discovery and per-entry trust controls execution. A
+generated entry may therefore remain `enabled: true` while its `SessionStart` or `PreToolUse`
+handler is inert after an absent or stale group-scoped hash. Generated wiring is structural proof,
+not proof of host delivery.
+
+D2-27 selects an authoritative live query rather than a local reconstruction. After C51 and C57,
+C70 runs inside `verify`, after generated wiring has validated, and obtains `hooks/list` through a
+bounded `codex app-server` subprocess constructed by C57's sole vendor-command owner. Its expected
+population is derived from the generated plan. Missing, disabled, `untrusted`, or `modified`
+expected entries collapse into one warning; strict mode exits 1 without escalating its severity.
+An absent optional Codex installation is a neutral explicit skip. A resolved installation that
+cannot be inspected is a warning and strict failure, never an inferred delivery claim.
+
+The check does not parse `~/.codex/config.toml`, compute vendor hashes, grant trust, or auto-approve
+entries. Owner remediation is through `/hooks` only. It writes neither the consumer tree nor host
+config; vendor-owned cache, log, or network effects caused by app-server startup are an accepted
+bounded operational cost. C59 waits for C70 and receives this finding exactly once as part of the
+complete `verify` stream; it never adds a third provider or queries Codex itself. Exact Finding
+codes and the timeout literal are mechanical C70 constants pinned by its isolated carrier corpus.
 
 ### Release class
 

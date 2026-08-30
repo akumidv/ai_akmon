@@ -10,10 +10,13 @@ Run from the akmon root::
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
 import sync
 import verify
+from findings import render
 
 AGENTS_MD = """# AGENTS.md
 
@@ -69,6 +72,7 @@ def _make_project(tmp_path: Path) -> Path:
         "ARCHETYPES.md",
         "CHANGELOG.md",
         "MODEL.md",
+        "CAPABILITIES.md",
         "roles/README.md",
         "roles/review.md",
         "roles/architect.md",
@@ -111,8 +115,8 @@ def _make_project(tmp_path: Path) -> Path:
       "orchestrator_floor": "highest"
     },
     "second_opinion": {
-      "cli": "claude",
-      "invoke": "claude -p --output-format text",
+      "harness": "claude",
+      "operation": "review",
       "report_dir": ".codex/second-opinion/"
     },
     "semantic_fallback": {
@@ -131,8 +135,8 @@ def _make_project(tmp_path: Path) -> Path:
       "orchestrator_floor": "highest"
     },
     "second_opinion": {
-      "cli": "codex",
-      "invoke": "codex exec",
+      "harness": "codex",
+      "operation": "review",
       "report_dir": ".claude/second-opinion/"
     },
     "semantic_fallback": {
@@ -167,11 +171,11 @@ def _make_project(tmp_path: Path) -> Path:
 
 
 def _levels(findings) -> set[str]:
-    return {finding.level for finding in findings}
+    return {finding.severity for finding in findings}
 
 
 def _messages(findings, level: str) -> list[str]:
-    return [finding.message for finding in findings if finding.level == level]
+    return [finding.message for finding in findings if finding.severity == level]
 
 
 # --------------------------------------------------------------------------------------
@@ -406,6 +410,30 @@ def test_vendor_pointer_without_agents_link_is_error(tmp_path):
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("do not point at AGENTS.md" in message for message in _messages(verifier.findings, "error"))
+
+
+def test_missing_vendor_pointers_do_not_emit_a_pointer_ok(tmp_path):
+    root = tmp_path
+    (root / "AGENTS.md").write_text(AGENTS_MD, encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.check_cross_agent_contract()
+    assert not any(
+        finding.code == "pointers.vendor-agents-link" and finding.severity == "ok"
+        for finding in verifier.findings
+    )
+
+
+def test_a_path_with_a_line_separator_is_escaped_before_it_reaches_a_finding(tmp_path):
+    root = tmp_path
+    agent = root / "_aitna" / "agents" / "bad\nERROR forged.rule victim"
+    agent.mkdir(parents=True)
+    verifier = verify.Verifier(root)
+    verifier.check_agent_charters()
+    assert len(verifier.findings) == 1
+    finding = verifier.findings[0]
+    assert finding.severity == "error"
+    assert r"\nERROR forged.rule victim" in finding.target
+    assert len(render(finding).splitlines()) == 1
 
 
 def test_skills_without_agents_source_root_reference_is_warning(tmp_path):
@@ -851,7 +879,7 @@ def test_check_hooks_skips_in_package_mode_with_note(tmp_path):
     verifier = verify.Verifier(root)
     verifier.check_hooks()
     assert len(verifier.findings) == 1
-    assert verifier.findings[0].level == "ok"
+    assert verifier.findings[0].severity == "ok"
     assert "package mode" in verifier.findings[0].message
 
 
@@ -869,8 +897,9 @@ def test_check_changelog_skips_in_package_mode_with_note(tmp_path):
     verifier = verify.Verifier(root)
     verifier.check_changelog()
     assert len(verifier.findings) == 1
-    assert verifier.findings[0].level == "ok"
-    assert "package mode" in verifier.findings[0].message
+    assert verifier.findings[0].severity == "ok"
+    assert verifier.findings[0].message == "package mode: changelog discipline is owned by the akmon repository"
+    assert "generated-pointers" not in verifier.findings[0].message
 
 
 def test_check_ci_package_mode_accepts_cli_invocation(tmp_path):
@@ -965,3 +994,41 @@ def test_check_standard_path_falls_back_to_standard_tree_label_in_package_mode(t
     verifier.check_standard_path("README.md")
     assert verifier.findings[-1].message.startswith("standard tree:")
     assert verifier.findings[-1].message.endswith("README.md exists")
+
+
+# --------------------------------------------------------------------------------------
+# retired second-opinion keys in the project overlay (N-review of C57). The overlay is
+# deep-merged *over* the shipped registry, so `cli`/`invoke` never displace the new
+# `harness`/`operation` — they ride along beside them, and every presence check still
+# passes. The stale pair therefore has to be caught at the file it is written in.
+# --------------------------------------------------------------------------------------
+
+
+def _overlay_second_opinion_errors(root: Path) -> list[str]:
+    verifier = verify.Verifier(root)
+    verifier.run()
+    return [
+        f.target
+        for f in verifier.findings
+        if f.severity == "error" and f.code == "routing.second-opinion"
+    ]
+
+
+@pytest.mark.parametrize("retired", [{"cli": "claude"}, {"invoke": "claude -p"},
+                                     {"cli": "claude", "invoke": "claude -p"}])
+def test_a_stale_overlay_second_opinion_is_one_error(tmp_path, retired):
+    root = _make_project(tmp_path)
+    _write(
+        root / "_aitna" / "model-routing.json",
+        json.dumps({"anthropic": {"second_opinion": dict(retired)}}),
+    )
+    assert _overlay_second_opinion_errors(root) == ["_aitna/model-routing.json#anthropic"]
+
+
+def test_an_overlay_overriding_only_policy_stays_clean(tmp_path):
+    root = _make_project(tmp_path)
+    _write(
+        root / "_aitna" / "model-routing.json",
+        json.dumps({"anthropic": {"second_opinion": {"report_dir": ".local/so/"}}}),
+    )
+    assert _overlay_second_opinion_errors(root) == []

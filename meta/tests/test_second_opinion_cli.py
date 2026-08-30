@@ -30,16 +30,16 @@ _TWO_VENDOR_REGISTRY = {
     "anthropic": {
         "selection_policy": {},
         "second_opinion": {
-            "cli": "codex",
-            "invoke": "codex exec",
+            "harness": "codex",
+            "operation": "review",
             "report_dir": ".claude/second-opinion",
         },
     },
     "openai": {
         "selection_policy": {},
         "second_opinion": {
-            "cli": "claude",
-            "invoke": "claude -p --output-format text",
+            "harness": "claude",
+            "operation": "review",
             "model_flag": "--model {model}",
             "report_dir": ".claude/second-opinion",
         },
@@ -51,8 +51,8 @@ _ONE_VENDOR_REGISTRY = {
     "anthropic": {
         "selection_policy": {},
         "second_opinion": {
-            "cli": "codex",
-            "invoke": "codex exec",
+            "harness": "codex",
+            "operation": "review",
             "report_dir": ".claude/second-opinion",
         },
     },

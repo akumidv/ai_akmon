@@ -3,7 +3,7 @@
 - **Status:** Accepted — owner-locked (D2-12 verified; backlog A10 done). Implementation
   is [C37](../TASKS.md).
 - **Owner:** akuminov@gmail.com
-- **References:** design [packaging-uvx-init.md](../design/packaging-uvx-init.md) (options
+- **References:** design [packaging concept](../design/packaging/README.md) (options
   and mechanics — the operative spec) · ROADMAP §Distribution ·
   [release-versioning](../design/release-versioning.md) (the tag is the reviewed state) ·
   ADR [0001](0001-release-and-roles-model.md) (one version line).
@@ -56,4 +56,4 @@ layer staying, the mounted tree leaving.
 - Consumer CI stops running the standard's own self-tests (`self_ci.py`, `meta/tests`) —
   those move to ai_akmon's CI; the consumer keeps `sync --check` + `verify --strict`.
 - Non-Python consumers and the co-development workflow stay design open points
-  (packaging-uvx-init.md §Open points) — nothing here blocks them.
+  (packaging concept §Open points) — nothing here blocks them.

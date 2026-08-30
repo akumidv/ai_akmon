@@ -180,7 +180,7 @@ def test_second_opinion_defaults_to_opposite_vendor_and_builds_command():
     spec = routing.second_opinion_spec(REGISTRY, provider)
 
     assert provider == "anthropic"
-    assert spec["cli"] == "claude"
+    assert spec["harness"] == "claude"
     assert routing.second_opinion_command(spec, "review this") == [
         "claude",
         "-p",
@@ -406,7 +406,7 @@ def test_staleness_on_settings_model_mismatch():
 
 
 def test_status_lines_name_binding_and_self_check():
-    lines = routing.status_lines(_fresh_config(), REGISTRY, "_aitna")
+    lines = routing.status_lines(_fresh_config(), REGISTRY, "_aitna/akmon")
     joined = "\n".join(lines)
     assert "orchestrator=large" in joined
     assert "auditor=large" in joined
@@ -420,7 +420,7 @@ def test_status_lines_warn_when_orchestrator_leaves_corridor():
     ladder = ["haiku", "sonnet", "opus", "fable"]
     binding = routing.compute_binding(REGISTRY, "sonnet", available=ladder)
     config = routing.local_config(binding, REGISTRY, second_opinion=False, available=ladder)
-    joined = "\n".join(routing.status_lines(config, REGISTRY, "_aitna"))
+    joined = "\n".join(routing.status_lines(config, REGISTRY, "_aitna/akmon"))
     assert "⚠" in joined and "below the orchestration floor" in joined
 
 
@@ -1102,6 +1102,22 @@ def test_hook_session_start_owner_sees_init_instruction(tmp_path):
     result = _load_hook().model_routing_result(root, {"hook_event_name": "SessionStart"})
     assert "needs initialization" in result.additional_context
     assert "needs initialization" in result.system_message
+    assert "_aitna/akmon/tools/model_routing/init.py" in result.additional_context
+
+
+def test_recovery_instructions_name_the_tree_a_package_mode_project_has(tmp_path):
+    """The recovery path used to name `<AITNA_ROOT>/akmon`, which package mode does not have."""
+    root = _make_package_project(tmp_path)
+    materialized = root / "_aitna" / ".akmon" / "tools" / "model_routing"
+    materialized.mkdir(parents=True)
+    (materialized / "registry.json").write_text(json.dumps(REGISTRY), encoding="utf-8")
+
+    result = _load_hook().model_routing_result(root, {"hook_event_name": "SessionStart"})
+    assert "_aitna/.akmon/tools/model_routing/init.py" in result.additional_context
+    assert "_aitna/akmon/tools" not in result.additional_context
+
+    lines = "\n".join(routing.status_lines(_fresh_config(), REGISTRY, "_aitna/.akmon"))
+    assert "_aitna/.akmon/tools/model_routing/init.py" in lines
 
 
 # --------------------------------------------------------------------------------------
@@ -1174,3 +1190,54 @@ def test_hook_user_prompt_submit_pressure_notice_dual_channel(tmp_path):
     )
     assert "context pressure" in result.additional_context
     assert "context pressure" in result.system_message
+
+
+# --------------------------------------------------------------------------------------
+# mount-decoupled resolution (ADR 0009 §4): package mode has no `<AITNA_ROOT>/akmon` at all
+# --------------------------------------------------------------------------------------
+
+
+def _make_package_project(tmp_path: Path, *, stale_mount: bool = False) -> Path:
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / "_aitna").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "_aitna" / ".akmon.toml").write_text('mount = "package"\n', encoding="utf-8")
+    if stale_mount:
+        stale = tmp_path / "_aitna" / "akmon" / "tools" / "model_routing"
+        stale.mkdir(parents=True)
+        (stale / "registry.json").write_text(json.dumps({"anthropic": {}}), encoding="utf-8")
+    return tmp_path
+
+
+def test_find_project_root_accepts_the_record_without_a_mount(tmp_path):
+    root = _make_package_project(tmp_path)
+    nested = root / "src" / "pkg"
+    nested.mkdir(parents=True)
+    assert _load_init()._find_project_root(nested) == root
+
+
+def test_standard_tree_root_is_the_mount_when_mounted(tmp_path):
+    root = _make_project(tmp_path)
+    assert _load_init()._standard_tree_root(root) == root / "_aitna" / "akmon"
+
+
+def test_standard_tree_root_falls_back_to_its_own_tree_in_package_mode(tmp_path):
+    root = _make_package_project(tmp_path)
+    assert _load_init()._standard_tree_root(root) == _KEYSTONE
+
+
+def test_standard_tree_root_reads_the_mount_field_through_an_inline_comment(tmp_path):
+    root = _make_package_project(tmp_path, stale_mount=True)
+    (root / "_aitna" / ".akmon.toml").write_text('mount = "package"  # ADR 0009 §4\n', encoding="utf-8")
+    assert _load_init()._standard_tree_root(root) == _KEYSTONE
+
+
+def test_standard_tree_root_ignores_a_stale_mount_in_package_mode(tmp_path):
+    """The recorded mode decides, not a leftover directory from a prior mount mode."""
+    root = _make_package_project(tmp_path, stale_mount=True)
+    assert _load_init()._standard_tree_root(root) == _KEYSTONE
+
+
+def test_init_runs_in_package_mode_against_the_shipped_registry(tmp_path):
+    root = _make_package_project(tmp_path)
+    assert _load_init().main(["--project-root", str(root), "--available", "small,medium,large"]) == 0
+    assert sorted((root / ".claude" / "agents").glob("k_*.md"))

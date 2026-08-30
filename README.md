@@ -9,12 +9,38 @@ project**. A consumer either mounts the repository at `_aitna/akmon/` or pins th
 `_aitna/.akmon/` ([ADR 0009](meta/decisions/0009-packaging-package-carrier-and-mount-modes.md)).
 The standard is **LLM-agnostic** at the policy layer: plain Markdown/JSON that any assistant
 or human can read. Enforcement depth remains vendor-specific, and the single entry point in
-a consuming project is its root `AGENTS.md`. Package-mode `sync`, `verify`, `path`, and
-materialization are implemented; automated `akmon init` and public PyPI publication remain
-pending.
+a consuming project is its root `AGENTS.md`. `akmon init`, `sync`, `verify`, `path` and
+package-mode materialization are implemented for all four mount modes; public PyPI
+publication is still pending (pin by git tag until then).
 
-**New consumer? Start at [BOOTSTRAP.md](BOOTSTRAP.md)** — it attaches akmon to a project.
+**New consumer? Run `akmon init`** (Quick start below) — it attaches akmon to a project.
 Already attached? **[MODEL.md](MODEL.md)** is the operative rulebook.
+[BOOTSTRAP.md](BOOTSTRAP.md) is the reference behind `init`: the judgment steps it leaves to
+you, and the manual path when you would rather attach by hand.
+
+## Quick start
+
+```bash
+# until the first PyPI publish, run the CLI straight from the repository (uv required):
+uvx --from git+https://github.com/akumidv/ai_akmon akmon init   # `uvx akmon init` after the publish
+```
+
+`init` picks the mount mode (`submodule` when the project is a git repo that can reach the
+akmon repository, else `vendored`; `--mode vendored|subtree|package` to choose), mounts the
+standard, creates the `_aitna/` layout, writes the `AGENTS.md` akmon block and the
+`.akmon.toml` record, wires the vendor hooks and pointers (`sync`), initializes model
+routing, and prints the two decisions it leaves to you — the archetype/guardrail
+classification and the `[test].runner` pin. Then:
+
+```bash
+akmon verify --strict   # the contract check; also what CI should run, next to `akmon sync --check`
+```
+
+With `--mode package` there is no tree in the repo, so the pin lives in your manifest and
+`init` cannot write it: add `akmon` to a **dev** group (never a runtime dependency) —
+`"akmon @ git+https://github.com/akumidv/ai_akmon@vX.Y.Z"` until the first publish. `init`
+exits 1 and `verify --strict` keeps failing until it is there, because nothing else attaches
+the standard in that mode.
 
 ## The simple idea
 
@@ -71,25 +97,20 @@ sits inside `_aitna/`; the `k-` prefix of the subagents reads as *Kyklōpes*.
 
 ## Vendor support
 
-akmon is LLM-agnostic by design, but *enforcement depth* differs per vendor harness — a
-pointer file is universal, hooks are not. The honest current state; ❓ cells are
-unverified and tracked as task **N1** in [meta/TASKS.md](meta/TASKS.md) (fill from
-experiment against the real harness, not from vendor docs). The Claude and Codex columns
-were measured live under **N2** — Claude Code 2.1.221 and codex-cli 0.146.0 — and ⚠️ marks
-a capability that exists but is narrower than the ✅ next to it; details in the
-[N2 findings](meta/reviews/alternatives/n2-stage0-probes-inventory-20260807.md):
+akmon is LLM-agnostic by design: the `AGENTS.md` entry point and the generated vendor pointers
+are universal, while hook-delivered mechanisms exist only where a harness offers them. How far
+each mechanism actually reaches on each harness is recorded claim by claim in
+[CAPABILITIES.md](CAPABILITIES.md), which answers six separate questions per claim — documented,
+delivered, the exact route, the boundary effect, the crash posture, and the evidence behind it —
+rather than compressing them into one mark. Two consequences are worth knowing before you attach:
 
-| Capability | Claude Code | Codex CLI | Gemini CLI | Copilot |
-|---|---|---|---|---|
-| `AGENTS.md` entry point via generated pointer (`sync.py`) | ✅ `CLAUDE.md` | ✅ native `AGENTS.md` | ✅ `GEMINI.md` | ❓ |
-| Always-on guardrails via `@`-import from `AGENTS.md` | ✅ imports expanded | ❌ `@` lines delivered as literal text (0.146.0) — the guardrails never load | ❓ | ❓ |
-| Session-start context (agent roster, memory, delegation) | ✅ SessionStart hook | ⚠️ `hookSpecificOutput` reaches the **parent only** — no `SubagentStart` dispatch in 0.146.0 | ❓ | ❓ |
-| Commit guard — hard `ask`/`deny` at the tool boundary | ✅ PreToolUse hook | ⚠️ deny enforced per **route** (0.146.0): blocked `apply_patch` is reachable via the shell unless the `Bash` matcher is emitted too | ❓ | ❓ |
-| Delegation policy reaches the orchestrator | ✅ direct AGENTS + hook | ✅ direct AGENTS + SessionStart | ❓ | ❓ |
-| Delegation log + nudge | ✅ PreToolUse hook | ❌ subagent hook payload unverified | ❓ | ❓ |
-| Generic subagent launch | ✅ | ✅ live Codex 0.144.1 capability | ❓ | ❓ |
-| Named `k_*` agents and child-model routing | ✅ Claude agent files | ⚠️ model pin **and** named identity proven live (0.146.0); `.codex/agents/*.toml` exists as a carrier but akmon emits none | ❓ | ❓ |
-| Second opinion (cross-vendor review) | ✅ asks Codex | ✅ asks Claude | ❓ | ❓ |
+- a harness that does not run hooks still gets the whole documentary contract, and nothing else;
+- on Codex, wiring the hooks is not the same as having them run — host-side approval gates
+  delivery, and the procedure for it is in [BOOTSTRAP](BOOTSTRAP.md) §A8, §E and §F.
+
+Gemini CLI and Copilot carry no measured claim beyond the generated pointer; filling that in is
+tracked as **N1** in [meta/TASKS.md](meta/TASKS.md).
+
 
 ## What's in this repository
 
@@ -195,13 +216,15 @@ owner ◄── synthesis + audit verdict + the items only the owner can verify
   against a yardstick. Worked, real example: [examples/gate-anatomy.md](examples/gate-anatomy.md).
 - **Hooks keep it true at runtime.** SessionStart shows the binding; a PreToolUse hook logs
   every delegation at zero token cost; the delegation nudge pushes a drifting orchestrator
-  back to the smiths; the commit guard enforces owner-owned commits.
+  back to the smiths; the commit guard holds D5 at the tool boundary. What each of those
+  actually reaches, per harness, is in [CAPABILITIES.md](CAPABILITIES.md).
 
-> **The smiths are used, not just named.** Delegation to the `k_*` smiths is **enforced**,
-> not merely documented — because restating "delegate by task kind" in prose did not stop
-> the orchestrator from doing everything itself. A PreToolUse forcing-function counts the
-> orchestrator's own consecutive delegable calls (read/sweep, edit, shell) with no
-> delegation and, past a threshold, nudges — then hard-asks — to hand the work to a smith.
+> **The smiths are used, not just named.** Delegation to the `k_*` smiths carries a forcing
+> function, not just prose — because restating "delegate by task kind" did not stop the
+> orchestrator from doing everything itself. A PreToolUse hook counts the orchestrator's own
+> consecutive delegable calls (read/sweep, edit, shell) with no delegation and, past a
+> threshold, nudges — then hard-asks — to hand the work to a smith. How far that reaches on
+> each harness is one row in [CAPABILITIES.md](CAPABILITIES.md).
 > The smiths themselves are exempt (a `k_*` delegate has no delegation tool of its own).
 > Mechanism + motivation: [model-routing §13](meta/design/model-routing.md).
 

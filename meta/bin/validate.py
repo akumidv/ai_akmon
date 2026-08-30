@@ -21,11 +21,15 @@ import argparse
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 # meta/bin/validate.py → akmon root is two parents up.
 _KEYSTONE_ROOT = Path(__file__).resolve().parents[2]
+
+# The shared finding envelope ships in the standard's own ``bin/`` (stdlib-only, no install).
+sys.path.insert(0, str(_KEYSTONE_ROOT / "bin"))
+
+from findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
 
 # akmon's own dev-layer artifacts (META). These ship with the submodule but are inert
 # for a consumer; here we assert they exist so akmon's own tree stays whole.
@@ -43,6 +47,7 @@ _DEV_LAYER_FILES = (
 # the operative USE-surface source files akmon authors and ships (the contract itself).
 _USE_SOURCE_FILES = (
     "MODEL.md",
+    "CAPABILITIES.md",
     "BOOTSTRAP.md",
     "ARCHETYPES.md",
     "CHANGELOG.md",
@@ -72,43 +77,57 @@ def _requirement_name(requirement: str) -> str:
     return head.lower()
 
 
-@dataclass(frozen=True)
-class Finding:
-    level: str
-    message: str
-
-
 class Validator:
     def __init__(self, root: Path, *, skip_tests: bool = False) -> None:
         self.root = root
         self.skip_tests = skip_tests
         self.findings: list[Finding] = []
 
-    def ok(self, message: str) -> None:
-        self.findings.append(Finding("ok", message))
+    def ok(self, code: str, message: str, *, target: str = "", fix: str) -> None:
+        self.findings.append(Finding("ok", code, line_safe(message), line_safe(target), line_safe(fix)))
 
-    def warn(self, message: str) -> None:
-        self.findings.append(Finding("warn", message))
+    def warn(self, code: str, message: str, *, target: str = "", fix: str) -> None:
+        self.findings.append(Finding("warn", code, line_safe(message), line_safe(target), line_safe(fix)))
 
-    def error(self, message: str) -> None:
-        self.findings.append(Finding("error", message))
+    def error(self, code: str, message: str, *, target: str = "", fix: str) -> None:
+        self.findings.append(Finding("error", code, line_safe(message), line_safe(target), line_safe(fix)))
 
-    def check_present(self, relatives: tuple[str, ...], label: str) -> None:
+    def check_present(self, relatives: tuple[str, ...], label: str, *, code: str, target: str) -> None:
+        """One presence rule over a population; the caller owns the code naming that rule."""
         missing = [rel for rel in relatives if not (self.root / rel).is_file()]
         if missing:
-            self.error(f"{label}: missing {', '.join(missing)}")
+            self.error(
+                code,
+                f"{label}: missing {', '.join(missing)}",
+                target=target,
+                fix="Restore the listed files from git history.",
+            )
         else:
-            self.ok(f"{label}: all present")
+            self.ok(
+                code,
+                f"{label}: all present",
+                target=target,
+                fix="Keep every file in this population present.",
+            )
 
     def check_dev_layout(self) -> None:
-        self.check_present(_DEV_LAYER_FILES, "dev layer (meta/)")
-        self.check_present(_USE_SOURCE_FILES, "USE-surface sources")
+        self.check_present(
+            _DEV_LAYER_FILES, "dev layer (meta/)", code="devlayer.files", target="meta/"
+        )
+        self.check_present(
+            _USE_SOURCE_FILES, "USE-surface sources", code="devlayer.use-surface", target="."
+        )
 
     def run_self_ci(self) -> None:
         """Run the synthetic-fixture self-CI: sync.py + USE-layer verify.py on a fixture."""
         self_ci = self.root / "meta" / "self_ci.py"
         if not self_ci.is_file():
-            self.error("meta/self_ci.py is missing; cannot exercise the USE contract")
+            self.error(
+                "devlayer.self-ci-runner",
+                "meta/self_ci.py is missing; cannot exercise the USE contract",
+                target="meta/self_ci.py",
+                fix="Restore meta/self_ci.py from git history.",
+            )
             return
         result = subprocess.run(
             [sys.executable, str(self_ci)],
@@ -116,23 +135,48 @@ class Validator:
             text=True,
         )
         if result.returncode == 0:
-            self.ok("self-CI fixture passes (sync + USE verify)")
+            self.ok(
+                "devlayer.self-ci",
+                "self-CI fixture passes (sync + USE verify)",
+                target="meta/self_ci.py",
+                fix="Keep the synthetic fixture green before every release.",
+            )
         else:
             detail = (result.stderr or result.stdout).strip().splitlines()
             tail = detail[-1] if detail else f"exit {result.returncode}"
-            self.error(f"self-CI fixture failed: {tail}")
+            self.error(
+                "devlayer.self-ci",
+                f"self-CI fixture failed: {tail}",
+                target="meta/self_ci.py",
+                fix="Run python3 meta/self_ci.py and fix the reported failure.",
+            )
 
     def run_tests(self) -> None:
         if self.skip_tests:
-            self.warn("unit tests skipped (--skip-tests)")
+            self.warn(
+                "devlayer.unit-tests-skipped",
+                "unit tests skipped (--skip-tests)",
+                target="meta/tests",
+                fix="Drop --skip-tests to run the unit tests.",
+            )
             return
         tests_dir = self.root / "meta" / "tests"
         if not tests_dir.is_dir():
-            self.error("meta/tests is missing; cannot run akmon unit tests")
+            self.error(
+                "devlayer.tests-dir",
+                "meta/tests is missing; cannot run akmon unit tests",
+                target="meta/tests",
+                fix="Restore meta/tests from git history.",
+            )
             return
         runner, reason = self._pytest_command()
         if runner is None:
-            self.warn(f"unit tests skipped: {reason}")
+            self.warn(
+                "devlayer.unit-tests-skipped",
+                f"unit tests skipped: {reason}",
+                target="meta/tests",
+                fix="Install pytest, or run this validator with an interpreter that has it.",
+            )
             return
         result = subprocess.run(
             [*runner, str(tests_dir), "-q"],
@@ -141,11 +185,21 @@ class Validator:
             text=True,
         )
         if result.returncode == 0:
-            self.ok(f"unit tests pass ({' '.join(runner)})")
+            self.ok(
+                "devlayer.unit-tests",
+                f"unit tests pass ({' '.join(runner)})",
+                target="meta/tests",
+                fix="Keep the unit tests green before every commit.",
+            )
         else:
             detail = (result.stdout or result.stderr).strip().splitlines()
             tail = detail[-1] if detail else f"exit {result.returncode}"
-            self.error(f"unit tests failed: {tail}")
+            self.error(
+                "devlayer.unit-tests",
+                f"unit tests failed: {tail}",
+                target="meta/tests",
+                fix="Run the unit tests locally and fix the reported failure.",
+            )
 
     def _pytest_command(self) -> tuple[list[str] | None, str]:
         """Pick a pytest runner that actually resolves here, else ``None`` and the reason why.
@@ -217,13 +271,6 @@ class Validator:
         self.run_tests()
 
 
-def print_findings(findings: list[Finding], *, quiet: bool) -> None:
-    for finding in findings:
-        if quiet and finding.level == "ok":
-            continue
-        print(f"[{finding.level}] {finding.message}")
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict", action="store_true", help="Treat warnings as failures.")
@@ -234,12 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     validator = Validator(_KEYSTONE_ROOT, skip_tests=args.skip_tests)
     validator.run()
     print_findings(validator.findings, quiet=args.quiet)
-
-    has_errors = any(finding.level == "error" for finding in validator.findings)
-    has_warnings = any(finding.level == "warn" for finding in validator.findings)
-    if has_errors or (args.strict and has_warnings):
-        return 1
-    return 0
+    return exit_code(validator.findings, strict=args.strict)
 
 
 if __name__ == "__main__":

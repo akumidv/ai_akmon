@@ -27,12 +27,82 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import routing
 
 
+def _toml_scalar(raw: str) -> str:
+    """A ``.akmon.toml`` scalar: a quoted string's content, else the bare value up to a ``#``.
+
+    The same rule as ``bin/sync.py::_strip_inline_comment`` + quote stripping, kept local for
+    the reason the reader itself is local (below). Without it the documented shape
+    ``mount = "package"  # materialized`` read back as ``package"  # materialized`` — i.e. not
+    ``package`` — and a package-mode project whose record carried a comment silently fell back
+    to the mounted-tree branch, the exact skew this field exists to prevent.
+    """
+    value = raw.strip()
+    quote = value[:1]
+    if quote not in ('"', "'"):
+        return value.split("#", 1)[0].strip()
+    index = 1
+    while index < len(value):
+        if quote == '"' and value[index] == "\\":
+            index += 2
+            continue
+        if value[index] == quote:
+            return value[1:index]
+        index += 1
+    return value[1:]
+
+
+def _read_top_level_toml_value(path: Path, key: str) -> str | None:
+    """A minimal top-level ``key = "value"`` reader for ``.akmon.toml`` (stops at the first
+    ``[section]`` header).
+
+    Deliberately local rather than a reuse of ``bin/sync.py::read_akmon_toml``: it answers
+    *which tree this script may trust*, and in mount mode ``package`` this file runs from the
+    materialized ``<AITNA_ROOT>/.akmon/`` copy, where ``bin/`` does not exist at all (ADR 0009
+    §4) — so the answer must not depend on any tree being importable.
+    """
+    if not path.is_file():
+        return None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("["):
+            break
+        found_key, sep, value = stripped.partition("=")
+        if sep and found_key.strip() == key:
+            return _toml_scalar(value)
+    return None
+
+
 def _find_project_root(start: Path) -> Path:
+    """Walk up for a project ``AGENTS.md`` plus either a mounted tree or an integration
+    record — the latter is the only marker a package-mode project carries, since it has no
+    mounted tree at all (ADR 0009 §4; mirrors ``bin/sync.py::_find_project_root``)."""
     aitna = routing.aitna_root_name()
     for candidate in (start, *start.parents):
-        if (candidate / "AGENTS.md").is_file() and (candidate / aitna / "akmon").exists():
+        if not (candidate / "AGENTS.md").is_file():
+            continue
+        if (candidate / aitna / "akmon").exists() or (candidate / aitna / ".akmon.toml").is_file():
             return candidate
     return start
+
+
+def _standard_tree_root(project_root: Path) -> Path:
+    """The tree this script reads ``registry.json`` from: the mount for mounted modes, this
+    script's own tree otherwise (ADR 0009 §4, mirroring ``bin/sync.py::standard_tree_root``).
+
+    In package mode that own tree is either the materialized ``<AITNA_ROOT>/.akmon/`` copy or
+    the installed package's embedded tree, whichever this file was executed from — both carry
+    ``tools/model_routing/registry.json``. The recorded ``mount`` field decides, never the mere
+    presence of the directory: a stale ``<AITNA_ROOT>/akmon`` left over from a prior mode must
+    not shadow the pin.
+    """
+    aitna = project_root / routing.aitna_root_name()
+    if _read_top_level_toml_value(aitna / ".akmon.toml", "mount") != "package":
+        mounted = aitna / "akmon"
+        if mounted.is_dir():
+            return mounted
+    return Path(__file__).resolve().parents[2]
 
 
 def _settings_model(project_root: Path) -> str | None:
@@ -82,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = (args.project_root or _find_project_root(Path.cwd())).resolve()
-    akmon_dir = root / routing.aitna_root_name() / "akmon"
+    akmon_dir = _standard_tree_root(root)
     registry = routing.load_registry(akmon_dir, root)
     vendors = routing.vendors_with_routing_policy(registry)
     if args.vendor not in vendors:

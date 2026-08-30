@@ -84,6 +84,14 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     event = payload.get("hook_event_name") or "SessionStart"
 
     aitna = aitna_root_name()
+    # Recovery instructions must name the tree this project actually has: the mount when one
+    # exists, the `<AITNA_ROOT>/.akmon` materialization in mount mode `package`, which carries
+    # its own copy of the routing tools (ADR 0009 §4). Naming the mount unconditionally handed a
+    # package-mode session a path that is not there.
+    try:
+        runtime_rel = akmon.relative_to(root).as_posix()
+    except ValueError:  # pragma: no cover - the runtime root always sits under the project
+        runtime_rel = str(akmon)
     # An overlay `briefs` key matching no agent makes every regeneration lossy, so the
     # rebind is refused rather than run — and the reason is stated instead of swallowed (C50).
     brief_warn = routing.brief_warning(registry, aitna)
@@ -124,13 +132,13 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     reason = routing.staleness(config, registry, settings_model)
     overlay = [brief_warn] if brief_warn else []
     if reason is not None:
-        lines = routing.init_instruction(reason, aitna) + overlay + pressure
+        lines = routing.init_instruction(reason, runtime_rel) + overlay + pressure
         return HookResult(
             event_name="SessionStart",
             additional_context="\n".join(lines),
             system_message="\n".join([lines[0], *overlay, *pressure]),
         )
-    lines = routing.status_lines(config, registry, aitna) + overlay + pressure
+    lines = routing.status_lines(config, registry, runtime_rel) + overlay + pressure
     # Owner-addressed subset: warnings (corridor/pressure) and the fact of a rebind; the
     # steady-state status line itself stays context-only so the UI is quiet when healthy.
     owner = [line for line in lines if line.startswith("⚠")]

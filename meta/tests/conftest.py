@@ -16,7 +16,9 @@ _KEYSTONE = next(
     for parent in Path(__file__).resolve().parents
     if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-for _subdir in ("hooks", "bin"):
+# ``meta`` joins them so the dev-only ``checks`` package (akmon's own declaration checkers,
+# whose single production caller is ``meta/self_ci.py``) imports by the same bare name here.
+for _subdir in ("hooks", "bin", "meta", "tools/model_routing"):
     _path = str(_KEYSTONE / _subdir)
     if _path not in sys.path:
         sys.path.insert(0, _path)

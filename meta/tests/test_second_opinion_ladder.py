@@ -27,7 +27,7 @@ import routing  # noqa: E402
 
 
 def test_second_opinion_command_without_model_is_unchanged():
-    spec = {"invoke": "claude -p --output-format text", "model_flag": "--model {model}"}
+    spec = {"harness": "claude", "operation": "review", "model_flag": "--model {model}"}
     assert routing.second_opinion_command(spec, "review this") == [
         "claude",
         "-p",
@@ -38,7 +38,7 @@ def test_second_opinion_command_without_model_is_unchanged():
 
 
 def test_second_opinion_command_with_model_inserts_flag_before_prompt():
-    spec = {"invoke": "claude -p --output-format text", "model_flag": "--model {model}"}
+    spec = {"harness": "claude", "operation": "review", "model_flag": "--model {model}"}
     assert routing.second_opinion_command(spec, "review this", model="opus") == [
         "claude",
         "-p",
@@ -51,7 +51,7 @@ def test_second_opinion_command_with_model_inserts_flag_before_prompt():
 
 
 def test_second_opinion_command_with_model_but_no_model_flag_omits_it():
-    spec = {"invoke": "codex exec"}
+    spec = {"harness": "codex", "operation": "review"}
     assert routing.second_opinion_command(spec, "review this", model="o3") == [
         "codex",
         "exec",
@@ -66,14 +66,14 @@ def test_second_opinion_command_with_model_but_no_model_flag_omits_it():
 _TWO_VENDOR_REGISTRY = {
     "anthropic": {
         "selection_policy": {},
-        "second_opinion": {"invoke": "codex exec", "report_dir": ".claude/second-opinion", "cli": "codex"},
+        "second_opinion": {"harness": "codex", "operation": "review", "report_dir": ".claude/second-opinion"},
     },
     "openai": {
         "selection_policy": {},
         "second_opinion": {
-            "invoke": "claude -p --output-format text",
+            "harness": "claude",
+            "operation": "review",
             "report_dir": ".claude/second-opinion",
-            "cli": "claude",
         },
     },
     "second_opinion_policy": {"diversity_ladder": ["other-vendor", "same-vendor-other-model"]},
@@ -82,7 +82,7 @@ _TWO_VENDOR_REGISTRY = {
 _ONE_VENDOR_REGISTRY = {
     "anthropic": {
         "selection_policy": {},
-        "second_opinion": {"invoke": "codex exec", "report_dir": ".claude/second-opinion", "cli": "codex"},
+        "second_opinion": {"harness": "codex", "operation": "review", "report_dir": ".claude/second-opinion"},
     },
     "second_opinion_policy": {"diversity_ladder": ["other-vendor", "same-vendor-other-model"]},
 }

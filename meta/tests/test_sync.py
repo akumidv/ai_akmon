@@ -398,3 +398,92 @@ def test_full_generation_under_custom_root_is_idempotent(monkeypatch, tmp_path):
     assert sync.main(["--project-root", str(root), "--check"]) == 0  # clean second pass
     banner = (root / "CLAUDE.md").read_text(encoding="utf-8")
     assert "tools/ai/akmon/bin/sync.py" in banner  # GENERATED banner tracks the root
+
+
+# --------------------------------------------------------------------------------------
+# read_akmon_toml — the pre-3.11 fallback must agree with tomllib on inline comments
+# --------------------------------------------------------------------------------------
+
+
+def test_strip_inline_comment_drops_a_trailing_comment():
+    assert sync._strip_inline_comment('"poetry run pytest"   # optional') == '"poetry run pytest"'
+    assert sync._strip_inline_comment("v0.3.0 # the pin") == "v0.3.0"
+
+
+def test_strip_inline_comment_ends_a_basic_string_at_the_closing_quote():
+    """`\\"` inside a basic string is an escaped quote, not the end of the value — stopping at
+    the first quote handed back a truncated fragment with the escape still dangling."""
+    assert sync._strip_inline_comment(r'"say \"hi\" twice"  # note') == r'"say \"hi\" twice"'
+    assert sync._strip_inline_comment(r"'literal \ backslash'  # note") == r"'literal \ backslash'"
+
+
+def test_strip_inline_comment_keeps_a_hash_inside_the_value():
+    """A `#` inside a quoted value is data — cutting there would corrupt the value."""
+    assert sync._strip_inline_comment('"run --tag #1"') == '"run --tag #1"'
+    assert sync._strip_inline_comment('"unterminated # still data') == '"unterminated # still data'
+
+
+def test_read_akmon_toml_ignores_inline_comments(tmp_path):
+    """The shape BOOTSTRAP §C documents parsed differently on 3.9/3.10 than on 3.11+."""
+    record = tmp_path / ".akmon.toml"
+    record.write_text(
+        'akmon_version = "v0.3.0"   # where this project sits\n'
+        'attached_archetype = "package/python"\n'
+        "\n"
+        "[test]\n"
+        'runner = "poetry run pytest"       # optional — pinned at attach\n',
+        encoding="utf-8",
+    )
+    fields = sync.read_akmon_toml(record)
+    assert fields["akmon_version"] == "v0.3.0"
+    assert fields["test"]["runner"] == "poetry run pytest"
+
+
+# --------------------------------------------------------------------------------------
+# the package-mode manifest pin — one owner for `init` and `verify` (ADR 0009 §4)
+# --------------------------------------------------------------------------------------
+
+
+def test_package_pin_status_answers_none_without_a_manifest(tmp_path):
+    assert sync.package_pin_status(tmp_path) == "none"
+
+
+def test_package_pin_status_reports_the_worst_declaration_not_the_first(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[dependency-groups]\ndev = ["akmon"]\n\n[project]\ndependencies = ["akmon"]\n',
+        encoding="utf-8",
+    )
+    assert sync.package_pin_status(tmp_path) == "runtime"
+
+
+def test_package_pin_status_ignores_a_source_override(tmp_path):
+    """`[tool.uv.sources]` says where a package comes from, never that it is required."""
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\ndependencies = ["pandas"]\n\n[tool.uv.sources]\nakmon = { git = "https://x" }\n',
+        encoding="utf-8",
+    )
+    assert sync.package_pin_status(tmp_path) == "none"
+
+
+def test_package_pin_status_normalizes_distribution_name_case(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[dependency-groups]\ndev = ["AkMoN @ git+https://x"]\n',
+        encoding="utf-8",
+    )
+    assert sync.package_pin_status(tmp_path) == "dev"
+
+
+def test_package_pin_status_supports_legacy_uv_dev_dependencies(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.uv]\ndev-dependencies = ["akmon @ git+https://x"]\n',
+        encoding="utf-8",
+    )
+    assert sync.package_pin_status(tmp_path) == "dev"
+
+
+def test_package_pin_status_ignores_akmon_key_in_an_unrelated_tool_section(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.example]\nakmon = { enabled = true }\n',
+        encoding="utf-8",
+    )
+    assert sync.package_pin_status(tmp_path) == "none"

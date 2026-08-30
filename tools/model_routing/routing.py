@@ -14,10 +14,19 @@ import json
 import os
 import re
 import shlex
+import sys
 import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# The optional-harness command map lives in the standard tree's ``bin/`` (C57, §7). Two parents
+# up from ``tools/model_routing/`` is that tree root in every mount mode — the mounted
+# ``<AITNA_ROOT>/akmon/`` and the materialized ``<AITNA_ROOT>/.akmon/`` alike — so this resolves
+# without reading the mount record and stays clear of the tree-resolution fork (C69).
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bin"))
+
+from runtime import harness_command  # noqa: E402
 
 _AITNA_ROOT_DEFAULT = "_aitna"
 
@@ -189,7 +198,7 @@ def compute_binding(
         escalation=escalation,
         semantic_fallback=semantic,
         warning=warning,
-        second_opinion_cli=second_opinion.get("cli"),
+        second_opinion_cli=second_opinion.get("harness"),
     )
 
 
@@ -239,12 +248,38 @@ def second_opinion_provider(registry: dict, config: dict, orchestrator_vendor: s
     return opposite_vendor(registry, orchestrator_vendor)
 
 
+#: Keys C57 retired when the executable moved into ``bin/runtime.py``. A project overlay written
+#: before that change deep-merges *over* the shipped registry, so the new keys survive and the
+#: stale ones ride along unread — the config looks usable and silently means something else.
+RETIRED_SECOND_OPINION_KEYS = ("cli", "invoke")
+
+
 def second_opinion_spec(registry: dict, provider: str, *, required: bool = True) -> dict:
+    """The second-opinion policy for one provider, or ``{}`` when it is absent and optional.
+
+    A spec still carrying the retired keys always raises, in both the required and optional
+    calls: it is a stale *configuration*, not an absent capability, and degrading it to "no
+    second opinion available" would hide the migration behind a silently weaker run.
+    """
     spec = registry.get(provider, {}).get("second_opinion", {})
-    if isinstance(spec, dict) and spec.get("invoke") and spec.get("report_dir"):
-        return spec
+    if isinstance(spec, dict):
+        retired = [key for key in RETIRED_SECOND_OPINION_KEYS if key in spec]
+        if retired:
+            raise KeyError(
+                f"second-opinion provider '{provider}' still carries the retired key(s) "
+                f"{', '.join(retired)}; the executable and its argv moved into bin/runtime.py "
+                f"(C57). Delete only those keys from the hand-owned project overlay and "
+                f"leave the rest of the object alone: the overlay is deep-merged over the "
+                f"shipped registry, so harness/operation/report_dir are inherited unless the "
+                f"overlay deliberately overrides one. The initializer reads this file and will "
+                f"not rewrite it; re-run it afterwards to refresh the generated config."
+            )
+        if spec.get("harness") and spec.get("operation") and spec.get("report_dir"):
+            return spec
     if required:
-        raise KeyError(f"second-opinion provider '{provider}' has no usable invoke/report_dir spec")
+        raise KeyError(
+            f"second-opinion provider '{provider}' has no usable harness/operation/report_dir spec"
+        )
     return {}
 
 
@@ -265,12 +300,12 @@ def second_opinion_fallback_model(rungs: list[str], orchestrator: str, auditor: 
 def second_opinion_command(spec: dict, prompt: str, model: str | None = None) -> list[str]:
     """Build the non-interactive CLI command; the prompt is passed as the final argv.
 
-    When ``model`` is given and the spec declares a ``model_flag`` format string
-    (e.g. ``"--model {model}"``), the flag is inserted before the prompt so the
+    The executable and the operation's argv come from the single owner in ``bin/runtime.py``;
+    the registry contributes only *policy* — which harness, which operation, and the optional
+    ``model_flag`` format string (e.g. ``"--model {model}"``) inserted before the prompt so the
     same-vendor branch of the diversity ladder can pin a *different* model.
     """
-    invoke = str(spec["invoke"])
-    argv = shlex.split(invoke)
+    argv = harness_command(str(spec["harness"]), str(spec["operation"]))
     if model:
         model_flag = spec.get("model_flag")
         if model_flag:
@@ -1111,13 +1146,20 @@ def staleness(config: dict, registry: dict, settings_model: str | None) -> str |
     return None
 
 
-def status_lines(config: dict, registry: dict, aitna: str) -> list[str]:
-    """The steady-state status injection: one binding line + self-check, plus any warning."""
+def status_lines(config: dict, registry: dict, runtime_root: str) -> list[str]:
+    """The steady-state status injection: one binding line + self-check, plus any warning.
+
+    ``runtime_root`` is the project-root-relative directory the routing tools actually live in
+    — ``<AITNA_ROOT>/akmon`` when the standard is mounted, ``<AITNA_ROOT>/.akmon`` in mount mode
+    ``package``, where there is no mount at all (ADR 0009 §4). It is passed in rather than
+    derived here because only the caller knows the project root; naming the mount
+    unconditionally used to hand a package-mode session a path that does not exist.
+    """
     binding = config.get("binding", {})
     second = "on" if config.get("second_opinion") else "off"
     orchestrator_vendor = str(config.get("vendor") or "anthropic")
     provider = second_opinion_provider(registry, config, orchestrator_vendor)
-    second_cli = registry.get(provider, {}).get("second_opinion", {}).get("cli", "-")
+    second_cli = registry.get(provider, {}).get("second_opinion", {}).get("harness", "-")
     orchestrator = config.get("orchestrator", "?")
     lines = [
         "[akmon] model routing: "
@@ -1129,7 +1171,7 @@ def status_lines(config: dict, registry: dict, aitna: str) -> list[str]:
         "k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · "
         "k_auditor (audit at gates); escalate one rung only on failure signals.",
         f"Self-check: if your actual model is not '{orchestrator}', re-run "
-        f"`python3 {aitna}/akmon/tools/model_routing/init.py --orchestrator <alias>`.",
+        f"`python3 {runtime_root}/tools/model_routing/init.py --orchestrator <alias>`.",
     ]
     warning = compute_binding(registry, orchestrator, config.get("available"), orchestrator_vendor).warning
     if warning:
@@ -1159,11 +1201,13 @@ def rebind_notice(config: dict, registry: dict) -> list[str]:
     return lines
 
 
-def init_instruction(reason: str, aitna: str) -> list[str]:
+def init_instruction(reason: str, runtime_root: str) -> list[str]:
+    """The one-time setup instruction. ``runtime_root``: see ``status_lines`` — the recovery
+    path must name the tree this project actually has, mounted or materialized."""
     return [
         f"[akmon] Model routing needs initialization — {reason}.",
         "State the model you are running on and the models available in this harness, then run: "
-        f"`python3 {aitna}/akmon/tools/model_routing/init.py --orchestrator <your-alias> "
+        f"`python3 {runtime_root}/tools/model_routing/init.py --orchestrator <your-alias> "
         "[--available <alias,...>] [--second-opinion on|off]`.",
         "Then ask the owner to (a) confirm the proposed tier→model binding and "
         "(b) enable or decline second-opinion review, and re-run the tool with their answers.",

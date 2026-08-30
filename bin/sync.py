@@ -11,9 +11,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from findings import Finding, line_safe, print_findings
 
 # The dev-layer (LOCAL) root is configurable: ``_aitna`` is the default, but a project may
 # relocate it by declaring ``AITNA_ROOT`` (a project-root-relative path, e.g. ``tools/ai``).
@@ -47,6 +50,33 @@ def akmon_root(project_root: Path) -> Path:
 _TREE_ROOT = Path(__file__).resolve().parent.parent
 
 
+def _strip_inline_comment(value: str) -> str:
+    """A TOML value with any trailing ``# comment`` removed, honouring quotes.
+
+    ``tomllib`` does this for free; the pre-3.11 fallback in ``read_akmon_toml`` did not, so
+    the very shape BOOTSTRAP §C documents — ``runner = "poetry run pytest"  # optional`` —
+    parsed to *different values* depending on the host Python: the comment rode along on 3.9/3.10
+    and was dropped on 3.11+. A ``#`` inside a quoted value is data, not a comment, so a quoted
+    value ends at its closing quote and only a bare value is cut at the first ``#``.
+    """
+    value = value.strip()
+    quote = value[:1]
+    if quote not in ('"', "'"):
+        return value.split("#", 1)[0].strip()
+    # Scan to the *closing* quote rather than to the next one: in a basic string a `\"` is an
+    # escaped quote, so `find` would end the value in the middle of it and hand back a broken
+    # fragment. Literal strings (`'...'`) have no escapes at all, by TOML's definition.
+    index = 1
+    while index < len(value):
+        if quote == '"' and value[index] == "\\":
+            index += 2
+            continue
+        if value[index] == quote:
+            return value[: index + 1]
+        index += 1
+    return value
+
+
 def read_akmon_toml(path: Path) -> dict:
     """Read ``_aitna/.akmon.toml`` (the integration record) into a nested dict.
 
@@ -76,7 +106,7 @@ def read_akmon_toml(path: Path) -> dict:
         key, sep, value = stripped.partition("=")
         if not sep:
             continue
-        section[key.strip()] = value.strip().strip('"').strip("'")
+        section[key.strip()] = _strip_inline_comment(value).strip('"').strip("'")
     return data
 
 
@@ -100,6 +130,103 @@ def is_package_mode(project_root: Path) -> bool:
     mount exists yet — see ``read_mount_mode``'s backward-compatible default).
     """
     return read_mount_mode(project_root) == "package"
+
+
+# A requirement *naming* akmon: the quoted PEP 508 form (`"akmon @ git+..."`, `"akmon==0.4.0"`)
+# anywhere in a value. `(?![\w.-])` rather than `\b` so a different distribution whose name merely
+# starts with it (`akmon-plugin`) is not read as the pin. The poetry/pdm table form
+# (`akmon = { git = ... }`) is recognised by its key instead, in ``package_pin_status``.
+_AKMON_REQUIREMENT_RE = re.compile(r"""["']\s*akmon(?![\w.-])""", re.IGNORECASE)
+
+# Sections that declare a *runtime* dependency — one that reaches the consumer's own users.
+# `optional-dependencies` (PEP 621 extras) counts: an extra ships with the distribution.
+_RUNTIME_SECTIONS = ("project", "tool.poetry")
+# Sections that say *where a package comes from*, never *that it is required*: a lockfile-ish
+# source override naming akmon is not a declaration, and reading it as one was how a manifest
+# with no akmon dependency at all classified as pinned.
+_SOURCE_SECTIONS = ("tool.uv.sources", "tool.poetry.source", "tool.pdm.source")
+
+
+def _is_dev_dependency_section(section: str, key: str) -> bool:
+    """Whether ``section`` is a supported dev-dependency declaration table."""
+    return (
+        section == "dependency-groups"
+        or (section == "tool.uv" and key == "dev-dependencies")
+        or section == "tool.pdm.dev-dependencies"
+        or (section.startswith("tool.poetry.group.") and section.endswith(".dependencies"))
+    )
+
+
+def manifest_lines(project_root: Path):
+    """``pyproject.toml`` as ``(section, key, line)`` triples, comments stripped.
+
+    A deliberate line scan rather than a TOML parse: the floor is 3.9, where ``tomllib`` does
+    not exist, and pulling in a parser would break the zero-runtime-dependency contract (ADR
+    0009 §1). It reads just enough structure to tell *where* a requirement sits — the section
+    header, and the key whose (possibly multi-line) array is still open.
+    """
+    manifest = project_root / "pyproject.toml"
+    if not manifest.is_file():
+        return
+    section = ""
+    key = ""
+    for raw in manifest.read_text(encoding="utf-8").splitlines():
+        line = _strip_inline_comment(raw).strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section, key = line[1:-1].strip(), ""
+            continue
+        name, sep, value = line.partition("=")
+        if sep:
+            key = name.strip()
+            yield section, key, value.strip()
+            if not value.strip().startswith("["):
+                key = ""
+            continue
+        yield section, key, line
+        if line.endswith("]"):
+            key = ""
+
+
+def package_pin_status(project_root: Path) -> str:
+    """How the consumer's manifest pins akmon: ``"dev"``, ``"runtime"`` or ``"none"``.
+
+    Mode ``package`` mounts no tree: the pin *is* the consumer's dependency declaration, and
+    ADR 0009 §4 locks which class it may be — a **dev** group, never a runtime dependency and
+    never an extra, because akmon is dev tooling and must not reach the consumer's own users.
+    So this reports three answers, not two: a pin in the wrong class is a finding, not a pass.
+
+    Every declaration is scanned and the **worst** answer wins — stopping at the first match
+    let a correct dev pin hide a runtime one declared further down the same file. A bare
+    mention in prose or a comment is not a pin, and neither is a `[tool.uv.sources]` entry:
+    both used to read as "declared", which let a package-mode attach finish green over a
+    project where ``uv run akmon`` cannot resolve at all.
+
+    Shared by ``akmon init`` (which reports it as a next step) and ``verify.py`` (which gates
+    on it) so the two cannot disagree about what a valid pin looks like.
+    """
+    status = "none"
+    for section, key, line in manifest_lines(project_root):
+        distribution_key = key.casefold() == "akmon"
+        requirement_value = bool(_AKMON_REQUIREMENT_RE.search(line))
+        if not (requirement_value or distribution_key):
+            continue
+        if section in _SOURCE_SECTIONS or section.endswith(".sources"):
+            continue
+        runtime = (
+            # `[project] dependencies = [...]` / `[tool.poetry] dependencies = [...]`
+            (section in _RUNTIME_SECTIONS and key == "dependencies")
+            # poetry's runtime table: `[tool.poetry.dependencies]`, one key per package
+            or (section == "tool.poetry.dependencies" and distribution_key)
+            # an extra ships to the consumer's users too — ADR 0009 §4 rules it out with the rest
+            or section.endswith("optional-dependencies")
+        )
+        if runtime:
+            return "runtime"
+        if _is_dev_dependency_section(section, key):
+            status = "dev"
+    return status
 
 
 def standard_tree_root(project_root: Path) -> Path:
@@ -487,6 +614,10 @@ def _materialized_files(root: Path) -> list[PlannedFile]:
             files.append(PlannedFile(dest / "guardrails" / guardrail_path.name, content))
 
     runtime_files = (
+        # `bin/runtime.py` is the sole owner of the optional-harness command map (C57), and
+        # `routing.py` builds the second-opinion argv from it — so the materialized tree needs
+        # it too, at the same tree-relative path the mounted tree uses.
+        source / "bin" / "runtime.py",
         *sorted((source / "tools" / "model_routing").glob("*.py")),
         source / "tools" / "model_routing" / "registry.json",
         source / "tools" / "d2_ledger" / "d2_ledger.py",
@@ -640,14 +771,70 @@ def _apply(files: list[PlannedFile], *, write: bool, root: Path | None = None) -
     return result
 
 
+def _check_findings(result: Result, *, root: Path) -> list[Finding]:
+    """``--check``'s observations as the shared envelope (C51).
+
+    Only the non-writing ``--check`` mode speaks findings: ``--dry-run`` and a real write
+    print an action log, because "updated this file" is a record of what happened, not a
+    diagnostic about the tree. This is the stream ``akmon status`` consumes (F22).
+    """
+    findings: list[Finding] = []
+    for path in result.changed:
+        relative = str(path.relative_to(root))
+        findings.append(
+            Finding(
+                "error",
+                "sync.stale-generated",
+                line_safe(f"generated file is stale or missing: {relative}"),
+                line_safe(relative),
+                "Run akmon sync to regenerate this file.",
+            )
+        )
+    for path in result.deleted:
+        relative = str(path.relative_to(root))
+        findings.append(
+            Finding(
+                "error",
+                "sync.obsolete-generated",
+                line_safe(f"generated file is no longer planned: {relative}"),
+                line_safe(relative),
+                "Run akmon sync to delete this file.",
+            )
+        )
+    for path in result.ok:
+        relative = str(path.relative_to(root))
+        findings.append(
+            Finding(
+                "ok",
+                "sync.up-to-date",
+                line_safe(f"generated file matches its source: {relative}"),
+                line_safe(relative),
+                "Re-run akmon sync after every change to this file's source.",
+            )
+        )
+    for error in result.errors:
+        findings.append(
+            Finding(
+                "error",
+                "sync.plan-error",
+                line_safe(error),
+                "",
+                "Resolve the reported planning error, then re-run akmon sync.",
+            )
+        )
+    return findings
+
+
 def _print_summary(result: Result, *, root: Path, mode: str) -> None:
+    """The action log for the writing modes: ``dry-run`` and a real write (``--check`` speaks
+    findings instead, see :func:`_check_findings`)."""
     for path in result.changed:
         rel = path.relative_to(root)
-        action = "would update" if mode in {"check", "dry-run"} else "updated"
+        action = "would update" if mode == "dry-run" else "updated"
         print(f"{action}: {rel}")
     for path in result.deleted:
         rel = path.relative_to(root)
-        action = "would delete" if mode in {"check", "dry-run"} else "deleted"
+        action = "would delete" if mode == "dry-run" else "deleted"
         print(f"{action}: {rel}")
     for path in result.ok:
         print(f"ok: {path.relative_to(root)}")
@@ -673,8 +860,13 @@ def main(argv: list[str] | None = None) -> int:
     result = _apply(files, write=write, root=root)
     result.errors.extend(errors)
 
-    mode = "check" if args.check else "dry-run" if args.dry_run else "write"
-    _print_summary(result, root=root, mode=mode)
+    if args.check:
+        print_findings(_check_findings(result, root=root))
+    else:
+        _print_summary(result, root=root, mode="dry-run" if args.dry_run else "write")
+    # `sync` keeps its own exit vocabulary rather than the envelope's `exit_code`, by owner
+    # decision at C51: 2 separates "could not even plan the files" from 1's "the plan and the
+    # tree disagree", and no `--strict` exists here because nothing in this stream warns.
     if result.errors:
         return 2
     if args.check and (result.changed or result.deleted):
