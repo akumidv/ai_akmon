@@ -39,24 +39,6 @@ def _make_package_root(tmp_path: Path, *, extra_toml: str = "") -> Path:
 
 
 # --------------------------------------------------------------------------------------
-# _find_project_root — .akmon.toml as an alternate marker
-# --------------------------------------------------------------------------------------
-
-
-def test_find_project_root_accepts_akmon_toml_without_mount(tmp_path):
-    root = _make_package_root(tmp_path)
-    nested = root / "src" / "pkg"
-    nested.mkdir(parents=True)
-    assert sync._find_project_root(nested) == root
-
-
-def test_find_project_root_still_requires_agents_md(tmp_path):
-    (tmp_path / "_aitna").mkdir()
-    (tmp_path / "_aitna" / ".akmon.toml").write_text('mount = "package"\n', encoding="utf-8")
-    assert sync._find_project_root(tmp_path) == tmp_path  # no AGENTS.md -> falls back to start
-
-
-# --------------------------------------------------------------------------------------
 # read_mount_mode / is_package_mode
 # --------------------------------------------------------------------------------------
 
@@ -309,3 +291,28 @@ def test_planned_files_include_akmon_toml_stamp_in_package_mode(tmp_path, monkey
     toml_plan = next((f for f in files if f.path.name == ".akmon.toml"), None)
     assert toml_plan is not None
     assert 'akmon_version = "0.4.0"' in toml_plan.content
+
+
+def test_a_malformed_record_reads_as_empty_rather_than_raising():
+    """The reader documents "absent or unreadable"; on 3.11+ it used to raise instead.
+
+    Found while landing the C69/D2-26 veto: `tomllib.load` propagated `TOMLDecodeError`, so a
+    project with a broken `.akmon.toml` crashed `sync`, `verify` and — once the hooks consulted
+    the record — a session, on 3.11+ only, while 3.9 parsed the same file to a partial dict.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / ".akmon.toml"
+        path.write_text('mount = "package"\n[unclosed\nkey = ', encoding="utf-8")
+        assert isinstance(sync.read_akmon_toml(path), dict)  # no exception
+
+
+def test_both_parsers_agree_on_a_record_with_an_inline_comment():
+    """The documented shape, on either host Python: `tomllib` and the fallback must not differ."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / ".akmon.toml"
+        path.write_text('mount = "package"  # materialized\n', encoding="utf-8")
+        assert sync.read_akmon_toml(path)["mount"] == "package"

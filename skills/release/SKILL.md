@@ -49,12 +49,17 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
    breaking change to layout / required files / a role-pipeline contract; `y` otherwise),
    breaking-change handling, migration notes, deferrals, and which consumers to update.
 8. **Prepare release artifacts.** Move `CHANGELOG.md` `Unreleased` → the new version
-   heading; keep an empty `Unreleased` so the verify warn stays satisfied. This is the
-   **only** file the release role edits — route everything else to its owning role.
-9. **Verify.** Run `python3 _aitna/akmon/tools/release/release_check.py --check`. It runs the
-   subject's release suite (pointer sync, contract verify, and the subject's own checks + tests)
-   and is resilient to the test runner (`uv` → project `.venv` → system `pytest`). All green
-   before handoff.
+   heading; keep an empty `Unreleased` so the verify warn stays satisfied. Then bump the
+   **version literals** the same heading now names — for akmon that is `pyproject.toml`'s
+   `version` **and** `src/akmon/__init__.py::_STATIC_VERSION`, which must stay literally equal:
+   one release bump is two edits, and the git tag does not produce the number. These are the
+   only files the release role edits — route everything else to its owning role.
+9. **Verify.** Run `python3 _aitna/akmon/tools/release/release_check.py --check`. It first joins
+   the four version carriers — both literals, the topmost `CHANGELOG.md` heading and the tag set
+   — and then runs the subject's release suite (pointer sync, contract verify, and the subject's
+   own checks + tests), resilient to the test runner (`uv` → project `.venv` → system `pytest`).
+   All green before handoff; a version finding fails the mode outright, and a skip finding names
+   a rule whose input was absent rather than one that passed.
 10. **Owner handoff** *(gate, D5)*. Run
     `python3 _aitna/akmon/tools/release/release_check.py --plan vX.Y.Z` to print the exact
     owner-run command set, then present it with the residual risk and **stop**. The owner
@@ -84,8 +89,8 @@ subject — a akmon **pin bump** — is deferred (backlog T18).
 | Mode | Does | Writes? |
 |---|---|---|
 | `--state` | summarize the subject's TASKS / TASKS_ARCHIVE / CHANGELOG / `git status` | no |
-| `--check` *(default)* | run the subject's release suite, runner-resilient | no |
-| `--plan vX.Y.Z` | print the exact owner-run commit/tag/push command set | no |
+| `--check` *(default)* | join the version carriers, then run the subject's release suite, runner-resilient | no |
+| `--plan vX.Y.Z` | print the version bump, then the exact owner-run commit/tag/push command set | no |
 
 - **`--subject akmon`** runs the akmon suite (pointer sync, contract verify, and
   akmon's own self-checks + tests); the plan tags from the submodule tree.

@@ -1,6 +1,6 @@
 [project]
 name = "akmon"
-version = "0.4.0"
+version = "0.4.0.dev0"
 description = "Akmon is AI-agent development standard, as an installable package."
 readme = "README.md"
 license = "Apache-2.0"
@@ -45,6 +45,7 @@ packages = ["src/akmon"]
 "LICENSE" = "akmon/_tree/LICENSE"
 "MODEL.md" = "akmon/_tree/MODEL.md"
 "README.md" = "akmon/_tree/README.md"
+"common" = "akmon/_tree/common"
 "bin" = "akmon/_tree/bin"
 "examples" = "akmon/_tree/examples"
 "guardrails" = "akmon/_tree/guardrails"

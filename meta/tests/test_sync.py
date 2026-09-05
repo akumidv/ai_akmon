@@ -28,22 +28,6 @@ def _make_root(tmp_path: Path) -> Path:
 
 
 # --------------------------------------------------------------------------------------
-# _find_project_root
-# --------------------------------------------------------------------------------------
-
-
-def test_find_project_root_walks_up_from_nested_cwd(tmp_path):
-    root = _make_root(tmp_path)
-    nested = root / "src" / "pkg"
-    nested.mkdir(parents=True)
-    assert sync._find_project_root(nested) == root
-
-
-def test_find_project_root_falls_back_to_start_when_no_marker(tmp_path):
-    assert sync._find_project_root(tmp_path) == tmp_path
-
-
-# --------------------------------------------------------------------------------------
 # _read_json
 # --------------------------------------------------------------------------------------
 
@@ -351,14 +335,6 @@ def test_aitna_root_name_blank_env_falls_back_to_default(monkeypatch):
 def test_akmon_root_derives_from_configured_aitna(monkeypatch, tmp_path):
     monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     assert sync.akmon_root(tmp_path) == tmp_path / "tools" / "ai" / "akmon"
-
-
-def test_find_project_root_detects_via_custom_aitna_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
-    root = _make_root_at(tmp_path, "tools/ai")
-    nested = root / "src" / "pkg"
-    nested.mkdir(parents=True)
-    assert sync._find_project_root(nested) == root
 
 
 def test_generated_hook_commands_use_custom_aitna_root(monkeypatch, tmp_path):

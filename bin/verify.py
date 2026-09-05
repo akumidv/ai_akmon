@@ -13,10 +13,19 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
 
-import sync as sync_tool
-from findings import Finding, exit_code, line_safe, print_findings
+# The shared utilities live in the tree's ``common`` package, not beside this script:
+# ``bin/`` is the launcher directory. A launcher is run as ``python3 <tree>/bin/sync.py``, so
+# ``sys.path[0]`` is ``bin/`` — the tree root has to be added for the package to resolve. Done
+# here rather than left to the caller because both launchers are entry points in their own right.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import sync as sync_tool  # noqa: E402
+
+from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
+from common.project_root import resolve_project_root  # noqa: E402
 
 _TASKS_MAX_LINES = 200
 _TASK_STATUSES = ("active", "blocked", "deferred", "done")
@@ -1086,7 +1095,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--quiet", action="store_true", help="Only print warnings and errors.")
     args = parser.parse_args(argv)
 
-    root = (args.project_root or sync_tool._find_project_root(Path.cwd())).resolve()
+    root, root_notice = resolve_project_root(args.project_root)
+    if root_notice:
+        print(root_notice, file=sys.stderr)
     verify = Verifier(root)
     verify.run()
     print_findings(verify.findings, quiet=args.quiet)

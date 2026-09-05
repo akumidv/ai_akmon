@@ -1,9 +1,10 @@
-"""Make the akmon hook and bin modules importable for akmon's own tests.
+"""Make the akmon hook, launcher and library modules importable for akmon's own tests.
 
 The hook entrypoints import ``hook_core`` / ``claude_adapter`` by bare name, and ``verify``
 imports ``sync`` by bare name — both rely on the script directory being on ``sys.path`` at
-runtime. Tests live under ``meta/tests/``, so resolve the akmon root by walking up to
-the directory that holds ``hooks`` and ``bin`` (robust to where the tests sit).
+runtime. The shared utilities are imported as ``common.<module>``, which needs the tree root
+itself. Tests live under ``meta/tests/``, so resolve the akmon root by walking up to the
+directory that holds ``hooks`` and ``bin`` (robust to where the tests sit).
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ _KEYSTONE = next(
 )
 # ``meta`` joins them so the dev-only ``checks`` package (akmon's own declaration checkers,
 # whose single production caller is ``meta/self_ci.py``) imports by the same bare name here.
-for _subdir in ("hooks", "bin", "meta", "tools/model_routing"):
-    _path = str(_KEYSTONE / _subdir)
+for _subdir in (".", "hooks", "bin", "meta", "tools/model_routing"):
+    _path = str((_KEYSTONE / _subdir).resolve())
     if _path not in sys.path:
         sys.path.insert(0, _path)

@@ -17,6 +17,7 @@ import claude_adapter
 import codex_adapter
 import hook_core
 import pytest
+import sync
 
 requires_tomllib = pytest.mark.skipif(
     sys.version_info < (3, 11),
@@ -854,6 +855,57 @@ def test_find_project_root_in_package_mode_from_nested_directory(tmp_path):
     nested.mkdir(parents=True)
 
     assert hook_core.find_project_root(nested) == project.resolve()
+    assert hook_core.akmon_runtime_root(project) == project / "_aitna" / ".akmon"
+
+
+# --------------------------------------------------------------------------------------
+# akmon_runtime_root — the record vetoes the directory check (C69/D2-26)
+# --------------------------------------------------------------------------------------
+
+
+def _runtime_root_case(tmp_path, *, record: str | None, mount: bool):
+    """A project in one of the mount states, with its materialization always present."""
+    project = tmp_path / "project"
+    (project / "_aitna" / ".akmon").mkdir(parents=True)
+    (project / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    if record is not None:
+        (project / "_aitna" / ".akmon.toml").write_text(record, encoding="utf-8")
+    if mount:
+        (project / "_aitna" / "akmon").mkdir()
+    return project
+
+
+@pytest.mark.parametrize(
+    ("name", "record", "mount", "expected"),
+    [
+        # The two states the directory check got wrong, and the reason this rule exists: the
+        # hooks bound a stale tree's registry and printed its tool paths, silently.
+        ("package record beside a stale mount", 'mount = "package"\n', True, ".akmon"),
+        ("package record written with a comment", 'mount = "package"  # materialized\n', True, ".akmon"),
+        # Everything the fix must not lose. A record that says nothing is not a declaration:
+        # projects predating the `mount` field carry no record and must still find their mount.
+        ("package record, no mount", 'mount = "package"\n', False, ".akmon"),
+        ("submodule record with its mount", 'mount = "submodule"\n', True, "akmon"),
+        ("no record, mount present", None, True, "akmon"),
+        ("no record, no mount", None, False, ".akmon"),
+        # Fail-safe: a record a hook cannot parse must leave the previous answer standing
+        # rather than abort a session over a file it only consults.
+        ("unparseable record beside a mount", "mount = \x00broken\n", True, "akmon"),
+    ],
+)
+def test_the_recorded_mount_vetoes_the_directory_check(tmp_path, name, record, mount, expected):
+    project = _runtime_root_case(tmp_path, record=record, mount=mount)
+    assert hook_core.akmon_runtime_root(project).name == expected, name
+
+
+def test_the_hooks_and_sync_agree_on_which_tree_a_package_project_runs(tmp_path):
+    """The disagreement itself, pinned: two owners of one decision must not answer differently.
+
+    ``sync`` has always read the record; the hooks read the directory. This asserts the join
+    rather than each side separately, because the defect only existed in the gap between them.
+    """
+    project = _runtime_root_case(tmp_path, record='mount = "package"\n', mount=True)
+    assert sync.is_package_mode(project) is True
     assert hook_core.akmon_runtime_root(project) == project / "_aitna" / ".akmon"
 
 

@@ -44,5 +44,12 @@ python3 meta/self_ci.py
 uv build
 ```
 
+`meta/self_ci.py`'s installed-wheel leg runs `akmon init --mode package`, which resolves the pin
+from the akmon repository's **release tags over the network**. It therefore needs network reach
+and a git credential helper that works *outside* this checkout — verify with
+`git ls-remote --tags <repo>` from a directory that is not a git repository, and wire it with
+`gh auth login` then `gh auth setup-git`. Without that the leg fails on the prerequisite, not on
+anything akmon ships; the finding says so rather than reporting a bare exit status.
+
 Do not claim Codex/Claude/Gemini capability parity without a live harness probe and a regression
 test for the exact payload and enforcement behavior.

@@ -219,7 +219,7 @@ A project may overlay this with a local override file (same shape, deep-merged) 
 project-specific kinds or a pinned dated id when behaviour must be frozen.
 
 `second_opinion` names a harness and an operation; it does not spell a command. C57 moved the
-executable and its argv into `bin/runtime.py`, the single map of harness commands, so the
+executable and its argv into `common/runtime.py`, the single map of harness commands, so the
 registry carries policy — which harness, which operation, where reports land — and the runtime
 contract carries the invocation. The retired `cli` and `invoke` keys are not accepted: a config
 still using them fails `routing.second-opinion` at `verify`, which names the overlay file. The
@@ -607,7 +607,10 @@ subagent and the second-opinion CLI — replacing §4.6's free-form `--prompt-fi
 - **a coverage map** — which zone/module each fan-out worker actually checked, assembled
   **from the delegation log by code, not by the orchestrator** (fan-out calls carry a
   zone label in their description; a tool derives the map — requirement 8 discipline:
-  visible at code cost, not token cost);
+  visible at code cost, not token cost); *"actually checked" overstates what the built map
+  can prove — the log is a journal of dispatch **requests** (F21/A), so a refused or aborted
+  delegation still reads as coverage. The uncovered list is the sound half, and completion
+  evidence is [N4](../TASKS.md)'s, not C17's;*
 - *optional, per gate:* a real dependency-graph excerpt (grep-derived) for
   architecture-review gates — open point 3.
 
@@ -747,9 +750,14 @@ learn/release may route them too — advisory-only, and verification is never ro
 Enforcement is advisory, same idiom as the delegation nudge: the delegation hook warns
 when a routed kind falls outside the active role's row (**cross-cutting verification kinds
 excepted**, per the note above — a `cross_cutting_kinds` registry list, checked in
-`role_matrix_warning`). It needs a machine-readable active-role marker (the `🧭` chat
-declaration is invisible to hooks) — decided §10.4: doc rule + registry data ship first; the
-session-state marker lands with C20.
+`role_matrix_warning`). It needs a machine-readable active role, and the `🧭` chat
+declaration is invisible to a hook *as chat* — so §10.4 decision 1 planned a session-state
+marker to land with C20. **C20 shipped without one, and none exists.** It reads the last
+main-chain `🧭 agent: <name>` declaration out of the transcript instead
+(`routing.active_role`), chosen for consistency with C22/C23 scanning, a single source, and
+nothing to forget to write. What the lock's first half named — matrix as doc rule plus
+registry data — is what shipped; the second half was not built, and nothing may name that
+marker as a carrier. See the note under the §10.4 table.
 
 ### 10.3 Pipeline step contracts gain data outputs
 
@@ -770,9 +778,19 @@ session-state marker lands with C20.
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Active-role marker for hook enforcement | **(b) then (a)** — ship the matrix as a doc rule + registry data first; add the session-state marker when the delegation hook gains its role check (C20) |
+| 1 | Active-role marker for hook enforcement | **(b) then (a)** — ship the matrix as a doc rule + registry data first; add the session-state marker when the delegation hook gains its role check (C20) **— second half NOT BUILT; kept verbatim, see the note under this table** |
 | 2 | Does `review` routing `debug-deep` blur analysis-only? | **no** — a failure-mechanism diagnosis is analysis; the *fix* is what review must not construct |
 | 3 | `engineer` vs the auditor — §9.4 permits an on-signal code audit, §10.2 omitted it (A7 seam 1) | **(b)** — make `audit` (+ `independent-review`) **cross-cutting verification kinds**: routable from *any* role and exempt from the role-matrix warning; *when* they apply is the structural trigger (§9.5), not the role. Cleaner than a per-row copy — the auditor is role-agnostic *verification*, not engineer-specific work, which dissolves the seam at source and simplifies C20. Consequence: learn/release may route them too (advisory-only, never harmful). Impl in C18: registry `cross_cutting_kinds` + `role_matrix_warning` exemption + test + ADR 0005 addendum. Follow-up weighs the sub-fork (auto-trigger `plan-draft` on un-decomposed high-leverage work — verdict contradiction 2's economics root) |
+
+> **Row 1, second half, was not built as written — kept verbatim as the record.** C20 does
+> not add a session-state marker: it reads the active role from the transcript's last
+> main-chain `🧭 agent: <name>` declaration ([D2-4](../D2_LEDGER.md)), chosen for
+> consistency with C22/C23 scanning, a single source, and nothing to forget to write. So
+> **no session-state marker exists**, and anything that named it as a carrier was standing
+> on a promise this table made and the implementation declined. One such reference was
+> live: `coverage_map.py` claimed a `gate_id` refinement would ride on it (C17/D2-3); the
+> claim is withdrawn there, and gate-level precision has no carrier today. The lock's first
+> half — matrix as doc rule plus registry data — is what shipped.
 
 ## 11. Prior art — the host harness's own subagents (Claude Code)
 

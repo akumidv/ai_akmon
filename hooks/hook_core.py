@@ -16,30 +16,44 @@ from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path
 
-# The dev-layer (LOCAL) root is configurable: ``_aitna`` is the default, but a project may
-# relocate it by declaring ``AITNA_ROOT`` (a path relative to the project root, e.g.
-# ``tools/ai``). akmon is always mounted at ``<aitna-root>/akmon``. Tooling derives every
-# dev-layer path from this one resolver instead of hard-coding ``_aitna/``.
-_AITNA_ROOT_DEFAULT = "_aitna"
+# Where the dev layer is, what it is called, and how the project root is found are not this
+# module's facts — they belong to ``common.project_root``, which is stdlib-only and sits
+# beside ``hooks/`` in every carrier the hooks run from: the mounted ``<AITNA_ROOT>/akmon/``
+# tree and the materialized ``<AITNA_ROOT>/.akmon/`` copy, both written by the same ``sync``
+# run, so the two can never arrive apart. The copy that used to live here answered the same
+# questions in the same words and was the last remaining second definition (C73).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-
-def aitna_root_name() -> str:
-    """The configured dev-layer root, as a project-root-relative POSIX path (default ``_aitna``)."""
-    return (os.environ.get("AITNA_ROOT") or _AITNA_ROOT_DEFAULT).strip("/") or _AITNA_ROOT_DEFAULT
-
-
-def aitna_root(project_root: Path) -> Path:
-    """Absolute dev-layer root for ``project_root`` (``<project_root>/<AITNA_ROOT>``)."""
-    return project_root / aitna_root_name()
-
-
-def akmon_root(project_root: Path) -> Path:
-    """Absolute akmon mount for ``project_root`` (``<aitna-root>/akmon``)."""
-    return aitna_root(project_root) / "akmon"
+from common.project_root import (  # noqa: E402
+    aitna_root,
+    aitna_root_name,
+    find_project_root,
+)
+from common.project_root import akmon_mount as akmon_root  # noqa: E402
+from common.record import records_package_mode  # noqa: E402
 
 
 def akmon_runtime_root(project_root: Path) -> Path:
-    """Runtime files used by hooks: mounted tree, else package materialization."""
+    """Runtime files used by hooks: the materialization when the record says so, else the mount.
+
+    The recorded ``mount`` is a **veto over** the directory check, not a replacement for it
+    (C69/D2-26, owner decision). This function used to answer by directory existence alone,
+    which every other owner of the same decision contradicted — ``sync.is_package_mode``,
+    ``cli._mounted_akmon_root``, ``model_routing/init._standard_tree_root`` all read the record —
+    and the disagreement was measured, not theoretical: a package-mode project beside a stale
+    ``<AITNA_ROOT>/akmon`` from a prior mode made the hooks bind the *stale* registry, classify
+    warnings from it, and print tool paths into a tree the project no longer pins. All of it
+    silently, because a wrong tree that exists is indistinguishable from the right one.
+
+    Veto rather than replacement because the record's absence is not a declaration: mode
+    ``submodule`` is what a project predating the ``mount`` field gets by default
+    (``sync.read_mount_mode``), so deciding purely on the record would send a project with no
+    record and no mount to a mount that is not there. The order below keeps every state that
+    already worked: only ``mount = "package"`` overrides a directory that exists, and an absent,
+    unreadable or malformed record leaves the previous behaviour untouched.
+    """
+    if records_package_mode(project_root):
+        return aitna_root(project_root) / ".akmon"
     mounted = akmon_root(project_root)
     return mounted if mounted.exists() else aitna_root(project_root) / ".akmon"
 
@@ -209,18 +223,6 @@ def current_git_branch() -> str:
         ).stdout.strip()
     except (subprocess.SubprocessError, OSError):
         return ""
-
-
-def find_project_root(start: Path | None = None) -> Path:
-    """Walk up to AGENTS.md plus either a mounted tree or package integration record."""
-    current = (start or Path.cwd()).resolve()
-    for candidate in (current, *current.parents):
-        if not (candidate / "AGENTS.md").is_file():
-            continue
-        aitna = aitna_root(candidate)
-        if (aitna / "akmon").exists() or (aitna / ".akmon.toml").is_file():
-            return candidate
-    return current
 
 
 

@@ -29,7 +29,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from findings import Finding
+from common.findings import Finding
 
 MATRIX_FILE = "CAPABILITIES.md"
 REGION_BEGIN = "<!-- akmon:capability-matrix:begin -->"

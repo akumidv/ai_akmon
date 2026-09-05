@@ -27,9 +27,12 @@ from pathlib import Path
 _KEYSTONE_ROOT = Path(__file__).resolve().parents[2]
 
 # The shared finding envelope ships in the standard's own ``bin/`` (stdlib-only, no install).
+# The tree root for the shared ``common`` package, and ``bin/`` for the two launchers,
+# which are imported by their bare script name (``import sync``) the way they are at runtime.
 sys.path.insert(0, str(_KEYSTONE_ROOT / "bin"))
+sys.path.insert(0, str(_KEYSTONE_ROOT))
 
-from findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
+from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
 
 # akmon's own dev-layer artifacts (META). These ship with the submodule but are inert
 # for a consumer; here we assert they exist so akmon's own tree stays whole.
@@ -142,8 +145,14 @@ class Validator:
                 fix="Keep the synthetic fixture green before every release.",
             )
         else:
-            detail = (result.stderr or result.stdout).strip().splitlines()
-            tail = detail[-1] if detail else f"exit {result.returncode}"
+            # Name the failure, not the last thing printed. `self_ci` streams every finding to
+            # stdout and exits non-zero only for the `error` ones, so the last line is routinely
+            # an unrelated `warn` — a reader is then pointed at a rule that did not fail. Prefer
+            # the first rendered error; fall back to the tail only when there is none.
+            stderr, stdout = result.stderr.strip(), result.stdout.strip()
+            errors = [line for line in stdout.splitlines() if line.startswith("ERROR ")]
+            lines = (stderr or stdout).splitlines()
+            tail = errors[0] if errors else (lines[-1] if lines else f"exit {result.returncode}")
             self.error(
                 "devlayer.self-ci",
                 f"self-CI fixture failed: {tail}",

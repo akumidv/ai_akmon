@@ -114,3 +114,26 @@ def test_cli_scopes_by_session_and_writes(tmp_path, capsys):
     assert "pricing" not in written  # other session filtered out
     captured = capsys.readouterr().out
     assert "entries=1" in captured
+
+
+def test_the_default_map_path_follows_the_configured_dev_layer_root(tmp_path, monkeypatch, capsys):
+    """No ``--out`` must land under the *configured* dev layer, not the default literal.
+
+    The sibling of the gate-pack carrier, and the same defect: this path was spelled
+    ``_aitna`` directly, so a project that relocated its dev layer got its coverage map
+    written into a directory it does not read — silently, with a success line printed.
+    """
+    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+    root = tmp_path
+    (root / "AGENTS.md").write_text("x", encoding="utf-8")
+    (root / "tools" / "ai" / "akmon").mkdir(parents=True)
+    log = root / routing.DELEGATION_LOG_REL
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("T0\tsess-1\tk_explorer\tsmall\tauth\tcheck tokens\n", encoding="utf-8")
+
+    assert coverage_map.main(["--project-root", str(root)]) == 0
+    capsys.readouterr()
+
+    written = sorted((root / "tools" / "ai" / "artifacts" / "gates").glob("coverage-*.md"))
+    assert len(written) == 1
+    assert not (root / "_aitna").exists()

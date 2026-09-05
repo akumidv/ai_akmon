@@ -57,6 +57,7 @@ TREE_MEMBERS = (
     "LICENSE",
     "MODEL.md",
     "README.md",
+    "common",
     "bin",
     "examples",
     "guardrails",
@@ -214,7 +215,7 @@ def _effective_aitna_root(flag: str | None, root: Path) -> str:
     if raw is None or not raw.strip():
         from akmon import cli
 
-        return cli._AITNA_ROOT_DEFAULT
+        return cli._project_root_lib().AITNA_ROOT_DEFAULT
     return _validated_aitna_root(raw, root, source)
 
 
@@ -313,11 +314,18 @@ def _default_mode(root: Path, repo: str) -> tuple[str, str]:
 
 def _tag_for_version(version: str) -> str:
     """The GitHub ref a consumer's human-facing links should point at: the release tag for a
-    released version, ``main`` for a development one (no tag exists for it yet)."""
-    base = version.lstrip("v")
-    if any(marker in base for marker in (".dev", "a", "b", "rc", "+")) or not base:
+    released version, ``main`` for a development one (no tag exists for it yet).
+
+    "Released" is asked of ``common/versions.py``, the sole owner of that rule (C54), rather than
+    answered again here: the substring heuristic this replaced missed ``.postN`` entirely and
+    would have pointed a consumer at a tag that does not exist.
+    """
+    from akmon import cli
+
+    versions = cli._embedded_common_module(_tree.embedded_tree_root(), "versions")
+    if not versions.is_final(version):
         return "main"
-    return f"v{base}"
+    return f"v{versions.split_version(version)[0]}"
 
 
 # --------------------------------------------------------------------------------------
@@ -996,7 +1004,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     from akmon import cli as _cli
 
-    if aitna != _cli._AITNA_ROOT_DEFAULT:
+    if aitna != _cli._project_root_lib().AITNA_ROOT_DEFAULT:
         next_steps.append(f"export AITNA_ROOT={aitna} in every shell and CI job that runs the akmon tooling")
     next_steps.append("run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)")
 

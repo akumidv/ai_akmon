@@ -65,7 +65,8 @@ function is quality per unit of **tokens + owner attention**; only tokens had a 
    design-fork/quant-derivation (doc-sync post-Record only), engineer routes realization
    kinds but never design-fork (a design gap goes back to architect), learn/release get
    their rows. Enforcement advisory via the delegation hook; doc rule + registry data ship
-   first, the machine-readable active-role marker lands with the hook check (C20).
+   first, the machine-readable active-role marker lands with the hook check (C20) **— that
+   marker was NOT built; kept verbatim, see the addendum at the end of this ADR**.
    `review` routing `debug-deep` stays legitimate: diagnosis is analysis, the fix is not.
 10. **Owner attention is the second budget:** the synthesizer report attaches to the D2
     ledger entry (one place: change + rationale + audit + disagreement), and the stats
@@ -129,3 +130,18 @@ architect's synthesis operation) is a **different concept and was deliberately k
 body above preserves the original vocabulary as the historical record; the normative source is the
 design doc's live §2 tier table and `registry.json`, both now on the new names. This is a rename
 only — no decision from the body is reopened.
+
+## Addendum — decision #9's active-role marker was not built (C20 reads the transcript)
+
+Decision #9 above closes with "the machine-readable active-role marker lands with the hook
+check (C20)". **C20 landed and built no marker.** `routing.active_role` reads the active role
+out of the transcript — the last main-chain `🧭 agent: <name>` declaration — chosen over a
+written marker for consistency with the C22/C23 transcript scanning already in the hooks, a
+single source of the role, and nothing an orchestrator can forget to write. Recorded at
+[D2-4](../D2_LEDGER.md); the same correction is under the design's §10.2 and §10.4.
+
+**No session-state marker exists**, so no other decision may name one as a carrier. One had:
+`coverage_map.py` claimed a `gate_id` refinement would ride on it (C17/[D2-3](../D2_LEDGER.md));
+that claim is withdrawn, and gate-level precision has no carrier today. Decision #9's first
+half — matrix as doc rule plus registry data — shipped as written, and the advisory itself is
+unchanged: only its source of the active role differs from what this body planned.

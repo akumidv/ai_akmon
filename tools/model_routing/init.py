@@ -23,8 +23,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# The tree root, so the shared ``common`` package resolves: it holds the single owner of
+# project-root discovery (C73) and is reachable at the same tree-relative depth from the
+# mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import routing
+import routing  # noqa: E402
+
+from common.project_root import resolve_project_root  # noqa: E402
 
 
 def _toml_scalar(raw: str) -> str:
@@ -72,19 +78,6 @@ def _read_top_level_toml_value(path: Path, key: str) -> str | None:
         if sep and found_key.strip() == key:
             return _toml_scalar(value)
     return None
-
-
-def _find_project_root(start: Path) -> Path:
-    """Walk up for a project ``AGENTS.md`` plus either a mounted tree or an integration
-    record — the latter is the only marker a package-mode project carries, since it has no
-    mounted tree at all (ADR 0009 §4; mirrors ``bin/sync.py::_find_project_root``)."""
-    aitna = routing.aitna_root_name()
-    for candidate in (start, *start.parents):
-        if not (candidate / "AGENTS.md").is_file():
-            continue
-        if (candidate / aitna / "akmon").exists() or (candidate / aitna / ".akmon.toml").is_file():
-            return candidate
-    return start
 
 
 def _standard_tree_root(project_root: Path) -> Path:
@@ -151,7 +144,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print changes without writing them.")
     args = parser.parse_args(argv)
 
-    root = (args.project_root or _find_project_root(Path.cwd())).resolve()
+    root, root_notice = resolve_project_root(args.project_root)
+    if root_notice:
+        print(root_notice, file=sys.stderr)
     akmon_dir = _standard_tree_root(root)
     registry = routing.load_registry(akmon_dir, root)
     vendors = routing.vendors_with_routing_policy(registry)

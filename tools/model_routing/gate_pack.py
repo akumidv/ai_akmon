@@ -18,8 +18,16 @@ Two pack kinds:
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from pathlib import Path
+
+# The tree root, so the shared ``common`` package resolves: it holds the single owner of
+# project-root discovery (C73) and is reachable at the same tree-relative depth from the
+# mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from common.project_root import aitna_root, resolve_project_root  # noqa: E402
 
 # Role -> the question the pack asks its executor (design §9.4: "roles and tiers stay
 # orthogonal" — the role determines the pack's contract and question, the tier only the
@@ -160,17 +168,10 @@ def build_plan_check_pack(gate: str, role: str, yardstick: str, zone_plan: str) 
 # --------------------------------------------------------------------------------------
 
 
-def _find_project_root(start: Path) -> Path:
-    for candidate in (start, *start.parents):
-        if (candidate / "AGENTS.md").is_file() and (candidate / "_aitna" / "akmon").exists():
-            return candidate
-    return start
-
-
 def _report_path(root: Path, gate: str, kind: str) -> Path:
     safe_gate = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in gate).strip("-") or "gate"
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    return root / "_aitna" / "artifacts" / "gates" / f"{safe_gate}-{kind}-{stamp}.md"
+    return aitna_root(root) / "artifacts" / "gates" / f"{safe_gate}-{kind}-{stamp}.md"
 
 
 def _digest(text: str, limit: int = 1200) -> str:
@@ -203,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--coverage-map", type=Path, help="Coverage map file (full).")
     parser.add_argument("--zone-plan", type=Path, help="Zone plan file (required for --kind plan-check).")
     parser.add_argument("--dep-graph", type=Path, help="Dependency-graph excerpt file (opt-in, §9.7 #3).")
-    parser.add_argument("--out", type=Path, help="Output path. Defaults under _aitna/artifacts/gates/.")
+    parser.add_argument("--out", type=Path, help="Output path. Defaults under <AITNA_ROOT>/artifacts/gates/.")
     parser.add_argument(
         "--stdout",
         action="store_true",
@@ -214,7 +215,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.kind == "plan-check" and args.zone_plan is None:
         parser.error("--zone-plan is required for --kind plan-check")
 
-    root = (args.project_root or _find_project_root(Path.cwd())).resolve()
+    root, root_notice = resolve_project_root(args.project_root)
+    if root_notice:
+        print(root_notice, file=sys.stderr)
     yardstick_text = args.yardstick.read_text(encoding="utf-8")
 
     if args.kind == "plan-check":
