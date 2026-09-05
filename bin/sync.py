@@ -16,28 +16,29 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from findings import Finding, line_safe, print_findings
+# The shared utilities live in the tree's ``common`` package, not beside this script:
+# ``bin/`` is the launcher directory. A launcher is run as ``python3 <tree>/bin/sync.py``, so
+# ``sys.path[0]`` is ``bin/`` — the tree root has to be added for the package to resolve. Done
+# here rather than left to the caller because both launchers are entry points in their own right.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# The dev-layer (LOCAL) root is configurable: ``_aitna`` is the default, but a project may
-# relocate it by declaring ``AITNA_ROOT`` (a project-root-relative path, e.g. ``tools/ai``).
-# akmon is always mounted at ``<aitna-root>/akmon``. Every generated pointer and hook
-# command is templated from this one resolver instead of hard-coding ``_aitna/``.
-_AITNA_ROOT_DEFAULT = "_aitna"
+from common.findings import Finding, line_safe, print_findings  # noqa: E402
+from common.project_root import (  # noqa: E402
+    aitna_root,
+    aitna_root_name,
+    resolve_project_root,
+)
+from common.project_root import akmon_mount as akmon_root  # noqa: E402
 
+# The integration record has one reader, in the shared package (C69/D2-26): the hooks needed it
+# too, and a sixth narrow copy is what that decision refused. Re-exported here because `verify`,
+# `init` and the tests already reach `read_akmon_toml` through this module.
+from common.record import _strip_inline_comment, read_akmon_toml  # noqa: E402,F401
 
-def aitna_root_name() -> str:
-    """The configured dev-layer root, as a project-root-relative POSIX path (default ``_aitna``)."""
-    return (os.environ.get("AITNA_ROOT") or _AITNA_ROOT_DEFAULT).strip("/") or _AITNA_ROOT_DEFAULT
-
-
-def aitna_root(project_root: Path) -> Path:
-    """Absolute dev-layer root for ``project_root`` (``<project_root>/<AITNA_ROOT>``)."""
-    return project_root / aitna_root_name()
-
-
-def akmon_root(project_root: Path) -> Path:
-    """Absolute akmon mount for ``project_root`` (``<aitna-root>/akmon``)."""
-    return aitna_root(project_root) / "akmon"
+# The dev-layer (LOCAL) root is configurable and the project root is discovered, not assumed;
+# both answers come from the single owner in ``common/project_root.py`` (C73) and are
+# re-exported here because every generated pointer and hook command is templated from them, and
+# because callers and tests already reach them through this module.
 
 
 # This file's own tree root (``bin/``'s parent) — in a mounted checkout that is the mount
@@ -48,66 +49,6 @@ def akmon_root(project_root: Path) -> Path:
 # (``python3 <tree>/bin/sync.py``) in mounted mode, where no Python package is installed at
 # all (ADR 0009 §4).
 _TREE_ROOT = Path(__file__).resolve().parent.parent
-
-
-def _strip_inline_comment(value: str) -> str:
-    """A TOML value with any trailing ``# comment`` removed, honouring quotes.
-
-    ``tomllib`` does this for free; the pre-3.11 fallback in ``read_akmon_toml`` did not, so
-    the very shape BOOTSTRAP §C documents — ``runner = "poetry run pytest"  # optional`` —
-    parsed to *different values* depending on the host Python: the comment rode along on 3.9/3.10
-    and was dropped on 3.11+. A ``#`` inside a quoted value is data, not a comment, so a quoted
-    value ends at its closing quote and only a bare value is cut at the first ``#``.
-    """
-    value = value.strip()
-    quote = value[:1]
-    if quote not in ('"', "'"):
-        return value.split("#", 1)[0].strip()
-    # Scan to the *closing* quote rather than to the next one: in a basic string a `\"` is an
-    # escaped quote, so `find` would end the value in the middle of it and hand back a broken
-    # fragment. Literal strings (`'...'`) have no escapes at all, by TOML's definition.
-    index = 1
-    while index < len(value):
-        if quote == '"' and value[index] == "\\":
-            index += 2
-            continue
-        if value[index] == quote:
-            return value[: index + 1]
-        index += 1
-    return value
-
-
-def read_akmon_toml(path: Path) -> dict:
-    """Read ``_aitna/.akmon.toml`` (the integration record) into a nested dict.
-
-    Uses ``tomllib`` when present (Python 3.11+); else a minimal stdlib fallback for the subset
-    the record uses — flat ``key = "value"`` lines, ``[section]`` headers, ``#`` comments — so the
-    reader stays stdlib-only and works on a consumer host with an older Python (the contract checks
-    must not assume 3.11). Quotes are stripped; values are treated as strings. Returns ``{}`` if the
-    file is absent or unreadable."""
-    if not path.is_file():
-        return {}
-    try:
-        import tomllib
-
-        with path.open("rb") as handle:
-            return tomllib.load(handle)
-    except ImportError:
-        pass
-    data: dict = {}
-    section = data
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.startswith("[") and stripped.endswith("]"):
-            section = data.setdefault(stripped[1:-1].strip(), {})
-            continue
-        key, sep, value = stripped.partition("=")
-        if not sep:
-            continue
-        section[key.strip()] = _strip_inline_comment(value).strip('"').strip("'")
-    return data
 
 
 def read_mount_mode(project_root: Path) -> str:
@@ -452,20 +393,6 @@ class Result:
     errors: list[str]
 
 
-def _find_project_root(start: Path) -> Path:
-    """Walk up from ``start`` for a project ``AGENTS.md`` plus either a mounted tree
-    (``<AITNA_ROOT>/akmon``) or an integration record (``<AITNA_ROOT>/.akmon.toml`` —
-    the only marker package-mode projects have, since they carry no mounted tree at all;
-    ADR 0009 §4)."""
-    for candidate in (start, *start.parents):
-        if not (candidate / "AGENTS.md").is_file():
-            continue
-        aitna = aitna_root(candidate)
-        if (aitna / "akmon").exists() or (aitna / ".akmon.toml").is_file():
-            return candidate
-    return start
-
-
 def _read_json(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -614,10 +541,12 @@ def _materialized_files(root: Path) -> list[PlannedFile]:
             files.append(PlannedFile(dest / "guardrails" / guardrail_path.name, content))
 
     runtime_files = (
-        # `bin/runtime.py` is the sole owner of the optional-harness command map (C57), and
-        # `routing.py` builds the second-opinion argv from it — so the materialized tree needs
-        # it too, at the same tree-relative path the mounted tree uses.
-        source / "bin" / "runtime.py",
+        # The whole `common` package, not a chosen subset: the hooks materialized above
+        # import it (the root walk), `routing.py` and the model-routing CLIs import it (the
+        # harness command map, C57), and a subset would have to be re-decided every time one
+        # of them grows an import. It lands at the same tree-relative path the mounted tree
+        # uses, which is what makes one owner reachable from both carriers (C73).
+        *sorted((source / "common").glob("*.py")),
         *sorted((source / "tools" / "model_routing").glob("*.py")),
         source / "tools" / "model_routing" / "registry.json",
         source / "tools" / "d2_ledger" / "d2_ledger.py",
@@ -854,7 +783,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.check and args.dry_run:
         parser.error("--check and --dry-run are mutually exclusive")
 
-    root = (args.project_root or _find_project_root(Path.cwd())).resolve()
+    root, root_notice = resolve_project_root(args.project_root)
+    if root_notice:
+        print(root_notice, file=sys.stderr)
     files, errors = _planned_files(root)
     write = not args.check and not args.dry_run
     result = _apply(files, write=write, root=root)

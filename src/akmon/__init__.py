@@ -8,9 +8,12 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
-# The release pipeline cuts the real version from the git tag (package version == standard
-# version, ADR 0009 §1); this placeholder is only used when the package is not installed
-# (e.g. run from a source checkout without `pip install` / `uv pip install -e`).
+# The built version is the static literal in `pyproject.toml`, which hatchling stamps into the
+# wheel; the owner bumps it as a release step and the git tag records the reviewed state rather
+# than producing the number (package version == standard version, ADR 0009 §1). This fallback
+# must stay literally equal to that literal — `tools/release/release_check.py` checks it — and
+# is used only when the package is not installed (e.g. run from a source checkout without
+# `pip install` / `uv pip install -e`).
 _STATIC_VERSION = "0.4.0.dev0"
 
 try:

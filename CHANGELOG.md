@@ -91,7 +91,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   harnesses also read `delivered: unmeasured`:** akmon builds the argv and its tests pin it, but
   they run only `--dry-run`, so nothing has yet observed the command reaching a harness. A
   dry-run says what akmon emits, not what the harness accepts (probe tracked as N8).
-- **A declared runtime contract (C57).** `bin/runtime.py` states what akmon needs on a host —
+- **A declared runtime contract (C57).** `common/runtime.py` states what akmon needs on a host —
   POSIX shell and `python3` always, `git` on the Codex route because the generated Codex wiring
   resolves the project root through `$(git rev-parse --show-toplevel)`, `claude` and `codex`
   optional — and Windows is declared unsupported rather than merely untested. The declaration is
@@ -108,8 +108,48 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   than read incompletely, or confidently wrongly, and reported as clean. What the declaration does *not* yet cover is deliberate and
   tracked as **A20**: `git` is needed by `akmon init --mode submodule` and `--mode subtree` — not
   by `vendored` or `package` — while the declaration scopes it to the Codex route.
+- **The four version carriers are now joined at release time (C54).**
+  `tools/release/release_check.py --check` reads `pyproject.toml`'s `version`,
+  `src/akmon/__init__.py::_STATIC_VERSION`, the topmost `CHANGELOG.md` heading and the git tag
+  set, and reports through the shared envelope. A **non-final** version (the full PEP 440 set —
+  `.devN`, `aN`/`bN`/`rcN`, `.postN`, `+local`, and their combinations) requires a topmost
+  `## Unreleased`; a **final** `X.Y.Z` requires the topmost *released* heading to equal it, so a
+  matching heading further down no longer passes; the two version literals must be **literally
+  equal**. A final version whose tag already exists is a **warn** (a retag is legitimate owner
+  work), and a `vX.Y.Z` tag with no `## vX.Y.Z` heading is a **warn** (tags are immutable, so a
+  historical gap can never go green). Nothing here passes quietly: a rule whose input is absent
+  — no version literal at all, no `CHANGELOG.md`, no `git` — emits an explicit skip finding
+  instead of a clean pass. Comparisons normalize first: a leading `v` is a spelling, and a
+  `git describe` distance means the tree is *past* that tag rather than at it. `vX.Y.Z` stays the
+  release tag's only admissible spelling: a version-shaped tag without the prefix is reported as
+  `release.tag-spelling` and excluded from both git-dependent rules, rather than dropped in
+  silence by a filter that would hide it from them and say nothing.
 
 ### Changed
+- **One home for the shared utilities (C74/D2-33).** `bin/` is the launcher directory —
+  `sync.py` and `verify.py` — and the stdlib-only modules every carrier imports now live in a
+  package of their own: `common/{project_root,findings,runtime,versions}.py` — named for the rule
+  that admits a module (shared by every carrier), not for its contents. In `bin/` they were
+  reachable only by importing them under bare top-level names, which put four generic names into
+  `sys.modules`: the packaged CLI had to rename `versions` to dodge a name a consumer's environment
+  may own and pre-resolve each bare name with its own loader helper, and — because the hooks could
+  not reach them at all — `hooks/hook_core.py` carried a second copy of the project-root walk.
+  That copy is gone, and so is the last second definition of the dev-layer name: `hook_core` and
+  the packaged CLI both ask the one owner. Consumers get the new directory from the same
+  `git submodule update` / `akmon sync`; no command or path a project runs changed.
+- **The release plan bumps the version before it stages anything (C54).**
+  `release_check --plan vX.Y.Z` now prints the version bump as its first step, names **both**
+  literals (`pyproject.toml` and `src/akmon/__init__.py`) and stages both explicitly, where it
+  previously staged `CHANGELOG.md` alone and never mentioned a version. That omission is why the
+  tree at tag `v0.3.0` still carried `0.3.0.dev0` — a procedure that keeps re-creating the
+  mismatch makes any checker reporting it theatre, so the procedure moved with the check. It
+  also names the step *after* the push: return both literals to the next `.dev0` and reopen
+  `## Unreleased`, without which the tree sits at a released version whose tag exists and every
+  later `--check` reports a re-release.
+- **One owner decides how akmon spells a version (C54, carried forward from C61).** The new
+  stdlib-only `common/versions.py` answers two questions — what part of a recorded string names the
+  version, and whether that version is a release — and the CLI skew notice, the release-time
+  join and `akmon init` all ask it instead of deciding separately.
 - **One finding shape across every akmon check (C51).** `akmon verify`, `akmon sync --check`
   and akmon's own dev-layer checks now report through a single envelope —
   `severity · code · message · target · fix` — and print one canonical stdout line per finding in the form
@@ -143,7 +183,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 ### Migration
 - **`registry.json` second-opinion keys moved (C57).** `second_opinion.cli` is now
   `second_opinion.harness` and `second_opinion.invoke` is now `second_opinion.operation`; both
-  refer by name into the single command owner in `bin/runtime.py`, which spells the executable
+  refer by name into the single command owner in `common/runtime.py`, which spells the executable
   and the operation prefix. The ownership is that narrow on purpose: `model_flag` and `report_dir`
   stay in the registry and are unchanged, and `routing.second_opinion_command` still appends the
   model flag and the prompt after the prefix, because a model pin is policy rather than a fact
@@ -159,6 +199,57 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **The hooks stop reading a tree the project no longer pins (C69/D2-26).** `akmon_runtime_root`
+  chose the hooks' tree by directory existence while every other owner of that decision read the
+  recorded `mount`, so a package-mode project beside a stale `<AITNA_ROOT>/akmon` from a prior
+  mode had its hooks bind the **stale** registry, classify warnings from it and print tool paths
+  into it — silently, because a wrong tree that exists looks exactly like the right one. The
+  record is now a **veto** over the directory check rather than a replacement for it: records
+  `package` → the materialization, else the mount if it exists, else the materialization. The
+  veto shape is not cosmetic — an absent record defaults to `submodule`, so a record-only rule
+  would send a project predating the `mount` field to a mount that is not there.
+- **A malformed integration record no longer crashes the tools.** `read_akmon_toml` documented
+  "absent or unreadable → empty", but let `tomllib`'s decode error propagate, so on Python 3.11+
+  a broken `.akmon.toml` aborted `sync` and `verify` while 3.9 parsed the same file to a partial
+  dict. It now falls through to the stdlib parser on a decode error — what it documents, and what
+  keeps the two host Pythons answering alike.
+- Project-root discovery has one owner (`common/project_root.py`), and a command that cannot find a
+  root now says so instead of quietly using the current directory. Seven copies of the walk
+  disagreed: three ignored `AITNA_ROOT` entirely and one could never find a package-mode project,
+  so a gate pack could land under the wrong root indistinguishably from the right one (C73/D2-32).
+- **A relocated dev layer is now followed everywhere it is read or written (C73/D2-32).** Four
+  more sites still spelled `_aitna` past `AITNA_ROOT`: the coverage map's default output path,
+  and the release check's akmon mount, its pinned `[test].runner` record and its dev-venv
+  interpreter. A project with a relocated dev layer had its coverage map written into a
+  directory it does not read, and had its pinned test runner silently replaced by discovery.
+- **An unavailable second opinion now says why, and what is left (D2-1).** The gate printed one
+  line — `skipped (ladder exhausted)` — which left the owner with neither a reason nor an
+  option. It now names, per configured ladder step, the population that step had, and offers
+  the one check that can still be run by hand: the same gate pack past a subagent on the same
+  model in a fresh context. Its boundary is printed with it and is not separable from it — that
+  removes anchoring on the author's own reasoning, not the shared model priors, so it is a
+  self-check and must not be filed as a second opinion. The gate still refuses to run it
+  automatically: a reviewer on the author's weights agrees confidently, which is
+  indistinguishable from a review once it is in the report directory.
+- **The session status line no longer promises a second opinion that will never run (D2-1).**
+  It named the *configured* provider through `second_opinion_provider`, while the runner picks
+  one by walking `second_opinion_policy.diversity_ladder`. On an installation the ladder cannot
+  satisfy — a single vendor whose rungs do not differ from the reviewed model — every gate
+  skipped the review while the status line still read `second-opinion=<harness>(on)`. It now
+  resolves through the same ladder, reports `unavailable` with a warning when the ladder is
+  exhausted and the gate is on, and names the model when the same-vendor rung pins one. The
+  superseded `routing.second_opinion_provider` is removed rather than left as a second answer.
+- **`akmon init` no longer points a consumer at a tag that does not exist (C54).**
+  `_tag_for_version` classified a version by substring (`.dev`, `a`, `b`, `rc`, `+`), which
+  missed `.postN` entirely: an installed `0.4.0.post1` produced links and a default ref of
+  `v0.4.0.post1`, a tag no repository carries. It now asks `common/versions.py`, so anything that
+  is not exactly `X.Y.Z` — including a two-segment `0.4` — resolves to `main`.
+- **The two version literals disagreed in the shipped tree (C54, F9/1).** `pyproject.toml`
+  declared `0.4.0` while `src/akmon/__init__.py` declared `0.4.0.dev0`, so a wheel built from
+  this tree would have been named for a release the changelog does not describe. Both now read
+  `0.4.0.dev0`, matching the topmost `## Unreleased` heading, and `__init__.py` no longer claims
+  that the release pipeline cuts the real version from the git tag — under a static hatchling
+  version the tag influences the built artifact not at all.
 - **On Codex, a renamed file is now seen at its destination, not only at its source (C67).**
   `apply_patch` spells a rename as `*** Update File: <source>` followed by
   `*** Move to: <destination>`, and akmon's patch-path extraction read the

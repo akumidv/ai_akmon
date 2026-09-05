@@ -17,9 +17,10 @@ import json
 import sys
 from pathlib import Path
 
-import findings as findings_mod
 import pytest
-from findings import (
+
+from common import findings as findings_mod
+from common.findings import (
     CODE_RE,
     RETIRED_CODES,
     SEVERITIES,
@@ -315,7 +316,7 @@ def test_exactly_one_canonical_serializer_exists():
     """A second owner of the field mapping is the defect, not only a copy in an adopter."""
     tree = ast.parse(ADOPTER_SOURCES["verify"].read_text(encoding="utf-8"))  # sanity: parses
     assert tree is not None
-    module = ast.parse((_KEYSTONE / "bin" / "findings.py").read_text(encoding="utf-8"))
+    module = ast.parse((_KEYSTONE / "common" / "findings.py").read_text(encoding="utf-8"))
     serializers = [
         node.name
         for node in ast.walk(module)
@@ -361,7 +362,7 @@ def test_no_adopter_repeats_the_field_mapping(name):
 
 
 def test_findings_module_imports_only_the_standard_library():
-    module = ast.parse((_KEYSTONE / "bin" / "findings.py").read_text(encoding="utf-8"))
+    module = ast.parse((_KEYSTONE / "common" / "findings.py").read_text(encoding="utf-8"))
     imported = set()
     for node in ast.walk(module):
         if isinstance(node, ast.Import):
@@ -683,7 +684,7 @@ def test_self_ci_fixture_carries_and_runs_its_mounted_launchers(tmp_path):
     fixture = tmp_path / "consumer"
     self_ci._make_fixture(fixture, _KEYSTONE)
     mounted_bin = fixture / "_aitna" / "akmon" / "bin"
-    assert (mounted_bin / "findings.py").is_file()
+    assert (fixture / "_aitna" / "akmon" / "common" / "findings.py").is_file()
     for script in ("sync.py", "verify.py"):
         result = self_ci.subprocess.run(
             [sys.executable, str(mounted_bin / script), "--help"],

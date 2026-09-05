@@ -13,10 +13,11 @@ from pathlib import Path
 
 import pytest
 import routing
-import runtime as runtime_declaration
 from checks import runtime as runtime_checks
-from findings import exit_code
-from runtime import (
+
+from common import runtime as runtime_declaration
+from common.findings import exit_code
+from common.runtime import (
     GENERATED_WIRING,
     OPTIONAL,
     OWN_TOOLING,
@@ -652,6 +653,64 @@ def test_grouping_survives_the_arithmetic_refusal():
     with pytest.raises(runtime_checks.UnparsedCommand):
         runtime_checks._binaries_in_command("(( x = 1 )) && python3 a.py")
     assert runtime_checks._binaries_in_command("( ( python3 a.py ) ) && jq .") == {
+        POSIX_SHELL, "python3", "jq",
+    }
+
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python3 a.py --re x((y",          # declared a binary called `y`
+        "python3 foo(bar)",                # declared `bar`
+        "python3 ((x))",                   # declared `x`
+    ],
+)
+def test_a_parenthesis_that_cannot_be_grouping_is_refused(command):
+    """Each is a shell syntax error that the walk answered with a confident binary name.
+
+    `(` glued to a word is either the `()` of a definition or nothing this parser reads, and
+    `((` is refused wherever it appears — quoted it is a word and never arrives as an operator,
+    so unlike `case` or `time` it cannot be a legitimate argument.
+    """
+    with pytest.raises(runtime_checks.UnparsedCommand):
+        runtime_checks._binaries_in_command(command)
+
+
+@pytest.mark.parametrize(
+    "command, expected",
+    [
+        ("2>&1 python3 a.py", {"python3"}),          # declared `2` and missed `python3`
+        ("2> /dev/null python3 a.py", {"python3"}),
+        (">log python3 a.py", {"python3"}),
+        ("python3 a.py 2>&1 | jq .", {"python3", "jq"}),
+    ],
+)
+def test_a_redirection_may_precede_the_command(command, expected):
+    """A redirection prefix is valid shell, and its file-descriptor number is not a binary."""
+    assert runtime_checks._binaries_in_command(command) == {POSIX_SHELL, *expected}
+
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["python3 a.py <(jq .)", "python3 a.py >(jq .)", "diff <(jq . a) <(jq . b)"],
+)
+def test_process_substitution_is_refused(command):
+    """It *runs* the command inside it, and the redirection branch ate the `(` before it.
+
+    `python3 a.py <(jq .)` reported no `jq`; `diff <(jq . a) <(jq . b)` reported one — the same
+    construct read two ways depending on where it sat, which is worse than either answer.
+    """
+    with pytest.raises(runtime_checks.UnparsedCommand):
+        runtime_checks._binaries_in_command(command)
+
+
+def test_an_ordinary_redirection_is_not_a_process_substitution():
+    assert runtime_checks._binaries_in_command("python3 a.py < in.txt && jq .") == {
+        POSIX_SHELL, "python3", "jq",
+    }
+    assert runtime_checks._binaries_in_command('python3 a.py --re "<(x" && jq .') == {
         POSIX_SHELL, "python3", "jq",
     }
 

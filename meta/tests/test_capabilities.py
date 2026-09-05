@@ -192,7 +192,7 @@ def test_an_unmeasured_crash_posture_under_enforcement_warns(tmp_path, effect):
 
 @pytest.mark.parametrize("effect", ["ask", "deny"])
 def test_an_unmeasured_crash_posture_keeps_a_non_strict_run_at_zero(tmp_path, effect):
-    from findings import exit_code
+    from common.findings import exit_code
 
     row = GUARD_ROW.replace("- effect: deny", f"- effect: {effect}")
     row = row.replace("- crash-posture: fail-closed", "- crash-posture: unmeasured")

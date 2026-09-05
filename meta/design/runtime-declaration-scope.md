@@ -2,7 +2,7 @@
 
 **Status:** open fork — A20. Nothing here is decided.
 
-C57 shipped `bin/runtime.py`: the binaries akmon requires, each with a population and a modality,
+C57 shipped `common/runtime.py`: the binaries akmon requires, each with a population and a modality,
 joined against what the tree actually invokes. The join is closed by construction and the real
 tree passes it. This note records the question that closure does not answer.
 

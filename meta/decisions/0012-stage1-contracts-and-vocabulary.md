@@ -65,7 +65,7 @@ references where one would do.
 
 ### F1 — one diagnostic field vocabulary: `severity`, with no alias
 
-One stdlib-only module `bin/findings.py` extends the existing `verify.py::Finding` into the shared
+One stdlib-only module `common/findings.py` extends the existing `verify.py::Finding` into the shared
 envelope **`severity · code · message · target · fix`**, adopted by `bin/verify.py`,
 `meta/bin/validate.py`, `sync --check` and `meta/self_ci.py` — the last importing the module
 directly rather than parsing subprocess output.

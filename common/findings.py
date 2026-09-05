@@ -2,8 +2,9 @@
 """The shared finding envelope every akmon check speaks (stage 1, P1.6).
 
 One structure — ``severity · code · message · target · fix`` — used by ``bin/verify.py``,
-``bin/sync.py --check``, ``meta/bin/validate.py`` and ``meta/self_ci.py``, so a reader (and,
-from C59, a machine) meets one shape rather than four. Stdlib-only and dependency-free
+``bin/sync.py --check``, ``meta/bin/validate.py``, ``meta/self_ci.py`` and (from C54)
+``tools/release/release_check.py``, so a reader (and, from C59, a machine) meets one shape
+rather than five. Stdlib-only and dependency-free
 by contract: it ships in ``bin/`` and must import on the declared Python floor with no venv.
 
 The five fields, and why each is load-bearing:

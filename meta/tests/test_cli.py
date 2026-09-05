@@ -9,6 +9,7 @@ so the "embedded tree" resolves to this repo's own akmon root via the editable f
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -60,6 +61,24 @@ NO_MAIN_PY = 'print("ran as a script, no main() defined")\n'
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _embedded_tree(tmp_path: Path, sync_body: str = SYNC_PY) -> Path:
+    """A stand-in embedded tree: a fixture launcher plus the real shared library.
+
+    ``common`` is copied rather than stubbed because the CLI asks the embedded tree for the
+    dev-layer name (one owner, C73). A tree without it is not a tree the wheel can ship — the
+    force-include list and the wheel smoke both assert that — so faking one here would test a
+    layout that cannot exist.
+    """
+    fixture_tree = tmp_path / "embedded"
+    _write(fixture_tree / "bin" / "sync.py", sync_body)
+    shutil.copytree(
+        _KEYSTONE / "common",
+        fixture_tree / "common",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    return fixture_tree
 
 
 def _mounted_project(tmp_path: Path, *, sync_body: str = SYNC_PY, verify_body: str = VERIFY_PY) -> Path:
@@ -130,8 +149,7 @@ def test_mounted_akmon_root_none_when_akmon_toml_says_package_despite_stale_moun
 
 def test_dispatch_ignores_stale_mount_when_akmon_toml_says_package(tmp_path, monkeypatch, capfd):
     root = _package_mode_project(tmp_path, with_stale_mount=True)
-    fixture_tree = tmp_path / "embedded"
-    _write(fixture_tree / "bin" / "sync.py", SYNC_PY)
+    fixture_tree = _embedded_tree(tmp_path)
     monkeypatch.setattr(_tree, "embedded_tree_root", lambda: fixture_tree)
 
     code = cli._dispatch("sync", [], cwd=root)
@@ -168,8 +186,7 @@ def test_dispatch_runs_mounted_verify_that_imports_sync(tmp_path, capfd):
 
 
 def test_dispatch_falls_back_to_embedded_when_no_mount(tmp_path, monkeypatch, capfd):
-    fixture_tree = tmp_path / "embedded"
-    _write(fixture_tree / "bin" / "sync.py", SYNC_PY)
+    fixture_tree = _embedded_tree(tmp_path)
     monkeypatch.setattr(_tree, "embedded_tree_root", lambda: fixture_tree)
 
     no_mount_cwd = tmp_path / "consumer"
@@ -186,15 +203,13 @@ def test_dispatch_falls_back_to_embedded_when_no_mount(tmp_path, monkeypatch, ca
 
 
 def test_run_embedded_imports_main_in_process(tmp_path, monkeypatch):
-    fixture_tree = tmp_path / "embedded"
-    _write(fixture_tree / "bin" / "sync.py", SYNC_PY)
+    fixture_tree = _embedded_tree(tmp_path)
     monkeypatch.setattr(_tree, "embedded_tree_root", lambda: fixture_tree)
     assert cli._run_embedded("sync", ["--check"]) == 11
 
 
 def test_run_embedded_falls_back_to_subprocess_when_no_main(tmp_path, monkeypatch, capfd):
-    fixture_tree = tmp_path / "embedded"
-    _write(fixture_tree / "bin" / "sync.py", NO_MAIN_PY)
+    fixture_tree = _embedded_tree(tmp_path, NO_MAIN_PY)
     monkeypatch.setattr(_tree, "embedded_tree_root", lambda: fixture_tree)
     code = cli._run_embedded("sync", [])
     out = capfd.readouterr().out
@@ -355,8 +370,7 @@ def test_main_rejects_unknown_command():
 def test_main_passes_leading_dash_flags_through_to_sync(tmp_path, monkeypatch, capfd):
     # Regression guard: argparse subparsers + REMAINDER mis-parse a remainder starting
     # with "-" (e.g. `akmon sync --check`); main() uses a single-level REMAINDER instead.
-    fixture_tree = tmp_path / "embedded"
-    _write(fixture_tree / "bin" / "sync.py", SYNC_PY)
+    fixture_tree = _embedded_tree(tmp_path)
     monkeypatch.setattr(_tree, "embedded_tree_root", lambda: fixture_tree)
     monkeypatch.chdir(tmp_path)  # no AGENTS.md here -> no mount found -> embedded path
     code = cli.main(["sync", "--check", "--project-root", "/tmp/x"])

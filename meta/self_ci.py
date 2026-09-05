@@ -3,7 +3,7 @@
 
 Each leg — the fixture ``sync`` write, the ``sync --check`` re-run, the USE-layer
 ``verify --strict``, and the installed-wheel smoke — reports through the shared finding
-envelope (``bin/findings.py``), imported directly rather than by parsing what the child
+envelope (``common/findings.py``), imported directly rather than by parsing what the child
 processes print. The child's own output is echoed to stderr when its leg fails, so the
 finding names the leg and the detail is still there to read.
 """
@@ -18,12 +18,16 @@ import tempfile
 from pathlib import Path
 
 _KEYSTONE_ROOT = Path(__file__).resolve().parents[1]
+# The tree root for the shared ``common`` package, and ``bin/`` for the two launchers,
+# which are imported by their bare script name (``import sync``) the way they are at runtime.
 sys.path.insert(0, str(_KEYSTONE_ROOT / "bin"))
+sys.path.insert(0, str(_KEYSTONE_ROOT))
 sys.path.insert(0, str(_KEYSTONE_ROOT / "meta"))
 
 from checks import capabilities  # noqa: E402
 from checks import runtime as runtime_checks  # noqa: E402
-from findings import Finding, exit_code, print_findings  # noqa: E402
+
+from common.findings import Finding, exit_code, print_findings  # noqa: E402
 
 AGENTS_MD = """# AGENTS.md
 
@@ -98,7 +102,12 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "pipelines/design-flow.md",
         "pipelines/release.md",
         "pipelines/tasks.md",
-        "bin/findings.py",
+        "common/__init__.py",
+        "common/findings.py",
+        "common/project_root.py",
+        "common/record.py",
+        "common/runtime.py",
+        "common/versions.py",
         "bin/sync.py",
         "bin/verify.py",
         "hooks/hook_core.py",
@@ -132,7 +141,9 @@ def _checked(command: list[str], *, cwd: Path | None = None) -> None:
     if result.returncode == 0:
         return
     sys.stderr.write((result.stdout or "") + (result.stderr or ""))
-    detail = (result.stdout or result.stderr).strip().splitlines()
+    # stderr first: a failing command states its reason there while stdout carries progress,
+    # so preferring stdout reported the last *successful* step and dropped the diagnosis.
+    detail = (result.stderr or result.stdout).strip().splitlines()
     tail = detail[-1] if detail else f"exit {result.returncode}"
     raise RuntimeError(f"{' '.join(command)}: {tail}")
 
@@ -186,12 +197,10 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path) -> None:
         '[project]\nname = "package-consumer"\nversion = "0.1.0"\n\n'
         '[dependency-groups]\ndev = ["akmon"]\n',
     )
-    subprocess.run(
-        [str(akmon), "init", "--mode", "package", "--project-root", str(fixture), "--yes"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    # Through ``_checked`` rather than a bare ``check=True``: CalledProcessError names only the
+    # command and the exit status, and this leg's most common failure — the pin lookup below —
+    # is a whole sentence the reader needs.
+    _checked([str(akmon), "init", "--mode", "package", "--project-root", str(fixture), "--yes"])
     for command in (["sync", "--check"], ["verify", "--strict", "--quiet"]):
         _checked([str(akmon), *command], cwd=fixture)
 
@@ -208,6 +217,32 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path) -> None:
     context = output["hookSpecificOutput"]["additionalContext"]
     assert "DEVELOP (build the project): architect, engineer, review" in context
     assert "Delegation is the default for non-atomic work" in context
+
+
+def _wheel_smoke_report(detail: str) -> tuple[str, str]:
+    """Message and one-sentence fix for a failed smoke — a *prerequisite* failure says so.
+
+    The leg's ``init --mode package`` resolves the pin by reading the akmon repository's release
+    tags over the network, so it also fails when the network is unreachable or git cannot
+    authenticate — neither of which is a defect in what akmon ships. Reported as "returned
+    non-zero exit status 2" that reads like a packaging regression and costs a bisect; reported
+    as the prerequisite it is, it costs one command. The envelope keeps ``fix`` to a single
+    imperative sentence, so the diagnosis rides in the message.
+    """
+    if "cannot discover the latest release tag" in detail or "could not read Username" in detail:
+        return (
+            f"installed-wheel smoke could not run: {detail} :: prerequisite of this leg, not a "
+            "packaging defect — `init --mode package` resolves the pin from the akmon "
+            "repository's release tags, so it needs network reach plus a git credential helper "
+            "that works outside this checkout (check with `git ls-remote --tags <repo>` from a "
+            "directory that is not a git repository)",
+            "Wire git credentials outside this checkout with `gh auth login` then "
+            "`gh auth setup-git`, and re-run python3 meta/self_ci.py.",
+        )
+    return (
+        f"installed-wheel smoke failed: {detail}",
+        "Run python3 meta/self_ci.py and fix the packaged-install failure it reports.",
+    )
 
 
 def _run(akmon_root: Path) -> list[Finding]:
@@ -248,15 +283,8 @@ def _run(akmon_root: Path) -> list[Finding]:
             _installed_wheel_smoke(akmon_root, fixture / "wheel-smoke")
         except Exception as exc:  # the leg owns build, install, attach and hook execution
             detail = " ".join(str(exc).split()) or type(exc).__name__
-            findings.append(
-                Finding(
-                    "error",
-                    "selfci.wheel-smoke",
-                    f"installed-wheel smoke failed: {detail}",
-                    "",
-                    "Run python3 meta/self_ci.py and fix the packaged-install failure it reports.",
-                )
-            )
+            message, fix = _wheel_smoke_report(detail)
+            findings.append(Finding("error", "selfci.wheel-smoke", message, "", fix))
         else:
             findings.append(
                 Finding(

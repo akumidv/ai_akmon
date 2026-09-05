@@ -165,3 +165,49 @@ def test_requirement_name_reads_the_head_of_a_pep_508_string():
     assert validate._requirement_name(" pytest ") == "pytest"
     assert validate._requirement_name('pytest[extra]>=8; python_version >= "3.9"') == "pytest"
     assert validate._requirement_name("pytest-cov") == "pytest-cov"
+
+
+# --------------------------------------------------------------------------------------
+# the self-CI failure diagnostic
+# --------------------------------------------------------------------------------------
+
+
+def _self_ci_result(root: Path, monkeypatch, *, stdout: str, stderr: str = "", code: int = 1):
+    """Run ``run_self_ci`` against a stubbed child process and return the findings."""
+    (root / "meta").mkdir(parents=True, exist_ok=True)
+    (root / "meta" / "self_ci.py").write_text("# stub\n", encoding="utf-8")
+
+    class _Completed:
+        returncode = code
+
+    completed = _Completed()
+    completed.stdout = stdout
+    completed.stderr = stderr
+    monkeypatch.setattr(validate.subprocess, "run", lambda *a, **k: completed)
+    validator = validate.Validator(root)
+    validator.run_self_ci()
+    return validator.findings
+
+
+def test_a_failing_self_ci_is_reported_by_its_error_not_by_its_last_line(tmp_path, monkeypatch):
+    # The failing leg is followed by unrelated warnings in the same stream, which is the normal
+    # shape: a `warn` finding does not fail the run, so it is routinely the last line printed.
+    findings = _self_ci_result(
+        tmp_path, monkeypatch,
+        stdout="OK a.b: fine → Keep it.\n"
+               "ERROR selfci.wheel-smoke: installed-wheel smoke failed: boom → Fix it.\n"
+               "WARN c.d: unrelated → Note it.\n",
+    )
+    assert [finding.severity for finding in findings] == ["error"]
+    assert "wheel-smoke" in findings[0].message
+    assert "unrelated" not in findings[0].message
+
+
+def test_a_self_ci_that_crashed_without_findings_still_names_something(tmp_path, monkeypatch):
+    findings = _self_ci_result(tmp_path, monkeypatch, stdout="", stderr="Traceback\nValueError: boom\n")
+    assert "ValueError: boom" in findings[0].message
+
+
+def test_a_self_ci_that_printed_nothing_reports_its_exit_code(tmp_path, monkeypatch):
+    findings = _self_ci_result(tmp_path, monkeypatch, stdout="", stderr="", code=3)
+    assert "exit 3" in findings[0].message

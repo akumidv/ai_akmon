@@ -420,7 +420,7 @@ instead of inventing one.
 ## 1. Shared finding envelope (P1.6 → C51)
 
 **Decision.** Extend the existing `bin/verify.py::Finding` into one shared stdlib-only module
-`bin/findings.py`, with fields `severity · code · message · target · fix`. `severity` carries the
+`common/findings.py`, with fields `severity · code · message · target · fix`. `severity` carries the
 `ok / warn / error` vocabulary and preserves the shared exit-code contract (errors exit 1;
 warnings exit 1 only under `--strict`) in the three strict-capable adopters; `sync --check` carries
 the explicit 0/1/2 exception recorded below. `code` is a stable dotted slug naming the check (`boundary.missing-banner`,
@@ -1026,6 +1026,53 @@ tag passes them too, because no fixture there distinguishes warn from error. Nor
 seeded over `v0.4.0`, `0.4.0` and a `git describe` suffix; the re-release case asserts **warn**,
 not merely non-clean.
 
+**Delivered (C54).** `tools/release/release_check.py::check_release_versions` joins the four
+carriers and reports through the shared envelope, wired into `--check` (a release-time gate:
+the tree's steady mid-cycle state — non-final over `## Unreleased` — is exactly what it accepts,
+so it is not also a `self_ci` leg). Codes: `release.version-literals`,
+`release.changelog-window`, `release.retag` (warn), `release.undocumented-tag` (warn),
+`release.check-skipped` (warn). Eight implementation choices the lock left open are recorded for
+owner verification as **D2-31**; two are worth naming here because they close a gap the lock
+did not see. First, the final/non-final classification is **binary by construction** — final is
+exactly `X.Y.Z` with no `describe` distance, and *every* other spelling is non-final (a leading `v` is a spelling of the same version rather than a difference, since `git describe` supplies it) — so no
+version can fall between the two heading rules and escape both; F9/3's PEP 440 enumeration is
+then a subset the corpus proves rather than the definition. Second, a rule that does not
+**apply** is not reported as skipped: under a non-final version there is no re-release question,
+so git's absence skips tag coverage alone. F9/6's normalizer was **lifted** rather than copied,
+per C61's carried-forward note: the new stdlib-only `common/versions.py` owns both `split_version`
+and `is_final`, and the lift found a *third* owner — `src/akmon/_init.py::_tag_for_version`
+classified by substring (`.dev`, `a`, `b`, `rc`, `+`), missing `.postN` and resolving an
+installed `0.4.0.post1` to the non-existent tag `v0.4.0.post1`. That repair is a behaviour change
+in `akmon init` outside this section's scope and is the part of D2-31 that most needs a look.
+**The checker was then reviewed adversarially against itself** (twenty seeded mutations of the
+checker, the spelling module, the attach helper and the plan). Fifteen were caught by the
+carriers as written; of the five survivors, two were mutations of redundant code — the released
+heading is anchored twice, by `^` in the pattern and by `.match`, so removing either alone
+changes nothing, and the honest mutation removes both — and three were real. **Two were test
+gaps**: "literally equal" was never seeded against an implementation that normalizes first
+(`v0.4.0` vs `0.4.0` must still fail), and which literal is authoritative was decided by nothing
+(`pyproject` wins, because it is the literal that names the wheel). **Three were defects.** Tag
+coverage returned **silently** when `CHANGELOG.md` was absent — the same silence F9/4 exists to
+remove, now an explicit skip. The tag list was filtered to `vX.Y.Z`, so a project that cut
+`1.2.3` was invisible to *both* git-dependent rules and nothing said so. The owner ruled during
+the repair that `vX.Y.Z` **is** the release tag's only admissible spelling, so the fix is not to
+widen the population but to stop the silence: such a tag is now reported as
+`release.tag-spelling` (warn) and then excluded, which states the rule instead of enforcing it
+invisibly. And `--plan` stopped at the push, leaving the tree at a released
+version whose tag exists, so every later `--check` reported a re-release — the procedure
+re-creating what the checker reports, which is the exact failure this section already named
+once. The pattern across both passes is worth recording: every real defect was either a **silent
+non-run** or a **rule that read one spelling of something it compares in two**.
+
+One carrier the frame did not count turned up during the repair: `uv.lock` records the project
+version as well, making five. It gets no rule, because `uv` rewrites it from `pyproject.toml`
+without being asked — it re-synced itself on the first command after the bump — so it is a
+derived copy rather than an independently maintained one.
+
+The live tree was observed **red** — `error release.version-literals` (`0.4.0` vs `0.4.0.dev0`)
+and `error release.changelog-window` (final `0.4.0` over a topmost released `## v0.3.0`) — before
+the F9/1 repair, and green after it, in that order.
+
 ## 5. Source/generated boundary (P1.7 → C55)
 
 **Decision (owner-locked as register fork F17/A).** **The generator is the one declaration.** Every
@@ -1256,7 +1303,7 @@ a migration line.
 are excluded — a fixture naming a harness describes the map rather than bypassing it — and data
 files are excluded because the registry now refers to the map **by name**, which is the point of
 the decision above. Measured at implementation: after the change, no source outside
-`bin/runtime.py` spells either binary.
+`common/runtime.py` spells either binary.
 
 **Modality is derived, not restated.** A binary present in every vendor's generated wiring is
 `required`; one present in a single vendor's wiring is `required-on:<that vendor>`. The
@@ -1458,6 +1505,19 @@ defects, each one a rule that could be satisfied without being true:
   quotes, escapes and operator runs. A quoted operator can no longer *become* one, because
   quoting is resolved in the same pass that decides structure, and an escape now reads as an
   escape instead of as an unreadable command.
+
+  A sixth pass, against that tokenizer, found four more — every one of them a construct the
+  previous shape had hidden rather than a regression. **Process substitution** silently lost the
+  command it runs: the redirection branch consumed the `(`, so `python3 a.py <(jq .)` reported no
+  `jq` while `diff <(jq . a) <(jq . b)` reported one, the same construct read two ways depending
+  on where it sat; it is a bash extension and is now refused. A **`(` glued to a word** —
+  `x((y`, `foo(bar)` — is a shell syntax error that the walk answered with a binary named `y` or
+  `bar`; it is now refused unless it is the `()` of a definition. **`((` away from a head** was
+  still read as grouping, so `python3 ((x))` declared `x`; unlike the *words* `case` and `time`,
+  `((` can never be a legitimate argument — quoted, it is a word and never arrives as an
+  operator — so its refusal is not head-scoped. And a **redirection preceding the command** is
+  valid shell whose file-descriptor number is not a binary: `2>&1 python3 a.py` declared `2` and
+  missed `python3`.
 
   A fifth pass, against that rewrite, found two more and one dead entry. `shlex` opens a comment
   at a `#` **anywhere**, while a shell opens one only at a word start, so `python3 a.py#x && jq .`

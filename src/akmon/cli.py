@@ -19,8 +19,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -29,9 +27,6 @@ from types import ModuleType
 from akmon import __version__, _tree
 
 _DISPATCHED_COMMANDS = {"sync", "verify"}
-_AITNA_ROOT_DEFAULT = "_aitna"
-# ``git describe --tags`` distance from the tag: ``-<N>-g<sha>``, optionally ``-dirty``.
-_DESCRIBE_SUFFIX = re.compile(r"-(\d+)-g[0-9a-f]+(?:-dirty)?$")
 
 
 def _load_module_from_path(path: Path, name: str) -> ModuleType:
@@ -56,14 +51,45 @@ def _load_module_from_path(path: Path, name: str) -> ModuleType:
     return module
 
 
-def _load_embedded_findings(tree_root: Path) -> ModuleType:
-    """Load ``tree_root/bin/findings.py`` fresh, registered as ``sys.modules['findings']``.
+def _load_embedded_common(tree_root: Path) -> ModuleType:
+    """Load ``tree_root/common/`` as the package ``common``, for *this* tree.
 
-    Both launchers do a bare ``import findings`` for the shared envelope, so it has to be
-    resolved before either of them is loaded — same pre-registration trick, and the same
-    reason, as :func:`_load_embedded_sync` below.
+    The tree the CLI runs is the tree that answers, so a swapped ``tree_root`` must never
+    resolve to a previously loaded copy (akmon's own tests swap the embedded tree inside one
+    process). The package is registered with its ``__path__`` pointed at this tree, and every
+    ``common`` entry from a different tree is discarded first; submodules then resolve
+    through that ``__path__``, so no ``sys.path`` mutation is needed and nothing leaks either
+    way. Re-registration is skipped when the loaded package already belongs to this tree.
+
+    Registering it is required, not merely convenient: the embedded ``bin/sync.py`` and
+    ``bin/verify.py`` import ``common.*`` by name, and the import statement consults
+    ``sys.modules`` before it consults ``sys.path``.
     """
-    return _load_module_from_path(tree_root / "bin" / "findings.py", "findings")
+    package_dir = (tree_root / "common").resolve()
+    loaded = sys.modules.get("common")
+    if loaded is not None and Path(next(iter(loaded.__path__), "")).resolve() == package_dir:
+        return loaded
+    for name in [n for n in sys.modules if n == "common" or n.startswith("common.")]:
+        del sys.modules[name]
+    spec = importlib.util.spec_from_file_location(
+        "common", package_dir / "__init__.py", submodule_search_locations=[str(package_dir)]
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load 'common' from {package_dir}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["common"] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop("common", None)
+        raise
+    return module
+
+
+def _embedded_common_module(tree_root: Path, name: str) -> ModuleType:
+    """One module out of ``tree_root``'s ``common`` — e.g. ``versions``, ``project_root``."""
+    _load_embedded_common(tree_root)
+    return importlib.import_module(f"common.{name}")
 
 
 def _load_embedded_sync(tree_root: Path) -> ModuleType:
@@ -75,12 +101,20 @@ def _load_embedded_sync(tree_root: Path) -> ModuleType:
     leakage across differing ``tree_root`` values used within one process (e.g. across test
     fixtures that swap the embedded tree).
     """
-    _load_embedded_findings(tree_root)  # sync.py does `import findings`; resolve it first.
+    _load_embedded_common(tree_root)  # sync.py imports `common.*`; resolve them first.
     return _load_module_from_path(tree_root / "bin" / "sync.py", "sync")
 
 
-def _aitna_root_name() -> str:
-    return (os.environ.get("AITNA_ROOT") or _AITNA_ROOT_DEFAULT).strip("/") or _AITNA_ROOT_DEFAULT
+def _project_root_lib() -> ModuleType:
+    """The embedded tree's ``common.project_root`` — the owner of the dev-layer name.
+
+    Asked rather than answered again here, for the same reason as :func:`_split_version` below:
+    the tree that ships with this CLI is in lockstep with it, so delegating costs nothing and
+    leaves one definition. Note this is *not* the dependency :func:`_mounted_akmon_root` must
+    avoid — that one is on the **consumer's** mounted or materialized tree, whose content is
+    exactly what that function is deciding about.
+    """
+    return _embedded_common_module(_tree.embedded_tree_root(), "project_root")
 
 
 def _toml_scalar(raw: str) -> str:
@@ -143,7 +177,7 @@ def _mounted_akmon_root(start: Path) -> Path | None:
     mode must not shadow it, so this returns ``None`` (no mount) even if that directory
     still exists on disk.
     """
-    aitna_name = _aitna_root_name()
+    aitna_name = _project_root_lib().aitna_root_name()
     for candidate in (start, *start.parents):
         if (candidate / "AGENTS.md").is_file():
             aitna_dir = candidate / aitna_name
@@ -158,24 +192,12 @@ def _mounted_akmon_root(start: Path) -> Path | None:
 def _split_version(recorded: str) -> tuple[str, str | None]:
     """Split a recorded version into the part to compare and its ``git describe`` distance.
 
-    The two carriers spell the same standard differently by construction: mounted mode records
-    ``git describe --tags`` (``v0.3.0``, optionally ``-N-g<sha>``, optionally ``-dirty``), package
-    mode records installed metadata (``0.4.0.dev0`` — PEP 440, no ``v``). Only those two
-    spellings are normalized away. A PEP 440 pre/post/dev segment is **not** a spelling: it names a
-    different version and must keep comparing unequal.
-
-    Returns ``(base, commits_ahead)``; ``commits_ahead`` is ``None`` when the recorded string names
-    a tag exactly.
+    Delegates to the embedded tree's ``common/versions.py``, the sole owner of the rule
+    (C54 lifted it there): release-time checking asks the same question, and the second copy
+    that would answer it is the pattern C46 exists to remove. Returns ``(base, commits_ahead)``;
+    ``commits_ahead`` is ``None`` when the recorded string names a version exactly.
     """
-    base = recorded.strip()
-    ahead = None
-    match = _DESCRIBE_SUFFIX.search(base)
-    if match:
-        ahead = match.group(1)
-        base = base[: match.start()]
-    if base[:1] == "v":
-        base = base[1:]
-    return base, ahead
+    return _embedded_common_module(_tree.embedded_tree_root(), "versions").split_version(recorded)
 
 
 def _skew_notice(mounted_root: Path) -> str | None:
@@ -227,7 +249,7 @@ def _run_embedded(script: str, argv: list[str]) -> int:
         if script == "verify":
             _load_embedded_sync(tree_root)  # verify.py does `import sync`; resolve it first.
         else:
-            _load_embedded_findings(tree_root)  # every launcher imports the shared envelope.
+            _load_embedded_common(tree_root)  # every launcher imports the shared utilities.
         module = _load_module_from_path(script_path, f"_akmon_embedded_{script}")
         main = module.main
     except Exception:

@@ -149,6 +149,43 @@ def test_skip_branch_when_ladder_exhausted_runs_no_subprocess(tmp_path, capsys, 
     assert "ladder exhausted" in out
 
 
+def test_the_skip_states_its_reason_and_offers_the_weaker_check_with_its_limits(
+    tmp_path, capsys, monkeypatch
+):
+    """A bare "skipped" leaves the owner with no reason and no option. The gate refuses to
+    downgrade itself, but the same-model self-check is still worth offering — to a person,
+    with the boundary attached, so its result is never filed as a second opinion."""
+    config = {
+        "orchestrator": "only",
+        "binding": {"auditor": "only"},
+        "available": ["only"],
+    }
+    root = _write_project(tmp_path, _ONE_VENDOR_REGISTRY, config)
+    monkeypatch.setattr(
+        second_opinion.subprocess,
+        "run",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no subprocess on the skip branch")),
+    )
+
+    second_opinion.main(
+        [
+            "--project-root", str(root),
+            "--orchestrator-vendor", "anthropic",
+            "--gate", "code-verify",
+            "--gate-pack", str(_gate_pack(root)),
+        ]
+    )
+    out = capsys.readouterr().out
+
+    # The reason, derived from the ladder's own inputs rather than restated here.
+    assert "no other vendor is configured" in out
+    assert "'only'" in out
+    # The option, and — inseparably — what it does not buy.
+    assert "subagent" in out and "fresh context" in out
+    assert "does not remove shared model priors" in out
+    assert "must not be filed as one" in out
+
+
 # --------------------------------------------------------------------------------------
 # explicit --provider override bypasses the ladder
 # --------------------------------------------------------------------------------------

@@ -176,10 +176,10 @@ def test_second_opinion_fallback_model_single_rung_returns_none():
 def test_second_opinion_defaults_to_opposite_vendor_and_builds_command():
     binding = routing.compute_binding(REGISTRY, "large", available=["small", "medium", "large"], vendor="openai")
     config = routing.local_config(binding, REGISTRY, second_opinion=True, available=None)
-    provider = routing.second_opinion_provider(REGISTRY, config, "openai")
-    spec = routing.second_opinion_spec(REGISTRY, provider)
+    target = routing.resolve_second_opinion(REGISTRY, config, "openai")
+    spec = routing.second_opinion_spec(REGISTRY, target.provider)
 
-    assert provider == "anthropic"
+    assert target.provider == "anthropic"
     assert spec["harness"] == "claude"
     assert routing.second_opinion_command(spec, "review this") == [
         "claude",
@@ -422,6 +422,48 @@ def test_status_lines_warn_when_orchestrator_leaves_corridor():
     config = routing.local_config(binding, REGISTRY, second_opinion=False, available=ladder)
     joined = "\n".join(routing.status_lines(config, REGISTRY, "_aitna/akmon"))
     assert "⚠" in joined and "below the orchestration floor" in joined
+
+
+def _single_vendor_config(available: list[str], orchestrator: str) -> tuple[dict, dict]:
+    """A registry with one vendor, so the diversity ladder can only reach its own rungs."""
+    registry = {k: v for k, v in REGISTRY.items() if k != "openai"}
+    binding = routing.compute_binding(registry, orchestrator, available=available)
+    return registry, routing.local_config(binding, registry, second_opinion=True, available=available)
+
+
+def test_status_lines_name_the_model_the_ladder_pins_not_just_the_harness():
+    """The same-vendor rung runs a *different* model; a bare harness name hides which."""
+    registry, config = _single_vendor_config(["small", "medium", "large"], "large")
+    joined = "\n".join(routing.status_lines(config, registry, "_aitna/akmon"))
+    assert "second-opinion=claude(on, model=medium)" in joined
+
+
+def test_status_lines_do_not_promise_a_second_opinion_the_ladder_cannot_reach():
+    """The pre-ladder display read `<harness>(on)` while every gate silently skipped."""
+    registry, config = _single_vendor_config(["only"], "only")
+    joined = "\n".join(routing.status_lines(config, registry, "_aitna/akmon"))
+    assert "second-opinion=unavailable(on)" in joined
+    assert "ladder is exhausted" in joined
+    assert "⚠" in joined
+
+
+def test_an_exhausted_ladder_is_not_warned_about_while_second_opinion_is_off():
+    """Nothing is lost when the owner never asked for the gate, so it stays quiet."""
+    registry = {k: v for k, v in REGISTRY.items() if k != "openai"}
+    binding = routing.compute_binding(registry, "only", available=["only"])
+    config = routing.local_config(binding, registry, second_opinion=False, available=["only"])
+    joined = "\n".join(routing.status_lines(config, registry, "_aitna/akmon"))
+    assert "second-opinion=unavailable(off)" in joined
+    assert "ladder is exhausted" not in joined
+
+
+def test_a_retired_key_overlay_refuses_the_status_block_rather_than_degrading_it():
+    """D2-30's hard failure reaches the status line too — via `compute_binding`, not only
+    the second-opinion field, so there is no partial status to render."""
+    registry = json.loads(json.dumps(REGISTRY))
+    registry["openai"]["second_opinion"]["cli"] = "codex"
+    with pytest.raises(KeyError, match="retired key"):
+        routing.status_lines(_fresh_config(), registry, "_aitna/akmon")
 
 
 # --------------------------------------------------------------------------------------
@@ -1206,13 +1248,6 @@ def _make_package_project(tmp_path: Path, *, stale_mount: bool = False) -> Path:
         stale.mkdir(parents=True)
         (stale / "registry.json").write_text(json.dumps({"anthropic": {}}), encoding="utf-8")
     return tmp_path
-
-
-def test_find_project_root_accepts_the_record_without_a_mount(tmp_path):
-    root = _make_package_project(tmp_path)
-    nested = root / "src" / "pkg"
-    nested.mkdir(parents=True)
-    assert _load_init()._find_project_root(nested) == root
 
 
 def test_standard_tree_root_is_the_mount_when_mounted(tmp_path):

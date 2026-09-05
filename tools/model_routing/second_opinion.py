@@ -16,16 +16,14 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# The tree root, so the shared ``common`` package resolves: it holds the single owner of
+# project-root discovery (C73) and is reachable at the same tree-relative depth from the
+# mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import routing
+import routing  # noqa: E402
 
-
-def _find_project_root(start: Path) -> Path:
-    aitna = routing.aitna_root_name()
-    for candidate in (start, *start.parents):
-        if (candidate / "AGENTS.md").is_file() and (candidate / aitna / "akmon").exists():
-            return candidate
-    return start
+from common.project_root import resolve_project_root  # noqa: E402
 
 
 def _read_json(path: Path) -> dict:
@@ -51,6 +49,32 @@ Rules:
 Material to review:
 {prompt_text}
 """
+
+
+def _unavailable_notice(registry: dict, config: dict, orchestrator_vendor: str, gate: str) -> str:
+    """The skip, stated as a fact plus the one option that is left and what it costs.
+
+    The gate is skipped rather than downgraded to a same-model reviewer: shared weights
+    reproduce the author's systematic errors and return a confident agreement, which reads
+    exactly like a review and is filed like one. That refusal is the machine's; the weaker
+    check is still worth running sometimes, so it is offered here — to a person, with its
+    boundary attached — instead of being taken automatically and labelled as diversity.
+    """
+    reason = routing.second_opinion_unavailability(registry, config, orchestrator_vendor)
+    return "\n".join(
+        [
+            f"second-opinion: skipped at gate '{gate}' — ladder exhausted, no model-diverse "
+            f"reviewer is reachable.",
+            f"  why: {reason}.",
+            "  not downgraded: a reviewer on the author's own weights repeats the author's "
+            "systematic errors and agrees confidently, which is indistinguishable from a review.",
+            "  what you can still run by hand: hand this gate pack to a subagent on this same "
+            "model in a fresh context (no session history, no prior reasoning).",
+            "  its limits, to record with any result: it removes anchoring on the author's own "
+            "output; it does not remove shared model priors. It is a self-check, not a second "
+            "opinion, and must not be filed as one.",
+        ]
+    )
 
 
 def _report_path(root: Path, report_dir: str, gate: str) -> Path:
@@ -82,7 +106,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    root = (args.project_root or _find_project_root(Path.cwd())).resolve()
+    root, root_notice = resolve_project_root(args.project_root)
+    if root_notice:
+        print(root_notice, file=sys.stderr)
     akmon_dir = root / routing.aitna_root_name() / "akmon"
     registry = routing.load_registry(akmon_dir, root)
     config = _read_json(root / routing.LOCAL_CONFIG_REL)
@@ -92,10 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         target = routing.resolve_second_opinion(registry, config, args.orchestrator_vendor)
         if target is None:
-            print(
-                "second-opinion: skipped (no model-diverse provider reachable — ladder exhausted; "
-                "would repeat the reviewed model)"
-            )
+            print(_unavailable_notice(registry, config, args.orchestrator_vendor, args.gate))
             return 0
         provider, model = target.provider, target.model
 

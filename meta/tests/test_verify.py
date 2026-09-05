@@ -16,7 +16,8 @@ from pathlib import Path
 import pytest
 import sync
 import verify
-from findings import render
+
+from common.findings import render
 
 AGENTS_MD = """# AGENTS.md
 

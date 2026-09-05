@@ -95,6 +95,16 @@ def test_tag_for_version_points_at_main_for_a_development_version():
     assert _init._tag_for_version("0.4.0.dev0") == "main"
 
 
+@pytest.mark.parametrize(
+    "version", ["0.4.0.dev0", "0.4.0a1", "0.4.0b2", "0.4.0rc1", "0.4.0.post1",
+                "0.4.0+local.1", "v0.4.0-3-gdeadbee", "0.4", ""],
+)
+def test_no_non_final_version_is_pointed_at_a_tag(version):
+    # One owner answers "is this a release": the substring heuristic this replaced returned
+    # `v0.4.0.post1` — a tag no repository carries.
+    assert _init._tag_for_version(version) == "main"
+
+
 def test_package_default_ref_uses_the_latest_tag_from_the_requested_remote(tmp_path, monkeypatch):
     seen = []
 

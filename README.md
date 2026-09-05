@@ -126,7 +126,8 @@ tracked as **N1** in [meta/TASKS.md](meta/TASKS.md).
 | [skills/](skills/) | shared know-how any consuming project can use |
 | [tools/](tools/) | executable mechanics: model routing (registry · init · gate-pack · coverage map · second opinion), tasks, release checks, the D2 ledger |
 | [hooks/](hooks/) | the forcing functions — vendor-wired session/pre-tool guards (commit guard, analysis guard, delegation log + nudge, model routing) — [hooks/README.md](hooks/README.md) |
-| [bin/](bin/) | `sync.py` — generates the thin vendor pointers · `verify.py` — validates the project contract (reports, never modifies) |
+| [bin/](bin/) | the two launchers: `sync.py` — generates the thin vendor pointers · `verify.py` — validates the project contract (reports, never modifies) |
+| [common/](common/) | the shared stdlib-only utilities every carrier imports: project-root discovery · the finding envelope · the harness command map · the version-spelling rule |
 | [examples/](examples/) | worked, self-contained walkthroughs (start: [gate-anatomy.md](examples/gate-anatomy.md)) |
 | [CHANGELOG.md](CHANGELOG.md) | the versioned change record — what a consumer's bump delta-checks against |
 | [meta/](meta/) | akmon's **own** DEVELOP layer — a consumer never loads it |

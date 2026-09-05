@@ -172,3 +172,35 @@ def test_cli_writes_full_pack(tmp_path):
     assert "# Gate-pack — code-verify" in text
     assert "### finding.md" in text
     assert "Finding: all clear." in text
+
+
+def test_the_default_report_path_follows_the_configured_dev_layer_root(monkeypatch, tmp_path):
+    """C73: the default landed under a literal ``_aitna`` regardless of ``AITNA_ROOT``.
+
+    Written with no ``--out``, the pack is the artifact a gate is verified from, so a path that
+    ignores the project's own dev-layer name puts it where nothing looks for it.
+    """
+    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+    yardstick = tmp_path / "yardstick.md"
+    yardstick.write_text("Ship it.\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / "tools" / "ai" / "akmon").mkdir(parents=True)
+
+    assert (
+        gate_pack.main(
+            [
+                "--project-root",
+                str(tmp_path),
+                "--gate",
+                "code-verify",
+                "--role",
+                "review",
+                "--yardstick",
+                str(yardstick),
+            ]
+        )
+        == 0
+    )
+    written = sorted((tmp_path / "tools" / "ai" / "artifacts" / "gates").glob("*.md"))
+    assert len(written) == 1
+    assert not (tmp_path / "_aitna").exists()

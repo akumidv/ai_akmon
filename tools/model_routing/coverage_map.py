@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Assemble the coverage map from the delegation log (design §9.4 + §10.3, C17).
 
-Which zone/module each fan-out worker actually checked, derived **from the delegation log
-by code, not by the orchestrator** — the map costs one tool run, not tokens per gate. Each
+Which zone/module each fan-out worker was *dispatched to*, derived **from the delegation log
+by code, not by the orchestrator** — the map costs one tool run, not tokens per gate. §9.4
+says "actually checked"; the log cannot support that. It records the observed dispatch
+request and makes no launch or completion claim (F21/A), so a delegation the harness
+refused or aborted still reads as coverage. Read a covered zone as "someone was sent
+there", and the uncovered list — the output the gate leans on — as the sound half. Each
 fan-out delegation carries a ``[zone:LABEL]`` marker in its description (parsed at log-write
 time by ``routing.delegation_log_line`` into a zone column); this tool groups the in-scope
 entries by zone and, given the Decompose/Survey zone plan (§10.3), flags the *uncovered
@@ -10,8 +14,12 @@ seams* — planned zones no worker touched.
 
 Scope: the log is one append-only file across sessions, so an assembly run is scoped by
 ``--session`` (self-describing key, written now) and optionally ``--since``/``--until``.
-The ``gate_id`` refinement for multiple rounds in one session rides on the C20 session-state
-marker; the scope-by-key shape here does not change when it lands.
+``session_id`` is the finest key that exists today, so two fan-out rounds inside one
+session assemble as one map — narrow them with ``--since``/``--until``. This docstring
+previously said a ``gate_id`` refinement "rides on the C20 session-state marker": there is
+no such marker. C20 reads the active role from the transcript instead (D2-4), and the
+design row that promised the marker (§10.4 decision 1) was never reconciled with it. A
+finer key, whenever one is built, changes only the key — not the scope-by-key shape here.
 
 Output feeds ``gate_pack.py --coverage-map <path>`` (closing its C17 stub).
 """
@@ -19,11 +27,19 @@ Output feeds ``gate_pack.py --coverage-map <path>`` (closing its C17 stub).
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from collections.abc import Iterable
 from pathlib import Path
 
-import routing
+# The tree root, so the shared ``common`` package resolves: it holds the single owner of
+# project-root discovery (C73) and is reachable at the same tree-relative depth from the
+# mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+import routing  # noqa: E402
+
+from common.project_root import aitna_root, resolve_project_root  # noqa: E402
 
 _UNLABELLED = "(unlabelled)"
 
@@ -109,13 +125,6 @@ def build_coverage_map(
 # --------------------------------------------------------------------------------------
 
 
-def _find_project_root(start: Path) -> Path:
-    for candidate in (start, *start.parents):
-        if (candidate / "AGENTS.md").is_file() and (candidate / "_aitna" / "akmon").exists():
-            return candidate
-    return start
-
-
 def _in_scope(entry: routing.DelegationEntry, session: str | None, since: str | None, until: str | None) -> bool:
     if session is not None and entry.session_id != session:
         return False
@@ -134,11 +143,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--since", help="Include entries with timestamp >= this (ISO, same format as the log).")
     parser.add_argument("--until", help="Include entries with timestamp <= this (ISO, same format as the log).")
     parser.add_argument("--zone-plan", type=Path, help="Zone-plan file (§10.3) — enables uncovered-seam detection.")
-    parser.add_argument("--out", type=Path, help="Output path. Defaults under _aitna/artifacts/gates/ (gitignored).")
+    parser.add_argument(
+        "--out", type=Path, help="Output path. Defaults under <AITNA_ROOT>/artifacts/gates/ (gitignored)."
+    )
     parser.add_argument("--stdout", action="store_true", help="Also print the coverage map to stdout.")
     args = parser.parse_args(argv)
 
-    root = (args.project_root or _find_project_root(Path.cwd())).resolve()
+    root, root_notice = resolve_project_root(args.project_root)
+    if root_notice:
+        print(root_notice, file=sys.stderr)
     log_path = args.log or (root / routing.DELEGATION_LOG_REL)
     if not log_path.is_file():
         parser.error(f"delegation log not found: {log_path}")
@@ -151,7 +164,11 @@ def main(argv: list[str] | None = None) -> int:
     zone_plan = parse_zone_plan(args.zone_plan.read_text(encoding="utf-8")) if args.zone_plan else None
     coverage = build_coverage_map(entries, zone_plan)
 
-    out = args.out or (root / "_aitna" / "artifacts" / "gates" / f"coverage-{time.strftime('%Y%m%d-%H%M%S')}.md")
+    # The default lands under the *configured* dev layer, like every other generated artifact:
+    # the literal this replaced wrote the map into `_aitna/` even when the project's dev layer is
+    # somewhere else, i.e. into a directory the project does not read (same defect as gate_pack's).
+    default_name = f"coverage-{time.strftime('%Y%m%d-%H%M%S')}.md"
+    out = args.out or (aitna_root(root) / "artifacts" / "gates" / default_name)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(coverage + "\n", encoding="utf-8")
     try:

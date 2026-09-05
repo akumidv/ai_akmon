@@ -25,8 +25,8 @@ import ast
 import re
 from pathlib import Path
 
-from findings import Finding, line_safe
-from runtime import (
+from common.findings import Finding, line_safe
+from common.runtime import (
     GENERATED_WIRING,
     OPTIONAL,
     OWN_TOOLING,
@@ -206,6 +206,18 @@ def _tokenize(text: str) -> list:
                 index += 1
             index += 1
             continue
+        if text.startswith("<(", index) or text.startswith(">(", index):
+            # process substitution: a bash extension that *runs* the command inside it. The
+            # redirection branch ate the `(` and the command behind it was read as an argument,
+            # so `python3 a.py <(jq .)` reported no `jq` — and `diff <(jq . a) <(jq . b)` did,
+            # which is worse than either answer alone.
+            raise UnparsedCommand(
+                "process substitution is a bash extension this parser does not read"
+            )
+        if character == "(" and in_word and not text.startswith("()", index):
+            # `foo()` is a definition and `_heads` names it; `x((y` and `foo(bar)` are shell
+            # syntax errors, and the walk answered them with a binary called `y` / `bar`.
+            raise UnparsedCommand("a '(' glued to a word is not a construct this parser reads")
         for operator in _OPERATORS:
             if text.startswith(operator, index):
                 flush()
@@ -256,7 +268,11 @@ def _heads(text: str) -> set:
         if skip_target:
             skip_target = False
             continue
-        if expect_head and token in _REFUSED_TOKENS:
+        if operator == "((":
+            # unlike the words below, `((` cannot *be* an argument: quoted, it is a word and
+            # never reaches here. `python3 ((x))` declared a binary called `x`.
+            raise UnparsedCommand(_REFUSED_TOKENS["(("])
+        if expect_head and operator is None and token in _REFUSED_TOKENS:
             raise UnparsedCommand(_REFUSED_TOKENS[token])
         if operator in _HEREDOCS:
             raise UnparsedCommand(
@@ -274,6 +290,13 @@ def _heads(text: str) -> set:
             continue
         if not token:
             raise UnparsedCommand("an empty word is not a command name")
+        if (
+            token.isdigit()
+            and index + 1 < len(tokens)
+            and tokens[index + 1][0] in _REDIRECTIONS
+        ):
+            continue                  # an fd prefix: `2>&1 python3 a.py` still runs `python3`
+
         if token in _UNSUPPORTED_KEYWORDS:
             raise UnparsedCommand(f"the {token!r} construct is outside the supported grammar")
         if token in _POSITIONAL_WRAPPERS:
@@ -504,7 +527,7 @@ def generated_wiring(root: Path) -> dict:
 
 def check_declared_runtimes(root: Path) -> list:
     """The join over akmon's own declaration, map and wiring — what ``self_ci`` calls."""
-    import runtime as runtime_declaration
+    from common import runtime as runtime_declaration
 
     return check_runtime(
         declarations=runtime_declaration.DECLARED_RUNTIMES,
