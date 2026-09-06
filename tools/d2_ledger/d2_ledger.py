@@ -272,9 +272,8 @@ def _read_or_skeleton(path: Path) -> str:
 def _read_akmon_toml(path: Path) -> dict:
     """Read a ``.akmon.toml`` file into a dict; ``{}`` if absent or ``tomllib`` is unavailable.
 
-    ``tomllib`` is 3.11+ stdlib (this project pins >=3.14). A consumer on an older Python
-    simply gets no sensitive-path config, rather than a new dependency (design mandates
-    graceful degrade, not a fallback parser, since the schema here is TOML-proper)."""
+    ``tomllib`` is part of the supported Python 3.11+ floor. Import failure still yields no
+    sensitive-path config: this diagnostic remains conservative without adding a dependency."""
     if not path.is_file():
         return {}
     try:

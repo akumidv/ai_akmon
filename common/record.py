@@ -24,10 +24,10 @@ _PACKAGE_MODE = "package"
 def _strip_inline_comment(value: str) -> str:
     """A TOML value with any trailing ``# comment`` removed, honouring quotes.
 
-    ``tomllib`` does this for free; the pre-3.11 fallback in ``read_akmon_toml`` did not, so
+    ``tomllib`` does this for free; the narrow fallback in ``read_akmon_toml`` must agree, so
     the very shape BOOTSTRAP §C documents — ``runner = "poetry run pytest"  # optional`` —
-    parsed to *different values* depending on the host Python: the comment rode along on 3.9/3.10
-    and was dropped on 3.11+. A ``#`` inside a quoted value is data, not a comment, so a quoted
+    strict and lenient parsing cannot produce different values. A ``#`` inside a quoted value
+    is data, not a comment, so a quoted
     value ends at its closing quote and only a bare value is cut at the first ``#``.
     """
     value = value.strip()
@@ -51,10 +51,9 @@ def _strip_inline_comment(value: str) -> str:
 def read_akmon_toml(path: Path) -> dict:
     """Read ``_aitna/.akmon.toml`` (the integration record) into a nested dict.
 
-    Uses ``tomllib`` when present (Python 3.11+); else a minimal stdlib fallback for the subset
-    the record uses — flat ``key = "value"`` lines, ``[section]`` headers, ``#`` comments — so the
-    reader stays stdlib-only and works on a consumer host with an older Python (the contract checks
-    must not assume 3.11). Quotes are stripped; values are treated as strings. Returns ``{}`` if the
+    Uses Python 3.11+ ``tomllib``; a minimal stdlib parser remains as a lenient fallback for
+    malformed records in this record's subset. It is not a pre-3.11 support promise. Quotes are
+    stripped; values are treated as strings. Returns ``{}`` if the
     file is absent, unreadable, or malformed — a caller that needs to *report* a broken record must
     check the file itself rather than infer it from an empty dict."""
     if not path.is_file():
@@ -71,9 +70,8 @@ def read_akmon_toml(path: Path) -> dict:
             # A malformed record falls through to the lenient parser below rather than raising.
             # Two reasons, both measured. It is what this function documents ("absent or
             # unreadable"), and a hook consulting the record must not abort a session over a file
-            # it only reads (C69/D2-26). And it keeps the two parsers agreeing: without this, the
-            # same broken record raised on 3.11+ and parsed to a partial dict on 3.9 — the very
-            # host-dependent split `_strip_inline_comment` exists to close.
+            # it only reads (C69/D2-26). It also keeps strict and lenient parsing aligned on
+            # inline comments instead of making malformed-input behavior parser-dependent.
             pass
         except OSError:
             return {}

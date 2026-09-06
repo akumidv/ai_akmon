@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Claude PreToolUse wrapper: log each subagent delegation at zero token cost.
+"""Claude PreToolUse wrapper: log each subagent delegation outside model context.
 
 Appends one TSV line (timestamp, session_id, subagent, model, zone, description) to
 ``.claude/model-routing.log`` whenever the session calls the subagent tool
-(``Agent``/``Task``). Nothing is injected into context and nothing is blocked — routing
-switches are visible in the log, so the model never has to narrate them. A system message
-is emitted to the user interface (not model context) to make each delegation — and the
-model it runs on — visible in the console. When the routed agent's task kinds fall outside
-the active role's row (§10.2, C20), an advisory line is appended.
+(``Agent``/``Task``). Nothing is injected into context and nothing is blocked — declared
+routing selections are visible in the log, so the model never has to narrate them. A system message
+is emitted to the user interface (not model context) to make each delegation — and its
+declared model selection, when present — visible in the console. When the routed agent has
+no kind overlapping the active role's effective allowed set (§10.2, C20), an advisory line
+is appended.
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ def _format_system_message(line: str) -> str:
 
 
 def main() -> int:
-    # Never block a tool call: on any failure, log to stderr and exit cleanly.
+    # Advisory only: ordinary runtime failures are reported to stderr and return cleanly.
     try:
         payload = load_payload()
         tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
@@ -65,8 +66,9 @@ def main() -> int:
         cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
         root = find_project_root(Path(cwd))
 
-        # Derive the model the agent is pinned to (its frontmatter `model:` isn't echoed in
-        # the call), so the console line and record name the real model, not a bare `-`.
+        # Derive the recorded generated-agent pin (its frontmatter `model:` is not echoed in
+        # the call). An explicit call override still wins in `delegation_log_line`; neither
+        # value is an independent observation of the model the harness actually launched.
         config = _load_config(root)
         subagent_type = str(tool_input.get("subagent_type") or "")
         bound_model = routing.bound_model_for(config, subagent_type)
@@ -83,9 +85,9 @@ def main() -> int:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("a", encoding="utf-8") as handle:
                 handle.write(line + "\n")
-            # Emit system message for UI visibility (zero token cost).
+            # Emit a UI-visible system message without injecting it into model context.
             messages = [_format_system_message(line)]
-            # C20 — advise when the routed agent is outside the active role's task-kind row.
+            # C20 — advise when the agent has no overlap with the role's effective allowed set.
             registry = routing.load_registry(akmon_runtime_root(root), root)
             role = routing.active_role(payload.get("transcript_path"))
             warning = routing.role_matrix_warning(registry, subagent_type, role)

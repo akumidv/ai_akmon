@@ -299,22 +299,40 @@ the UI is not noisy when nothing needs the owner's attention.
 
 Same rule-plus-hook split akmon already uses (commit guard, role declaration).
 
-### 4.4 Routing observability (code) — delegation log at zero token cost
+### 4.4 Routing observability (code) — delegation log outside model context
 
 Requirement 8. A **PreToolUse hook on the subagent tool** (`Agent`/`Task` matcher, wired
 like the guards) appends one line per delegation to a local log
-(`.claude/model-routing.log`): timestamp, task kind/tier, resolved model, description.
-This is a local process in milliseconds and **consumes no model tokens** — nothing is
-injected into context; the harness UI already shows subagent calls live. The model never
-narrates a switch.
+(`.claude/model-routing.log`): timestamp, session id, subagent, resolved model, zone and
+description. The hook injects nothing into model context; it emits a UI-visible system message
+and the harness already shows subagent calls live. The model never narrates a switch. The
+harness payload names the subagent but carries no independently authoritative task kind.
+
+**Resolved model selection** is the call's explicit override if it carries one, else the routed
+agent's pinned tier model derived from the *recorded binding* (`bound_model_for`) — the calls
+almost never echo the frontmatter pin, and the binding is what wrote it. This is a declaration
+captured at delegation time, not an independent observation of the model the harness actually
+launched, so a later rebind must not rewrite it. The column is `-` when there is **neither an
+explicit override nor a recorded pin**, and that is a fact about the delegation, not a gap in
+the log:
+
+- a **host built-in** (`general-purpose`, `Explore`) carries no akmon pin and, without an
+  explicit call override, inherits the session's model — measured in the N2 probes, and the
+  reason ordinary built-in dispatch remains counted under the `-` requested-model bucket
+  rather than attributed to a named model;
+- a **semantic-fallback binding** (no recorded `available` ladder) pins nothing either: the
+  generated agent files carry no `model:` line in that mode, so the host again inherits the
+  session's model. The tier values there are labels (`worker`, `strongest`), not vendor
+  aliases, and must never be shown as models — in the console line, in this record, or in
+  anything reading it (`coverage_map`, the C13 stats digest).
 
 On demand — the owner asks in chat (e.g. "статистика работы") — a **statistics digest**
 runs **in a subagent** (a `k_*` reporter, not the orchestrator, so parsing the transcript
 and the log costs the orchestrator no context). It parses the session transcript (JSONL)
 plus the delegation log and reports:
 
-- **subagent / tier stats** — how many delegations, by task kind/tier and resolved model
-  (from the log);
+- **subagent / model stats** — how many delegations, by routed subagent and resolved model
+  (from the log; the payload carries no authoritative task kind);
 - **tokens spent per role/tier** — attributed from the transcript's per-message usage;
 - **remaining budget** — session and week, **queried from the Claude API** (rate-limit /
   usage response, not memory — the exact field is verified against the API at
@@ -417,7 +435,7 @@ During work (orchestrator):
   keep); the question is asked at first init or on staleness. Open point §8.2.
 - **Model narrates every switch in chat** — rejected for the steady state: tens of
   tokens per delegation and easy to forget; the PreToolUse log hook (§4.4) reports the
-  same fact at zero token cost. *Revisit-if:* the owner wants in-chat visibility beyond
+  same fact outside model context. *Revisit-if:* the owner wants in-chat visibility beyond
   the harness UI.
 - **Hand-written `.claude/agents/` files, no tool** — rejected as the end state (drifts
   from the registry, per-vendor duplication), but **accepted as the bootstrap** (§8
@@ -747,17 +765,34 @@ auditor is a role-agnostic *verification capability*, not an engineer-specific t
 it belongs to no single row above and is exempt from the warning below. (Consequence:
 learn/release may route them too — advisory-only, and verification is never role-inappropriate.)
 
-Enforcement is advisory, same idiom as the delegation nudge: the delegation hook warns
-when a routed kind falls outside the active role's row (**cross-cutting verification kinds
-excepted**, per the note above — a `cross_cutting_kinds` registry list, checked in
-`role_matrix_warning`). It needs a machine-readable active role, and the `🧭` chat
-declaration is invisible to a hook *as chat* — so §10.4 decision 1 planned a session-state
-marker to land with C20. **C20 shipped without one, and none exists.** It reads the last
-main-chain `🧭 agent: <name>` declaration out of the transcript instead
-(`routing.active_role`), chosen for consistency with C22/C23 scanning, a single source, and
-nothing to forget to write. What the lock's first half named — matrix as doc rule plus
-registry data — is what shipped; the second half was not built, and nothing may name that
-marker as a carrier. See the note under the §10.4 table.
+Runtime checking is a conservative Claude-side advisory at **agent granularity**: the payload
+identifies the routed subagent, not the invocation's intended task kind. For a known active role
+and registered agent, let `agent_kinds` be every kind carried by that agent and let
+`effective_allowed(role)` be its `role_task_kinds` row plus separately owned registry
+extensions when accepted. The hook warns iff `agent_kinds ∩ effective_allowed(role) = ∅`. Silence proves only
+one allowed overlap; it does not prove that the invocation's intended kind, or a phase-qualified
+use such as architect `doc-sync` before Record confirmation, is allowed. Thus shared agents leave
+known blind spots: for example, engineer `k_reasoner` can carry forbidden `design-fork` beside
+allowed kinds, and architect `k_mechanic` can carry forbidden edit kinds beside allowed
+`doc-sync`.
+
+This conservative any-overlap rule is chosen over an all-kinds-subset warning, which would flag
+legitimate calls through every mixed agent; an explicit description marker, which would add a
+self-reported protocol rather than an authoritative harness fact; and splitting agents per kind,
+which would reopen the grouped-by-brief design solely for advisory precision. D2-4 owns this
+predicate and the transcript role source. D2-6 independently owns the `cross_cutting_kinds`
+population added to `effective_allowed`; approving D2-4 does not approve that population. No
+Codex runtime claim is made because Codex does not wire this hook.
+
+The hook needs a machine-readable active role, and the `🧭` chat declaration is invisible to a
+hook *as chat* — so §10.4 decision 1 planned a session-state marker to land with C20. **C20 shipped
+without one, and none exists.** It reads the last qualifying main-chain declaration from the
+transcript instead (`routing.active_role`): the declaration must be the first non-whitespace text
+of its assistant turn, and the captured role name is case-normalized. This keeps later inline and
+Markdown-prefixed examples from changing state while preserving the chat declaration as the
+single source. What the
+lock's first half named — matrix as doc rule plus registry data — is what shipped; the second half
+was not built, and nothing may name that marker as a carrier. See the note under the §10.4 table.
 
 ### 10.3 Pipeline step contracts gain data outputs
 
@@ -783,9 +818,10 @@ marker as a carrier. See the note under the §10.4 table.
 | 3 | `engineer` vs the auditor — §9.4 permits an on-signal code audit, §10.2 omitted it (A7 seam 1) | **(b)** — make `audit` (+ `independent-review`) **cross-cutting verification kinds**: routable from *any* role and exempt from the role-matrix warning; *when* they apply is the structural trigger (§9.5), not the role. Cleaner than a per-row copy — the auditor is role-agnostic *verification*, not engineer-specific work, which dissolves the seam at source and simplifies C20. Consequence: learn/release may route them too (advisory-only, never harmful). Impl in C18: registry `cross_cutting_kinds` + `role_matrix_warning` exemption + test + ADR 0005 addendum. Follow-up weighs the sub-fork (auto-trigger `plan-draft` on un-decomposed high-leverage work — verdict contradiction 2's economics root) |
 
 > **Row 1, second half, was not built as written — kept verbatim as the record.** C20 does
-> not add a session-state marker: it reads the active role from the transcript's last
-> main-chain `🧭 agent: <name>` declaration ([D2-4](../D2_LEDGER.md)), chosen for
-> consistency with C22/C23 scanning, a single source, and nothing to forget to write. So
+> not add a session-state marker: it reads the active role from the transcript's last qualifying
+> main-chain `🧭 agent: <name>` declaration ([D2-4](../D2_LEDGER.md)) — first non-whitespace
+> text of the assistant turn, with the role name case-normalized — chosen for consistency with
+> C22/C23 scanning, a single source, and nothing to forget to write. So
 > **no session-state marker exists**, and anything that named it as a carrier was standing
 > on a promise this table made and the implementation declined. One such reference was
 > live: `coverage_map.py` claimed a `gate_id` refinement would ride on it (C17/D2-3); the

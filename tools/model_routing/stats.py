@@ -306,8 +306,7 @@ class BudgetSummary:
 
 
 def _remaining_pct(percent: object) -> float | None:
-    # A tuple, not `int | float`: PEP 604 unions in isinstance need 3.10+, and this tool
-    # runs on the consumer's bare `python3` (floor 3.9).
+    # A tuple keeps the runtime check explicit and accepts both numeric scalar types.
     if not isinstance(percent, (int, float)):
         return None
     return round(100.0 - float(percent), 1)

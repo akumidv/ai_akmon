@@ -565,8 +565,36 @@ def test_bound_model_for_derives_from_binding_by_tier():
 
 
 def test_bound_model_for_skips_semantic_fallback_token():
-    # A tier value that is not a real alias (semantic-fallback) -> None, mirroring _agent_model.
-    config = {"binding": {"worker": "worker"}, "available": ["haiku", "sonnet"]}
+    """No recorded ladder is semantic fallback: report no pin, not the label.
+
+    Built from ``local_config`` rather than by hand — the previous fixture paired semantic
+    tier labels with a non-empty ``available``, a state neither ``compute_binding`` nor
+    ``local_config`` can produce, so it passed while the reachable one reported ``worker``
+    and ``strongest`` as if they were models.
+    """
+    registry = routing.load_registry(_KEYSTONE)
+    binding = routing.compute_binding(registry, "opus", None, "anthropic")
+    assert binding.semantic_fallback is True
+    config = routing.local_config(registry=registry, binding=binding, second_opinion=False, available=None)
+    assert config["available"] is None
+    assert config["binding"]["worker"] == "worker"  # a label, not a vendor alias
+    for agent in ("k_explorer", "k_mechanic", "k_implementer", "k_reasoner", "k_auditor"):
+        assert routing.bound_model_for(config, agent) is None
+    # The mirror it claims: the generated agent file carries no `model:` line in this mode.
+    content = routing.agent_file_content(routing._AGENT_BY_NAME["k_reasoner"], binding)
+    assert not any(line.startswith("model:") for line in content.splitlines())
+    # A binding value outside a recorded ladder (hand-edited config) is still refused.
+    stale = {"binding": {"worker": "retired"}, "available": ["haiku", "sonnet"]}
+    assert routing.bound_model_for(stale, "k_explorer") is None
+
+
+@pytest.mark.parametrize(
+    "available",
+    ["haiku", {"haiku": True}, ["haiku", 7], 42],
+)
+def test_bound_model_for_rejects_malformed_available_ladder(available):
+    """Hand-edited config cannot turn malformed discovery data into a claimed pin."""
+    config = {"binding": {"worker": "haiku"}, "available": available}
     assert routing.bound_model_for(config, "k_explorer") is None
 
 
@@ -590,15 +618,37 @@ def test_subagent_kinds():
     assert routing.subagent_kinds("general-purpose") == ()
 
 
-def test_role_matrix_warning_against_the_real_registry():
+def test_role_matrix_warning_d2_4_base_predicate_and_boundaries():
     registry = routing.load_registry(_KEYSTONE)
+    base_registry = {**registry, "cross_cutting_kinds": []}
     # Edit agents under the analysis-only review role -> warn (no kind intersects).
-    assert routing.role_matrix_warning(registry, "k_mechanic", "review") is not None
-    assert routing.role_matrix_warning(registry, "k_implementer", "review") is not None
-    # k_reasoner shares debug-deep/plan-draft with review -> no warn.
-    assert routing.role_matrix_warning(registry, "k_reasoner", "review") is None
+    assert routing.role_matrix_warning(base_registry, "k_mechanic", "review") is not None
+    assert routing.role_matrix_warning(base_registry, "k_implementer", "review") is not None
+    # Accepted agent-granularity boundary: one allowed overlap suppresses the advisory even
+    # when the same multi-kind agent also carries a kind forbidden to that role.
+    assert routing.role_matrix_warning(base_registry, "k_reasoner", "review") is None
+    assert routing.role_matrix_warning(base_registry, "k_mechanic", "architect") is None
+    assert routing.role_matrix_warning(base_registry, "k_reasoner", "engineer") is None
     # engineer may route implementation.
-    assert routing.role_matrix_warning(registry, "k_implementer", "engineer") is None
+    assert routing.role_matrix_warning(base_registry, "k_implementer", "engineer") is None
+    # No/unknown role, or a host built-in with no kinds -> no check.
+    assert routing.role_matrix_warning(base_registry, "k_mechanic", None) is None
+    assert routing.role_matrix_warning(base_registry, "k_mechanic", "no-such-role") is None
+    assert routing.role_matrix_warning(base_registry, "general-purpose", "review") is None
+
+
+def test_role_matrix_warning_renders_effective_allowed_in_registry_order():
+    registry = routing.load_registry(_KEYSTONE)
+    base_registry = {**registry, "cross_cutting_kinds": []}
+    assert routing.role_matrix_warning(base_registry, "k_mechanic", "review") == (
+        "role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active "
+        "role 'review' — it routes explore-search, summarize, debug-deep, plan-draft. "
+        "Re-route or switch role."
+    )
+
+
+def test_role_matrix_warning_d2_6_cross_cutting_extension():
+    registry = routing.load_registry(_KEYSTONE)
     # Cross-cutting verification (A7 (b)): k_auditor's only kind is audit, a
     # cross_cutting_kind -> routable from ANY role, never warns (incl. roles whose row omits it).
     for role in ("review", "architect", "engineer", "learn", "release"):
@@ -607,10 +657,6 @@ def test_role_matrix_warning_against_the_real_registry():
     # same routing warns again (guards against the kind silently re-entering a row instead).
     gated = {**registry, "cross_cutting_kinds": []}
     assert routing.role_matrix_warning(gated, "k_auditor", "engineer") is not None
-    # No/unknown role, or a host built-in with no kinds -> no check.
-    assert routing.role_matrix_warning(registry, "k_mechanic", None) is None
-    assert routing.role_matrix_warning(registry, "k_mechanic", "no-such-role") is None
-    assert routing.role_matrix_warning(registry, "general-purpose", "review") is None
 
 
 def _assistant_turn(text, sidechain=False):
@@ -632,6 +678,42 @@ def test_active_role_reads_last_main_chain_declaration(tmp_path):
     assert routing.active_role(transcript) == "engineer"  # last declaration wins
     assert routing.active_role(tmp_path / "missing.jsonl") is None
     assert routing.active_role(None) is None
+
+
+def test_active_role_requires_first_content_and_ignores_quoted_examples(tmp_path):
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        _assistant_turn("  \n🧭 agent: review — analysis\nLater: `🧭 agent: engineer — example`")
+        + "\n"
+        + _assistant_turn("Quoted: `🧭 agent: engineer — code/tests`")
+        + "\n"
+        + _assistant_turn(
+            "- **Format:** put `🧭 agent: engineer — code/tests` on the first non-blank line"
+        )
+        + "\n"
+        + _assistant_turn("```text\n🧭 agent: architect — example\n```")
+        + "\n"
+        + _assistant_turn("> 🧭 agent: engineer — quoted")
+        + "\n",
+        encoding="utf-8",
+    )
+    assert routing.active_role(transcript) == "review"
+
+
+def test_active_role_case_normalizes_the_role_name(tmp_path):
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(_assistant_turn("🧭 agent: Engineer — build") + "\n", encoding="utf-8")
+    role = routing.active_role(transcript)
+    assert role == "engineer"
+    restricted = {"role_task_kinds": {"engineer": ["explore-search"]}, "cross_cutting_kinds": []}
+    assert routing.role_matrix_warning(restricted, "k_mechanic", role) is not None
+
+
+def test_role_matrix_warning_warns_for_a_known_empty_role_row():
+    registry = {"role_task_kinds": {"review": []}, "cross_cutting_kinds": []}
+    warning = routing.role_matrix_warning(registry, "k_mechanic", "review")
+    assert warning is not None
+    assert "'review' — it routes no task kinds." in warning
 
 
 def test_active_role_ignores_sidechain_turns(tmp_path):
@@ -1144,22 +1226,27 @@ def test_hook_session_start_owner_sees_init_instruction(tmp_path):
     result = _load_hook().model_routing_result(root, {"hook_event_name": "SessionStart"})
     assert "needs initialization" in result.additional_context
     assert "needs initialization" in result.system_message
-    assert "_aitna/akmon/tools/model_routing/init.py" in result.additional_context
+    assert "/tools/model_routing/init.py" in result.additional_context
 
 
-def test_recovery_instructions_name_the_tree_a_package_mode_project_has(tmp_path):
-    """The recovery path used to name `<AITNA_ROOT>/akmon`, which package mode does not have."""
+def test_recovery_instructions_reach_the_tree_through_the_cli_in_package_mode(tmp_path):
+    """The recovery path must name a tree the project actually has, in a spelling that lasts.
+
+    It used to name `<AITNA_ROOT>/akmon`, which package mode does not have. Naming the
+    executing tree literally would be no better: since C77 that tree is inside the wheel, so
+    the literal path carries the venv's Python version and breaks on the next bump. `akmon
+    path` is the CLI's own answer and stays true wherever the venv is.
+    """
     root = _make_package_project(tmp_path)
-    materialized = root / "_aitna" / ".akmon" / "tools" / "model_routing"
-    materialized.mkdir(parents=True)
-    (materialized / "registry.json").write_text(json.dumps(REGISTRY), encoding="utf-8")
 
     result = _load_hook().model_routing_result(root, {"hook_event_name": "SessionStart"})
-    assert "_aitna/.akmon/tools/model_routing/init.py" in result.additional_context
+    assert "$(akmon path)/tools/model_routing/init.py" in result.additional_context
+    assert "site-packages" not in result.additional_context
     assert "_aitna/akmon/tools" not in result.additional_context
+    assert "_aitna/.akmon/tools" not in result.additional_context
 
-    lines = "\n".join(routing.status_lines(_fresh_config(), REGISTRY, "_aitna/.akmon"))
-    assert "_aitna/.akmon/tools/model_routing/init.py" in lines
+    lines = "\n".join(routing.status_lines(_fresh_config(), REGISTRY, "$(akmon path)"))
+    assert "$(akmon path)/tools/model_routing/init.py" in lines
 
 
 # --------------------------------------------------------------------------------------

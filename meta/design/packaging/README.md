@@ -5,15 +5,14 @@
 > [ADR 0009](../../decisions/0009-packaging-package-carrier-and-mount-modes.md) (backlog A10),
 > Accepted by the owner (D2-12 verified). Implementation is C37: the CLI, `init` in all four
 > mount modes, package mode and the docs cut-over exist and are covered on the current development
-> interpreter by tests, the self-CI package leg and a live network probe. The separately declared
-> Python 3.9 floor is red — measured in the [floor note](python-39-floor.md), which also carries
-> the known 3.9 baseline to compare a run against; this document does not call that surface green.
+> interpreter by tests, the self-CI package leg and a live network probe. C68/D2-34 supersedes the
+> former Python 3.9 clause with one **Python >=3.11** floor for the package and every shipped
+> venv-free entry point; the [floor note](python-39-floor.md) preserves the measured reason.
 > What "landed" does **not** yet mean here: the work is under owner review and uncommitted
 > (D5 — the owner commits). C37 owns the carrier and local/git-pin adoption, not publication.
 > The first PyPI publish is the separate release task V4, gated on V1, on
-> [C69](mount-resolution-owner.md), and on either the deferred
-> [C68 floor repair](python-39-floor.md) or a separate owner re-lock of the declared floor to a
-> version the shipped surface actually supports.
+> [C69](mount-resolution-owner.md), and on the landing of the
+> [C68 floor re-lock](python-39-floor.md).
 > Pilot consumer for the `package` mount mode: **alphavar**.
 
 ## Frame
@@ -80,27 +79,38 @@ until the first PyPI publish, `akmon==X.Y.Z` after) and the standard lives in
 site-packages as the CLI's embedded tree. A **dev**-group pin, never a runtime dep or an
 extra: akmon is dev tooling and must not reach the consumer's own users.
 
-What must still exist as files in the consumer repo is exactly the **always-on surface**
-— the pieces that fire before any venv is guaranteed (vendor hooks) or that vendor
-loaders @-import at session start (guardrails). `akmon sync` **materializes** them into
-`<AITNA_ROOT>/.akmon/`:
+What must still exist as files in the consumer repo is exactly what the **harness** has to
+resolve by path: the guardrails the consumer's AGENTS.md @-imports. `akmon sync`
+**materializes** those, and only those, into `<AITNA_ROOT>/.akmon/guardrails/`. Pointing the
+import into the package instead was considered and rejected in the C77 amendment: AGENTS.md is
+committed, the path into the package carries the venv's Python version, and an @-import that
+does not resolve reports nothing at all. Because the copy is the consumer's *rules*, it is held
+current from two sides: `sync --check` / `verify` on a commit, and a SessionStart line naming any
+guardrail the running package has moved past. `common/materialization.py` owns both the format
+`sync` writes and the comparison the hook makes, so the writer and the judge cannot drift apart.
 
-- `hooks/` — self-contained copies of `hooks/*.py` (incl. `hook_core.py` and the
-  adapters); stdlib-only, so `python3 …/<AITNA_ROOT>/.akmon/hooks/<hook>.py` works with
-  no venv — the same property the mounted tree gives today;
-- `guardrails/` — the files the consumer's AGENTS.md @-imports.
+The executable surface is *not* materialized — see the C77 amendment in ADR 0009. It was,
+until the generated wiring gained a way to name a hook without a path: the wiring is a
+committed file and cannot carry `.venv/lib/python3.13/site-packages/…`, so copies into the
+repo were the only way to spell a hook at all. `akmon hook <name>` is that way, and the
+wiring now reads `"<anchor>/.venv/bin/akmon" hook <name>` in package mode. Everything the
+hooks import — `common/`, the routing library, `registry.json` — stays inside the wheel and
+is reached from there, because the hook resolves its runtime tree from its own location.
 
-Materialized files carry the generated banner: `sync --check` (CI) flags drift after a
-pin bump, `sync` refreshes, hand-edits are overwritten like any generated pointer.
+Materialized guardrails carry the generated banner: `sync --check` (CI) flags drift after a
+pin bump, `sync` refreshes, hand-edits are overwritten like any generated pointer. The
+`.akmon/` directory has no other writer, so `sync` also removes everything unplanned under
+it — banner or not, which is what finally clears a previous version's routing registry.
 Consequences inside the tools (C37 scope):
 
 - **Standard-tree resolution decouples from the mount:** tree root = `<AITNA_ROOT>/akmon`
   when it exists, else the installed package's embedded tree (`importlib.resources`).
   Project-root discovery accepts `AGENTS.md` + `<AITNA_ROOT>/.akmon.toml` (today
   `bin/sync.py::_find_project_root` requires the mount to exist).
-- **Hook-path templating becomes mount-aware:** `{aitna}/akmon/hooks` (mounted) vs
-  `{aitna}/.akmon/hooks` (package). `_is_akmon_entry` recognises both markers, so
-  switching modes drops stale entries pointing at the old location.
+- **Hook wiring becomes mode-aware:** `python3 "<anchor>/{aitna}/akmon/hooks/<hook>.py"`
+  (mounted) vs `"<anchor>/.venv/bin/akmon" hook <hook>` (package). Entry recognition covers
+  every spelling the generator has emitted, including the retired materialized one, so
+  switching modes replaces stale entries instead of leaving them beside the new ones.
 - **`.akmon.toml` records the mode:** `mount = "submodule" | "vendored" | "subtree" |
   "package"`; in package mode sync stamps `akmon_version` from the package version.
 - **No version skew by construction:** the installed package *is* the pinned standard;
@@ -136,6 +146,7 @@ uvx akmon init [--mode submodule|vendored|subtree|package] [--aitna-root PATH] [
 akmon sync  [--check|--dry-run]
 akmon verify [--strict]
 akmon path
+akmon hook <name> [args...]
 akmon version
 ```
 
@@ -183,6 +194,13 @@ a submodule" let a `vendored → submodule` switch finish green with no `.gitmod
 - ***The dev-layer root is validated wherever it comes from.** `--aitna-root` and `AITNA_ROOT`
   are one contract — the flag's whole effect is to set the variable — so both are refused when
   absolute or when they climb out of the project, lexically and after resolution.*
+- ***Mode `package` requires the virtualenv inside the project root.** The generated wiring
+  names the console script by a project-relative path, and that wiring is a committed file every
+  developer on the project runs; an absolute path to whichever venv happened to run `sync` is a
+  silent break for everyone else. `sync` never fails over it — the first attach runs `sync`
+  before the pin is installed, by construction — and predicts `.venv/bin/akmon` instead;
+  `verify` reports the missing script (`hooks.launcher`) until it is there. A venv outside the
+  project root stays a design open point; the answer is a locator shim, not an absolute path.*
 
 - **`init`** (new code): mount the standard; create `_aitna/{agents,skills,tools,memory}`
   + `_aitna/TASKS.md` skeleton; write/update `.akmon.toml` (version, mount mode); run
@@ -199,6 +217,22 @@ a submodule" let a `vendored → submodule` switch finish green with no `.gitmod
 - **`path`** — print the resolved standard-tree root (the mount when present, else the
   embedded tree). The package-mode answer to "where do I read roles/pipelines/MODEL.md";
   also useful in scripts.
+- **`hook`** — run one hook out of that same resolved tree (C77). Called by the generated
+  vendor wiring, not by a human: it exists so the wiring can name a hook **without a path**,
+  which is what let the executable materialization go. In-process (`runpy`), because these
+  hooks sit on the hottest tools of a session and a second interpreter start per tool call
+  would be the only cost this indirection adds; safe because the hooks are stdlib-only. The
+  argv tail passes through verbatim, so Codex keeps its dispatcher shape
+  (`akmon hook codex-hook role-on-code`). A path where a name belongs is refused — only
+  generated wiring calls this.
+  *Measured on the alphavar pilot (Python 3.14 venv, medians over 30–40 runs): +3.1 ms over
+  running the hook file directly. Getting there meant keeping the dispatch path clear of three
+  imports, each individually larger than the dispatch — the lazy `__version__` (89 ms of
+  distribution-metadata scan), `importlib.resources` in `akmon/_tree.py` (~45 ms, reached only
+  when the wheel data is not a plain directory beside the module), and `argparse` (~18 ms) +
+  `subprocess` (~12 ms), with `main` dispatching `hook` before it builds a parser.
+  `import akmon.cli`: 88 ms → 32 ms. Anything added to that path is paid on every tool call of
+  every package-mode session.*
 - Out of scope for now: `akmon bump` (pin bump = deferred C2), publishing an MCP surface.
 
 ## Packaging mechanics
@@ -211,8 +245,9 @@ a submodule" let a `vendored → submodule` switch finish green with no `.gitmod
   build time, excluding `.git`, `__pycache__`, `tests/` fixtures' caches). Whether
   `meta/` (the DEVELOP tree) ships too: **yes for parity** — the submodule carries it, a
   vendored mount must not be a second, poorer flavor of the standard. *(lock)*
-- Python floor: **3.9** (sync.py already carries a pre-3.11 tomllib fallback; do not
-  raise the floor just for packaging). *(lock)*
+- Python floor: **3.11** for the package and all shipped venv-free entry points, including the
+  bare `python3` used by generated hooks in every carrier. Python 3.9/3.10 are unsupported;
+  zero runtime dependencies remains unchanged. *(D2-34 lock; supersedes only D2-12's floor)*
 - Name: `akmon` on PyPI — both `akmon` and fallback `ai-akmon` returned 404 when checked for
   D2-12; availability is historical evidence rather than a reservation, so registration still
   happens at first publish. *(lock)*
@@ -223,8 +258,9 @@ a submodule" let a `vendored → submodule` switch finish green with no `.gitmod
 ## Implementation plan (C37 touch-list, after A10 locks)
 
 *Status: 1–5 written and covered on the current development interpreter (uncommitted, under owner
-review), 6 not started; the separately tracked 3.9 floor remains red. What each step actually
-shipped is recorded in the CHANGELOG; the notes below stay as the plan they were.*
+review), 6 not started; C68's Python 3.11 floor re-lock is owner-approved and awaits its landing
+commit. What each step actually shipped is recorded in the CHANGELOG; the notes below stay as the
+plan they were.*
 
 1. **Package skeleton** — `pyproject.toml`, `src/akmon/cli.py` dispatching to
    `bin/sync.py::main` / `bin/verify.py::main` (import, not subprocess, for the embedded
@@ -247,7 +283,7 @@ shipped is recorded in the CHANGELOG; the notes below stay as the plan they were
    documented in BOOTSTRAP. Skew notice in the launchers.
 4. **Package mode** — mount-decoupled tree resolution (root discovery via
    `.akmon.toml`; embedded tree via `importlib.resources`), `<AITNA_ROOT>/.akmon/`
-   materialization of hooks + guardrails, mount-aware hook templating, `akmon path`,
+   materialization of the imported guardrails, `akmon hook` wiring, `akmon path`,
    `mount` key in `.akmon.toml`. **Pilot on alphavar** (git+https dev-group pin):
    detach the submodule, pin, re-point AGENTS.md @-imports and vendor hook wiring at
    `.akmon/`, CI → `uv run akmon sync --check` / `verify --strict` (the self_ci and
@@ -274,12 +310,18 @@ shipped is recorded in the CHANGELOG; the notes below stay as the plan they were
   git+https is *not* a publish and may run first.
 - `uvx akmon init` runs the *latest* published CLI while a project may want an older
   standard: `uvx akmon@0.2.1 init` covers it; document, don't engineer around it.
+- **A virtualenv outside the project root** in mode `package`: the generated wiring names the
+  console script relative to the project, so a venv elsewhere can only be spelled absolutely,
+  and the wiring is committed. Locked for now as a requirement of the mode, with `verify`'s
+  `hooks.launcher` reporting it; the eventual answer is a small locator shim, not an absolute
+  path in a shared file.
 - **Non-Python consumers** (e.g. a JS project like tvassistant): the manifest-pin flavor
   of `package` mode is Python-specific, but nothing else is — the CLI is stdlib-only and
   `uvx akmon init/sync/verify` runs ephemerally wherever uv exists, with the pin
-  recorded in `.akmon.toml` instead of a manifest (hooks stay `python3`-runnable from
-  the materialized `.akmon/`). Candidate flavors, in cost order: (a) document
-  `uvx`-driven `package` mode for any-language repos — no new code beyond C37; (b) an
+  recorded in `.akmon.toml` instead of a manifest. C77 removes the materialized hook copy, so
+  persistent hook execution still needs the project-local launcher required by package mode;
+  an ephemeral `uvx` invocation alone does not provide it. Candidate flavors, in cost order:
+  (a) document `uvx`-driven `package` mode for any-language repos — no new code beyond C37; (b) an
   npm wrapper package (`akmon` on npm shelling to `uvx akmon` / bundling the tree) so JS
   projects pin in `package.json` `devDependencies` the way Python ones pin in
   `pyproject.toml`; (c) mounted modes (submodule/vendored) keep working for any language
@@ -288,7 +330,8 @@ shipped is recorded in the CHANGELOG; the notes below stay as the plan they were
   of `ai_akmon` (self-hosted: `meta/` carries its own backlog/tests/self-CI). For
   co-development against a consumer, override the pin locally — uv: `[tool.uv.sources]
   akmon = { path = "../ai_akmon", editable = true }` (or an ephemeral
-  `uv pip install -e ../ai_akmon`) — then `akmon sync` re-materializes from the working
-  copy. Documented in README §akmon's own development — the single home by owner decision:
+  `uv pip install -e ../ai_akmon`) — then the wired hooks execute from that working copy and
+  `akmon sync` refreshes its imported guardrails. Documented in README §akmon's own development —
+  the single home by owner decision:
   BOOTSTRAP stays consumer-only (developing *with* akmon, never akmon itself); no new
   machinery.

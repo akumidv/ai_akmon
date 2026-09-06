@@ -47,7 +47,10 @@ operating as**, and **restates it on every switch** (e.g. handing a locked desig
 `architect` to `engineer`). This keeps the role — and the pipeline/guardrails it pulls in —
 explicit rather than implicit.
 
-- **Format:** `🧭 agent: <name> — <focus>` (e.g. `🧭 agent: engineer — code/tests`).
+- **Format:** put `🧭 agent: <name> — <focus>` on the first non-blank line of its own assistant
+  turn (e.g. `🧭 agent: engineer — code/tests`). Canonical role names are lowercase; the
+  Claude-side advisory case-normalizes the name only as input tolerance. Later inline examples and
+  Markdown-prefixed quotations are not declarations; a first-position marker is one by definition.
 - **If the task is ambiguous** about which role it calls for, ask before proceeding.
 - **Executable side:** the [`session-start-agent`](../hooks/README.md) SessionStart hook
   injects this reminder + the project's scanned agent roster each session, so the

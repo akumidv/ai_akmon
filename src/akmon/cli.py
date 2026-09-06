@@ -1,8 +1,12 @@
 """``akmon`` console entry point — a thin CLI dispatching to the standard tree.
 
-``init`` / ``sync`` / ``verify`` / ``path`` / ``version`` per the CLI contract in
+``init`` / ``sync`` / ``verify`` / ``path`` / ``hook`` / ``version`` per the CLI contract in
 ``meta/design/packaging/README.md``. ``init`` (all four mount modes) lives in
 ``akmon._init``; this module keeps only the dispatch rules.
+
+``hook`` is the entry point the generated vendor wiring names in mode ``package`` (C77): it
+runs a hook out of the resolved standard tree, so the wiring never has to spell a path into
+site-packages.
 
 Version-skew rule (design doc, "sync / verify"): when a mounted tree exists at
 ``<AITNA_ROOT>/akmon`` the launcher runs *that* tree's ``bin/sync.py`` / ``bin/verify.py``
@@ -17,14 +21,23 @@ goes through this same dispatch, so the freshly pinned tree governs from that po
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
-import subprocess
+import runpy
 import sys
 from pathlib import Path
 from types import ModuleType
 
-from akmon import __version__, _tree
+import akmon
+from akmon import _tree
+
+# Two deliberate absences from that list. ``argparse`` (~18 ms) and ``subprocess`` (~12 ms) are
+# imported where they are used, because since C77 this module is on the path of every
+# ``akmon hook`` call — every tool call in a package-mode session — and that path needs neither:
+# ``main`` dispatches ``hook`` before it builds a parser, and nothing it runs shells out.
+#
+# ``akmon`` is reached as a module, never as ``from akmon import __version__``: the attribute is
+# lazy (PEP 562, see ``akmon/__init__.py``) precisely so that same path does not pay a
+# distribution-metadata scan, and a from-import would resolve it here.
 
 _DISPATCHED_COMMANDS = {"sync", "verify"}
 
@@ -219,10 +232,10 @@ def _skew_notice(mounted_root: Path) -> str | None:
     if not pinned:
         return None
     pinned_base, ahead = _split_version(pinned)
-    cli_base, _ = _split_version(__version__)
+    cli_base, _ = _split_version(akmon.__version__)
     if pinned_base != cli_base:
         return (
-            f"akmon: CLI is {__version__}, mounted/pinned standard is {pinned} "
+            f"akmon: CLI is {akmon.__version__}, mounted/pinned standard is {pinned} "
             "— the mounted tree governs."
         )
     if ahead is not None:
@@ -236,6 +249,8 @@ def _skew_notice(mounted_root: Path) -> str | None:
 
 def _run_mounted(script: str, mounted_root: Path, argv: list[str]) -> int:
     """``exec`` the mounted tree's launcher as a subprocess (skew rule)."""
+    import subprocess
+
     script_path = mounted_root / "bin" / f"{script}.py"
     result = subprocess.run([sys.executable, str(script_path), *argv])
     return result.returncode
@@ -243,6 +258,8 @@ def _run_mounted(script: str, mounted_root: Path, argv: list[str]) -> int:
 
 def _run_embedded(script: str, argv: list[str]) -> int:
     """Run the embedded tree's launcher: import its ``main`` when possible, else subprocess."""
+    import subprocess
+
     tree_root = _tree.embedded_tree_root()
     script_path = tree_root / "bin" / f"{script}.py"
     try:
@@ -270,16 +287,109 @@ def _dispatch(script: str, argv: list[str], *, cwd: Path | None = None) -> int:
     return _run_embedded(script, argv)
 
 
-def _cmd_path(*, cwd: Path | None = None) -> int:
+def controlling_tree_root(cwd: Path | None = None) -> Path:
+    """The standard tree that governs ``cwd``'s project: the mount when one exists, else the
+    tree embedded in this package (ADR 0009 §4-5).
+
+    One resolver for ``path`` and ``hook`` alike — the tree an agent is told to read must be
+    the tree its hooks run from, and two answers to that is exactly the skew ADR 0009 §5
+    removes by construction.
+    """
     cwd = cwd if cwd is not None else Path.cwd()
     mounted_root = _mounted_akmon_root(cwd)
-    root = mounted_root if mounted_root is not None else _tree.embedded_tree_root()
-    print(root)
+    return mounted_root if mounted_root is not None else _tree.embedded_tree_root()
+
+
+def _cmd_path(*, cwd: Path | None = None) -> int:
+    print(controlling_tree_root(cwd))
     return 0
 
 
+def _run_hook_script(script: Path, argv: list[str]) -> int:
+    """Execute ``script`` as ``__main__`` **in this process** (``runpy``), not as a subprocess.
+
+    In-process because the generated wiring puts these hooks on the hottest tools of a session
+    (the delegation nudge alone matches ``Read|Grep|Glob``), so a second interpreter start per
+    tool call would be the only cost this indirection adds over the copies it replaces. It is
+    safe because the hooks are stdlib-only: they bring no third-party import that could collide
+    with the CLI's own.
+
+    Three pieces of the normal script environment have to be restored by hand, because
+    ``run_path`` supplies neither: the hooks directory on ``sys.path`` (they import each other
+    flatly — ``from hook_core import ...`` — which an ordinary ``python3 <script>`` run gets
+    from ``sys.path[0]``), ``sys.argv`` (``codex-hook.py`` parses it), and the ``common``
+    package. The CLI itself loads embedded ``common`` while resolving the project root; a
+    mounted hook must instead import the mounted tree's matching utilities, then leave the
+    caller's module state as it found it.
+
+    An exception the hook does not handle itself is deliberately **not** swallowed here. Every
+    akmon hook already guarantees "never block a session" in its own ``main``, so reaching this
+    frame means the hook is broken before that guarantee applies (an import error, say) — and a
+    dispatcher that hid it would leave a guardrail silently off, which is the whole failure mode
+    this design exists to remove. The traceback exits 1: visible to the owner, not a block.
+    """
+    saved_path = list(sys.path)
+    saved_argv = list(sys.argv)
+    saved_common = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "common" or name.startswith("common.")
+    }
+    sys.path.insert(0, str(script.parent))
+    sys.argv = [str(script), *argv]
+    try:
+        _load_embedded_common(script.parent.parent)
+        runpy.run_path(str(script), run_name="__main__")
+    except SystemExit as exc:
+        code = exc.code
+        if code is None:
+            return 0
+        if isinstance(code, int):
+            return code
+        print(code, file=sys.stderr)
+        return 1
+    finally:
+        for name in [n for n in sys.modules if n == "common" or n.startswith("common.")]:
+            del sys.modules[name]
+        sys.modules.update(saved_common)
+        sys.path[:] = saved_path
+        sys.argv[:] = saved_argv
+    return 0
+
+
+def _cmd_hook(argv: list[str], *, cwd: Path | None = None) -> int:
+    """``akmon hook <name> [args...]`` — run one hook out of the controlling tree.
+
+    The single entry point both vendor wirings name (C77). It exists so the generated wiring
+    can spell a hook *without a path*: a path into the wheel carries the venv's Python version
+    (``.venv/lib/python3.13/site-packages/...``) and breaks — silently, since a hook the
+    harness cannot find says nothing — on the next interpreter bump or on a differently laid
+    out venv.
+
+    Only generated wiring calls this, so a path where a name belongs is the caller's error and
+    is refused rather than accommodated. ``<name>`` and ``<name>.py`` are both accepted; the
+    rest of ``argv`` is passed through verbatim, which is what lets the Codex dispatcher keep
+    its advisory argument (``akmon hook codex-hook role-on-code``).
+    """
+    if not argv:
+        print("akmon hook: missing hook name", file=sys.stderr)
+        return 2
+    name, *rest = argv
+    hooks_dir = controlling_tree_root(cwd) / "hooks"
+    if "/" in name or "\\" in name or name.startswith("."):
+        print(f"akmon hook: {name!r} is a path; name the hook instead (e.g. 'role-on-code')", file=sys.stderr)
+        return 2
+    stem = name[:-3] if name.endswith(".py") else name
+    script = hooks_dir / f"{stem}.py"
+    if not script.is_file():
+        available = ", ".join(sorted(path.stem for path in hooks_dir.glob("*.py"))) or "(none)"
+        print(f"akmon hook: unknown hook {name!r}; available: {available}", file=sys.stderr)
+        return 2
+    return _run_hook_script(script, rest)
+
+
 def _cmd_version() -> int:
-    print(__version__)
+    print(akmon.__version__)
     return 0
 
 
@@ -292,7 +402,7 @@ def _cmd_init(argv: list[str]) -> int:
     return _init.main(argv)
 
 
-_COMMANDS = ("init", "sync", "verify", "path", "version")
+_COMMANDS = ("init", "sync", "verify", "path", "hook", "version")
 
 # `argparse.add_subparsers` + a REMAINDER positional mis-parses a remainder that starts
 # with "-" (e.g. `akmon sync --check`) — a known argparse limitation. A single top-level
@@ -303,6 +413,7 @@ _EPILOG = """commands:
   sync      sync generated agent pointers (bin/sync.py)
   verify    verify a consuming project's USE contract (bin/verify.py)
   path      print the resolved standard-tree root
+  hook      run a hook from the resolved standard tree (called by generated wiring)
   version   print the akmon package version
 
 sync/verify/init accept their own flags, passed through verbatim, e.g.:
@@ -313,7 +424,9 @@ sync/verify/init accept their own flags, passed through verbatim, e.g.:
 """
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _build_parser():
+    import argparse
+
     parser = argparse.ArgumentParser(
         prog="akmon",
         description="akmon — the akmon AI-agent development standard, as an installable package.",
@@ -326,12 +439,21 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # `hook` short-circuits the parser: it is the hottest entry point there is (the generated
+    # wiring calls it on every tool call), it takes no flags of its own, and building an
+    # `argparse` parser costs more than everything the dispatch below does.
+    effective = sys.argv[1:] if argv is None else argv
+    if effective and effective[0] == "hook":
+        return _cmd_hook(list(effective[1:]))
+
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.command in _DISPATCHED_COMMANDS:
         return _dispatch(args.command, args.args)
     if args.command == "path":
         return _cmd_path()
+    if args.command == "hook":
+        return _cmd_hook(args.args)
     if args.command == "version":
         return _cmd_version()
     if args.command == "init":

@@ -305,6 +305,18 @@ def _dev_pin(root: Path) -> None:
     )
 
 
+def _project_venv(root: Path) -> None:
+    """The console script an installed dev pin puts in the project venv.
+
+    Written by hand because the fixture never actually installs anything, and since C77 the
+    generated hook wiring names it — ``verify``'s ``hooks.launcher`` check reports its absence
+    (correctly: a hook command with a missing executable fails silently).
+    """
+    launcher = root / ".venv" / "bin" / "akmon"
+    _write(launcher, "#!/bin/sh\n")
+    launcher.chmod(0o755)
+
+
 def _verify_strict(root: Path, monkeypatch) -> int:
     """``akmon verify --strict`` the way a consumer runs it — through the CLI's own dispatch."""
     monkeypatch.chdir(root)
@@ -325,9 +337,16 @@ def test_package_attach_verifies_strict_green(tmp_path, monkeypatch):
         ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
     ) == 0
     assert not (tmp_path / "_aitna" / "akmon").exists()  # no tree in the repo (ADR 0009 §4)
-    assert (tmp_path / "_aitna" / ".akmon" / "hooks" / "hook_core.py").is_file()
-    assert (tmp_path / "_aitna" / ".akmon" / "guardrails" / "_common.md").is_file()
+    # The imported guardrails, and nothing else: no executable surface is copied any more —
+    # the wiring calls `akmon hook`, which runs the hooks from inside the wheel (C77).
+    materialized = sorted(
+        path.relative_to(tmp_path).as_posix()
+        for path in (tmp_path / "_aitna" / ".akmon").rglob("*")
+        if path.is_file()
+    )
+    assert materialized == ["_aitna/.akmon/guardrails/_common.md"]
     assert sorted((tmp_path / ".claude" / "agents").glob("k_*.md"))
+    _project_venv(tmp_path)
     assert _verify_strict(tmp_path, monkeypatch) == 0
 
 
@@ -358,6 +377,7 @@ def test_package_verify_strict_fails_while_the_manifest_has_no_pin(tmp_path, mon
     ) == 1
     assert _verify_strict(tmp_path, monkeypatch) == 1
     _dev_pin(tmp_path)
+    _project_venv(tmp_path)
     assert _verify_strict(tmp_path, monkeypatch) == 0
 
 

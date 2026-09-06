@@ -11,11 +11,11 @@ vendor through `AGENTS.md`. The alphavar package-mode pilot disproved two assump
 
 - Codex loads the literal `AGENTS.md` text but does not expand the nested `@.../_common.md`
   line into model-visible instructions, so the delegation rule never reaches the orchestrator;
-- materialized hooks still discover a project through `<AITNA_ROOT>/akmon`, which does not
+- hooks still discovered a project through `<AITNA_ROOT>/akmon`, which does not
   exist in package mode, so SessionStart becomes silent from a nested working directory.
 
 Good means that a fresh Codex session receives the operative delegation rule without an owner
-prompt, materialized hooks work from any directory below the project root once Codex's host-side
+prompt, the wired hooks work from any directory below the project root once Codex's host-side
 project and entry trust grants delivery, and documentation
 claims no enforcement or model-routing capability that has not been proven against the live
 Codex harness.
@@ -42,12 +42,17 @@ agent definitions or child-model selection.
 ### Package runtime is self-contained
 
 Project-root discovery accepts `AGENTS.md` plus either a mounted `<AITNA_ROOT>/akmon` tree or the
-package integration record `<AITNA_ROOT>/.akmon.toml`. Runtime paths resolve to the mount in
-mounted modes and `<AITNA_ROOT>/.akmon` in package mode.
+package integration record `<AITNA_ROOT>/.akmon.toml`.
 
-Every dependency of a wired materialized hook must also be materialized. Package mode therefore
-copies the stdlib-only model-routing and D2-ledger tool modules used by hooks and their emitted
-commands. Hooks never import the consumer virtualenv.
+**Amended by C77.** Runtime paths resolve to the tree the hook is *executing* from, not to a
+recorded mode: the mounted tree in mounted modes, the wheel's embedded tree in package mode,
+where the Codex wiring calls `"$(git rev-parse --show-toplevel)/.venv/bin/akmon" hook codex-hook
+<advisory>`. That replaces the earlier rule that every dependency of a wired hook must be copied
+into `<AITNA_ROOT>/.akmon/`: nothing executable is copied any more, and the dependencies are
+already installed beside the consumer inside the wheel. A hook still never imports the consumer's
+own packages — only the stdlib and the tree it runs from. What mode `package` does require is
+that the virtualenv live inside the project root, since the wiring names the console script by a
+project-relative path.
 
 ### Capability-aware Codex support
 
@@ -166,8 +171,11 @@ immutable. Commit, tag, push, publish, and consumer pin updates remain owner-run
 - a real stdin-to-JSON Codex SessionStart test contains the direct delegation instruction;
 - verifier rejects an `AGENTS.md` block with only the guardrail import and accepts the explicit
   anchor;
-- package sync materializes every runtime dependency and `sync --check` detects drift;
-- self-CI includes an installed-wheel package-mode smoke from a nested cwd;
+- package sync materializes the imported guardrails, `sync --check` detects drift, and a
+  previous version's materialization is removed in one run;
+- self-CI includes an installed-wheel package-mode smoke from a nested cwd, which runs **every
+  generated hook command verbatim** and checks exit code, stderr and the size of stdout — the
+  last because a hook that cannot find its tree exits 0 with an empty stderr;
 - README, BOOTSTRAP, hooks docs, capability matrix, task state, and changelog agree with code;
 - tests, ruff, self-CI (including strict consumer-fixture verify), and build pass.
 

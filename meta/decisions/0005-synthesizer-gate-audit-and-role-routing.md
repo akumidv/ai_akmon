@@ -135,13 +135,26 @@ only — no decision from the body is reopened.
 
 Decision #9 above closes with "the machine-readable active-role marker lands with the hook
 check (C20)". **C20 landed and built no marker.** `routing.active_role` reads the active role
-out of the transcript — the last main-chain `🧭 agent: <name>` declaration — chosen over a
+out of the transcript — the last main-chain turn whose first non-whitespace text is an
+`🧭 agent: <name>` declaration, with the captured role name case-normalized — chosen over a
 written marker for consistency with the C22/C23 transcript scanning already in the hooks, a
-single source of the role, and nothing an orchestrator can forget to write. Recorded at
+single source of the role, and nothing an orchestrator can forget to write. Restricting the
+marker to first text prevents later inline and Markdown-prefixed examples from changing the active
+role; a first-position marker is a declaration by definition. Recorded at
 [D2-4](../D2_LEDGER.md); the same correction is under the design's §10.2 and §10.4.
 
 **No session-state marker exists**, so no other decision may name one as a carrier. One had:
 `coverage_map.py` claimed a `gate_id` refinement would ride on it (C17/[D2-3](../D2_LEDGER.md));
 that claim is withdrawn, and gate-level precision has no carrier today. Decision #9's first
-half — matrix as doc rule plus registry data — shipped as written, and the advisory itself is
-unchanged: only its source of the active role differs from what this body planned.
+half — matrix as doc rule plus registry data — shipped as written.
+
+The C20 runtime check is deliberately conservative at agent granularity because the Claude
+payload names an agent, not the invocation's task kind. For a known role and registered agent it
+warns only when none of the agent's carried kinds intersects the effective allowed set. Silence
+therefore proves an overlap, not conformance of the intended kind or a phase-qualified use. This
+any-overlap rule avoids systematic warnings for legitimate mixed-agent calls. An all-kinds rule
+was rejected as noisy; a description marker was rejected as a new self-reported protocol; and
+per-kind agents were rejected as disproportionate churn that would reopen the grouped-by-brief
+design. D2-4 owns the predicate and transcript source; the A7/C18/D2-6 addendum above separately
+owns the membership of `cross_cutting_kinds` added to the effective set. No Codex runtime claim is
+made for this Claude-only hook.

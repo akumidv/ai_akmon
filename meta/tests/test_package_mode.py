@@ -1,6 +1,7 @@
-"""Unit tests for mount mode ``package`` (ADR 0009 §4, C37 slice B): mount-decoupled tree
-resolution, ``.akmon/`` materialization, mount-aware hook-entry recognition, and the
-``.akmon.toml`` version stamp — all in ``bin/sync.py``.
+"""Unit tests for mount mode ``package`` (ADR 0009 §4, C37 slice B; narrowed by C77):
+mount-decoupled tree resolution, the guardrail-only ``.akmon/`` materialization, launcher
+resolution and hook-entry recognition across every spelling, and the ``.akmon.toml`` version
+stamp — all in ``bin/sync.py``.
 
 These build throwaway project trees under ``tmp_path``; nothing touches the real repo. A
 package-mode fixture has no mounted tree at all, so ``sync``'s own "embedded tree" fallback
@@ -14,9 +15,29 @@ Run from the akmon root::
 
 from __future__ import annotations
 
+import json
+import shutil
+import tomllib
 from pathlib import Path
 
+import pytest
 import sync
+
+from common import materialization
+
+
+def test_python_floor_declarations_stay_joined():
+    root = sync._TREE_ROOT
+    with (root / "pyproject.toml").open("rb") as handle:
+        manifest = tomllib.load(handle)
+
+    assert manifest["project"]["requires-python"] == ">=3.11"
+    assert manifest["tool"]["ruff"]["target-version"] == "py311"
+    workflow = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert 'python-version: ["3.11", "3.13"]' in workflow
+    lock = (root / "uv.lock").read_text(encoding="utf-8")
+    assert lock.startswith('version = 1\nrevision = 3\nrequires-python = ">=3.11"\n')
+
 
 # --------------------------------------------------------------------------------------
 # helpers
@@ -30,11 +51,36 @@ def _make_mounted_root(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_package_root(tmp_path: Path, *, extra_toml: str = "") -> Path:
-    """A minimal package-mode project: AGENTS.md + _aitna/.akmon.toml, no mounted tree."""
-    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+# The AGENTS.md akmon block both *makes* the guardrail import and *documents* it, quoting the
+# language-guardrail form as an example. Read literally the two are indistinguishable, so the
+# fixture carries both — the scan must take the first and leave the second.
+_AGENTS_MD = """# AGENTS
+
+## Dev layer — akmon
+
+- **Guardrails (always-on, by language):** add this project's language guardrail on its own
+  line (e.g. `@_aitna/.akmon/guardrails/python.md`) per the ARCHETYPES map.
+
+@_aitna/.akmon/guardrails/_common.md
+@_aitna/.akmon/guardrails/python.md
+"""
+
+
+def _make_package_root(tmp_path: Path, *, extra_toml: str = "", agents_md: str = _AGENTS_MD) -> Path:
+    """A minimal package-mode project: AGENTS.md + _aitna/.akmon.toml, no mounted tree.
+
+    The project venv is part of the minimum, not decoration: a real package-mode consumer has
+    ``.venv/bin/akmon`` by construction (the dev-group pin puts the console script there when
+    the environment is installed), and since C77 the generated wiring names it.
+    """
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "AGENTS.md").write_text(agents_md, encoding="utf-8")
     (tmp_path / "_aitna").mkdir(parents=True)
     (tmp_path / "_aitna" / ".akmon.toml").write_text(f'mount = "package"\n{extra_toml}', encoding="utf-8")
+    launcher = tmp_path / ".venv" / "bin" / "akmon"
+    launcher.parent.mkdir(parents=True, exist_ok=True)
+    launcher.write_text("#!/bin/sh\n", encoding="utf-8")
+    launcher.chmod(0o755)
     return tmp_path
 
 
@@ -89,136 +135,333 @@ def test_standard_tree_root_ignores_stale_mount_dir_in_package_mode(tmp_path):
 
 def test_materialized_files_empty_outside_package_mode(tmp_path):
     root = _make_mounted_root(tmp_path)
-    assert sync._materialized_files(root) == []
+    assert sync._materialized_files(root) == ([], [])
 
 
-def test_materialized_files_copies_hooks_and_guardrails_with_banner(tmp_path):
+def test_materialization_ships_only_the_guardrails_agents_md_imports(tmp_path):
+    """The one exception to "execute from the package", and its exact width.
+
+    The ``@``-import sits in a committed ``AGENTS.md``, and the only path from there into the
+    package carries the venv's Python version — the string C77 removed from the wiring, failing
+    more quietly. Everything else the hooks need is already installed beside the consumer
+    inside the wheel, so nothing executable is copied.
+    """
     root = _make_package_root(tmp_path)
-    files = sync._materialized_files(root)
+    files, errors = sync._materialized_files(root)
+    assert errors == []
     paths = {f.path.relative_to(root).as_posix() for f in files}
 
-    assert "_aitna/.akmon/hooks/hook_core.py" in paths
-    assert "_aitna/.akmon/hooks/git-commit-guard.py" in paths
-    assert "_aitna/.akmon/guardrails/_common.md" in paths
-    assert "_aitna/.akmon/guardrails/python.md" in paths
-    assert "_aitna/.akmon/tools/model_routing/routing.py" in paths
-    assert "_aitna/.akmon/tools/model_routing/registry.json" in paths
-    assert "_aitna/.akmon/tools/d2_ledger/d2_ledger.py" in paths
-    # hooks/*.py only — hooks/README.md is not a hook script and must not be materialized.
-    assert not any(p.endswith("hooks/README.md") for p in paths)
-
-    # git-commit-guard.py is a directly-invoked hook and carries a shebang; the banner must
-    # land right after it so the materialized copy stays directly runnable with no venv.
-    commit_guard = next(f for f in files if f.path.name == "git-commit-guard.py")
-    assert commit_guard.content.startswith("#!")
-    assert sync.GENERATED_MARKER in commit_guard.content.splitlines()[1]
-
-    # hook_core.py is a support module with no shebang; the banner leads the file instead.
-    hook_core = next(f for f in files if f.path.name == "hook_core.py")
-    assert sync.GENERATED_MARKER in hook_core.content
-    assert hook_core.content.splitlines()[0].startswith("#")
-
+    assert paths == {
+        "_aitna/.akmon/guardrails/_common.md",
+        "_aitna/.akmon/guardrails/python.md",
+    }
     guardrail = next(f for f in files if f.path.name == "_common.md")
     assert sync.GENERATED_MARKER in guardrail.content
     assert guardrail.content.startswith("#")  # heading preserved as the first line
 
 
-def test_materialized_python_content_no_shebang_gets_leading_banner():
-    content = sync._materialized_python_content("import os\n")
-    lines = content.splitlines()
-    assert lines[0].startswith("#") and sync.GENERATED_MARKER in lines[0]
-    assert "import os" in content
+def test_no_executable_surface_is_materialized(tmp_path):
+    """The whole point, stated as an absence: hooks, ``common``, the routing library and its
+    registry stay in the wheel and are reached through ``akmon hook``."""
+    root = _make_package_root(tmp_path)
+    files, _ = sync._planned_files(root)
+    materialized = {
+        f.path.relative_to(root).as_posix()
+        for f in files
+        if "/.akmon/" in f.path.relative_to(root).as_posix()
+    }
+    assert not any(path.endswith(".py") for path in materialized), materialized
+    assert not any("/hooks/" in path or "/common/" in path for path in materialized), materialized
+    assert not any("model_routing" in path for path in materialized), materialized
 
 
-def test_materialized_markdown_content_no_heading_gets_leading_banner():
-    content = sync._materialized_markdown_content("some prose\n")
-    assert content.startswith("<!--")
-    assert sync.GENERATED_MARKER in content
+def test_a_guardrail_import_quoted_in_prose_is_not_an_import(tmp_path):
+    """Only the ``_common.md`` anchor survives when every other mention is an example."""
+    agents_md = """# AGENTS
+
+Add a language guardrail, for example `@_aitna/.akmon/guardrails/python.md`.
+
+```markdown
+@_aitna/.akmon/guardrails/go.md
+```
+
+@_aitna/.akmon/guardrails/_common.md
+"""
+    root = _make_package_root(tmp_path, agents_md=agents_md)
+    names, errors = sync.imported_guardrails(root)
+    assert names == ["_common.md"]
+    assert errors == []
 
 
-def test_sync_check_detects_drift_in_materialized_hook(tmp_path):
+def test_the_common_guardrail_is_materialized_even_when_agents_md_imports_nothing(tmp_path):
+    """Its import is the anchor ``verify`` requires of a package-mode AGENTS.md, so a missing
+    one is a finding about AGENTS.md — not a licence to ship a broken import target."""
+    root = _make_package_root(tmp_path, agents_md="# AGENTS\n")
+    names, errors = sync.imported_guardrails(root)
+    assert names == ["_common.md"]
+    assert errors == []
+
+
+def test_importing_a_guardrail_the_standard_does_not_ship_is_a_plan_error(tmp_path):
+    """Stated, not silently skipped: an import with no target is a broken always-on rule, and
+    a materialization that quietly ships nothing for it looks identical to a healthy one."""
+    root = _make_package_root(tmp_path, agents_md="# AGENTS\n\n@_aitna/.akmon/guardrails/klingon.md\n")
+    _, errors = sync.imported_guardrails(root)
+    assert errors == ["AGENTS.md imports a guardrail the standard does not ship: guardrails/klingon.md"]
+    _, plan_errors = sync._planned_files(root)
+    assert any("klingon.md" in error for error in plan_errors)
+
+
+def test_sync_check_detects_drift_in_a_materialized_guardrail(tmp_path):
     root = _make_package_root(tmp_path)
     files, errors = sync._planned_files(root)
     assert errors == []
     result = sync._apply(files, write=True, root=root)
     assert not result.errors
 
-    hook_path = root / "_aitna" / ".akmon" / "hooks" / "hook_core.py"
-    assert hook_path.is_file()
-    hand_edited = hook_path.read_text(encoding="utf-8") + "\n# hand edit\n"
-    hook_path.write_text(hand_edited, encoding="utf-8")
+    guardrail = root / "_aitna" / ".akmon" / "guardrails" / "_common.md"
+    assert guardrail.is_file()
+    hand_edited = guardrail.read_text(encoding="utf-8") + "\n<!-- hand edit -->\n"
+    guardrail.write_text(hand_edited, encoding="utf-8")
 
     files2, errors2 = sync._planned_files(root)
     assert errors2 == []
     check_result = sync._apply(files2, write=False, root=root)
     changed_rel = {p.relative_to(root).as_posix() for p in check_result.changed}
-    assert "_aitna/.akmon/hooks/hook_core.py" in changed_rel
-    assert hook_path.read_text(encoding="utf-8") == hand_edited  # --check must not rewrite
+    assert "_aitna/.akmon/guardrails/_common.md" in changed_rel
+    assert guardrail.read_text(encoding="utf-8") == hand_edited  # --check must not rewrite
 
     # a real (write=True) sync run then clears the drift.
     result2 = sync._apply(files2, write=True, root=root)
-    assert hook_path in result2.changed
-    assert "hand edit" not in hook_path.read_text(encoding="utf-8")
+    assert guardrail in result2.changed
+    assert "hand edit" not in guardrail.read_text(encoding="utf-8")
 
 
-# --------------------------------------------------------------------------------------
-# mount-aware hook templating + entry recognition
-# --------------------------------------------------------------------------------------
+def test_a_previous_versions_materialization_is_removed_in_one_run(tmp_path):
+    """Migration must finish in one ``sync``, or it leaves a tree nobody reads and nobody
+    complains about.
 
-
-def test_hooks_dir_mount_aware(tmp_path):
-    mounted_dir = tmp_path / "mounted"
-    mounted_dir.mkdir()
-    mounted = _make_mounted_root(mounted_dir)
-    package_dir = tmp_path / "package"
-    package_dir.mkdir()
-    package = _make_package_root(package_dir)
-    assert sync._hooks_dir(mounted) == "_aitna/akmon/hooks"
-    assert sync._hooks_dir(package) == "_aitna/.akmon/hooks"
-
-
-def test_claude_settings_uses_package_hooks_dir_in_package_mode(tmp_path):
+    Three things are pinned together because they fail apart: the banner-less routing registry
+    (a banner-only sweep would keep it forever — it has to stay parseable JSON), the emptied
+    parent directories, and ``__pycache__`` — swept, but never reported, since a project that
+    merely *ran* a hook since the last sync is not drifted.
+    """
     root = _make_package_root(tmp_path)
-    settings = sync._claude_settings(root).content
-    assert "_aitna/.akmon/hooks/git-commit-guard.py" in settings
-    assert "_aitna/akmon/hooks" not in settings
+    stale = root / "_aitna" / ".akmon"
+    for relative, text in (
+        ("hooks/hook_core.py", "# Generated by ...\nprint(1)\n"),
+        ("common/project_root.py", "# Generated by ...\n"),
+        ("tools/model_routing/routing.py", "# Generated by ...\n"),
+        ("tools/model_routing/registry.json", "{}\n"),  # never carried a banner
+    ):
+        path = stale / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    bytecode = stale / "hooks" / "__pycache__" / "hook_core.cpython-311.pyc"
+    bytecode.parent.mkdir(parents=True)
+    bytecode.write_bytes(b"\x00")
 
-
-def test_codex_hooks_uses_package_hooks_dir_in_package_mode(tmp_path):
-    root = _make_package_root(tmp_path)
     files, errors = sync._planned_files(root)
     assert errors == []
-    codex = next(f for f in files if f.path.name == "hooks.json").content
-    assert "_aitna/.akmon/hooks/codex-hook.py" in codex
-    assert "_aitna/akmon/hooks" not in codex
+    result = sync._apply(files, write=True, root=root)
+
+    deleted = {p.relative_to(root).as_posix() for p in result.deleted}
+    assert deleted == {
+        "_aitna/.akmon/hooks/hook_core.py",
+        "_aitna/.akmon/common/project_root.py",
+        "_aitna/.akmon/tools/model_routing/routing.py",
+        "_aitna/.akmon/tools/model_routing/registry.json",
+    }
+    assert not any("__pycache__" in path for path in deleted)
+    assert not bytecode.exists() and not bytecode.parent.exists()
+    for emptied in ("hooks", "common", "tools/model_routing", "tools"):
+        assert not (stale / emptied).exists(), emptied
+    assert sorted(p.name for p in stale.iterdir()) == ["guardrails"]
+
+
+def test_sync_check_does_not_report_bytecode_left_by_a_hook_run(tmp_path):
+    """``--check`` runs in CI; failing it because someone executed a hook would make the gate
+    a coin flip. The cache is neither reported nor (in the non-writing mode) touched."""
+    root = _make_package_root(tmp_path)
+    files, _ = sync._planned_files(root)
+    sync._apply(files, write=True, root=root)
+    bytecode = root / "_aitna" / ".akmon" / "guardrails" / "__pycache__" / "x.cpython-311.pyc"
+    bytecode.parent.mkdir(parents=True)
+    bytecode.write_bytes(b"\x00")
+
+    files2, _ = sync._planned_files(root)
+    check_result = sync._apply(files2, write=False, root=root)
+    assert check_result.changed == []
+    assert check_result.deleted == []
+    assert bytecode.exists()
+
+
+# --------------------------------------------------------------------------------------
+# launcher resolution — a property of the project, not of whoever ran sync
+# --------------------------------------------------------------------------------------
+
+
+def test_launcher_prefers_the_project_venv(tmp_path):
+    root = _make_package_root(tmp_path)
+    assert sync.launcher_relative(root) == ".venv/bin/akmon"
+
+
+def test_launcher_accepts_the_unhidden_venv_spelling(tmp_path):
+    root = _make_package_root(tmp_path)
+    shutil.rmtree(root / ".venv")
+    legacy = root / "venv" / "bin" / "akmon"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("#!/bin/sh\n", encoding="utf-8")
+    legacy.chmod(0o755)
+    assert sync.launcher_relative(root) == "venv/bin/akmon"
+
+
+def test_launcher_ignores_an_interpreter_outside_the_project(tmp_path, monkeypatch):
+    """A pipx install, and akmon's own dev checkout running ``sync`` over a fixture, are both
+    normal and both outside the consumer — neither says anything about its layout, and an
+    absolute path in a committed file is a silent break for every other developer."""
+    root = _make_package_root(tmp_path / "project")
+    shutil.rmtree(root / ".venv")
+    elsewhere = tmp_path / "elsewhere" / "bin"
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "akmon").write_text("#!/bin/sh\n", encoding="utf-8")
+    (elsewhere / "akmon").chmod(0o755)
+    (elsewhere / "python3").write_text("", encoding="utf-8")
+    monkeypatch.setattr(sync.sys, "executable", str(elsewhere / "python3"))
+    monkeypatch.setattr(sync.shutil, "which", lambda _name: str(elsewhere / "akmon"))
+    assert sync.launcher_relative(root) == ".venv/bin/akmon"
+
+
+def test_launcher_accepts_an_interpreter_inside_the_project(tmp_path, monkeypatch):
+    root = _make_package_root(tmp_path)
+    shutil.rmtree(root / ".venv")
+    inside = root / "env" / "bin"
+    inside.mkdir(parents=True)
+    (inside / "akmon").write_text("#!/bin/sh\n", encoding="utf-8")
+    (inside / "akmon").chmod(0o755)
+    (inside / "python3").write_text("", encoding="utf-8")
+    monkeypatch.setattr(sync.sys, "executable", str(inside / "python3"))
+    monkeypatch.setattr(sync.shutil, "which", lambda _name: None)
+    assert sync.launcher_relative(root) == "env/bin/akmon"
+
+
+def test_launcher_ignores_a_non_executable_script(tmp_path, monkeypatch):
+    root = _make_package_root(tmp_path)
+    launcher = root / ".venv" / "bin" / "akmon"
+    launcher.chmod(0o644)
+    fallback = root / "venv" / "bin" / "akmon"
+    fallback.parent.mkdir(parents=True)
+    fallback.write_text("#!/bin/sh\n", encoding="utf-8")
+    fallback.chmod(0o755)
+    monkeypatch.setattr(sync.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(sync.sys, "executable", str(tmp_path / "nowhere" / "python3"))
+
+    assert not sync.is_executable_file(launcher)
+    assert sync.launcher_relative(root) == "venv/bin/akmon"
+
+
+def test_launcher_never_fails_and_predicts_the_convention(tmp_path, monkeypatch):
+    """The first attach runs ``sync`` *before* the dev group is installed, by construction. A
+    hard error here would break the one flow that has to work out of the box; the prediction
+    becomes true the moment the pin is installed, and ``verify`` reports it until then."""
+    root = _make_package_root(tmp_path)
+    shutil.rmtree(root / ".venv")
+    monkeypatch.setattr(sync.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(sync.sys, "executable", str(tmp_path / "nowhere" / "python3"))
+    assert sync.launcher_relative(root) == ".venv/bin/akmon"
+
+
+# --------------------------------------------------------------------------------------
+# hook wiring — the console script in package mode, files in mounted modes
+# --------------------------------------------------------------------------------------
+
+
+def test_claude_wiring_names_the_console_script_and_no_repo_path_in_package_mode(tmp_path):
+    root = _make_package_root(tmp_path)
+    entries = sync._claude_hooks(root)["hooks"]
+    commands = [
+        hook["command"]
+        for event in entries.values()
+        for entry in event
+        for hook in entry["hooks"]
+    ]
+    assert commands, "no hook commands generated"
+    for command in commands:
+        assert command.startswith('"$CLAUDE_PROJECT_DIR/.venv/bin/akmon" hook '), command
+        assert "_aitna/" not in command, command
+        assert ".py" not in command, command
+    assert '"$CLAUDE_PROJECT_DIR/.venv/bin/akmon" hook delegation-log' in commands
+
+
+def test_codex_wiring_keeps_its_advisory_argument_in_package_mode(tmp_path):
+    root = _make_package_root(tmp_path)
+    entries = sync._codex_hooks(root)["hooks"]
+    commands = [
+        hook["command"]
+        for event in entries.values()
+        for entry in event
+        for hook in entry["hooks"]
+    ]
+    assert '"$(git rev-parse --show-toplevel)/.venv/bin/akmon" hook codex-hook role-on-code' in commands
+    for command in commands:
+        assert "_aitna/" not in command, command
+
+
+def test_mounted_wiring_still_names_files(tmp_path):
+    """Unchanged by construction: in a mounted mode the path is both spellable and pinned."""
+    root = _make_mounted_root(tmp_path)
+    claude = sync._claude_settings(root).content
+    codex = json.dumps(sync._codex_hooks(root))
+    assert '_aitna/akmon/hooks/git-commit-guard.py' in claude
+    assert "akmon\\" not in claude and " hook " not in claude
+    assert "_aitna/akmon/hooks/codex-hook.py" in codex
 
 
 def _akmon_entry(path: str) -> dict:
     return {"matcher": "Bash", "hooks": [{"type": "command", "command": f'python3 "{path}"'}]}
 
 
-def test_is_akmon_entry_recognises_both_mounted_and_package_markers(monkeypatch):
+def _launcher_entry() -> dict:
+    return {
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": '"$CLAUDE_PROJECT_DIR/.venv/bin/akmon" hook git-commit-guard'}],
+    }
+
+
+def test_is_akmon_entry_recognises_every_spelling_the_generator_ever_emitted(monkeypatch):
+    """Including the retired ones. Recognition is what lets a mode switch *replace* an entry
+    instead of leaving the old one running beside the new."""
     monkeypatch.delenv("AITNA_ROOT", raising=False)
     assert sync._is_akmon_entry(_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py"))
     assert sync._is_akmon_entry(_akmon_entry("_aitna/.akmon/hooks/git-commit-guard.py"))
+    assert sync._is_akmon_entry(_launcher_entry())
 
 
-def test_merge_drops_mounted_entry_when_switching_to_package_mode(monkeypatch):
+def test_a_projects_own_hook_mentioning_akmon_is_not_recognised_as_ours(monkeypatch):
+    """The marker carries the closing quote (``akmon" hook ``) for this reason: a bare
+    ``akmon hook`` would also match a project hook that merely names the package."""
     monkeypatch.delenv("AITNA_ROOT", raising=False)
-    stale = _akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")
-    wanted = [_akmon_entry("_aitna/.akmon/hooks/git-commit-guard.py")]
-    merged = sync._merge_hook_entries([stale], wanted)
-    assert stale not in merged
-    assert merged == wanted
+    mine = {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 tools/akmon hook check.py"}]}
+    assert not sync._is_akmon_entry(mine)
 
 
-def test_merge_drops_package_entry_when_switching_to_mounted_mode(monkeypatch):
+@pytest.mark.parametrize(
+    ("name", "stale", "wanted"),
+    [
+        ("mounted -> package", _akmon_entry("_aitna/akmon/hooks/git-commit-guard.py"), _launcher_entry()),
+        ("package -> mounted", _launcher_entry(), _akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")),
+        (
+            "materialized package -> package",
+            _akmon_entry("_aitna/.akmon/hooks/git-commit-guard.py"),
+            _launcher_entry(),
+        ),
+    ],
+)
+def test_merge_replaces_the_other_spellings_entry(monkeypatch, name, stale, wanted):
     monkeypatch.delenv("AITNA_ROOT", raising=False)
-    stale = _akmon_entry("_aitna/.akmon/hooks/git-commit-guard.py")
-    wanted = [_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")]
-    merged = sync._merge_hook_entries([stale], wanted)
-    assert stale not in merged
-    assert merged == wanted
+    merged = sync._merge_hook_entries([stale], [wanted])
+    assert stale not in merged, name
+    assert merged == [wanted], name
 
 
 # --------------------------------------------------------------------------------------
@@ -316,3 +559,95 @@ def test_both_parsers_agree_on_a_record_with_an_inline_comment():
         path = Path(tmp) / ".akmon.toml"
         path.write_text('mount = "package"  # materialized\n', encoding="utf-8")
         assert sync.read_akmon_toml(path)["mount"] == "package"
+
+
+# --------------------------------------------------------------------------------------
+# common.materialization.stale_guardrails — the freshness half of the one remaining copy
+# --------------------------------------------------------------------------------------
+
+
+def _tree_with_guardrail(tmp_path: Path, text: str) -> Path:
+    """A minimal standard tree carrying one guardrail, standing in for the installed package."""
+    tree = tmp_path / "tree"
+    (tree / "guardrails").mkdir(parents=True)
+    (tree / "guardrails" / "_common.md").write_text(text, encoding="utf-8")
+    return tree
+
+
+def _materialize(root: Path, name: str, text: str) -> Path:
+    dest = materialization.materialized_guardrails_dir(root)
+    dest.mkdir(parents=True, exist_ok=True)
+    path = dest / name
+    path.write_text(materialization.materialized_markdown(text), encoding="utf-8")
+    return path
+
+
+def test_stale_guardrails_is_empty_without_a_materialization(tmp_path):
+    """Every mounted-mode project, and a package-mode one between ``init`` and its first
+    ``sync``: there is no copy to be stale, and the check must not invent one."""
+    tree = _tree_with_guardrail(tmp_path, "# Common\n\nrule\n")
+    assert materialization.stale_guardrails(tmp_path / "project", tree) == []
+
+
+def test_stale_guardrails_is_empty_when_the_copy_matches(tmp_path):
+    text = "# Common\n\nrule\n"
+    tree = _tree_with_guardrail(tmp_path, text)
+    root = tmp_path / "project"
+    _materialize(root, "_common.md", text)
+
+    assert materialization.stale_guardrails(root, tree) == []
+
+
+def test_stale_guardrails_names_a_guardrail_the_package_has_moved_past(tmp_path):
+    """The bump this exists for: the pin resolves, the hooks run from the new package, and the
+    repository still holds the previous release's rules until someone runs ``sync``."""
+    root = tmp_path / "project"
+    _materialize(root, "_common.md", "# Common\n\nold rule\n")
+    tree = _tree_with_guardrail(tmp_path, "# Common\n\nnew rule\n")
+
+    assert materialization.stale_guardrails(root, tree) == ["_common.md"]
+
+
+def test_stale_guardrails_names_a_hand_edited_copy(tmp_path):
+    """Same instruction, different cause — and the reason the comparison is against content
+    rather than a recorded version: a version stamp cannot see this at all."""
+    text = "# Common\n\nrule\n"
+    tree = _tree_with_guardrail(tmp_path, text)
+    root = tmp_path / "project"
+    path = _materialize(root, "_common.md", text)
+    path.write_text(path.read_text(encoding="utf-8") + "\nlocal edit\n", encoding="utf-8")
+
+    assert materialization.stale_guardrails(root, tree) == ["_common.md"]
+
+
+def test_stale_guardrails_names_a_guardrail_the_package_no_longer_ships(tmp_path):
+    tree = _tree_with_guardrail(tmp_path, "# Common\n\nrule\n")
+    root = tmp_path / "project"
+    _materialize(root, "retired.md", "# Retired\n\nrule\n")
+
+    assert materialization.stale_guardrails(root, tree) == ["retired.md"]
+
+
+def test_stale_guardrails_ignores_non_markdown_leftovers(tmp_path):
+    """Sweeping stray files under ``.akmon/`` is ``sync``'s job and it reports them; the hook
+    speaks only about what the harness actually ``@``-imports."""
+    tree = _tree_with_guardrail(tmp_path, "# Common\n\nrule\n")
+    root = tmp_path / "project"
+    dest = materialization.materialized_guardrails_dir(root)
+    dest.mkdir(parents=True)
+    (dest / "notes.txt").write_text("stray\n", encoding="utf-8")
+
+    assert materialization.stale_guardrails(root, tree) == []
+
+
+def test_sync_writes_guardrails_the_freshness_check_calls_current(tmp_path):
+    """The two halves joined: what ``sync`` writes is exactly what the hook calls fresh. They
+    share one format owner precisely so this cannot drift apart."""
+    root = _make_package_root(tmp_path)
+    files, errors = sync._materialized_files(root)
+    assert errors == []
+    for planned in files:
+        planned.path.parent.mkdir(parents=True, exist_ok=True)
+        planned.path.write_text(planned.content, encoding="utf-8")
+
+    assert materialization.stale_guardrails(root, sync.standard_tree_root(root)) == []

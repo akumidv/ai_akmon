@@ -263,7 +263,8 @@ The machine-readable companion to the AGENTS.md akmon block: the akmon **version
 project was attached/realigned against, plus the pinned test environment. The agent writes it
 (step 6); `verify.py` reads it; a bump diffs it against the CHANGELOG ("Pull the latest shared
 layer"). **Committed, not gitignored** — it travels with the repo and shows in the bump diff.
-TOML (read with `tomllib`, or a stdlib line-parser fallback when the host Python is < 3.11):
+TOML (read with Python 3.11+ `tomllib`; the narrow line parser remains a defensive fallback for
+malformed records, not a supported pre-3.11 host):
 
 ```toml
 akmon_version = "v0.2.0"        # `git -C _aitna/akmon describe --tags`
@@ -378,6 +379,14 @@ python3 _aitna/akmon/bin/verify.py --strict
 git add _aitna/akmon CLAUDE.md GEMINI.md .codex .github/copilot-instructions.md .claude/settings.json .claude/skills
 git commit -m "bump akmon"             # owner commits if the pin/pointers moved
 ```
+In **mode `package`** the same procedure runs without the submodule step: bump the dev pin
+(`uv sync` / `uv lock --upgrade-package akmon`), then `akmon sync`, `akmon sync --check`,
+`akmon verify --strict`. Do not skip `akmon sync` because "nothing is materialized any more":
+the guardrails your `AGENTS.md` imports are, and a bump that changed one leaves the repository
+holding the previous release's rules while the hooks already run the new ones. A session started
+in that state says so at SessionStart and asks for exactly this — but the first session to notice
+has already loaded the stale text.
+
 **Record the bump** in the consuming project (a `_aitna/TASKS_ARCHIVE.md` line or the project's
 own changelog) — the **downstream bump record** lives in the consumer, not in akmon's notes.
 
@@ -415,17 +424,31 @@ Alongside the mounted modes (`submodule` — this document's default — plus `v
   resolve. `verify --strict` reports it for as long as it is missing, and reports a pin in
   the wrong class (runtime dependency or extra) as an error. A version bump is then an
   ordinary dependency bump, delta-checked against [CHANGELOG.md](CHANGELOG.md) as usual.
-- `akmon sync` materializes the **always-on surface only** into `<AITNA_ROOT>/.akmon/`:
-  `hooks/` (self-contained, stdlib-only — vendor hooks keep running venv-free via
-  `python3`) and `guardrails/` (the `@`-import targets for AGENTS.md). The copies are
-  banner-marked and drift-checked by `sync --check`.
+- **The hooks run from the installed package.** The generated vendor wiring calls
+  `"<project-root>/.venv/bin/akmon" hook <name>`, so nothing executable is copied into the
+  repository. That is why mode `package` needs the virtualenv **inside the project root**: the
+  wiring is a committed file every developer runs, and an absolute path to one person's venv
+  breaks silently for everyone else — a hook command whose executable is missing produces no
+  error you will see. `akmon verify` reports it (`hooks.launcher`) until the pin is installed.
+- `akmon sync` materializes exactly one thing into `<AITNA_ROOT>/.akmon/guardrails/`: the
+  guardrail files your `AGENTS.md` actually `@`-imports. Those cannot be reached through the
+  package, because `AGENTS.md` is committed and the only path from it into the package carries
+  the venv's Python version (`.venv/lib/python3.14/site-packages/…`) — and an `@`-import that
+  does not resolve says nothing at all, in any harness. The copies are banner-marked and
+  drift-checked by `sync --check`, and SessionStart warns when a bump has moved the standard past
+  them (run `akmon sync`, then start a new session — the `@`-import is expanded once, at session
+  start);
+  importing a guardrail akmon does not ship is a `sync` error, not a silent skip.
 - Everything else (MODEL.md, roles, pipelines, skills) is read from the installed
   package's embedded tree — `akmon path` prints its root; consumer docs link the standard
   by GitHub-tag URL instead of relative mount paths.
 - `.akmon.toml` records `mount = "package"`; the CLI and the standard share one version
   cut from the release tag, so there is **no version skew by construction**.
-- Checked in: `_aitna/{local assets}` + `_aitna/.akmon/{hooks,guardrails}` +
-  `.akmon.toml` — no 90-file tree. Consumer CI runs `uv run akmon sync --check` and
+- Checked in: `_aitna/{local assets}` + `_aitna/.akmon/guardrails/` +
+  `.akmon.toml` — no 90-file tree. A version-number-only change does not rewrite the guardrails;
+  a bump that changes an imported guardrail or generated vendor pointer changes that checked-in
+  file through `sync`, but never rewrites a copied executable surface. Consumer CI runs
+  `uv run akmon sync --check` and
   `uv run akmon verify --strict`; the standard's own self-tests stay in ai_akmon's CI.
 - **Codex only, after every bump:** the bump re-runs `akmon sync`, so `.codex/hooks.json`
   may change — and any change to an approved entry, *including a `matcher` the commands do

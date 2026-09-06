@@ -837,9 +837,10 @@ future `init` slice seeds a narrow archetype-derived default, moving the default
 *on and narrow* without touching existing consumers — `sync` preserves every key it does not own.
 **Rejected (c1):** erroring when a ledger exists with no globs configured contradicts the
 warn-first decision in [ADR 0007](../decisions/0007-d2-ledger.md) §4 — a red gate before the habit
-holds gets routed around — and punishes a project that keeps the ledger deliberately by hand. Note
-the limit neither option removes: `tomllib` is 3.11+ stdlib, so on an older host the globs read as
-empty however they are configured, and only the marker's wording describes that state.
+holds gets routed around — and punishes a project that keeps the ledger deliberately by hand.
+Under the former Python 3.9 floor, an older host read the globs as empty because `tomllib` was
+unavailable. C68/D2-34 later removed that supported-host limitation with one Python >=3.11 floor;
+import failure remains conservative but is no longer a supported runtime.
 
 **F8/4 — marker line grammar (locked).** `Runtime check: <id>` — the ID is the **first token**;
 anything after ` — ` is human prose the parser ignores. The tail is not decoration: five of the
@@ -1088,8 +1089,13 @@ contract suite. There is no banner-exception list, field-owner list or second pa
 
 The current population is classified in the same declaration. Generated Markdown and Python
 pointers/materializations are `bannered-file`; wholly generated JSON such as `.codex/hooks.json`
-and the package-mode routing registry is `structured-file`; merged `.claude/settings.json` hook
-entries and package-mode `.akmon.toml`'s `mount` / `akmon_version` keys are `field-owned`. Adding a
+is `structured-file`; merged `.claude/settings.json` hook
+entries and package-mode `.akmon.toml`'s `mount` / `akmon_version` keys are `field-owned`.
+*(C77 narrowed the package-mode materialization to the guardrails `AGENTS.md` imports — bannered
+Markdown — so the routing registry that used to be this section's `structured-file` example is no
+longer written into a consumer at all. `sync` now also removes everything unplanned under
+`<aitna>/.akmon/` regardless of banner, since nothing else writes there; the banner rule below
+still governs the wider scanner boundary, where other writers do exist.)* Adding a
 fourth implicit state is forbidden: a constructor with no mode, a field-owned entry with no
 selector, or one path declared in two modes fails the contract suite.
 

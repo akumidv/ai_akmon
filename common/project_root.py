@@ -41,9 +41,10 @@ def akmon_mount(project_root: Path) -> Path:
     """Absolute akmon mount for ``project_root`` (``<aitna-root>/akmon``).
 
     The *mounted* tree's path, computed — not a claim that it exists, and not a claim that it is
-    the tree that runs: a package-mode project has no mount at all, and a stale one left over
-    from a prior mode must not shadow the record (ADR 0009 §4-5). Which tree runs is
-    ``hooks/hook_core.py::akmon_runtime_root``'s question and is still open at D2-26.
+    the tree that runs: a package-mode project has no mount at all (ADR 0009 §4-5). Which tree
+    runs is ``hooks/hook_core.py::akmon_runtime_root``'s question, and since C77 it answers with
+    the tree it is executing from — so a stale mount left over from a prior mode cannot shadow
+    anything, because it is not a candidate.
     """
     return aitna_root(project_root) / "akmon"
 
@@ -73,8 +74,8 @@ def find_project_root(start: Path | None = None) -> Path:
     ``hooks/hook_core.py`` imports this rather than repeating it. That was previously deferred
     on the belief that it waited on the C69/D2-26 fork; it does not. That fork is about which
     *tree* the hooks read (``akmon_runtime_root``), not about where the project root is, and the
-    only real dependency — that the package be materialized beside ``hooks/`` — is this tree's
-    own ``_materialized_files`` list, which writes both in the same run.
+    only real dependency — that this package sit beside ``hooks/`` — holds in every carrier by
+    construction, since C77 leaves the hooks running inside the tree that ships them.
     """
     current = (start or Path.cwd()).resolve()
     for candidate in (current, *current.parents):

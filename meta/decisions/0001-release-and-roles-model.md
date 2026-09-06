@@ -67,7 +67,8 @@ the design doc; this ADR records only the locked decisions.
    USAGE, **not** OPERATE — akmon's USAGE relation *is* the consuming project's DEVELOP relation.
 
 7. **Versioning: `v0.x.y` until the standard stabilizes.** While pre-1.0, the compat signal rides
-   on `x`: bump `x` for a breaking change to layout, required files, or a role/pipeline contract;
+   on `x`: bump `x` for a breaking change to layout, required files, runtime compatibility, or a
+   role/pipeline contract;
    bump `y` for minor/patch. Promote to strict SemVer (`1.0.0`) only once the role/pipeline
    contracts stop moving.
 

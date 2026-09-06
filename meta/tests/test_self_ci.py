@@ -9,6 +9,9 @@ tell them apart.
 
 from __future__ import annotations
 
+import zipfile
+
+import pytest
 import self_ci
 
 from common.findings import Finding
@@ -45,3 +48,29 @@ def test_any_other_failure_keeps_the_packaging_remediation():
     assert finding.message == "installed-wheel smoke failed: verify --strict: exit 1"
     assert "fix the packaged-install failure" in finding.fix
     assert "gh auth" not in finding.fix
+
+
+def _wheel_with_metadata(tmp_path, metadata: str):
+    wheel = tmp_path / "akmon-test.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr("akmon-0.0.dist-info/METADATA", metadata)
+    return wheel
+
+
+def test_wheel_python_floor_accepts_the_exact_field(tmp_path):
+    wheel = _wheel_with_metadata(tmp_path, "Metadata-Version: 2.4\nRequires-Python: >=3.11\n")
+    self_ci._assert_wheel_python_floor(wheel)
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    (
+        "Metadata-Version: 2.4\n",
+        "Requires-Python: >=3.9\n",
+        "Requires-Python: >=3.11\nRequires-Python: >=3.11\n",
+    ),
+)
+def test_wheel_python_floor_rejects_missing_stale_or_duplicate_fields(tmp_path, metadata):
+    wheel = _wheel_with_metadata(tmp_path, metadata)
+    with pytest.raises(RuntimeError, match="Requires-Python must be exactly >=3.11"):
+        self_ci._assert_wheel_python_floor(wheel)

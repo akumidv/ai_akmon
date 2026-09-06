@@ -1,7 +1,8 @@
 # Design note: who answers "which standard tree does this project run?"
 
-> **Closed — [C69](../../TASKS.md), owner-decided and landed at
-> [D2-26](../../D2_LEDGER.md); kept because the measurement below is why.** Provenance:
+> **Closed — [C69](../../TASKS.md), owner-approved at
+> [D2-26](../../D2_LEDGER.md) and awaiting the landing commit; kept because the measurement below
+> is why.** Provenance:
 > C37 review side finding, measured on this tree. **The decision: the recorded `mount` is a veto
 > over the directory check, not a replacement for it** — records `package` → the materialization,
 > else the mount if it exists, else the materialization. Replacement was rejected on a measured
@@ -10,10 +11,23 @@
 > `mount` decides. This note records the module that answered it differently, what that cost —
 > measured, not argued — and the fork the fix had to pick.
 
+> **Superseded for the runtime root — [C77](../../TASKS.md), see the "mode `package` executes
+> from the package" amendment in
+> [ADR 0009](../../decisions/0009-packaging-package-carrier-and-mount-modes.md).**
+> `akmon_runtime_root` no longer consults the record at all: it returns the tree the hook is
+> *executing* from (`Path(__file__).parent.parent`). The reasoning below stays as written,
+> because it was correct for its state of the world — package mode copied the hooks and their
+> data into `<AITNA_ROOT>/.akmon/`, so that directory really was a tree, and the record really
+> was the only way to tell it from a stale mount. Once the materialization narrowed to the
+> imported guardrails, that directory stopped being a tree and the veto would have pointed the
+> hooks at one with no registry in it. What the veto defended against is not given up: a stale
+> mount cannot shadow anything, because a tree that is not executing is not a candidate.
+> The `common/record.py` reader the fork produced is unaffected and still has its other callers.
+
 ## The split
 
-> Past tense from here on: `akmon_runtime_root` now applies the veto, so the split below is
-> the state as found, kept as the record of what it cost.
+> Past tense from here on: the split below is the state C69 found and the veto it implemented,
+> kept as the record of what it cost. C77 supersedes that runtime-root answer as stated above.
 
 `hooks/hook_core.py::akmon_runtime_root` answers with **directory existence**:
 `<AITNA_ROOT>/akmon` if that directory is there, else `<AITNA_ROOT>/.akmon`. Every other owner
@@ -93,8 +107,9 @@ justification to re-examine on its own, and three of the four are weaker than wh
   predate the `mount` field default to `submodule` (`sync.py::read_mount_mode`). **This is the
   state that decided the shape** — a record-only rule sends such a project to a mount that is
   not there, so the record vetoes the directory check rather than replacing it.
-- The hooks must keep running venv-free from the materialized copy. Held: `common/` is
-  materialized whole beside `hooks/`, and the wheel smoke runs `.akmon/hooks/codex-hook.py`.
+- ~~The hooks must keep running venv-free from the materialized copy.~~ Held by C69, then
+  superseded for package mode by C77: the hooks and `common/` now run together from the installed
+  package; mounted modes still run the mounted files directly with bare `python3`.
 - ~~The regression needs the state no test covers today~~ — `meta/tests/test_adapters.py` now
   pins all seven states. The previous rule was wrong in exactly two of them (a package record
   beside a stale mount, and the same record in the documented `mount = "package"  # comment`

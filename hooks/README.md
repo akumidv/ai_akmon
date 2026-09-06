@@ -39,7 +39,10 @@ project-local hook surface.
   neutral active-agent reminder: injects a
   reminder to declare the active agent (and restate it on switch) plus the project's
   **scanned** agent roster (`_aitna/agents/` dev + root `agents/` desk), and the "read
-  `_aitna/memory/` at session start" rule. Runs as a **SessionStart** hook.
+  `_aitna/memory/` at session start" rule. In mode `package` it also reports guardrails under
+  `_aitna/.akmon/guardrails/` that the running package has moved past — the copy the harness
+  `@`-imports going stale after a pin bump is otherwise silent until the next CI run. Runs as a
+  **SessionStart** hook.
 - [`role-on-code.py`](role-on-code.py) — Claude PreToolUse wrapper for the *switch* backstop
   for the same "Role declaration" convention: SessionStart only fires once, so a **design→code switch mid-session** (architect →
   writing code) goes unannounced. On the **first** `Edit`/`Write`/`MultiEdit`/`apply_patch` of a
@@ -71,9 +74,12 @@ project-local hook surface.
   host UI (ADR 0006). Logic
   in [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).
 - [`delegation-log.py`](delegation-log.py) — Claude PreToolUse wrapper that appends one TSV
-  line (timestamp, subagent, model, description) to `.claude/model-routing.log` per
-  subagent delegation — routing switches are visible at **zero token cost**; the model never
-  narrates them. Runs as a **PreToolUse → Task|Agent** hook; never blocks.
+  line (timestamp, session id, subagent, model, zone, description) to
+  `.claude/model-routing.log` per subagent delegation. It emits a UI system message without
+  injecting routing narration into model context. The same message carries C20's conservative
+  role/agent advisory when the agent has no kind overlapping the active role's effective allowed
+  set; a mixed agent's silence does not prove its intended kind. Runs as a
+  **PreToolUse → Task|Agent** hook; ordinary runtime failures remain advisory and return 0.
 - [`delegation-nudge.py`](delegation-nudge.py) — Claude PreToolUse wrapper for the
   **delegation nudge**: counts consecutive orchestrator edit/shell/read calls (Read/Grep/Glob
   normalize to the same read kind) since session start or the last subagent delegation
@@ -114,7 +120,12 @@ project-local hook surface.
 The hooks are the source of truth here; each assistant wires them in its own way.
 **BOOTSTRAP** does this on attach; **`bin/sync.py`** keeps it wired (ROADMAP O3).
 
-- **Claude Code** — `.claude/settings.json`:
+- **Claude Code** — `.claude/settings.json`. The example below is a **mounted** project. In
+  mount mode `package` there are no hook files in the repository at all: `sync` writes
+  `"$CLAUDE_PROJECT_DIR/.venv/bin/akmon" hook <name>` instead, which runs the same script out
+  of the installed package (ADR 0009, C77 amendment). Codex gets the same shape with its own
+  anchor, keeping the advisory argument: `"$(git rev-parse --show-toplevel)/.venv/bin/akmon"
+  hook codex-hook role-on-code`.
   ```json
   {
     "hooks": {
@@ -151,4 +162,6 @@ The hooks are the source of truth here; each assistant wires them in its own way
 - **Gemini** — pointer-only and unverified; do not infer hook parity from the shared policy.
 
 A project may point the wiring at the akmon copy (above) or at a local copy under
-`.claude/hooks/` — prefer the akmon path so submodule updates propagate the fix.
+`.claude/hooks/` — prefer the akmon path so submodule updates propagate the fix. In package
+mode the equivalent is `akmon hook`: it always resolves the hook out of the pinned package, so
+a pin bump propagates a fix with nothing to re-copy.

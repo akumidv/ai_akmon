@@ -41,6 +41,7 @@ from hook_core import (
     d2_status_line,
     d2_tracking_active,
     find_project_root,
+    runtime_root_display,
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools" / "model_routing"))
@@ -77,21 +78,30 @@ def _load_config(root: Path) -> dict:
 def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     akmon = akmon_runtime_root(root)
     if not routing.registry_path(akmon).is_file():
-        return None  # akmon without model routing (older pin) — stay silent
+        # Silence is the right answer for a pin that predates model routing: such a tree has no
+        # routing tools at all, and there is nothing to report. It is the wrong answer for a
+        # registry that has gone *missing* from a tree that does carry them — a broken carrier
+        # takes the status line and the delegation log out of every session, at exit 0 with an
+        # empty stderr. So the two states are separated rather than swallowed together (C77).
+        if (akmon / "tools" / "model_routing").is_dir():
+            print(
+                f"akmon model-routing hook: {akmon}/tools/model_routing exists but registry.json "
+                "is missing — model routing is silent for this session",
+                file=sys.stderr,
+            )
+        return None
 
     registry = routing.load_registry(akmon, root)
     config = _load_config(root)
     event = payload.get("hook_event_name") or "SessionStart"
 
     aitna = aitna_root_name()
-    # Recovery instructions must name the tree this project actually has: the mount when one
-    # exists, the `<AITNA_ROOT>/.akmon` materialization in mount mode `package`, which carries
-    # its own copy of the routing tools (ADR 0009 §4). Naming the mount unconditionally handed a
-    # package-mode session a path that is not there.
-    try:
-        runtime_rel = akmon.relative_to(root).as_posix()
-    except ValueError:  # pragma: no cover - the runtime root always sits under the project
-        runtime_rel = str(akmon)
+    # Recovery instructions must name the tree this project actually has, in a spelling that
+    # keeps working: the project-relative mount when one exists, `$(akmon path)` in mode
+    # `package`, where the tree is inside the installed wheel and its literal path carries the
+    # venv's Python version (C77). Naming the mount unconditionally used to hand a package-mode
+    # session a path that is not there.
+    runtime_rel = runtime_root_display(root)
     # An overlay `briefs` key matching no agent makes every regeneration lossy, so the
     # rebind is refused rather than run — and the reason is stated instead of swallowed (C50).
     brief_warn = routing.brief_warning(registry, aitna)
