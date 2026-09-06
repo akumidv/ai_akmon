@@ -851,8 +851,14 @@ def _make_package_mode_project(tmp_path: Path) -> Path:
 
     _write(root / ".gitignore", GITIGNORE)
     _write(root / ".github" / "workflows" / "ci.yml", PACKAGE_CI_YML)
+    # The console script the generated wiring names. A real consumer has it by construction —
+    # the dev-group pin puts it in the project venv on install — and since C77 the hook
+    # commands reference it, so a fixture without it is not a package-mode project.
+    launcher = root / ".venv" / "bin" / "akmon"
+    _write(launcher, "#!/bin/sh\n")
+    launcher.chmod(0o755)
 
-    # a real sync run: materializes .akmon/hooks + .akmon/guardrails and writes the vendor
+    # a real sync run: materializes the imported .akmon/guardrails and writes the vendor
     # pointers, exactly as attaching for real would.
     files, errors = sync._planned_files(root)
     assert errors == []
@@ -874,14 +880,63 @@ def test_main_strict_passes_on_package_mode_project(tmp_path):
     assert verify.main(["--project-root", str(root), "--strict"]) == 0
 
 
-def test_check_hooks_skips_in_package_mode_with_note(tmp_path):
+def test_check_hooks_checks_the_wheels_scripts_in_package_mode(tmp_path):
+    """It used to short-circuit here, on the grounds that the generated-pointers check already
+    covered the materialized copies. There are no copies since C77: the wiring calls
+    ``akmon hook``, so these files' existence in the tree *is* what it rests on."""
     root = tmp_path
     _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
     verifier = verify.Verifier(root)
     verifier.check_hooks()
-    assert len(verifier.findings) == 1
-    assert verifier.findings[0].severity == "ok"
-    assert "package mode" in verifier.findings[0].message
+    assert _levels(verifier.findings) == {"ok"}
+    assert any("hooks/codex-hook.py" in finding.message for finding in verifier.findings)
+
+
+def test_check_hook_launcher_passes_when_the_project_venv_has_the_script(tmp_path):
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    launcher = root / ".venv" / "bin" / "akmon"
+    _write(launcher, "#!/bin/sh\n")
+    launcher.chmod(0o755)
+    verifier = verify.Verifier(root)
+    verifier.check_hook_launcher()
+    assert _levels(verifier.findings) == {"ok"}
+
+
+def test_check_hook_launcher_errors_and_names_the_silence(tmp_path):
+    """The finding has to say *how* it fails: a hook command whose executable is missing
+    produces no session-visible error at all, so "the guardrails are off" is not deducible
+    from anything the developer would otherwise see."""
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    verifier = verify.Verifier(root)
+    verifier.check_hook_launcher()
+    assert _levels(verifier.findings) == {"error"}
+    message = verifier.findings[0].message
+    assert ".venv/bin/akmon" in message
+    assert "silently" in message
+
+
+def test_check_hook_launcher_errors_when_the_script_is_not_executable(tmp_path):
+    root = tmp_path
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    launcher = root / ".venv" / "bin" / "akmon"
+    _write(launcher, "#!/bin/sh\n")
+    launcher.chmod(0o644)
+
+    verifier = verify.Verifier(root)
+    verifier.check_hook_launcher()
+
+    assert _levels(verifier.findings) == {"error"}
+    assert "not executable" in verifier.findings[0].message
+
+
+def test_check_hook_launcher_is_a_package_mode_check_only(tmp_path):
+    root = tmp_path
+    (root / "_aitna" / "akmon").mkdir(parents=True)
+    verifier = verify.Verifier(root)
+    verifier.check_hook_launcher()
+    assert verifier.findings == []
 
 
 def test_check_hooks_still_checks_mounted_paths_when_not_package_mode(tmp_path):

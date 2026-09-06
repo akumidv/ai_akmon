@@ -4,7 +4,7 @@ version = "0.4.0.dev0"
 description = "Akmon is AI-agent development standard, as an installable package."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 authors = [
     {name = "Andrei Kuminov", email = "akuminov@gmail.com"}
 ]
@@ -68,7 +68,7 @@ exclude = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["F", "E", "W", "I", "UP", "B"]

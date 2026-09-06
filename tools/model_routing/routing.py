@@ -773,8 +773,15 @@ def bound_model_for(config: dict, subagent_type: str) -> str | None:
     The generated agent frontmatter carries ``model: <alias>`` (see ``_agent_model``), but an
     ``Agent`` call rarely echoes it — so the delegation record shows ``-`` and the console
     line omits the model. Deriving it from the recorded binding restores it. None for an
-    unknown agent (a host built-in) or a semantic-fallback binding whose tier value is not a
-    real alias (mirrors ``_agent_model`` emitting no ``model:`` line in that mode).
+    unknown agent (a host built-in) or for a semantic-fallback binding, whose tier values are
+    labels (``worker``/``strongest``), not vendor aliases.
+
+    The config does not persist ``Binding.semantic_fallback``, so the mode is re-derived the
+    same way ``compute_binding`` decides it: **no recorded ``available`` ladder is exactly
+    semantic fallback**. That is the mirror of ``_agent_model`` emitting no ``model:`` line —
+    an agent file without a pin is inherited by the host from the session, so there is no pin
+    to report and the record honestly says ``-``. Reporting the label instead would assert a
+    pin precisely where the design refuses to make one.
     """
     spec = _AGENT_BY_NAME.get(subagent_type)
     if spec is None or not isinstance(config, dict):
@@ -783,15 +790,20 @@ def bound_model_for(config: dict, subagent_type: str) -> str | None:
     if not isinstance(binding, dict):
         return None
     model = binding.get(spec.tier)
-    if not model:
+    if not isinstance(model, str) or not model:
         return None
-    available = config.get("available") or []
-    if available and model not in available:
+    available = config.get("available")
+    if (
+        not isinstance(available, list)
+        or not available
+        or not all(isinstance(alias, str) for alias in available)
+        or model not in available
+    ):
         return None
-    return str(model)
+    return model
 
 
-_ROLE_DECL_RE = re.compile(r"🧭\s*agent:\s*([A-Za-z][\w-]*)")
+_ROLE_DECL_RE = re.compile(r"\A\s*🧭\s*agent:\s*([A-Za-z][\w-]*)")
 
 
 def _assistant_text(entry: dict) -> str:
@@ -809,12 +821,14 @@ def _assistant_text(entry: dict) -> str:
 
 
 def active_role(transcript_path: str | Path | None) -> str | None:
-    """The role the orchestrator last declared (``🧭 agent: <name>``), read from the transcript.
+    """The role from the last qualifying ``🧭 agent: <name>`` transcript declaration.
 
     The chat declaration is invisible to a hook as chat, but the transcript records it in the
     assistant turns a hook can already scan (as C22/C23 do). Only main-chain assistant turns
     are read, so the SessionStart reminder / a subagent echo never masquerades as the
-    declaration. Returns the last-declared name (the caller maps it to a role row), else None.
+    declaration. A declaration qualifies only as the first non-whitespace text of its turn,
+    so later inline and Markdown-prefixed examples cannot change state. A first-position marker
+    is a declaration by definition. Returns the case-normalized role name, else None.
     """
     if not transcript_path:
         return None
@@ -835,21 +849,21 @@ def active_role(transcript_path: str | Path | None) -> str | None:
                     continue
                 if not isinstance(entry, dict) or entry.get("type") != "assistant" or entry.get("isSidechain"):
                     continue
-                for match in _ROLE_DECL_RE.finditer(_assistant_text(entry)):
-                    role = match.group(1)
+                match = _ROLE_DECL_RE.match(_assistant_text(entry))
+                if match:
+                    role = match.group(1).casefold()
     except OSError:
         return None
     return role
 
 
 def role_matrix_warning(registry: dict, subagent_type: str, role: str | None) -> str | None:
-    """Advisory (§10.2): the routed agent has no task kind the active role may route.
+    """Conservative advisory (§10.2): the agent has no effectively allowed task kind.
 
-    Subagent granularity — the call carries the agent, not the specific kind — so warn only
-    when *none* of the agent's kinds intersect the role's allowed row. That catches an edit
-    agent routed under the analysis-only ``review`` role without false-flagging a multi-kind
-    agent (e.g. ``k_reasoner``) that shares one legitimate kind. None when the role is
-    unknown/undeclared or the agent is a host built-in (no kinds).
+    The call carries the agent, not an authoritative invocation kind, so warn only when *none*
+    of the agent's kinds intersect the role's effective allowed set. Silence proves one allowed
+    overlap, not conformance of an intended kind carried by a multi-kind agent. None when the
+    role is unknown/undeclared or the agent is a host built-in (no kinds).
 
     **Cross-cutting verification kinds** (``cross_cutting_kinds`` — ``independent-review`` and
     ``audit``) are *not* role-gated (A7 (b), §10.2): any role may route them and *when* they
@@ -859,16 +873,20 @@ def role_matrix_warning(registry: dict, subagent_type: str, role: str | None) ->
     """
     if not role:
         return None
-    allowed = registry.get("role_task_kinds", {}).get(role)
-    if not allowed:
+    role_rows = registry.get("role_task_kinds", {})
+    if not isinstance(role_rows, dict) or role not in role_rows:
         return None
-    allowed = set(allowed) | set(registry.get("cross_cutting_kinds", []))
+    allowed = role_rows[role]
+    if not isinstance(allowed, list):
+        return None
+    effective_allowed = tuple(dict.fromkeys((*allowed, *registry.get("cross_cutting_kinds", []))))
     kinds = subagent_kinds(subagent_type)
-    if not kinds or set(kinds) & allowed:
+    if not kinds or set(kinds) & set(effective_allowed):
         return None
+    allowed_text = ", ".join(effective_allowed) or "no task kinds"
     return (
         f"role/task-kind: {subagent_type} ({', '.join(kinds)}) is outside the active role "
-        f"'{role}' — it routes {', '.join(allowed)}. Re-route or switch role."
+        f"'{role}' — it routes {allowed_text}. Re-route or switch role."
     )
 
 
@@ -1315,9 +1333,9 @@ def delegation_log_line(
     Columns: ``timestamp · session_id · subagent · model · zone · description``. The zone
     is parsed off a leading ``[zone:LABEL]`` marker in the description (removed from the
     stored description); ``-`` marks an absent session / model / zone. The model is the
-    call's explicit override if given, else ``bound_model`` (the agent's pinned tier model,
-    derived by the caller so the record + console line name the actual model). ``session_id``
-    scopes a fan-out round for the coverage-map assembler (C17).
+    call's explicit override if given, else ``bound_model`` (the agent's recorded tier pin,
+    derived by the caller so the record + console line name the declared model selection).
+    ``session_id`` scopes a fan-out round for the coverage-map assembler (C17).
     """
     if tool_name not in _SUBAGENT_TOOLS:
         return None

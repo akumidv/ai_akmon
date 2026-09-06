@@ -224,10 +224,10 @@ def _validated_aitna_root(value: str, root: Path, source: str = "--aitna-root") 
 
     `AITNA_ROOT` is *project-root-relative* by contract (BOOTSTRAP §A) and `init` writes a whole
     layout under it — backlog, memory, charters, the integration record, and in package mode the
-    materialized hooks. An absolute path or one climbing out with `..` would scatter all of that
-    outside the project the caller named, silently, because every later step simply follows the
-    variable. Checked both lexically and by resolution: a symlinked segment can leave the project
-    without a single `..` in the string.
+    materialized imported guardrails. An absolute path or one climbing out with `..` would
+    scatter all of that outside the project the caller named, silently, because every later step
+    simply follows the variable. Checked both lexically and by resolution: a symlinked segment
+    can leave the project without a single `..` in the string.
     """
     raw = value.strip()
     # Absoluteness is decided on the *raw* value: stripping the slashes first would turn
@@ -669,8 +669,9 @@ def _agents_block(aitna: str, package_mode: bool, ref: str, archetype: str, lang
         else f"roles: [`{aitna}/akmon/roles/`]({aitna}/akmon/roles/)"
     )
     shared_layer = (
-        "installed `akmon` package (always-on surface materialized at "
-        f"`{aitna}/.akmon/`; `akmon path` locates the rest)"
+        "installed `akmon` package (hooks and tools run from it via `akmon hook`; only the "
+        f"imported guardrails are materialized, at `{aitna}/.akmon/guardrails/`; `akmon path` "
+        "locates the rest)"
         if package_mode
         else f"`{aitna}/akmon/`"
     )
@@ -964,7 +965,7 @@ def main(argv: list[str] | None = None) -> int:
     # --- generated surface: sync, then model routing ---------------------------------
     from akmon import cli
 
-    log("running sync (generated pointers, hook wiring, package-mode materialization)")
+    log("running sync (generated pointers, hook wiring, imported guardrails)")
     code = cli._dispatch("sync", ["--project-root", str(root)], cwd=root)
     if code != 0:
         print(f"akmon init: sync failed ({code}); the attach is incomplete", file=sys.stderr)
@@ -993,8 +994,10 @@ def main(argv: list[str] | None = None) -> int:
         next_steps.insert(
             0,
             "**pin akmon in the project's dependency manifest**, in a **dev** group (never a runtime "
-            f'dependency): "akmon @ git+{AKMON_REPO}@{ref}" — until it is there, `akmon` cannot resolve '
-            "in this project and neither the CI checks nor the hooks' recovery commands can run",
+            f'dependency): "akmon @ git+{AKMON_REPO}@{ref}" — then install it into a virtualenv inside '
+            "the project root. Until both are done, `akmon` cannot resolve here: the CI checks cannot "
+            "run, and the generated hook commands fail silently because the console script they name "
+            "does not exist",
         )
     elif package_mode and pin_status == "runtime":
         next_steps.insert(

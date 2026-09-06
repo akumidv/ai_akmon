@@ -5,12 +5,13 @@
 
 The cross-project standard for **how an AI assistant helps develop, and helps use, each
 project**. A consumer either mounts the repository at `_aitna/akmon/` or pins the
-`akmon` package as a development dependency and materializes its runtime surface at
-`_aitna/.akmon/` ([ADR 0009](meta/decisions/0009-packaging-package-carrier-and-mount-modes.md)).
+`akmon` package as a development dependency and runs it from there — with only the
+guardrails its `AGENTS.md` imports materialized at `_aitna/.akmon/guardrails/`
+([ADR 0009](meta/decisions/0009-packaging-package-carrier-and-mount-modes.md)).
 The standard is **LLM-agnostic** at the policy layer: plain Markdown/JSON that any assistant
 or human can read. Enforcement depth remains vendor-specific, and the single entry point in
 a consuming project is its root `AGENTS.md`. `akmon init`, `sync`, `verify`, `path` and
-package-mode materialization are implemented for all four mount modes; public PyPI
+`hook` are implemented for all four mount modes; public PyPI
 publication is still pending (pin by git tag until then).
 
 **New consumer? Run `akmon init`** (Quick start below) — it attaches akmon to a project.
@@ -140,7 +141,7 @@ Three movements, each defined once here and reused by every project:
    the project's archetype and language; resolve its guardrails and profiles; create the LOCAL layout
    (`_aitna/{agents,skills,tools,memory}` + `TASKS.md`); write the akmon block into the
    project's `AGENTS.md` and the machine-readable integration record `.akmon.toml`; wire
-   the hooks into vendor config; run `akmon sync` (generated pointers/materialization) and
+   the hooks into vendor config; run `akmon sync` (generated pointers, hook wiring) and
    `akmon verify --strict` (contract check). The agent prepares everything — **the owner
    commits**.
 2. **Stay current.** A project pins an akmon version; a bump is a **delta-check** against
@@ -244,7 +245,8 @@ consumer before tagging, point the consumer at the working copy — work directl
 mounted submodule (it *is* a checkout of `ai_akmon`), or, for a `package`-mode uv consumer,
 override the pin with a local editable install: `[tool.uv.sources] akmon = { path =
 "../ai_akmon", editable = true }` in its `pyproject.toml` (or ephemerally
-`uv pip install -e ../ai_akmon`, which lasts until the next `uv sync`); `akmon sync` then
-re-materializes hooks/guardrails from the working copy. When done: commit + tag here, drop
+`uv pip install -e ../ai_akmon`, which lasts until the next `uv sync`); the wired hooks then
+run straight out of the working copy, and `akmon sync` refreshes the imported guardrails
+from it. When done: commit + tag here, drop
 the override, return the consumer to the tag pin. (This workflow lives here on purpose —
 BOOTSTRAP is consumer-only: developing *with* akmon, never akmon itself.)

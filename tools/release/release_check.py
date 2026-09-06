@@ -212,9 +212,9 @@ _TAG_SHAPE_RE = re.compile(r"^v?\d+\.\d+\.\d+$")
 def _pyproject_version(path: Path) -> str | None:
     """``[project].version`` from ``pyproject.toml``, or ``None`` when there is none.
 
-    ``tomllib`` when the host has it (3.11+), else a section-scoped line scan — the same
-    stdlib-only shape as :func:`_read_akmon_toml`, and section-scoped so a ``version`` belonging
-    to some other table is never mistaken for the project's.
+    Python 3.11+ ``tomllib``, with a section-scoped line scan retained as a defensive
+    stdlib-only fallback. It is section-scoped so a ``version`` belonging to some other table
+    is never mistaken for the project's.
     """
     if not path.is_file():
         return None
@@ -496,9 +496,9 @@ def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: 
 def _read_akmon_toml(path: Path) -> dict:
     """Read `<AITNA_ROOT>/.akmon.toml` into a nested dict (mirrors `sync.read_akmon_toml`).
 
-    Kept self-contained — this tool does not import `sync` — and stdlib-only: `tomllib` when
-    present (3.11+), else a minimal fallback for the record's subset (flat `key = "value"`,
-    `[section]`, `#` comments) so it works on a consumer host with an older Python."""
+    Kept self-contained — this tool does not import `sync` — and stdlib-only: Python 3.11+
+    `tomllib`, with a minimal defensive fallback for malformed records in the documented subset
+    (flat `key = "value"`, `[section]`, `#` comments)."""
     if not path.is_file():
         return {}
     try:

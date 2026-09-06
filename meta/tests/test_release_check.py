@@ -92,7 +92,7 @@ def test_dev_venv_discovered_as_python_dash_m(tmp_path):
 
 
 def test_toml_read_falls_back_when_tomllib_absent(tmp_path, monkeypatch):
-    # Host Python < 3.11 has no tomllib: the stdlib line-parser fallback must still read the record.
+    # Injected import failure exercises fail-open behavior, not a pre-3.11 support promise.
     _attach(tmp_path, 'akmon_version = "v9"\n\n[test]\nrunner = "poetry run pytest"\n')
     real_import = builtins.__import__
 

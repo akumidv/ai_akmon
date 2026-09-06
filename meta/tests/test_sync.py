@@ -377,7 +377,7 @@ def test_full_generation_under_custom_root_is_idempotent(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# read_akmon_toml — the pre-3.11 fallback must agree with tomllib on inline comments
+# read_akmon_toml — the defensive fallback must agree with tomllib on inline comments
 # --------------------------------------------------------------------------------------
 
 

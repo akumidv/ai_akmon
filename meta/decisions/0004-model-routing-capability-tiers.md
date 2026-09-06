@@ -1,6 +1,7 @@
 # 0004 — Model routing: capability tiers, task-kind matrix, ladder binding
 
-- **Status:** Accepted (owner-scoped; implementation phased).
+- **Status:** Base decision accepted (owner-scoped; implementation phased); the D2-5 amendment is
+  owner-approved and awaits landing.
 - **Owner:** akuminov@gmail.com
 - **References:** [MODEL.md](../../MODEL.md) (the operation axis the tiers bind to) ·
   [guardrails/_common.md](../../guardrails/_common.md) (gains the floor rule) ·
@@ -88,3 +89,23 @@ project with per-session override.
 - Rejected branches (polar two-tier routing, per-model binding tables, complexity
   scoring, prose-only skill, chat-narrated switches) stay on record in the design
   concept with revisit-if conditions.
+
+## Amendment — delegation model attribution (D2-5)
+
+Decision 5's “model switches are visible” is narrowed to the model selection akmon can actually
+observe on the Claude delegation route. The TSV model column and its `systemMessage` render the
+call's explicit model override, else the generated agent's recorded binding pin, else `-`. This is
+the declared selection captured at delegation time, not an independent observation of the model
+the harness launched; a later rebind never rewrites an existing row. Host built-ins and
+semantic-fallback bindings have no generated pin and therefore remain `-` unless the call carries
+an explicit override. A malformed or stale recorded ladder cannot be promoted into a claimed pin.
+
+This amendment makes no Codex delivery claim: `delegation-log.py` is wired only on Claude's
+subagent route, and Codex receives neither this record nor its UI message. Accepted cost: rows with
+no declared model remain counted under the `-` requested-model bucket and are not attributed to a
+named model; Codex has no equivalent attribution. Rejected: payload-only attribution, because
+ordinary generated-agent calls omit the frontmatter pin; rendering semantic tier labels as model
+names, because that asserts a pin that does not exist; and reconstructing old rows from the current
+binding, because a rebind would rewrite historical attribution. The operative contract and carriers
+are [D2-5](../D2_LEDGER.md) and the design's
+[§4.4](../design/model-routing.md#44-routing-observability-code--delegation-log-outside-model-context).

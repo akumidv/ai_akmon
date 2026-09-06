@@ -191,9 +191,10 @@ Four clauses fix what the table alone leaves open:
   seeds a narrow archetype-derived default, moving the default from *off* to *on and narrow* without
   touching existing consumers. Erroring on a ledger with no globs is rejected: it contradicts
   [ADR 0007](0007-d2-ledger.md) §4's warn-first decision — a red gate before the habit holds gets
-  routed around — and punishes a project that keeps the ledger deliberately by hand. One limit
-  survives every option: `tomllib` is 3.11+ stdlib, so on an older host the globs read as empty
-  however they are configured, and only the marker's wording describes that state.
+  routed around — and punishes a project that keeps the ledger deliberately by hand. Under the
+  former Python 3.9 floor, an older host read the globs as empty because `tomllib` was unavailable.
+  C68/D2-34 later removed that supported-host limitation with one Python >=3.11 floor; import
+  failure remains conservative but is no longer a supported runtime.
 - **Grammar and namespaces are locked.** In `Runtime check: <id> — <prose>` the ID is the **first
   token** and everything after ` — ` is human prose the parser ignores; the tail is not decoration,
   because five of the six markers claim a subset and a subset can only be described in words.
@@ -587,8 +588,9 @@ is written rather than what any single one says:
   text, because non-emptiness cannot see whether a rationale says what is required of it; for
   classifications added later, non-emptiness is the mechanical half and review owns the substance.
 - **Coverage of the D2 reminder is honestly the consumer's**, and stays visible as a reported
-  state. One limit survives every option: `tomllib` is 3.11+ stdlib, so on an older host the globs
-  read as empty however they are configured, and only the marker's wording describes that state.
+  state. Under the former Python 3.9 floor, an older host read the globs as empty because
+  `tomllib` was unavailable. C68/D2-34 later removed that supported-host limitation with one
+  Python >=3.11 floor; import failure remains conservative but is no longer a supported runtime.
 - **Never-reuse has a manual cost (F14).** Whoever removes a check must append its code to the
   retired-code record; forgetting the append restores the current blind spot, rather than making
   it mechanically impossible.

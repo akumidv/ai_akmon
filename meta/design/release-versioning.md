@@ -441,12 +441,13 @@ Version classes:
 
 - `patch` — fixes or internal process changes with no consuming-project migration.
 - `minor` — new capabilities or stricter checks that are backward-compatible.
-- `major` — breaking changes to akmon layout, required files, role/pipeline contracts, or
-  generated artifacts.
+- `major` — breaking changes to akmon layout, required files, runtime compatibility,
+  role/pipeline contracts, or generated artifacts.
 
 **Decision — `v0.x.y` until the standard stabilizes.** While akmon is pre-1.0, the compat
-signal is carried by `x`: bump `x` for any **breaking** change to layout, required files, or a
-role/pipeline contract; bump `y` for `minor`/`patch`. This is the cheapest signal that lets a
+signal is carried by `x`: bump `x` for any **breaking** change to layout, required files, runtime
+compatibility, or a role/pipeline contract; bump `y` for `minor`/`patch`. This is the cheapest
+signal that lets a
 consumer decide whether to bump a pin without reading commits — the stated goal in §Frame.
 Promote to strict SemVer (`1.0.0`) only once the role/pipeline contracts stop moving.
 

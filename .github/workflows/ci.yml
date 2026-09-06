@@ -12,9 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.9 is the package floor (pyproject requires-python); 3.13 is current.
-        # tomllib-dependent d2 tests self-skip below 3.11 (see meta/tests markers).
-        python-version: ["3.9", "3.13"]
+        # 3.11 is the supported floor (pyproject requires-python); 3.13 is the upper leg.
+        python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
 

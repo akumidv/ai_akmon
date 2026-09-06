@@ -57,7 +57,14 @@ CODE_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$
 #: Codes spent by checks that no longer exist. A slug listed here may never be issued again,
 #: so a consumer who greps their history is never shown two different rules under one name.
 #: Empty while no check has been removed; appending on deletion is process-owned (F14).
-RETIRED_CODES = frozenset()
+RETIRED_CODES = frozenset(
+    {
+        # verify's package-mode short-circuit for check_hooks. Removed by C77: there is nothing
+        # left to be redundant with, since package mode materializes no hooks and the wiring
+        # rests on the scripts being present in the tree instead.
+        "hooks.package-mode",
+    }
+)
 
 # A sentence terminator followed by more text — the mechanical half of "one sentence".
 # The uppercase lookahead catches the compact but still multi-sentence ``Do this.Then that.``

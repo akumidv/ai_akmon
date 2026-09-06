@@ -18,13 +18,13 @@ The rules that make a module belong here, all of them load-bearing:
 - **Standard library only, and no project imports.** These modules run venv-free from a hook,
   from ``tools/``, and from an installed wheel's embedded tree; anything they import has to be
   present in all three.
-- **Python 3.9.** The floor the package declares (``requires-python``), older than the tree's
-  own dev environment, so it is checked, not assumed.
+- **Python 3.11.** The single floor declared by the package and every shipped venv-free entry
+  point, checked by the lower CI leg rather than inferred from the development interpreter.
 - **Reachable at the same tree-relative path from every carrier**: the mounted
-  ``<AITNA_ROOT>/akmon/``, the materialized ``<AITNA_ROOT>/.akmon/`` copy that package mode
-  writes, and ``akmon/_tree/`` inside the wheel. That is what lets one owner exist at all, and
-  it is why this directory is in both ``pyproject.toml``'s force-include list and
-  ``bin/sync.py::_materialized_files``.
+  ``<AITNA_ROOT>/akmon/`` and ``akmon/_tree/`` inside the wheel — which since C77 is where a
+  package-mode consumer's hooks run from, rather than a copy in its repository. That is what
+  lets one owner exist at all, and it is why this directory is in ``pyproject.toml``'s
+  force-include list.
 
 Deliberately no re-exports here: a fact has one spelling, and ``from common import X``
 beside ``from common.x import X`` would be two.

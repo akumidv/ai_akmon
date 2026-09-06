@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 _KEYSTONE_ROOT = Path(__file__).resolve().parents[1]
@@ -104,6 +106,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "pipelines/tasks.md",
         "common/__init__.py",
         "common/findings.py",
+        "common/materialization.py",
         "common/project_root.py",
         "common/record.py",
         "common/runtime.py",
@@ -169,6 +172,19 @@ def _leg(
     return False
 
 
+def _assert_wheel_python_floor(wheel: Path) -> None:
+    """Fail unless the built wheel carries exactly one Python >=3.11 metadata field."""
+    with zipfile.ZipFile(wheel) as archive:
+        metadata_names = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+        if len(metadata_names) != 1:
+            raise RuntimeError(f"wheel has {len(metadata_names)} METADATA files; expected exactly one")
+        metadata = archive.read(metadata_names[0]).decode("utf-8")
+    fields = [line for line in metadata.splitlines() if line.startswith("Requires-Python:")]
+    if fields != ["Requires-Python: >=3.11"]:
+        rendered = ", ".join(fields) if fields else "missing"
+        raise RuntimeError(f"wheel Requires-Python must be exactly >=3.11; got {rendered}")
+
+
 def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path) -> None:
     """The package leg: build the wheel, install it, and attach a fresh consumer with the
     installed console script — `akmon init` → `sync` → routing init → `verify --strict`.
@@ -179,16 +195,23 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path) -> None:
     hook-runtime contract hold for a real installation rather than for a dev bench.
     """
     dist = tmp_root / "dist"
-    venv = tmp_root / "venv"
     fixture = tmp_root / "package-consumer"
+    fixture.mkdir(parents=True)
+    # The venv lives **inside the fixture**, because mode `package` requires exactly that
+    # (ADR 0009 §4): the generated hook wiring names the console script by a project-relative
+    # path, and that wiring is a committed file every developer runs. A venv elsewhere would
+    # only be spellable absolutely, which is a silent break for everyone but its owner.
+    venv = fixture / ".venv"
+    # A git repository, because the Codex wiring anchors on `git rev-parse --show-toplevel`.
+    _checked(["git", "init", "-q", str(fixture)])
     _checked(["uv", "build", "--wheel", "--out-dir", str(dist)], cwd=akmon_root)
     wheel = next(dist.glob("akmon-*.whl"))
+    _assert_wheel_python_floor(wheel)
     _checked(["uv", "venv", str(venv)])
     python = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
     akmon = venv / ("Scripts/akmon.exe" if sys.platform == "win32" else "bin/akmon")
     _checked(["uv", "pip", "install", "--python", str(python), str(wheel)])
 
-    fixture.mkdir(parents=True)
     # The manifest a package-mode consumer must carry: mode `package` mounts no tree, so this
     # dev-group declaration *is* the pin (ADR 0009 §4) — `init` ends non-zero without it, and
     # `verify --strict` keeps reporting it, so the fixture has to look like a real consumer.
@@ -204,19 +227,110 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path) -> None:
     for command in (["sync", "--check"], ["verify", "--strict", "--quiet"]):
         _checked([str(akmon), *command], cwd=fixture)
 
+    # Nothing executable is materialized any more: the wiring calls `akmon hook`, which runs
+    # the hooks out of the wheel. Assert the absence, or the next regression re-adds the copies
+    # and every check below still passes.
+    materialized = sorted(
+        path.relative_to(fixture).as_posix()
+        for path in (fixture / "_aitna" / ".akmon").rglob("*")
+        if path.is_file()
+    )
+    if materialized != ["_aitna/.akmon/guardrails/_common.md"]:
+        raise RuntimeError(f"package mode materialized more than the imported guardrails: {materialized}")
+
     nested = fixture / "src" / "package"
     nested.mkdir(parents=True)
-    completed = subprocess.run(
-        [str(python), str(fixture / "_aitna" / ".akmon" / "hooks" / "codex-hook.py"), "session-start"],
-        input=json.dumps({"cwd": str(nested)}),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    output = json.loads(completed.stdout)
-    context = output["hookSpecificOutput"]["additionalContext"]
-    assert "DEVELOP (build the project): architect, engineer, review" in context
-    assert "Delegation is the default for non-atomic work" in context
+    _run_generated_hook_commands(fixture, nested)
+
+
+def _generated_hook_commands(fixture: Path) -> list[tuple[str, str, str]]:
+    """Every ``(vendor, event, command)`` triple the two generated wirings name, read from the
+    generated files themselves — not rebuilt from the templates that wrote them."""
+    triples: list[tuple[str, str, str]] = []
+    for vendor, relative in (("claude", ".claude/settings.json"), ("codex", ".codex/hooks.json")):
+        document = json.loads((fixture / relative).read_text(encoding="utf-8"))
+        for event, entries in document.get("hooks", {}).items():
+            for entry in entries:
+                for hook in entry.get("hooks", []):
+                    triples.append((vendor, event, hook["command"]))
+    return triples
+
+
+# A patch body in the shape codex 0.146.0 actually sends (``tool_input.command``), so the
+# advisories receive a real target instead of raising their own no-path diagnostic.
+_CODEX_PATCH = "*** Begin Patch\n*** Update File: src/package/probe.py\n+print(1)\n*** End Patch\n"
+
+
+def _hook_payload(vendor: str, event: str, cwd: Path) -> dict:
+    """A payload of the shape each vendor really sends for ``event``.
+
+    Realistic rather than minimal on purpose: a tool event with no readable target makes the
+    advisories report *their own* defect signal on stderr, which would mask the thing this
+    leg is watching for.
+    """
+    payload: dict = {"cwd": str(cwd), "session_id": "self-ci", "hook_event_name": event}
+    if event != "PreToolUse":
+        return payload
+    payload["tool_use_id"] = "self-ci-1"
+    if vendor == "codex":
+        payload["tool_name"] = "apply_patch"
+        payload["tool_input"] = {"command": _CODEX_PATCH}
+    else:
+        payload["tool_name"] = "Edit"
+        payload["tool_input"] = {"file_path": str(cwd / "src" / "package" / "probe.py")}
+    return payload
+
+
+def _run_generated_hook_commands(fixture: Path, nested: Path) -> None:
+    """Run every generated hook command **verbatim**, the way the harness runs it.
+
+    Verbatim and through a shell because the command *is* the artifact under test: the vendor
+    anchors (``$CLAUDE_PROJECT_DIR``, ``$(git rev-parse --show-toplevel)``) and the console
+    script path are the parts that break, and a reconstructed invocation would test something
+    the harness never runs.
+
+    The size of stdout is checked, not only the exit code, because that is the only signal that
+    separates "the hook decided to stay quiet" from "the hook silently found no tree to read":
+    a hook command whose runtime root is wrong exits 0 with an empty stderr. So the two hooks
+    that must always speak — the Codex session brief and the Claude routing status — are
+    required to produce output, while the advisories are only required not to fail.
+    """
+    environment = {**os.environ, "CLAUDE_PROJECT_DIR": str(fixture)}
+    speaking = 0
+    for vendor, event, command in _generated_hook_commands(fixture):
+        # Codex is handed the *nested* cwd, which is what pins root discovery from a
+        # subdirectory; Claude's session-start wrapper takes the payload cwd as the root
+        # directly, so it gets the project root.
+        cwd = nested if vendor == "codex" else fixture
+        payload = json.dumps(_hook_payload(vendor, event, cwd))
+        completed = subprocess.run(
+            command,
+            shell=True,
+            cwd=fixture,
+            env=environment,
+            input=payload,
+            capture_output=True,
+            text=True,
+        )
+        label = f"{vendor} {event}: {command}"
+        if completed.returncode != 0:
+            raise RuntimeError(f"generated hook command failed ({label}): {completed.stderr.strip()}")
+        if completed.stderr.strip():
+            raise RuntimeError(f"generated hook command wrote to stderr ({label}): {completed.stderr.strip()}")
+        if event == "SessionStart":
+            # Every SessionStart hook has something to say in a freshly attached project. The
+            # per-turn hooks are silent by design, so only these are required to speak.
+            if not completed.stdout.strip():
+                raise RuntimeError(f"generated hook command produced no output ({label})")
+            speaking += 1
+            if vendor == "codex":
+                context = json.loads(completed.stdout)["hookSpecificOutput"]["additionalContext"]
+                if "DEVELOP (build the project): architect, engineer, review" not in context:
+                    raise RuntimeError(f"session-start hook lost its role brief ({label})")
+                if "Delegation is the default for non-atomic work" not in context:
+                    raise RuntimeError(f"session-start hook lost its delegation rule ({label})")
+    if speaking < 3:  # codex session-start + claude session-start-agent + claude model-routing
+        raise RuntimeError(f"expected the always-speaking hooks to be wired; saw {speaking}")
 
 
 def _wheel_smoke_report(detail: str) -> tuple[str, str]:

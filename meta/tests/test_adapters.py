@@ -17,12 +17,10 @@ import claude_adapter
 import codex_adapter
 import hook_core
 import pytest
+import routing
 import sync
 
-requires_tomllib = pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="tomllib is 3.11+ stdlib; .akmon.toml reading degrades to silent on older hosts by design",
-)
+from common.materialization import materialized_markdown
 
 
 def _codex_hook():
@@ -161,7 +159,6 @@ def test_role_on_code_fires_on_the_captured_codex_payload(monkeypatch, tmp_path,
     assert emitted["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message()
 
 
-@requires_tomllib
 def test_d2_ledger_reminder_fires_on_the_captured_codex_payload(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
     root = _codex_project(tmp_path, sensitive='["src/**"]')
@@ -206,7 +203,6 @@ def test_the_rename_destination_is_a_measured_path_not_a_guessed_one():
     assert codex_adapter.unmeasured_path_source(payload) is False
 
 
-@requires_tomllib
 def test_a_file_moved_into_a_sensitive_path_reaches_the_d2_advisory(monkeypatch, tmp_path, capsys):
     # The case the gap cost: neither endpoint is unusual on its own, but the *destination* is
     # D2-sensitive and the source is not, so reading the `File:` lines alone skipped the
@@ -491,7 +487,6 @@ def test_analysis_advisory_fires_on_an_adjacent_heredoc(monkeypatch, tmp_path, c
     assert "may mutate the filesystem" not in captured.err
 
 
-@requires_tomllib
 def test_d2_advisory_fires_on_a_patch_the_shell_carried(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
     root = _codex_project(tmp_path, sensitive='["src/**"]')
@@ -846,6 +841,165 @@ def test_delegation_log_system_message_without_description():
     assert msg == "[akmon] → k_reasoner (reasoner)"
 
 
+def _delegation_log_payload(tmp_path, transcript, subagent_type):
+    return {
+        "tool_name": "Task",
+        "tool_input": {"subagent_type": subagent_type, "description": "do the work"},
+        "session_id": "sess-c20",
+        "cwd": str(tmp_path),
+        "transcript_path": str(transcript),
+    }
+
+
+def _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, config=None):
+    """Wire the hook onto ``tmp_path``. With ``config``, the local routing config is written
+    to disk and read by the hook itself, so the config -> bound model -> console line chain
+    is exercised end to end instead of being stubbed away."""
+    akmon_root = Path(hook_core.__file__).parent.parent
+    registry = deleg_log.routing.load_registry(akmon_root, tmp_path)
+    base_registry = {**registry, "cross_cutting_kinds": []}
+    monkeypatch.setattr(deleg_log, "load_payload", lambda: payload)
+    monkeypatch.setattr(deleg_log, "find_project_root", lambda _path: tmp_path)
+    monkeypatch.setattr(deleg_log, "akmon_runtime_root", lambda _root: akmon_root)
+    if config is None:
+        monkeypatch.setattr(deleg_log, "_load_config", lambda _root: {})
+    else:
+        path = tmp_path / deleg_log.routing.LOCAL_CONFIG_REL
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(config), encoding="utf-8")
+    monkeypatch.setattr(deleg_log.routing, "load_registry", lambda *_args: base_registry)
+
+
+def test_delegation_log_role_advisory_is_system_message_only(tmp_path, monkeypatch, capsys):
+    deleg_log = _claude_hook("delegation-log.py")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}})
+        + "\n",
+        encoding="utf-8",
+    )
+    payload = _delegation_log_payload(tmp_path, transcript, "k_mechanic")
+    _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload)
+
+    assert deleg_log.main() == 0
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
+    assert "permissionDecision" not in emitted["hookSpecificOutput"]
+    assert "[akmon] → k_mechanic: do the work" in emitted["systemMessage"]
+    assert "role/task-kind: k_mechanic" in emitted["systemMessage"]
+
+
+def test_delegation_log_allowed_agent_stays_silent(tmp_path, monkeypatch, capsys):
+    deleg_log = _claude_hook("delegation-log.py")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}})
+        + "\n",
+        encoding="utf-8",
+    )
+    payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
+    _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload)
+
+    assert deleg_log.main() == 0
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["systemMessage"] == "[akmon] → k_explorer: do the work"
+    assert "permissionDecision" not in emitted["hookSpecificOutput"]
+
+
+def _bound_config(available):
+    """A local routing config as ``routing.local_config`` writes it, bound or semantic."""
+    akmon_root = Path(hook_core.__file__).parent.parent
+    sys.path.insert(0, str(akmon_root / "tools" / "model_routing"))
+    import routing
+
+    registry = routing.load_registry(akmon_root)
+    binding = routing.compute_binding(registry, "opus", available, "anthropic")
+    return routing.local_config(registry=registry, binding=binding, second_opinion=False, available=available)
+
+
+def test_delegation_log_names_the_bound_model(tmp_path, monkeypatch, capsys):
+    """The hook reads the config itself: console line and record name the pinned model."""
+    deleg_log = _claude_hook("delegation-log.py")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
+        encoding="utf-8",
+    )
+    payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
+    config = _bound_config(["haiku", "sonnet", "opus", "fable"])
+    _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, config=config)
+
+    assert deleg_log.main() == 0
+    emitted = json.loads(capsys.readouterr().out)
+    worker = config["binding"]["worker"]
+    assert emitted["systemMessage"] == f"[akmon] → k_explorer ({worker}): do the work"
+    log_line = (tmp_path / deleg_log.routing.DELEGATION_LOG_REL).read_text(encoding="utf-8").strip()
+    assert log_line.split("\t")[3] == worker
+
+
+def test_delegation_log_reports_no_model_without_a_bound_ladder(tmp_path, monkeypatch, capsys):
+    """Semantic fallback has no pin to report: the label must not be shown as a model.
+
+    Without a recorded ``available`` ladder the generated agent files carry no ``model:``
+    line, so the host inherits the session's model. Naming the tier label (``worker``,
+    ``strongest``) here would assert a pin that does not exist, in the console and in the
+    record the coverage map and the stats digest read.
+    """
+    deleg_log = _claude_hook("delegation-log.py")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
+        encoding="utf-8",
+    )
+    payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
+    config = _bound_config(None)
+    assert config["binding"]["worker"] == "worker"  # the label the old guard let through
+    _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, config=config)
+
+    assert deleg_log.main() == 0
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["systemMessage"] == "[akmon] → k_explorer: do the work"
+    log_line = (tmp_path / deleg_log.routing.DELEGATION_LOG_REL).read_text(encoding="utf-8").strip()
+    assert log_line.split("\t")[3] == "-"
+
+
+@pytest.mark.parametrize("available", ["haiku", 42])
+def test_delegation_log_rejects_malformed_available_without_losing_record(
+    available, tmp_path, monkeypatch, capsys
+):
+    """Malformed local config yields no pin and cannot suppress the delegation record."""
+    deleg_log = _claude_hook("delegation-log.py")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
+        encoding="utf-8",
+    )
+    payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
+    config = {"binding": {"worker": "haiku"}, "available": available}
+    _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, config=config)
+
+    assert deleg_log.main() == 0
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["systemMessage"] == "[akmon] → k_explorer: do the work"
+    log_line = (tmp_path / deleg_log.routing.DELEGATION_LOG_REL).read_text(encoding="utf-8").strip()
+    assert log_line.split("\t")[3] == "-"
+
+
+def test_delegation_log_ordinary_exception_returns_zero(tmp_path, monkeypatch, capsys):
+    deleg_log = _claude_hook("delegation-log.py")
+    payload = _delegation_log_payload(tmp_path, tmp_path / "missing.jsonl", "k_mechanic")
+    _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload)
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("seeded C20 failure")
+
+    monkeypatch.setattr(deleg_log.routing, "delegation_log_line", fail)
+    assert deleg_log.main() == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert len(captured.err.splitlines()) == 1
+
+
 def test_find_project_root_in_package_mode_from_nested_directory(tmp_path):
     project = tmp_path / "project"
     (project / "_aitna").mkdir(parents=True)
@@ -855,11 +1009,10 @@ def test_find_project_root_in_package_mode_from_nested_directory(tmp_path):
     nested.mkdir(parents=True)
 
     assert hook_core.find_project_root(nested) == project.resolve()
-    assert hook_core.akmon_runtime_root(project) == project / "_aitna" / ".akmon"
 
 
 # --------------------------------------------------------------------------------------
-# akmon_runtime_root — the record vetoes the directory check (C69/D2-26)
+# akmon_runtime_root — the carrier answers, and no mount state changes the answer (C77)
 # --------------------------------------------------------------------------------------
 
 
@@ -876,37 +1029,53 @@ def _runtime_root_case(tmp_path, *, record: str | None, mount: bool):
 
 
 @pytest.mark.parametrize(
-    ("name", "record", "mount", "expected"),
+    ("name", "record", "mount"),
     [
-        # The two states the directory check got wrong, and the reason this rule exists: the
-        # hooks bound a stale tree's registry and printed its tool paths, silently.
-        ("package record beside a stale mount", 'mount = "package"\n', True, ".akmon"),
-        ("package record written with a comment", 'mount = "package"  # materialized\n', True, ".akmon"),
-        # Everything the fix must not lose. A record that says nothing is not a declaration:
-        # projects predating the `mount` field carry no record and must still find their mount.
-        ("package record, no mount", 'mount = "package"\n', False, ".akmon"),
-        ("submodule record with its mount", 'mount = "submodule"\n', True, "akmon"),
-        ("no record, mount present", None, True, "akmon"),
-        ("no record, no mount", None, False, ".akmon"),
-        # Fail-safe: a record a hook cannot parse must leave the previous answer standing
-        # rather than abort a session over a file it only consults.
-        ("unparseable record beside a mount", "mount = \x00broken\n", True, "akmon"),
+        # The states kept verbatim from the rule this replaced (C69/D2-26): the two the old
+        # directory check got wrong, the ones its fix had to preserve, and the unparseable
+        # record. The point of the table is now that **none of them changes the answer** —
+        # the hook runs from a tree, and that tree is the answer.
+        ("package record beside a stale mount", 'mount = "package"\n', True),
+        ("package record written with a comment", 'mount = "package"  # materialized\n', True),
+        ("package record, no mount", 'mount = "package"\n', False),
+        ("submodule record with its mount", 'mount = "submodule"\n', True),
+        ("no record, mount present", None, True),
+        ("no record, no mount", None, False),
+        ("unparseable record beside a mount", "mount = \x00broken\n", True),
     ],
 )
-def test_the_recorded_mount_vetoes_the_directory_check(tmp_path, name, record, mount, expected):
+def test_the_runtime_root_is_the_executing_tree_in_every_mount_state(tmp_path, name, record, mount):
     project = _runtime_root_case(tmp_path, record=record, mount=mount)
-    assert hook_core.akmon_runtime_root(project).name == expected, name
+    assert hook_core.akmon_runtime_root(project) == hook_core._TREE_ROOT, name
 
 
-def test_the_hooks_and_sync_agree_on_which_tree_a_package_project_runs(tmp_path):
-    """The disagreement itself, pinned: two owners of one decision must not answer differently.
+def test_a_stale_mount_cannot_shadow_the_executing_tree(tmp_path):
+    """What the record-veto rule defended against, held by construction rather than by a read.
 
-    ``sync`` has always read the record; the hooks read the directory. This asserts the join
-    rather than each side separately, because the defect only existed in the gap between them.
+    ``sync`` still reads the record and reports package mode; the hook answers with its own
+    carrier. The leftover ``_aitna/akmon`` from a prior mode is not a candidate at all, because
+    a tree that is not executing cannot be the tree that is executing.
     """
     project = _runtime_root_case(tmp_path, record='mount = "package"\n', mount=True)
     assert sync.is_package_mode(project) is True
-    assert hook_core.akmon_runtime_root(project) == project / "_aitna" / ".akmon"
+    assert hook_core.akmon_runtime_root(project) == hook_core._TREE_ROOT
+    assert hook_core.akmon_runtime_root(project) != project / "_aitna" / "akmon"
+
+
+def test_the_hook_reaches_the_routing_registry_in_package_mode(tmp_path):
+    """The regression this change is one mistake away from: a package-mode session with no
+    model routing at all.
+
+    ``model_routing_result`` returns ``None`` when the registry is not under the runtime root —
+    silently, at exit 0 — so pointing the runtime root at the materialization (which carries no
+    registry any more) would take the status line and the delegation log out of every session
+    with nothing to show for it. Asserted through ``routing.registry_path`` on the hook's own
+    answer, which is the exact expression the guard evaluates.
+    """
+    project = _runtime_root_case(tmp_path, record='mount = "package"\n', mount=False)
+    runtime = hook_core.akmon_runtime_root(project)
+    assert routing.registry_path(runtime).is_file()
+    assert routing.load_registry(runtime, project)
 
 
 def test_session_start_contains_capability_neutral_delegation_rule(tmp_path):
@@ -920,3 +1089,37 @@ def test_session_start_contains_capability_neutral_delegation_rule(tmp_path):
     assert result.additional_context is not None
     assert "Delegation is the default for non-atomic work" in result.additional_context
     assert "harness exposes no subagents" in result.additional_context
+
+
+def test_stale_guardrail_notice_reaches_both_vendor_wirings(monkeypatch, tmp_path, capsys):
+    """The notice lives in ``session_start_result``, the SessionStart logic both vendors already
+    call, so it needed no new hook and no wiring change — which matters: a regenerated
+    ``.codex/hooks.json`` invalidates the host's approval of every changed group.
+
+    Claude carries it on both channels; Codex has no documented owner-facing channel, so it
+    arrives as context and the model relays it. Asserted through the serializers rather than the
+    core, because "both wirings" is the claim.
+    """
+    tree = tmp_path / "installed"
+    (tree / "guardrails").mkdir(parents=True)
+    (tree / "guardrails" / "_common.md").write_text("# Common\n\nnew rule\n", encoding="utf-8")
+    monkeypatch.setattr(hook_core, "akmon_runtime_root", lambda project_root: tree)
+
+    root = _codex_project(tmp_path)
+    dest = root / "_aitna" / ".akmon" / "guardrails"
+    dest.mkdir(parents=True)
+    (dest / "_common.md").write_text(
+        materialized_markdown("# Common\n\nold rule\n"), encoding="utf-8"
+    )
+
+    result = hook_core.session_start_result(root)
+    assert result is not None
+
+    claude_adapter.print_result(result)
+    claude_payload = json.loads(capsys.readouterr().out)
+    assert "_common.md" in claude_payload["hookSpecificOutput"]["additionalContext"]
+    assert "akmon sync" in claude_payload["systemMessage"]
+
+    _run_codex_hook(monkeypatch, "session-start", {"cwd": str(root)})
+    codex_payload = json.loads(capsys.readouterr().out)
+    assert "_common.md" in codex_payload["hookSpecificOutput"]["additionalContext"]

@@ -5,7 +5,7 @@ Consumer-facing release notes for the **akmon standard** (repo `ai_akmon`, mount
 they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-model.md)):
 
 - **Versioning `v0.x.y`** while pre-1.0 — bump `x` for a **breaking** change to layout, required
-  files, or a role/pipeline contract; bump `y` for minor/patch.
+  files, runtime compatibility, or a role/pipeline contract; bump `y` for minor/patch.
 - Entries are grouped **Added / Changed / Fixed / Breaking**; every `consumer-visible`,
   `migration`, or `breaking` change gets a line. `internal` changes need no entry.
 - A `Breaking`/`migration` line is a consumer's **re-attach checklist item** (the bump procedure
@@ -17,6 +17,12 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 ## Unreleased
 
 ### Added
+- **`akmon hook <name> [args...]` (C77):** runs one hook out of the resolved standard tree — the
+  mount when there is one, the installed package otherwise. It exists so the generated vendor
+  wiring can name a hook **without a path**, which is what a package-mode consumer needs and what
+  let the copied hook tree go (see Changed). Called by generated wiring, not by hand: the argv
+  tail passes through verbatim (`akmon hook codex-hook role-on-code`), and a path where a name
+  belongs is refused.
 - **`akmon init` (C37):** one command attaches the standard to a project in any of the four
   mount modes — `submodule` (default when the project is a git repo that can reach the akmon
   repository, pinned at the latest release tag unless `--ref` says otherwise), `vendored`
@@ -126,6 +132,45 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   silence by a filter that would hide it from them and say nothing.
 
 ### Changed
+- **Mode `package` no longer puts an executable surface in the consumer repo (C77/D2-35).**
+  `akmon sync` used to copy ~20 files into `<AITNA_ROOT>/.akmon/` — the hooks, the `common`
+  package they import, the model-routing library and its `registry.json`, the D2-ledger tool —
+  and rewrite all of them into the project's history on every version bump. They were never a
+  second implementation: the same files are installed beside the consumer inside the wheel. Now
+  the generated vendor wiring calls `"<project-root>/.venv/bin/akmon" hook <name>` and the hooks
+  run from the package. **Only the guardrails your `AGENTS.md` actually `@`-imports are still
+  materialized** (at `<AITNA_ROOT>/.akmon/guardrails/`), because `AGENTS.md` is a committed file
+  and the only path from it into the package carries the venv's Python version — and an
+  `@`-import that does not resolve reports nothing. Mounted modes are unchanged.
+  - **Those copies now say when they have gone stale.** A pin bump installs the new hooks the
+    moment the dependency resolves — they run from the package — while the guardrails in your
+    repository stay on the previous release until you run `akmon sync`. `sync --check` and
+    `verify` catch that on a commit; **SessionStart** now catches it in the session, naming the
+    files and asking for `akmon sync` plus a **new session** (the `@`-import is expanded once, at
+    session start, so a mid-session sync changes nothing already in context). Silent when the
+    release left the guardrails alone: the comparison is against the tree the hooks run from, not
+    a version string. No wiring change — it rides the SessionStart logic both vendors already
+    call.
+  - **Mode `package` now requires a virtualenv inside the project root.** The wiring is a
+    committed file every developer runs, so it cannot carry an absolute path to one person's
+    venv. `akmon verify` reports a missing `.venv/bin/akmon` as an error (`hooks.launcher`),
+    because a hook command with a missing executable fails *silently* — no stderr, no failing
+    gate, just guardrails that stopped firing. `sync` never fails over it: the first attach runs
+    `sync` before the pin is installed.
+  - **Package-mode skill stubs and hook recovery instructions now reach the standard through
+    `akmon path`.** They previously spelled a relative or absolute path into site-packages,
+    which carries the venv's Python version (`.venv/lib/python3.13/…`) and breaks on the next
+    interpreter bump.
+  - **Hooks resolve their runtime tree from their own location.** This supersedes the
+    record-vetoes-the-directory rule (C69/D2-26) for that one function; a stale mount from a
+    prior mode still cannot shadow anything, because a tree that is not executing is not a
+    candidate. `verify` also stopped skipping its hook check in package mode.
+  - **`akmon.__version__` resolves lazily, and the CLI's import path was trimmed.** The wiring
+    now calls the console script on the hottest tools of a session, so what the CLI imports is
+    paid on every tool call: the version lookup (which walks every installed distribution),
+    `importlib.resources`, `argparse` and `subprocess` are all reached only when actually
+    needed. Measured on a real package-mode consumer, running a hook through `akmon hook` costs
+    **+3.1 ms** over running the file directly.
 - **One home for the shared utilities (C74/D2-33).** `bin/` is the launcher directory —
   `sync.py` and `verify.py` — and the stdlib-only modules every carrier imports now live in a
   package of their own: `common/{project_root,findings,runtime,versions}.py` — named for the rule
@@ -180,7 +225,22 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   ([BOOTSTRAP](BOOTSTRAP.md) §F) as well as the mounted one. `akmon verify` still does not
   inspect that host state ([N7 evidence](meta/reviews/n7-codex-hook-delivery-20260825.md)).
 
+### Breaking
+- **Python 3.11 is now the single runtime floor (C68/D2-34).** Python 3.9 and 3.10 are
+  unsupported for both the package and every shipped venv-free entry point. Before adopting this
+  release, make both `python3 --version` on the generated-hook host and the interpreter used to
+  install/run `akmon` report 3.11 or newer; then rerun `akmon sync` and
+  `akmon verify --strict`. This requires a pre-1.0 `x` bump.
+
 ### Migration
+- **Package-mode consumers: re-run `akmon sync` once and commit the deletions.** The bump removes
+  `<AITNA_ROOT>/.akmon/{hooks,common,tools}/` — including the emptied directories and the
+  `__pycache__` a hook run left behind — and rewrites `.claude/settings.json` and
+  `.codex/hooks.json` to call `akmon hook`. It finishes in one run. Two preconditions, both
+  reported if unmet: the akmon dev pin must be **installed into a virtualenv inside the project
+  root** (`akmon verify` → `hooks.launcher`), and the pin itself must be declared in a dev group
+  (`verify` → `package.dev-pin`). Codex users: the rewritten `.codex/hooks.json` voids the host
+  approval of every changed group — re-approve with `/hooks` after the bump, as after any bump.
 - **`registry.json` second-opinion keys moved (C57).** `second_opinion.cli` is now
   `second_opinion.harness` and `second_opinion.invoke` is now `second_opinion.operation`; both
   refer by name into the single command owner in `common/runtime.py`, which spells the executable
@@ -199,15 +259,22 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   deliver load-bearing instructions to Codex.
 
 ### Fixed
-- **The hooks stop reading a tree the project no longer pins (C69/D2-26).** `akmon_runtime_root`
-  chose the hooks' tree by directory existence while every other owner of that decision read the
-  recorded `mount`, so a package-mode project beside a stale `<AITNA_ROOT>/akmon` from a prior
-  mode had its hooks bind the **stale** registry, classify warnings from it and print tool paths
-  into it — silently, because a wrong tree that exists looks exactly like the right one. The
-  record is now a **veto** over the directory check rather than a replacement for it: records
-  `package` → the materialization, else the mount if it exists, else the materialization. The
-  veto shape is not cosmetic — an absent record defaults to `submodule`, so a record-only rule
-  would send a project predating the `mount` field to a mount that is not there.
+- **Claude delegation model attribution (D2-5):** the console message and TSV record use the
+  explicit call override, else the generated agent's recorded binding pin, else `-`. Semantic
+  fallback and malformed or stale local ladders no longer appear as model names; host built-ins
+  remain `-`. This field records the declared selection at delegation time, not an independently
+  observed runtime identity.
+- **Claude role/task-kind advisory (C20):** role declarations are recognized only as the first
+  non-blank text of an assistant turn, so later inline and Markdown-prefixed examples no longer
+  change the active role; canonical role names are case-normalized, and warning text now renders
+  its allowed kinds deterministically. The check remains a conservative agent-level signal:
+  silence proves an allowed overlap, not the intended kind of a mixed agent.
+- **The hooks stop reading a tree the project no longer pins (C69/D2-26; superseded for the
+  runtime root by C77/D2-35).** C69 made the recorded `mount` a veto over the directory check,
+  which fixed a package-mode project binding a stale mount. C77 then removed the executable
+  materialization that decision selected: `akmon_runtime_root` now reads the tree the hook is
+  executing from. The C69 record reader and its other callers remain; only the runtime-root
+  choice is superseded.
 - **A malformed integration record no longer crashes the tools.** `read_akmon_toml` documented
   "absent or unreadable → empty", but let `tomllib`'s decode error propagate, so on Python 3.11+
   a broken `.akmon.toml` aborted `sync` and `verify` while 3.9 parsed the same file to a partial
@@ -261,14 +328,13 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   The rename literal is measured on codex-cli 0.149.1, not guessed
   ([N1/F4 evidence](meta/reviews/n1-f4-codex-timeout-20260825.md)); it was rare enough that
   zero of 345 recorded real `apply_patch` calls contained one, which is why it went unseen.
-- **Model-routing recovery names a tree that exists in package mode (C37).** The SessionStart
+- **Model-routing recovery names a tree that exists in package mode (C37, subsequently narrowed
+  by C77).** The SessionStart
   status line and the "routing needs initialization" instruction both told the session to run
   `python3 <AITNA_ROOT>/akmon/tools/model_routing/init.py` — a path a package-mode consumer does
   not have, so the one instruction that unblocks a stale or missing routing config was
-  unusable there. Both now name the mounted tree in a mounted project and the materialized
-  `<AITNA_ROOT>/.akmon/` tree in an ordinary package-mode project. **Known C69 gap:** hook-core
-  still chooses by directory existence, so a stale mount left beside a package-mode record wins
-  until the recorded-mount owner is locked and implemented.
+  unusable there. C37 first routed it through the materialized `<AITNA_ROOT>/.akmon/` tree;
+  C77's execute-from-package amendment now names the executing tree through `$(akmon path)`.
 - **`.akmon.toml` inline comments no longer end up inside the value (C37).** Three readers
   parsed that file and all three kept a trailing `# comment` as part of the value.
   `read_akmon_toml`'s pre-3.11 fallback made the exact shape BOOTSTRAP §C documents
@@ -304,9 +370,10 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   accepted form is one of the four status words, optionally followed by a qualifier —
   `blocked (after C51)`.
 - **Release check subject scoping (C9):** `--subject akmon` now runs upstream self-CI and meta tests from the akmon source root instead of running consumer-only `sync`/`verify` against the wrong layout.
-- Package-mode hooks now discover the project from nested working directories through
-  `<AITNA_ROOT>/.akmon.toml`, use `<AITNA_ROOT>/.akmon` as their runtime root, and
-  materialize the stdlib model-routing/D2 tool dependencies used by wired hooks.
+- Package-mode hooks discover the project from nested working directories through
+  `<AITNA_ROOT>/.akmon.toml`. C39 initially used `<AITNA_ROOT>/.akmon` as their runtime root and
+  materialized the stdlib model-routing/D2 dependencies; C77 supersedes that carrier, running
+  the hooks and their dependencies from the installed package instead.
 - **The Codex advisory hooks now actually fire (C48 + C47).** `role-on-code`,
   `analysis-guard` and `d2-ledger-reminder` had produced no output in any Codex session since
   they were wired, for two independent reasons: `codex_adapter.file_paths` looked for the patch

@@ -18,44 +18,73 @@ from pathlib import Path
 
 # Where the dev layer is, what it is called, and how the project root is found are not this
 # module's facts — they belong to ``common.project_root``, which is stdlib-only and sits
-# beside ``hooks/`` in every carrier the hooks run from: the mounted ``<AITNA_ROOT>/akmon/``
-# tree and the materialized ``<AITNA_ROOT>/.akmon/`` copy, both written by the same ``sync``
-# run, so the two can never arrive apart. The copy that used to live here answered the same
-# questions in the same words and was the last remaining second definition (C73).
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# beside ``hooks/`` at the same tree-relative path in every carrier the hooks run from: the
+# mounted ``<AITNA_ROOT>/akmon/`` tree and the wheel's embedded ``akmon/_tree/``. The copy that
+# used to live here answered the same questions in the same words and was the last remaining
+# second definition (C73).
+# This file's own tree root. Every carrier keeps a hook and the data it reads in one tree —
+# the mounted ``<AITNA_ROOT>/akmon/``, and the wheel's embedded ``akmon/_tree/`` — so this is
+# both the import anchor for ``common`` and the answer to "which tree is running" below.
+_TREE_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_TREE_ROOT))
 
+from common.materialization import stale_guardrails  # noqa: E402
 from common.project_root import (  # noqa: E402
     aitna_root,
     aitna_root_name,
+    akmon_mount,
     find_project_root,
 )
-from common.project_root import akmon_mount as akmon_root  # noqa: E402
-from common.record import records_package_mode  # noqa: E402
 
 
 def akmon_runtime_root(project_root: Path) -> Path:
-    """Runtime files used by hooks: the materialization when the record says so, else the mount.
+    """Runtime files used by hooks: **the tree this hook is executing from**.
 
-    The recorded ``mount`` is a **veto over** the directory check, not a replacement for it
-    (C69/D2-26, owner decision). This function used to answer by directory existence alone,
-    which every other owner of the same decision contradicted — ``sync.is_package_mode``,
-    ``cli._mounted_akmon_root``, ``model_routing/init._standard_tree_root`` all read the record —
-    and the disagreement was measured, not theoretical: a package-mode project beside a stale
-    ``<AITNA_ROOT>/akmon`` from a prior mode made the hooks bind the *stale* registry, classify
-    warnings from it, and print tool paths into a tree the project no longer pins. All of it
-    silently, because a wrong tree that exists is indistinguishable from the right one.
+    Each carrier ships a hook and its data together, so the hook's own location answers the
+    question without asking anything: the mounted tree when the wiring named a file there, and
+    the wheel's embedded ``akmon/_tree`` when the wiring called ``akmon hook`` (C77). No
+    record read, no directory probe, and no way for the two to disagree.
 
-    Veto rather than replacement because the record's absence is not a declaration: mode
-    ``submodule`` is what a project predating the ``mount`` field gets by default
-    (``sync.read_mount_mode``), so deciding purely on the record would send a project with no
-    record and no mount to a mount that is not there. The order below keeps every state that
-    already worked: only ``mount = "package"`` overrides a directory that exists, and an absent,
-    unreadable or malformed record leaves the previous behaviour untouched.
+    This replaces the record-vetoes-the-directory rule (C69/D2-26), which was correct only while
+    mode ``package`` copied the hooks — and the whole runtime surface they read — into
+    ``<AITNA_ROOT>/.akmon/``. With the materialization narrowed to the guardrails the
+    consumer's ``AGENTS.md`` imports, that directory holds no registry at all, and pointing
+    here would have made the routing hook's "no registry, older pin — stay silent" guard fire on
+    every session: status line and delegation log gone, exit code 0, stderr empty.
+
+    What the old rule defended against is gone rather than given up: a stale
+    ``<AITNA_ROOT>/akmon`` from a prior mode cannot shadow anything, because a tree that is not
+    executing is not a candidate.
+
+    ``project_root`` stays in the signature: the project overlay it locates
+    (``<AITNA_ROOT>/model-routing.json``) is still layered onto whatever registry this tree
+    carries, and callers pass the pair together.
     """
-    if records_package_mode(project_root):
-        return aitna_root(project_root) / ".akmon"
-    mounted = akmon_root(project_root)
-    return mounted if mounted.exists() else aitna_root(project_root) / ".akmon"
+    del project_root  # the carrier answers; the project only supplies the overlay on top of it
+    return _TREE_ROOT
+
+
+def runtime_root_display(project_root: Path) -> str:
+    """How to *spell* the runtime tree in something an agent will run.
+
+    Project-relative when the executing tree **is the project's mount** — the spelling the
+    session already reads everywhere else. ``$(akmon path)`` otherwise.
+
+    The test is "is it the mount", deliberately, not "is it somewhere under the project root".
+    The two are not the same and the difference was measured on a real package-mode consumer:
+    the wheel's tree sits at ``<project>/.venv/lib/python3.14/site-packages/akmon/_tree``, which
+    *is* under the root, so a containment test spelled the recovery command with the venv's
+    Python version in it — a command that breaks on the next interpreter bump and on every
+    other machine, printed to the one person trying to recover. ``akmon path`` is the CLI's own
+    answer to the same question and stays true wherever the venv is.
+    """
+    mount = akmon_mount(project_root)
+    try:
+        if akmon_runtime_root(project_root).resolve() == mount.resolve():
+            return f"{aitna_root_name()}/akmon"
+    except OSError:  # pragma: no cover - resolve() only raises on pathological filesystems
+        pass
+    return "$(akmon path)"
 
 
 @dataclass(frozen=True)
@@ -331,11 +360,57 @@ def agent_names(directory: Path) -> list[str]:
     )
 
 
+def stale_guardrail_notice(root: Path) -> str | None:
+    """One owner-addressed line when the materialized guardrails are behind the running tree.
+
+    The interactive half of the freshness guarantee (C77). ``sync --check`` and ``verify``
+    already catch this copy in CI, but they run on a commit; the window this closes opens
+    earlier and closes silently. A pin bump installs the new hooks the instant the dependency
+    resolves — they run from the package — while ``<AITNA_ROOT>/.akmon/guardrails/`` still
+    holds the previous release's text until someone runs ``akmon sync``. Nothing in a session
+    would otherwise say that the always-on rules loaded from the repository are not the rules
+    the running standard ships.
+
+    Package execution is the precondition: mounted modes import their guardrails directly from
+    the same mounted tree as the hook, so a leftover package-mode materialization is inactive
+    and must not produce a warning. In package mode the copy is compared against
+    :func:`akmon_runtime_root`, the tree this hook is executing from, so the answer is about the
+    code actually in play rather than a recorded version string: a release that leaves the
+    guardrails untouched stays quiet, and a hand-edited copy does not.
+
+    The restart is part of the instruction, not politeness: the ``@``-import is expanded by the
+    harness when the session starts, so running ``sync`` mid-session fixes the file on disk and
+    changes nothing about the text already in context.
+    """
+    runtime_root = akmon_runtime_root(root)
+    try:
+        if runtime_root.resolve() == akmon_mount(root).resolve():
+            return None
+    except OSError:
+        # SessionStart is advisory and fail-open. A pathological filesystem must not make a
+        # hook that cannot prove package execution block or warn about an inactive copy.
+        return None
+    names = stale_guardrails(root, runtime_root)
+    if not names:
+        return None
+    return (
+        f"\u26a0 akmon: the guardrails in {aitna_root_name()}/.akmon/guardrails/ are not the ones "
+        f"this session's akmon ships ({', '.join(names)}). Run `akmon sync`, then start a new "
+        "session — the guardrail text is @-imported once at session start, so this session keeps "
+        "the stale copy."
+    )
+
+
 def session_start_result(root: Path) -> HookResult | None:
+    stale = stale_guardrail_notice(root)
     dev = agent_names(aitna_root(root) / "agents")
     desk = agent_names(root / "agents")
     if not dev and not desk:
-        return None
+        # A project with no agent charters still has to hear this one: it is about the rules
+        # the harness just loaded, not about the roles it did not declare.
+        if stale is None:
+            return None
+        return HookResult(event_name="SessionStart", additional_context=stale, system_message=stale)
 
     lines = [
         "[akmon] Active-agent declaration",
@@ -365,7 +440,16 @@ def session_start_result(root: Path) -> HookResult | None:
         "subagents; state the reason."
     )
     lines.append(f"Also: read `{aitna_root_name()}/memory/` at session start (project memory).")
-    return HookResult(event_name="SessionStart", additional_context="\n".join(lines))
+    if stale is not None:
+        lines.append(stale)
+    # Dual channel for the stale-guardrail line only (requirement 11): it asks the *owner* for a
+    # command and a restart, which the model cannot do for them. The reminder itself stays
+    # context-only.
+    return HookResult(
+        event_name="SessionStart",
+        additional_context="\n".join(lines),
+        system_message=stale,
+    )
 
 
 def _relative_within(candidate: Path, root: Path) -> str | None:
@@ -546,8 +630,8 @@ def analysis_write_result(
 def d2_sensitive_paths(root: Path) -> list[str]:
     """The project's ``[d2_ledger] sensitive_paths`` globs from ``<aitna>/.akmon.toml`` (``[]`` if unset).
 
-    ``tomllib`` is 3.11+ stdlib; on an older host the reminder simply degrades to silent rather
-    than adding a dependency (matches the ledger tool's config reader)."""
+    ``tomllib`` is part of the supported Python 3.11+ floor. Import failure still degrades to
+    silence so an abnormal host cannot turn this advisory into a hook crash."""
     config = aitna_root(root) / ".akmon.toml"
     if not config.is_file():
         return []
@@ -568,8 +652,7 @@ def d2_sensitive_paths(root: Path) -> list[str]:
 def _segments_match(pattern_segments: list[str], path_segments: list[str]) -> bool:
     """Recursive ``/``-aware glob match: ``**`` spans zero or more whole segments, ``*``/``?`` stay
     within one segment (via ``fnmatchcase``). Mirrors ``PurePath.full_match`` but runs on any
-    Python 3.x — the hooks execute under the *system* ``python3`` (often older than the ledger
-    tool's ``uv`` interpreter), so ``full_match`` (3.13+) is not available here."""
+    the supported Python 3.11+ host, so ``full_match`` (3.13+) is not available here."""
     if not pattern_segments:
         return not path_segments
     head, *rest = pattern_segments
@@ -592,12 +675,7 @@ def is_d2_sensitive_path(file_path: str, root: Path, globs: list[str]) -> bool:
 
 
 def d2_ledger_reminder_message(root: Path) -> str:
-    runtime = akmon_runtime_root(root)
-    try:
-        runtime_display = runtime.resolve().relative_to(root.resolve()).as_posix()
-    except (ValueError, OSError):
-        runtime_display = runtime.as_posix()
-    tool = f"{runtime_display}/tools/d2_ledger/d2_ledger.py"
+    tool = f"{runtime_root_display(root)}/tools/d2_ledger/d2_ledger.py"
     ledger = f"{aitna_root_name()}/D2_LEDGER.md"
     return (
         "[akmon] D2 ledger check — you are editing a D2-sensitive path (math / data shape / "

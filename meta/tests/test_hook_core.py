@@ -10,7 +10,6 @@ Run from the akmon root::
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import hook_core
@@ -34,12 +33,7 @@ from hook_core import (
     session_start_result,
 )
 
-# The D2 config readers use ``tomllib`` (3.11+ stdlib) and degrade to silent on older
-# hosts by design (see hook_core's own comment) — these tests assert the full behaviour.
-requires_tomllib = pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="tomllib is 3.11+ stdlib; .akmon.toml reading degrades to silent on older hosts by design",
-)
+from common.materialization import materialized_markdown
 
 # --------------------------------------------------------------------------------------
 # privilege_escalation_guard_result
@@ -276,6 +270,95 @@ def test_session_start_operate_only_uses_generic_pick_line(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
+# session_start_result — stale-guardrail notice (C77)
+# --------------------------------------------------------------------------------------
+
+
+def _guardrail_tree(tmp_path: Path, text: str) -> Path:
+    tree = tmp_path / "installed"
+    (tree / "guardrails").mkdir(parents=True)
+    (tree / "guardrails" / "_common.md").write_text(text, encoding="utf-8")
+    return tree
+
+
+def _materialized(root: Path, text: str) -> Path:
+    dest = root / "_aitna" / ".akmon" / "guardrails"
+    dest.mkdir(parents=True)
+    path = dest / "_common.md"
+    path.write_text(materialized_markdown(text), encoding="utf-8")
+    return path
+
+
+def _running_tree(monkeypatch, tree: Path) -> None:
+    """Stand in for "the tree this hook executes from" — in production the installed wheel."""
+    monkeypatch.setattr(hook_core, "akmon_runtime_root", lambda project_root: tree)
+
+
+def test_session_start_is_quiet_when_the_guardrail_copy_is_current(monkeypatch, tmp_path):
+    text = "# Common\n\nrule\n"
+    _running_tree(monkeypatch, _guardrail_tree(tmp_path, text))
+    _materialized(tmp_path, text)
+    _make_agent(tmp_path / "_aitna" / "agents", "engineer")
+
+    result = session_start_result(tmp_path)
+    assert "akmon sync" not in result.additional_context
+    assert result.system_message is None
+
+
+def test_session_start_reports_guardrails_the_running_akmon_has_moved_past(monkeypatch, tmp_path):
+    """The window no CI gate covers: the pin bump installed new hooks, the repository still
+    holds the previous release's rules, and nothing else in the session would say so."""
+    _running_tree(monkeypatch, _guardrail_tree(tmp_path, "# Common\n\nnew rule\n"))
+    _materialized(tmp_path, "# Common\n\nold rule\n")
+    _make_agent(tmp_path / "_aitna" / "agents", "engineer")
+
+    result = session_start_result(tmp_path)
+    notice = result.additional_context.splitlines()[-1]
+    assert notice.startswith("\u26a0 akmon:")
+    assert "_common.md" in notice
+    assert "akmon sync" in notice
+    # The restart is part of the instruction: the @-import is expanded once, at session start,
+    # so a mid-session sync fixes the file and changes nothing already in context.
+    assert "start a new session" in notice
+    # Owner-addressed — it asks for a command and a restart the model cannot perform.
+    assert result.system_message == notice
+
+
+def test_session_start_speaks_the_notice_even_with_no_agent_charters(monkeypatch, tmp_path):
+    """A project with no agents gets no reminder, but the rules it just loaded being the wrong
+    ones is not a fact about its charters."""
+    _running_tree(monkeypatch, _guardrail_tree(tmp_path, "# Common\n\nnew rule\n"))
+    _materialized(tmp_path, "# Common\n\nold rule\n")
+
+    result = session_start_result(tmp_path)
+    assert result is not None
+    assert result.additional_context == result.system_message
+    assert "_common.md" in result.additional_context
+
+
+def test_session_start_stays_none_with_no_agents_and_no_materialization(monkeypatch, tmp_path):
+    _running_tree(monkeypatch, _guardrail_tree(tmp_path, "# Common\n\nrule\n"))
+    assert session_start_result(tmp_path) is None
+
+
+def test_session_start_ignores_leftover_package_guardrails_in_mounted_mode(monkeypatch, tmp_path):
+    """Mounted AGENTS imports the mount directly; an old package copy is not active input."""
+    mounted = tmp_path / "_aitna" / "akmon"
+    (mounted / "guardrails").mkdir(parents=True)
+    (mounted / "guardrails" / "_common.md").write_text(
+        "# Common\n\nmounted rule\n", encoding="utf-8"
+    )
+    _running_tree(monkeypatch, mounted)
+    _materialized(tmp_path, "# Common\n\nold package rule\n")
+    _make_agent(tmp_path / "_aitna" / "agents", "engineer")
+
+    result = session_start_result(tmp_path)
+    assert result is not None
+    assert "akmon sync" not in result.additional_context
+    assert result.system_message is None
+
+
+# --------------------------------------------------------------------------------------
 # is_code_path
 # --------------------------------------------------------------------------------------
 
@@ -502,7 +585,6 @@ def _make_d2_project(tmp_path: Path, *, globs: str | None = '["src/**/lib/**"]')
     return root
 
 
-@requires_tomllib
 def test_d2_sensitive_paths_reads_configured_globs(tmp_path):
     root = _make_d2_project(tmp_path)
     assert d2_sensitive_paths(root) == ["src/**/lib/**"]
@@ -540,7 +622,6 @@ def test_d2_ledger_reminder_silent_on_non_sensitive_path(monkeypatch, tmp_path):
     assert d2_ledger_reminder_result(hook_core.EDIT_TOOL, str(root / "README.md"), "s1", root) is None
 
 
-@requires_tomllib
 def test_d2_ledger_reminder_fires_once_per_session(monkeypatch, tmp_path):
     _isolate_marker_dir(monkeypatch, tmp_path)
     root = _make_d2_project(tmp_path)
@@ -618,7 +699,6 @@ def test_d2_status_counts_reads_both_open_states(tmp_path):
     assert d2_status_counts(root) == (2, 1)
 
 
-@requires_tomllib
 def test_d2_tracking_active_with_config(tmp_path):
     assert d2_tracking_active(_make_d2_project(tmp_path)) is True
 
@@ -710,11 +790,42 @@ def test_analysis_guard_and_role_on_code_are_disjoint(monkeypatch, tmp_path):
 def test_aitna_root_resolvers_default_and_override(monkeypatch, tmp_path):
     monkeypatch.delenv("AITNA_ROOT", raising=False)
     assert hook_core.aitna_root_name() == "_aitna"
-    assert hook_core.akmon_root(tmp_path) == tmp_path / "_aitna" / "akmon"
+    assert hook_core.aitna_root(tmp_path) == tmp_path / "_aitna"
     monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     assert hook_core.aitna_root_name() == "tools/ai"
     assert hook_core.aitna_root(tmp_path) == tmp_path / "tools" / "ai"
-    assert hook_core.akmon_root(tmp_path) == tmp_path / "tools" / "ai" / "akmon"
+
+
+def test_runtime_root_display_is_project_relative_when_the_tree_is_in_the_repo(monkeypatch, tmp_path):
+    """A mounted consumer executes the hook out of its own repository, so the spelling an agent
+    is handed is the project-relative one it reads everywhere else."""
+    mount = tmp_path / "_aitna" / "akmon"
+    mount.mkdir(parents=True)
+    monkeypatch.setattr(hook_core, "_TREE_ROOT", mount)
+    assert hook_core.runtime_root_display(tmp_path) == "_aitna/akmon"
+    assert "_aitna/akmon/tools/d2_ledger/d2_ledger.py" in hook_core.d2_ledger_reminder_message(tmp_path)
+
+
+def test_runtime_root_display_uses_the_cli_when_the_tree_is_not_the_mount(tmp_path):
+    """Mode ``package``: the tree is inside the installed wheel, so its literal path carries the
+    venv's Python version and is wrong on the next bump. ``akmon path`` is spelled instead."""
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    assert hook_core.runtime_root_display(tmp_path) == "$(akmon path)"
+    message = hook_core.d2_ledger_reminder_message(tmp_path)
+    assert "$(akmon path)/tools/d2_ledger/d2_ledger.py" in message
+    assert "site-packages" not in message
+
+
+def test_runtime_root_display_rejects_the_wheels_tree_inside_the_project_venv(monkeypatch, tmp_path):
+    """The measured case, on a real package-mode consumer: the wheel's tree lives *under* the
+    project root, at ``.venv/lib/python3.14/site-packages/akmon/_tree``. A containment test
+    therefore succeeds and spells the venv's Python version into the recovery command — the one
+    command a person runs when routing is already broken."""
+    wheel_tree = tmp_path / ".venv" / "lib" / "python3.14" / "site-packages" / "akmon" / "_tree"
+    wheel_tree.mkdir(parents=True)
+    monkeypatch.setattr(hook_core, "_TREE_ROOT", wheel_tree)
+    assert hook_core.runtime_root_display(tmp_path) == "$(akmon path)"
+    assert "site-packages" not in hook_core.d2_ledger_reminder_message(tmp_path)
 
 
 def test_is_code_path_excludes_custom_dev_root(monkeypatch):

@@ -1,68 +1,54 @@
-# Design note: the declared Python 3.9 floor, and what makes it real
+# Design note: why the Python floor moved from 3.9 to 3.11
 
-> **Deferred — backlog [C68](../../TASKS.md).** Provenance: C37 side finding, measured on this
-> tree. This is independent of C37 and does not block its implementation or local git-pin
-> adoption. It gates the separate V4 first-publish task unless the owner instead re-locks the
-> declared floor to a version the shipped surface actually supports.
-> Not a decision record: the floor itself is already locked by
-> [ADR 0009 §1](../../decisions/0009-packaging-package-carrier-and-mount-modes.md). This note
-> records *why the floor is currently a claim rather than a fact*, and the one open question
-> the fix has to answer.
+> **Decision owner-approved at D2-34; C68 implementation awaits landing.** Provenance: C37 side finding, measured on the tree that
+> declared Python 3.9. The filename is retained because this note is the historical evidence for
+> retiring that floor. The operative contract is now Python **3.11 or newer** for the package and
+> every shipped venv-free entry point; Python 3.9 and 3.10 are unsupported.
 
-## The claim
+## What was measured
 
-`pyproject.toml` declares `requires-python >=3.9`, and CI runs a 3.9 matrix leg. The floor
-exists because the hooks must run **venv-free** on whatever `python3` a consumer host has:
-`hooks/` is stdlib-only by contract precisely so an old host is still governed.
+The former `requires-python >=3.9` claim was not true. A Python 3.9 run produced
+`617 passed, 24 failed, 7 skipped` from two independent causes:
 
-## What is measured
+1. `hooks/codex-hook.py` evaluated a PEP 604 union at import time, so all four generated Codex
+   hook entries failed before any advisory ran. Eighteen failures reached this one line through
+   `meta/tests/test_adapters.py`.
+2. Six `meta/tests/test_validate.py` cases asserted Python 3.11+ `tomllib` behaviour without a
+   version guard.
 
-`uv run --python 3.9 pytest meta/tests` is **24 failures on a clean tree**. The leg has been
-red for as long as it has existed, and nothing reads it. Two independent causes:
+The repair was small — one compatibility spelling and six guarded expectations — but retaining
+3.9 would keep every venv-free hook, launcher and tool constrained by a legacy interpreter. The
+owner chose one modern baseline instead of continuing that obligation.
 
-1. **A shipped hook is dead on a 3.9 host.** `hooks/codex-hook.py` evaluates
-   `Advisory = Callable[[str, str, str, Path], HookResult | None]` at **import** time, and
-   PEP 604 in a runtime expression needs 3.10. `python3 <tree>/hooks/codex-hook.py
-   session-start` exits 1 with `TypeError: unsupported operand type(s) for |` before any
-   advisory runs — so **all four wired Codex entries** (`session-start`, `role-on-code`,
-   `analysis-guard`, `d2-ledger-reminder`, i.e. every command `sync.py::_codex_hooks` writes)
-   are silent no-ops on exactly the Python the standard promises to run on. 18 of the 24
-   failures are this one line, through `meta/tests/test_adapters.py`.
+## Decision
 
-   An import probe of every shipped `hooks/`, `bin/` and `tools/` module under 3.9 finds this
-   file and **only** this file, so the code fix is one alias — `Optional[HookResult]`, the
-   spelling the rest of the file already uses under `from __future__ import annotations`.
+- The single supported floor is **Python >=3.11**. It applies both to package installation and to
+  the bare `python3` used by generated hooks in mounted, vendored, subtree and package carriers.
+- Python 3.9 and 3.10 consumers must upgrade that host interpreter before adopting the release.
+  Raising package metadata alone is insufficient because mounted hooks do not execute inside the
+  package environment.
+- Zero runtime dependencies and the stdlib-only shipped runtime remain unchanged.
+- The change is Breaking and requires a pre-1.0 `x` bump. Its migration names both interpreters:
+  the one installing/running the package and the bare `python3` used by generated hooks.
 
-2. **Six `meta/tests/test_validate.py` cases assert 3.11+ behaviour without a version guard.**
-   `meta/bin/validate.py` deliberately answers "its pyproject.toml cannot be read here
-   (tomllib needs 3.11+)" below 3.11 (C62), and those tests expect the resolved runner
-   unconditionally. A dev-side expectation bug, fixed with the same self-skip the
-   tomllib-dependent d2 tests already carry.
+Rejected alternatives:
 
-## The known baseline (so a new failure is visible)
+- **Repair and retain 3.9** — cheapest immediate code change and widest host reach, rejected to
+  end the continuing pre-3.11 compatibility obligation.
+- **Raise only to 3.10** — fixes the observed PEP 604 import but retains the pre-`tomllib` split
+  and creates another near-term floor transition.
+- **Package 3.11 / hooks 3.9** — creates two support contracts and preserves the compatibility
+  work C68 was meant to retire.
+- **Metadata-only 3.11** — protects package installation but leaves mounted bare-Python hooks on
+  an unsupported interpreter without a truthful contract.
 
-Re-measured on the current tree with the C37 work in place: **`617 passed, 24 failed, 7 skipped`**.
-The 24 are exactly the two causes above — 18 in `meta/tests/test_adapters.py`, 6 in
-`meta/tests/test_validate.py` — and the whole C37 surface (`test_init.py`, `test_cli.py`,
-`test_sync.py`: 143 tests) passes under 3.9. That is what makes this note independent of C37
-rather than a claim about it.
+## Acceptance carriers
 
-While this note is open the 3.9 leg cannot be green, so that triple is the fingerprint to compare
-against: a 3.9 run that differs from it has a **new** failure, and "C37 is green" means the
-current-interpreter legs *plus* this exact 3.9 shape. Re-measure the fingerprint whenever the test
-count changes for other reasons; a stale baseline hides the thing it exists to reveal.
-
-## The open question
-
-Not *what to fix* — the code fix is two small edits — but **what makes the floor stay real**.
-The tests did catch cause (1); the gap is that a red floor leg costs nobody anything today.
-Whatever lands has to change that: a green 3.9 leg that gates, or an import probe of the
-shipped surface that runs where it is read.
-
-## Do not lose in the fix
-
-- The floor is fixed by fixing the code, not by raising `requires-python`: the 3.9 leg exists
-  because a consumer host may be old and the hooks must run there with no venv.
-- Stdlib-only with zero runtime dependencies stays the contract (ADR 0009 §1).
-- The two causes are independent. Fixing the noisy one (2) alone leaves a green CI over a
-  dead hook.
+- `pyproject.toml` declares `requires-python = ">=3.11"`; the lock repeats it and built wheel
+  metadata contains `Requires-Python: >=3.11`.
+- Ruff targets `py311`; CI retains an exact 3.11 floor leg and a 3.13 upper compatibility leg.
+- The full suite, Ruff, self-CI installed-wheel smoke and build pass on the supported development
+  interpreter. The 3.11 CI leg is the lower-bound runtime/import probe.
+- A contract test joins the project floor, Ruff target and CI matrix so they cannot drift apart.
+- Compatibility fallbacks may remain where harmless or where they also implement malformed-input
+  fail-open behaviour; their presence is not a support promise below 3.11.

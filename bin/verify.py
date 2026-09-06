@@ -661,16 +661,14 @@ class Verifier:
             )
 
     def check_hooks(self) -> None:
-        if sync_tool.is_package_mode(self.root):
-            # Redundant with check_generated_pointers in package mode: that check already
-            # verifies the materialized .akmon/hooks/*.py exist *and* match content exactly
-            # (this check only verifies mounted-tree source existence).
-            self.ok(
-                "hooks.package-mode",
-                "package mode: mounted-tree checks skipped (covered by generated-pointers)",
-                fix="Keep the materialized hooks under the dev-layer .akmon directory in sync.",
-            )
-            return
+        """The hook scripts must exist in the standard tree this project runs.
+
+        Checked in every mode, package included. It used to short-circuit there on the grounds
+        that the generated-pointers check already covered the materialized copies — but since
+        C77 there are no copies: the wiring calls ``akmon hook <name>``, which runs these files
+        out of the wheel, so their existence in the tree *is* what the wiring rests on. Nothing
+        else covers it, and a missing one fails the way every hook failure fails — silently.
+        """
         for script in (
             "hook_core.py",
             "claude_adapter.py",
@@ -683,7 +681,43 @@ class Verifier:
             "model-routing.py",
             "delegation-log.py",
         ):
-            self.check_path(f"{self.akmon}/hooks/{script}")
+            self.check_standard_path(f"hooks/{script}")
+
+    def check_hook_launcher(self) -> None:
+        """Mode ``package``: the console script the generated hook wiring names must be executable.
+
+        The wiring spells ``"<anchor>/.venv/bin/akmon" hook <name>`` (ADR 0009 §4). A hook
+        command whose executable is missing or not executable **fails silently** — the harness
+        runs it, the shell error stays outside the session, and the session shows no non-zero gate,
+        just guardrails that stopped firing. So this is checked here, in the consumer's CI, rather
+        than as a ``sync`` plan error: the first attach runs ``sync`` before the dev group is
+        installed, and failing there would break the flow that has to work out of the box.
+
+        Mode ``package`` therefore requires the venv **inside the project root**: the wiring is
+        a committed shared file, so an absolute path to whatever venv the person who ran
+        ``sync`` happened to use is the same silent break for everyone else.
+        """
+        if not sync_tool.is_package_mode(self.root):
+            return
+        relative = sync_tool.launcher_relative(self.root)
+        if sync_tool.is_executable_file(self.root / relative):
+            self.ok(
+                "hooks.launcher",
+                f"generated hook wiring calls {relative}, which is executable",
+                target=relative,
+                fix=f"Keep the akmon dev pin installed into a project-local venv ({relative}).",
+            )
+            return
+        self.error(
+            "hooks.launcher",
+            f"generated hook wiring calls {relative}, which is missing or not executable — every akmon hook "
+            "command fails silently (an unavailable executable produces no session-visible error), "
+            "so the guardrails are off",
+            target=relative,
+            fix=(
+                "Install the akmon dev pin into a project-local virtualenv, then re-run akmon sync."
+            ),
+        )
 
     def check_model_routing(self) -> None:
         """The routing registry and tools must ship with akmon and parse cleanly.
@@ -1079,6 +1113,7 @@ class Verifier:
         self.check_skills()
         self.check_generated_pointers()
         self.check_hooks()
+        self.check_hook_launcher()
         self.check_model_routing()
         self.check_gitignore()
         self.check_akmon_gitignore()
