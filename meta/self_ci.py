@@ -30,6 +30,7 @@ from checks import capabilities  # noqa: E402
 from checks import runtime as runtime_checks  # noqa: E402
 
 from common.findings import Finding, exit_code, print_findings  # noqa: E402
+from common.runtime import codex_hooks_list_command  # noqa: E402
 
 AGENTS_MD = """# AGENTS.md
 
@@ -105,6 +106,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "pipelines/release.md",
         "pipelines/tasks.md",
         "common/__init__.py",
+        "common/codex_hooks.py",
         "common/findings.py",
         "common/materialization.py",
         "common/project_root.py",
@@ -133,14 +135,44 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         _write(root / "_aitna" / "akmon" / relative, text)
 
 
-def _checked(command: list[str], *, cwd: Path | None = None) -> None:
+def path_without(binary: str, path: str, scratch: Path) -> str:
+    """``path`` with every directory holding ``binary`` swapped for a shadow of it that does not.
+
+    How self-CI stands in an *absent* Codex for the legs whose fixture never went through the
+    owner's `/hooks` approval: ``verify``'s C70 check resolves the binary on ``PATH`` and reports
+    an absent installation as its neutral skip, so hiding the binary runs the real code path
+    rather than a switch in ``verify`` that any environment could flip. The shadow holds a
+    symlink to every other entry of the directory it replaces, so the rest still resolves.
+    """
+    entries = []
+    for index, entry in enumerate(path.split(os.pathsep)):
+        directory = Path(entry).absolute()
+        if entry and os.path.lexists(directory / binary):
+            shadow = scratch / f"path-{index}"
+            shadow.mkdir(parents=True, exist_ok=True)
+            for child in directory.iterdir():
+                link = shadow / child.name
+                if child.name != binary and not os.path.lexists(link):
+                    link.symlink_to(child)
+            entry = str(shadow)
+        entries.append(entry)
+    return os.pathsep.join(entries)
+
+
+def _codex_free_env(scratch: Path) -> dict[str, str]:
+    """This process's environment with the Codex binary hidden from ``PATH`` (see above)."""
+    path = path_without(codex_hooks_list_command()[0], os.environ.get("PATH", os.defpath), scratch)
+    return {**os.environ, "PATH": path}
+
+
+def _checked(command: list[str], *, cwd: Path | None = None, env: dict | None = None) -> None:
     """Run a sub-leg quietly; on failure echo its output to stderr and raise with the tail.
 
     Captured rather than inherited so a nested launcher's own finding stream does not print
     into this one — two envelopes on one channel read as one, and the reader cannot tell
     whose findings they are.
     """
-    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+    result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True)
     if result.returncode == 0:
         return
     sys.stderr.write((result.stdout or "") + (result.stderr or ""))
@@ -159,9 +191,10 @@ def _leg(
     code: str,
     ok_fix: str,
     error_fix: str,
+    env: dict | None = None,
 ) -> bool:
     """Run one leg as a subprocess and record it as a finding; ``True`` when it passed."""
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(command, capture_output=True, text=True, env=env)
     if result.returncode == 0:
         findings.append(Finding("ok", code, f"{label} passes", "", ok_fix))
         return True
@@ -185,7 +218,7 @@ def _assert_wheel_python_floor(wheel: Path) -> None:
         raise RuntimeError(f"wheel Requires-Python must be exactly >=3.11; got {rendered}")
 
 
-def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path) -> None:
+def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[str, str]) -> None:
     """The package leg: build the wheel, install it, and attach a fresh consumer with the
     installed console script — `akmon init` → `sync` → routing init → `verify --strict`.
 
@@ -224,8 +257,13 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path) -> None:
     # command and the exit status, and this leg's most common failure — the pin lookup below —
     # is a whole sentence the reader needs.
     _checked([str(akmon), "init", "--mode", "package", "--project-root", str(fixture), "--yes"])
+    # `verify_env` hides Codex from PATH. C70's host-trust check would otherwise ask a live
+    # `codex app-server` whether this throwaway fixture went through the owner's `/hooks`
+    # approval — it never has — and fail --strict on any machine with Codex installed, over a
+    # fact this packaging smoke is not testing. Hidden, it takes the check's own absent-install
+    # skip; there is no switch in `verify` to flip instead.
     for command in (["sync", "--check"], ["verify", "--strict", "--quiet"]):
-        _checked([str(akmon), *command], cwd=fixture)
+        _checked([str(akmon), *command], cwd=fixture, env=verify_env)
 
     # Nothing executable is materialized any more: the wiring calls `akmon hook`, which runs
     # the hooks out of the wheel. Assert the absence, or the next regression re-adds the copies
@@ -361,8 +399,12 @@ def _wheel_smoke_report(detail: str) -> tuple[str, str]:
 
 def _run(akmon_root: Path) -> list[Finding]:
     findings: list[Finding] = []
-    with tempfile.TemporaryDirectory(prefix="akmon-self-ci-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="akmon-self-ci-") as tmp, tempfile.TemporaryDirectory(
+        prefix="akmon-self-ci-path-"
+    ) as path_scratch:
         fixture = Path(tmp)
+        # Outside the fixture: the shadow PATH directories are not part of the consumer tree.
+        verify_env = _codex_free_env(Path(path_scratch))
         _make_fixture(fixture, akmon_root)
         mounted_bin = fixture / "_aitna" / "akmon" / "bin"
         sync_py = str(mounted_bin / "sync.py")
@@ -390,11 +432,15 @@ def _run(akmon_root: Path) -> list[Finding]:
             code="selfci.fixture-verify",
             ok_fix="Keep the synthetic consumer compliant with the USE contract.",
             error_fix="Fix the USE-contract finding the fixture verify reports.",
+            # This synthetic fixture never runs the live Codex `/hooks` owner-approval flow C70
+            # checks for; Codex is hidden from PATH so the check takes its absent-install skip
+            # (see the matching note on the wheel smoke).
+            env=verify_env,
         )
         if not healthy:
             return findings
         try:
-            _installed_wheel_smoke(akmon_root, fixture / "wheel-smoke")
+            _installed_wheel_smoke(akmon_root, fixture / "wheel-smoke", verify_env)
         except Exception as exc:  # the leg owns build, install, attach and hook execution
             detail = " ".join(str(exc).split()) or type(exc).__name__
             message, fix = _wheel_smoke_report(detail)

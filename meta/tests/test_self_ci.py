@@ -9,6 +9,8 @@ tell them apart.
 
 from __future__ import annotations
 
+import os
+import shutil
 import zipfile
 
 import pytest
@@ -74,3 +76,20 @@ def test_wheel_python_floor_rejects_missing_stale_or_duplicate_fields(tmp_path, 
     wheel = _wheel_with_metadata(tmp_path, metadata)
     with pytest.raises(RuntimeError, match="Requires-Python must be exactly >=3.11"):
         self_ci._assert_wheel_python_floor(wheel)
+
+
+def test_path_without_hides_only_the_named_binary(tmp_path):
+    """C70's fixture legs stand in an absent Codex by hiding it from PATH: the binary must stop
+    resolving while everything beside it — in its own directory and in the others — still does,
+    and the real directory is left alone."""
+    first, second = tmp_path / "first", tmp_path / "second"
+    for directory, names in ((first, ("codex", "tool")), (second, ("other",))):
+        directory.mkdir()
+        for name in names:
+            (directory / name).write_text("#!/bin/sh\n", encoding="utf-8")
+            (directory / name).chmod(0o755)
+    path = self_ci.path_without("codex", os.pathsep.join((str(first), str(second))), tmp_path / "scratch")
+    assert shutil.which("codex", path=path) is None
+    assert shutil.which("tool", path=path) is not None
+    assert shutil.which("other", path=path) == str(second / "other")
+    assert (first / "codex").is_file()

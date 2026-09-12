@@ -17,6 +17,18 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 ## Unreleased
 
 ### Added
+- **`akmon verify` checks live Codex hook delivery (C70/D2-27).** Generated wiring only proves
+  the hooks *file* is correct; a live probe (N7) measured that a discovered `SessionStart`/
+  `PreToolUse` entry can still be reported `enabled: true` while its persisted trust is absent
+  (`untrusted`) or stale (`modified`), and the handler simply never fires. `verify` now asks the
+  authoritative `codex app-server` `hooks/list` route about the wiring in `.codex/hooks.json`,
+  once, after generated wiring itself validates. Missing, disabled, `untrusted`, or `modified`
+  expected entries collapse into one `warn codex.host-trust` finding (`--strict` fails); an
+  absent Codex installation is a neutral `ok` skip, never a delivery claim; a resolved
+  installation whose `hooks/list` answer cannot be trusted (timeout, closed pipe, malformed or
+  error response) is the same warn rather than an inferred delivery claim either way. The check
+  parses no host config, computes no hash, and grants no trust — remediation is named through
+  `/hooks` only.
 - **`akmon hook <name> [args...]` (C77):** runs one hook out of the resolved standard tree — the
   mount when there is one, the installed package otherwise. It exists so the generated vendor
   wiring can name a hook **without a path**, which is what a package-mode consumer needs and what

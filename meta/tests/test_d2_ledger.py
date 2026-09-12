@@ -322,6 +322,25 @@ def test_sensitive_paths_for_degrades_gracefully_without_tomllib(tmp_path, monke
     assert d2.sensitive_paths_for(ledger) == []
 
 
+def test_read_akmon_toml_raises_tomldecodeerror_on_a_malformed_file(tmp_path):
+    (tmp_path / ".akmon.toml").write_text("this is not [valid toml\n", encoding="utf-8")
+    import tomllib
+
+    with pytest.raises(tomllib.TOMLDecodeError):
+        d2._read_akmon_toml(tmp_path / ".akmon.toml")
+
+
+def test_sensitive_paths_for_propagates_a_malformed_records_decode_error(tmp_path):
+    (tmp_path / ".akmon.toml").write_text("this is not [valid toml\n", encoding="utf-8")
+    ledger = tmp_path / "D2_LEDGER.md"
+    ledger.write_text(d2.SKELETON, encoding="utf-8")
+
+    import tomllib
+
+    with pytest.raises(tomllib.TOMLDecodeError):
+        d2.sensitive_paths_for(ledger)
+
+
 # --------------------------------------------------------------------------------------
 # main() end to end
 # --------------------------------------------------------------------------------------
