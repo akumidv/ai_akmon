@@ -12,7 +12,9 @@ consumer follows). It does not modify files; run ``sync.py`` for generated point
 from __future__ import annotations
 
 import argparse
+import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -24,8 +26,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import sync as sync_tool  # noqa: E402
 
+from common.codex_hooks import (  # noqa: E402
+    CodexProtocolError,
+    expected_codex_hooks,
+    hook_trust_problems,
+    query_hooks_list,
+)
+from common.codex_hooks import (
+    default_runner as _default_codex_hooks_runner,
+)
 from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
 from common.project_root import resolve_project_root  # noqa: E402
+from common.runtime import codex_hooks_list_command  # noqa: E402
 from common.versions import split_version  # noqa: E402
 
 _TASKS_MAX_LINES = 200
@@ -96,7 +108,7 @@ _VENDOR_POINTERS = {
 
 
 class Verifier:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, codex_hooks_runner=None) -> None:
         self.root = root
         self.findings: list[Finding] = []
         # The dev-layer root is configurable (AITNA_ROOT, default _aitna); akmon mounts at
@@ -108,6 +120,10 @@ class Verifier:
         # ``self.root`` entirely. Used by ``check_standard_path`` and the checks that
         # validate the standard's own shipped content rather than the consumer's use of it.
         self.standard_root = sync_tool.standard_tree_root(self.root)
+        # C70's injectable seam: a carrier passes a fake runner instead of spawning a real
+        # `codex app-server` subprocess (common/codex_hooks.py's own docstring explains the
+        # protocol the default one speaks).
+        self._codex_hooks_runner = codex_hooks_runner or _default_codex_hooks_runner
 
     def ok(self, code: str, message: str, *, target: str = "", fix: str) -> None:
         self.findings.append(Finding("ok", code, line_safe(message), line_safe(target), line_safe(fix)))
@@ -720,6 +736,79 @@ class Verifier:
             ),
         )
 
+    def check_codex_host_trust(self) -> None:
+        """C70 — the live host-trust gap N7 measured (design §7, D2-27).
+
+        Generated wiring is structural proof only: a discovered ``hooks/list`` entry can stay
+        ``enabled: true`` while its persisted project or per-entry trust is absent or stale, and
+        the handler simply never fires — measured silent for both ``SessionStart`` and
+        ``PreToolUse``. This asks the authoritative host directly through a bounded
+        ``codex app-server`` query rather than reconstruct ``~/.codex/config.toml`` parsing or
+        hashing, which N7 also measured to be keyed per *group*, not per command.
+
+        Gated on current wiring before anything is parsed: ``.codex/hooks.json`` must be
+        byte-identical to what the current generator writes (``sync._codex_hooks_text``), or this
+        check stops. Missing, unreadable, invalid JSON, a non-object, an unknown event and plain
+        staleness all end there — no host call, and no parse of the file (TASKS.md C70: "no call
+        after missing/invalid/stale wiring"). Each of them is already one aggregate
+        ``pointers.generated-freshness`` error from :meth:`check_generated_pointers`, which runs
+        earlier in :meth:`run`; this check adds no second finding for it. Only then is the
+        expected population derived, from text the generator produced, so its shape is the
+        generator's by construction.
+
+        An absent Codex installation is an explicit neutral skip: it is not read as "no problem".
+        A resolved installation this bounded query cannot get a clean answer from is a warning and
+        a strict failure, never a delivery claim either way. This check neither parses host config
+        nor writes anything; remediation is named as `/hooks` only. It has no off switch: akmon's
+        own self-CI, whose throwaway fixtures never go through `/hooks`, hides the binary from
+        ``PATH`` instead (``meta/self_ci.py::path_without``) and so lands on the same neutral skip
+        a consumer without Codex gets.
+        """
+        try:
+            text = (self.root / ".codex" / "hooks.json").read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return
+        if text != sync_tool._codex_hooks_text(self.root):
+            return
+        expected = expected_codex_hooks(json.loads(text))
+        if not expected:
+            return
+        command = codex_hooks_list_command()
+        if shutil.which(command[0]) is None:
+            self.ok(
+                "codex.host-trust",
+                f"{command[0]} is not installed; Codex host-trust delivery is not verified",
+                target=".codex/hooks.json",
+                fix="Install codex to verify hook delivery, or ignore if this project does not run it.",
+            )
+            return
+        try:
+            entries = query_hooks_list(command, self.root, runner=self._codex_hooks_runner)
+        except CodexProtocolError as exc:
+            self.warn(
+                "codex.host-trust",
+                f"codex app-server hooks/list could not be inspected: {exc}",
+                target="codex app-server hooks/list",
+                fix="Run `codex app-server` manually to diagnose, then re-run verify.",
+            )
+            return
+        problems = hook_trust_problems(expected, entries)
+        if not problems:
+            self.ok(
+                "codex.host-trust",
+                "every generated Codex hook entry is discovered, enabled, and trusted",
+                target=".codex/hooks.json",
+                fix="Keep hook trust current via `/hooks` after every `akmon sync`.",
+            )
+            return
+        summary = "; ".join(f"{problem} ({len(commands)})" for problem, commands in sorted(problems.items()))
+        self.warn(
+            "codex.host-trust",
+            f"Codex hook delivery is incomplete: {summary}",
+            target=".codex/hooks.json",
+            fix="Open `/hooks` in Codex and re-approve the listed entries.",
+        )
+
     def check_model_routing(self) -> None:
         """The routing registry and tools must ship with akmon and parse cleanly.
 
@@ -1171,6 +1260,7 @@ class Verifier:
         self.check_generated_pointers()
         self.check_hooks()
         self.check_hook_launcher()
+        self.check_codex_host_trust()
         self.check_model_routing()
         self.check_gitignore()
         self.check_akmon_gitignore()

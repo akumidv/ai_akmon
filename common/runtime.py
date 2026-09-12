@@ -94,6 +94,9 @@ HARNESS_COMMANDS: Mapping[str, HarnessCommands] = {
         operations={
             "version": ("--version",),
             "review": ("exec",),
+            # C70: the app-server listens on stdio by default; the caller then speaks bounded
+            # JSON-RPC ``hooks/list`` over that pipe (common/codex_hooks.py), not a second argv.
+            "hooks-list": ("app-server",),
         },
     ),
 }
@@ -132,3 +135,14 @@ def harness_command(harness: str, operation: str, *extra: str) -> list:
 def version_command(harness: str) -> list:
     """The harness-version query. ``sync`` reads it to pick a generated inventory (C46)."""
     return harness_command(harness, "version")
+
+
+def codex_hooks_list_command() -> list:
+    """The bounded ``codex app-server`` invocation C70 speaks ``hooks/list`` JSON-RPC over.
+
+    The sole spelling of the Codex binary name for this route (§7): a caller reaches it through
+    this function rather than writing ``"codex"`` itself, so the executable name has exactly one
+    owner even for the one route that talks a persistent-process protocol instead of a one-shot
+    argv.
+    """
+    return harness_command("codex", "hooks-list")

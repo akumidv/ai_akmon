@@ -109,6 +109,15 @@ justification to re-examine on its own, and three of the four are weaker than wh
 > behavioural choice about what the hooks trust, and it stays the owner's. Only the cost argument
 > against the shared home is withdrawn — it can no longer be the reason to pick duplication.
 
+> **Narrowed since — [D2-35](../../D2_LEDGER.md) (C77).** "Materialized whole into
+> `<AITNA_ROOT>/.akmon/`" above is this row's state, not today's: package mode stopped
+> materializing an executable surface at all. The only files it now writes under `.akmon/` are
+> the guardrails a committed `AGENTS.md` imports; `common/`, `hooks/`, the model-routing library
+> and the D2-ledger tool run from the installed package (`akmon hook <name>`), never copied into
+> the consumer's tree. This is the same narrowing the runtime-root callout above already covers
+> for `akmon_runtime_root` — recorded again here because this block, read on its own, still
+> describes the wider copy as current.
+
 ## Do not lose in the fix
 
 - A project with **no record and no mount** must still resolve to `.akmon`: records that

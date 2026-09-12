@@ -9,8 +9,11 @@ directory that holds ``hooks`` and ``bin`` (robust to where the tests sit).
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 _KEYSTONE = next(
     parent
@@ -23,3 +26,32 @@ for _subdir in (".", "hooks", "bin", "meta", "tools/model_routing"):
     _path = str((_KEYSTONE / _subdir).resolve())
     if _path not in sys.path:
         sys.path.insert(0, _path)
+
+from self_ci import path_without  # noqa: E402
+
+from common.runtime import codex_hooks_list_command  # noqa: E402
+
+
+@pytest.fixture(scope="session")
+def _codex_free_path(tmp_path_factory) -> str:
+    return path_without(
+        codex_hooks_list_command()[0],
+        os.environ.get("PATH", os.defpath),
+        tmp_path_factory.mktemp("codex-free-path"),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _codex_absent_in_tests(monkeypatch, _codex_free_path):
+    """Every test runs on a host without Codex, the way self-CI's fixture legs do (C70).
+
+    ``verify``'s host-trust check spawns a real ``codex app-server`` whenever a fixture's
+    ``.codex/hooks.json`` is current and ``codex`` resolves on ``PATH`` — true on any host that
+    has Codex installed, this one included — and no fixture here has been through `/hooks`.
+    ``verify`` also runs as a genuine child process in some tests (mounted-mode ``akmon verify``
+    re-execs the standard tree's script), which an in-process patch of ``shutil.which`` cannot
+    reach; ``PATH`` is inherited by every child, so hiding the binary there reaches them all and
+    exercises the check's own absent-installation skip rather than a switch in ``verify``. The
+    tests that exercise the live-query path inject a runner or put a fake ``codex`` on ``PATH``.
+    """
+    monkeypatch.setenv("PATH", _codex_free_path)

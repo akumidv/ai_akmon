@@ -716,6 +716,16 @@ def _package_mode_akmon_toml(root: Path) -> PlannedFile | None:
     return PlannedFile(path, text)
 
 
+def _codex_hooks_text(root: Path) -> str:
+    """The exact text ``.codex/hooks.json`` is generated with.
+
+    One spelling for both readers: the plan below writes it, and ``verify``'s C70 host-trust
+    check compares the file against it before parsing anything, so "current wiring" there means
+    byte-for-byte what ``sync --check`` means by it.
+    """
+    return json.dumps(_codex_hooks(root), indent=2) + "\n"
+
+
 def _planned_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
     errors: list[str] = []
     files = [
@@ -723,7 +733,7 @@ def _planned_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
         PlannedFile(root / ".github" / "copilot-instructions.md", _copilot_md()),
         PlannedFile(root / "GEMINI.md", _gemini_md()),
         PlannedFile(root / ".codex" / "README.md", _codex_readme()),
-        PlannedFile(root / ".codex" / "hooks.json", json.dumps(_codex_hooks(root), indent=2) + "\n"),
+        PlannedFile(root / ".codex" / "hooks.json", _codex_hooks_text(root)),
     ]
     try:
         files.append(_claude_settings(root))

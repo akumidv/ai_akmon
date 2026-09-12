@@ -249,3 +249,44 @@ def test_a_row_without_an_iso_stamp_fails_a_time_scoped_run(tmp_path, capsys):
     assert exc.value.code == 2
     assert "cannot be placed inside --since/--until" in capsys.readouterr().err
     assert not out.exists()
+
+
+def test_session_and_all_sessions_together_are_refused(tmp_path, capsys):
+    """The two scope flags are a mutually exclusive group — naming both is as unscoped as naming
+    neither, and argparse's own refusal is the contract here, not a hand-rolled check."""
+    root = _log_project(tmp_path, _TWO_ROUNDS)
+    with pytest.raises(SystemExit) as exc:
+        coverage_map.main(
+            ["--project-root", str(root), "--session", "sess-1", "--all-sessions", "--out", str(root / "m.md")]
+        )
+    assert exc.value.code == 2
+    assert "not allowed with argument" in capsys.readouterr().err
+    assert not (root / "m.md").exists()
+
+
+@pytest.fixture
+def utc_plus_three(monkeypatch):
+    """Pin local time to a non-UTC offset: a naive bound/timestamp is read in *local* time
+    (`_aware` calls bare `.astimezone()`), so a host that is not UTC must not silently drift."""
+    monkeypatch.setenv("TZ", "Etc/GMT-3")  # POSIX sign is inverted: this is UTC+3
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_a_naive_bound_is_read_in_local_time_not_utc(tmp_path, capsys, utc_plus_three):
+    """At UTC+3, local end-of-day for `--until 2026-09-01` is 2026-09-01T20:59:59.999999Z — a
+    row at 20:00Z is inside it, one at 21:00Z is past it. Read as a *UTC* end-of-day instead
+    (the bug this pins against), both would fall inside the bound; only the local reading
+    excludes the second row."""
+    root = _log_project(
+        tmp_path,
+        [
+            "2026-09-01T20:00:00+0000\tsess-1\tk_explorer\tsmall\tauth\tbefore local midnight",
+            "2026-09-01T21:00:00+0000\tsess-1\tk_explorer\tsmall\tauth\tafter local midnight",
+        ],
+    )
+    args = ["--project-root", str(root), "--session", "sess-1", "--out", str(root / "m.md")]
+    assert coverage_map.main([*args, "--until", "2026-09-01"]) == 0
+    assert "entries=1" in capsys.readouterr().out
