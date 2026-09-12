@@ -649,8 +649,10 @@ def _upsert_toml_key(text: str, key: str, value: str) -> str:
     Updates an existing top-level (pre-first-``[section]``) line for ``key`` in place; else
     inserts one just before the first ``[section]`` header (or appends at the end if none).
     A minimal, comment-preserving alternative to a full parse+rewrite — ``.akmon.toml`` mixes
-    generated fields (this one) with hand-written ones (``attached_archetype``,
-    ``last_realign``, ``[test]``…) that a full round-trip would risk losing.
+    tool-written fields (``mount``, ``akmon_version``, and ``last_realign`` — the last written
+    by ``_init._mark_realign_complete`` once every stage has succeeded, never here) with
+    hand-written ones (``attached_archetype``, ``[test]``…) that a full round-trip would risk
+    losing.
     """
     lines = text.splitlines()
     new_line = f'{key} = "{value}"'
@@ -686,13 +688,20 @@ def _installed_akmon_version() -> str | None:
 
 
 def _package_mode_akmon_toml(root: Path) -> PlannedFile | None:
-    """Package-mode ``.akmon.toml`` stamping (ADR 0009 §4): the installed package version
-    *is* the pin (no separate realign step the way a submodule pin-bump needs one), so sync
-    keeps ``akmon_version`` in sync with reality on every run. Only the ``mount``/
-    ``akmon_version`` keys are touched; every other field is preserved verbatim (see
+    """Package-mode ``.akmon.toml`` stamping (ADR 0009 §4): the installed package version *is*
+    the pin, so sync keeps ``akmon_version`` in sync with reality on every run. Only the
+    ``mount``/``akmon_version`` keys are touched; every other field is preserved verbatim (see
     ``_upsert_toml_key``). ``None`` outside package mode, when the record does not exist yet
-    (``init`` — a later slice — creates it), or when the installed version cannot be
-    determined.
+    (``init`` creates it), or when the installed version cannot be determined.
+
+    **Stamping the pin is not a realign**, and this function must not be read as one. It moves
+    the recorded pin while ``last_realign`` and the model-routing binding stay where the last
+    completed realign left them. ``sync`` owns generated pointers, vendor wiring and imported
+    guardrails. An existing AGENTS.md block and existing CI workflows are hand-owned: ``init``
+    preserves them and reports any manual next steps instead of rewriting them. A package-mode
+    bump therefore runs ``init`` before ``sync`` (BOOTSTRAP §E), and the gap between the two
+    recorded versions is an error in ``verify`` (``verify.py::_check_realign_freshness``) rather
+    than a silent success here.
     """
     if not is_package_mode(root):
         return None

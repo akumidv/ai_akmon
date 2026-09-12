@@ -1282,7 +1282,7 @@ shell=`required`, `python3`=`required`, `git`=`required-on:codex`, and `claude`/
 The map is the single owner, never a manually synchronized copy beside the calls.
 
 **C57 build-time owner decision — the second-opinion command joins the map (owner choice, the
-middle path).** *(Ledger: **D2-30**, pending owner verification — this amends the
+middle path).** *(Ledger: **D2-30**, owner-verified — this amends the
 ownership contract D2-20 verified.)* F16 calls the vendor-command map "the sole executable owner and constructor" for
 own-tool operations, and implementation found the one live counter-example: no Python source
 spelled `claude` or `codex` at all, but `tools/model_routing/registry.json` did, in
@@ -1368,30 +1368,35 @@ akmon's own in-process checkers remain valid (`pipelines/tasks.md` may say a thr
 by `verify.py`), and guardrail runtime prose remains C53's F7/F8 surface rather than a second C57
 scan.
 
-**C57 build-time owner decision — the crash-posture branch of `matrix.unqualified-effect` is a
-warn.** *(Ledger: **D2-29**, pending owner verification — ADR 0012 still states the
-unsplit rule and carries the matching amendment note. The split is **permanent policy**: after
-C52 measures these two claims, a future `ask`/`deny` claim with no crash measurement still passes
-a non-strict run, and approving D2-29 is approving that.)* The rule above requires an `ask`/`deny` effect to carry a measured crash posture, and
+**C57 build-time owner decision — two named claims carry an unmeasured crash posture as a
+warn.** *(Ledger: **D2-29**, owner-approved; the global-warn variant first shipped was rejected.)*
+The rule above requires an `ask`/`deny` effect to carry a measured crash posture, and
 akmon's only two enforcement claims (the Claude commit guard, `deny`; the Claude delegation
 nudge, `ask`) have no such measurement anywhere in the tree: F3 *decided* crash-open, and N1/F4
 measured it live for **Codex only**. Converting therefore left the repaired tree red on exactly
-two rows, against this section's claim that it then passes. The owner's decision splits the code
-by coordinate — and **weakens it permanently for the crash-posture branch**: an `unmeasured`
-**route coordinate** under `ask`/`deny` stays `error`, while an `unmeasured` **crash posture**
-under `ask`/`deny` is `warn`. Non-strict `self_ci` returns zero and `--strict` still fails, so
-the debt fails somewhere rather than nowhere — but it is not a debt C52 repays: the rule is
-weaker for *every* future claim, and C52 landing the two measurements does not restore `error`.
-The two rows that exist today are owned
-by **C52**, whose D2-23 gate exists to produce exactly these numbers; §Order already states that
-missing runtime numbers must not hold C57 behind an unrelated measurement campaign, and an
-`error` here would have done precisely that. Rejected: citing F3 as the report behind
-`fail-open`, because F3 is a decision plus vendor documentation rather than a measurement of
-akmon's own hooks — the documented/delivered conflation this matrix exists to break, and a
-pre-payment of C52's gate; measuring inside C57, which absorbs the campaign the lock detached it
-from; and lowering the two effects, which is false in the other direction on the normal path.
-When C52 lands the measurement, the two rows record it and the warn disappears with no rule
-change.
+two rows, against this section's claim that it then passes. The owner's decision exempts **those
+two claim identities**, and only from the crash-posture branch: over their `unmeasured` crash
+posture `matrix.unqualified-effect` is a `warn` — non-strict `self_ci` returns zero, `--strict`
+still fails — while every other `ask`/`deny` claim with an `unmeasured` crash posture, and every
+`unmeasured` route coordinate, stays `error`. The exemption is a closed list in the checker
+(`meta/checks/capabilities.py::CRASH_POSTURE_EXEMPT`, whole `###` titles) that only shrinks, and
+its removal is a test rather than a promise: a carrier fails once either claim records a measured
+crash posture while it is still listed, and fails when a listed title names no live claim. The
+two rows are owned by **C52**, whose D2-23 gate exists to produce exactly these numbers; §Order
+already states that missing runtime numbers must not hold C57 behind an unrelated measurement
+campaign, and an unconditional `error` would have done precisely that. Cost: two hardcoded claim
+identities in the checker, so renaming either claim turns the tree red for a reason unrelated to
+what changed — loudly, since the renamed claim loses its warn and the carrier names the stale
+entry — and C52 inherits a carrier about a checker it does not otherwise touch. Rejected: a
+global `warn` for the crash-posture branch, which would pass every *future* `ask`/`deny` claim
+with no crash measurement in an ordinary run, permanently; a dated exemption, which needs a date
+authority the tree does not have; citing F3 as the report behind `fail-open`, because F3 is a
+decision plus vendor documentation rather than a measurement of akmon's own hooks — the
+documented/delivered conflation this matrix exists to break, and a pre-payment of C52's gate;
+measuring inside C57, which absorbs the campaign the lock detached it from; and lowering the two
+effects, which is false in the other direction on the normal path. When C52 lands the
+measurement, the two rows record it, the carrier goes red, and deleting the two list entries
+restores the unexempted rule.
 
 **Post-implementation review corrections (N-review of C57).** Three defects in the delivered
 checker, fixed inside C57 rather than deferred, because each one made a rule unenforceable:
@@ -1610,9 +1615,9 @@ Fixtures isolate every rule:
 - an otherwise complete `ask` or `deny` cell keeps every axis and route coordinate present but sets,
   one at a time, each **route coordinate** explicitly to `unmeasured`; every case emits exactly one
   `error matrix.unqualified-effect`. Setting the **crash posture** to `unmeasured` emits exactly one
-  **`warn`** of the same code and keeps the non-strict exit at zero, per D2-29 — pending owner
-  verification, and the one place in this lock where a carrier states the split rather than the
-  original rule. Deletion is never this code: it is `matrix.missing-axis` as above;
+  `error` of the same code, except on the two claims D2-29 exempts by name, where it is exactly one
+  **`warn`** that keeps the non-strict exit at zero; a separate carrier fails once an exempt claim
+  records a measured posture while still listed, or when a listed title names no live claim. Deletion is never this code: it is `matrix.missing-axis` as above;
 - a measured assertion with empty evidence and an `unmeasured` assertion with non-empty evidence
   are separate mutations, each emitting exactly one `error matrix.uncited-claim`;
 - parameterized fixtures place each of `enforced`, `enforces`, `✅` and `⚠️` beside each vendor and

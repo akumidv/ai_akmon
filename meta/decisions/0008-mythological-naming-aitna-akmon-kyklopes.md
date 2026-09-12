@@ -39,7 +39,7 @@ Load-bearing points:
    keystone (the contained standard) = anvil; `_forge` (the container workspace) = the volcano-forge.
    The reverse mapping would put a volcano inside an anvil.
 2. **The `k-` prefix does not migrate.** It stops meaning "keystone" and starts meaning "Kyklōpes" — a
-   pure re-reading, zero code/doc churn on the prefix. Orthogonal to [V2](../TASKS.md)'s `k-synthesizer`
+   pure re-reading, zero code/doc churn on the prefix. Orthogonal to [V2](../TASKS_ARCHIVE.md)'s `k-synthesizer`
    → `k-auditor` rename, which changes the *suffix* only.
 3. **The `ai` hook lands on the visible touchpoint.** `_aitna/` is the folder every consuming repo shows;
    it advertises "this repo is worked by the AI apparatus" at the point of contact, while the engine

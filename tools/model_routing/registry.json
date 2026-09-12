@@ -45,8 +45,8 @@
     }
   },
   "context_pressure": {
-    "window_default": 200000,
-    "windows": {},
+    "recommended_max": 200000,
+    "recommended_max_by_alias": {},
     "warn_ratios": [
       0.85,
       0.95

@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -1270,11 +1271,23 @@ def test_context_fill_sums_input_components_and_ignores_output():
     assert routing.context_fill(None) is None
 
 
-def test_context_window_default_and_alias_exception():
-    assert routing.context_window(REGISTRY, "claude-opus-4-8") == 200000
-    registry = dict(REGISTRY, context_pressure={"window_default": 200000, "windows": {"sonnet": 1000000}})
-    assert routing.context_window(registry, "claude-sonnet-5") == 1000000
-    assert routing.context_window(registry, "claude-opus-4-8") == 200000
+def test_recommended_max_context_default_and_alias_exception():
+    assert routing.recommended_max_context(REGISTRY, "claude-opus-4-8") == 200000
+    registry = dict(
+        REGISTRY, context_pressure={"recommended_max": 200000, "recommended_max_by_alias": {"haiku": 150000}}
+    )
+    assert routing.recommended_max_context(registry, "claude-haiku-4-5") == 150000
+    assert routing.recommended_max_context(registry, "claude-opus-4-8") == 200000
+
+
+def test_context_pressure_is_a_share_of_the_recommended_max_not_the_model_limit(tmp_path):
+    # Measured on a live claude-opus-5 session: 411,203 tokens filled with no compaction. The
+    # model's limit is larger; the recommended maximum is not, so the share passes 100%.
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(transcript, [_assistant("claude-opus-5", usage=_usage(411203))])
+    lines = routing.context_pressure_notice(REGISTRY, transcript, "s3", marker_dir=tmp_path)
+    assert len(lines) == 1
+    assert "~206% of the recommended 200k max (411203 tokens)" in lines[0] and "critical" in lines[0]
 
 
 def test_context_pressure_notice_bands_throttle_and_reset(tmp_path):
@@ -1286,7 +1299,8 @@ def test_context_pressure_notice_bands_throttle_and_reset(tmp_path):
 
     assert notice(100000) == []  # 50% — below every band
     high = notice(172000)  # 86% — crosses the plan band
-    assert len(high) == 1 and "context pressure: ~86% of 200k" in high[0] and "plan compaction" in high[0]
+    assert len(high) == 1 and "plan compaction" in high[0]
+    assert "context pressure: ~86% of the recommended 200k max" in high[0]
     assert notice(174000) == []  # still the same band — throttled
     critical = notice(191000)  # 95.5% — band rises to critical
     assert len(critical) == 1 and "critical" in critical[0] and "/compact" in critical[0]
@@ -1299,9 +1313,86 @@ def test_context_pressure_notice_silent_without_usage_or_ratios(tmp_path):
     transcript = tmp_path / "t.jsonl"
     _write_transcript(transcript, [_assistant("claude-fable-5")])  # no usage recorded
     assert routing.context_pressure_notice(REGISTRY, transcript, "s2", marker_dir=tmp_path) == []
-    no_ratios = dict(REGISTRY, context_pressure={"window_default": 200000, "warn_ratios": []})
+    no_ratios = dict(REGISTRY, context_pressure={"recommended_max": 200000, "warn_ratios": []})
     _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(199000))])
     assert routing.context_pressure_notice(no_ratios, transcript, "s2", marker_dir=tmp_path) == []
+
+
+def test_the_shipped_pressure_policy():
+    assert REGISTRY["context_pressure"] == {
+        "recommended_max": 200000,
+        "recommended_max_by_alias": {},
+        "warn_ratios": [0.85, 0.95],
+    }
+
+
+def test_context_fill_is_none_unless_every_input_component_is_a_non_negative_int():
+    zeros = {"input_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+    assert routing.context_fill(zeros) == 0
+    # One valid component must not carry a fill on its own.
+    mixed = {"input_tokens": 200000, "cache_read_input_tokens": "bad", "cache_creation_input_tokens": None}
+    assert routing.context_fill(mixed) is None
+    assert routing.context_fill({"input_tokens": 200000}) is None
+    assert routing.context_fill(dict(zeros, input_tokens=True)) is None  # a bool is not a count
+    assert routing.context_fill(dict(zeros, cache_creation_input_tokens=-1)) is None
+
+
+def test_context_pressure_notice_silent_on_mixed_malformed_usage(tmp_path):
+    transcript = tmp_path / "t.jsonl"
+    usage = {"input_tokens": 200000, "cache_read_input_tokens": "bad", "cache_creation_input_tokens": None}
+    _write_transcript(transcript, [_assistant("claude-fable-5", usage=usage)])
+    assert routing.context_pressure_notice(REGISTRY, transcript, "s4", marker_dir=tmp_path) == []
+    assert routing.context_fill_ratio(REGISTRY, transcript) is None
+
+
+def test_a_non_default_recommended_max_carries_through_notice_and_ratio(tmp_path):
+    registry = dict(REGISTRY, context_pressure={"recommended_max": 100000, "warn_ratios": [0.85, 0.95]})
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(86000))])
+    assert routing.context_fill_ratio(registry, transcript) == pytest.approx(0.86)
+    lines = routing.context_pressure_notice(registry, transcript, "s5", marker_dir=tmp_path)
+    assert len(lines) == 1 and "~86% of the recommended 100k max (86000 tokens)" in lines[0]
+
+
+def test_the_legacy_window_keys_are_ignored(tmp_path):
+    # A deep-merged overlay can leave the old keys beside the new ones; neither is read.
+    legacy = {"window_default": 100000, "windows": {"fable": 50000}, "warn_ratios": [0.85, 0.95]}
+    both = dict(REGISTRY, context_pressure=dict(legacy, recommended_max=200000))
+    assert routing.recommended_max_context(both, "claude-fable-5") == 200000
+    legacy_only = dict(REGISTRY, context_pressure=legacy)
+    assert routing.recommended_max_context(legacy_only, "claude-fable-5") == 200000  # built-in default
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(90000))])
+    assert routing.context_pressure_notice(both, transcript, "s6", marker_dir=tmp_path) == []  # 45%, not 90%
+
+
+@pytest.mark.parametrize("by_alias", [{"opus": 150000, "opus-5": 300000}, {"opus-5": 300000, "opus": 150000}])
+def test_recommended_max_by_alias_takes_the_longest_matching_key(by_alias):
+    registry = dict(REGISTRY, context_pressure={"recommended_max": 200000, "recommended_max_by_alias": by_alias})
+    assert routing.recommended_max_context(registry, "claude-opus-5") == 300000
+    assert routing.recommended_max_context(registry, "claude-opus-4-8") == 150000
+    assert routing.recommended_max_context(registry, "claude-fable-5") == 200000
+
+
+@pytest.mark.parametrize(("fill", "band"), [(169999, None), (170000, "high"), (189999, "high"), (190000, "critical")])
+def test_context_pressure_bands_start_exactly_at_their_ratios(tmp_path, fill, band):
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(fill))])
+    lines = routing.context_pressure_notice(REGISTRY, transcript, "s7", marker_dir=tmp_path)
+    if band is None:
+        assert lines == []
+    else:
+        assert len(lines) == 1
+        assert ("critical" in lines[0]) == (band == "critical")
+
+
+def test_the_pressure_marker_defaults_to_the_shared_temp_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(172000))])
+    session = f"cp-{uuid.uuid4()}"
+    assert len(routing.context_pressure_notice(REGISTRY, transcript, session)) == 1
+    assert (tmp_path / f"akmon-context-pressure-{session}").read_text(encoding="utf-8") == "0"
 
 
 def test_hook_user_prompt_submit_pressure_notice_dual_channel(tmp_path):

@@ -536,19 +536,25 @@ def test_planned_files_include_akmon_toml_stamp_in_package_mode(tmp_path, monkey
     assert 'akmon_version = "0.4.0"' in toml_plan.content
 
 
-def test_a_malformed_record_reads_as_empty_rather_than_raising():
+def test_a_malformed_record_falls_through_to_the_lenient_parser_rather_than_raising():
     """The reader documents "absent or unreadable"; on 3.11+ it used to raise instead.
 
     Found while landing the C69/D2-26 veto: `tomllib.load` propagated `TOMLDecodeError`, so a
     project with a broken `.akmon.toml` crashed `sync`, `verify` and — once the hooks consulted
     the record — a session, on 3.11+ only, while 3.9 parsed the same file to a partial dict.
+
+    The result is not `{}`: the fallback line parser still resolves the well-formed lines it can
+    read, so `mount = "package"` survives a broken file and `records_package_mode` can answer
+    `True` off it — this is what makes the shared reader "lenient by contract" (C75), not merely
+    non-raising.
     """
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / ".akmon.toml"
         path.write_text('mount = "package"\n[unclosed\nkey = ', encoding="utf-8")
-        assert isinstance(sync.read_akmon_toml(path), dict)  # no exception
+        result = sync.read_akmon_toml(path)  # no exception
+        assert result == {"mount": "package", "key": ""}
 
 
 def test_both_parsers_agree_on_a_record_with_an_inline_comment():

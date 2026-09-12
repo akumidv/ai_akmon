@@ -93,7 +93,8 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   claim standing beside a vendor or harness event *outside* the marked region is rejected as a
   second authority. The conversion demoted claims that were never measured: the Gemini pointer
   now reads `delivered: unmeasured` rather than a bare check-mark, and two Claude enforcement
-  rows carry a warning until C52 measures their crash posture. **The second-opinion rows on both
+  rows carry a warning until C52 measures their crash posture — an exemption named for those two
+  rows only; any other enforcement claim without a crash measurement is an error. **The second-opinion rows on both
   harnesses also read `delivered: unmeasured`:** akmon builds the argv and its tests pin it, but
   they run only `--dry-run`, so nothing has yet observed the command reaching a harness. A
   dry-run says what akmon emits, not what the harness accepts (probe tracked as N8).
@@ -132,6 +133,51 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   silence by a filter that would hide it from them and say nothing.
 
 ### Changed
+- **`tools/model_routing/coverage_map.py` requires a scope (C76):** pass `--session <id>` or
+  `--all-sessions`. A run that names neither now exits 2. It used to union every session in the
+  log silently, so one round's worker could hide a zone another round never touched. The summary
+  names the session set either way (`scope: …`). A script that calls the assembler without a scope
+  must add one.
+- **Context-pressure warnings are a share of a recommended maximum context, not the model's window
+  (C23/D2-38).** The model-routing hook's bands (0.85/0.95) are now taken of
+  `context_pressure.recommended_max` (200000 by default) and read
+  `⚠ context pressure: ~86% of the recommended 200k max (172000 tokens) — …`; on a model with a
+  larger window the share can pass 100%. The registry keys changed (see Migration), which changes
+  the registry hash: the routing binding goes stale once and the bump's `akmon init` rebinds it.
+- **A bump now runs `akmon init` before `akmon sync` (C78/D2-36).** Installing the pin is not
+  aligning to it. `sync` refreshes the generated pointers and, in mode `package`, restamps
+  `akmon_version` in `<AITNA_ROOT>/.akmon.toml` with the installed version. `init` runs that sync,
+  then reinitializes the model-routing binding, and advances `last_realign` only after both stages
+  and the package-pin gate succeed. Existing `AGENTS.md` blocks and existing CI workflows remain
+  hand-owned: `init` preserves them and reports the applicable manual next steps. A release that moves the routing
+  registry invalidates its binding by `registry_hash`, which `sync` cannot rebind. Both bump
+  procedures in [BOOTSTRAP.md](BOOTSTRAP.md) §E now run it — the mounted one through `uvx` when the
+  project has no package installed, since `init` dispatches the work to the mount either way — and
+  §A no longer tells you to write `last_realign` by hand. A bare `akmon init` reuses a valid mount
+  mode already recorded for the project.
+  - **`akmon verify` reports a pin that outran its realign** as `attach.realign` (error): the
+    record says the project sits on one version and was last aligned to another. Version
+    spellings are normalized first, so a mounted `git describe` record and a package-mode PEP 440
+    record compare, and a mount sitting N commits past its tag is not read as a missing realign.
+    The neighbouring fact — a pin the project has not even synced to — stays `akmon sync --check`'s
+    to report; it plans that same file. **Mode `package` only, in effect:** in the mounted modes
+    nothing restamps the pin after `git submodule update`, so a skipped realign leaves both keys
+    agreeing on the old version and this check cannot see it — run `akmon init` as the bump
+    procedure says.
+  - **A realign no longer needs the network.** `akmon init` on a project that already has
+    `<AITNA_ROOT>/.akmon.toml` takes the version it names in links and pin instructions from the
+    installed package instead of asking the akmon repository for its latest release tag. Only a
+    first package-mode attach without `--ref` still does (`git ls-remote` to GitHub); offline it
+    stops with exit 2 — pass `--ref <tag>`.
+  - **The CHANGELOG delta-check window opens at `last_realign`, not `akmon_version`.** In mode
+    `package` `sync` moves `akmon_version` to the target the moment it runs, so it cannot anchor
+    the window it is meant to open. `last_realign` is where the project actually sits.
+- **The generated `k_*` delegate definitions are per-user and gitignored** — this was already
+  true of `.gitignore` and of the design notes, and is now what the routing initializer and
+  `tools/README.md` say too (they called them "committed"). Their frontmatter pins each delegate
+  to a model chosen for the current session's orchestrator, and the SessionStart hook rewrites
+  them when it changes, so committing one commits somebody else's session. Nothing to do unless
+  your project committed them: delete them from the index and let the hook regenerate.
 - **Mode `package` no longer puts an executable surface in the consumer repo (C77/D2-35).**
   `akmon sync` used to copy ~20 files into `<AITNA_ROOT>/.akmon/` — the hooks, the `common`
   package they import, the model-routing library and its `registry.json`, the D2-ledger tool —
@@ -233,6 +279,19 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   `akmon verify --strict`. This requires a pre-1.0 `x` bump.
 
 ### Migration
+- **Projects overlaying `context_pressure` in `<AITNA_ROOT>/model-routing.json`: rename `window_default` →
+  `recommended_max` and `windows` → `recommended_max_by_alias` (C23/D2-38).** The old keys are no
+  longer read; an overlay that still sets them silently falls back to the 200000 default. Projects
+  without an overlay have nothing to do beyond the bump's `akmon init`.
+- **Every consumer: run `akmon init` once as part of this bump, before `akmon sync`.** In mode
+  `package`: if the installed pin has not yet been synced into `<AITNA_ROOT>/.akmon.toml`,
+  `akmon sync --check` reports that record drift, and if `sync` restamps the pin without a
+  preceding realign, `akmon verify` then fails with `attach.realign` because the recorded pin is
+  newer than `last_realign`. In the mounted modes no check flags a skipped realign — run it anyway. `init`
+  preserves existing hand-owned `AGENTS.md` and CI text and reports any manual next steps. It
+  runs `sync`, reinitializes model routing, and advances `last_realign` only after both stages
+  and the package-pin gate succeed. Codex users: the usual `/hooks` re-approval applies if `sync`
+  changed the wiring.
 - **Package-mode consumers: re-run `akmon sync` once and commit the deletions.** The bump removes
   `<AITNA_ROOT>/.akmon/{hooks,common,tools}/` — including the emptied directories and the
   `__pycache__` a hook run left behind — and rewrites `.claude/settings.json` and
@@ -259,6 +318,12 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **Coverage-map time bounds and row counting (C76):** `--since`/`--until` compare instants,
+  not strings. A bare date covers its whole day — `--until 2026-09-02` used to drop every row of
+  that day. A bound with no offset is read in local time. An unparseable bound, or a log row with
+  no ISO timestamp in a time-scoped run, exits 2 and writes no map. The stats digest now counts
+  exactly the rows the coverage map reads; a 3-field row used to count in the digest and not in
+  the map.
 - **Claude delegation model attribution (D2-5):** the console message and TSV record use the
   explicit call override, else the generated agent's recorded binding pin, else `-`. Semantic
   fallback and malformed or stale local ladders no longer appear as model names; host built-ins

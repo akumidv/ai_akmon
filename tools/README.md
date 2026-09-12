@@ -18,6 +18,6 @@ is the executable; the skill is the know-how that drives it.
 | Tool | Driven by | Does |
 |---|---|---|
 | [`release/release_check.py`](release/release_check.py) | the [`release`](../skills/release/SKILL.md) skill / role | `--state` (collect), `--check` (join the four version carriers, then run the release suite, runner-resilient), `--plan vX.Y.Z` (version bump + owner-run command set). Never commits/tags/pushes. |
-| [`model_routing/init.py`](model_routing/init.py) | the SessionStart routing hook's init instruction (MODEL.md § Capability tiers) | computes the tier→model binding from [`model_routing/registry.json`](model_routing/registry.json) (+ the project overlay `<aitna-root>/model-routing.json`) relative to the orchestrating model; writes the generated `k_*` subagent definitions (committed) and `.claude/model-routing.local.json` (per-user, gitignored). Idempotent; `--check`/`--dry-run`. |
+| [`model_routing/init.py`](model_routing/init.py) | the SessionStart routing hook's init instruction (MODEL.md § Capability tiers) | computes the tier→model binding from [`model_routing/registry.json`](model_routing/registry.json) (+ the project overlay `<aitna-root>/model-routing.json`) relative to the orchestrating model; writes the generated `k_*` subagent definitions and `.claude/model-routing.local.json` (both per-user and gitignored — the delegates are pinned to the current session's orchestrator and rewritten when it changes). Idempotent; `--check`/`--dry-run`. |
 
 Run a tool with `python3 _aitna/akmon/tools/<path>` (stdlib-only; no install step).

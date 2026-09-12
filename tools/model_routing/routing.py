@@ -233,7 +233,7 @@ def opposite_vendor(registry: dict, vendor: str) -> str:
     return vendor
 
 
-#: Keys C57 retired when the executable moved into ``bin/runtime.py``. A project overlay written
+#: Keys C57 retired when the executable moved into ``common/runtime.py``. A project overlay written
 #: before that change deep-merges *over* the shipped registry, so the new keys survive and the
 #: stale ones ride along unread — the config looks usable and silently means something else.
 RETIRED_SECOND_OPINION_KEYS = ("cli", "invoke")
@@ -252,7 +252,7 @@ def second_opinion_spec(registry: dict, provider: str, *, required: bool = True)
         if retired:
             raise KeyError(
                 f"second-opinion provider '{provider}' still carries the retired key(s) "
-                f"{', '.join(retired)}; the executable and its argv moved into bin/runtime.py "
+                f"{', '.join(retired)}; the executable and its argv moved into common/runtime.py "
                 f"(C57). Delete only those keys from the hand-owned project overlay and "
                 f"leave the rest of the object alone: the overlay is deep-merged over the "
                 f"shipped registry, so harness/operation/report_dir are inherited unless the "
@@ -285,7 +285,7 @@ def second_opinion_fallback_model(rungs: list[str], orchestrator: str, auditor: 
 def second_opinion_command(spec: dict, prompt: str, model: str | None = None) -> list[str]:
     """Build the non-interactive CLI command; the prompt is passed as the final argv.
 
-    The executable and the operation's argv come from the single owner in ``bin/runtime.py``;
+    The executable and the operation's argv come from the single owner in ``common/runtime.py``;
     the registry contributes only *policy* — which harness, which operation, and the optional
     ``model_flag`` format string (e.g. ``"--model {model}"``) inserted before the prompt so the
     same-vendor branch of the diversity ladder can pin a *different* model.
@@ -965,54 +965,63 @@ def detect_orchestrator(transcript_path: str | Path | None, available: list[str]
 
 
 def context_fill(usage: dict | None) -> int | None:
-    """Context-window fill at a turn: the three input components partition the prompt.
+    """Context fill at a turn: the three input components partition the prompt.
 
-    ``output_tokens`` is not context carried forward, so it is excluded. ``None`` when the
-    usage carries no input component at all — the caller stays silent rather than warn
-    from a guess.
+    ``output_tokens`` is not context carried forward, so it is excluded. ``None`` unless all
+    three input components are non-negative integers (a bool is not a count): one valid
+    component never stands in for the prompt, so the caller stays silent rather than warn
+    from a partial or malformed record.
     """
     if not isinstance(usage, dict):
         return None
     components = [usage.get(key) for key in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")]
-    if not any(isinstance(value, int) for value in components):
+    if not all(isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in components):
         return None
-    return sum(value for value in components if isinstance(value, int))
+    return sum(components)
 
 
-def context_window(registry: dict, model_id: str | None) -> int:
-    """The model's context window: an alias-substring exception from ``windows``, else the default."""
+def recommended_max_context(registry: dict, model_id: str | None) -> int:
+    """The recommended maximum context, in tokens — what pressure percentages are a share of.
+
+    A working ceiling, not the model's hard limit (design §12.2): quality degrades with length
+    whatever the limit, the limit is not in the transcript, and limits grow faster than the
+    registry is edited. ``recommended_max_by_alias`` overrides it per alias substring (longest
+    match) — e.g. for a model whose hard limit sits below the default — else ``recommended_max``.
+    """
     policy = registry.get("context_pressure", {})
-    default = int(policy.get("window_default") or 200000)
-    windows = policy.get("windows", {})
-    if model_id and isinstance(windows, dict):
+    default = int(policy.get("recommended_max") or 200000)
+    by_alias = policy.get("recommended_max_by_alias", {})
+    if model_id and isinstance(by_alias, dict):
         lowered = model_id.lower()
-        matches = [key for key in windows if key and key.lower() in lowered]
+        matches = [key for key in by_alias if key and key.lower() in lowered]
         if matches:
-            return int(windows[max(matches, key=len)])
+            return int(by_alias[max(matches, key=len)])
     return default
 
 
 def _context_fill_metrics(registry: dict, transcript_path: str | Path | None) -> tuple[int, int, float] | None:
-    """``(fill, window, ratio)`` for the last main-chain turn; ``None`` if unavailable.
+    """``(fill, recommended_max, ratio)`` for the last main-chain turn; ``None`` if unavailable.
 
     Shared by ``context_pressure_notice`` (banded warnings) and ``context_fill_ratio``
-    (the C29 axis-2 coefficient) so both read the same fill/window definition.
+    (the C29 axis-2 coefficient) so both read the same fill/recommended-max definition.
     """
     model_id, usage = _last_main_turn(transcript_path)
     fill = context_fill(usage)
     if fill is None:
         return None
-    window = context_window(registry, model_id)
-    if window <= 0:
+    recommended = recommended_max_context(registry, model_id)
+    if recommended <= 0:
         return None
-    return fill, window, fill / window
+    return fill, recommended, fill / recommended
 
 
 def context_fill_ratio(registry: dict, transcript_path: str | Path | None) -> float | None:
-    """Context-window fill ratio (0..~1+) for the last main-chain turn; ``None`` if unavailable.
+    """Fill as a share of the recommended maximum for the last main-chain turn (can pass 1.0);
+    ``None`` if unavailable.
 
-    Reused by the C29 output-weight nudge to weight cumulative tool-output bytes by how
-    full the window already is — the same signal ``context_pressure_notice`` bands.
+    Reused by the C29 output-weight nudge to weight cumulative tool-output bytes by how far
+    into the recommended maximum the session already is — the same signal
+    ``context_pressure_notice`` bands.
     """
     metrics = _context_fill_metrics(registry, transcript_path)
     return metrics[2] if metrics else None
@@ -1031,7 +1040,9 @@ def context_pressure_notice(
     marker records the last announced band, so only a band *rise* warns — 0→high once,
     high→critical once more, a steady fill stays silent. A fill dropping below the lowest
     band (a compaction landed) clears the marker, so each compaction cycle gets its own
-    warnings. Missing/malformed usage → silent; never raises past I/O.
+    warnings. The share is of the recommended maximum, not the model's limit, so it can
+    pass 100% on a model with a larger window. Missing/malformed usage → silent; never
+    raises past I/O.
     """
     policy = registry.get("context_pressure", {})
     ratios = [float(r) for r in policy.get("warn_ratios") or [] if isinstance(r, (int, float))]
@@ -1040,7 +1051,7 @@ def context_pressure_notice(
     metrics = _context_fill_metrics(registry, transcript_path)
     if metrics is None:
         return []
-    fill, window, ratio = metrics
+    fill, recommended, ratio = metrics
     band: int | None = None
     for index, threshold in enumerate(ratios):
         if ratio >= threshold:
@@ -1072,7 +1083,8 @@ def context_pressure_notice(
         if critical
         else "checkpoint durable state (files/TASKS) and plan compaction"
     )
-    return [f"⚠ context pressure: ~{ratio:.0%} of {window // 1000}k ({fill} tokens) — {advice}"]
+    share = f"~{ratio:.0%} of the recommended {recommended // 1000}k max ({fill} tokens)"
+    return [f"⚠ context pressure: {share} — {advice}"]
 
 
 def binding_artifacts(

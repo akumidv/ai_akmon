@@ -243,6 +243,99 @@ def test_realign_preserves_hand_written_record_fields(tmp_path):
     assert fields["attached_archetype"] == "service/python"  # not reset to the placeholder
 
 
+def test_bare_init_reuses_the_recorded_package_mode(tmp_path, monkeypatch):
+    """The documented bare ``akmon init`` is an idempotent realign, not a mode migration."""
+    _dev_pin(tmp_path)
+    assert _init.main(
+        ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
+    ) == 0
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        _init,
+        "_default_mode",
+        lambda *args: (_ for _ in ()).throw(AssertionError("an existing valid mode must win")),
+    )
+    monkeypatch.setattr(_init, "_package_default_ref", lambda repo, root: "v0.3.0")
+
+    assert _init.main([]) == 0
+    sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
+    assert sync_mod.read_akmon_toml(tmp_path / "_aitna" / ".akmon.toml")["mount"] == "package"
+
+
+def test_sync_failure_preserves_the_previous_last_realign(tmp_path, monkeypatch):
+    _dev_pin(tmp_path)
+    record = tmp_path / "_aitna" / ".akmon.toml"
+    _write(
+        record,
+        'mount = "package"\nakmon_version = "v0.2.1"\nlast_realign = "v0.2.1"\n'
+        'attached_archetype = "package/python"\n',
+    )
+    monkeypatch.setattr(cli, "_dispatch", lambda *args, **kwargs: 7)
+
+    assert _init.main(
+        ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
+    ) == 7
+    fields = cli._load_embedded_sync(_tree.embedded_tree_root()).read_akmon_toml(record)
+    assert fields["akmon_version"] == __version__
+    assert fields["last_realign"] == "v0.2.1"
+
+
+def test_fresh_sync_failure_does_not_claim_a_completed_realign(tmp_path, monkeypatch):
+    _dev_pin(tmp_path)
+    monkeypatch.setattr(cli, "_dispatch", lambda *args, **kwargs: 7)
+
+    assert _init.main(
+        ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
+    ) == 7
+    fields = cli._load_embedded_sync(_tree.embedded_tree_root()).read_akmon_toml(
+        tmp_path / "_aitna" / ".akmon.toml"
+    )
+    assert fields["akmon_version"] == __version__
+    assert "last_realign" not in fields
+
+
+def test_routing_init_failure_preserves_the_previous_last_realign(tmp_path, monkeypatch):
+    _dev_pin(tmp_path)
+    record = tmp_path / "_aitna" / ".akmon.toml"
+    _write(
+        record,
+        'mount = "package"\nakmon_version = "v0.2.1"\nlast_realign = "v0.2.1"\n'
+        'attached_archetype = "package/python"\n',
+    )
+    monkeypatch.setattr(cli, "_dispatch", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        _init,
+        "_run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 8, "", "routing failed"),
+    )
+
+    assert _init.main(
+        ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
+    ) == 8
+    fields = cli._load_embedded_sync(_tree.embedded_tree_root()).read_akmon_toml(record)
+    assert fields["akmon_version"] == __version__
+    assert fields["last_realign"] == "v0.2.1"
+
+
+def test_fresh_routing_init_failure_does_not_claim_a_completed_realign(tmp_path, monkeypatch):
+    _dev_pin(tmp_path)
+    monkeypatch.setattr(cli, "_dispatch", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        _init,
+        "_run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 8, "", "routing failed"),
+    )
+
+    assert _init.main(
+        ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
+    ) == 8
+    fields = cli._load_embedded_sync(_tree.embedded_tree_root()).read_akmon_toml(
+        tmp_path / "_aitna" / ".akmon.toml"
+    )
+    assert fields["akmon_version"] == __version__
+    assert "last_realign" not in fields
+
+
 # --------------------------------------------------------------------------------------
 # the local layout
 # --------------------------------------------------------------------------------------
@@ -359,6 +452,32 @@ def test_package_attach_without_a_manifest_pin_is_incomplete(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "dev** group" in out and "git+https://github.com/akumidv/ai_akmon@" in out
     assert "INCOMPLETE" in out and "exit 1" in out
+    fields = cli._load_embedded_sync(_tree.embedded_tree_root()).read_akmon_toml(
+        tmp_path / "_aitna" / ".akmon.toml"
+    )
+    assert "last_realign" not in fields
+
+
+def test_package_pin_gate_preserves_the_previous_last_realign(tmp_path, monkeypatch):
+    record = tmp_path / "_aitna" / ".akmon.toml"
+    _write(
+        record,
+        'mount = "package"\nakmon_version = "v0.2.1"\nlast_realign = "v0.2.1"\n'
+        'attached_archetype = "package/python"\n',
+    )
+    monkeypatch.setattr(cli, "_dispatch", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        _init,
+        "_run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, "", ""),
+    )
+
+    assert _init.main(
+        ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
+    ) == 1
+    fields = cli._load_embedded_sync(_tree.embedded_tree_root()).read_akmon_toml(record)
+    assert fields["akmon_version"] == __version__
+    assert fields["last_realign"] == "v0.2.1"
 
 
 def test_package_attach_with_a_dev_pin_is_complete(tmp_path):
@@ -378,6 +497,10 @@ def test_package_verify_strict_fails_while_the_manifest_has_no_pin(tmp_path, mon
     assert _verify_strict(tmp_path, monkeypatch) == 1
     _dev_pin(tmp_path)
     _project_venv(tmp_path)
+    assert _verify_strict(tmp_path, monkeypatch) == 1  # installing the pin is not a completed realign
+    assert _init.main(
+        ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
+    ) == 0
     assert _verify_strict(tmp_path, monkeypatch) == 0
 
 
@@ -648,6 +771,45 @@ def test_package_pin_line_uses_the_requested_ref(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(_init, "_package_default_ref", unexpected_default_ref)
     assert _init.main(["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]) == 1
     assert "git+https://github.com/akumidv/ai_akmon@v0.3.0" in capsys.readouterr().out
+
+
+def _no_remote(repo, root):
+    raise AssertionError("a realign of a recorded project must not query the remote")
+
+
+def test_package_realign_with_a_record_makes_no_network_request(tmp_path, monkeypatch):
+    """The first step of every bump is `akmon init`; it has to work offline."""
+    _dev_pin(tmp_path)
+    assert _init.main(
+        ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
+    ) == 0
+    monkeypatch.setattr(_init, "_package_default_ref", _no_remote)
+    assert _init.main(["--project-root", str(tmp_path), "--yes"]) == 0
+
+
+def test_package_realign_names_the_installed_version_in_the_pin_line(tmp_path, capsys, monkeypatch):
+    """With no remote lookup, the pin instruction points at what is installed — no invented tag."""
+    assert _init.main(
+        ["--mode", "package", "--project-root", str(tmp_path), "--ref", "v0.3.0", "--yes"]
+    ) == 1  # no dev pin yet; the record is written all the same
+    capsys.readouterr()
+    monkeypatch.setattr(_init, "_package_default_ref", _no_remote)
+    assert _init.main(["--project-root", str(tmp_path), "--yes"]) == 1
+    out = capsys.readouterr().out
+    assert f"git+https://github.com/akumidv/ai_akmon@{_init._tag_for_version(__version__)}" in out
+    assert "Re-run `akmon init` after adding it" in out
+
+
+def test_package_first_attach_still_asks_the_remote(tmp_path, monkeypatch):
+    calls = []
+
+    def default_ref(repo, root):
+        calls.append(repo)
+        return "v0.3.0"
+
+    monkeypatch.setattr(_init, "_package_default_ref", default_ref)
+    _init.main(["--mode", "package", "--project-root", str(tmp_path), "--yes"])
+    assert len(calls) == 1
 
 
 def test_package_pin_line_defaults_to_the_latest_existing_release_tag(tmp_path, capsys, monkeypatch):

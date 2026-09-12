@@ -371,13 +371,15 @@ The `self_ci` checker reports through C51 with exact error codes:
 - `matrix.uncited-claim` — either direction of the evidence relation is violated;
 - `matrix.bare-claim` — closed enforcement vocabulary appears in a forbidden location.
 
-> **Amendment pending owner verification — [D2-29].** C57 split `matrix.unqualified-effect` by
-> coordinate: an unmeasured **route** stays an error, an unmeasured **crash posture** is a warn
-> that still fails `--strict`. This is a **permanent weakening of the rule for every claim**, not
-> a suspension until C52 measures the two that exist today: after C52 lands, a future `ask`/`deny`
-> claim with no crash measurement will still pass an ordinary run. The paragraph above states the
-> unsplit rule and the implementation does not match it; on approval this paragraph is rewritten
-> to state the split normatively, and this note is removed with it.
+> **Amendment — [D2-29], owner-approved: two claims are exempted by name.** The rule above
+> stands for every `ask`/`deny` claim with one closed exception: the Claude commit guard (`deny`)
+> and the Claude delegation nudge (`ask`) — the two enforcement claims that existed when C57
+> landed — carry an unmeasured crash posture as a **warn** that still fails `--strict`, because
+> their numbers are C52's measurement campaign and §7 forbids holding C57 behind it. The list
+> lives in the checker and only shrinks; a test fails once either claim records a measured crash
+> posture while still listed, so C52 landing restores the unexempted rule. Rejected: splitting
+> the code for every claim, which would have let each future `ask`/`deny` claim pass an ordinary
+> run with no crash measurement, permanently.
 >
 > Two rules were also **strengthened**, closing holes the paragraph above assumed shut:
 > `matrix.missing-file` now covers a marked region holding no claim or carrying a second marker

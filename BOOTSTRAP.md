@@ -98,10 +98,16 @@ When the user asks "attach akmon", the agent:
    agent writes it here, reading the version (tag-anchored, SHA-suffixed only between tags) from
    the submodule:
    ```bash
-   git -C _aitna/akmon describe --tags        # → akmon_version + last_realign
+   git -C _aitna/akmon describe --tags        # → akmon_version
    ```
-   On a **realign/bump** of an existing project, refresh `akmon_version` and `last_realign` to
-   the new `describe` value after the delta-check passes.
+   On a **realign/bump** of an existing project, refresh `akmon_version` to the new `describe`
+   value after the delta-check passes. **`last_realign` is not a copy of the pin** — it is a
+   completion marker. `akmon init` advances it only after its sync and model-routing stages —
+   and, in mode `package`, the dev-pin gate — have all succeeded, and running `init` writes both
+   keys, so prefer it. On this manual path, write `last_realign` only once you have run
+   `sync.py` and `tools/model_routing/init.py` yourself and both succeeded: the marker is a
+   claim about what completed, and a value written ahead of that asserts an alignment no run
+   performed (`verify` reads it as one).
 
    Then **generate/refresh the vendor pointers** (§C): for Claude Code write a `CLAUDE.md`
    that **imports** AGENTS.md via `@AGENTS.md` — Claude Code auto-loads `CLAUDE.md` but
@@ -269,7 +275,7 @@ malformed records, not a supported pre-3.11 host):
 ```toml
 akmon_version = "v0.2.0"        # `git -C _aitna/akmon describe --tags`
 attached_archetype = "frontend/js" # archetype/language from the akmon block
-last_realign = "v0.2.0"            # version of the last attach/realign (== akmon_version after a clean bump)
+last_realign = "v0.2.0"            # after sync + routing init + the package dev-pin gate succeed
 
 [test]
 runner = "poetry run pytest"       # optional — the test env pinned at attach (§A5); release_check uses it verbatim
@@ -361,28 +367,67 @@ This is the consumer side of the [release](roles/release.md) cycle; the bump its
 **Delta-check first (what to verify, not where it is stored).** The delta-check is a *procedure*,
 not stored data — it computes a version window and reads the changes from the CHANGELOG; it never
 keeps its own copy of them (the CHANGELOG is the single owner of "what changed"):
-1. `from` = `akmon_version` in `<AITNA_ROOT>/.akmon.toml` — where the project sits now.
+1. `from` = `last_realign` in `<AITNA_ROOT>/.akmon.toml` — the version the project was last
+   *aligned* to. Not `akmon_version`: that key records the pin, and in mode `package` `sync`
+   restamps it with the installed version on every run, so it stops anchoring the window the
+   moment you sync.
 2. `to` = `git -C _aitna/akmon describe --tags` after `git submodule update --remote` — the target.
 3. In [CHANGELOG.md](CHANGELOG.md), read only the version sections in the window `(from, to]`
    (`v0.x.y`: a bumped `x` is breaking). Everything `≤ from` is already applied; skip it.
 4. Each **`Breaking`/`migration`** line in that window is a **checklist item** — verify the project
    satisfies it (e.g. a new required file, a renamed path, a changed contract). `Added`/`Fixed`
    lines need no action.
-5. Realign per §A (refresh the akmon block, re-run `sync.py`), then update `.akmon.toml`
-   (`akmon_version` and `last_realign`) to `to`.
+5. Realign by running `akmon init`: it re-runs `sync` and the model-routing init, records
+   `akmon_version` from the mount's own `describe`, and advances `last_realign` only after both
+   stages succeed — so it writes both keys and you write neither. Refresh the hand-owned akmon block in
+   `AGENTS.md` yourself — `init` preserves it rather than rewriting it. A mounted project need
+   not have the package installed: run the CLI through `uvx`, pinned at the version the mount
+   now sits on. Whichever way it is launched, `init` dispatches the work to the **mount** — the
+   pin governs, and a CLI newer than the mount says so in one line — so the mount stays the
+   tree that runs.
 ```bash
 git submodule update --remote _aitna/akmon
-python3 _aitna/akmon/bin/sync.py          # refresh generated pointers
+uvx --from git+https://github.com/akumidv/ai_akmon@<to> akmon init   # or: akmon init
 python3 _aitna/akmon/bin/sync.py --check  # confirm no pointer drift
 python3 _aitna/akmon/bin/verify.py --strict
 # Codex only: open /hooks and review/trust changed project-local hooks after .codex/hooks.json changes
 git add _aitna/akmon CLAUDE.md GEMINI.md .codex .github/copilot-instructions.md .claude/settings.json .claude/skills
 git commit -m "bump akmon"             # owner commits if the pin/pointers moved
 ```
-In **mode `package`** the same procedure runs without the submodule step: bump the dev pin
-(`uv sync` / `uv lock --upgrade-package akmon`), then `akmon sync`, `akmon sync --check`,
-`akmon verify --strict`. Do not skip `akmon sync` because "nothing is materialized any more":
-the guardrails your `AGENTS.md` imports are, and a bump that changed one leaves the repository
+In **mode `package`** the same procedure runs without the submodule step, and `to` is the
+installed version rather than a `git describe`:
+
+```bash
+uv lock --upgrade-package akmon && uv sync   # bump the dev pin
+akmon init                                   # realign to it — see below
+akmon sync                                   # refresh generated pointers + guardrails
+akmon sync --check                           # confirm no drift
+akmon verify --strict
+# Codex only: open /hooks and review/trust changed project-local hooks after .codex/hooks.json changes
+```
+
+**`akmon init` is part of a bump, not only of an attach — in every mount mode.** Installing or
+updating the pin is not aligning to it. `sync` owns the generated pointers, vendor wiring and imported guardrails, and in
+mode `package` restamps `akmon_version`; `init` runs that sync, then reinitializes the model-routing binding, and advances
+`last_realign` only after both stages and the package-pin gate succeed. A release that moves the
+routing registry invalidates its binding by `registry_hash`, which `sync` cannot rebind. An existing AGENTS.md
+akmon block and existing CI workflows are hand-owned: `init` leaves them untouched, checks or
+reports the applicable manual next steps, and never treats rewriting them as part of realign.
+Re-running `init` is therefore safe. A skipped `init` is caught only where something moves the
+recorded pin. In mode `package`, `sync` restamps `akmon_version` with the installed version, so a
+sync without a realign leaves the record ahead of `last_realign` and `akmon verify` fails with
+`attach.realign`. In the mounted modes nothing restamps the pin — `git submodule update --remote`
+moves the mount and leaves the record where it was — so a skipped `init` leaves both keys agreeing
+on the old version and `verify` cannot see it; there the procedure above is the only guard.
+
+A realign needs no network: on a project that already has `<AITNA_ROOT>/.akmon.toml`, `init` takes
+the version it names in links and pin instructions from the installed package. Only a **first**
+attach in mode `package` without `--ref` asks the akmon repository for its latest release tag
+(`git ls-remote`, so it needs network access to GitHub) and stops with exit 2 when it cannot
+reach it — pass `--ref <tag>` to attach offline.
+
+Do not skip `akmon sync` either, on the grounds that "nothing is materialized any more": the
+guardrails your `AGENTS.md` imports are, and a bump that changed one leaves the repository
 holding the previous release's rules while the hooks already run the new ones. A session started
 in that state says so at SessionStart and asks for exactly this — but the first session to notice
 has already loaded the stale text.

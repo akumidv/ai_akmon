@@ -130,51 +130,6 @@ def _project_root_lib() -> ModuleType:
     return _embedded_common_module(_tree.embedded_tree_root(), "project_root")
 
 
-def _toml_scalar(raw: str) -> str:
-    """A ``.akmon.toml`` scalar: a quoted string's content, else the bare value up to a ``#``.
-
-    The same rule as ``bin/sync.py::_strip_inline_comment`` + quote stripping, kept local for
-    the reason the reader itself is local (below). Without it the documented shape
-    ``mount = "package"  # materialized`` read back as ``package"  # materialized`` — i.e. not
-    ``package`` — and a package-mode project whose record carried a comment silently fell back
-    to the mounted-tree branch, the exact skew this field exists to prevent.
-    """
-    value = raw.strip()
-    quote = value[:1]
-    if quote not in ('"', "'"):
-        return value.split("#", 1)[0].strip()
-    index = 1
-    while index < len(value):
-        if quote == '"' and value[index] == "\\":
-            index += 2
-            continue
-        if value[index] == quote:
-            return value[1:index]
-        index += 1
-    return value[1:]
-
-
-def _read_top_level_toml_value(path: Path, key: str) -> str | None:
-    """A minimal top-level ``key = "value"`` reader for ``.akmon.toml`` (stops at the first
-    ``[section]`` header). A narrow, self-contained duplicate of ``sync.py``'s fuller
-    ``read_akmon_toml`` — kept local (not imported) for the same reason mount detection
-    reimplements its own marker check below: this decides which tree to trust, so it must
-    not itself depend on either tree's content.
-    """
-    if not path.is_file():
-        return None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.startswith("["):
-            break
-        found_key, sep, value = stripped.partition("=")
-        if sep and found_key.strip() == key:
-            return _toml_scalar(value)
-    return None
-
-
 def _mounted_akmon_root(start: Path) -> Path | None:
     """The mounted tree root (``<AITNA_ROOT>/akmon``) for ``start``'s project, if any.
 
@@ -188,13 +143,16 @@ def _mounted_akmon_root(start: Path) -> Path | None:
     ``mount = "package"`` means "run the embedded tree unconditionally, no skew by
     construction" (ADR 0009 §4-5) — a stale ``<AITNA_ROOT>/akmon`` left over from a prior
     mode must not shadow it, so this returns ``None`` (no mount) even if that directory
-    still exists on disk.
+    still exists on disk. The record is read by the embedded tree's ``common/record.py`` —
+    the one reader (C75). That is not the dependency the paragraph above avoids: the embedded
+    tree ships with this CLI, while the consumer's tree is the one under judgment.
     """
+    record = _embedded_common_module(_tree.embedded_tree_root(), "record")
     aitna_name = _project_root_lib().aitna_root_name()
     for candidate in (start, *start.parents):
         if (candidate / "AGENTS.md").is_file():
             aitna_dir = candidate / aitna_name
-            if _read_top_level_toml_value(aitna_dir / ".akmon.toml", "mount") == "package":
+            if record.records_package_mode(candidate):
                 return None
             akmon_root = aitna_dir / "akmon"
             if akmon_root.exists():

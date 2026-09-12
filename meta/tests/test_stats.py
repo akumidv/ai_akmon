@@ -93,6 +93,18 @@ def test_aggregate_delegation_lines_counts_and_skips_malformed():
     assert result.per_pair[("k_explorer", "small")] == 2
 
 
+
+def test_digest_counts_exactly_the_rows_the_coverage_map_reads():
+    """A 3-field row was counted here and skipped by the coverage map (C76): one parser now."""
+    lines = [
+        "T0\tk_explorer\tsmall",  # too short for either schema
+        "T1\tk_explorer\tsmall\tfind X",  # legacy 4-field
+        "T2\tsess-1\tk_reasoner\t-\tauth\tthink",  # current 6-field, no model
+    ]
+    result = stats.aggregate_delegation_lines(lines)
+    assert result.total == len(routing.parse_delegation_entries(lines)) == 2
+    assert result.per_pair == {("k_explorer", "small"): 1, ("k_reasoner", "-"): 1}
+
 def test_parse_delegation_log_reads_real_file(tmp_path):
     log_path = tmp_path / "model-routing.log"
     log_path.write_text("T0\tk_explorer\tsmall\tfind X\n", encoding="utf-8")

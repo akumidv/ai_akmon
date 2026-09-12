@@ -1,6 +1,6 @@
 """The runtime-declaration checker (C57, design §7 / F16).
 
-The declaration in ``bin/runtime.py`` says what akmon needs on a host. This joins it to what
+The declaration in ``common/runtime.py`` says what akmon needs on a host. This joins it to what
 akmon actually invokes — and the shape of that join is the whole design:
 
 * the **generated-wiring** population is derived from the command strings ``sync`` emits, not
@@ -562,7 +562,7 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
             Finding(
                 "error", "runtime.undeclared-binary",
                 f"generated wiring invokes {binary!r}, which no runtime declaration names",
-                "bin/runtime.py",
+                "common/runtime.py",
                 f"Declare {binary} in the {GENERATED_WIRING} population, or stop emitting it.",
             )
         )
@@ -571,7 +571,7 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
             Finding(
                 "error", "runtime.undeclared-binary",
                 f"the harness-command map invokes {binary!r}, which no runtime declaration names",
-                "bin/runtime.py",
+                "common/runtime.py",
                 f"Declare {binary} in the {OWN_TOOLING} population, or drop it from the map.",
             )
         )
@@ -585,7 +585,7 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
                     "warn", "runtime.unused-binary",
                     f"{binary!r} is declared in {declaration.population or '(no population)'} "
                     f"but nothing in that population invokes it",
-                    "bin/runtime.py",
+                    "common/runtime.py",
                     f"Drop the {binary} declaration, or restore the call that needed it.",
                 )
             )
@@ -596,7 +596,7 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
                     "error", "runtime.wrong-population",
                     f"{binary!r} is declared in {declaration.population or '(no population)'} "
                     f"but is invoked by {found}",
-                    "bin/runtime.py",
+                    "common/runtime.py",
                     f"Declare {binary} in the {found} population.",
                 )
             )
@@ -612,7 +612,7 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
                     "error", "runtime.wrong-modality",
                     f"{binary!r} is declared {declaration.modality!r} but its "
                     f"{found} use is {expected!r}",
-                    "bin/runtime.py",
+                    "common/runtime.py",
                     f"Declare {binary} as {expected}.",
                 )
             )

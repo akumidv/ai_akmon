@@ -4,9 +4,11 @@
 Computes the tier→model binding from the registry's semantic selection policy (relative
 to the orchestrating model) and writes the generated artifacts:
 
-- ``.claude/agents/k_*.md`` — subagent definitions (committed; concrete ``model:``
-  frontmatter is emitted only when local model discovery / ``--available`` provides
-  concrete aliases);
+- ``.claude/agents/k_*.md`` — subagent definitions (per-user, gitignored: the frontmatter
+  pins each delegate to a model chosen for *this* session's orchestrator, and the
+  SessionStart hook rewrites them whenever it changes, so committing one would commit
+  somebody else's session. Concrete ``model:`` frontmatter is emitted only when local model
+  discovery / ``--available`` provides concrete aliases);
 - ``.claude/model-routing.local.json`` — the resolved binding + second-opinion opt-in +
   registry hash (per-user, gitignored like ``.env``).
 
@@ -31,53 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import routing  # noqa: E402
 
 from common.project_root import resolve_project_root  # noqa: E402
-
-
-def _toml_scalar(raw: str) -> str:
-    """A ``.akmon.toml`` scalar: a quoted string's content, else the bare value up to a ``#``.
-
-    The same rule as ``bin/sync.py::_strip_inline_comment`` + quote stripping, kept local for
-    the reason the reader itself is local (below). Without it the documented shape
-    ``mount = "package"  # materialized`` read back as ``package"  # materialized`` — i.e. not
-    ``package`` — and a package-mode project whose record carried a comment silently fell back
-    to the mounted-tree branch, the exact skew this field exists to prevent.
-    """
-    value = raw.strip()
-    quote = value[:1]
-    if quote not in ('"', "'"):
-        return value.split("#", 1)[0].strip()
-    index = 1
-    while index < len(value):
-        if quote == '"' and value[index] == "\\":
-            index += 2
-            continue
-        if value[index] == quote:
-            return value[1:index]
-        index += 1
-    return value[1:]
-
-
-def _read_top_level_toml_value(path: Path, key: str) -> str | None:
-    """A minimal top-level ``key = "value"`` reader for ``.akmon.toml`` (stops at the first
-    ``[section]`` header).
-
-    Deliberately local rather than a reuse of ``bin/sync.py::read_akmon_toml``: it answers
-    *which tree this script may trust*, and in mount mode ``package`` this file runs from the
-    materialized ``<AITNA_ROOT>/.akmon/`` copy, where ``bin/`` does not exist at all (ADR 0009
-    §4) — so the answer must not depend on any tree being importable.
-    """
-    if not path.is_file():
-        return None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.startswith("["):
-            break
-        found_key, sep, value = stripped.partition("=")
-        if sep and found_key.strip() == key:
-            return _toml_scalar(value)
-    return None
+from common.record import records_package_mode  # noqa: E402
 
 
 def _standard_tree_root(project_root: Path) -> Path:
@@ -91,7 +47,7 @@ def _standard_tree_root(project_root: Path) -> Path:
     not shadow the pin.
     """
     aitna = project_root / routing.aitna_root_name()
-    if _read_top_level_toml_value(aitna / ".akmon.toml", "mount") != "package":
+    if not records_package_mode(project_root):
         mounted = aitna / "akmon"
         if mounted.is_dir():
             return mounted
