@@ -1,6 +1,6 @@
 # Design note: why the Python floor moved from 3.9 to 3.11
 
-> **Decision owner-approved at D2-34; C68 implementation awaits landing.** Provenance: C37 side finding, measured on the tree that
+> **Decision owner-verified at D2-34; C68 landed in `db9ad7e`.** Provenance: C37 side finding, measured on the tree that
 > declared Python 3.9. The filename is retained because this note is the historical evidence for
 > retiring that floor. The operative contract is now Python **3.11 or newer** for the package and
 > every shipped venv-free entry point; Python 3.9 and 3.10 are unsupported.

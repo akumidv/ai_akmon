@@ -166,7 +166,7 @@ def test_mount_field_is_read_through_an_inline_comment(tmp_path):
     (root / "_aitna" / ".akmon.toml").write_text(
         'mount = "package"  # no tree in the repo (ADR 0009 §4)\n', encoding="utf-8"
     )
-    assert cli._read_top_level_toml_value(root / "_aitna" / ".akmon.toml", "mount") == "package"
+    assert cli._embedded_common_module(_tree.embedded_tree_root(), "record").recorded_mount(root) == "package"
     assert cli._mounted_akmon_root(root) is None
 
 

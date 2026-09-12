@@ -35,6 +35,7 @@ from common.project_root import (  # noqa: E402
     akmon_mount,
     find_project_root,
 )
+from common.record import read_akmon_toml  # noqa: E402
 
 
 def akmon_runtime_root(project_root: Path) -> Path:
@@ -630,20 +631,11 @@ def analysis_write_result(
 def d2_sensitive_paths(root: Path) -> list[str]:
     """The project's ``[d2_ledger] sensitive_paths`` globs from ``<aitna>/.akmon.toml`` (``[]`` if unset).
 
-    ``tomllib`` is part of the supported Python 3.11+ floor. Import failure still degrades to
-    silence so an abnormal host cannot turn this advisory into a hook crash."""
-    config = aitna_root(root) / ".akmon.toml"
-    if not config.is_file():
-        return []
-    try:
-        import tomllib
-    except ImportError:
-        return []
-    try:
-        with config.open("rb") as handle:
-            data = tomllib.load(handle)
-    except (OSError, ValueError):
-        return []
+    Reads through the shared ``common.record`` reader (C75) rather than a second parser of its
+    own: the same lenient parse every other caller gets, degrading to ``{}`` on an absent or
+    unreadable record and to a partial dict on a malformed one, so an abnormal host can never
+    turn this advisory into a hook crash."""
+    data = read_akmon_toml(aitna_root(root) / ".akmon.toml")
     section = data.get("d2_ledger")
     globs = section.get("sensitive_paths") if isinstance(section, dict) else None
     return [g for g in globs if isinstance(g, str)] if isinstance(globs, list) else []

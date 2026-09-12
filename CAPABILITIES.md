@@ -17,11 +17,12 @@ answer that came from a measurement.
 | `crash-posture` | what happens to the action when the mechanism fails | `fail-open` · `fail-closed` · `unmeasured` |
 | `evidence` | the probe or report behind the measured answers | a citation, or empty when nothing is measured |
 
-**Two rules bind them.** An `ask` or `deny` effect requires every route coordinate to be
-measured — an enforcement claim over an unmeasured route is not a guarantee. And a claim that
-measures anything must cite; a claim that measures nothing must cite nothing. The same
-enforcement claim over an unmeasured *crash posture* is a warning rather than an error: those
-numbers belong to C52's measurement campaign, and two rows below are carrying that debt.
+**Two rules bind them.** An `ask` or `deny` effect requires every route coordinate and the crash
+posture to be measured — an enforcement claim over an unmeasured route is not a guarantee. And a
+claim that measures anything must cite; a claim that measures nothing must cite nothing. Two rows
+below — the Claude commit guard and delegation nudge — are the only exception: their crash
+posture is still unmeasured, pending C52's measurement campaign, so they carry a warning rather
+than an error, and no other claim may join them.
 
 One row is one **claim**: one capability on one harness. A vendor with no measured or shipped
 claim has no row — absence here means akmon asserts nothing, not that the capability is missing.

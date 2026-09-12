@@ -108,25 +108,17 @@ class DelegationStats:
 
 
 def aggregate_delegation_lines(lines: Iterable[str]) -> DelegationStats:
-    """Aggregate TSV delegation-log lines; a malformed line (fewer than 3 fields) is skipped.
+    """Aggregate delegation-log lines, counting exactly the rows ``routing.parse_delegation_entries``
+    yields — the current 6-field schema and the legacy 4-field one; a shorter line is skipped.
 
-    Current schema has subagent/model at fields 2/3 (>= 6 fields); a legacy 4-field line
-    (timestamp · subagent · model · description) keeps them at 1/2 and is still counted.
+    One parser for both default readers, not a second reading here: this digest accepted a
+    3-field row that the coverage map skips, so the two could disagree on which delegations
+    exist (C76). An absent model counts as ``-``, as the log writes it.
     """
     stats = DelegationStats()
-    for raw in lines:
-        line = raw.rstrip("\n")
-        if not line:
-            continue
-        parts = line.split("\t")
-        if len(parts) >= 6:
-            subagent, model = parts[2], parts[3]
-        elif len(parts) >= 3:
-            subagent, model = parts[1], parts[2]
-        else:
-            continue
+    for entry in routing.parse_delegation_entries(lines):
         stats.total += 1
-        stats.per_pair[(subagent, model)] += 1
+        stats.per_pair[(entry.subagent, entry.model or "-")] += 1
     return stats
 
 

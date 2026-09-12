@@ -1,10 +1,12 @@
 # 0006 — Transcript-driven orchestrator detection, corridor warning, context pressure
 
 - **Status:** Accepted (extends [0004](0004-model-routing-capability-tiers.md)/[0005](0005-synthesizer-gate-audit-and-role-routing.md);
-  revises 0004's committed-agents point; implementation C22–C23).
+  revises 0004's committed-agents point; implementation C22–C23). C22 is owner-verified at D2-37 and
+  landed in `7312972`, Claude only (Codex pending); the D2-38 amendment below follows an owner-directed choice,
+  owner-approved as its ledger row and awaiting the landing commit.
 - **Owner:** akuminov@gmail.com
 - **References:** design source [`meta/design/model-routing.md` §1 (req 9–12), §3, §4.3, §12](../design/model-routing.md) ·
-  backlog [C22, C23](../TASKS.md).
+  C22 landed ([archive](../TASKS_ARCHIVE.md)); C23 in the [backlog](../TASKS.md).
 
 ## Context
 
@@ -63,5 +65,23 @@ already reads records per-turn `usage`.
 - Registry deltas: `orchestrator_floor: "opus"` (anthropic) + the `context_pressure`
   block — both change the registry hash, so existing local configs go stale once and
   re-init.
-- Backlog: C22 (detection + corridor + two-channel delivery) and C23 (context pressure);
-  D2 owner-verify applies to both (hook behaviour is architecture).
+- Implementation: C22 (detection + corridor + two-channel delivery) landed in `7312972` and is
+  archived after owner verification at D2-37; C23 (context pressure) stays in the backlog until
+  D2-38 lands. D2 owner-verify applies to both (hook behaviour is architecture).
+
+## Amendment — context pressure is a share of a recommended maximum (D2-38)
+
+Decision 5 measured the fill against "the model's window". That number is not in the transcript,
+so it had to be registry data — and the data was already wrong when checked: main-chain
+`claude-opus-5` turns on this machine reach 411,203 tokens with no compaction, while the block
+assumed a 200k window. Each model release would make it wrong again, and a larger limit does not
+move the point where quality degrades.
+
+The bands are therefore shares of a **recommended maximum context**, not of the model's limit
+(owner-directed; the exact contract is the D2-38 row, owner-approved). The registry block's `window_default`/`windows` become `recommended_max`
+(default 200000) and `recommended_max_by_alias` (alias-substring exceptions, longest match — e.g.
+a model whose hard limit sits below the default); `warn_ratios` is unchanged. A share above 100%
+is reported as such. The rename changes the registry hash, so local routing configs go stale once
+and re-init; an overlay still using the old keys is ignored. Carrier:
+`tools/model_routing/routing.py::recommended_max_context`; the operative contract is
+[D2-38](../D2_LEDGER.md) and [design §12.2](../design/model-routing.md).

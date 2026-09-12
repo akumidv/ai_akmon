@@ -757,6 +757,63 @@ def test_attach_record_valid_is_ok(tmp_path):
     assert any("records akmon version v0.3.0" in m for m in _messages(verifier.findings, "ok"))
 
 
+def _record(root: Path, *, pin: str, realigned: str) -> None:
+    _attach(root).write_text(
+        f'akmon_version = "{pin}"\nattached_archetype = "package/python"\nlast_realign = "{realigned}"\n',
+        encoding="utf-8",
+    )
+
+
+def test_attach_realign_matching_the_pin_is_ok(tmp_path):
+    root = _make_project(tmp_path)
+    _record(root, pin="v0.3.0", realigned="v0.3.0")
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert "error" not in _levels(verifier.findings)
+    assert any("realigned at v0.3.0" in m for m in _messages(verifier.findings, "ok"))
+
+
+def test_attach_realign_behind_the_pin_is_error(tmp_path):
+    """The state a package-mode bump leaves when `sync` ran and `init` did not."""
+    root = _make_project(tmp_path)
+    _record(root, pin="0.4.0.dev0", realigned="v0.2.1")
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    errors = _messages(verifier.findings, "error")
+    assert any("0.4.0.dev0" in m and "v0.2.1" in m for m in errors)
+    assert any(
+        finding.code == "attach.realign" and "akmon init" in finding.fix
+        for finding in verifier.findings
+    )
+
+
+def test_attach_realign_accepts_the_two_recorded_spellings(tmp_path):
+    """A mounted record writes `git describe` and a package one writes PEP 440 — same version."""
+    root = _make_project(tmp_path)
+    _record(root, pin="0.3.0", realigned="v0.3.0")
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert "error" not in _levels(verifier.findings)
+
+
+def test_attach_realign_ignores_a_describe_distance(tmp_path):
+    """A mount past its tag is `cli._skew_notice`'s fact, not a missing realign."""
+    root = _make_project(tmp_path)
+    _record(root, pin="v0.3.0-5-gabc1234", realigned="v0.3.0")
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert "error" not in _levels(verifier.findings)
+
+
+def test_attach_realign_silent_when_the_record_is_malformed(tmp_path):
+    """One finding per defect: a record missing keys cannot also be judged for freshness."""
+    root = _make_project(tmp_path)
+    _write(_attach(root), 'akmon_version = "v0.3.0"\n')
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert not any(finding.code == "attach.realign" for finding in verifier.findings)
+
+
 def test_attach_record_malformed_is_error(tmp_path):
     root = _make_project(tmp_path)
     _attach(root).write_text('akmon_version = "v0.3.0"\n', encoding="utf-8")  # missing the other keys
@@ -764,6 +821,37 @@ def test_attach_record_malformed_is_error(tmp_path):
     verifier.check_attach_record()
     errors = _messages(verifier.findings, "error")
     assert any("missing required key" in m for m in errors)
+
+
+@pytest.mark.parametrize(
+    ("version_key", "toml_value"),
+    [
+        ("akmon_version", "42"),
+        ("last_realign", '{ version = "v0.3.0" }'),
+    ],
+)
+def test_attach_record_rejects_non_string_versions(tmp_path, version_key, toml_value):
+    root = _make_project(tmp_path)
+    values = {
+        "akmon_version": '"v0.3.0"',
+        "attached_archetype": '"package/python"',
+        "last_realign": '"v0.3.0"',
+    }
+    values[version_key] = toml_value
+    _attach(root).write_text(
+        "".join(f"{key} = {value}\n" for key, value in values.items()),
+        encoding="utf-8",
+    )
+
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+
+    errors = [finding for finding in verifier.findings if finding.severity == "error"]
+    assert len(errors) == 1
+    assert errors[0].code == "attach.record"
+    assert version_key in errors[0].message
+    assert "expected non-empty strings" in errors[0].message
+    assert not any(finding.code == "attach.realign" for finding in verifier.findings)
 
 
 def test_attach_record_skipped_without_akmon_submodule(tmp_path):
@@ -825,12 +913,21 @@ jobs:
       - run: uv run akmon verify --strict
 """
 
-PACKAGE_AKMON_TOML = (
-    'mount = "package"\n'
-    'akmon_version = "0.3.0.dev0"\n'
-    'attached_archetype = "package"\n'
-    'last_realign = "2026-01-01"\n'
-)
+def _package_akmon_toml() -> str:
+    """A package-mode record of a project that *is* realigned to what is installed.
+
+    Both version keys carry the installed version, because these fixtures run a real ``sync``,
+    and ``sync`` restamps ``akmon_version`` with it (``sync._package_mode_akmon_toml``). A
+    literal here would make every whole-verifier package-mode test assert the one state
+    ``attach.realign`` exists to reject — an unrealigned project — instead of the green path.
+    """
+    version = sync._installed_akmon_version() or "0.3.0.dev0"
+    return (
+        'mount = "package"\n'
+        f'akmon_version = "{version}"\n'
+        'attached_archetype = "package"\n'
+        f'last_realign = "{version}"\n'
+    )
 
 
 def _make_package_mode_project(tmp_path: Path) -> Path:
@@ -843,7 +940,7 @@ def _make_package_mode_project(tmp_path: Path) -> Path:
     root = tmp_path
     _write(root / "AGENTS.md", PACKAGE_AGENTS_MD)
     _write(root / "_aitna" / "TASKS.md")
-    _write(root / "_aitna" / ".akmon.toml", PACKAGE_AKMON_TOML)
+    _write(root / "_aitna" / ".akmon.toml", _package_akmon_toml())
 
     _write(root / "_aitna" / "agents" / "engineer" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
     _write(root / "_aitna" / "memory" / "note.md", "fact\n")

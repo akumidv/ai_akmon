@@ -4,8 +4,12 @@
 The record answers "which carrier is this project on" (ADR 0009 §3), and answering it wrongly
 is never loud: a package-mode project beside a stale ``<AITNA_ROOT>/akmon`` had its hooks bind
 the stale tree's registry and print stale tool paths, silently (C69/D2-26). Five modules had
-grown their own narrow reader before this one existed, each justified in place; the hooks would
-have been the sixth, which is what settled it.
+grown their own narrow reader before this one existed, each justified in place. C75 folded four
+of them — ``release_check``, ``model_routing/init.py`` and the CLI (through the embedded tree's
+copy) — plus a sixth caller the fold-in list missed, ``hooks/hook_core.py::d2_sensitive_paths``,
+which had kept its own bare ``tomllib`` call. One reader stays local on purpose —
+``d2_ledger.py`` needs the strict parse this module deliberately is not, and its docstring says
+why.
 
 Lifted out of ``bin/sync.py`` unchanged — the tomllib-when-present / stdlib-fallback pair and
 the quote-aware comment strip are the same code, moved rather than rewritten, so nothing about
@@ -51,11 +55,13 @@ def _strip_inline_comment(value: str) -> str:
 def read_akmon_toml(path: Path) -> dict:
     """Read ``_aitna/.akmon.toml`` (the integration record) into a nested dict.
 
-    Uses Python 3.11+ ``tomllib``; a minimal stdlib parser remains as a lenient fallback for
-    malformed records in this record's subset. It is not a pre-3.11 support promise. Quotes are
-    stripped; values are treated as strings. Returns ``{}`` if the
-    file is absent, unreadable, or malformed — a caller that needs to *report* a broken record must
-    check the file itself rather than infer it from an empty dict."""
+    Uses Python 3.11+ ``tomllib`` when available; a minimal stdlib line parser is the fallback,
+    used both when ``tomllib`` is absent and when it raises ``TOMLDecodeError`` on a malformed
+    file — lenient parsing, not a pre-3.11 support promise. Quotes are stripped; values are
+    treated as strings. Returns ``{}`` only when the file is absent or unreadable (``OSError``);
+    a malformed file is read leniently by the fallback parser instead and can come back
+    non-empty, so a caller that needs to *report* a broken record must check the file itself
+    rather than infer it from the result."""
     if not path.is_file():
         return {}
     try:
@@ -107,9 +113,11 @@ def recorded_mount(project_root: Path) -> str | None:
 def records_package_mode(project_root: Path) -> bool:
     """Whether the record declares mount mode ``package`` (ADR 0009 §4).
 
-    Fail-safe by construction: an absent, unreadable or malformed record reads as ``{}`` and
-    answers ``False``, so a caller falls back to whatever it would have done without a record.
-    That matters most for the hooks, which must never abort a session over a file they only
-    consult.
+    Fail-safe by construction, not fail-empty: an absent or unreadable record reads as ``{}`` and
+    answers ``False``. A malformed record is parsed leniently instead — the fallback line parser
+    can still resolve a ``mount = "package"`` line out of an otherwise-broken file, so this can
+    answer ``True`` off a record that would fail a strict parse. Either way no caller aborts a
+    session over a file it only consults; a caller that must *reject* a broken record has to check
+    the file itself, as ``d2_ledger.py`` does (C75).
     """
     return recorded_mount(project_root) == _PACKAGE_MODE

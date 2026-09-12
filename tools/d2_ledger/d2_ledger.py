@@ -270,10 +270,17 @@ def _read_or_skeleton(path: Path) -> str:
 
 
 def _read_akmon_toml(path: Path) -> dict:
-    """Read a ``.akmon.toml`` file into a dict; ``{}`` if absent or ``tomllib`` is unavailable.
+    """Read a ``.akmon.toml`` file into a dict; ``{}`` if absent or ``tomllib`` is unavailable, and a
+    malformed file raises.
 
-    ``tomllib`` is part of the supported Python 3.11+ floor. Import failure still yields no
-    sensitive-path config: this diagnostic remains conservative without adding a dependency."""
+    Deliberately not ``common/record.py``, which every other caller shares (C75). That reader is
+    lenient by contract — a malformed record falls through to a line parser that yields every
+    value as a string — because a hook must not end a session over a file it only consults.
+    Here the same leniency would be a silent loss: ``sensitive_paths`` is an array the line parser
+    cannot produce, so a record that fails to parse would quietly switch the D2 path check off.
+    The lookup differs as well: it walks up from the ledger instead of resolving the dev-layer
+    root. ``tomllib`` is on the Python 3.11 floor; an import failure still yields no sensitive-path
+    config rather than a lenient guess."""
     if not path.is_file():
         return {}
     try:

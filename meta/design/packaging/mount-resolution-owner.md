@@ -1,7 +1,7 @@
 # Design note: who answers "which standard tree does this project run?"
 
-> **Closed — [C69](../../TASKS.md), owner-approved at
-> [D2-26](../../D2_LEDGER.md) and awaiting the landing commit; kept because the measurement below
+> **Closed — [C69](../../TASKS_ARCHIVE.md), owner-verified at
+> [D2-26](../../D2_LEDGER.md) and landed in `07f46ad`; kept because the measurement below
 > is why.** Provenance:
 > C37 review side finding, measured on this tree. **The decision: the recorded `mount` is a veto
 > over the directory check, not a replacement for it** — records `package` → the materialization,
@@ -11,7 +11,7 @@
 > `mount` decides. This note records the module that answered it differently, what that cost —
 > measured, not argued — and the fork the fix had to pick.
 
-> **Superseded for the runtime root — [C77](../../TASKS.md), see the "mode `package` executes
+> **Superseded for the runtime root — [C77](../../TASKS_ARCHIVE.md), see the "mode `package` executes
 > from the package" amendment in
 > [ADR 0009](../../decisions/0009-packaging-package-carrier-and-mount-modes.md).**
 > `akmon_runtime_root` no longer consults the record at all: it returns the tree the hook is
@@ -86,8 +86,16 @@ sixth:
 Only the hooks' reader moved. Folding the other four is [C75](../../TASKS.md): each carries a
 justification to re-examine on its own, and three of the four are weaker than when written.
 
-> **Premise corrected, and the shared home now exists ([C73](../../TASKS.md) →
-> [C74](../../TASKS.md)).** This note previously said `bin/` "does not exist at all" in the
+> **Folded — [C75](../../TASKS.md).** Three of the four now read through `common/record.py`:
+> `release_check` and `model_routing/init.py` import it, and the CLI asks the embedded tree's
+> copy — the tree that ships with it, not the consumer's tree it is judging. A caller the table
+> did not list, `src/akmon/_init.py::_recorded_mount`, borrowed the CLI's private reader and moved
+> with it. `d2_ledger.py` stays local, for a reason the table does not give: it reads an array and
+> must fail on a malformed record, and the shared reader is lenient by contract. The line numbers
+> above are the ones C69 measured.
+
+> **Premise corrected, and the shared home now exists ([C73](../../TASKS_ARCHIVE.md) →
+> [C74](../../TASKS_ARCHIVE.md)).** This note previously said `bin/` "does not exist at all" in the
 > materialized tree, and priced the shared home off that. It was already untrue — `_materialized_files`
 > had been copying a module there since C57 — and it is now moot: C74 gave the shared stdlib-only
 > utilities their own package, `common/`, materialized whole into `<AITNA_ROOT>/.akmon/` beside

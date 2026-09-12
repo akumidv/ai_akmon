@@ -48,6 +48,7 @@ sys.path.insert(0, str(KEYSTONE_ROOT))
 
 from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
 from common.project_root import aitna_root, aitna_root_name, resolve_project_root  # noqa: E402
+from common.record import read_akmon_toml  # noqa: E402
 from common.versions import is_final, split_version  # noqa: E402
 
 _VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
@@ -493,36 +494,6 @@ def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: 
 # --------------------------------------------------------------------------------------
 
 
-def _read_akmon_toml(path: Path) -> dict:
-    """Read `<AITNA_ROOT>/.akmon.toml` into a nested dict (mirrors `sync.read_akmon_toml`).
-
-    Kept self-contained — this tool does not import `sync` — and stdlib-only: Python 3.11+
-    `tomllib`, with a minimal defensive fallback for malformed records in the documented subset
-    (flat `key = "value"`, `[section]`, `#` comments)."""
-    if not path.is_file():
-        return {}
-    try:
-        import tomllib
-
-        with path.open("rb") as handle:
-            return tomllib.load(handle)
-    except ImportError:
-        pass
-    data: dict = {}
-    section = data
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.startswith("[") and stripped.endswith("]"):
-            section = data.setdefault(stripped[1:-1].strip(), {})
-            continue
-        key, sep, value = stripped.partition("=")
-        if sep:
-            section[key.strip()] = value.strip().strip('"').strip("'")
-    return data
-
-
 def _pinned_test_runner(root: Path) -> str | None:
     """The `[test].runner` recorded in `<root>/<AITNA_ROOT>/.akmon.toml`, if any.
 
@@ -531,7 +502,7 @@ def _pinned_test_runner(root: Path) -> str | None:
     and an env with pytest, so the right move is to *use what is there*, decided once at attach,
     not to re-guess (or build a second `<AITNA_ROOT>/.venv`) on every run. Absent → fall back to
     `_pytest_command`'s discovery for projects that predate this field."""
-    test = _read_akmon_toml(aitna_root(root) / ".akmon.toml").get("test")
+    test = read_akmon_toml(aitna_root(root) / ".akmon.toml").get("test")
     runner = test.get("runner") if isinstance(test, dict) else None
     return runner.strip() if isinstance(runner, str) and runner.strip() else None
 

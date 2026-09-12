@@ -9,11 +9,12 @@ three it is asserting.
 
 Two rules bind the axes to each other:
 
-* an `ask` or `deny` effect requires every route coordinate to be **measured** — an enforcement
-  claim over an unmeasured route is the exact thing this file exists to stop. The same claim
-  over an unmeasured *crash posture* is a **warn**: those numbers come from C52's measurement
-  campaign behind the D2-23 gate, and holding C57 behind an unrelated campaign is what §7
-  forbids. It still fails `--strict`, so the debt stays visible;
+* an `ask` or `deny` effect requires every route coordinate and the crash posture to be
+  **measured** — an enforcement claim over an unmeasured route is the exact thing this file
+  exists to stop. The two claims ``CRASH_POSTURE_EXEMPT`` names carry an unmeasured crash
+  posture as a **warn** instead (D2-29): their numbers come from C52's measurement campaign
+  behind the D2-23 gate, and holding C57 behind an unrelated campaign is what §7 forbids. The
+  warn still fails `--strict`, so the debt stays visible, and the list only shrinks;
 * a **measured** row must cite evidence, and a row that measures nothing must cite none.
   Requiring a citation only in free prose is rejected: a pattern cannot tell evidence from
   decoration.
@@ -44,6 +45,17 @@ EFFECTS = ("none", "advisory", "ask", "deny")
 CRASH_POSTURES = ("fail-open", "fail-closed", "unmeasured")
 #: The explicit "no measurement stands behind this coordinate" value.
 UNMEASURED = "unmeasured"
+
+#: The only claims whose ``ask``/``deny`` may stand on an unmeasured crash posture, as a warn
+#: (D2-29): the two enforcement claims that existed when C57 landed, whose numbers are C52's
+#: campaign. The list only shrinks. Any other claim over an unmeasured crash posture is an error,
+#: and ``meta/tests/test_capabilities.py`` fails once a listed claim records a measured posture or
+#: no live claim carries a listed title — the exemption is removed by a test, not remembered.
+#: Entries are the claims' ``###`` titles in ``CAPABILITIES.md``, matched whole.
+CRASH_POSTURE_EXEMPT = (
+    "Commit guard — owner-owned commits at the tool boundary — Claude Code",
+    "Delegation log and drift nudge — Claude Code",
+)
 
 # --- the bare-claim scan -------------------------------------------------------------------
 #
@@ -323,18 +335,19 @@ def _check_row(row: dict, target: str) -> list[Finding]:
                     )
                 )
         if posture == UNMEASURED:
-            # Warn, not error, and only for this coordinate. This is a **permanent** weakening
-            # of the rule for every claim, not a suspension until C52 measures the two that
-            # exist today: after C52 lands, a future ask/deny claim with no crash measurement
-            # still passes a non-strict run. The trade the owner accepted (D2-29) is that §7
-            # forbids holding C57 behind C52's measurement campaign, and `--strict` keeps the
-            # debt failing somewhere rather than nowhere.
+            # An error like any unmeasured coordinate, except on the claims the owner exempted by
+            # name (D2-29): those two predate C52's measurement campaign, and §7 forbids holding
+            # C57 behind it. The exemption is a warn, not silence, so `--strict` keeps the debt
+            # failing somewhere; a future claim cannot join it without editing the list.
+            exempt = title in CRASH_POSTURE_EXEMPT
             findings.append(
                 Finding(
-                    "warn", "matrix.unqualified-effect",
+                    "warn" if exempt else "error", "matrix.unqualified-effect",
                     f"{title}: effect {effect!r} claimed while 'crash-posture' is {UNMEASURED}",
                     where,
-                    f"Record the measured crash posture from C52 before relying on {effect}.",
+                    f"Record the measured crash posture from C52 before relying on {effect}."
+                    if exempt
+                    else f"Measure the crash posture before claiming {effect}, or lower the effect.",
                 )
             )
     if complete:

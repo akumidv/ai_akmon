@@ -26,6 +26,7 @@ import sync as sync_tool  # noqa: E402
 
 from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
 from common.project_root import resolve_project_root  # noqa: E402
+from common.versions import split_version  # noqa: E402
 
 _TASKS_MAX_LINES = 200
 _TASK_STATUSES = ("active", "blocked", "deferred", "done")
@@ -1058,7 +1059,7 @@ class Verifier:
     def check_attach_record(self) -> None:
         """Validate the `_aitna/.akmon.toml` integration record *of a consuming project*.
 
-        It is the "where the project is" anchor that BOOTSTRAP §B2 diffs against akmon's
+        It is the "where the project is" anchor that BOOTSTRAP §E diffs against akmon's
         CHANGELOG to compute which Breaking/migration entries a realign still needs to verify.
         The agent writes it on attach/realign (sync.py is stdlib-only and cannot run `git describe`).
 
@@ -1068,8 +1069,10 @@ class Verifier:
         package-mode consumer leaves) — verify run against the akmon repo itself (no mount,
         no record) skips it. Even on a consumer, a *missing* record is a non-gating note (the
         project may predate this contract; the fix is a realign), so it never fails
-        `--strict`; only a *present but malformed* record — missing the required top-level
-        keys — is an error.
+        `--strict`; only a *present but malformed* record — missing required top-level keys,
+        or carrying a blank/non-string ``akmon_version`` or ``last_realign`` — is an error. A
+        record that is *well-formed but behind* is an error too, and for its own reason: see
+        :meth:`_check_realign_freshness`.
         """
         name = f"{self.aitna}/.akmon.toml"
         path = self.root / self.aitna / ".akmon.toml"
@@ -1079,7 +1082,7 @@ class Verifier:
             self.ok(
                 "attach.record",
                 f"{name} not present (optional; a realign writes it so future "
-                "bumps can diff the CHANGELOG — BOOTSTRAP §B2)",
+                "bumps can diff the CHANGELOG — BOOTSTRAP §E)",
                 target=name,
                 fix=f"Run a realign when you next bump akmon so {name} is written.",
             )
@@ -1094,6 +1097,18 @@ class Verifier:
                 target=name,
                 fix=f"Add the listed keys to {name} by re-running a realign.",
             )
+        elif invalid_versions := [
+            key
+            for key in ("akmon_version", "last_realign")
+            if not isinstance(fields[key], str) or not fields[key].strip()
+        ]:
+            self.error(
+                "attach.record",
+                f"{name} has invalid version key(s): {', '.join(invalid_versions)}; "
+                "expected non-empty strings",
+                target=name,
+                fix=f"Repair the listed keys in {name} by re-running a realign.",
+            )
         else:
             self.ok(
                 "attach.record",
@@ -1101,6 +1116,48 @@ class Verifier:
                 target=name,
                 fix=f"Refresh {name} on every akmon bump.",
             )
+            self._check_realign_freshness(name, fields)
+
+    def _check_realign_freshness(self, name: str, fields: dict) -> None:
+        """The recorded realign must name the version the record says the project sits on.
+
+        `sync` is not a realign. In mode `package` it stamps `akmon_version` with the installed
+        version on every run (`sync.py::_package_mode_akmon_toml`), so that key records the
+        *pin* — not evidence that the project was aligned to it. `sync` owns the generated
+        pointers, vendor wiring and imported guardrails. `init` runs that sync, reinitializes
+        the model-routing binding, and advances `last_realign` only after those stages and the
+        package-pin completeness gate succeed. Existing AGENTS.md and CI text remain hand-owned.
+        A pin ahead of the last realign is therefore a project running new hooks against an old
+        alignment, and until now it was silent — `sync` moved one key past the other and reported
+        success.
+
+        This owns one half of the fact. The other half — a pin the project has not even synced
+        to — belongs to `sync --check`, which plans this same file and reports the drift
+        (`sync.py::_planned_files`); duplicating it here would put two owners on one comparison.
+
+        Both spellings are normalized first (`common/versions.py::split_version`, C54): a
+        mounted record carries `git describe` output and a package-mode record carries the
+        installed PEP 440 version, so a raw equality would fire on the mounted spelling alone.
+        Dropping the `git describe` distance is deliberate — a mount that sits N commits past
+        the tag it was realigned against is a different fact with its own notice
+        (`cli.py::_skew_notice`), not a missing realign.
+        """
+        recorded, realigned = fields["akmon_version"], fields["last_realign"]
+        if split_version(recorded)[0] == split_version(realigned)[0]:
+            self.ok(
+                "attach.realign",
+                f"{name} was realigned at {realigned}, the version it records",
+                target=name,
+                fix="Run `akmon init` after every bump so the realign follows the pin.",
+            )
+            return
+        self.error(
+            "attach.realign",
+            f"{name} records akmon {recorded} but was last realigned at {realigned} — "
+            "the pin moved and the project was never realigned to it",
+            target=name,
+            fix="Run `akmon init` to realign, then `akmon sync` and `akmon verify --strict`.",
+        )
 
     def run(self) -> None:
         self.check_basic_layout()

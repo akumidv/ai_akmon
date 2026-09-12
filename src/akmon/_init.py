@@ -246,10 +246,16 @@ def _validated_aitna_root(value: str, root: Path, source: str = "--aitna-root") 
 
 
 def _recorded_mount(root: Path, aitna: str) -> str | None:
-    """The mount mode a previous attach recorded, or ``None`` for a first attach."""
+    """The mount mode a previous attach recorded, or ``None`` for a first attach.
+
+    Read by the embedded tree's ``common/record.py``, the one reader (C75). The path is built
+    here rather than asked for because ``aitna`` is the dev-layer name this attach resolved.
+    """
     from akmon import cli
 
-    return cli._read_top_level_toml_value(root / aitna / ".akmon.toml", "mount")
+    record = cli._embedded_common_module(_tree.embedded_tree_root(), "record")
+    value = record.read_akmon_toml(root / aitna / ".akmon.toml").get("mount")
+    return value if isinstance(value, str) and value else None
 
 
 def _old_mount_removal(previous: str, relative: str) -> str:
@@ -759,18 +765,19 @@ def _write_if_absent(path: Path, text: str, log, label: str) -> bool:
 
 
 def _write_akmon_toml(root: Path, aitna: str, *, mode: str, version: str | None, archetype: str) -> Path:
-    """Create or realign ``<AITNA_ROOT>/.akmon.toml`` — the integration record a later bump
-    diffs against the CHANGELOG (BOOTSTRAP §C).
+    """Create or prepare ``<AITNA_ROOT>/.akmon.toml`` for an attach/realign.
 
     A fresh record is written whole. An existing one is *upserted key by key*
     (``sync.py::_upsert_toml_key``) rather than regenerated, so a hand-written
     ``[test].runner``, comments, and every field this command does not own survive the
     realign — and an ``attached_archetype`` a human already resolved is never overwritten
-    with the placeholder.
+    with the placeholder. This step records the attempted pin and mount but deliberately
+    leaves ``last_realign`` unchanged; :func:`_mark_realign_complete` advances that completion
+    marker only after sync, routing initialization, and the package-pin gate all succeed.
     """
     path = root / aitna / ".akmon.toml"
     if not path.is_file():
-        recorded = f'akmon_version = "{version}"\nlast_realign = "{version}"\n' if version else ""
+        recorded = f'akmon_version = "{version}"\n' if version else ""
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             "# akmon integration record — written by `akmon init`, refreshed on realign.\n"
@@ -794,12 +801,28 @@ def _write_akmon_toml(root: Path, aitna: str, *, mode: str, version: str | None,
     text = sync_mod._upsert_toml_key(text, "mount", mode)
     if version:
         text = sync_mod._upsert_toml_key(text, "akmon_version", version)
-        text = sync_mod._upsert_toml_key(text, "last_realign", version)
     if not fields.get("attached_archetype"):
         text = sync_mod._upsert_toml_key(text, "attached_archetype", archetype)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def _mark_realign_complete(path: Path, version: str | None) -> None:
+    """Advance the completion marker after every generated stage has succeeded.
+
+    The other record fields describe the attach being attempted and are useful even when a
+    fresh attach stops part-way through.  ``last_realign`` is different: it asserts that both
+    sync and model-routing init completed for that version, so an existing value must survive
+    either failure and a fresh failed attach must not gain one.
+    """
+    if not version:
+        return
+    from akmon import cli
+
+    sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
+    text = path.read_text(encoding="utf-8")
+    path.write_text(sync_mod._upsert_toml_key(text, "last_realign", version), encoding="utf-8")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -847,14 +870,16 @@ def main(argv: list[str] | None = None) -> int:
         aitna = _effective_aitna_root(args.aitna_root, root)
         os.environ["AITNA_ROOT"] = aitna
 
+        previous = _recorded_mount(root, aitna)
         if args.mode:
             mode, reason = args.mode, "requested"
+        elif previous in MODES:
+            mode, reason = previous, "recorded"
         else:
             mode, reason = _default_mode(root, args.repo)
         package_mode = mode == "package"
         mount = root / aitna / "akmon"
 
-        previous = _recorded_mount(root, aitna)
         switching = bool(previous) and previous != mode
         if switching and args.switch_mode and not package_mode and mount.exists() and any(mount.iterdir()):
             # Between two *mounted* modes the mount itself has to change shape — a submodule's
@@ -897,9 +922,16 @@ def main(argv: list[str] | None = None) -> int:
             version = __version__
             pin_status = _package_pin_status(root)
         # Package-mode links and pin instructions name a remote release. Mounted modes derive
-        # their recorded ref from the mounted tree instead.
+        # their recorded ref from the mounted tree instead. Only a *first* package attach asks the
+        # remote for its latest release tag: on a realign the ref feeds nothing but the AGENTS.md
+        # block `init` preserves and the pin instruction, and the installed version already names
+        # it — while a network round-trip there would make the first step of every bump fail
+        # offline, with exit 2, for a value the run does not use.
+        first_attach = not (root / aitna / ".akmon.toml").is_file()
         ref = args.ref or (
-            _package_default_ref(args.repo, root) if package_mode else _tag_for_version(version or __version__)
+            _package_default_ref(args.repo, root)
+            if package_mode and first_attach
+            else _tag_for_version(version or __version__)
         )
     except _InitError as exc:
         print(f"akmon init: {exc}", file=sys.stderr)
@@ -1025,8 +1057,9 @@ def main(argv: list[str] | None = None) -> int:
         print()
         log(
             "exit 1: mode 'package' has no akmon pin in a dev group yet (step 1) — nothing else attaches it, "
-            "so this attach is not finished. Re-run `akmon init --mode package` after adding it, or "
+            "so this attach is not finished. Re-run `akmon init` after adding it (it keeps the recorded mode), or "
             "`akmon verify --strict` to re-check."
         )
         return 1
+    _mark_realign_complete(record, version)
     return 0

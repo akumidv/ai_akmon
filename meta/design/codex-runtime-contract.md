@@ -1,6 +1,6 @@
 # Design: Codex runtime contract and package-mode hardening
 
-> Implementation task: [C39](../TASKS.md). Owner-verified in
+> Implementation task: [C39](../TASKS_ARCHIVE.md). Owner-verified in
 > [D2-13](../D2_LEDGER.md) (clauses a–c, **Approved**), with the capability-matrix clause signed
 > against the delivery caveat N7 added to the matrix.
 

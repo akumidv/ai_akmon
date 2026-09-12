@@ -13,7 +13,14 @@ from pathlib import Path
 
 import pytest
 from checks import capabilities
-from checks.capabilities import CRASH_POSTURES, EFFECTS, MATRIX_FILE, REGION_BEGIN, REGION_END
+from checks.capabilities import (
+    CRASH_POSTURE_EXEMPT,
+    CRASH_POSTURES,
+    EFFECTS,
+    MATRIX_FILE,
+    REGION_BEGIN,
+    REGION_END,
+)
 
 # A clean non-enforcement claim: every axis present, delivery settled, nothing enforced.
 PLAIN_ROW = """### Demo capability — Claude Code
@@ -60,8 +67,8 @@ def _only(findings, code: str, severity: str = "error"):
     """Exactly one finding, carrying ``code`` at ``severity``.
 
     Severity is pinned, not just the code: the crash-posture branch of
-    ``matrix.unqualified-effect`` is deliberately a warn while its route-coordinate branch is an
-    error, and a code-only assertion could not tell the two apart.
+    ``matrix.unqualified-effect`` is a warn on the claims ``CRASH_POSTURE_EXEMPT`` names and an
+    error everywhere else, and a code-only assertion could not tell the two apart.
     """
     assert [(f.severity, f.code) for f in findings] == [(severity, code)], _codes(findings)
     return findings[0]
@@ -177,28 +184,78 @@ def test_an_unmeasured_route_coordinate_under_enforcement_is_unqualified(tmp_pat
     assert coordinate in finding.message
 
 
-@pytest.mark.parametrize("effect", ["ask", "deny"])
-def test_an_unmeasured_crash_posture_under_enforcement_warns(tmp_path, effect):
-    """Warn, permanently — not a dated debt that C52 converts back into an error (D2-29)."""
+def _guard(effect: str, *, title: str | None = None, posture: str = "unmeasured") -> str:
     row = GUARD_ROW.replace("- effect: deny", f"- effect: {effect}")
-    row = row.replace("- crash-posture: fail-closed", "- crash-posture: unmeasured")
-    finding = _only(
-        capabilities.check_capabilities(_tree(tmp_path, row)),
-        "matrix.unqualified-effect",
-        severity="warn",
-    )
+    row = row.replace("- crash-posture: fail-closed", f"- crash-posture: {posture}")
+    return row.replace("### Demo guard — Claude Code", f"### {title}") if title else row
+
+
+@pytest.mark.parametrize("effect", ["ask", "deny"])
+def test_an_unmeasured_crash_posture_under_enforcement_is_unqualified(tmp_path, effect):
+    """An error for every claim the owner did not exempt by name (D2-29) — not a global warn."""
+    finding = _only(capabilities.check_capabilities(_tree(tmp_path, _guard(effect))), "matrix.unqualified-effect")
     assert "crash-posture" in finding.message
 
 
 @pytest.mark.parametrize("effect", ["ask", "deny"])
-def test_an_unmeasured_crash_posture_keeps_a_non_strict_run_at_zero(tmp_path, effect):
+def test_an_unmeasured_crash_posture_fails_a_non_strict_run(tmp_path, effect):
     from common.findings import exit_code
 
-    row = GUARD_ROW.replace("- effect: deny", f"- effect: {effect}")
-    row = row.replace("- crash-posture: fail-closed", "- crash-posture: unmeasured")
-    found = capabilities.check_capabilities(_tree(tmp_path, row))
+    assert exit_code(capabilities.check_capabilities(_tree(tmp_path, _guard(effect))), strict=False) == 1
+
+
+@pytest.mark.parametrize("title", CRASH_POSTURE_EXEMPT)
+@pytest.mark.parametrize("effect", ["ask", "deny"])
+def test_an_exempt_claim_carries_an_unmeasured_crash_posture_as_a_warn(tmp_path, effect, title):
+    from common.findings import exit_code
+
+    found = capabilities.check_capabilities(_tree(tmp_path, _guard(effect, title=title)))
+    finding = _only(found, "matrix.unqualified-effect", severity="warn")
+    assert "crash-posture" in finding.message
     assert exit_code(found, strict=False) == 0
     assert exit_code(found, strict=True) == 1
+
+
+@pytest.mark.parametrize("title", CRASH_POSTURE_EXEMPT)
+def test_the_exemption_covers_the_crash_posture_only(tmp_path, title):
+    """An exempt claim over an unmeasured route coordinate is still an error."""
+    row = _guard("deny", title=title, posture="fail-closed").replace("version=2.1.221", "version=unmeasured")
+    _only(capabilities.check_capabilities(_tree(tmp_path, row)), "matrix.unqualified-effect")
+
+
+def test_the_exemption_is_matched_on_the_whole_title(tmp_path):
+    """A claim cannot inherit the exemption by resembling a listed one."""
+    row = _guard("deny", title=CRASH_POSTURE_EXEMPT[0].replace("Claude Code", "Codex CLI"))
+    _only(capabilities.check_capabilities(_tree(tmp_path, row)), "matrix.unqualified-effect")
+
+
+# F13 carrier on C52/D2-23 — the D2-29 exemption expires by test, not by memory: it names live
+# claims, and it outlives none of their crash measurements.
+
+
+def _live_claims() -> dict[str, dict]:
+    text = (Path(__file__).resolve().parents[2] / MATRIX_FILE).read_text(encoding="utf-8")
+    begin, end = capabilities._region_span(text)
+    rows, _ = capabilities._parse_rows(text[begin:end], line_offset=1)
+    return {row["title"]: row["axes"] for row in rows}
+
+
+@pytest.mark.parametrize("title", CRASH_POSTURE_EXEMPT)
+def test_every_crash_posture_exemption_names_a_live_claim(title):
+    assert title in _live_claims(), (
+        f"CRASH_POSTURE_EXEMPT lists {title!r}, which no claim in {MATRIX_FILE} carries — a renamed "
+        "claim loses its exemption; rename the entry with it, or drop the entry"
+    )
+
+
+@pytest.mark.parametrize("title", CRASH_POSTURE_EXEMPT)
+def test_a_crash_posture_exemption_expires_once_the_claim_is_measured(title):
+    axes = _live_claims().get(title, {})
+    assert axes.get("crash-posture") == "unmeasured" and axes.get("effect") in ("ask", "deny"), (
+        f"{title!r} no longer stands on an unmeasured crash posture under ask/deny — C52 measured "
+        "it, so remove it from CRASH_POSTURE_EXEMPT (D2-29): the exemption must not outlive the "
+        "debt it covered"
+    )
 
 
 @pytest.mark.parametrize("effect", ["none", "advisory"])

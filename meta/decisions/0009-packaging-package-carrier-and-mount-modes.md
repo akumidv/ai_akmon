@@ -1,8 +1,8 @@
 # 0009 — Packaging: the `akmon` package as carrier, four mount modes incl. `package`
 
 - **Status:** Base ADR accepted — owner-locked (D2-12 verified; backlog A10 done).
-  Implementation is [C37](../TASKS.md). The C68 floor amendment is owner-approved at D2-34
-  and awaits landing. The C77 execute-from-the-package amendment is pending at D2-35.
+  Implementation is [C37](../TASKS.md). The C68 floor amendment (D2-34) and the
+  C77 execute-from-the-package amendment (D2-35) are owner-verified and landed in `db9ad7e`.
 - **Owner:** akuminov@gmail.com
 - **References:** design [packaging concept](../design/packaging/README.md) (options
   and mechanics — the operative spec) · ROADMAP §Distribution ·

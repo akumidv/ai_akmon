@@ -1,7 +1,7 @@
 # 0004 — Model routing: capability tiers, task-kind matrix, ladder binding
 
 - **Status:** Base decision accepted (owner-scoped; implementation phased); the D2-5 amendment is
-  owner-approved and awaits landing.
+  owner-verified and landed in `7312972`.
 - **Owner:** akuminov@gmail.com
 - **References:** [MODEL.md](../../MODEL.md) (the operation axis the tiers bind to) ·
   [guardrails/_common.md](../../guardrails/_common.md) (gains the floor rule) ·

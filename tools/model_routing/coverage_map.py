@@ -12,8 +12,14 @@ time by ``routing.delegation_log_line`` into a zone column); this tool groups th
 entries by zone and, given the Decompose/Survey zone plan (§10.3), flags the *uncovered
 seams* — planned zones no worker touched.
 
-Scope: the log is one append-only file across sessions, so an assembly run is scoped by
-``--session`` (self-describing key, written now) and optionally ``--since``/``--until``.
+Scope: the log is one append-only file across sessions, so an assembly run names its scope —
+``--session`` (the self-describing key) or an explicit ``--all-sessions`` — optionally narrowed
+by ``--since``/``--until``. There is no unscoped default: the union of every session lets one
+round's worker cover a zone another round never touched, and the uncovered list is exactly the
+output the gate cannot afford to under-report. The printed summary names the session set either
+way. Time bounds compare instants, not strings: a bare date covers its whole day, a bound with no
+offset is read in local time (the zone the log writer stamps in), and a row whose timestamp is not
+ISO fails a time-scoped run rather than being silently kept or dropped.
 ``session_id`` is the finest key that exists today, so two fan-out rounds inside one
 session assemble as one map — narrow them with ``--since``/``--until``. This docstring
 previously said a ``gate_id`` refinement "rides on the C20 session-state marker": there is
@@ -30,6 +36,7 @@ import argparse
 import sys
 import time
 from collections.abc import Iterable
+from datetime import date, datetime
 from pathlib import Path
 
 # The tree root, so the shared ``common`` package resolves: it holds the single owner of
@@ -125,29 +132,80 @@ def build_coverage_map(
 # --------------------------------------------------------------------------------------
 
 
-def _in_scope(entry: routing.DelegationEntry, session: str | None, since: str | None, until: str | None) -> bool:
+def _aware(value: datetime) -> datetime:
+    """``value`` as an instant: an offset-less value is read in local time."""
+    return value if value.tzinfo is not None else value.astimezone()
+
+
+def _parse_bound(text: str, *, end_of_day: bool) -> datetime:
+    """A ``--since``/``--until`` bound as an instant; ``ValueError`` when it is not ISO.
+
+    A bare date is the whole day — its first instant as a lower bound, its last as an upper one.
+    Compared as strings instead, ``--until 2026-09-02`` sorted before every offset-bearing stamp
+    of that day and dropped all of them.
+    """
+    text = text.strip()
+    try:
+        day = date.fromisoformat(text)
+    except ValueError:
+        return _aware(datetime.fromisoformat(text))
+    return _aware(datetime.combine(day, datetime.max.time() if end_of_day else datetime.min.time()))
+
+
+def _in_scope(
+    entry: routing.DelegationEntry, session: str | None, since: datetime | None, until: datetime | None
+) -> bool:
+    """Whether ``entry`` is in the run's scope; ``session`` None is the explicit all-sessions run.
+
+    Raises ``ValueError`` when a time bound is set and the row's timestamp is not ISO: such a row
+    cannot be placed in time, and keeping or dropping it would both be a guess.
+    """
     if session is not None and entry.session_id != session:
         return False
-    if since is not None and entry.timestamp < since:
-        return False
-    if until is not None and entry.timestamp > until:
-        return False
-    return True
+    if since is None and until is None:
+        return True
+    moment = _aware(datetime.fromisoformat(entry.timestamp.strip()))
+    return (since is None or moment >= since) and (until is None or moment <= until)
+
+
+def _describe_scope(session: str | None, entries: list[routing.DelegationEntry]) -> str:
+    """The session set a run covered — named for the all-sessions run too, since it is a choice."""
+    if session is not None:
+        return f"session {session}"
+    seen = sorted({entry.session_id or "-" for entry in entries})
+    return f"all sessions ({len(seen)}: {', '.join(seen)})" if seen else "all sessions (none in scope)"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument("--log", type=Path, help="Delegation log. Defaults to <root>/.claude/model-routing.log.")
-    parser.add_argument("--session", help="Scope to this session_id (the self-describing round key).")
-    parser.add_argument("--since", help="Include entries with timestamp >= this (ISO, same format as the log).")
-    parser.add_argument("--until", help="Include entries with timestamp <= this (ISO, same format as the log).")
+    scope = parser.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--session", help="Scope to this session_id (the self-describing round key).")
+    scope.add_argument(
+        "--all-sessions",
+        action="store_true",
+        help="Union every session in the log — explicit, because it can hide a zone one round left uncovered.",
+    )
+    parser.add_argument(
+        "--since", help="Include entries at or after this ISO date/date-time (a bare date: from its start)."
+    )
+    parser.add_argument(
+        "--until", help="Include entries at or before this ISO date/date-time (a bare date: through its end)."
+    )
     parser.add_argument("--zone-plan", type=Path, help="Zone-plan file (§10.3) — enables uncovered-seam detection.")
     parser.add_argument(
         "--out", type=Path, help="Output path. Defaults under <AITNA_ROOT>/artifacts/gates/ (gitignored)."
     )
     parser.add_argument("--stdout", action="store_true", help="Also print the coverage map to stdout.")
     args = parser.parse_args(argv)
+
+    bounds: dict[str, datetime | None] = {}
+    for flag, text, end_of_day in (("--since", args.since, False), ("--until", args.until, True)):
+        try:
+            bounds[flag] = _parse_bound(text, end_of_day=end_of_day) if text is not None else None
+        except ValueError:
+            parser.error(f"{flag} {text!r} is not an ISO date or date-time")
 
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
@@ -156,11 +214,14 @@ def main(argv: list[str] | None = None) -> int:
     if not log_path.is_file():
         parser.error(f"delegation log not found: {log_path}")
 
-    entries = [
-        entry
-        for entry in routing.parse_delegation_entries(log_path.read_text(encoding="utf-8").splitlines())
-        if _in_scope(entry, args.session, args.since, args.until)
-    ]
+    try:
+        entries = [
+            entry
+            for entry in routing.parse_delegation_entries(log_path.read_text(encoding="utf-8").splitlines())
+            if _in_scope(entry, args.session, bounds["--since"], bounds["--until"])
+        ]
+    except ValueError as exc:
+        parser.error(f"a delegation-log row cannot be placed inside --since/--until ({exc}); no map written")
     zone_plan = parse_zone_plan(args.zone_plan.read_text(encoding="utf-8")) if args.zone_plan else None
     coverage = build_coverage_map(entries, zone_plan)
 
@@ -177,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         rel = out
 
     print(f"coverage-map entries={len(entries)} zones={len({e.zone or _UNLABELLED for e in entries})}")
+    print(f"scope: {_describe_scope(args.session, entries)}")
     print(f"map: {rel}")
     if args.stdout:
         print("")
