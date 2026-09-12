@@ -7,6 +7,7 @@ injected runner (no real `codex app-server` subprocess).
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import sys
@@ -272,7 +273,7 @@ def test_query_hooks_list_raises_when_result_data_is_missing():
 
 def test_query_hooks_list_raises_when_no_entry_matches_the_cwd():
     raw = _raw({"data": [{"cwd": "/somewhere-else", "hooks": [], "warnings": [], "errors": []}]})
-    with pytest.raises(CodexProtocolError, match="/proj"):
+    with pytest.raises(CodexProtocolError, match="no entry for this project"):
         _query(raw)
 
 
@@ -285,8 +286,21 @@ def test_query_hooks_list_raises_when_data_is_not_a_list(data):
 
 def test_query_hooks_list_raises_when_data_entries_are_not_objects():
     """A non-dict entry (e.g. `data: [1]`) must not reach `.get("cwd")` as a bare AttributeError."""
-    with pytest.raises(CodexProtocolError, match="/proj"):
+    with pytest.raises(CodexProtocolError, match="no entry for this project"):
         _query(_raw({"data": [1, 2, 3]}))
+
+
+@pytest.mark.parametrize("order", ["answer-first", "empty-first", "identical"])
+def test_query_hooks_list_rejects_a_second_answer_for_the_same_cwd(order):
+    """Fourth C70 review: the first matching entry won, so `[trusted, empty]` read green and the
+    reverse read every entry missing. Two answers for the one cwd asked about are uninspectable
+    in any order, identical ones included — never a pick, never a merge."""
+    answer = {"cwd": "/proj", "hooks": [_entry("preToolUse", "m", "c1")], "warnings": [], "errors": []}
+    empty = {**answer, "hooks": []}
+    data = {"answer-first": [answer, empty], "empty-first": [empty, answer], "identical": [answer, answer]}[order]
+    with pytest.raises(CodexProtocolError) as excinfo:
+        _query(_raw({"data": data}))
+    assert excinfo.value.kind == "duplicate-project"
 
 
 @pytest.mark.parametrize(
@@ -405,18 +419,83 @@ def test_query_hooks_list_converts_an_arbitrary_runner_exception_without_its_mes
     def flaky(command, cwd, timeout):
         raise BrokenPipeError(_CANARY)
 
-    with pytest.raises(CodexProtocolError, match="BrokenPipeError") as excinfo:
+    with pytest.raises(CodexProtocolError, match="runner failed") as excinfo:
         query_hooks_list(["codex", "app-server"], "/proj", runner=flaky)
+    assert excinfo.value.kind == "runner-failed"
     assert _CANARY not in str(excinfo.value)
     assert excinfo.value.__cause__ is None
 
 
 def test_query_hooks_list_propagates_a_runner_timeout():
     def timing_out(command, cwd, timeout):
-        raise CodexProtocolError("no hooks/list response within 5.0s")
+        raise CodexProtocolError("timeout")
 
-    with pytest.raises(CodexProtocolError, match="response within"):
+    with pytest.raises(CodexProtocolError, match="within the query timeout") as excinfo:
         query_hooks_list(["codex", "app-server"], "/proj", runner=timing_out)
+    assert excinfo.value.kind == "timeout"
+
+
+@pytest.mark.parametrize("kind", [_CANARY, "no hooks/list response within 5.0s", None, 7, ["timeout"]])
+def test_a_protocol_error_can_only_carry_a_fixed_text(kind):
+    """Fourth C70 review: `CodexProtocolError("<vendor text>")` printed its text. The error is
+    built from a kind, so anything outside the fixed table — text, a non-string, an unhashable
+    value — is `unclassified`, never echoed."""
+    error = CodexProtocolError(kind)
+    assert error.kind == "unclassified"
+    assert str(error) == codex_hooks._PROTOCOL_FAILURES["unclassified"]
+
+
+class _VendorTextError(CodexProtocolError):
+    def __str__(self):
+        return _CANARY
+
+
+class _UninitializedError(CodexProtocolError):
+    def __init__(self):
+        Exception.__init__(self, _CANARY)
+
+
+@pytest.mark.parametrize(
+    ("raised", "kind"),
+    [
+        (CodexProtocolError(_CANARY), "unclassified"),
+        (CodexProtocolError("timeout"), "timeout"),
+        (_VendorTextError("timeout"), "timeout"),
+        (_UninitializedError(), "unclassified"),
+    ],
+    ids=["free-text", "known-kind", "subclass-str", "subclass-without-kind"],
+)
+def test_query_hooks_list_rebuilds_a_runner_protocol_error_from_its_kind(raised, kind):
+    """The review's probe: a runner raising `CodexProtocolError("SECRET_CANARY")` put the canary in
+    the Finding. What leaves this seam is a fresh base-class error rebuilt from `kind` alone, so
+    neither free text nor a subclass's own `__str__`/args survive it."""
+
+    def runner(command, cwd, timeout):
+        raise raised
+
+    with pytest.raises(CodexProtocolError) as excinfo:
+        query_hooks_list(["codex", "app-server"], "/proj", runner=runner)
+    assert type(excinfo.value) is CodexProtocolError
+    assert excinfo.value.kind == kind
+    assert str(excinfo.value) == codex_hooks._PROTOCOL_FAILURES[kind]
+    assert excinfo.value.__cause__ is None
+
+
+def _protocol_error_arguments():
+    tree = ast.parse(Path(codex_hooks.__file__).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "CodexProtocolError":
+            yield node.args[0]
+
+
+def test_every_raise_site_names_a_fixed_kind_and_every_kind_is_raised():
+    """A misspelt kind would silently degrade to `unclassified`, and a kind nothing raises is dead
+    text. The one non-literal argument is `query_hooks_list`'s rebuild of a runner's own error."""
+    arguments = list(_protocol_error_arguments())
+    literals = [arg.value for arg in arguments if isinstance(arg, ast.Constant)]
+    assert all(isinstance(kind, str) for kind in literals)
+    assert set(literals) == set(codex_hooks._PROTOCOL_FAILURES) - {"unclassified"}
+    assert len(arguments) - len(literals) == 1
 
 
 # --------------------------------------------------------------------------------------
@@ -457,8 +536,9 @@ def test_default_runner_reports_a_protocol_error_when_the_process_exits_immediat
 
 
 def test_default_runner_reports_an_unstartable_binary_by_type_not_os_text(tmp_path):
-    with pytest.raises(CodexProtocolError, match=r"could not start .*\(FileNotFoundError\)") as excinfo:
+    with pytest.raises(CodexProtocolError, match="could not be started") as excinfo:
         default_runner([str(tmp_path / "no-such-codex")], tmp_path, timeout=1.0)
+    assert excinfo.value.kind == "unstartable"
     assert "No such file" not in str(excinfo.value)
 
 
@@ -470,8 +550,10 @@ def test_default_runner_times_out_on_a_silent_process(tmp_path):
 
 def test_default_runner_never_waits_without_bound_during_cleanup(tmp_path, monkeypatch):
     """A child that survives both terminate() and kill() (uninterruptible sleep) is abandoned
-    after two bounded waits, not waited on forever — the answer is already in hand."""
-    waits = []
+    after two bounded waits, not waited on forever — the answer is already in hand. The exact
+    sequence pins D2-40 (6): terminate, 2.0 s, kill, 2.0 s (fourth C70 review: only
+    "bounded" was checked, so changing either literal stayed green)."""
+    events = []
 
     class _Stdin:
         def write(self, text):
@@ -489,13 +571,13 @@ def test_default_runner_never_waits_without_bound_during_cleanup(tmp_path, monke
             self.stdout = iter([json.dumps({"id": 2, "result": {"data": []}}) + "\n"])
 
         def terminate(self):
-            pass
+            events.append("terminate")
 
         def kill(self):
-            pass
+            events.append("kill")
 
         def wait(self, timeout=None):
-            waits.append(timeout)
+            events.append(("wait", timeout))
             if timeout is None:
                 raise AssertionError("unbounded wait")
             raise subprocess.TimeoutExpired("codex", timeout)
@@ -503,8 +585,7 @@ def test_default_runner_never_waits_without_bound_during_cleanup(tmp_path, monke
     monkeypatch.setattr(codex_hooks.subprocess, "Popen", _Unkillable)
     raw = default_runner(["codex", "app-server"], tmp_path, timeout=1.0)
     assert json.loads(raw)["id"] == 2
-    assert len(waits) == 2
-    assert None not in waits
+    assert events == ["terminate", ("wait", 2.0), "kill", ("wait", 2.0)]
 
 
 # --------------------------------------------------------------------------------------
