@@ -23,11 +23,13 @@ requires the response to echo before trusting it. The response shape is ``{"id":
 
 Every field this module reads off the wire is untrusted vendor input and is validated structurally
 before use; anything short of that measured shape raises :class:`CodexProtocolError`. Every
-diagnostic this module produces is a fixed category built from *akmon's own* values (the requested
-cwd, a field name, a Python type name, the timeout literal) — never a value taken from the response:
-not the body, not the echoed id, not a JSON-RPC error code or message, not an unrecognized
-``trustStatus``, not the text of an exception raised while reading it. That is design §7's "no raw
-hash/config/vendor-output leak" boundary, held by construction rather than by redaction.
+diagnostic this module produces is one of the fixed texts in :data:`_PROTOCOL_FAILURES`:
+:class:`CodexProtocolError` is built from a failure *kind*, not from a message, so whoever raises
+it — this module or an injected runner — can only select one of those texts, never supply one.
+Nothing taken from the response reaches it: not the body, not the echoed id, not a JSON-RPC error
+code or message, not an unrecognized ``trustStatus``, not the text of an exception raised while
+reading it. That is design §7's "no raw hash/config/vendor-output leak" boundary, held by
+construction rather than by redaction.
 """
 
 from __future__ import annotations
@@ -77,8 +79,47 @@ _INITIALIZE_ID = 1
 _HOOKS_LIST_ID = 2
 
 
+#: Failure kind -> the only text a :class:`CodexProtocolError` can carry. A closed table rather
+#: than messages written at each raise site: an injected runner that raised
+#: ``CodexProtocolError(<vendor text>)`` had that text printed verbatim (fourth C70 review).
+#: ``test_codex_hooks.py`` pins that every raise site names a kind here and every kind is raised.
+_UNCLASSIFIED = "unclassified"
+_PROTOCOL_FAILURES = {
+    "unstartable": "codex app-server could not be started",
+    "stdin-closed": "codex app-server exited before accepting the hooks/list request",
+    "timeout": "no hooks/list response within the query timeout",
+    "stdout-closed": "codex app-server closed its output before answering hooks/list",
+    "runner-failed": "the hooks/list runner failed",
+    "not-json": "hooks/list response is not valid JSON",
+    "not-object": "hooks/list response is not a JSON object",
+    "id-mismatch": "hooks/list response does not answer this request (id mismatch)",
+    "jsonrpc-error": "hooks/list returned a JSON-RPC error",
+    "no-data": "hooks/list response has no result.data list",
+    "no-project": "hooks/list answered no entry for this project",
+    "duplicate-project": "hooks/list answered this project more than once",
+    "project-shape": "hooks/list entry for this project lacks a hooks, warnings or errors list",
+    "discovery-errors": "hooks/list reported discovery errors for this project",
+    "hook-not-object": "hooks/list returned a hook entry that is not an object",
+    "hook-handler": "hooks/list returned a hook entry without a string handlerType",
+    "hook-enabled": "hooks/list returned a hook entry whose enabled is not a boolean",
+    "hook-trust": "hooks/list returned a hook entry with an unrecognized trustStatus",
+    "hook-identity": "hooks/list returned a command hook without a string eventName/command",
+    "hook-matcher": "hooks/list returned a command hook with a non-string matcher",
+    _UNCLASSIFIED: "the hooks/list exchange failed for an unclassified reason",
+}
+
+
 class CodexProtocolError(Exception):
-    """codex app-server resolved but its hooks/list exchange could not be trusted."""
+    """codex app-server resolved but its hooks/list exchange could not be trusted.
+
+    Built from a failure ``kind`` — a key of :data:`_PROTOCOL_FAILURES` — and never from text:
+    ``str()`` is always that key's fixed message, and any other value (arbitrary text, a
+    non-string) becomes :data:`_UNCLASSIFIED`. ``kind`` is kept for callers and carriers.
+    """
+
+    def __init__(self, kind: object) -> None:
+        self.kind = kind if isinstance(kind, str) and kind in _PROTOCOL_FAILURES else _UNCLASSIFIED
+        super().__init__(_PROTOCOL_FAILURES[self.kind])
 
 
 class CodexWiringError(ValueError):
@@ -216,8 +257,8 @@ def default_runner(command: Sequence[str], cwd: Path, timeout: float) -> str:
             text=True,
             bufsize=1,
         )
-    except OSError as exc:
-        raise CodexProtocolError(f"could not start {command[0]!r} ({type(exc).__name__})") from None
+    except OSError:
+        raise CodexProtocolError("unstartable") from None
 
     lines: queue.Queue[str | None] = queue.Queue()
 
@@ -255,23 +296,19 @@ def default_runner(command: Sequence[str], cwd: Path, timeout: float) -> str:
             )
             proc.stdin.flush()
         except OSError:
-            raise CodexProtocolError(
-                "codex app-server exited before accepting the hooks/list request"
-            ) from None
+            raise CodexProtocolError("stdin-closed") from None
 
         deadline = time.monotonic() + timeout
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise CodexProtocolError(f"no hooks/list response within {timeout}s")
+                raise CodexProtocolError("timeout")
             try:
                 line = lines.get(timeout=remaining)
             except queue.Empty:
-                raise CodexProtocolError(f"no hooks/list response within {timeout}s") from None
+                raise CodexProtocolError("timeout") from None
             if line is None:
-                raise CodexProtocolError(
-                    "codex app-server closed its output before answering hooks/list"
-                )
+                raise CodexProtocolError("stdout-closed")
             try:
                 message = json.loads(line)
             except json.JSONDecodeError:
@@ -303,21 +340,21 @@ def _check_hook_metadata(hook: object) -> None:
     would turn exactly that into a clean result.
     """
     if not isinstance(hook, dict):
-        raise CodexProtocolError("hooks/list returned a hook entry that is not an object")
+        raise CodexProtocolError("hook-not-object")
     if not isinstance(hook.get("handlerType"), str):
-        raise CodexProtocolError("hooks/list returned a hook entry without a string handlerType")
+        raise CodexProtocolError("hook-handler")
     if not isinstance(hook.get("enabled"), bool):
-        raise CodexProtocolError("hooks/list returned a hook entry whose enabled is not a boolean")
+        raise CodexProtocolError("hook-enabled")
     trust = hook.get("trustStatus")
     if not isinstance(trust, str) or trust not in _TRUST_STATUSES:
-        raise CodexProtocolError("hooks/list returned a hook entry with an unrecognized trustStatus")
+        raise CodexProtocolError("hook-trust")
     if hook["handlerType"] != "command":
         return
     if not isinstance(hook.get("eventName"), str) or not isinstance(hook.get("command"), str):
-        raise CodexProtocolError("hooks/list returned a command hook without a string eventName/command")
+        raise CodexProtocolError("hook-identity")
     matcher = hook.get("matcher")
     if matcher is not None and not isinstance(matcher, str):
-        raise CodexProtocolError("hooks/list returned a command hook with a non-string matcher")
+        raise CodexProtocolError("hook-matcher")
 
 
 def query_hooks_list(
@@ -331,53 +368,58 @@ def query_hooks_list(
 
     Raises :class:`CodexProtocolError` for anything short of a clean, well-shaped answer: a
     timeout, a closed pipe, a JSON-RPC error object, a response id that does not echo this
-    request's, a per-project ``errors`` entry, or a response missing or misshaping any field this
-    module reads (``result.data`` not a list, an entry's ``hooks``/``warnings``/``errors`` not a
-    list, a hook element failing :func:`_check_hook_metadata`). A caller must not read a caught
-    exception as "no hooks" — that is a distinct, positively reported state (an empty
-    ``data[].hooks`` list, not an exception).
+    request's, no entry or more than one entry for ``cwd``, a per-project ``errors`` entry, or a
+    response missing or misshaping any field this module reads (``result.data`` not a list, the
+    entry's ``hooks``/``warnings``/``errors`` not a list, a hook element failing
+    :func:`_check_hook_metadata`). A caller must not read a caught exception as "no hooks" — that
+    is a distinct, positively reported state (an empty ``data[].hooks`` list, not an exception).
 
-    Every message is one of a fixed set of categories (see the module docstring): nothing taken
-    from the response, and nothing from an exception raised while producing it beyond its Python
-    type name, reaches the text ``verify`` prints.
+    Exactly one entry may answer ``cwd``: only that one cwd was asked about, and choosing between
+    two answers for it — first, last, or a merge — would make the result depend on their order
+    (fourth C70 review: ``[trusted, empty]`` read green and the reverse read missing). Merging is a
+    delivery-semantics choice this module does not make, so a second answer is uninspectable.
 
-    Any exception the ``runner`` itself raises other than :class:`CodexProtocolError` — a write or
-    flush failure, an exec race, a bug in an injected test runner — is caught here and converted
-    rather than left to escape as a bare traceback: this function is the one seam ``verify`` trusts
-    to turn "codex resolved but is uninspectable" into a `Finding`, never a crash.
+    Every message is one of :data:`_PROTOCOL_FAILURES` (see the module docstring). A
+    :class:`CodexProtocolError` the ``runner`` raises is rebuilt here from its ``kind`` alone, so a
+    subclass with its own ``__str__`` cannot carry text past this seam either. Any other exception
+    the ``runner`` raises — a write or flush failure, an exec race, a bug in an injected test
+    runner — becomes ``runner-failed`` rather than escape as a bare traceback: this function is the
+    one seam ``verify`` trusts to turn "codex resolved but is uninspectable" into a `Finding`,
+    never a crash.
     """
     try:
         raw = runner(command, cwd, timeout)
-    except CodexProtocolError:
-        raise
-    except Exception as exc:
-        raise CodexProtocolError(f"hooks/list runner failed ({type(exc).__name__})") from None
+    except CodexProtocolError as exc:
+        raise CodexProtocolError(getattr(exc, "kind", None)) from None
+    except Exception:
+        raise CodexProtocolError("runner-failed") from None
 
     try:
         message = json.loads(raw)
     except (TypeError, ValueError):
-        raise CodexProtocolError("hooks/list response is not valid JSON") from None
+        raise CodexProtocolError("not-json") from None
     if not isinstance(message, dict):
-        raise CodexProtocolError("hooks/list response is not a JSON object")
+        raise CodexProtocolError("not-object")
     if message.get("id") != _HOOKS_LIST_ID:
-        raise CodexProtocolError("hooks/list response does not answer this request (id mismatch)")
+        raise CodexProtocolError("id-mismatch")
     if "error" in message:
-        raise CodexProtocolError("hooks/list returned a JSON-RPC error")
+        raise CodexProtocolError("jsonrpc-error")
     result = message.get("result")
     data = result.get("data") if isinstance(result, dict) else None
     if not isinstance(data, list):
-        raise CodexProtocolError("hooks/list response has no result.data list")
+        raise CodexProtocolError("no-data")
 
     cwd_str = str(cwd)
-    for entry in data:
-        if not isinstance(entry, dict) or entry.get("cwd") != cwd_str:
-            continue
-        for field in ("hooks", "warnings", "errors"):
-            if not isinstance(entry.get(field), list):
-                raise CodexProtocolError(f"hooks/list entry for this project has no {field} list")
-        if entry["errors"]:
-            raise CodexProtocolError("hooks/list reported discovery errors for this project")
-        for hook in entry["hooks"]:
-            _check_hook_metadata(hook)
-        return entry["hooks"]
-    raise CodexProtocolError(f"hooks/list answered no entry for cwd {cwd_str!r}")
+    answers = [entry for entry in data if isinstance(entry, dict) and entry.get("cwd") == cwd_str]
+    if not answers:
+        raise CodexProtocolError("no-project")
+    if len(answers) > 1:
+        raise CodexProtocolError("duplicate-project")
+    (entry,) = answers
+    if not all(isinstance(entry.get(field), list) for field in ("hooks", "warnings", "errors")):
+        raise CodexProtocolError("project-shape")
+    if entry["errors"]:
+        raise CodexProtocolError("discovery-errors")
+    for hook in entry["hooks"]:
+        _check_hook_metadata(hook)
+    return entry["hooks"]

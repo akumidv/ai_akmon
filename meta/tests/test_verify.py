@@ -20,7 +20,7 @@ import pytest
 import sync
 import verify
 
-from common.codex_hooks import expected_codex_hooks
+from common.codex_hooks import CodexProtocolError, expected_codex_hooks
 from common.findings import exit_code, render
 
 AGENTS_MD = """# AGENTS.md
@@ -1070,7 +1070,7 @@ def _generated_entries(root: Path) -> list[dict]:
 def _hooks_list_runner(entries, calls=None):
     def runner(command, cwd, timeout):
         if calls is not None:
-            calls.append(cwd)
+            calls.append((cwd, timeout))
         data = [{"cwd": str(cwd), "hooks": entries, "warnings": [], "errors": []}]
         return json.dumps({"id": 2, "result": {"data": data}})
 
@@ -1258,6 +1258,8 @@ def test_check_codex_host_trust_aggregates_mixed_problems_into_one_warning(tmp_p
     assert _only_host_trust_message(verifier) == (
         "Codex hook delivery is incomplete: disabled (1); missing (1); untrusted (1)"
     )
+    # The message carries categories and counts only, so the remediation cannot point at a list.
+    assert _host_trust(verifier)[0].fix == "Open `/hooks` in Codex and re-approve the affected generated entries."
     assert exit_code(verifier.findings, strict=True) == 1
     assert exit_code(verifier.findings, strict=False) == 0
 
@@ -1316,12 +1318,13 @@ def test_check_codex_host_trust_warns_when_the_protocol_cannot_be_trusted(tmp_pa
 
 def test_run_queries_the_host_exactly_once_after_valid_wiring(tmp_path, monkeypatch):
     """Driven through `Verifier.run()` only, never the method directly: deleting C70's call from
-    `run()`, or calling it twice, fails here — the one-call carrier TASKS.md C70 names."""
+    `run()`, or calling it twice, fails here — the one-call carrier TASKS.md C70 names. The one
+    call asks about the consumer root with the pinned 5.0 s query timeout (D2-40 (6))."""
     root = _make_project(tmp_path)
     calls = []
     verifier = _live_query_verifier(root, monkeypatch, _hooks_list_runner(_generated_entries(root), calls))
     verifier.run()
-    assert len(calls) == 1
+    assert calls == [(root, 5.0)]
     assert [finding.severity for finding in _host_trust(verifier)] == ["ok"]
 
 
@@ -1335,6 +1338,26 @@ def test_check_codex_host_trust_ambiguous_duplicate_entries_warn(tmp_path, monke
     verifier.check_codex_host_trust()
     assert _levels(verifier.findings) == {"warn"}
     assert _only_host_trust_message(verifier) == "Codex hook delivery is incomplete: ambiguous (1)"
+
+
+@pytest.mark.parametrize("order", ["trusted-first", "empty-first"])
+def test_check_codex_host_trust_a_second_answer_for_the_project_is_uninspectable(tmp_path, monkeypatch, order):
+    """Fourth C70 review: `[trusted, empty]` for the same cwd read green and the reverse read
+    `missing (4)`. Either order is now the same uninspectable warning, strict exit 1."""
+    _write_codex_wiring(tmp_path)
+
+    def runner(command, cwd, timeout):
+        trusted = {"cwd": str(cwd), "hooks": _generated_entries(tmp_path), "warnings": [], "errors": []}
+        empty = {**trusted, "hooks": []}
+        data = [trusted, empty] if order == "trusted-first" else [empty, trusted]
+        return json.dumps({"id": 2, "result": {"data": data}})
+
+    verifier = _live_query_verifier(tmp_path, monkeypatch, runner)
+    verifier.check_codex_host_trust()
+    assert _only_host_trust_message(verifier) == (
+        "codex app-server hooks/list could not be inspected: hooks/list answered this project more than once"
+    )
+    assert exit_code(verifier.findings, strict=True) == 1
 
 
 def test_check_codex_host_trust_runner_failure_becomes_a_warn_not_a_crash(tmp_path, monkeypatch):
@@ -1369,11 +1392,18 @@ def _project_answer(**fields):
     return runner
 
 
+class _VendorTextProtocolError(CodexProtocolError):
+    def __str__(self):
+        return _CANARY
+
+
 @pytest.mark.parametrize(
     "runner",
     [
         _raising(RuntimeError(_CANARY)),
         _raising(OSError(5, _CANARY)),
+        _raising(CodexProtocolError(_CANARY)),
+        _raising(_VendorTextProtocolError("timeout")),
         _answering(_CANARY),
         _answering(json.dumps(_CANARY)),
         _answering({"id": _CANARY, "result": {"data": []}}),
@@ -1387,6 +1417,8 @@ def _project_answer(**fields):
     ids=[
         "exception-text",
         "os-error-text",
+        "protocol-error-text",
+        "protocol-error-str",
         "raw-body",
         "json-string-body",
         "response-id",
@@ -1439,13 +1471,14 @@ with open(os.environ["FAKE_CODEX_LOG"], "a", encoding="utf-8") as log:
     log.flush()
     for line in sys.stdin:
         message = json.loads(line)
-        log.write(json.dumps({"method": message.get("method")}) + "\\n")
+        log.write(json.dumps({"method": message.get("method"), "id": message.get("id")}) + "\\n")
         log.flush()
         if message.get("method") == "initialize":
             reply = {"id": message["id"], "result": {}}
         elif message.get("method") == "hooks/list":
-            project = {"cwd": message["params"]["cwds"][0], "hooks": json.loads(os.environ["FAKE_CODEX_HOOKS"]),
-                       "warnings": [], "errors": []}
+            with open(os.environ["FAKE_CODEX_HOOKS"], encoding="utf-8") as state:
+                hooks = json.load(state)
+            project = {"cwd": message["params"]["cwds"][0], "hooks": hooks, "warnings": [], "errors": []}
             reply = {"id": message["id"], "result": {"data": [project]}}
         else:
             continue
@@ -1458,10 +1491,11 @@ def _tree_snapshot(*roots: Path) -> dict:
     return {path: path.read_bytes() for root in roots for path in root.rglob("*") if path.is_file()}
 
 
-def test_check_codex_host_trust_end_to_end_is_read_only(tmp_path, monkeypatch):
-    """The whole route through the default runner and a real subprocess — a stand-in `codex`
-    first on PATH: the only requests sent are the handshake and hooks/list (nothing that grants
-    trust or writes config), and neither the consumer tree nor the host's Codex home changes."""
+def _fake_codex_host(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path, Path]:
+    """A consumer with generated wiring, an isolated host home, and a stand-in `codex` first on
+    PATH that answers hooks/list from a state file it re-reads on every query — so a carrier can
+    change the host's trust between runs. Returns ``(root, home, state, log)``; the state starts
+    as every generated entry live and trusted."""
     root = tmp_path / "consumer"
     root.mkdir()
     _write_codex_wiring(root)
@@ -1472,22 +1506,63 @@ def test_check_codex_host_trust_end_to_end_is_read_only(tmp_path, monkeypatch):
     fake = fake_bin / "codex"
     fake.write_text(f"#!{sys.executable}\n{_FAKE_CODEX_BODY}", encoding="utf-8")
     fake.chmod(0o755)
+    state = tmp_path / "hooks-list.json"
+    state.write_text(json.dumps(_generated_entries(root)), encoding="utf-8")
     log = tmp_path / "codex.log"
     monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("CODEX_HOME", str(home / ".codex"))
     monkeypatch.setenv("FAKE_CODEX_LOG", str(log))
-    monkeypatch.setenv("FAKE_CODEX_HOOKS", json.dumps(_generated_entries(root)))
+    monkeypatch.setenv("FAKE_CODEX_HOOKS", str(state))
+    return root, home, state, log
+
+
+def _codex_log(log: Path) -> list[dict]:
+    return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+
+
+def test_check_codex_host_trust_end_to_end_is_read_only(tmp_path, monkeypatch):
+    """The whole route through the default runner and a real subprocess — a stand-in `codex`
+    first on PATH: the only requests sent are the handshake and hooks/list, with the pinned
+    JSON-RPC ids 1 and 2 (D2-40 (6)) — nothing that grants trust or writes config — and neither
+    the consumer tree nor the host's Codex home changes."""
+    root, home, _, log = _fake_codex_host(tmp_path, monkeypatch)
     before = _tree_snapshot(root, home)
 
     verifier = verify.Verifier(root)
     verifier.check_codex_host_trust()
 
     assert [finding.severity for finding in _host_trust(verifier)] == ["ok"]
-    records = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    records = _codex_log(log)
     assert records[0] == {"argv": ["app-server"]}
-    assert [record["method"] for record in records[1:]] == ["initialize", "hooks/list"]
+    assert records[1:] == [{"method": "initialize", "id": 1}, {"method": "hooks/list", "id": 2}]
     assert _tree_snapshot(root, home) == before
+
+
+@pytest.mark.parametrize("reuse", [False, True], ids=["fresh-verifier", "same-verifier"])
+def test_check_codex_host_trust_reports_the_host_state_current_at_each_run(tmp_path, monkeypatch, reuse):
+    """TASKS.md C70 "current-state freshness" (fourth C70 review: every other carrier answers from
+    a fixed runner, so a cached result would pass). The host's trust flips green -> inert -> green
+    -> inert between runs; each run must report the state current at that run, through the real
+    runner and one fresh `codex` process per run, as a new Verifier or the same one run again —
+    so neither a module-level nor a per-instance cached answer survives."""
+    root, _, state, log = _fake_codex_host(tmp_path, monkeypatch)
+    live = _generated_entries(root)
+    inert = [{**live[0], "trustStatus": "untrusted"}, *live[1:]]
+    shared = verify.Verifier(root)
+    seen = []
+    for hooks in (live, inert, live, inert):
+        state.write_text(json.dumps(hooks), encoding="utf-8")
+        verifier = shared if reuse else verify.Verifier(root)
+        already = len(_host_trust(verifier))
+        verifier.check_codex_host_trust()
+        (finding,) = _host_trust(verifier)[already:]
+        seen.append((finding.severity, finding.message))
+
+    green = ("ok", "every generated Codex hook entry is discovered, enabled, and trusted")
+    inert_warning = ("warn", "Codex hook delivery is incomplete: untrusted (1)")
+    assert seen == [green, inert_warning, green, inert_warning]
+    assert [record for record in _codex_log(log) if "argv" in record] == [{"argv": ["app-server"]}] * 4
 
 
 def test_check_hook_launcher_is_a_package_mode_check_only(tmp_path):

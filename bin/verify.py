@@ -806,7 +806,7 @@ class Verifier:
             "codex.host-trust",
             f"Codex hook delivery is incomplete: {summary}",
             target=".codex/hooks.json",
-            fix="Open `/hooks` in Codex and re-approve the listed entries.",
+            fix="Open `/hooks` in Codex and re-approve the affected generated entries.",
         )
 
     def check_model_routing(self) -> None:
