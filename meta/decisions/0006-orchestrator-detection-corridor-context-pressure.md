@@ -85,3 +85,19 @@ is reported as such. The rename changes the registry hash, so local routing conf
 and re-init; an overlay still using the old keys is ignored. Carrier:
 `tools/model_routing/routing.py::recommended_max_context`; the operative contract is
 [D2-38](../D2_LEDGER.md) and [design §12.2](../design/model-routing.md).
+
+## Amendment — a one-task context budget, bands 0.85 and 1.0 (D2-42)
+
+The recommended maximum is the recommended active-context budget for a session intended to carry
+one task: a session carries the task it is solving, not its history — fewer tokens, less drift
+from the task, less forgetting — and the warning is that reminder (owner-directed). The hook knows
+neither the task nor what it needs; it sees only the fill, so it is a pressure sensor, and the
+boundary between tasks is A21's. 200000 stays — a configurable owner policy set from a typical
+one-task development session, not an empirical optimum (C80). The bands become 0.85 (checkpoint;
+prepare a focused compact if the task continues) and 1.0 (budget reached — same task: checkpoint
+and a task-focused `/compact`; new task: `/clear` or a new session). Every band at or above 1.0 is
+one max state whose warning fires once per pressure episode; going on past it is the developer's
+call. A fill below the lowest band ends the episode whatever lowered it — decision 5's "a
+compaction drops the fill" names one cause, not the mechanism. `AKMON_CONTEXT_RECOMMENDED_MAX`
+overrides the budget per user or project. The operative contract is [D2-42](../D2_LEDGER.md) and
+[design §12.2](../design/model-routing.md).

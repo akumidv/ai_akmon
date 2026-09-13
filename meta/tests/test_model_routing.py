@@ -1287,7 +1287,8 @@ def test_context_pressure_is_a_share_of_the_recommended_max_not_the_model_limit(
     _write_transcript(transcript, [_assistant("claude-opus-5", usage=_usage(411203))])
     lines = routing.context_pressure_notice(REGISTRY, transcript, "s3", marker_dir=tmp_path)
     assert len(lines) == 1
-    assert "~206% of the recommended 200k max (411203 tokens)" in lines[0] and "critical" in lines[0]
+    assert "~206% of the recommended 200k budget (411203 tokens)" in lines[0]
+    assert "recommended context budget reached" in lines[0]
 
 
 def test_context_pressure_notice_bands_throttle_and_reset(tmp_path):
@@ -1298,15 +1299,21 @@ def test_context_pressure_notice_bands_throttle_and_reset(tmp_path):
         return routing.context_pressure_notice(REGISTRY, transcript, "s1", marker_dir=tmp_path)
 
     assert notice(100000) == []  # 50% — below every band
-    high = notice(172000)  # 86% — crosses the plan band
-    assert len(high) == 1 and "plan compaction" in high[0]
-    assert "context pressure: ~86% of the recommended 200k max" in high[0]
-    assert notice(174000) == []  # still the same band — throttled
-    critical = notice(191000)  # 95.5% — band rises to critical
-    assert len(critical) == 1 and "critical" in critical[0] and "/compact" in critical[0]
-    assert notice(192000) == []  # steady critical — throttled
-    assert notice(40000) == []  # compaction landed — resets the throttle silently
-    assert len(notice(172000)) == 1  # the next cycle warns again
+    high = notice(172000)  # 86% — crosses the checkpoint band
+    assert len(high) == 1
+    assert "checkpoint decisions and state to files/TASKS; if the task continues, prepare a focused /compact" in high[0]
+    assert "context pressure: ~86% of the recommended 200k budget" in high[0]
+    assert notice(191000) == []  # 95.5% — still the checkpoint band, throttled
+    at_max = notice(200000)  # 100% — the band rises to the recommended budget
+    assert len(at_max) == 1 and "recommended context budget reached" in at_max[0]
+    # Conditional advice: the hook cannot tell whether the task goes on, and a compact keeps
+    # what its focus names — no promise that it keeps "only the current task".
+    assert "same task: checkpoint and /compact with a task focus" in at_max[0]
+    assert "new task: /clear or start a new session" in at_max[0]
+    assert "keeps only" not in at_max[0]
+    assert notice(260000) == []  # no repeated warning after the max-band warning until reset
+    assert notice(40000) == []  # below every band — the pressure episode resets silently
+    assert len(notice(172000)) == 1  # the next episode warns again
 
 
 def test_context_pressure_notice_silent_without_usage_or_ratios(tmp_path):
@@ -1322,7 +1329,7 @@ def test_the_shipped_pressure_policy():
     assert REGISTRY["context_pressure"] == {
         "recommended_max": 200000,
         "recommended_max_by_alias": {},
-        "warn_ratios": [0.85, 0.95],
+        "warn_ratios": [0.85, 1.0],
     }
 
 
@@ -1351,7 +1358,7 @@ def test_a_non_default_recommended_max_carries_through_notice_and_ratio(tmp_path
     _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(86000))])
     assert routing.context_fill_ratio(registry, transcript) == pytest.approx(0.86)
     lines = routing.context_pressure_notice(registry, transcript, "s5", marker_dir=tmp_path)
-    assert len(lines) == 1 and "~86% of the recommended 100k max (86000 tokens)" in lines[0]
+    assert len(lines) == 1 and "~86% of the recommended 100k budget (86000 tokens)" in lines[0]
 
 
 def test_the_legacy_window_keys_are_ignored(tmp_path):
@@ -1374,7 +1381,7 @@ def test_recommended_max_by_alias_takes_the_longest_matching_key(by_alias):
     assert routing.recommended_max_context(registry, "claude-fable-5") == 200000
 
 
-@pytest.mark.parametrize(("fill", "band"), [(169999, None), (170000, "high"), (189999, "high"), (190000, "critical")])
+@pytest.mark.parametrize(("fill", "band"), [(169999, None), (170000, "high"), (199999, "high"), (200000, "max")])
 def test_context_pressure_bands_start_exactly_at_their_ratios(tmp_path, fill, band):
     transcript = tmp_path / "t.jsonl"
     _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(fill))])
@@ -1383,7 +1390,81 @@ def test_context_pressure_bands_start_exactly_at_their_ratios(tmp_path, fill, ba
         assert lines == []
     else:
         assert len(lines) == 1
-        assert ("critical" in lines[0]) == (band == "critical")
+        assert ("recommended context budget reached" in lines[0]) == (band == "max")
+
+
+@pytest.fixture(autouse=True)
+def _no_recommended_max_override(monkeypatch):
+    # Module-wide: a developer's own override must not leak into the shipped-policy tests.
+    monkeypatch.delenv("AKMON_CONTEXT_RECOMMENDED_MAX", raising=False)
+
+
+def test_the_recommended_max_env_overrides_the_registry_and_every_alias(tmp_path, monkeypatch):
+    policy = {"recommended_max": 200000, "recommended_max_by_alias": {"opus": 300000}, "warn_ratios": [0.85, 1.0]}
+    registry = dict(REGISTRY, context_pressure=policy)
+    monkeypatch.setenv("AKMON_CONTEXT_RECOMMENDED_MAX", "100000")
+    assert routing.recommended_max_context(registry, "claude-opus-5") == 100000
+    assert routing.recommended_max_context(registry, "claude-fable-5") == 100000
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(86000))])
+    assert routing.context_fill_ratio(registry, transcript) == pytest.approx(0.86)
+    lines = routing.context_pressure_notice(registry, transcript, "s8", marker_dir=tmp_path)
+    assert len(lines) == 1 and "~86% of the recommended 100k budget (86000 tokens)" in lines[0]
+
+
+@pytest.mark.parametrize("value", ["", " ", "0", "-5", "150k", "1e5", "2.5", "abc"])
+def test_a_recommended_max_env_that_is_not_a_positive_integer_is_ignored(monkeypatch, value):
+    monkeypatch.setenv("AKMON_CONTEXT_RECOMMENDED_MAX", value)
+    assert routing.recommended_max_context(REGISTRY, "claude-opus-5") == 200000
+
+
+@pytest.mark.parametrize(
+    ("maximum", "shown"), [("1", "1"), ("999", "999"), ("1500", "1500"), ("200000", "200k"), ("250000", "250k")]
+)
+def test_the_recommended_max_is_shown_exactly_unless_a_whole_thousand(tmp_path, monkeypatch, maximum, shown):
+    monkeypatch.setenv("AKMON_CONTEXT_RECOMMENDED_MAX", maximum)
+    transcript = tmp_path / "t.jsonl"
+    # ``_usage`` splits off 1,004 fixed tokens, so a fill below that is written out directly.
+    usage = {"input_tokens": int(maximum), "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+    _write_transcript(transcript, [_assistant("claude-fable-5", usage=usage)])
+    lines = routing.context_pressure_notice(REGISTRY, transcript, "s9", marker_dir=tmp_path)
+    assert len(lines) == 1 and f"~100% of the recommended {shown} budget ({maximum} tokens)" in lines[0]
+
+
+def test_an_overlay_top_band_below_one_keeps_the_checkpoint_advice(tmp_path):
+    # The max band is named by its threshold, not its position: a project overlay that keeps
+    # [0.85, 0.95] gets the checkpoint advice at 95%, never "recommended context budget reached".
+    registry = dict(REGISTRY, context_pressure={"recommended_max": 200000, "warn_ratios": [0.85, 0.95]})
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(191000))])
+    lines = routing.context_pressure_notice(registry, transcript, "s10", marker_dir=tmp_path)
+    assert len(lines) == 1 and "if the task continues, prepare a focused /compact" in lines[0]
+    assert "recommended context budget reached" not in lines[0]
+
+
+@pytest.mark.parametrize("jump", [False, True])
+def test_every_band_at_or_above_one_is_one_max_state(tmp_path, jump):
+    # An overlay may stack bands past 100%; they are all the one "budget reached" state, so the
+    # max warning fires once per pressure episode — at 100%, or at the first fill past it when
+    # the fill jumps — and never again at 120% until a fill below the lowest band resets it.
+    policy = {"recommended_max": 200000, "warn_ratios": [0.85, 1.0, 1.2]}
+    registry = dict(REGISTRY, context_pressure=policy)
+    transcript = tmp_path / "t.jsonl"
+
+    def notice(fill: int) -> list[str]:
+        _write_transcript(transcript, [_assistant("claude-fable-5", usage=_usage(fill))])
+        return routing.context_pressure_notice(registry, transcript, "s11", marker_dir=tmp_path)
+
+    if not jump:
+        assert len(notice(172000)) == 1  # 86% — the checkpoint band
+        at_max = notice(200000)  # 100%
+    else:
+        at_max = notice(250000)  # 125% on the first observation — straight past both max bands
+    assert len(at_max) == 1 and "recommended context budget reached" in at_max[0]
+    assert notice(250000) == []  # 125% — still the one max state
+    assert notice(300000) == []
+    assert notice(40000) == []  # the episode resets
+    assert len(notice(250000)) == 1  # the next episode gets its one max warning
 
 
 def test_the_pressure_marker_defaults_to_the_shared_temp_dir(tmp_path, monkeypatch):
