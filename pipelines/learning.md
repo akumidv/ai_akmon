@@ -25,7 +25,8 @@ insight.
 3. **PROMOTE** (PR into akmon) — by kind:
    - cross-project skill / tool → `akmon/{skills,tools}/`,
    - a role requirement or pipeline change → `akmon/{roles,pipelines}/`,
-   - a language or domain rule → `akmon/{guardrails,profiles}/`.
+   - a universal rule → `akmon/guardrails/`,
+   - a language, environment or domain rule → `akmon/profiles/`.
 4. **PROPAGATE** — after the akmon PR merges, bump the submodule pin in consuming
    projects (`git submodule update --remote` → commit the pin). Other projects inherit it
    on their next update.

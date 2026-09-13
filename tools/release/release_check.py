@@ -314,15 +314,18 @@ def check_release_versions(root: Path) -> list[Finding]:
         if declared == fallback:
             findings.append(
                 _finding(
-                    "ok", "release.version-literals",
-                    f"{_PYPROJECT} and {_STATIC_VERSION_FILE} both declare {declared}", _PYPROJECT,
+                    "ok",
+                    "release.version-literals",
+                    f"{_PYPROJECT} and {_STATIC_VERSION_FILE} both declare {declared}",
+                    _PYPROJECT,
                     "Bump both literals together — one release bump is two edits.",
                 )
             )
         else:
             findings.append(
                 _finding(
-                    "error", "release.version-literals",
+                    "error",
+                    "release.version-literals",
                     f"{_PYPROJECT} declares {declared} while {_STATIC_VERSION_FILE} declares {fallback}",
                     _PYPROJECT,
                     "Set both literals to the same string — one release bump is two edits.",
@@ -378,16 +381,20 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
         if headings and _UNRELEASED_HEADING_RE.match(headings[0]):
             return [
                 _finding(
-                    "ok", "release.changelog-window",
-                    f"non-final version {version} sits above a topmost `## Unreleased` heading", _CHANGELOG,
+                    "ok",
+                    "release.changelog-window",
+                    f"non-final version {version} sits above a topmost `## Unreleased` heading",
+                    _CHANGELOG,
                     "Keep `## Unreleased` topmost while the version is non-final.",
                 )
             ]
         observed = f"the topmost heading is `## {headings[0]}`" if headings else "it carries no heading"
         return [
             _finding(
-                "error", "release.changelog-window",
-                f"non-final version {version} but {observed}", _CHANGELOG,
+                "error",
+                "release.changelog-window",
+                f"non-final version {version} but {observed}",
+                _CHANGELOG,
                 "Add a topmost `## Unreleased` heading, or make the version final.",
             )
         ]
@@ -395,8 +402,10 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
     if not released:
         return [
             _finding(
-                "error", "release.changelog-window",
-                f"final version {version} but {_CHANGELOG} carries no released heading", _CHANGELOG,
+                "error",
+                "release.changelog-window",
+                f"final version {version} but {_CHANGELOG} carries no released heading",
+                _CHANGELOG,
                 f"Cut the `## Unreleased` heading to `## v{base}` before tagging.",
             )
         ]
@@ -406,15 +415,19 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
     if topmost_base != base:
         return [
             _finding(
-                "error", "release.changelog-window",
-                f"final version {version} but the topmost released heading is `## {topmost}`", _CHANGELOG,
+                "error",
+                "release.changelog-window",
+                f"final version {version} but the topmost released heading is `## {topmost}`",
+                _CHANGELOG,
                 f"Cut a `## v{base}` heading above `## {topmost}` before tagging.",
             )
         ]
     return [
         _finding(
-            "ok", "release.changelog-window",
-            f"final version {version} matches the topmost released heading `## {topmost}`", _CHANGELOG,
+            "ok",
+            "release.changelog-window",
+            f"final version {version} matches the topmost released heading `## {topmost}`",
+            _CHANGELOG,
             "Keep the topmost released heading equal to the version being built.",
         )
     ]
@@ -429,13 +442,15 @@ def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: 
         if final:
             findings.append(
                 _skip(
-                    f"git is unavailable, so whether {version} is already tagged is unknown", "",
+                    f"git is unavailable, so whether {version} is already tagged is unknown",
+                    "",
                     "Run this where git can read the repository to detect a re-release.",
                 )
             )
         findings.append(
             _skip(
-                f"git is unavailable, so no tag was checked for a {_CHANGELOG} heading", _CHANGELOG,
+                f"git is unavailable, so no tag was checked for a {_CHANGELOG} heading",
+                _CHANGELOG,
                 "Run this where git can read the repository to check tag coverage.",
             )
         )
@@ -450,8 +465,10 @@ def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: 
         if not tag.startswith("v"):
             findings.append(
                 _finding(
-                    "warn", "release.tag-spelling",
-                    f"tag {tag} names a version but is not spelled v{tag}", tag,
+                    "warn",
+                    "release.tag-spelling",
+                    f"tag {tag} names a version but is not spelled v{tag}",
+                    tag,
                     f"Cut release tags as v{tag} — that spelling is the release tag's only form.",
                 )
             )
@@ -462,8 +479,10 @@ def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: 
         if matching:
             findings.append(
                 _finding(
-                    "warn", "release.retag",
-                    f"final version {version} is already tagged as {matching[0]}", matching[0],
+                    "warn",
+                    "release.retag",
+                    f"final version {version} is already tagged as {matching[0]}",
+                    matching[0],
                     "Confirm this is a deliberate re-release, or bump the version.",
                 )
             )
@@ -471,7 +490,8 @@ def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: 
         # Unrunnable, not inapplicable: there are tags, and nothing to check them against.
         findings.append(
             _skip(
-                f"{_CHANGELOG} is absent, so no tag was checked for a heading", _CHANGELOG,
+                f"{_CHANGELOG} is absent, so no tag was checked for a heading",
+                _CHANGELOG,
                 f"Add {_CHANGELOG} so the tags already cut can be checked against it.",
             )
         )
@@ -481,8 +501,10 @@ def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: 
         if split_version(tag)[0] not in documented:
             findings.append(
                 _finding(
-                    "warn", "release.undocumented-tag",
-                    f"tag {tag} has no `## {tag}` heading in {_CHANGELOG}", tag,
+                    "warn",
+                    "release.undocumented-tag",
+                    f"tag {tag} has no `## {tag}` heading in {_CHANGELOG}",
+                    tag,
                     f"Add the `## {tag}` section it released, or accept the historical gap.",
                 )
             )

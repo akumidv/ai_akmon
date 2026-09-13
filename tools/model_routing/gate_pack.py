@@ -33,13 +33,8 @@ from common.project_root import aitna_root, resolve_project_root  # noqa: E402
 # orthogonal" — the role determines the pack's contract and question, the tier only the
 # model).
 ROLE_QUESTION: dict[str, str] = {
-    "review": (
-        "What contradicts across these findings? Which zone or seam is uncovered by the "
-        "fan-out?"
-    ),
-    "architect": (
-        "Do the locked decisions cohere? Do the options assume mutually compatible things?"
-    ),
+    "review": ("What contradicts across these findings? Which zone or seam is uncovered by the fan-out?"),
+    "architect": ("Do the locked decisions cohere? Do the options assume mutually compatible things?"),
 }
 
 _PLAN_CHECK_QUESTION = "Does the plan cover the stated goal? Which zones or seams are obviously missing?"
@@ -115,8 +110,7 @@ def build_full_pack(
     lines.append("")
     lines.append("- Contradictions between independently-correct findings/options")
     lines.append(
-        "- Uncovered seams — derived from the coverage map (zones no worker checked, "
-        "boundaries between zones)"
+        "- Uncovered seams — derived from the coverage map (zones no worker checked, boundaries between zones)"
     )
     lines.append("- Re-ranking / recommendation deltas")
     lines.append(

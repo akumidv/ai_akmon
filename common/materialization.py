@@ -2,7 +2,7 @@
 """The one owner of the package-mode materialization: its format, and whether it is current.
 
 Mode `package` puts **no executable surface** in the consumer repository (ADR 0009, the C77
-amendment). Exactly one thing is still written there: the guardrail files the consumer's
+amendment). Exactly one thing is still written there: the guardrail and profile files the consumer's
 ``AGENTS.md`` ``@``-imports, because that import sits in a committed, hand-owned document and
 the only path from it into the installed package carries the venv's Python version.
 
@@ -51,13 +51,20 @@ def materialized_markdown(source_text: str) -> str:
     return banner_line + "\n\n" + source_text
 
 
-def materialized_guardrails_dir(project_root: Path) -> Path:
-    """Where package mode writes the imported guardrails."""
-    return aitna_root(project_root) / ".akmon" / "guardrails"
+# The standard directories whose files a consumer's ``AGENTS.md`` ``@``-imports: the universal
+# guardrails, and the language and environment profiles. Package mode writes the imported ones
+# under ``<AITNA_ROOT>/.akmon/<directory>/``; mounted modes import them from the mount.
+IMPORTED_DIRS = ("guardrails", "profiles")
 
 
-def stale_guardrails(project_root: Path, tree_root: Path) -> list[str]:
-    """Materialized guardrail file names whose text is no longer what ``tree_root`` ships.
+def materialized_dir(project_root: Path) -> Path:
+    """Where package mode writes the imported guardrails and profiles, one subdirectory each."""
+    return aitna_root(project_root) / ".akmon"
+
+
+def stale_materialized(project_root: Path, tree_root: Path) -> list[str]:
+    """Materialized files — ``guardrails/<name>``, ``profiles/<name>`` — whose text is no longer
+    what ``tree_root`` ships.
 
     ``tree_root`` is the standard tree the caller is actually running from, so the comparison
     is against the code that is executing rather than against a recorded version string: a
@@ -72,19 +79,19 @@ def stale_guardrails(project_root: Path, tree_root: Path) -> list[str]:
     Unreadable files count as stale. The caller is a hook that must never raise, and "cannot be
     compared" and "does not match" lead to the same instruction.
     """
-    dest = materialized_guardrails_dir(project_root)
-    if not dest.is_dir():
-        return []
     stale: list[str] = []
-    for path in sorted(dest.glob("*.md")):
-        source = tree_root / "guardrails" / path.name
-        try:
-            if not source.is_file():
-                stale.append(path.name)
-            elif path.read_text(encoding="utf-8") != materialized_markdown(
-                source.read_text(encoding="utf-8")
-            ):
-                stale.append(path.name)
-        except OSError:
-            stale.append(path.name)
+    for directory in IMPORTED_DIRS:
+        dest = materialized_dir(project_root) / directory
+        if not dest.is_dir():
+            continue
+        for path in sorted(dest.glob("*.md")):
+            relative = f"{directory}/{path.name}"
+            source = tree_root / relative
+            try:
+                if not source.is_file():
+                    stale.append(relative)
+                elif path.read_text(encoding="utf-8") != materialized_markdown(source.read_text(encoding="utf-8")):
+                    stale.append(relative)
+            except OSError:
+                stale.append(relative)
     return stale

@@ -29,6 +29,11 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check .
 
+      # akmon's own formatting gate only: ruff is this repo's dev dependency, and nothing
+      # akmon ships asks a consumer to use it.
+      - name: Format (ruff)
+        run: uv run ruff format --check .
+
       - name: Tests
         run: uv run pytest meta/tests
 

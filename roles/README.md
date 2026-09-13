@@ -19,9 +19,9 @@ as-is wastes its budget). `learn` and `release` are cross-cutting.
 
 | Role | Focus | Pipeline | Guardrails |
 |---|---|---|---|
-| [review](review.md) | **analysis** — assess what *is*: state/quality/conformance, problems, bottlenecks; output is a report | [review-flow](../pipelines/review-flow.md) | language `guardrails/` + opted-in `profiles/` |
-| [architect](architect.md) | **synthesis** — design what *should be*: options, trade-offs, contracts, ADRs | [design-flow](../pipelines/design-flow.md) | language `guardrails/` + opted-in `profiles/` |
-| [engineer](engineer.md) | **realization** — code, tests, refactoring | [code-flow](../pipelines/code-flow.md) | language `guardrails/` + opted-in `profiles/` |
+| [review](review.md) | **analysis** — assess what *is*: state/quality/conformance, problems, bottlenecks; output is a report | [review-flow](../pipelines/review-flow.md) | `guardrails/` + language/environment `profiles/` + opted-in domain profiles |
+| [architect](architect.md) | **synthesis** — design what *should be*: options, trade-offs, contracts, ADRs | [design-flow](../pipelines/design-flow.md) | `guardrails/` + language/environment `profiles/` + opted-in domain profiles |
+| [engineer](engineer.md) | **realization** — code, tests, refactoring | [code-flow](../pipelines/code-flow.md) | `guardrails/` + language/environment `profiles/` + opted-in domain profiles |
 | [learn](learn.md) | the learn loop — memory, distillation, LOCAL→SHARED promotion | [memory-distill](../pipelines/memory-distill.md) + [learning](../pipelines/learning.md) | promotion test (general + proven); one-way-up; PR-only at SHARED boundary |
 | [release](release.md) | release cycle for a subject (package / akmon tag / pin bump) | [release](../pipelines/release.md) | D5 (owner executes landing); coordinator-not-super-role; propose/prepare |
 

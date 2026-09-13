@@ -16,9 +16,7 @@ from pathlib import Path
 import pytest
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 # ``meta`` joins them so the dev-only ``checks`` package (akmon's own declaration checkers,
 # whose single production caller is ``meta/self_ci.py``) imports by the same bare name here.

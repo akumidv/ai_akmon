@@ -1,5 +1,5 @@
 """Unit tests for mount mode ``package`` (ADR 0009 §4, C37 slice B; narrowed by C77):
-mount-decoupled tree resolution, the guardrail-only ``.akmon/`` materialization, launcher
+mount-decoupled tree resolution, the guardrail-and-profile ``.akmon/`` materialization, launcher
 resolution and hook-entry recognition across every spelling, and the ``.akmon.toml`` version
 stamp — all in ``bin/sync.py``.
 
@@ -52,17 +52,17 @@ def _make_mounted_root(tmp_path: Path) -> Path:
 
 
 # The AGENTS.md akmon block both *makes* the guardrail import and *documents* it, quoting the
-# language-guardrail form as an example. Read literally the two are indistinguishable, so the
+# language-profile form as an example. Read literally the two are indistinguishable, so the
 # fixture carries both — the scan must take the first and leave the second.
 _AGENTS_MD = """# AGENTS
 
 ## Dev layer — akmon
 
-- **Guardrails (always-on, by language):** add this project's language guardrail on its own
-  line (e.g. `@_aitna/.akmon/guardrails/python.md`) per the ARCHETYPES map.
+- **Guardrails and profiles (always-on):** import this project's language profile on its own
+  line (e.g. `@_aitna/.akmon/profiles/python.md`) per the ARCHETYPES map.
 
 @_aitna/.akmon/guardrails/_common.md
-@_aitna/.akmon/guardrails/python.md
+@_aitna/.akmon/profiles/python.md
 """
 
 
@@ -153,7 +153,7 @@ def test_materialization_ships_only_the_guardrails_agents_md_imports(tmp_path):
 
     assert paths == {
         "_aitna/.akmon/guardrails/_common.md",
-        "_aitna/.akmon/guardrails/python.md",
+        "_aitna/.akmon/profiles/python.md",
     }
     guardrail = next(f for f in files if f.path.name == "_common.md")
     assert sync.GENERATED_MARKER in guardrail.content
@@ -166,9 +166,7 @@ def test_no_executable_surface_is_materialized(tmp_path):
     root = _make_package_root(tmp_path)
     files, _ = sync._planned_files(root)
     materialized = {
-        f.path.relative_to(root).as_posix()
-        for f in files
-        if "/.akmon/" in f.path.relative_to(root).as_posix()
+        f.path.relative_to(root).as_posix() for f in files if "/.akmon/" in f.path.relative_to(root).as_posix()
     }
     assert not any(path.endswith(".py") for path in materialized), materialized
     assert not any("/hooks/" in path or "/common/" in path for path in materialized), materialized
@@ -188,8 +186,8 @@ Add a language guardrail, for example `@_aitna/.akmon/guardrails/python.md`.
 @_aitna/.akmon/guardrails/_common.md
 """
     root = _make_package_root(tmp_path, agents_md=agents_md)
-    names, errors = sync.imported_guardrails(root)
-    assert names == ["_common.md"]
+    names, errors = sync.imported_standard_files(root)
+    assert names == ["guardrails/_common.md"]
     assert errors == []
 
 
@@ -197,17 +195,106 @@ def test_the_common_guardrail_is_materialized_even_when_agents_md_imports_nothin
     """Its import is the anchor ``verify`` requires of a package-mode AGENTS.md, so a missing
     one is a finding about AGENTS.md — not a licence to ship a broken import target."""
     root = _make_package_root(tmp_path, agents_md="# AGENTS\n")
-    names, errors = sync.imported_guardrails(root)
-    assert names == ["_common.md"]
+    names, errors = sync.imported_standard_files(root)
+    assert names == ["guardrails/_common.md"]
     assert errors == []
+
+
+def test_an_import_of_a_moved_file_is_a_plan_error_naming_the_new_line(tmp_path):
+    """The language rules left ``guardrails/`` for ``profiles/``. An import of the old path
+    resolves to nothing, silently, so the plan error is the only place a consumer learns the new
+    line — and it names the line, not just the problem."""
+    agents_md = "# AGENTS\n\n@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/guardrails/python.md\n"
+    root = _make_package_root(tmp_path, agents_md=agents_md)
+    _, errors = sync.imported_standard_files(root)
+    assert errors == [
+        "AGENTS.md imports guardrails/python.md, which the standard moved to profiles/python.md: "
+        "replace the line with @_aitna/.akmon/profiles/python.md"
+    ]
+    files, plan_errors = sync._planned_files(root)
+    assert plan_errors == errors
+    assert not any(f.path.name == "python.md" for f in files)
+
+
+def test_a_mounted_consumer_importing_what_the_mount_lacks_is_a_plan_error(tmp_path):
+    """Mounted modes import the mount directly and materialize nothing — which is why the same
+    import used to go unchecked there, and a bump that moved a file would have left a mounted
+    consumer without its language rules and without a word about it."""
+    root = _make_mounted_root(tmp_path)
+    mount = root / "_aitna" / "akmon"
+    (mount / "guardrails").mkdir()
+    (mount / "guardrails" / "_common.md").write_text("# Common\n", encoding="utf-8")
+    (root / "AGENTS.md").write_text(
+        "# AGENTS\n\n@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/guardrails/python.md\n", encoding="utf-8"
+    )
+    files, errors = sync._materialized_files(root)
+    assert files == []
+    assert errors == [
+        "AGENTS.md imports guardrails/python.md, which the standard moved to profiles/python.md: "
+        "replace the line with @_aitna/akmon/profiles/python.md"
+    ]
+
+
+def test_a_mounted_consumer_whose_imports_resolve_plans_nothing_and_no_error(tmp_path):
+    root = _make_mounted_root(tmp_path)
+    mount = root / "_aitna" / "akmon"
+    for relative in ("guardrails/_common.md", "profiles/python.md"):
+        (mount / relative).parent.mkdir(parents=True, exist_ok=True)
+        (mount / relative).write_text("# Rules\n", encoding="utf-8")
+    (root / "AGENTS.md").write_text(
+        "# AGENTS\n\n@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/python.md\n", encoding="utf-8"
+    )
+    assert sync._materialized_files(root) == ([], [])
+
+
+def test_every_moved_import_points_from_a_retired_path_to_a_shipped_one():
+    """The move table is only as good as its two ends: a new path the standard does not ship
+    sends the consumer to a second broken import, and an old path that still exists makes the
+    entry dead."""
+    assert sync.MOVED_IMPORTS
+    for old, new in sync.MOVED_IMPORTS.items():
+        assert not (sync._TREE_ROOT / old).exists(), old
+        assert (sync._TREE_ROOT / new).is_file(), new
+
+
+def test_a_moved_guardrail_copy_is_removed_by_the_sync_that_writes_its_profile(tmp_path):
+    """The migration the changelog promises: once ``AGENTS.md`` imports the profile, one ``sync``
+    writes the new copy and sweeps the old one — nothing stale is left for the harness to load."""
+    root = _make_package_root(tmp_path)
+    old = root / "_aitna" / ".akmon" / "guardrails" / "python.md"
+    old.parent.mkdir(parents=True)
+    old.write_text(materialization.materialized_markdown("# Guardrails: Python\n\nold rule\n"), encoding="utf-8")
+
+    files, errors = sync._planned_files(root)
+    assert errors == []
+    result = sync._apply(files, write=True, root=root)
+
+    assert old in result.deleted and not old.exists()
+    assert (root / "_aitna" / ".akmon" / "profiles" / "python.md").is_file()
+
+
+def test_stale_materialized_names_a_profile_the_package_has_moved_past(tmp_path):
+    """The profile copy is held to the same freshness rule as the guardrail beside it."""
+    tree = _tree_with_guardrail(tmp_path, "# Common\n\nrule\n")
+    (tree / "profiles").mkdir()
+    (tree / "profiles" / "python.md").write_text("# Python\n\nnew rule\n", encoding="utf-8")
+    root = tmp_path / "project"
+    _materialize(root, "_common.md", "# Common\n\nrule\n")
+    profiles = materialization.materialized_dir(root) / "profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "python.md").write_text(
+        materialization.materialized_markdown("# Python\n\nold rule\n"), encoding="utf-8"
+    )
+
+    assert materialization.stale_materialized(root, tree) == ["profiles/python.md"]
 
 
 def test_importing_a_guardrail_the_standard_does_not_ship_is_a_plan_error(tmp_path):
     """Stated, not silently skipped: an import with no target is a broken always-on rule, and
     a materialization that quietly ships nothing for it looks identical to a healthy one."""
     root = _make_package_root(tmp_path, agents_md="# AGENTS\n\n@_aitna/.akmon/guardrails/klingon.md\n")
-    _, errors = sync.imported_guardrails(root)
-    assert errors == ["AGENTS.md imports a guardrail the standard does not ship: guardrails/klingon.md"]
+    _, errors = sync.imported_standard_files(root)
+    assert errors == ["AGENTS.md imports a file the standard does not ship: guardrails/klingon.md"]
     _, plan_errors = sync._planned_files(root)
     assert any("klingon.md" in error for error in plan_errors)
 
@@ -276,7 +363,7 @@ def test_a_previous_versions_materialization_is_removed_in_one_run(tmp_path):
     assert not bytecode.exists() and not bytecode.parent.exists()
     for emptied in ("hooks", "common", "tools/model_routing", "tools"):
         assert not (stale / emptied).exists(), emptied
-    assert sorted(p.name for p in stale.iterdir()) == ["guardrails"]
+    assert sorted(p.name for p in stale.iterdir()) == ["guardrails", "profiles"]
 
 
 def test_sync_check_does_not_report_bytecode_left_by_a_hook_run(tmp_path):
@@ -379,12 +466,7 @@ def test_launcher_never_fails_and_predicts_the_convention(tmp_path, monkeypatch)
 def test_claude_wiring_names_the_console_script_and_no_repo_path_in_package_mode(tmp_path):
     root = _make_package_root(tmp_path)
     entries = sync._claude_hooks(root)["hooks"]
-    commands = [
-        hook["command"]
-        for event in entries.values()
-        for entry in event
-        for hook in entry["hooks"]
-    ]
+    commands = [hook["command"] for event in entries.values() for entry in event for hook in entry["hooks"]]
     assert commands, "no hook commands generated"
     for command in commands:
         assert command.startswith('"$CLAUDE_PROJECT_DIR/.venv/bin/akmon" hook '), command
@@ -396,12 +478,7 @@ def test_claude_wiring_names_the_console_script_and_no_repo_path_in_package_mode
 def test_codex_wiring_keeps_its_advisory_argument_in_package_mode(tmp_path):
     root = _make_package_root(tmp_path)
     entries = sync._codex_hooks(root)["hooks"]
-    commands = [
-        hook["command"]
-        for event in entries.values()
-        for entry in event
-        for hook in entry["hooks"]
-    ]
+    commands = [hook["command"] for event in entries.values() for entry in event for hook in entry["hooks"]]
     assert '"$(git rev-parse --show-toplevel)/.venv/bin/akmon" hook codex-hook role-on-code' in commands
     for command in commands:
         assert "_aitna/" not in command, command
@@ -412,7 +489,7 @@ def test_mounted_wiring_still_names_files(tmp_path):
     root = _make_mounted_root(tmp_path)
     claude = sync._claude_settings(root).content
     codex = json.dumps(sync._codex_hooks(root))
-    assert '_aitna/akmon/hooks/git-commit-guard.py' in claude
+    assert "_aitna/akmon/hooks/git-commit-guard.py" in claude
     assert "akmon\\" not in claude and " hook " not in claude
     assert "_aitna/akmon/hooks/codex-hook.py" in codex
 
@@ -568,7 +645,7 @@ def test_both_parsers_agree_on_a_record_with_an_inline_comment():
 
 
 # --------------------------------------------------------------------------------------
-# common.materialization.stale_guardrails — the freshness half of the one remaining copy
+# common.materialization.stale_materialized — the freshness half of the one remaining copy
 # --------------------------------------------------------------------------------------
 
 
@@ -581,7 +658,7 @@ def _tree_with_guardrail(tmp_path: Path, text: str) -> Path:
 
 
 def _materialize(root: Path, name: str, text: str) -> Path:
-    dest = materialization.materialized_guardrails_dir(root)
+    dest = materialization.materialized_dir(root) / "guardrails"
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / name
     path.write_text(materialization.materialized_markdown(text), encoding="utf-8")
@@ -592,7 +669,7 @@ def test_stale_guardrails_is_empty_without_a_materialization(tmp_path):
     """Every mounted-mode project, and a package-mode one between ``init`` and its first
     ``sync``: there is no copy to be stale, and the check must not invent one."""
     tree = _tree_with_guardrail(tmp_path, "# Common\n\nrule\n")
-    assert materialization.stale_guardrails(tmp_path / "project", tree) == []
+    assert materialization.stale_materialized(tmp_path / "project", tree) == []
 
 
 def test_stale_guardrails_is_empty_when_the_copy_matches(tmp_path):
@@ -601,7 +678,7 @@ def test_stale_guardrails_is_empty_when_the_copy_matches(tmp_path):
     root = tmp_path / "project"
     _materialize(root, "_common.md", text)
 
-    assert materialization.stale_guardrails(root, tree) == []
+    assert materialization.stale_materialized(root, tree) == []
 
 
 def test_stale_guardrails_names_a_guardrail_the_package_has_moved_past(tmp_path):
@@ -611,7 +688,7 @@ def test_stale_guardrails_names_a_guardrail_the_package_has_moved_past(tmp_path)
     _materialize(root, "_common.md", "# Common\n\nold rule\n")
     tree = _tree_with_guardrail(tmp_path, "# Common\n\nnew rule\n")
 
-    assert materialization.stale_guardrails(root, tree) == ["_common.md"]
+    assert materialization.stale_materialized(root, tree) == ["guardrails/_common.md"]
 
 
 def test_stale_guardrails_names_a_hand_edited_copy(tmp_path):
@@ -623,7 +700,7 @@ def test_stale_guardrails_names_a_hand_edited_copy(tmp_path):
     path = _materialize(root, "_common.md", text)
     path.write_text(path.read_text(encoding="utf-8") + "\nlocal edit\n", encoding="utf-8")
 
-    assert materialization.stale_guardrails(root, tree) == ["_common.md"]
+    assert materialization.stale_materialized(root, tree) == ["guardrails/_common.md"]
 
 
 def test_stale_guardrails_names_a_guardrail_the_package_no_longer_ships(tmp_path):
@@ -631,7 +708,7 @@ def test_stale_guardrails_names_a_guardrail_the_package_no_longer_ships(tmp_path
     root = tmp_path / "project"
     _materialize(root, "retired.md", "# Retired\n\nrule\n")
 
-    assert materialization.stale_guardrails(root, tree) == ["retired.md"]
+    assert materialization.stale_materialized(root, tree) == ["guardrails/retired.md"]
 
 
 def test_stale_guardrails_ignores_non_markdown_leftovers(tmp_path):
@@ -639,11 +716,11 @@ def test_stale_guardrails_ignores_non_markdown_leftovers(tmp_path):
     speaks only about what the harness actually ``@``-imports."""
     tree = _tree_with_guardrail(tmp_path, "# Common\n\nrule\n")
     root = tmp_path / "project"
-    dest = materialization.materialized_guardrails_dir(root)
+    dest = materialization.materialized_dir(root) / "guardrails"
     dest.mkdir(parents=True)
     (dest / "notes.txt").write_text("stray\n", encoding="utf-8")
 
-    assert materialization.stale_guardrails(root, tree) == []
+    assert materialization.stale_materialized(root, tree) == []
 
 
 def test_sync_writes_guardrails_the_freshness_check_calls_current(tmp_path):
@@ -656,4 +733,4 @@ def test_sync_writes_guardrails_the_freshness_check_calls_current(tmp_path):
         planned.path.parent.mkdir(parents=True, exist_ok=True)
         planned.path.write_text(planned.content, encoding="utf-8")
 
-    assert materialization.stale_guardrails(root, sync.standard_tree_root(root)) == []
+    assert materialization.stale_materialized(root, sync.standard_tree_root(root)) == []

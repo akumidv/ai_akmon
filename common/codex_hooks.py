@@ -281,18 +281,13 @@ def default_runner(command: Sequence[str], cwd: Path, timeout: float) -> str:
                     {
                         "id": _INITIALIZE_ID,
                         "method": "initialize",
-                        "params": {
-                            "clientInfo": {"name": "akmon", "title": "akmon verify", "version": "1"}
-                        },
+                        "params": {"clientInfo": {"name": "akmon", "title": "akmon verify", "version": "1"}},
                     }
                 )
                 + "\n"
             )
             proc.stdin.write(
-                json.dumps(
-                    {"id": _HOOKS_LIST_ID, "method": "hooks/list", "params": {"cwds": [str(cwd)]}}
-                )
-                + "\n"
+                json.dumps({"id": _HOOKS_LIST_ID, "method": "hooks/list", "params": {"cwds": [str(cwd)]}}) + "\n"
             )
             proc.stdin.flush()
         except OSError:

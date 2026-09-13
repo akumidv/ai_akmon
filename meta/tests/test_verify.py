@@ -214,9 +214,7 @@ _AKMON_ROOT = Path(__file__).resolve().parents[2]
 def test_live_registry_reasoner_policy_passes_the_checker():
     import json
 
-    registry = json.loads(
-        (_AKMON_ROOT / "tools" / "model_routing" / "registry.json").read_text(encoding="utf-8")
-    )
+    registry = json.loads((_AKMON_ROOT / "tools" / "model_routing" / "registry.json").read_text(encoding="utf-8"))
     verifier = verify.Verifier(_AKMON_ROOT)
     verifier._check_model_routing_registry(registry)
     errors = _messages(verifier.findings, "error")
@@ -383,7 +381,6 @@ def test_agents_md_missing_anchor_is_error(tmp_path):
     assert any("akmon block is missing" in message for message in _messages(verifier.findings, "error"))
 
 
-
 def test_agents_md_generated_marker_is_error(tmp_path):
     root = _make_project(tmp_path)
     (root / "AGENTS.md").write_text(
@@ -423,8 +420,7 @@ def test_missing_vendor_pointers_do_not_emit_a_pointer_ok(tmp_path):
     verifier = verify.Verifier(root)
     verifier.check_cross_agent_contract()
     assert not any(
-        finding.code == "pointers.vendor-agents-link" and finding.severity == "ok"
-        for finding in verifier.findings
+        finding.code == "pointers.vendor-agents-link" and finding.severity == "ok" for finding in verifier.findings
     )
 
 
@@ -678,9 +674,7 @@ def test_missing_akmon_gitignore_is_warning(tmp_path):
     (root / "_aitna" / "akmon" / ".gitignore").unlink()
     verifier = verify.Verifier(root)
     verifier.run()
-    assert any(
-        "_aitna/akmon/.gitignore is missing" in message for message in _messages(verifier.findings, "warn")
-    )
+    assert any("_aitna/akmon/.gitignore is missing" in message for message in _messages(verifier.findings, "warn"))
 
 
 def test_akmon_gitignore_without_pycache_is_warning(tmp_path):
@@ -761,8 +755,7 @@ def test_indented_note_under_an_entry_is_not_an_entry(tmp_path):
 def test_done_entry_is_named_in_the_archive_warning(tmp_path):
     root = _make_project(tmp_path)
     _tasks(root).write_text(
-        "- T1 · old work · done · engineer · finished\n"
-        "- T2 · live work · active · engineer · ongoing\n",
+        "- T1 · old work · done · engineer · finished\n- T2 · live work · active · engineer · ongoing\n",
         encoding="utf-8",
     )
     verifier = verify.Verifier(root)
@@ -773,9 +766,7 @@ def test_done_entry_is_named_in_the_archive_warning(tmp_path):
 
 def test_dates_in_tasks_are_warning(tmp_path):
     root = _make_project(tmp_path)
-    _tasks(root).write_text(
-        "- T1 · do a thing · active · engineer · landed 2026-06-21\n", encoding="utf-8"
-    )
+    _tasks(root).write_text("- T1 · do a thing · active · engineer · landed 2026-06-21\n", encoding="utf-8")
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("dates" in message for message in _messages(verifier.findings, "warn"))
@@ -826,11 +817,7 @@ def test_changelog_without_unreleased_is_warning(tmp_path):
 # integration record (_aitna/.akmon.toml) — a consumer artifact, non-gating when absent
 # --------------------------------------------------------------------------------------
 
-_VALID_ATTACH = (
-    'akmon_version = "v0.3.0"\n'
-    'attached_archetype = "package/python"\n'
-    'last_realign = "v0.3.0"\n'
-)
+_VALID_ATTACH = 'akmon_version = "v0.3.0"\nattached_archetype = "package/python"\nlast_realign = "v0.3.0"\n'
 
 
 def _attach(root: Path) -> Path:
@@ -878,10 +865,7 @@ def test_attach_realign_behind_the_pin_is_error(tmp_path):
     verifier.check_attach_record()
     errors = _messages(verifier.findings, "error")
     assert any("0.4.0.dev0" in m and "v0.2.1" in m for m in errors)
-    assert any(
-        finding.code == "attach.realign" and "akmon init" in finding.fix
-        for finding in verifier.findings
-    )
+    assert any(finding.code == "attach.realign" and "akmon init" in finding.fix for finding in verifier.findings)
 
 
 def test_attach_realign_accepts_the_two_recorded_spellings(tmp_path):
@@ -979,6 +963,23 @@ def test_attach_record_valid_for_package_mode_without_mount_dir(tmp_path):
     assert any("records akmon version v0.3.0" in m for m in _messages(verifier.findings, "ok"))
 
 
+@pytest.mark.parametrize(
+    ("manifest", "level", "text"),
+    [
+        ('[dependency-groups]\ndev = [\n  "pytest",\n  "akmon==0.4.0",\n]\n', "ok", "pins akmon in a dev group"),
+        ('[dependency-groups]\ndev = [\n  "akmon==0.4.0",\n', "warn", "not valid TOML"),
+    ],
+    ids=["multi-line-dev-pin", "unreadable"],
+)
+def test_package_pin_check_reads_the_manifest_it_gates_on(tmp_path, manifest, level, text):
+    root = tmp_path
+    _write(_attach(root), 'mount = "package"\n' + _VALID_ATTACH)
+    _write(root / "pyproject.toml", manifest)
+    verifier = verify.Verifier(root)
+    verifier.check_package_pin()
+    assert any(text in m for m in _messages(verifier.findings, level)), verifier.findings
+
+
 # --------------------------------------------------------------------------------------
 # mount mode "package" (ADR 0009 §4, C37 slice B): a synthetic package-mode project that
 # goes end-to-end green after a real sync run, plus the individual re-pointed/re-rooted/
@@ -1010,6 +1011,7 @@ jobs:
       - run: uv run akmon verify --strict
 """
 
+
 def _package_akmon_toml() -> str:
     """A package-mode record of a project that *is* realigned to what is installed.
 
@@ -1020,10 +1022,7 @@ def _package_akmon_toml() -> str:
     """
     version = sync._installed_akmon_version() or "0.3.0.dev0"
     return (
-        'mount = "package"\n'
-        f'akmon_version = "{version}"\n'
-        'attached_archetype = "package"\n'
-        f'last_realign = "{version}"\n'
+        f'mount = "package"\nakmon_version = "{version}"\nattached_archetype = "package"\nlast_realign = "{version}"\n'
     )
 
 
@@ -1790,15 +1789,12 @@ def test_check_standard_path_falls_back_to_standard_tree_label_in_package_mode(t
 def _overlay_second_opinion_errors(root: Path) -> list[str]:
     verifier = verify.Verifier(root)
     verifier.run()
-    return [
-        f.target
-        for f in verifier.findings
-        if f.severity == "error" and f.code == "routing.second-opinion"
-    ]
+    return [f.target for f in verifier.findings if f.severity == "error" and f.code == "routing.second-opinion"]
 
 
-@pytest.mark.parametrize("retired", [{"cli": "claude"}, {"invoke": "claude -p"},
-                                     {"cli": "claude", "invoke": "claude -p"}])
+@pytest.mark.parametrize(
+    "retired", [{"cli": "claude"}, {"invoke": "claude -p"}, {"cli": "claude", "invoke": "claude -p"}]
+)
 def test_a_stale_overlay_second_opinion_is_one_error(tmp_path, retired):
     root = _make_project(tmp_path)
     _write(

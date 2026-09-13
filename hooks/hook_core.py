@@ -28,7 +28,7 @@ from pathlib import Path
 _TREE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_TREE_ROOT))
 
-from common.materialization import stale_guardrails  # noqa: E402
+from common.materialization import stale_materialized  # noqa: E402
 from common.project_root import (  # noqa: E402
     aitna_root,
     aitna_root_name,
@@ -97,6 +97,28 @@ class HookResult:
     system_message: str | None = None
 
 
+def hook_failure_diagnostic(hook_name: str, exc: BaseException) -> str:
+    """The one stderr line a crashed entry point writes (ADR 0013 F3): the hook and the class.
+
+    Never the exception's message — it routinely carries a path, a key or a payload fragment.
+    """
+    return f"akmon {hook_name} hook: {type(exc).__name__}"
+
+
+def hook_failure_notice(hook_name: str, exc: BaseException) -> str:
+    """What the owner is told when an entry point crashed (C87/D2-45): the fact, then the command.
+
+    The same two facts as :func:`hook_failure_diagnostic` and nothing from the exception's text.
+    It is written inside a crash handler, so it reads nothing that can raise — the dev-layer
+    name is an environment lookup with a default, not a filesystem question.
+    """
+    return (
+        f"⚠ akmon: the {hook_name} hook failed ({type(exc).__name__}) and was skipped — this action "
+        f"went ahead without it. Check the setup: `akmon verify` (a mounted tree: "
+        f"`python3 {aitna_root_name()}/akmon/bin/verify.py`)."
+    )
+
+
 _CODE_EXTENSIONS = frozenset(
     {
         ".py",
@@ -133,6 +155,8 @@ _CODE_EXTENSIONS = frozenset(
         ".mm",
     }
 )
+
+
 # Path-classification segments are derived from the configured dev-layer root (default
 # ``_aitna``) so relocating it via AITNA_ROOT keeps the code/planning-doc detection correct.
 # These match lowercased path *substrings*, so the segment uses the lowercased root name.
@@ -255,7 +279,6 @@ def current_git_branch() -> str:
         return ""
 
 
-
 # ask->deny escalation for unattended sessions (C31/D2-10, owner decision). A live test
 # showed a hook-forced `ask` is a silent no-op — no prompt, no block — in a Claude Code
 # background/child session running in `acceptEdits` mode; the PreToolUse payload carries a
@@ -367,7 +390,7 @@ def stale_guardrail_notice(root: Path) -> str | None:
     The interactive half of the freshness guarantee (C77). ``sync --check`` and ``verify``
     already catch this copy in CI, but they run on a commit; the window this closes opens
     earlier and closes silently. A pin bump installs the new hooks the instant the dependency
-    resolves — they run from the package — while ``<AITNA_ROOT>/.akmon/guardrails/`` still
+    resolves — they run from the package — while ``<AITNA_ROOT>/.akmon/`` still
     holds the previous release's text until someone runs ``akmon sync``. Nothing in a session
     would otherwise say that the always-on rules loaded from the repository are not the rules
     the running standard ships.
@@ -391,14 +414,13 @@ def stale_guardrail_notice(root: Path) -> str | None:
         # SessionStart is advisory and fail-open. A pathological filesystem must not make a
         # hook that cannot prove package execution block or warn about an inactive copy.
         return None
-    names = stale_guardrails(root, runtime_root)
+    names = stale_materialized(root, runtime_root)
     if not names:
         return None
     return (
-        f"\u26a0 akmon: the guardrails in {aitna_root_name()}/.akmon/guardrails/ are not the ones "
-        f"this session's akmon ships ({', '.join(names)}). Run `akmon sync`, then start a new "
-        "session — the guardrail text is @-imported once at session start, so this session keeps "
-        "the stale copy."
+        f"\u26a0 akmon: the rules in {aitna_root_name()}/.akmon/ are not the ones this session's "
+        f"akmon ships ({', '.join(names)}). Run `akmon sync`, then start a new session — the rules "
+        "are @-imported once at session start, so this session keeps the stale copy."
     )
 
 
@@ -547,7 +569,7 @@ def role_on_code_message() -> str:
         "realize a decided structure in code → `engineer`. If you were assessing (`review`) or "
         "designing (`architect`) — or no role is declared — this is a switch: declare "
         "`\U0001f9ed agent: engineer — <focus>` and follow its pipeline (code-flow + pre-commit: "
-        "tests + lint mandatory before \"done\") before continuing. "
+        'tests + lint mandatory before "done") before continuing. '
         "Restate the role on every switch (roles/README.md).\n"
         "Design→code hand-off: before writing code, confirm the task is **landed in "
         f"`{tasks}`** with a link to its design (design-flow step 8 Hand-off), and **re-read "
@@ -593,7 +615,7 @@ def analysis_before_mutation_message() -> str:
         "(`\U0001f9ed agent: <name> — <focus>`) and restate it on a switch (roles/README.md).\n"
         "If this turn is analysis-only — the owner asked you to analyze, explain, review, "
         "compare options, or identify what remains — STOP: report findings + a recommendation in "
-        "chat and get explicit confirmation (\"write it\" / \"record it\" / \"make the change\") "
+        'chat and get explicit confirmation ("write it" / "record it" / "make the change") '
         "before editing. If the request was already an edit command, proceed. Rule: "
         "guardrails/_common.md § Analysis before mutation."
     )
@@ -779,13 +801,46 @@ def d2_status_line(pending: int, approved: int = 0) -> str:
 # detected via the payload's ``agent_id`` (present only inside a subagent) and are exempted
 # entirely: no counter touch, no advisory, no ask.
 
-_DELEGATION_NUDGE_THRESHOLD_DEFAULT = 10
-_DELEGATION_ASK_THRESHOLD_DEFAULT = 20
-_DELEGATION_NUDGE_TOOL_KINDS = frozenset({EDIT_TOOL, SHELL_TOOL, READ_TOOL})
+#
+# Calibrated, not guessed (C88/D2-46). Replayed over akmon's own Claude sessions (M72), the rule
+# this replaced — every call worth 1, advisory at 10, ask at 20 — fired the advisory in 10 of 11
+# sessions and the ask in 10 of 11; 16 of those 17 asks came in a non-default permission mode,
+# where an ask escalates to a deny, and 3 of the denies fell on a read. An earlier replay on
+# another corpus found the same (M75). A signal that fires in every session measures session
+# length. Three corrections, all keyed on the tool kind — the command text is not read (C28(c)):
+#
+# - **A read weighs half** (:data:`_DELEGATION_WEIGHTS`): a sweep is drift too, but cheaper to
+#   undo than an edit.
+# - **The opening calls of a stretch are free** (:data:`_DELEGATION_GRACE_DEFAULT`): orientation
+#   before the first delegation is not yet a failure to delegate.
+# - **A read never carries the ask.** Outside the interactive default mode the ask is a deny, and
+#   a denied look costs the agent the means to find out what it was about to do. The score stays
+#   over the threshold, so the ask lands on the next edit or shell call.
+#
+# At 30 / 120 the same replay fires the advisory in 10 of 11 sessions and the ask in 7 of 11. The
+# weights barely move that: from 50 to 120 every weighting tried reaches 7 of 11 (M73), because
+# those sessions did run hundreds of calls without a delegation — there the advisory is mostly
+# right. What changed is that a read is never denied and the ask comes six times later.
+_DELEGATION_NUDGE_THRESHOLD_DEFAULT = 30
+_DELEGATION_ASK_THRESHOLD_DEFAULT = 120
+_DELEGATION_GRACE_DEFAULT = 8
+
+#: What one orchestrator call adds to the drift score, by tool kind.
+_DELEGATION_WEIGHTS: dict[str, float] = {READ_TOOL: 0.5, EDIT_TOOL: 1.0, SHELL_TOOL: 1.0}
+_DELEGATION_NUDGE_TOOL_KINDS = frozenset(_DELEGATION_WEIGHTS)
+
+
+def delegation_grace() -> int:
+    """Calls at the start of a stretch that score nothing (env `KEYSTONE_DELEGATION_GRACE`)."""
+    try:
+        value = int(os.environ.get("KEYSTONE_DELEGATION_GRACE", ""))
+    except ValueError:
+        return _DELEGATION_GRACE_DEFAULT
+    return value if value >= 0 else _DELEGATION_GRACE_DEFAULT
 
 
 def delegation_nudge_threshold() -> int:
-    """Mutation count that triggers the advisory nudge (env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`)."""
+    """Drift score that triggers the advisory nudge (env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`)."""
     try:
         value = int(os.environ.get("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", ""))
     except ValueError:
@@ -794,7 +849,7 @@ def delegation_nudge_threshold() -> int:
 
 
 def delegation_ask_threshold() -> int:
-    """Mutation count that graduates the nudge to a hard `ask` (env
+    """Drift score that graduates the nudge to a hard `ask` (env
     `KEYSTONE_DELEGATION_ASK_THRESHOLD`). Clamped so it never falls below the advisory
     threshold — an ask below the advisory would be reachable before the advisory itself."""
     try:
@@ -806,10 +861,17 @@ def delegation_ask_threshold() -> int:
     return max(value, delegation_nudge_threshold())
 
 
-def delegation_nudge_message(count: int) -> str:
+def _drift_score_text(score: float) -> str:
     return (
-        f"[akmon] Delegation check — {count} consecutive orchestrator edit/shell/read calls "
-        "without a subagent delegation.\n"
+        f"a drift score of {score:g} (an edit or shell call counts 1, a read ½, the first "
+        f"{delegation_grace()} calls of a stretch nothing)"
+    )
+
+
+def delegation_nudge_message(score: float) -> str:
+    return (
+        f"[akmon] Delegation check — {_drift_score_text(score)} since the last subagent "
+        "delegation.\n"
         "Delegation is the default: route by task kind (MODEL.md § Capability tiers; "
         "guardrails/_common.md § Route by task kind). Exploration/summaries → `k_explorer` · "
         "mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → "
@@ -821,12 +883,11 @@ def delegation_nudge_message(count: int) -> str:
     )
 
 
-def delegation_ask_message(count: int) -> str:
+def delegation_ask_message(score: float) -> str:
     return (
-        f"[akmon] Sustained delegation drift — {count} consecutive orchestrator "
-        "edit/shell/read calls with no subagent delegation. The read/sweep class "
-        "(Read/Grep/Glob) is exactly the drift the tier floor targets "
-        "(guardrails/_common.md § Route by task kind).\n"
+        f"[akmon] Sustained delegation drift — {_drift_score_text(score)} with no subagent "
+        "delegation. A read never carries this ask, so it lands on a call that changes "
+        "something (guardrails/_common.md § Route by task kind).\n"
         "Route the next steps to a `k_*` delegate — exploration/summaries → `k_explorer` · "
         "mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → "
         "`k_validator` · code under a decided contract → `k_implementer` · load-bearing "
@@ -872,18 +933,25 @@ def delegation_nudge_result(
     if tool_name not in _DELEGATION_NUDGE_TOOL_KINDS:
         return None
 
+    # Two numbers in one file: `seen` is the stretch's calls (the grace is counted in calls),
+    # `score` what they were worth. A one-number counter from the previous rule reads as calls
+    # with no score yet.
     try:
-        count = int(counter.read_text(encoding="utf-8"))
+        raw_seen, _, raw_score = counter.read_text(encoding="utf-8").partition(" ")
+        seen, score = int(raw_seen), float(raw_score or 0)
     except (OSError, ValueError):
-        count = 0
-    count += 1
+        seen, score = 0, 0.0
+    seen += 1
+    if seen > delegation_grace():
+        score += _DELEGATION_WEIGHTS[tool_name]
     try:
-        counter.write_text(str(count), encoding="utf-8")
+        counter.write_text(f"{seen} {score}", encoding="utf-8")
     except OSError:
         pass
 
-    if count >= delegation_ask_threshold():
-        if ask_marker.exists():
+    if score >= delegation_ask_threshold():
+        # A read never carries the ask and does not spend it; the next edit or shell call does.
+        if ask_marker.exists() or tool_name == READ_TOOL:
             return None
         try:
             ask_marker.write_text("seen", encoding="utf-8")
@@ -893,16 +961,16 @@ def delegation_nudge_result(
             HookResult(
                 event_name="PreToolUse",
                 permission_decision="ask",
-                permission_reason=delegation_ask_message(count),
+                permission_reason=delegation_ask_message(score),
             ),
             permission_mode,
         )
-    if count >= delegation_nudge_threshold():
+    if score >= delegation_nudge_threshold():
         if marker.exists():
             return None
         try:
             marker.write_text("seen", encoding="utf-8")
         except OSError:
             pass
-        return HookResult(event_name="PreToolUse", additional_context=delegation_nudge_message(count))
+        return HookResult(event_name="PreToolUse", additional_context=delegation_nudge_message(score))
     return None

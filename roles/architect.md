@@ -162,7 +162,8 @@ verdict — *adopting* a plan, the recommendation, and the decision are never de
 
 ## Guardrails
 
-- Bound by language [guardrails/](../guardrails/) and any opted-in [profiles/](../profiles/).
+- Bound by the [guardrails/](../guardrails/), the project's language and environment
+  [profiles/](../profiles/), and any opted-in domain profiles.
 - Never commit/`git add` on the owner's behalf unless explicitly told.
 - Never silently change an agreed requirement — change it through an ADR + owner
   agreement.

@@ -263,9 +263,7 @@ def second_opinion_spec(registry: dict, provider: str, *, required: bool = True)
         if spec.get("harness") and spec.get("operation") and spec.get("report_dir"):
             return spec
     if required:
-        raise KeyError(
-            f"second-opinion provider '{provider}' has no usable harness/operation/report_dir spec"
-        )
+        raise KeyError(f"second-opinion provider '{provider}' has no usable harness/operation/report_dir spec")
     return {}
 
 
@@ -514,7 +512,7 @@ AGENT_SPECS: tuple[AgentSpec, ...] = (
 - A behaviour change ships with a test; tests mirror the source layout. Run the project's
   test and lint commands (targeted first, then as instructed); report real output,
   including failures.
-- Follow the language guardrails: type hints on public surfaces, every callable reads as
+- Follow the guardrails and the language profile: type hints on public surfaces, every callable reads as
   `f(subject, *rest)` — subject first. Artifacts in English.
 - Never `git add`/`commit`/`push` — the owner owns commits. Changes to math or data
   shape are owner-verified — flag them explicitly in your report.

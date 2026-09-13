@@ -114,12 +114,8 @@ class Validator:
             )
 
     def check_dev_layout(self) -> None:
-        self.check_present(
-            _DEV_LAYER_FILES, "dev layer (meta/)", code="devlayer.files", target="meta/"
-        )
-        self.check_present(
-            _USE_SOURCE_FILES, "USE-surface sources", code="devlayer.use-surface", target="."
-        )
+        self.check_present(_DEV_LAYER_FILES, "dev layer (meta/)", code="devlayer.files", target="meta/")
+        self.check_present(_USE_SOURCE_FILES, "USE-surface sources", code="devlayer.use-surface", target=".")
 
     def run_self_ci(self) -> None:
         """Run the synthetic-fixture self-CI: sync.py + USE-layer verify.py on a fixture."""

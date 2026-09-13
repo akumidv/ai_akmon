@@ -70,9 +70,7 @@ TREE_MEMBERS = (
     "tools",
 )
 
-_COPY_IGNORE = shutil.ignore_patterns(
-    "__pycache__", "*.py[cod]", ".pytest_cache", ".ruff_cache", ".git", ".DS_Store"
-)
+_COPY_IGNORE = shutil.ignore_patterns("__pycache__", "*.py[cod]", ".pytest_cache", ".ruff_cache", ".git", ".DS_Store")
 
 _MOUNT_GITIGNORE = "__pycache__/\n*.py[cod]\n"
 
@@ -176,9 +174,7 @@ def _package_default_ref(repo: str, root: Path) -> str:
             timeout=20,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        raise _InitError(
-            f"cannot discover the latest release tag from {repo!r}; pass --ref explicitly"
-        ) from exc
+        raise _InitError(f"cannot discover the latest release tag from {repo!r}; pass --ref explicitly") from exc
     if completed.returncode != 0:
         raise _InitError(f"cannot discover the latest release tag from {repo!r}; pass --ref explicitly")
     tags = []
@@ -271,14 +267,8 @@ def _old_mount_removal(previous: str, relative: str) -> str:
             f"    rm -rf .git/modules/{relative}"
         )
     if previous == "subtree":
-        return (
-            f"    git rm -r -- {relative}   # a subtree's files are ordinary tracked files\n"
-            f"    rm -rf {relative}"
-        )
-    return (
-        f"    git rm -r --cached -- {relative}   # if the vendored copy was committed\n"
-        f"    rm -rf {relative}"
-    )
+        return f"    git rm -r -- {relative}   # a subtree's files are ordinary tracked files\n    rm -rf {relative}"
+    return f"    git rm -r --cached -- {relative}   # if the vendored copy was committed\n    rm -rf {relative}"
 
 
 def _mode_switch_steps(previous: str, mode: str, aitna: str) -> list[str]:
@@ -289,10 +279,11 @@ def _mode_switch_steps(previous: str, mode: str, aitna: str) -> list[str]:
     edits is the honest half of the deal; the other half is refusing to perform the switch
     silently (see `main`).
     """
-    guardrails = f"{aitna}/.akmon/guardrails" if mode == "package" else f"{aitna}/akmon/guardrails"
+    base = f"{aitna}/.akmon" if mode == "package" else f"{aitna}/akmon"
     steps = [
-        f"re-point the AGENTS.md akmon block from the {previous} layout to {mode}: the guardrail imports become "
-        f"`@{guardrails}/_common.md` (plus each language guardrail), and every link to the standard's docs "
+        f"re-point the AGENTS.md akmon block from the {previous} layout to {mode}: the imports become "
+        f"`@{base}/guardrails/_common.md` plus each imported profile (`@{base}/profiles/<name>.md`), "
+        "and every link to the standard's docs "
         + (
             "becomes a GitHub link at the pinned tag, with `akmon path` named as the way to read them locally"
             if mode == "package"
@@ -506,7 +497,8 @@ def _mount_vendored(root: Path, mount: Path, ref: str | None, log) -> str:
 
 
 def _package_pin_status(root: Path) -> str:
-    """Where the consumer's manifest pins akmon: ``"dev"``, ``"runtime"`` or ``"none"``.
+    """Where the consumer's manifest pins akmon: ``"dev"``, ``"runtime"``, ``"none"``, or
+    ``"unreadable"`` when ``pyproject.toml`` is not valid TOML.
 
     Delegates to ``bin/sync.py::package_pin_status``, which is also what ``verify.py`` gates on:
     `init` reporting one definition of "pinned" while the contract check enforced another is the
@@ -547,7 +539,7 @@ The id is typed — `A` architecture · `C` code · `N` analysis · `L` learning
 and the owning role follows from that letter, so it is not a separate field. Status is one of
 `active | blocked | deferred | done`.
 
-- A1 · classify archetype and guardrails · active · pick archetype/language per ARCHETYPES.md; attach its guardrail
+- A1 · classify archetype and language · active · pick archetype/language per ARCHETYPES.md; import its language profile
 - C1 · pin the test runner · active · record `[test].runner` in `{aitna}/.akmon.toml`, reusing this project's manager
 """
 
@@ -669,6 +661,7 @@ def _agents_block(aitna: str, package_mode: bool, ref: str, archetype: str, lang
         return _doc_link(name, aitna, package_mode, ref)
 
     guardrails_dir = f"{aitna}/.akmon/guardrails" if package_mode else f"{aitna}/akmon/guardrails"
+    profiles_dir = f"{aitna}/.akmon/profiles" if package_mode else f"{aitna}/akmon/profiles"
     roles_hint = (
         f"roles: [`akmon/roles/`]({link('roles/README.md')}) — run `akmon path` to read them locally"
         if package_mode
@@ -684,11 +677,11 @@ def _agents_block(aitna: str, package_mode: bool, ref: str, archetype: str, lang
     return f"""{BLOCK_HEADING} (developing the project)
 
 This project uses the akmon dev layer — one standard for how an assistant helps develop it.
-Model & notation: [`MODEL.md`]({link('MODEL.md')}); attach/realign guide:
-[`BOOTSTRAP.md`]({link('BOOTSTRAP.md')}); overview: [`README.md`]({link('README.md')}).
+Model & notation: [`MODEL.md`]({link("MODEL.md")}); attach/realign guide:
+[`BOOTSTRAP.md`]({link("BOOTSTRAP.md")}); overview: [`README.md`]({link("README.md")}).
 
 - **Archetype / language:** `{archetype}` / `{language}` — classify per
-  [`ARCHETYPES.md`]({link('ARCHETYPES.md')}), then update this line, the guardrail imports
+  [`ARCHETYPES.md`]({link("ARCHETYPES.md")}), then update this line, the guardrail imports
   below, and `attached_archetype` in `{aitna}/.akmon.toml`.
 - **Layers:** SHARED = {shared_layer} · LOCAL = `{aitna}/{{agents,skills,tools,memory}}` +
   [`{aitna}/TASKS.md`]({aitna}/TASKS.md) · USAGE = root `skills/` (absent until this project
@@ -708,21 +701,22 @@ Model & notation: [`MODEL.md`]({link('MODEL.md')}); attach/realign guide:
   verifies architecture, data-shape and math decisions; an assistant *drafts*, the owner
   *decides*. **D5** — the owner owns commits, tags, pushes, publishing and pin bumps; never
   `git add`/`commit`/`push` on the owner's behalf.
-- **Guardrails (always-on, by language):** the common guardrail is **imported** (not just
-  linked) so its rules load at session start; akmon is the single owner — do not restate them
-  here. Add this project's language guardrail on its own line (e.g.
-  `@{guardrails_dir}/python.md`) per the ARCHETYPES map.
+- **Guardrails and profiles (always-on):** the common guardrail and the project's language
+  profile are **imported** (not just linked) so their rules load at session start; akmon is the
+  single owner — do not restate them here. Import this project's language profile on its own
+  line (e.g. `@{profiles_dir}/python.md`), and an environment profile where some of its code
+  runs in one, per the ARCHETYPES map.
 
 @{guardrails_dir}/_common.md
 
-- **Profiles (opt-in by need):** none attached yet — add only those the project actually needs.
-- **Pipelines:** [pre-commit]({link('pipelines/pre-commit.md')}) (tests mandatory),
-  [review-flow]({link('pipelines/review-flow.md')}),
-  [design-flow]({link('pipelines/design-flow.md')}),
-  [code-flow]({link('pipelines/code-flow.md')}),
-  [tasks]({link('pipelines/tasks.md')}) (backlog format), and the learn loop
-  ([memory-distill]({link('pipelines/memory-distill.md')}) +
-  [learning]({link('pipelines/learning.md')})).
+- **Domain profiles (opt-in by need):** none attached yet — link only those the project actually needs.
+- **Pipelines:** [pre-commit]({link("pipelines/pre-commit.md")}) (tests mandatory),
+  [review-flow]({link("pipelines/review-flow.md")}),
+  [design-flow]({link("pipelines/design-flow.md")}),
+  [code-flow]({link("pipelines/code-flow.md")}),
+  [tasks]({link("pipelines/tasks.md")}) (backlog format), and the learn loop
+  ([memory-distill]({link("pipelines/memory-distill.md")}) +
+  [learning]({link("pipelines/learning.md")})).
 - **Memory:** read `{aitna}/memory/` at session start — distilled project facts, indexed by
   [`{aitna}/memory/README.md`]({aitna}/memory/README.md).
 - **Backlog:** [`{aitna}/TASKS.md`]({aitna}/TASKS.md) — one line per task, detail by reference;
@@ -1037,6 +1031,12 @@ def main(argv: list[str] | None = None) -> int:
             "**move the akmon pin** out of the project's runtime dependencies (or extras) into a **dev** "
             "group: akmon is dev tooling and must not reach this project's own users (ADR 0009 §4)",
         )
+    elif package_mode and pin_status == "unreadable":
+        next_steps.insert(
+            0,
+            "**fix pyproject.toml** — it is not valid TOML, so neither akmon nor uv can read an akmon pin "
+            "from it; once it parses, the pin belongs in a **dev** group",
+        )
     from akmon import cli as _cli
 
     if aitna != _cli._project_root_lib().AITNA_ROOT_DEFAULT:
@@ -1054,11 +1054,15 @@ def main(argv: list[str] | None = None) -> int:
     for index, step in enumerate(next_steps, start=1):
         print(f"  {index}. {step}", flush=True)
     if incomplete:
+        missing, remedy = (
+            ("cannot read an akmon pin: pyproject.toml is not valid TOML (step 1)", "fixing it")
+            if pin_status == "unreadable"
+            else ("has no akmon pin in a dev group yet (step 1) — nothing else attaches it", "adding it")
+        )
         print()
         log(
-            "exit 1: mode 'package' has no akmon pin in a dev group yet (step 1) — nothing else attaches it, "
-            "so this attach is not finished. Re-run `akmon init` after adding it (it keeps the recorded mode), or "
-            "`akmon verify --strict` to re-check."
+            f"exit 1: mode 'package' {missing}, so this attach is not finished. Re-run `akmon init` after "
+            f"{remedy} (it keeps the recorded mode), or `akmon verify --strict` to re-check."
         )
         return 1
     _mark_realign_complete(record, version)

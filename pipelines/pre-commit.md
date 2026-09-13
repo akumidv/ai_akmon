@@ -9,8 +9,11 @@ on every project regardless of role.
 
 1. **Tests** — run the project's test suite. **No commit on red.** A behaviour change
    must come with a test that covers it.
-2. **Lint / format** — run the project's linter and formatter (see the language
-   [guardrails/](../guardrails/) for the stack's tools).
+2. **Lint / format** — run the project's linter and formatter (the project's own tools; its
+   language profile in [profiles/](../profiles/) says what akmon checks), then
+   `akmon check --changed` (mounted: `python3 _aitna/akmon/bin/check.py --changed`) — the
+   language profile's checked rules, whatever linter the project runs. An `error` finding
+   stops the commit; severities and parameters are the project's, in `.akmon.toml` `[python]`.
 3. **Types** — run the type checker if the language has one.
 4. **Docs in sync** — if code or behaviour changed, update the doc that **owns** the
    affected fact (API, env vars, package layout, requirements). Never leave docs stale
@@ -47,9 +50,9 @@ on every project regardless of role.
 
 ## Per-project specifics
 
-The concrete commands (test runner, linter, type checker) come from the language
-[guardrails/](../guardrails/) and, where a project differs, from its `AGENTS.md`. This
-pipeline defines the **gate**; the project supplies the **commands**.
+The concrete commands (test runner, linter, type checker) come from the project's `AGENTS.md`
+and its language profile in [profiles/](../profiles/). This pipeline defines the **gate**;
+the project supplies the **commands**.
 
 ## Done
 

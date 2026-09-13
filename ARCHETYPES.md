@@ -4,7 +4,7 @@ The **Archetype** axis (see [MODEL.md](MODEL.md) §4): it decides **whether the 
 layer exists and what shape it takes**. Chosen by the **contract a project exposes**, not
 by its language.
 
-> Language is a *separate* dimension (it selects [guardrails/](guardrails/)). One
+> Language is a *separate* dimension (it selects the language profile in [profiles/](profiles/)). One
 > archetype = one runtime/contract. A language change that keeps the contract (a Python vs
 > JS *package* — both expose a public API) is the **same** archetype, different language.
 > A language change that produces a *different* contract (a JS HTTP API vs a Python
@@ -32,8 +32,9 @@ IDs are immutable contract values (tooling/templates depend on them).
 ## Required per archetype (beyond the universal set)
 
 **Universal (every archetype):** the Layer/Role/Archetype declaration in `AGENTS.md`; the
-secrets policy; the `_aitna/` layout + `bin/sync.py`; archetype ID + owner; the language
-profile + matching [guardrails/](guardrails/); any opted-in [profiles/](profiles/).
+secrets policy; the `_aitna/` layout + `bin/sync.py`; archetype ID + owner; the common
+[guardrail](guardrails/_common.md) + the language profile and any environment profile
+([profiles/](profiles/)); any opted-in domain profiles.
 
 The USAGE column above says *whether*; this says *what each must document on top of the
 universal set*. Where an archetype exports a USAGE skill, its **shape** follows the one
@@ -87,20 +88,26 @@ and writes the resulting links into the project's `AGENTS.md` (so agents don't r
 it each session). When this map changes, re-run bootstrap (or, later, `sync.py`) to
 refresh the project's list.
 
-Two kinds of attachment:
-- **Guardrails — automatic by language.** Always applied; derived from the language, not
-  chosen.
-- **Profiles — opt-in by need.** *Suggested* by archetype, attached only if the project
+Three kinds of attachment:
+- **The common guardrail and the language profile — automatic by language.** Always applied;
+  derived from the language, not chosen. Both are `@`-imported, so they load at session start.
+- **Environment profiles — automatic by where code runs.** Imported when some of the project's
+  code runs in that environment; the project declares those paths in its `.akmon.toml`.
+- **Domain profiles — opt-in by need.** *Suggested* by archetype, attached only if the project
   actually has that concern (don't attach `quant` to an API that does no numerics).
 
-| Language | Guardrails (automatic) |
+| Language | Imported (automatic) |
 |---|---|
-| Python | [`_common`](guardrails/_common.md) + [`python`](guardrails/python.md) |
-| JavaScript/TS | `_common` + `js` *(when added)* |
-| Mixed | `_common` + each present language's guardrail |
+| Python | [`_common`](guardrails/_common.md) guardrail + [`python`](profiles/python.md) profile |
+| JavaScript/TS | `_common` + a `js` profile *(when added)* |
+| Mixed | `_common` + each present language's profile |
 | Other | `_common` + document the language's rules locally |
 
-Each cell lists profiles *suggested* by the archetype; attach one only if the project has
+| Environment | Profile (automatic, for the declared paths) |
+|---|---|
+| Python on a bare interpreter — hooks, bootstrap and install scripts | [`python-stdlib`](profiles/python-stdlib.md) |
+
+Each cell below lists domain profiles *suggested* by the archetype; attach one only if the project has
 that concern (the opt-in rule above). `crypto` is suggested wherever crypto/secrets are
 plausible — auth, encryption, sealed data, decryption hosting — so it recurs by design.
 

@@ -116,7 +116,7 @@ rather than defining a second schema. Text and JSON must carry the same ordered 
 same exit/strict semantics.
 
 **Text rendering changes, and C51 owns the change.** `verify.py` prints `[{level}] {message}`
-today (`bin/verify.py:690`); the canonical form this envelope introduces is
+today (`bin/verify.py:691`); the canonical form this envelope introduces is
 `SEVERITY code target: message → fix`, one canonical stdout line per finding. Every adopter's text output moves in
 the same commit as the `level` → `severity` rename, and the tests pinning the old form move with
 it.
@@ -380,6 +380,12 @@ The `self_ci` checker reports through C51 with exact error codes:
 > posture while still listed, so C52 landing restores the unexempted rule. Rejected: splitting
 > the code for every claim, which would have let each future `ask`/`deny` claim pass an ordinary
 > run with no crash measurement, permanently.
+>
+> **Expired — C90 / D2-47.** Both claims now record a measured crash posture, `fail-open`: the
+> C87 guard answers a crash with exit 0 and an owner notice and the tool call runs, and a hook
+> that dies with exit 1 is fail-open as well, on every tool either claim's matcher names (M69,
+> M70, M77). The list could only shrink; with its last entries gone it went too, so the rule above
+> stands for every claim, unexempted.
 >
 > Two rules were also **strengthened**, closing holes the paragraph above assumed shut:
 > `matrix.missing-file` now covers a marked region holding no claim or carrying a second marker

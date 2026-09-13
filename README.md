@@ -6,7 +6,7 @@
 The cross-project standard for **how an AI assistant helps develop, and helps use, each
 project**. A consumer either mounts the repository at `_aitna/akmon/` or pins the
 `akmon` package as a development dependency and runs it from there — with only the
-guardrails its `AGENTS.md` imports materialized at `_aitna/.akmon/guardrails/`
+guardrails and profiles its `AGENTS.md` imports materialized under `_aitna/.akmon/`
 ([ADR 0009](meta/decisions/0009-packaging-package-carrier-and-mount-modes.md)).
 The standard is **LLM-agnostic** at the policy layer: plain Markdown/JSON that any assistant
 or human can read. Enforcement depth remains vendor-specific, and the single entry point in
@@ -18,6 +18,27 @@ publication is still pending (pin by git tag until then).
 Already attached? **[MODEL.md](MODEL.md)** is the operative rulebook.
 [BOOTSTRAP.md](BOOTSTRAP.md) is the reference behind `init`: the judgment steps it leaves to
 you, and the manual path when you would rather attach by hand.
+
+## Mission
+
+Better project outcomes through better human–agent collaboration: use the person's
+knowledge and judgment where they matter, and let agents carry routine work with
+appropriate models and verifiable results.
+
+The [mission and priorities](MODEL.md#mission-and-priorities) put **human attention and
+joint decision quality** alongside **token efficiency for quality**. Roles, subagents,
+model routing, reusable skills, and hooks serve those outcomes; they are not the goal.
+Truthful reports and decisions that can be challenged matter more than easy agreement.
+
+This is an economic model of effective resource use, not simply saving resources.
+More design time or stronger model reasoning can be worthwhile when it improves the
+outcome or avoids larger implementation and rework costs. Evaluate the whole path to
+the result, not the price of an isolated step.
+
+Routing and governance mechanisms already exist. The fuller attention-aware interaction
+protocol is [under design, with evaluation planned](meta/design/attention-and-human-agent-collaboration.md),
+not a claimed measured advantage over other products. The research preserves its
+premises, alternatives, implementation plan, and conditions for reconsideration.
 
 ## Quick start
 
@@ -47,12 +68,16 @@ the standard in that mode.
 
 Attach one supported carrier — get a working discipline for AI-assisted development:
 
+- **The owner decides with context.** Plans, design rationale, and verification points
+  connect work to its purpose; agent advice does not replace owner acceptance. Improving
+  that interaction across the whole task is a primary development direction.
 - **One entry point.** The root `AGENTS.md` is the single source of guidance; thin
   generated pointers (`CLAUDE.md`, `GEMINI.md`, …) keep every assistant reading it.
 - **Rules that bite.** The invariants ship as hooks (commit guard, delegation nudge,
   session-start reminders) — not prose that decays out of context.
 - **The right model for each step.** Cheap models fan out on mechanical work; the
-  strongest model concentrates on the few checks where an error would cost the most.
+  strongest model concentrates on high-leverage analysis, design, and checks where an
+  error would cost the most.
 - **A learn loop.** A lesson paid for once, in one project, becomes a rule every
   project inherits on its next update.
 
@@ -62,20 +87,19 @@ this altitude; the machinery behind them can wait until the basics run.
 
 ## Why it exists
 
-AI assistance fails in predictable ways: rules restated in prose fall out of context and
-decay; the same fact duplicated across documents drifts into contradiction; a session does
-everything itself, on one model rung, regardless of what each step actually needs; and
-every project reinvents its own conventions, so nothing learned in one carries to the next.
+AI assistance can produce technically plausible work while missing the owner's intended
+outcome, obscuring a limitation, or repeatedly asking the person to reconstruct context.
+It can also spend an expensive model on routine mechanics, lose rules out of context,
+duplicate facts into contradiction, and repeat lessons already learned elsewhere.
 
 akmon is the counter-structure: **one versioned standard shared by all projects**, built
-around a single goal function — *quality per unit of tokens + owner attention* — and a
-small set of named invariants
+around the [mission's two priorities](MODEL.md#mission-and-priorities) and a small set of named invariants
 ([MODEL.md §11](MODEL.md#11-principles--the-shape-in-seven-lines)). In short: a rule that
 must always hold ships with a forcing function (a hook), not just prose; a binding
 contract lives as machine-checked data with exactly one owning artifact; the strongest
-model concentrates at the few points where an error would cost the most; and assistants
-only *draft* — the owner always *decides*. Everything in this repository is those
-principles taking physical shape.
+model concentrates at the decisions and checks where an error would cost the most; and assistants
+only *draft* — the owner always *decides*. The goal is not more process or functionality
+by itself, but better decisions and results at an explicit human and computational cost.
 
 ## Name & metaphor — the forge under Aitna
 
@@ -122,8 +146,8 @@ tracked as **N1** in [meta/TASKS.md](meta/TASKS.md).
 | [ARCHETYPES.md](ARCHETYPES.md) | the archetype taxonomy + per-archetype USAGE/requirement checklists |
 | [roles/](roles/) | the role definitions: `review` · `architect` · `engineer` + `learn` · `release` |
 | [pipelines/](pipelines/) | how each role works: review-flow · design-flow · code-flow · pre-commit · release · tasks · the learn loop |
-| [guardrails/](guardrails/) | always-on hard rules per language (`_common`, `python`, …) |
-| [profiles/](profiles/) | opt-in domain rules (`quant`, …) |
+| [guardrails/](guardrails/) | always-on hard rules for every project (`_common`) |
+| [profiles/](profiles/) | always-on language and environment profiles (`python`, `python-stdlib`) and opt-in domain rules (`quant`, …) |
 | [skills/](skills/) | shared know-how any consuming project can use |
 | [tools/](tools/) | executable mechanics: model routing (registry · init · gate-pack · coverage map · second opinion), tasks, release checks, the D2 ledger |
 | [hooks/](hooks/) | the forcing functions — vendor-wired session/pre-tool guards (commit guard, analysis guard, delegation log + nudge, model routing) — [hooks/README.md](hooks/README.md) |
@@ -183,9 +207,10 @@ Every artifact and every action classifies on **three independent axes** —
   `frontend` / …): chosen by the contract, not the language; decides whether a USAGE
   layer exists and its shape ([ARCHETYPES.md](ARCHETYPES.md)).
 
-On top of the axes sit the always-on **[guardrails/](guardrails/)** (hard rules per
-language, applied automatically) and opt-in **[profiles/](profiles/)** (domain rules such
-as `quant`, attached only where the project has that concern).
+On top of the axes sit the always-on **[guardrails/](guardrails/)** (the universal floor,
+applied automatically) and **[profiles/](profiles/)** — language and environment profiles
+applied automatically, and domain profiles opted in only where the project has that
+concern (`quant`, …).
 
 ### How a session runs — the model in one picture
 
@@ -247,6 +272,6 @@ override the pin with a local editable install: `[tool.uv.sources] akmon = { pat
 "../ai_akmon", editable = true }` in its `pyproject.toml` (or ephemerally
 `uv pip install -e ../ai_akmon`, which lasts until the next `uv sync`); the wired hooks then
 run straight out of the working copy, and `akmon sync` refreshes the imported guardrails
-from it. When done: commit + tag here, drop
+and profiles from it. When done: commit + tag here, drop
 the override, return the consumer to the tag pin. (This workflow lives here on purpose —
 BOOTSTRAP is consumer-only: developing *with* akmon, never akmon itself.)

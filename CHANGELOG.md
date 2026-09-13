@@ -17,6 +17,21 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 ## Unreleased
 
 ### Added
+- **Google's Python rules, checked by akmon itself — `akmon check` and language profiles
+  (C89/D2-48).** Each rule now sits in the layer that can hold it
+  ([ADR 0014](meta/decisions/0014-code-rules-catalog-and-language-profiles.md)): a principle that
+  holds in any language is in `guardrails/_common.md` § Code design; a rule a program can check is
+  in the catalog `profiles/python.rules.toml`, with its Google Python Style Guide section, default
+  severity and parameters; the rest is in the Python language profile `profiles/python.md` and the
+  environment profile `profiles/python-stdlib.md`, for code that runs on a bare interpreter.
+  `akmon check` (mounted: `python3 _aitna/akmon/bin/check.py`) runs the catalog's rules on the
+  project's Python with the standard library alone — no linter is required of the project — and
+  the pre-commit pipeline runs `akmon check --changed`; an `error` finding exits 1. A project
+  switches a rule off or changes a parameter under `[python]` in `<AITNA_ROOT>/.akmon.toml`;
+  `akmon verify` reports an unknown rule, parameter or value there (`python.config`), never the
+  code. `akmon check --print-ruff` prints a matching fragment for a project that also runs ruff.
+  `sync` now checks a mounted consumer's `@`-imports as well: an import the mount cannot resolve
+  is a plan error, as it already was in package mode.
 - **`akmon verify` checks live Codex hook delivery (C70/D2-27).** Generated wiring only proves
   the hooks *file* is correct; a live probe (N7) measured that a discovered `SessionStart`/
   `PreToolUse` entry can still be reported `enabled: true` while its persisted trust is absent
@@ -145,6 +160,32 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   silence by a filter that would hide it from them and say nothing.
 
 ### Changed
+- **`self_ci --strict` passes: the Claude commit guard and delegation nudge record a measured
+  crash posture (C90/D2-47).** The two `matrix.unqualified-effect` warns are gone. On Claude Code
+  2.1.270 a crashing hook — answered by the C87 guard with exit 0 and a notice, or dead with exit
+  1 — lets the call run on `Bash`, `Read`, `Edit`, `Write` and `Agent`, so both rows say
+  `fail-open`. The named exemption that carried them (D2-29) is removed: an `ask`/`deny` claim
+  over an unmeasured crash posture is now an error everywhere.
+- **The delegation nudge weighs calls and fires later (C88/D2-46).** Replayed over recorded
+  sessions, the old rule — every edit, shell or read call worth 1, advisory at 10, ask at 20 —
+  fired in 10 of 11 sessions, and outside the interactive default mode its ask is a deny, which
+  fell on a plain read 3 times. Now an edit or shell call counts 1 and a read ½, the first 8
+  calls after a delegation count nothing, the advisory comes at 30 and the ask at 120, and a
+  read never carries the ask — the next edit or shell call does. New env
+  `KEYSTONE_DELEGATION_GRACE`; the two threshold variables keep their names.
+- **A crashing akmon hook is reported to the owner (C87/D2-45).** Before, five hooks turned an
+  exception into a stderr line nobody sees, and four did not catch it at all. Now every hook
+  entry point catches a crash, lets the action go ahead, and says so. On Claude Code the owner
+  gets a notice (`⚠ akmon: the <hook> hook failed (<class>) …`, naming `akmon verify`) that the
+  model never sees. On Codex the hook exits 1, which Codex shows as `Failed`. The stderr line
+  names the hook and the exception class only; it no longer carries the exception text.
+- **`CAPABILITIES.md` cites the Codex 0.153.4 re-measure (C85).** On codex-cli 0.153.4 a Codex
+  child fires `SubagentStart`/`SubagentStop`, and `additionalContext` returned from
+  `SubagentStart` reaches it, so the matrix no longer rests on "no SubagentStart dispatch"
+  (measured on 0.146.0) or calls the subagent payload unverified; the generic-subagent row now
+  names 0.153.4. Nothing on 0.153.4 produces `SessionStart` `source=clear` (`/new` arrives as
+  `startup`); the generated matcher keeps `clear`. No wiring changed: akmon still wires no Codex
+  `SubagentStart`, delegation log or deny.
 - **Skill stubs now carry their source's frontmatter and are written for Codex too (C79/D2-41).**
   `sync` writes each skill's stub into `.claude/skills/<name>/SKILL.md` **and**
   `.agents/skills/<name>/SKILL.md`: the source `SKILL.md`'s frontmatter copied verbatim (the
@@ -299,6 +340,11 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   inspect that host state ([N7 evidence](meta/reviews/n7-codex-hook-delivery-20260825.md)).
 
 ### Breaking
+- **The Python language rules moved from `guardrails/python.md` to `profiles/python.md`
+  (C89/D2-48).** An `AGENTS.md` that still imports `guardrails/python.md` fails `akmon sync`
+  (exit 2) and `akmon verify` (`pointers.generated-plan`) with a message naming the replacement
+  line. In package mode `sync` materializes the imported profile at
+  `<AITNA_ROOT>/.akmon/profiles/`. This requires a pre-1.0 `x` bump.
 - **The skill frontmatter contract is the Agent Skills format (C79/D2-41).** `verify` now requires
   `name`, `description` and `metadata.owner`, and no longer requires `when_to_use`. A skill with
   a top-level `owner:` fails `verify` with `skills.required-fields` (`missing: metadata.owner`).
@@ -313,6 +359,14 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   `akmon verify --strict`. This requires a pre-1.0 `x` bump.
 
 ### Migration
+- **Every Python project: re-point the language import, then sync (C89/D2-48).** In the
+  `AGENTS.md` akmon block replace `@_aitna/.akmon/guardrails/python.md` with
+  `@_aitna/.akmon/profiles/python.md` (mounted: `@_aitna/akmon/guardrails/python.md` with
+  `@_aitna/akmon/profiles/python.md`), run `akmon sync` — in package mode it writes
+  `_aitna/.akmon/profiles/python.md` and removes the old copy in the same run — and commit the
+  result. Then run `akmon check` once to see where the project stands before the pre-commit step
+  starts stopping commits on `error` findings; switch off or retune what does not fit under
+  `[python.rules]` in `<AITNA_ROOT>/.akmon.toml`.
 - **Every project with its own skills (`skills/`, `<AITNA_ROOT>/skills/`): reshape each
   `SKILL.md` frontmatter, then sync (C79/D2-41).** Move `owner: <x>` under a `metadata:` block
   (`metadata:` on its own line, then `  owner: <x>`). Put the trigger ("Use when …") in
@@ -359,6 +413,15 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **The package-mode pin is read from multi-line arrays (C84):** `verify` and `init` now read
+  the akmon pin from `pyproject.toml` as TOML. A pin written one requirement per line —
+  `"akmon==0.4.0",` inside a multi-line `[dependency-groups]` or `dependencies` array, the
+  shape `uv add --dev` writes — used to read as *no pin*: `verify` warned `package.dev-pin` over
+  a correctly pinned project and `init` exited 1. A versioned runtime pin in a multi-line array
+  is now an error, as the single-line form always was. Poetry inline-table and dotted-key
+  spellings and the pre-group `[tool.poetry.dev-dependencies]` are read too. A `pyproject.toml`
+  that is not valid TOML is reported as such — a `package.dev-pin` warn, and `init` exits 1
+  naming it — instead of as a missing pin.
 - **Coverage-map time bounds and row counting (C76):** `--since`/`--until` compare instants,
   not strings. A bare date covers its whole day — `--until 2026-09-02` used to drop every row of
   that day. A bound with no offset is read in local time. An unparseable bound, or a log row with

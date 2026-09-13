@@ -102,7 +102,8 @@ owner.
 
 ## Guardrails
 
-- Bound by language [guardrails/](../guardrails/) and any opted-in [profiles/](../profiles/).
+- Bound by the [guardrails/](../guardrails/), the project's language and environment
+  [profiles/](../profiles/), and any opted-in domain profiles.
 - Never commit/`git add` on the owner's behalf unless explicitly told.
 - Never mutate the artifact under review while reviewing it — separate the report from the
   fix.

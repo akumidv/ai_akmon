@@ -33,7 +33,7 @@ import os
 import sys
 from pathlib import Path
 
-from claude_adapter import load_payload, print_result
+from claude_adapter import load_payload, run_guarded
 from hook_core import (
     HookResult,
     aitna_root_name,
@@ -117,9 +117,7 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
         routing.rebind_to(root, registry, config, detected)
         config = _load_config(root)  # reload the freshly-written binding
 
-    pressure = routing.context_pressure_notice(
-        registry, payload.get("transcript_path"), payload.get("session_id")
-    )
+    pressure = routing.context_pressure_notice(registry, payload.get("transcript_path"), payload.get("session_id"))
     suppressed = routing.suppressed_rebind_warning(
         brief_warn if switched else None,
         detected,
@@ -180,15 +178,14 @@ def _project_root(payload: dict) -> Path:
     return find_project_root(Path(cwd))
 
 
+def _decide() -> HookResult | None:
+    payload = load_payload()
+    return model_routing_result(_project_root(payload), payload)
+
+
 def main() -> int:
-    # Never block a turn: on any failure, log to stderr and exit cleanly.
-    try:
-        payload = load_payload()
-        print_result(model_routing_result(_project_root(payload), payload))
-    except Exception as exc:
-        print(f"akmon model-routing hook: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 0
-    return 0
+    # Never block a turn: a crash is reported (stderr + the owner's notice), exit 0.
+    return run_guarded("model-routing", _decide)
 
 
 if __name__ == "__main__":

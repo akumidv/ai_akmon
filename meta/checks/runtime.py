@@ -74,9 +74,19 @@ _SHELL_WRAPPERS = frozenset({"command", "exec", "builtin"})
 #: Wrappers that are themselves external programs. The host needs *both* the wrapper and the
 #: command it runs, so the wrapper is recorded as a binary and the walk continues past it.
 #: `time` is deliberately absent: see `_REFUSED_TOKENS`.
-_EXTERNAL_WRAPPERS = frozenset({
-    "nohup", "env", "sudo", "doas", "nice", "ionice", "setsid", "stdbuf", "xargs",
-})
+_EXTERNAL_WRAPPERS = frozenset(
+    {
+        "nohup",
+        "env",
+        "sudo",
+        "doas",
+        "nice",
+        "ionice",
+        "setsid",
+        "stdbuf",
+        "xargs",
+    }
+)
 
 _WRAPPERS = _SHELL_WRAPPERS | _EXTERNAL_WRAPPERS
 
@@ -105,7 +115,7 @@ _REFUSED_TOKENS = {
     "((": "an arithmetic command is outside the supported grammar",
     "coproc": "'coproc' is outside the supported grammar",
     "time": "'time' is a shell keyword in some shells and an external program in others, so "
-            "whether it names a host requirement cannot be read from the command string",
+    "whether it names a host requirement cannot be read from the command string",
 }
 
 #: A function *definition* is not an invocation. `foo() { ... ; }` put `foo` in the binary set,
@@ -115,17 +125,65 @@ _REFUSED_TOKENS = {
 
 #: Utilities POSIX requires the shell itself to provide. They are already covered by declaring
 #: the shell, so counting them again would demand host declarations for `cd` and `echo`.
-_SHELL_BUILTINS = frozenset({
-    ":", ".", "[", "alias", "bg", "break", "cd", "continue", "echo", "eval", "exit", "export",
-    "false", "fg", "getopts", "hash", "jobs", "kill", "local", "printf", "pwd", "read",
-    "readonly", "return", "set", "shift", "source", "test", "times", "trap", "true", "type",
-    "ulimit", "umask", "unalias", "unset", "wait",
-})
+_SHELL_BUILTINS = frozenset(
+    {
+        ":",
+        ".",
+        "[",
+        "alias",
+        "bg",
+        "break",
+        "cd",
+        "continue",
+        "echo",
+        "eval",
+        "exit",
+        "export",
+        "false",
+        "fg",
+        "getopts",
+        "hash",
+        "jobs",
+        "kill",
+        "local",
+        "printf",
+        "pwd",
+        "read",
+        "readonly",
+        "return",
+        "set",
+        "shift",
+        "source",
+        "test",
+        "times",
+        "trap",
+        "true",
+        "type",
+        "ulimit",
+        "umask",
+        "unalias",
+        "unset",
+        "wait",
+    }
+)
 
 #: Shell keywords a command genuinely follows, so the segment walk resumes after them.
-_SHELL_KEYWORDS = frozenset({
-    "if", "then", "elif", "else", "fi", "while", "until", "do", "done", "{", "}", "!",
-})
+_SHELL_KEYWORDS = frozenset(
+    {
+        "if",
+        "then",
+        "elif",
+        "else",
+        "fi",
+        "while",
+        "until",
+        "do",
+        "done",
+        "{",
+        "}",
+        "!",
+    }
+)
 
 #: What must precede an unquoted ``#`` for it to open a comment. Anywhere else it is an ordinary
 #: character, which is why the comment is stripped here rather than by the tokenizer.
@@ -143,8 +201,26 @@ class UnparsedCommand(Exception):
 #: `((` and `))` are listed so an arithmetic command stays one token and can be refused; with a
 #: space between them, `( ( … ) )` is ordinary nested grouping and tokenizes as such.
 _OPERATORS = (
-    "<<<", "<<", ">>", ">&", "<&", ">|", "<>", "&&", "||", "|&", ";;", "((", "))", "|", ";", "&",
-    "(", ")", "<", ">",
+    "<<<",
+    "<<",
+    ">>",
+    ">&",
+    "<&",
+    ">|",
+    "<>",
+    "&&",
+    "||",
+    "|&",
+    ";;",
+    "((",
+    "))",
+    "|",
+    ";",
+    "&",
+    "(",
+    ")",
+    "<",
+    ">",
 )
 
 _WHITESPACE = " \t\r\n"
@@ -184,13 +260,13 @@ def _tokenize(text: str) -> list:
             index += 1
             continue
         if character == "\\":
-            word.append(text[index + 1:index + 2])
+            word.append(text[index + 1 : index + 2])
             in_word = True
             index += 2
             continue
         if character == "'":
-            closing = text.index("'", index + 1)      # balance guaranteed by the scanner
-            word.append(text[index + 1:closing])
+            closing = text.index("'", index + 1)  # balance guaranteed by the scanner
+            word.append(text[index + 1 : closing])
             in_word = True
             index = closing + 1
             continue
@@ -199,7 +275,7 @@ def _tokenize(text: str) -> list:
             in_word = True
             while index < len(text) and text[index] != '"':
                 if text[index] == "\\":
-                    word.append(text[index + 1:index + 2])
+                    word.append(text[index + 1 : index + 2])
                     index += 2
                     continue
                 word.append(text[index])
@@ -211,9 +287,7 @@ def _tokenize(text: str) -> list:
             # redirection branch ate the `(` and the command behind it was read as an argument,
             # so `python3 a.py <(jq .)` reported no `jq` — and `diff <(jq . a) <(jq . b)` did,
             # which is worse than either answer alone.
-            raise UnparsedCommand(
-                "process substitution is a bash extension this parser does not read"
-            )
+            raise UnparsedCommand("process substitution is a bash extension this parser does not read")
         if character == "(" and in_word and not text.startswith("()", index):
             # `foo()` is a definition and `_heads` names it; `x((y` and `foo(bar)` are shell
             # syntax errors, and the walk answered them with a binary called `y` / `bar`.
@@ -247,15 +321,8 @@ def _heads(text: str) -> set:
     for index, (operator, token) in enumerate(tokens):
         # `foo()` reaches this as two operator tokens, and `(` would otherwise reset `last_head`
         # as an ordinary segment break, so the pair is recognised before that happens.
-        if (
-            operator == "("
-            and last_head is not None
-            and index + 1 < len(tokens)
-            and tokens[index + 1][0] == ")"
-        ):
-            raise UnparsedCommand(
-                f"{last_head!r} is a function definition, not an invocation of a host binary"
-            )
+        if operator == "(" and last_head is not None and index + 1 < len(tokens) and tokens[index + 1][0] == ")":
+            raise UnparsedCommand(f"{last_head!r} is a function definition, not an invocation of a host binary")
         if pending_wrapper is not None:
             wrapper, pending_wrapper = pending_wrapper, None
             if operator is None and token.startswith("-"):
@@ -275,9 +342,7 @@ def _heads(text: str) -> set:
         if expect_head and operator is None and token in _REFUSED_TOKENS:
             raise UnparsedCommand(_REFUSED_TOKENS[token])
         if operator in _HEREDOCS:
-            raise UnparsedCommand(
-                "a here-document body is data, not a command list; this parser does not read it"
-            )
+            raise UnparsedCommand("a here-document body is data, not a command list; this parser does not read it")
         if operator in _REDIRECTIONS:
             skip_target = True
             continue
@@ -286,16 +351,12 @@ def _heads(text: str) -> set:
             last_head = None
             continue
         if not expect_head:
-            last_head = None          # only a word *immediately* followed by `()` defines one
+            last_head = None  # only a word *immediately* followed by `()` defines one
             continue
         if not token:
             raise UnparsedCommand("an empty word is not a command name")
-        if (
-            token.isdigit()
-            and index + 1 < len(tokens)
-            and tokens[index + 1][0] in _REDIRECTIONS
-        ):
-            continue                  # an fd prefix: `2>&1 python3 a.py` still runs `python3`
+        if token.isdigit() and index + 1 < len(tokens) and tokens[index + 1][0] in _REDIRECTIONS:
+            continue  # an fd prefix: `2>&1 python3 a.py` still runs `python3`
 
         if token in _UNSUPPORTED_KEYWORDS:
             raise UnparsedCommand(f"the {token!r} construct is outside the supported grammar")
@@ -308,13 +369,10 @@ def _heads(text: str) -> set:
             continue
         if _SUBSTITUTION_MARKER in token:
             raise UnparsedCommand(
-                "a command substitution supplies the binary name; the command string does not "
-                "say what runs"
+                "a command substitution supplies the binary name; the command string does not say what runs"
             )
         if _EXPANSION_RE.search(token):
-            raise UnparsedCommand(
-                f"the head {token!r} is an expansion; the command string does not say what runs"
-            )
+            raise UnparsedCommand(f"the head {token!r} is an expansion; the command string does not say what runs")
         # A function may be *named* after a builtin or a wrapper — `echo() { jq .; }` is valid
         # shell — so every word consumed in head position is a candidate definition name, not
         # only the ones that end up in `binaries`.
@@ -395,7 +453,7 @@ def _split_substitutions(text: str) -> tuple:
             index += 1
             continue
         if character == "\\":
-            out.append(text[index:index + 2])
+            out.append(text[index : index + 2])
             index += 2
             continue
         if character == "`":
@@ -444,7 +502,7 @@ def _binaries_in_command(command) -> set:
     binaries = {POSIX_SHELL}
     pending, outer = _split_substitutions(command)
     binaries |= _heads(outer)
-    while pending:                       # a substitution may itself contain substitutions
+    while pending:  # a substitution may itself contain substitutions
         nested, inner = _split_substitutions(pending.pop())
         pending.extend(nested)
         binaries |= _heads(inner)
@@ -544,7 +602,8 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
     for vendor, command, reason in refusals:
         findings.append(
             Finding(
-                "error", "runtime.unparsed-command",
+                "error",
+                "runtime.unparsed-command",
                 f"{vendor} wiring carries a command this checker will not claim to have read "
                 f"({reason}): {line_safe(command)}",
                 f"generated-wiring:{vendor}",
@@ -560,7 +619,8 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
     for binary in sorted(generated - set(declared)):
         findings.append(
             Finding(
-                "error", "runtime.undeclared-binary",
+                "error",
+                "runtime.undeclared-binary",
                 f"generated wiring invokes {binary!r}, which no runtime declaration names",
                 "common/runtime.py",
                 f"Declare {binary} in the {GENERATED_WIRING} population, or stop emitting it.",
@@ -569,7 +629,8 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
     for binary in sorted(own - set(declared)):
         findings.append(
             Finding(
-                "error", "runtime.undeclared-binary",
+                "error",
+                "runtime.undeclared-binary",
                 f"the harness-command map invokes {binary!r}, which no runtime declaration names",
                 "common/runtime.py",
                 f"Declare {binary} in the {OWN_TOOLING} population, or drop it from the map.",
@@ -582,7 +643,8 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
         if found is None:
             findings.append(
                 Finding(
-                    "warn", "runtime.unused-binary",
+                    "warn",
+                    "runtime.unused-binary",
                     f"{binary!r} is declared in {declaration.population or '(no population)'} "
                     f"but nothing in that population invokes it",
                     "common/runtime.py",
@@ -593,7 +655,8 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
         if declaration.population != found:
             findings.append(
                 Finding(
-                    "error", "runtime.wrong-population",
+                    "error",
+                    "runtime.wrong-population",
                     f"{binary!r} is declared in {declaration.population or '(no population)'} "
                     f"but is invoked by {found}",
                     "common/runtime.py",
@@ -601,17 +664,13 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
                 )
             )
             continue
-        expected = (
-            _expected_generated_modality(binary, per_vendor)
-            if found == GENERATED_WIRING
-            else OPTIONAL
-        )
+        expected = _expected_generated_modality(binary, per_vendor) if found == GENERATED_WIRING else OPTIONAL
         if declaration.modality != expected:
             findings.append(
                 Finding(
-                    "error", "runtime.wrong-modality",
-                    f"{binary!r} is declared {declaration.modality!r} but its "
-                    f"{found} use is {expected!r}",
+                    "error",
+                    "runtime.wrong-modality",
+                    f"{binary!r} is declared {declaration.modality!r} but its {found} use is {expected!r}",
                     "common/runtime.py",
                     f"Declare {binary} as {expected}.",
                 )
@@ -620,7 +679,8 @@ def check_runtime(*, declarations, harness_commands, wiring, root: Path) -> list
     for relative, line, binary in own_tool_literals(root, own):
         findings.append(
             Finding(
-                "error", "runtime.duplicate-query-owner",
+                "error",
+                "runtime.duplicate-query-owner",
                 f"{binary!r} is spelled outside the harness-command map",
                 f"{relative}:{line}",
                 "Reach this harness through runtime.harness_command instead.",

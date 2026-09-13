@@ -21,7 +21,7 @@ import sync
 
 
 def _make_root(tmp_path: Path) -> Path:
-    """A minimal tree that _find_project_root accepts."""
+    """A minimal mounted tree that ``is_project_root`` accepts."""
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
     (tmp_path / "_aitna" / "akmon").mkdir(parents=True)
     return tmp_path
@@ -552,7 +552,71 @@ def test_package_pin_status_supports_legacy_uv_dev_dependencies(tmp_path):
 
 def test_package_pin_status_ignores_akmon_key_in_an_unrelated_tool_section(tmp_path):
     (tmp_path / "pyproject.toml").write_text(
-        '[tool.example]\nakmon = { enabled = true }\n',
+        "[tool.example]\nakmon = { enabled = true }\n",
         encoding="utf-8",
     )
     assert sync.package_pin_status(tmp_path) == "none"
+
+
+@pytest.mark.parametrize(
+    ("manifest", "expected"),
+    [
+        ('[dependency-groups]\ndev = [\n    "setuptools>=75",\n    "akmon==0.4.0",\n]\n', "dev"),
+        ('[project]\ndependencies = [\n    "pandas",\n    "akmon==0.4.0",\n]\n', "runtime"),
+        ('[dependency-groups]\ndev = [\n    "akmon[all]==0.4.0",\n]\n', "dev"),
+        ('[dependency-groups]\ndev = [\n    "akmon @ https://x/p.zip#sha256=ab",  # pin\n]\n', "dev"),
+        ("[project]\ndependencies = [\n    \"akmon>=0.4; python_version >= '3.11'\",\n]\n", "runtime"),
+        ('[project.optional-dependencies]\nagent = [\n    "akmon==0.4.0",\n]\n', "runtime"),
+        ("[project]\ndependencies = [\n    'akmon==0.4.0',\n]\n", "runtime"),
+        ('[tool.pdm.dev-dependencies]\nagent = [\n    "akmon==0.4.0",\n]\n', "dev"),
+    ],
+    ids=["dev-group", "runtime", "extras", "url-hash", "marker", "extra", "single-quoted", "pdm-dev"],
+)
+def test_package_pin_status_reads_a_versioned_element_of_a_multiline_array(tmp_path, manifest, expected):
+    """One requirement per line is what `uv add --dev` and formatters write, and `akmon==X.Y.Z` is the
+    pin the packaging design names once akmon is on PyPI. Every one of these read as no pin at all."""
+    (tmp_path / "pyproject.toml").write_text(manifest, encoding="utf-8")
+    assert sync.package_pin_status(tmp_path) == expected
+
+
+@pytest.mark.parametrize(
+    ("manifest", "expected"),
+    [
+        ('[tool.poetry.group.dev]\ndependencies = { akmon = "^0.4" }\n', "dev"),
+        ('[tool.poetry.group.dev]\ndependencies.akmon = "^0.4"\n', "dev"),
+        ('[tool.poetry]\ndependencies = { akmon = "^0.4" }\n', "runtime"),
+        ('[tool.poetry.dev-dependencies]\nakmon = "^0.4"\n', "dev"),
+        ('[dependency-groups]\ndev = [{include-group = "lint"}, "akmon==0.4.0"]\nlint = ["ruff"]\n', "dev"),
+    ],
+    ids=[
+        "poetry-inline-table",
+        "poetry-dotted-key",
+        "poetry-runtime-inline-table",
+        "poetry-legacy-dev",
+        "include-group",
+    ],
+)
+def test_package_pin_status_reads_the_declaration_not_its_spelling(tmp_path, manifest, expected):
+    """The same declaration has several valid TOML spellings; each one names the same pin."""
+    (tmp_path / "pyproject.toml").write_text(manifest, encoding="utf-8")
+    assert sync.package_pin_status(tmp_path) == expected
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        '[dependency-groups]\ndev = [\n    "pytest",  # akmon later\n]\n',
+        '[dependency-groups]\ndev = [\n    "akmon-plugin==1.0",\n]\n',
+        '[project]\ndescription = "akmon==0.4.0 is a dev tool"\n',
+    ],
+    ids=["comment", "prefix-named-distribution", "prose"],
+)
+def test_package_pin_status_ignores_what_is_not_a_requirement_naming_akmon(tmp_path, manifest):
+    (tmp_path / "pyproject.toml").write_text(manifest, encoding="utf-8")
+    assert sync.package_pin_status(tmp_path) == "none"
+
+
+def test_package_pin_status_reports_a_manifest_that_is_not_valid_toml(tmp_path):
+    """uv cannot read such a file either, so "no pin" would name the wrong cause."""
+    (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = [\n    "akmon==0.4.0",\n', encoding="utf-8")
+    assert sync.package_pin_status(tmp_path) == "unreadable"

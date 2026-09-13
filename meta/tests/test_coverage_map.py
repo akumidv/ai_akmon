@@ -13,9 +13,7 @@ from pathlib import Path
 import pytest
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 _ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
@@ -102,15 +100,12 @@ def test_cli_scopes_by_session_and_writes(tmp_path, capsys):
     log = root / routing.DELEGATION_LOG_REL
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(
-        "T0\tsess-1\tk_explorer\tsmall\tauth\tcheck tokens\n"
-        "T1\tsess-2\tk_explorer\tsmall\tpricing\tother session\n",
+        "T0\tsess-1\tk_explorer\tsmall\tauth\tcheck tokens\nT1\tsess-2\tk_explorer\tsmall\tpricing\tother session\n",
         encoding="utf-8",
     )
     out = root / "cov.md"
 
-    rc = coverage_map.main(
-        ["--project-root", str(root), "--session", "sess-1", "--out", str(out), "--stdout"]
-    )
+    rc = coverage_map.main(["--project-root", str(root), "--session", "sess-1", "--out", str(out), "--stdout"])
     assert rc == 0
     written = out.read_text(encoding="utf-8")
     assert "| auth |" in written

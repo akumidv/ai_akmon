@@ -99,6 +99,31 @@ def read_akmon_toml(path: Path) -> dict:
     return data
 
 
+class RecordError(ValueError):
+    """The integration record exists but cannot be read as TOML."""
+
+
+def read_akmon_toml_strict(path: Path) -> dict:
+    """Read ``_aitna/.akmon.toml`` strictly: ``{}`` when the file is absent, the parsed table
+    otherwise, and :class:`RecordError` when it cannot be read or does not parse.
+
+    :func:`read_akmon_toml` is lenient on purpose, and that is right for a caller that only
+    *consults* the record. It is wrong for one that *applies* it: the Python rule configuration
+    (ADR 0014 §4) is read to switch rules on and off, and the lenient fallback flattens a nested
+    table into strings — a broken record would silently leave a rule on, or off, instead of
+    saying so. Such a caller takes this entry point and reports the error.
+    """
+    if not path.is_file():
+        return {}
+    import tomllib
+
+    try:
+        with path.open("rb") as handle:
+            return tomllib.load(handle)
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise RecordError(f"{path.name} cannot be read as TOML: {exc}") from exc
+
+
 def recorded_mount(project_root: Path) -> str | None:
     """The ``mount`` value this project records, or ``None`` when it records nothing.
 

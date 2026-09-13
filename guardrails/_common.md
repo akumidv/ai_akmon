@@ -1,11 +1,12 @@
 # Guardrails: common (all languages)
 
 Hard rules that bind **every** agent on **every** project, regardless of language or role.
-Applied automatically (not opt-in). Language-specific rules layer on top — see
-[python.md](python.md) etc.
+Applied automatically (not opt-in). A language's and an environment's rules layer on top, in
+[profiles/](../profiles/) — e.g. [python](../profiles/python.md).
 
 > Guardrails are **constraints**, not guidance: they say what must always / never happen.
-> Pipelines say *how* to work; profiles add *domain* rules; guardrails are the floor.
+> Pipelines say *how* to work; profiles add *language, environment and domain* rules;
+> guardrails are the floor.
 
 ## Language — artifacts English, chat in the user's language
 
@@ -112,6 +113,38 @@ Applies to **every role and every agent** (architect and engineer alike).
 - Escalate on signal, not by default: start at the cheapest adequate rung and move up one
   rung only on failure signals (gates red twice, the delegate flags uncertainty, a
   contested fork emerges mid-task).
+
+## Code design — the principles every language inherits
+
+The language-independent half of the code standard, drawn from the Google Python Style Guide
+and read for any language. A language's profile in [profiles/](../profiles/) says how each
+reads there, and its checked rules enforce the mechanical half.
+
+- **A rule a program can check lives in the checker, not in prose.** Prose holds only what no
+  checker can see; where a checker enforces a rule, a document names the rule and never
+  restates it.
+- **Data or behaviour, never half of each.** A value type holds data and no hidden behaviour; a
+  behaviour type owns its state. Validation models sit on the boundaries, where data enters.
+- **A contract carries a typed object**, not a string-keyed map or a bare string.
+- **Return a value or change state — not both — and let the name say which** (`sorted` vs
+  `sort`).
+- **Failure is raised, never returned.** No `None`, `-1` or `False` as a failure signal. Catch
+  only where you can act, keep the protected region to what can fail, and keep the cause.
+- **Configuration is read at the entry point and passed down;** nothing deep in the logic reads
+  the environment or a file of its own accord.
+- **No mutable global state.** A module-level value is a constant.
+- **Plain code over power features:** no metaprogramming, reflection-driven dispatch, dynamic
+  inheritance, import tricks or finalizers where ordinary code does the job.
+- **Concurrency stays at the edges.** Never rely on a built-in being atomic; hand data between
+  threads through a queue.
+- **A resource is released by a scope** (a context manager, RAII, `defer`), never by hope.
+- **Small, focused functions.** A function that has grown past a screen is split, or says why
+  it is not; the language's checked rules set the number.
+- **Names say what a thing is**, without abbreviations and without its type.
+- **The public surface is documented; comments say why, not what.** An error message states the
+  condition that failed and names the value.
+- **A TODO carries a tracker link:** `TODO: <link> - <what>`.
+- **Be consistent with the surrounding code** (§ Reuse over re-implementation).
 
 ## API shape — subject first, then how
 

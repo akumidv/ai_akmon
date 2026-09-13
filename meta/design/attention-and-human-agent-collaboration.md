@@ -58,6 +58,17 @@ rules inferred from the research:
     grounded in human cognitive capabilities and limits and in agents' tendency to
     accommodate a position instead of examining its grounds. Distinguish useful
     interaction adaptation from agreement-seeking and unnecessary repeated approval.
+12. Present the two connected priorities as the project's mission: human attention
+    and joint decision quality; token efficiency for quality through subagents,
+    model selection, roles, skills, and controls. Document the reasoning path so
+    people and other models can recheck premises and later implementation. The owner
+    explicitly extended the original file-only scope to mission/priority updates in
+    README and upper-level documents and requested an implementation task. Exact
+    decisions and their realization will be verified separately afterwards.
+13. Treat this as an economic model of effective resource allocation, not simply
+    economy. Additional design time can avoid much larger implementation and rework
+    costs; high-leverage analysis and synthesis can justify the most capable model
+    at its highest reasoning effort instead of repeated mechanical cheap-model trials.
 
 ### Research questions
 
@@ -93,8 +104,11 @@ gives a proposed sequence, concrete evaluation cases, dependencies, and exit
 conditions. Resume at AP0 using the already collected episodes; do not restart a
 broad literature or transcript survey unless a material gap remains.
 
-No architecture choice is locked here. Recording these notes does not authorize
-changes to contracts, skills, tasks, the D2 ledger, or consumer materializations.
+The mission direction and the request to record work come from the owner; the
+proposed interaction architecture is not locked here. A22 tracks refinement, C86
+tracks the gated implementation, and D2-44 isolates verification of the mission
+wording. Those records do not authorize unaccepted contracts, new skills, automatic
+approval, or consumer changes. See [tracked work](#tracked-work-and-acceptance-boundaries).
 
 ## Working synthesis
 
@@ -135,6 +149,8 @@ of options, streaming speed, or interruption interval for akmon.
 - For independent checking: [session evidence](#historical-session-evidence) and
   [sources](#sources).
 - For the proposed next work: [refinement and implementation plan](#refinement-and-implementation-plan).
+- For why that direction was chosen and how to challenge it:
+  [mission premises and decision trace](#mission-premises-and-decision-trace).
 
 ## Memory, attention, and information structure
 
@@ -814,9 +830,10 @@ adds ceremony without improving understanding, decisions, or resumption.
 ### Explicit non-decisions and limitations
 
 No report schema, numerical budget, automatic challenge policy, skill placement,
-new role, metric, or tooling change is accepted here. No TASKS or D2 entry has been
-created for these proposals. They remain in this note until a separate final
-design and the existing owner-controlled process authorize further work.
+new role, metric, or tooling change is accepted here. The owner's later request
+created A22/C86 for refinement and gated implementation, plus D2-44 for the narrow
+mission-framing verification point. Recording those items does not accept the
+proposed operational policies; they still require the existing design process.
 
 The research combines older cognitive experiments, text-comprehension studies,
 human–AI decision-support experiments, practitioner methods, and recent preprints.
@@ -921,8 +938,8 @@ changed, determine whether this is merely a context-restoration problem.
 AP0 is the proposed next action, not completed case preparation. The research and
 sample already exist; use them to reduce that work. AP2 should start with inspectable
 example evaluation; any model-running experiment has its own explicit execution
-scope and budget. This plan launches neither Codex nor Claude, and changes no
-operative instructions. A conversational pilot does not require a new runtime
+scope and budget. This plan launches neither Codex nor Claude and authorizes no new
+operative interaction rules. A conversational pilot does not require a new runtime
 framework; it also does not authorize tool use outside the underlying task.
 
 ### Paired cases and negative controls
@@ -1006,6 +1023,164 @@ risks before the useful behavior has been demonstrated. Revisit a deferred mecha
 only when a repeated observed failure cannot be addressed adequately with the
 smaller approach. A failure of the pilot is a reason to reduce or revise the design,
 not automatically to add another layer.
+
+## Mission premises and decision trace
+
+### Owner direction, evidence, and open hypotheses
+
+The owner characterized this work as a potentially important distinction of akmon
+and asked to make it central in the product description. The owner also identified
+token efficiency for quality as the complementary priority, realized mainly through
+subagents, model selection, roles, and possible skills/hooks. These are attributed
+product intentions, not findings that akmon already outperforms competing products.
+
+The canonical mission wording is in [MODEL](../../MODEL.md#mission-and-priorities).
+README is its short reader-facing summary; CONCEPT explains the rationale; ROADMAP
+sets development priority. This section owns the rationale of this research path,
+not another copy of the operative mission or a new decision database.
+
+| Premise | Provenance and epistemic status | What needs checking or could change the implementation |
+| --- | --- | --- |
+| Human attention and domain knowledge deserve deliberate investment | Explicit owner direction, compatible with MODEL's two-budget goal; historical episodes show requests for context, meaningful briefs, and agent-handled mechanics | Which effort is avoidable and which thinking is valuable; approval speed is not a substitute |
+| Token efficiency must serve quality, not just cheap calls | Explicit owner direction and existing MODEL §10 leverage/task-kind routing | Total work and rework, achieved correctness, selected versus delivered model behavior |
+| Efficiency is lifecycle resource allocation, not local saving | Owner clarification during D2-44 discussion: invest more in design or capable high-effort analysis/synthesis when downstream benefit warrants it | Relevant horizon, expected benefit and uncertainty, total costs and achieved outcome; neither cheap calls nor maximum effort prove efficiency |
+| Adapt presentation, not facts to social pressure | Owner's symmetric-challenge requirement; sycophancy and verification-cost research [^21][^25][^26] | Cases must also reward legitimate revision after new constraints; anti-sycophancy must not become rigidity |
+| Cognitive findings can inform akmon interactions | Published evidence above, with different populations and activities | The local pilot may show no benefit or harm; report budgets and transfer effects remain hypotheses |
+| A minimal extension of existing guidance may be enough | Agent recommendation based on existing Frame, rationale, review, D2, and checkpoint mechanisms | If current guidance solves the cases, adopt less; a distinct repeated failure could justify a skill/tool |
+| The combined approach may differentiate the product | Owner's positioning hypothesis | Comparative outcome evidence is absent here; do not promote intent into a superiority claim |
+
+### Actual choices made in this planning path
+
+The initial problem was report size and prolonged D2 review. The owner broadened
+it to the full collaboration: extracting lived knowledge, designing for future use,
+preserving goals, and challenging both parties. The session evidence showed both
+avoidable reconstruction and valuable repeated review that found new defects.
+Consequently, the plan targets context loss and unsupported agreement without
+assuming every additional review round is waste.
+
+Alternatives remain in [placement alternatives](#placement-alternatives). A fixed
+report cap is insufficient for truthfulness; a D2-only skill is too narrow; a
+universal profile/arbitration system creates premature infrastructure and authority
+risks. The current recommendation is minimal shared guidance plus inspectable
+examples, with an on-demand walkthrough only if its separate value is demonstrated.
+Existing-guidance-only remains a real baseline. These are agent recommendations,
+not owner-accepted operational choices.
+
+For the documentation update, "mission" was selected because the owner proposed
+it for a stable product purpose. "Product priorities" names the two investment
+directions; roles, routing, skills, and hooks remain mechanisms. A report-format
+label alone would lose the purpose; a proven-superiority claim would exceed the
+evidence. D2-44 isolates inspection of this framing and its limits, not approval
+of every mechanism suggested in the research.
+
+One correction to MODEL is deliberate: its earlier "finite, measured" wording
+could imply that attention was measured like token usage, while C19 still describes
+deferred/proxy metrics. The revised statement distinguishes measurement, proxies,
+and unknown effort. No exchange rate, composite score, new threshold, or rerouting
+rule is introduced.
+
+During the D2-44 walkthrough the owner sharpened the distinction between saving and
+efficiency: the mission needs an economic model of resource allocation. More design
+time or stronger, higher-effort inference can be worthwhile when it avoids greater
+implementation and rework costs or improves the intended result. This clarifies why
+the two budgets are investments, not targets for uniform reduction. The mission names
+the purpose; the economic model explains how resource choices should be assessed.
+
+This fits MODEL's existing downstream-leverage principle. Its description of key
+points as "low-token" was removed because a valuable up-front analysis may itself
+be costly. README now includes analysis and design, not only checks, as high-leverage
+work. No current tier, task-kind routing, session-model ownership, or effort setting
+was changed. Local saving is insufficient; universal maximum spending is also not
+the chosen criterion. The return of a particular investment remains a hypothesis
+until assessed, not a measured conclusion supplied by this clarification.
+
+### Token-quality work and its evidence boundary
+
+Use the existing [model-routing design](model-routing.md) and operative MODEL §10;
+this initiative does not replace their accepted decisions. These are evaluation
+questions, not new routing rules:
+
+| Mechanism | Contribution to investigate | Evidence needed before claiming improvement |
+| --- | --- | --- |
+| Roles | Match analysis, design, and implementation to distinct responsibilities | Fewer missed boundaries and wrong-problem solutions, not more role switches |
+| Bounded subagents | Remove routine work from the orchestrator and owner | Accepted outputs, integration/retry cost, sufficient context, preserved boundaries |
+| Model selection | Invest capability and reasoning effort at high downstream error cost | Task outcome, total effort, and actual route/version/effort evidence where observable; requested settings alone are insufficient |
+| Skills | Reuse proven procedures and focused context | Correct selection, useful execution, maintenance cost, counterexample behavior |
+| Hooks and validators | Enforce observable invariants and reveal drift | Exact delivered payload/route, negative tests, false alarms, unsupported boundaries |
+| Evidence/context reuse | Avoid repeating established work while detecting relevant change | Correct reuse on an unchanged subject and recheck when a premise changes |
+
+Include retries, duplicated context, unsuccessful delegations, and orchestration
+overhead in token comparisons. More parallelism can increase total work while
+reducing latency. Do not shrink evidence until the owner must reconstruct it, or
+classify a valuable independent check as waste solely because it consumes tokens.
+Assess quality and human effort separately from computational cost.
+
+For the A22 evaluation, compare a local-saving case that causes downstream rework
+with a justified up-front investment, and include a counterexample where further
+analysis or maximum effort adds no useful decision information. State the intended
+outcome, relevant lifecycle horizon, expected avoided work or quality gain, extra
+human/model effort and latency, and uncertainty. Define what useful result would
+end the extra investigation or what observation would make it worth stopping.
+Do not compare unlike outcomes as if lower cost alone established efficiency, add
+minutes and tokens without an explicit valuation, or turn speculative avoided work
+into a claimed measured return. This adds an evaluation question, not a new routing gate.
+
+### Traceable records for human and model review
+
+| Reviewer question | Existing owning artifact or evidence |
+| --- | --- |
+| What problem, owner knowledge, and premise motivated this? | Task brief, attributed premise table, research sources, bounded session evidence |
+| Which alternatives and criteria led to the recommendation? | This concept's alternative/open-point registers and cases; later the accepted ADR |
+| What exactly was accepted and what is still proposed? | Owning decision record and exact D2 scope, not a summary's implied consensus |
+| What implementation was authorized and what actually changed? | TASKS design link, accepted slice, actual diff/commit, reported deviations |
+| Does the result conform, and does the premise still hold? | Tests/probes for conformance, separately from behavioral/owner evidence of usefulness |
+| What would require reconsideration? | Premise and scope/version where relevant, counterevidence or changed goal, affected decisions and revisit condition |
+
+This is an inspectable justification and evidence path, not a transcript of private
+reasoning. A reviewer may challenge an upstream premise even if code matches its
+specification; a correct premise likewise does not prove a correct implementation.
+Human and model reviews should use the same evidence subjects and disclose unknowns.
+A second model's endorsement does not close either question.
+
+## Tracked work and acceptance boundaries
+
+Execution state lives in [TASKS](../TASKS.md), not the AP labels or a copied status
+table here. The owner requested both the plan and its implementation task.
+
+- **A22 — design refinement.** AP0–AP3: ground the cases, specify the smallest behavior
+  change, evaluate alternatives, and prepare independently acceptable slices. Done
+  requires explicit owner acceptance of the slice's premises, criteria, and behavior,
+  its decision record/ADR, and linked acceptance examples. D2-44 verifies the mission
+  wording separately; it does not accept a report protocol or skill.
+- **C86 — implementation.** AP4–AP5, blocked on A22 locking an implementable slice and
+  owner authorization to realize it. Start with owning guidance and examples;
+  skills/tools are conditional. Done requires conformance evidence, behavioral
+  evidence and limitations against accepted premises, accurate follow-up disposition,
+  and the existing owner verification/landing process. A failed premise returns the
+  affected choice to A22, not to silent feature growth or rewritten success criteria.
+- **D2-44 — mission wording and top-document alignment.** The owner accepted the
+  framing, including the economic clarification: lifecycle resource effectiveness,
+  not local saving, with justified up-front investment in design and model reasoning.
+  Acceptance does not extend to the proposed interaction protocol or routing/effort
+  changes. Operational forks receive their own points when specified; they must not
+  borrow this approval. The ledger owns approval/landing state; no other D2 point or
+  task status is changed by this acceptance.
+
+The immediate authorized change is mission/priority documentation and the requested
+backlog/verification records. No runtime implementation, new skill/hook, consumer
+change, automatic acceptance, or vendor experiment is claimed by this update.
+
+### Review of this documentation increment
+
+Bounded subagent reviews checked mission/protocol separation, task and D2 scope,
+the recorded decision path, and document consistency. They identified stale role
+descriptions in CONCEPT/ROADMAP and a task goal phrased as steps rather than an
+outcome; these were corrected. The roadmap's package-carrier description was also
+aligned with the current README, and planned evaluation was distinguished from
+completed evaluation. New local links/anchors and all 36 bibliography definitions
+were checked, together with diff whitespace. These are documentation checks, not
+owner acceptance, a cross-vendor second opinion, executable regression results,
+or evidence that the proposed interaction behavior improves outcomes.
 
 ## Sources
 

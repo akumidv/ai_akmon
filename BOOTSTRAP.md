@@ -51,10 +51,11 @@ When the user asks "attach akmon", the agent:
    the contract it exposes and the **language**. Inspect `pyproject.toml` / `package.json`,
    any root `skills/`, the runtime entry points. Record the decision if a non-default
    language changes the contract.
-4. **Resolve guardrails + profiles** from the map in [ARCHETYPES.md](ARCHETYPES.md):
-   language guardrails are automatic; archetype-suggested profiles (`quant`, `crypto`, …)
-   attach **only if the project has that concern** — confirm each. Result: a concrete list
-   of links.
+4. **Resolve guardrails + profiles** from the map in [ARCHETYPES.md](ARCHETYPES.md): the
+   common guardrail and the language profile are automatic (plus an environment profile for
+   code that must run on a bare interpreter, e.g. hooks/bootstrap/install scripts);
+   archetype-suggested domain profiles (`quant`, `crypto`, …) attach **only if the project
+   has that concern** — confirm each. Result: a concrete list of links.
 5. **Create the local layout** if missing:
    ```
    _aitna/agents/        _aitna/skills/   _aitna/tools/   _aitna/memory/   _aitna/TASKS.md
@@ -153,8 +154,8 @@ pointer drift and structural contract drift fail before merge.
 Attach akmon to this project with the CLI, then finish the judgement steps:
   uvx --from git+https://github.com/akumidv/ai_akmon akmon init
 (add `--mode package` for a dependency pin with no tree in the repo, `--mode vendored` for
-an offline copy). Then classify the project per ARCHETYPES.md, add the language guardrail
-import to the AGENTS.md akmon block, pin `[test].runner` in <AITNA_ROOT>/.akmon.toml, and
+an offline copy). Then classify the project per ARCHETYPES.md, import the language profile
+into the AGENTS.md akmon block, pin `[test].runner` in <AITNA_ROOT>/.akmon.toml, and
 run `akmon verify --strict`. Show the diff, do not commit.
 ```
 
@@ -214,17 +215,21 @@ This project uses the akmon dev layer. Model & notation:
   prompt. The orchestrator retains decomposition, routing, synthesis, and owner dialogue. Skip
   only when the task is atomic or the harness exposes no subagents; state the reason. This clause
   is direct because Codex does not expand nested `@` imports in `AGENTS.md`.
-- **Guardrails (always-on, by language):** the common guardrail is **imported** (not just
-  linked) so its always-on rules load into context at session start. Put each `@`-import on its
-  own line, blank-line-separated; akmon is the single owner — do not restate the rules here.
+- **Guardrails and profiles (always-on):** the common guardrail and the project's language
+  profile are **imported** (not just linked) so their rules load at session start; akmon is
+  the single owner — do not restate them here. Put each `@`-import on its own line,
+  blank-line-separated.
 
 @_aitna/akmon/guardrails/_common.md
 
-  <!-- + each language guardrail per the ARCHETYPES map, on its own line, e.g.
-       @_aitna/akmon/guardrails/python.md
-       Only guardrails are imported (always-on). Roles/MODEL/pipelines stay links below
-       (on-demand) — pulled when an agent enters a role or runs a pipeline, not every session. -->
-- **Profiles (applied — opt-in by need):**
+  <!-- + the language profile per the ARCHETYPES map, and an environment profile where some
+       code runs on one, on their own lines, e.g.
+       @_aitna/akmon/profiles/python.md
+       @_aitna/akmon/profiles/python-stdlib.md
+       Only guardrails and language/environment profiles are imported (always-on).
+       Roles/MODEL/pipelines stay links below (on-demand) — pulled when an agent enters a
+       role or runs a pipeline, not every session. -->
+- **Domain profiles (applied — opt-in by need):**
   <!-- only the profiles this project actually uses, e.g.
        - [quant](_aitna/akmon/profiles/quant.md) — numerics -->
 - **Pipelines:** [pre-commit](_aitna/akmon/pipelines/pre-commit.md) (tests mandatory),
@@ -385,6 +390,8 @@ keeps its own copy of them (the CHANGELOG is the single owner of "what changed")
    now sits on. Whichever way it is launched, `init` dispatches the work to the **mount** — the
    pin governs, and a CLI newer than the mount says so in one line — so the mount stays the
    tree that runs.
+6. If `sync` reports that `AGENTS.md` imports a file that moved, replace that import line with
+   the one the error names (today: `guardrails/python.md` → `profiles/python.md`).
 ```bash
 git submodule update --remote _aitna/akmon
 uvx --from git+https://github.com/akumidv/ai_akmon@<to> akmon init   # or: akmon init
@@ -400,14 +407,14 @@ installed version rather than a `git describe`:
 ```bash
 uv lock --upgrade-package akmon && uv sync   # bump the dev pin
 akmon init                                   # realign to it — see below
-akmon sync                                   # refresh generated pointers + guardrails
+akmon sync                                   # refresh generated pointers + guardrails/profiles
 akmon sync --check                           # confirm no drift
 akmon verify --strict
 # Codex only: open /hooks and review/trust changed project-local hooks after .codex/hooks.json changes
 ```
 
 **`akmon init` is part of a bump, not only of an attach — in every mount mode.** Installing or
-updating the pin is not aligning to it. `sync` owns the generated pointers, vendor wiring and imported guardrails, and in
+updating the pin is not aligning to it. `sync` owns the generated pointers, vendor wiring and imported guardrails and profiles, and in
 mode `package` restamps `akmon_version`; `init` runs that sync, then reinitializes the model-routing binding, and advances
 `last_realign` only after both stages and the package-pin gate succeed. A release that moves the
 routing registry invalidates its binding by `registry_hash`, which `sync` cannot rebind. An existing AGENTS.md
@@ -427,7 +434,7 @@ attach in mode `package` without `--ref` asks the akmon repository for its lates
 reach it — pass `--ref <tag>` to attach offline.
 
 Do not skip `akmon sync` either, on the grounds that "nothing is materialized any more": the
-guardrails your `AGENTS.md` imports are, and a bump that changed one leaves the repository
+guardrails and profiles your `AGENTS.md` imports are, and a bump that changed one leaves the repository
 holding the previous release's rules while the hooks already run the new ones. A session started
 in that state says so at SessionStart and asks for exactly this — but the first session to notice
 has already loaded the stale text.
@@ -475,24 +482,27 @@ Alongside the mounted modes (`submodule` — this document's default — plus `v
   wiring is a committed file every developer runs, and an absolute path to one person's venv
   breaks silently for everyone else — a hook command whose executable is missing produces no
   error you will see. `akmon verify` reports it (`hooks.launcher`) until the pin is installed.
-- `akmon sync` materializes exactly one thing into `<AITNA_ROOT>/.akmon/guardrails/`: the
-  guardrail files your `AGENTS.md` actually `@`-imports. Those cannot be reached through the
-  package, because `AGENTS.md` is committed and the only path from it into the package carries
-  the venv's Python version (`.venv/lib/python3.14/site-packages/…`) — and an `@`-import that
-  does not resolve says nothing at all, in any harness. The copies are banner-marked and
-  drift-checked by `sync --check`, and SessionStart warns when a bump has moved the standard past
-  them (run `akmon sync`, then start a new session — the `@`-import is expanded once, at session
-  start);
-  importing a guardrail akmon does not ship is a `sync` error, not a silent skip.
+- `akmon sync` materializes into `<AITNA_ROOT>/.akmon/guardrails/` and
+  `<AITNA_ROOT>/.akmon/profiles/` the guardrail and profile files your `AGENTS.md` actually
+  `@`-imports. Those cannot be reached through the package, because `AGENTS.md` is committed
+  and the only path from it into the package carries the venv's Python version
+  (`.venv/lib/python3.14/site-packages/…`) — and an `@`-import that does not resolve says
+  nothing at all, in any harness. The copies are banner-marked and drift-checked by
+  `sync --check`, and SessionStart warns when a bump has moved the standard past them (run
+  `akmon sync`, then start a new session — the `@`-import is expanded once, at session start);
+  importing a file akmon does not ship is a `sync` error, not a silent skip.
+- If `sync` reports that `AGENTS.md` imports a file that moved, replace that import line with
+  the one the error names (today: `guardrails/python.md` → `profiles/python.md`).
 - Everything else (MODEL.md, roles, pipelines, skills) is read from the installed
   package's embedded tree — `akmon path` prints its root; consumer docs link the standard
   by GitHub-tag URL instead of relative mount paths.
 - `.akmon.toml` records `mount = "package"`; the CLI and the standard share one version
   cut from the release tag, so there is **no version skew by construction**.
 - Checked in: `_aitna/{local assets}` + `_aitna/.akmon/guardrails/` +
-  `.akmon.toml` — no 90-file tree. A version-number-only change does not rewrite the guardrails;
-  a bump that changes an imported guardrail or generated vendor pointer changes that checked-in
-  file through `sync`, but never rewrites a copied executable surface. Consumer CI runs
+  `_aitna/.akmon/profiles/` + `.akmon.toml` — no 90-file tree. A version-number-only change
+  does not rewrite the guardrails; a bump that changes an imported guardrail or generated
+  vendor pointer changes that checked-in file through `sync`, but never rewrites a copied
+  executable surface. Consumer CI runs
   `uv run akmon sync --check` and
   `uv run akmon verify --strict`; the standard's own self-tests stay in ai_akmon's CI.
 - **Codex only, after every bump:** the bump re-runs `akmon sync`, so `.codex/hooks.json`

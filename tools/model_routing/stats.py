@@ -461,9 +461,9 @@ def render_report(
 
     lines.append("---")
     lines.append(
-        "Sources: delegation log `.claude/model-routing.log`; "
-        f"session transcript `{transcript_path}`." if transcript_path else "Sources: delegation log "
-        "`.claude/model-routing.log`; session transcript not found."
+        f"Sources: delegation log `.claude/model-routing.log`; session transcript `{transcript_path}`."
+        if transcript_path
+        else "Sources: delegation log `.claude/model-routing.log`; session transcript not found."
     )
     return "\n".join(lines) + "\n"
 

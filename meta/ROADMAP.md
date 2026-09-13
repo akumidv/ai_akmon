@@ -1,11 +1,40 @@
 # Roadmap — akmon
 
-The forward-looking plan. The operating model itself is in [CONCEPT.md](CONCEPT.md); this
-file records **what is deliberately not yet formulated** (so the gaps are explicit, not
-lost) and the order in which to close them.
+The forward-looking plan. [MODEL.md](../MODEL.md) owns the mission and operating model;
+[CONCEPT.md](CONCEPT.md) explains the background. This file records development
+priorities and **what is deliberately not yet formulated**; [TASKS.md](TASKS.md) owns
+current execution state and dependencies.
 
 Each open item states: **the gap** (what is missing), **why it matters**, and a
 **direction** (how it will likely be resolved). Directions are intent, not commitments.
+
+## Product priorities
+
+1. **Human attention and joint decision quality.** Improve the whole collaboration:
+   goals and future-use knowledge, plans, truthful proportional reporting, useful
+   disagreement, and resumption without repeated context reconstruction. D2 is a pilot
+   case, not the boundary. Start with the [research and AP0–AP5 plan](design/attention-and-human-agent-collaboration.md#refinement-and-implementation-plan)
+   and its design/implementation tasks A22/C86.
+2. **Token efficiency for quality.** Develop the existing roles, subagent delegation,
+   model selection, skills, and hook controls against the cost of errors and rework.
+   Check achieved quality and actual routing/delivery evidence, not agent counts or
+   nominal model settings. Reuse [model-routing](design/model-routing.md); do not create
+   a competing routing policy under the attention initiative.
+
+These are connected priorities under the [mission](../MODEL.md#mission-and-priorities),
+not two unrelated products. Track quality, human effort, and token cost separately;
+neither fast approval nor low token use establishes effectiveness. Audit the premises
+of a decision separately from checking that its implementation conforms to it.
+
+Evaluate resource allocation over the relevant lifecycle: design, implementation,
+verification, use, and rework. A larger up-front investment in design or model reasoning
+can be efficient; retain it for its expected and then observed contribution, not because
+the individual step was cheap or the chosen model was the strongest.
+
+Reliable delivery, compatibility, and the learn loop support both priorities. A new
+carrier, feature, role, or automation earns scope through demonstrated need; it does
+not outrank outcome quality merely because it is implementable. Existing safety,
+correctness, and explicitly locked task dependencies remain in force.
 
 ---
 
@@ -15,11 +44,13 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
   (package/service/…). Layer as a decision tree, not a grid (no false "shared usage").
 - **Role vs agent** — role = definition (in akmon); agent = incarnation (in a
   project). Axis values are roles; an agent is a point where axes meet.
-- **Learn loop** (README §3a) — CAPTURE → DISTILL → PROMOTE → PROPAGATE; two memories
+- **Learn loop** ([MODEL §6](../MODEL.md#6-the-learn-loop-how-the-standard-evolves)) — CAPTURE → DISTILL → PROMOTE → PROPAGATE; two memories
   (shared `_aitna/memory/` vs provider-private) kept distinct; promotion test
   (general + proven).
-- **Two roles** — architect, engineer (with role files + project-agent charters).
-- **Distribution intent** — submodule now, MCP hybrid later (see below).
+- **Develop roles** — review, architect, engineer, with cross-cutting learn and release;
+  role and model tier remain separate ([MODEL §3](../MODEL.md#3-role-vs-agent--the-develop-triad)).
+- **Distribution** — supported carriers are described in the [README](../README.md);
+  possible further carriers remain subordinate to the product priorities.
 
 ---
 
@@ -74,18 +105,18 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
 
 ### O4. Orchestration & separation of duties
 
-- **Status.** More live now: there are **4 roles** (architect, engineer, learn, release),
-  past the "3rd role" threshold that originally parked this. But `release`'s anti-super-role
-  **routing** (findings → the owning role) is a de-facto lightweight orchestration for
-  DEVELOP, so a dedicated orchestrator is still deferred — revisit when role routing causes
-  real friction, or when OPERATE (O1) needs a hard propose≠execute enforcer (backlog T4).
-- **Gap.** The architect → engineer hand-off is described, but *who routes work* across
-  roles, and how propose/execute separation is enforced, is undefined. Matters more as
-  roles/agents multiply and once OPERATE (O1) exists.
-- **Why it matters.** Without an orchestrator, role boundaries are advisory; an agent can
-  quietly cross from proposing into executing.
-- **Direction.** A lightweight orchestrator role/skill that selects the role for a task,
-  enforces the hand-off, and (for OPERATE) guarantees propose ≠ execute.
+- **Status.** DEVELOP routing is defined in [MODEL §10](../MODEL.md#10-capability-tiers--model-routing):
+  the session orchestrator owns decomposition, routing, integration, and owner dialogue;
+  the task-kind matrix routes bounded work to model tiers. This is distinct from adding
+  another DEVELOP role. The current roles are owned by MODEL §3.
+- **Gap.** OPERATE's hard runtime propose/execute separation remains undesigned (O1).
+  For DEVELOP, any claimed enforcement must be checked against the actual harness
+  capability, not inferred from the existence of a routing policy.
+- **Why it matters.** Explicit routing helps allocate work, but neither routing nor a
+  second agent by itself proves an authority boundary is enforced.
+- **Direction.** Evaluate friction and delivered controls through the existing routing
+  work. A separate orchestrator role/skill is not a prerequisite for the mission;
+  revisit it only for a demonstrated gap, and design OPERATE separately if brought into scope.
 
 ### O5. Skill contract — PARTIALLY DONE
 
@@ -104,20 +135,19 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
 
 ---
 
-## Distribution — submodule → MCP → product
+## Distribution — current carriers and conditional directions
 
-akmon is built to survive a change of carrier (README §9):
+akmon is built to survive a change of carrier; carrier expansion serves the mission:
 
-- **Now.** Git submodule — deterministic pinning, PR governance, works offline, no infra.
-  - **Install vehicle (in design):** a pip/uvx package (`uvx akmon init`) that mechanizes
-    the attach and makes subtree/vendored real alternatives to the submodule — a carrier
-    for the same contract, not a new one ([design](design/packaging/README.md), A10/C37).
-- **Next (hybrid).** Governance/docs stay in the submodule; executable `tools/` and
-  validators move behind an **MCP server** the assistant mounts. Same contract, new
-  carrier. Revisit when executable tooling (sync, validators, fixtures) becomes the
-  bottleneck rather than the docs.
-- **Later (product).** A standalone offering — the name `akmon` stands on its own. Only
-  worth it at cross-project volume that justifies the infra.
+- **Current.** The [README](../README.md) owns supported mount modes and installation
+  status; the [packaging design](design/packaging/README.md) owns their rationale.
+  Do not treat the package carrier as merely a future design or confuse an implemented
+  CLI with public package publication.
+- **Possible hybrid.** Governance/docs retain their versioned source while executable
+  tools and validators could be exposed through an MCP server. Revisit only when a
+  demonstrated tooling bottleneck justifies another delivery and maintenance surface.
+- **Possible standalone offering.** Consider it at cross-project volume that justifies
+  the infrastructure. It is not a required stage on the path to better collaboration.
 
 ---
 
@@ -134,11 +164,13 @@ selectively, observability/eval first — never as a dependency the model needs 
 
 ## Suggested order to close the gaps
 
-1. **O1 direction note + this ROADMAP** — make every gap explicit (cheap, prevents loss).
-2. **Pipelines + guardrails + profiles** — make the roles and the learn loop runnable.
-3. **ARCHETYPES + BOOTSTRAP** — make akmon deployable to a new project.
-4. **O3 `sync.py`** — make the cross-agent claim real. *(base done — T1; v2 remains.)*
-5. **Harden for scale** — *O2 versioning ✅ resolved (ADR 0001); O5 skill contract ✅ minimal
-   done (T2)* → remaining: O5 richer schema/eval gates, O3 v2 (generated AGENTS skill block),
-   O4 orchestration (deferred until routing friction — T4).
-6. **O1 OPERATE** — formulate the runtime branch when a runtime actor is actually needed.
+1. **Make the mission testable.** Refine the interaction cases and premises, then verify
+   a small first slice before adding a universal skill or new infrastructure (A22/C86).
+2. **Improve quality per agent-work cost in parallel.** Continue the existing routing,
+   delegation, skills, and measured enforcement work against real failure modes; use
+   TASKS for its current ordering and dependencies.
+3. **Validate and propagate useful mechanisms.** Evaluate behavior, owner understanding,
+   limitations, and maintenance cost as well as code correctness; release and realign
+   consumers only through the existing owner-controlled process.
+4. **Expand only for demonstrated need.** Richer skill/eval infrastructure, further carrier
+   changes, and OPERATE remain conditional directions, not prerequisites for the mission.

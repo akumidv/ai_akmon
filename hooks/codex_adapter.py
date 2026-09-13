@@ -12,7 +12,7 @@ import re
 import sys
 from typing import Any
 
-from hook_core import EDIT_TOOL, SHELL_TOOL, HookResult
+from hook_core import EDIT_TOOL, SHELL_TOOL, HookResult, hook_failure_diagnostic
 
 # Codex's file-editing tool name(s) → akmon's neutral edit-tool kind.
 EDIT_TOOLS = frozenset({"apply_patch"})
@@ -32,9 +32,7 @@ SHELL_TOOLS = frozenset({"Bash"})
 # widening measurement rather than inference. Kept as one alternation because these lines
 # are the single measured source of patch paths, and a second extractor is a second place
 # for the next form to be missing from.
-_PATCH_PATH_RE = re.compile(
-    r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$", re.MULTILINE
-)
+_PATCH_PATH_RE = re.compile(r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$", re.MULTILINE)
 
 # A deliberately narrow recognition rule for the one shell effect we can classify exactly:
 # an apply_patch invocation in *command position*, with the patch body carried inline.
@@ -285,3 +283,16 @@ def print_result(result: HookResult | None) -> None:
         # Codex hooks have no documented user-facing channel; pass silently for now.
         pass
     print(json.dumps(top_level))
+
+
+def report_failure(hook_name: str, exc: BaseException) -> int:
+    """The crash half of the Codex entry point (ADR 0013 F3 as amended by C87/D2-45): exit 1.
+
+    One stderr line naming the route and the exception class — never its message — and nothing
+    on stdout. Codex has no measured text channel to the owner, but it does show each hook's
+    outcome: a hook that exits 1 on ``SessionStart``, on ``PreToolUse`` (shell and patch routes)
+    or on ``UserPromptSubmit`` is reported ``Failed`` while the action goes ahead (M68, M71). An
+    exit 0 would read ``Completed`` and hide the crash, so the exit code is the channel here.
+    """
+    print(hook_failure_diagnostic(hook_name, exc), file=sys.stderr)
+    return 1

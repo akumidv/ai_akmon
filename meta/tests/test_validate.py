@@ -15,9 +15,7 @@ import sys
 from pathlib import Path
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 _spec = importlib.util.spec_from_file_location("akmon_validate", _KEYSTONE / "meta" / "bin" / "validate.py")
 validate = importlib.util.module_from_spec(_spec)
@@ -193,10 +191,11 @@ def test_a_failing_self_ci_is_reported_by_its_error_not_by_its_last_line(tmp_pat
     # The failing leg is followed by unrelated warnings in the same stream, which is the normal
     # shape: a `warn` finding does not fail the run, so it is routinely the last line printed.
     findings = _self_ci_result(
-        tmp_path, monkeypatch,
+        tmp_path,
+        monkeypatch,
         stdout="OK a.b: fine → Keep it.\n"
-               "ERROR selfci.wheel-smoke: installed-wheel smoke failed: boom → Fix it.\n"
-               "WARN c.d: unrelated → Note it.\n",
+        "ERROR selfci.wheel-smoke: installed-wheel smoke failed: boom → Fix it.\n"
+        "WARN c.d: unrelated → Note it.\n",
     )
     assert [finding.severity for finding in findings] == ["error"]
     assert "wheel-smoke" in findings[0].message

@@ -16,6 +16,7 @@ import argparse
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import NoReturn
 
 from codex_adapter import (
     command,
@@ -24,6 +25,7 @@ from codex_adapter import (
     load_payload,
     payload_shape,
     print_result,
+    report_failure,
     session_id,
     tool_kind,
     tool_name,
@@ -70,9 +72,7 @@ def _report_unreadable_target(payload: dict, name: str) -> None:
     # session/tool-use pair as the event identity so one malformed edit produces one
     # diagnostic, while a later malformed edit remains visible. A missing component
     # repeats fail-visible instead of creating a global marker that can hide drift.
-    if sid != "nosession" and event_id and not claim_diagnostic_marker(
-        "codex-unreadable-target", f"{sid}\0{event_id}"
-    ):
+    if sid != "nosession" and event_id and not claim_diagnostic_marker("codex-unreadable-target", f"{sid}\0{event_id}"):
         return
     print(
         f"akmon codex-hook: '{tool_name(payload) or 'apply_patch'}' matched but no file path could "
@@ -92,9 +92,7 @@ def _report_unmeasured_path_source(payload: dict) -> None:
     """
     sid = session_id(payload)
     event_id = tool_use_id(payload)
-    if sid != "nosession" and event_id and not claim_diagnostic_marker(
-        "codex-unmeasured-path", f"{sid}\0{event_id}"
-    ):
+    if sid != "nosession" and event_id and not claim_diagnostic_marker("codex-unmeasured-path", f"{sid}\0{event_id}"):
         return
     print(
         f"akmon codex-hook: '{tool_name(payload) or 'apply_patch'}' named a file only through an "
@@ -137,30 +135,53 @@ def _session_start(payload: dict) -> None:
     print_result(session_start_result(find_project_root(start)))
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "hook",
-        choices=("analysis-guard", "role-on-code", "d2-ledger-reminder", "session-start", "git-commit-guard"),
-    )
-    args = parser.parse_args(argv)
+_ROUTES = ("analysis-guard", "role-on-code", "d2-ledger-reminder", "session-start", "git-commit-guard")
 
-    payload = load_payload()
-    if args.hook == "analysis-guard":
+
+class UsageError(Exception):
+    """A bad route argument, raised where argparse would print usage and exit on its own."""
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        # argparse's own exit is a SystemExit, which passes an `except Exception` guard, and it
+        # prints a usage block first — two lines where the crash contract allows one (ADR 0013).
+        raise UsageError(message)
+
+
+def _dispatch(route: str, payload: dict) -> None:
+    if route == "analysis-guard":
         _advisory(payload, analysis_write_result)
-    elif args.hook == "role-on-code":
+    elif route == "role-on-code":
         _advisory(payload, role_on_code_result)
-    elif args.hook == "d2-ledger-reminder":
+    elif route == "d2-ledger-reminder":
         _advisory(payload, d2_ledger_reminder_result)
-    elif args.hook == "session-start":
+    elif route == "session-start":
         _session_start(payload)
-    elif args.hook == "git-commit-guard":
+    elif route == "git-commit-guard":
         # Intentionally not wired by sync.py yet; C28(b) owns the exact live-probe,
         # owner/D2-verification, then generated-wiring sequence for Bash+git behavior.
         from hook_core import git_commit_guard_result, privilege_escalation_guard_result
 
         cmd = command(payload)
         print_result(privilege_escalation_guard_result(cmd) or git_commit_guard_result(cmd))
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run one route under the crash guard: a crash exits 1 so Codex shows the hook ``Failed``.
+
+    Every route writes at most one document, as its last step, so a crash cannot leave a
+    partial one behind it (ADR 0013 F3 as amended by C87/D2-45).
+    """
+    hook = "codex-hook"
+    try:
+        parser = _Parser(description=__doc__)
+        parser.add_argument("hook", choices=_ROUTES)
+        route = parser.parse_args(argv).hook
+        hook = f"codex-hook {route}"
+        _dispatch(route, load_payload())
+    except Exception as exc:
+        return report_failure(hook, exc)
     return 0
 
 
