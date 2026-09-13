@@ -119,15 +119,12 @@ def harness_command(harness: str, operation: str, *extra: str) -> list:
     try:
         spec = HARNESS_COMMANDS[harness]
     except KeyError:
-        raise ValueError(
-            f"unknown harness {harness!r}; known: {', '.join(sorted(HARNESS_COMMANDS))}"
-        ) from None
+        raise ValueError(f"unknown harness {harness!r}; known: {', '.join(sorted(HARNESS_COMMANDS))}") from None
     try:
         tail = spec.operations[operation]
     except KeyError:
         raise ValueError(
-            f"harness {harness!r} declares no operation {operation!r}; "
-            f"known: {', '.join(sorted(spec.operations))}"
+            f"harness {harness!r} declares no operation {operation!r}; known: {', '.join(sorted(spec.operations))}"
         ) from None
     return [spec.binary, *tail, *extra]
 

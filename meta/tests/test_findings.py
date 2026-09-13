@@ -32,9 +32,7 @@ from common.findings import (
 )
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 
 #: Every adopter of the envelope, by the name used in test ids, and its source file.
@@ -120,18 +118,18 @@ def test_valid_dotted_slugs_construct(code):
 @pytest.mark.parametrize(
     "code",
     [
-        "nodot",                 # no dot at all
-        "Area.rule",             # uppercase
-        "area .rule",            # whitespace
-        "area..rule",            # empty segment
-        ".rule",                 # empty leading segment
-        "area.",                 # empty trailing segment
-        "area.ru--le",           # repeated hyphen
-        "-area.rule",            # leading hyphen
-        "area.rule-",            # trailing hyphen
-        "area.rule ",            # trailing whitespace
-        "area.rule\n",           # `$` alone accepts a final newline; validation uses fullmatch
-        "area.rule\r",           # every line separator is invalid in every rendered field
+        "nodot",  # no dot at all
+        "Area.rule",  # uppercase
+        "area .rule",  # whitespace
+        "area..rule",  # empty segment
+        ".rule",  # empty leading segment
+        "area.",  # empty trailing segment
+        "area.ru--le",  # repeated hyphen
+        "-area.rule",  # leading hyphen
+        "area.rule-",  # trailing hyphen
+        "area.rule ",  # trailing whitespace
+        "area.rule\n",  # `$` alone accepts a final newline; validation uses fullmatch
+        "area.rule\r",  # every line separator is invalid in every rendered field
         "area.rule\u2028",
     ],
 )
@@ -320,8 +318,7 @@ def test_exactly_one_canonical_serializer_exists():
     serializers = [
         node.name
         for node in ast.walk(module)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and _returns_the_canonical_mapping(node)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _returns_the_canonical_mapping(node)
     ]
     assert serializers == ["to_dict"]
 
@@ -370,7 +367,14 @@ def test_findings_module_imports_only_the_standard_library():
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             imported.add(node.module.split(".")[0])
     stdlib = getattr(sys, "stdlib_module_names", None) or {
-        "re", "sys", "dataclasses", "typing", "json", "pathlib", "argparse", "os",
+        "re",
+        "sys",
+        "dataclasses",
+        "typing",
+        "json",
+        "pathlib",
+        "argparse",
+        "os",
     }
     assert imported <= set(stdlib), imported - set(stdlib)
 
@@ -381,11 +385,14 @@ def test_findings_module_imports_only_the_standard_library():
 
 
 def test_render_is_severity_code_target_message_fix_in_that_order():
-    finding = _finding(severity="error", code="pointers.stale", target="CLAUDE.md",
-                       message="generated pointer is stale", fix="Run akmon sync.")
-    assert render(finding) == (
-        "ERROR pointers.stale CLAUDE.md: generated pointer is stale → Run akmon sync."
+    finding = _finding(
+        severity="error",
+        code="pointers.stale",
+        target="CLAUDE.md",
+        message="generated pointer is stale",
+        fix="Run akmon sync.",
     )
+    assert render(finding) == ("ERROR pointers.stale CLAUDE.md: generated pointer is stale → Run akmon sync.")
 
 
 def test_render_keeps_every_field():
@@ -424,7 +431,7 @@ def test_print_findings_quiet_drops_only_ok(capsys):
 def test_no_adopter_keeps_the_old_renderer(name):
     text = ADOPTER_SOURCES[name].read_text(encoding="utf-8")
     assert "[{finding.level}]" not in text
-    assert '[{level}]' not in text
+    assert "[{level}]" not in text
     assert "def print_findings" not in text, f"{name} must use the shared renderer"
 
 
@@ -454,9 +461,9 @@ def _codes_in(path: Path) -> set[str]:
         target = node.func
         # A code reaches the envelope two ways: as the slug leading an emit call, or as a
         # `code=` argument a check forwards to a shared presence/shape helper.
-        emitter = (
-            isinstance(target, ast.Attribute) and target.attr in {"ok", "warn", "error"}
-        ) or (isinstance(target, ast.Name) and target.id == "Finding")
+        emitter = (isinstance(target, ast.Attribute) and target.attr in {"ok", "warn", "error"}) or (
+            isinstance(target, ast.Name) and target.id == "Finding"
+        )
         if emitter:
             positional = node.args[1:2] if isinstance(target, ast.Name) else node.args[0:1]
             for argument in positional:
@@ -611,9 +618,7 @@ def test_exact_rendering_is_identical_across_adopters(adopter, monkeypatch, tmp_
         ("error", True, 1),
     ],
 )
-def test_exit_matrix_is_identical_across_adopters(
-    adopter, severity, strict, expected, monkeypatch, tmp_path
-):
+def test_exit_matrix_is_identical_across_adopters(adopter, severity, strict, expected, monkeypatch, tmp_path):
     seeded = [_finding(severity=severity)]
     assert _STRICT_ADOPTERS[adopter](monkeypatch, tmp_path, seeded, strict) == expected
 
@@ -647,9 +652,7 @@ def test_sync_keeps_its_own_exit_vocabulary(tmp_path):
     duplicate.mkdir(parents=True)
     (duplicate / "SKILL.md").write_text("---\nname: demo\n---\n", encoding="utf-8")
     (tmp_path / "_aitna" / "skills" / "demo").mkdir(parents=True)
-    (tmp_path / "_aitna" / "skills" / "demo" / "SKILL.md").write_text(
-        "---\nname: demo\n---\n", encoding="utf-8"
-    )
+    (tmp_path / "_aitna" / "skills" / "demo" / "SKILL.md").write_text("---\nname: demo\n---\n", encoding="utf-8")
     assert sync.main(["--project-root", str(tmp_path), "--check"]) == 2  # cannot plan
 
 
@@ -685,7 +688,7 @@ def test_self_ci_fixture_carries_and_runs_its_mounted_launchers(tmp_path):
     self_ci._make_fixture(fixture, _KEYSTONE)
     mounted_bin = fixture / "_aitna" / "akmon" / "bin"
     assert (fixture / "_aitna" / "akmon" / "common" / "findings.py").is_file()
-    for script in ("sync.py", "verify.py"):
+    for script in ("sync.py", "verify.py", "check.py"):
         result = self_ci.subprocess.run(
             [sys.executable, str(mounted_bin / script), "--help"],
             capture_output=True,
@@ -706,9 +709,7 @@ def test_self_ci_leg_uses_a_success_specific_invariant(monkeypatch):
         ok_fix="Keep fixture sync green.",
         error_fix="Fix the sync failure.",
     )
-    assert emitted == [
-        Finding("ok", "selfci.fixture-sync", "fixture sync passes", "", "Keep fixture sync green.")
-    ]
+    assert emitted == [Finding("ok", "selfci.fixture-sync", "fixture sync passes", "", "Keep fixture sync green.")]
 
 
 def test_checked_suppresses_success_output(monkeypatch, capsys):

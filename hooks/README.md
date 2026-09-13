@@ -81,15 +81,17 @@ project-local hook surface.
   set; a mixed agent's silence does not prove its intended kind. Runs as a
   **PreToolUse → Task|Agent** hook; ordinary runtime failures remain advisory and return 0.
 - [`delegation-nudge.py`](delegation-nudge.py) — Claude PreToolUse wrapper for the
-  **delegation nudge**: counts consecutive orchestrator edit/shell/read calls (Read/Grep/Glob
-  normalize to the same read kind) since session start or the last subagent delegation
-  (`Task`/`Agent` resets the counter) and, past a threshold (default 10; env
+  **delegation nudge**: scores orchestrator edit/shell/read calls (Read/Grep/Glob normalize to
+  the same read kind) since session start or the last subagent delegation (`Task`/`Agent`
+  resets the score) — an edit or shell call counts 1, a read ½, and the first 8 calls of a
+  stretch nothing (env `KEYSTONE_DELEGATION_GRACE`) — and, past a threshold (default 30; env
   `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`), injects a **one-time, advisory** reminder that the
   work may belong to a `k_*` delegate (MODEL.md § Capability tiers). Task-kind classification
   is fuzzy, so the advisory never blocks; but on *sustained* drift past a second, higher
-  threshold (default 20; env `KEYSTONE_DELEGATION_ASK_THRESHOLD`, clamped to at least the
-  advisory threshold) it graduates to a hard `ask` permission decision — its own
-  once-per-episode marker, also cleared by a delegation. Runs as a **PreToolUse →
+  threshold (default 120; env `KEYSTONE_DELEGATION_ASK_THRESHOLD`, clamped to at least the
+  advisory threshold) the next edit or shell call — never a read — carries a hard `ask`
+  permission decision, with its own once-per-episode marker, also cleared by a delegation.
+  The weights and thresholds come from a replay of recorded sessions (C88, M72–M75). Runs as a **PreToolUse →
   Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob** hook (one combined-matcher entry
   seeing the mutations, the reads/sweeps, and the delegation resets).
 - [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for SessionStart,
@@ -109,11 +111,30 @@ project-local hook surface.
   Commit enforcement, delegation log/nudge, named-agent generation, and model routing are
   deliberately not wired. N2 proved hard `deny` on the headless patch route, but the exact
   Bash+git `deny`/`ask` matrix, `permission_mode` delivery, and TUI/headless equivalence remain
-  C28(b) evidence gates; generic Codex subagents and their child hook payloads remain separate
-  N1/A12 work.
+  C28(b) evidence gates. Generic Codex subagents fire `SubagentStart`/`SubagentStop` on 0.153.4
+  ([M62](../meta/MEASUREMENTS.md)), but akmon wires neither; that remains separate N1/A12 work.
 
 > The Role-declaration **rule** also lives in `AGENTS.md` (vendor-neutral), so Codex/Gemini
 > follow it by reading the doc; this hook is only the Claude-side *enforcement* of it.
+
+## Crash posture (C87)
+
+Every spawned entry point runs under one top-level guard: the eight Claude wrappers and
+`codex-hook.py` ([ADR 0013](../meta/decisions/0013-hook-survivability-and-crash-posture.md) F3,
+amended by C87/D2-45). A crash never blocks the action, and it is always reported:
+
+- **stderr:** one line, `akmon <hook> hook: <ExceptionClass>`. It never carries the exception's
+  message, which can hold a path, a key or a payload fragment.
+- **Claude Code:** the entry's one stdout document is `{"systemMessage": …}` for the owner — the
+  fact and `akmon verify` — and it exits 0. Claude Code 2.1.270 shows that message as a notice on
+  `PreToolUse`/`UserPromptSubmit` and never gives it to the model; a hook that exits 1 there is
+  shown nowhere ([M69, M70](../meta/MEASUREMENTS.md)).
+- **Codex:** nothing on stdout, and it exits 1. Codex prints the hook as `Failed` and runs the
+  action ([M68, M71](../meta/MEASUREMENTS.md)); an exit 0 would read `Completed`.
+
+The code is `claude_adapter.run_guarded` and `codex_adapter.report_failure`. The crash tests read
+the entry points from the generated wiring, so a newly wired entry fails them until it uses the
+guard.
 
 ## Wiring (per vendor)
 

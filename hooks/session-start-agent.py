@@ -9,11 +9,10 @@ This entrypoint only adapts Claude Code's JSON payload/output shape so existing
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
-from claude_adapter import load_payload, print_result
-from hook_core import session_start_result
+from claude_adapter import load_payload, run_guarded
+from hook_core import HookResult, session_start_result
 
 
 def _project_root(payload: dict) -> Path:
@@ -21,15 +20,13 @@ def _project_root(payload: dict) -> Path:
     return Path(cwd)
 
 
+def _decide() -> HookResult | None:
+    return session_start_result(_project_root(load_payload()))
+
+
 def main() -> int:
-    # Never block session start: on any failure, log to stderr (diagnostic, not the hook's
-    # JSON stdout) and exit cleanly.
-    try:
-        print_result(session_start_result(_project_root(load_payload())))
-    except Exception as exc:
-        print(f"akmon session-start-agent hook: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 0
-    return 0
+    # Never block session start: a crash is reported (stderr + the owner's notice), exit 0.
+    return run_guarded("session-start-agent", _decide)
 
 
 if __name__ == "__main__":

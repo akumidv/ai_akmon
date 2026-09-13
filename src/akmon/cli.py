@@ -39,7 +39,7 @@ from akmon import _tree
 # lazy (PEP 562, see ``akmon/__init__.py``) precisely so that same path does not pay a
 # distribution-metadata scan, and a from-import would resolve it here.
 
-_DISPATCHED_COMMANDS = {"sync", "verify"}
+_DISPATCHED_COMMANDS = {"sync", "verify", "check"}
 
 
 def _load_module_from_path(path: Path, name: str) -> ModuleType:
@@ -133,8 +133,8 @@ def _project_root_lib() -> ModuleType:
 def _mounted_akmon_root(start: Path) -> Path | None:
     """The mounted tree root (``<AITNA_ROOT>/akmon``) for ``start``'s project, if any.
 
-    A deliberate, narrow duplication of ``bin/sync.py``'s own marker check
-    (``_find_project_root`` + ``akmon_root``: an ``AGENTS.md`` file plus an existing
+    A deliberate, narrow duplication of the mount half of the project-root marker check
+    (``common/project_root.py::is_project_root``: an ``AGENTS.md`` file plus an existing
     ``<AITNA_ROOT>/akmon`` directory, walking up from ``start``) rather than a reuse: this
     function's job is to decide *which* tree's code the CLI should trust for everything
     else, so it must not itself depend on either tree's content.
@@ -192,10 +192,7 @@ def _skew_notice(mounted_root: Path) -> str | None:
     pinned_base, ahead = _split_version(pinned)
     cli_base, _ = _split_version(akmon.__version__)
     if pinned_base != cli_base:
-        return (
-            f"akmon: CLI is {akmon.__version__}, mounted/pinned standard is {pinned} "
-            "— the mounted tree governs."
-        )
+        return f"akmon: CLI is {akmon.__version__}, mounted/pinned standard is {pinned} — the mounted tree governs."
     if ahead is not None:
         commits = "commit" if ahead == "1" else "commits"
         return (
@@ -289,9 +286,7 @@ def _run_hook_script(script: Path, argv: list[str]) -> int:
     saved_path = list(sys.path)
     saved_argv = list(sys.argv)
     saved_common = {
-        name: module
-        for name, module in sys.modules.items()
-        if name == "common" or name.startswith("common.")
+        name: module for name, module in sys.modules.items() if name == "common" or name.startswith("common.")
     }
     sys.path.insert(0, str(script.parent))
     sys.argv = [str(script), *argv]
@@ -360,7 +355,7 @@ def _cmd_init(argv: list[str]) -> int:
     return _init.main(argv)
 
 
-_COMMANDS = ("init", "sync", "verify", "path", "hook", "version")
+_COMMANDS = ("init", "sync", "verify", "check", "path", "hook", "version")
 
 # `argparse.add_subparsers` + a REMAINDER positional mis-parses a remainder that starts
 # with "-" (e.g. `akmon sync --check`) — a known argparse limitation. A single top-level
@@ -370,6 +365,7 @@ _EPILOG = """commands:
   init      attach the standard to a project (mount + layout + sync + routing)
   sync      sync generated agent pointers (bin/sync.py)
   verify    verify a consuming project's USE contract (bin/verify.py)
+  check     check the project's Python against the rule catalog (bin/check.py)
   path      print the resolved standard-tree root
   hook      run a hook from the resolved standard tree (called by generated wiring)
   version   print the akmon package version

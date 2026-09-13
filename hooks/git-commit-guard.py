@@ -14,27 +14,31 @@ least said the route may mutate files unseen. This is the hook Claude already ru
 
 from __future__ import annotations
 
-from claude_adapter import load_payload, print_result
+from claude_adapter import load_payload, run_guarded
 from hook_core import (
+    HookResult,
     git_commit_guard_result,
     privilege_escalation_guard_result,
     report_unclassified_shell_route,
 )
 
 
-def main() -> int:
+def _decide() -> HookResult | None:
     payload = load_payload()
     if payload.get("tool_name") != "Bash":
-        return 0
+        return None
     session_id = payload.get("session_id")
     report_unclassified_shell_route(session_id if isinstance(session_id, str) else None)
     command = (payload.get("tool_input") or {}).get("command", "") or ""
     permission_mode = payload.get("permission_mode")
-    result = privilege_escalation_guard_result(command) or git_commit_guard_result(
+    return privilege_escalation_guard_result(command) or git_commit_guard_result(
         command, permission_mode=permission_mode if isinstance(permission_mode, str) else None
     )
-    print_result(result)
-    return 0
+
+
+def main() -> int:
+    # Deny-class, and still crash-open (ADR 0013 F3): a crash lets the command through and says so.
+    return run_guarded("git-commit-guard", _decide)
 
 
 if __name__ == "__main__":

@@ -275,3 +275,47 @@ either process is review-visible rather than mechanically impossible.
 - **Treat a raised cap as a tuning knob** — rejected, and stated as a prohibition because it is the
   natural thing to do under a failing test. Raising the envelope is new design work with new
   measurements and its own owner verification.
+
+## Amendment — the crash guard ships in C87, and a crash reaches the owner (C87 / D2-45)
+
+F3's guard leaves C52 and lands on its own. C52 stays blocked behind D2-23 for the measured
+literals of F4–F6, and the guard needs none of them. What changes in F3 is who hears about a
+crash.
+
+- **The guard, on all nine spawned entries.** In substance this is F3 unchanged. Any exception in
+  a wrapper, adapter or handler is caught at the entry's top level, and one stderr line names the
+  hook and the exception class, never the message. The action goes ahead: crash-open, the
+  deny-class `git-commit-guard` included. The Codex entry also catches a bad route argument,
+  which argparse would raise as a `SystemExit` past an `except Exception` guard, and reports it
+  in the same one line. The shared code is `claude_adapter.run_guarded` and
+  `codex_adapter.report_failure`, called from each entry's `main()`. The adapters still carry
+  no guard of their own.
+- **Claude: exit 0, plus one `systemMessage` for the owner.** Measured on 2.1.270 (M69, M70): a
+  `systemMessage` from a hook that exits 0 is shown as a notice on `PreToolUse` and
+  `UserPromptSubmit` and never reaches the model, while a hook that exits 1 there leaves no trace
+  at all. So a crash writes the notice as the entry's one stdout document. The notice gives the
+  fact (the hook, the class, and that the action went ahead) and the command (`akmon verify`).
+  The document is rendered before it is written, so no partial document can come before the
+  notice — F3's single-write precondition, now tested at the adapter. On `SessionStart` the
+  notice is recorded with the hook's response; whether the terminal shows it there is
+  unmeasured.
+- **Codex: exit 1, nothing on stdout.** Measured on 0.154.0 (M71) and 0.153.4 (M68): a hook that
+  exits 1 on `SessionStart`, on `PreToolUse` (shell and patch routes) or on `UserPromptSubmit` is
+  reported `Failed`, and the action goes ahead; an exit 0 reads `Completed`. Codex has no
+  measured text channel to the owner, so the exit code is the channel. This replaces F3's
+  "exits 0" on Codex only; the crash posture stays fail-open.
+- **F13's crash matrix reads accordingly.** Every crash emits exactly one safe stderr line. A
+  Claude entry's stdout is exactly the owner's notice, and the entry exits 0. The Codex entry's
+  stdout is empty, and it exits 1. D2-45 lists the carriers. They read the entries from the
+  generated wiring, so a newly wired entry without the guard fails them.
+
+**Unchanged:** F3's gate for moving a deny-class hook to fail-closed, and F4–F6 with D2-23 and
+C52.
+
+**Rejected:**
+- Keeping the channel inside C52: no crash visible to the owner until D2-23 lands.
+- A local error log that `verify` checks: the owner learns at the next `verify`, not in the
+  session.
+- The exception text in the notice: F3 already forbids it.
+- Exit 1 on Claude: the crash would be silent (M70).
+- Exit 0 on Codex: it hides the `Failed` status that M68 and M71 show.

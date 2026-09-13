@@ -19,13 +19,9 @@ from pathlib import Path
 import pytest
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_spec = importlib.util.spec_from_file_location(
-    "release_check", _KEYSTONE / "tools" / "release" / "release_check.py"
-)
+_spec = importlib.util.spec_from_file_location("release_check", _KEYSTONE / "tools" / "release" / "release_check.py")
 release_check = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(release_check)
 
@@ -127,8 +123,9 @@ _NON_FINAL_CORPUS = (
 )
 
 
-def _tree(root: Path, *, version: str | None = None, static: str | None = None,
-          changelog: str | None = "## Unreleased\n") -> Path:
+def _tree(
+    root: Path, *, version: str | None = None, static: str | None = None, changelog: str | None = "## Unreleased\n"
+) -> Path:
     """A synthetic release subject: the three file-borne version carriers, each optional."""
     if version is not None:
         (root / "pyproject.toml").write_text(
@@ -266,8 +263,7 @@ def test_a_rule_that_does_not_apply_is_not_reported_as_skipped(tmp_path, monkeyp
 
 
 def test_an_older_tag_missing_its_heading_warns_without_failing(tmp_path, monkeypatch):
-    _tree(tmp_path, version="0.4.0.dev0", static="0.4.0.dev0",
-          changelog="## Unreleased\n\n## v0.3.0\n\n## v0.1.0\n")
+    _tree(tmp_path, version="0.4.0.dev0", static="0.4.0.dev0", changelog="## Unreleased\n\n## v0.3.0\n\n## v0.1.0\n")
     findings = _check(tmp_path, monkeypatch, tags=("v0.1.0", "v0.2.0", "v0.3.0"))
     assert _codes(findings, "error") == []
     warns = [finding for finding in findings if finding.code == "release.undocumented-tag"]
@@ -287,20 +283,29 @@ def test_git_tags_are_read_from_a_real_repository(tmp_path, monkeypatch):
     if shutil.which("git") is None:  # pragma: no cover - git is present on the dev bench
         pytest.skip("git is unavailable")
     _tree(tmp_path, version="0.4.0", static="0.4.0", changelog="## v0.4.0\n")
-    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e",
-           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"}
-    for command in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "x"],
-                    ["tag", "v0.4.0"], ["tag", "v0.2.0"], ["tag", "0.1.0"],
-                    ["tag", "not-a-version"], ["tag", "v0.3"], ["tag", "v0.3.0rc1"]):
-        subprocess.run(["git", "-C", str(tmp_path), *command], check=True, env=env,
-                       capture_output=True)
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@e",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@e",
+    }
+    for command in (
+        ["init", "-q"],
+        ["commit", "-q", "--allow-empty", "-m", "x"],
+        ["tag", "v0.4.0"],
+        ["tag", "v0.2.0"],
+        ["tag", "0.1.0"],
+        ["tag", "not-a-version"],
+        ["tag", "v0.3"],
+        ["tag", "v0.3.0rc1"],
+    ):
+        subprocess.run(["git", "-C", str(tmp_path), *command], check=True, env=env, capture_output=True)
     # Both spellings are release tags; nothing else is. Read here rather than through the
     # supplied corpus, because the corpus tests replace this function and would never see it.
     assert release_check._git_tags(tmp_path) == ["0.1.0", "v0.2.0", "v0.4.0"]
     findings = release_check.check_release_versions(tmp_path)
-    assert sorted(_codes(findings, "warn")) == [
-        "release.retag", "release.tag-spelling", "release.undocumented-tag"
-    ]
+    assert sorted(_codes(findings, "warn")) == ["release.retag", "release.tag-spelling", "release.undocumented-tag"]
 
 
 def test_git_tags_returns_none_outside_a_repository(tmp_path):
@@ -320,8 +325,7 @@ def test_the_leading_v_is_a_spelling_not_a_different_version(version, tmp_path, 
 
 def test_a_describe_suffix_means_ahead_of_the_tag_rather_than_at_it(tmp_path, monkeypatch):
     # Past v0.4.0 is not v0.4.0: the tree is mid-cycle, so it wants `## Unreleased`.
-    _tree(tmp_path, version="v0.4.0-3-gdeadbee", static="v0.4.0-3-gdeadbee",
-          changelog="## v0.4.0\n")
+    _tree(tmp_path, version="v0.4.0-3-gdeadbee", static="v0.4.0-3-gdeadbee", changelog="## v0.4.0\n")
     assert _codes(_check(tmp_path, monkeypatch, tags=()), "error") == ["release.changelog-window"]
     _tree(tmp_path, changelog="## Unreleased\n\n## v0.4.0\n")
     assert _codes(_check(tmp_path, monkeypatch, tags=()), "error") == []
@@ -383,10 +387,10 @@ def test_the_plan_stages_both_version_literals_before_committing(capsys):
 @pytest.mark.parametrize(
     "mutate",
     [
-        pytest.param(lambda lines: [line.replace(" pyproject.toml", "") for line in lines],
-                     id="omits-pyproject"),
-        pytest.param(lambda lines: [line.replace(" src/akmon/__init__.py", "") for line in lines],
-                     id="omits-static-version"),
+        pytest.param(lambda lines: [line.replace(" pyproject.toml", "") for line in lines], id="omits-pyproject"),
+        pytest.param(
+            lambda lines: [line.replace(" src/akmon/__init__.py", "") for line in lines], id="omits-static-version"
+        ),
         pytest.param(
             lambda lines: (
                 [line for line in lines if "_STATIC_VERSION" not in line]
@@ -424,7 +428,8 @@ def test_the_check_mode_fails_on_a_version_error_even_when_the_suites_are_green(
     monkeypatch.setattr(release_check, "_pytest_command", lambda root, tests: ["true"])
     monkeypatch.setattr(release_check, "_run_commands", lambda root, commands: [])
     monkeypatch.setattr(
-        release_check, "check_release_versions",
+        release_check,
+        "check_release_versions",
         lambda _root: [release_check.Finding("error", "release.changelog-window", "seeded", "", "Repair it.")],
     )
     assert release_check.run_check(tmp_path, "akmon") == 1
@@ -434,7 +439,8 @@ def test_the_check_mode_does_not_fail_on_a_version_warning(monkeypatch, tmp_path
     monkeypatch.setattr(release_check, "_pytest_command", lambda root, tests: ["true"])
     monkeypatch.setattr(release_check, "_run_commands", lambda root, commands: [])
     monkeypatch.setattr(
-        release_check, "check_release_versions",
+        release_check,
+        "check_release_versions",
         lambda _root: [release_check.Finding("warn", "release.retag", "seeded", "", "Confirm it.")],
     )
     assert release_check.run_check(tmp_path, "akmon") == 0
@@ -443,9 +449,7 @@ def test_the_check_mode_does_not_fail_on_a_version_warning(monkeypatch, tmp_path
 # --- heading vocabulary and untrusted text ------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "heading", ["v1.2.3", "1.2.3", "[1.2.3] - 2024-01-01", "v1.2.3 (2024-01-01)"]
-)
+@pytest.mark.parametrize("heading", ["v1.2.3", "1.2.3", "[1.2.3] - 2024-01-01", "v1.2.3 (2024-01-01)"])
 def test_a_released_heading_may_say_more_than_its_version(heading, tmp_path, monkeypatch):
     # The `package` subject reads a consuming project's changelog, where Keep a Changelog's
     # `## [1.2.3] - <date>` is ordinary. Demanding a bare version would report "no released
@@ -503,9 +507,11 @@ def test_the_pyproject_literal_is_the_one_the_window_is_checked_against(tmp_path
 def test_tag_coverage_without_a_changelog_is_skipped_out_loud(tmp_path, monkeypatch):
     _tree(tmp_path, version="0.4.0.dev0", static="0.4.0.dev0", changelog=None)
     findings = _check(tmp_path, monkeypatch, tags=("v0.1.0",))
-    assert [finding.code for finding in findings] == ["release.version-literals",
-                                                      "release.check-skipped",
-                                                      "release.check-skipped"]
+    assert [finding.code for finding in findings] == [
+        "release.version-literals",
+        "release.check-skipped",
+        "release.check-skipped",
+    ]
     assert _codes(findings, "error") == []
 
 
@@ -566,10 +572,7 @@ def test_the_plan_says_how_to_reopen_the_cycle_after_the_tag(capsys):
     [
         pytest.param(lambda lines: [line for line in lines if "dev0" not in line], id="omits-reopen"),
         pytest.param(
-            lambda lines: (
-                [line for line in lines if "dev0" in line]
-                + [line for line in lines if "dev0" not in line]
-            ),
+            lambda lines: [line for line in lines if "dev0" in line] + [line for line in lines if "dev0" not in line],
             id="reopens-before-the-tag",
         ),
     ],
@@ -588,9 +591,7 @@ def test_the_integration_record_is_read_from_the_configured_dev_layer(tmp_path, 
     """
     monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     (tmp_path / "tools" / "ai").mkdir(parents=True)
-    (tmp_path / "tools" / "ai" / ".akmon.toml").write_text(
-        '[test]\nrunner = "poetry run pytest"\n', encoding="utf-8"
-    )
+    (tmp_path / "tools" / "ai" / ".akmon.toml").write_text('[test]\nrunner = "poetry run pytest"\n', encoding="utf-8")
     assert release_check._pinned_test_runner(tmp_path) == "poetry run pytest"
     assert release_check._pytest_command(tmp_path, "TESTS") == ["poetry", "run", "pytest", "TESTS"]
 

@@ -73,9 +73,7 @@ def _worker(entry: routing.DelegationEntry) -> str:
     return f"{entry.subagent}/{entry.model}" if entry.model else entry.subagent
 
 
-def build_coverage_map(
-    entries: Iterable[routing.DelegationEntry], zone_plan: list[str] | None = None
-) -> str:
+def build_coverage_map(entries: Iterable[routing.DelegationEntry], zone_plan: list[str] | None = None) -> str:
     """Render the coverage map markdown embedded into a gate-pack.
 
     ``entries`` are already scoped to the fan-out round (the CLI does the filtering). With a

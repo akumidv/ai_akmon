@@ -11,9 +11,7 @@ import sys
 from pathlib import Path
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 _ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:

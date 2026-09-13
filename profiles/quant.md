@@ -5,8 +5,9 @@ Greeks, volatility surfaces, risk measures, time-series, DataFrame pipelines. At
 linking it from the project's `AGENTS.md`; it is *suggested* by `package`-type numerics
 projects but only applies if the project actually does numerics.
 
-> A profile adds **domain** rules on top of language [guardrails/](../guardrails/). It does
-> not replace them. Where a profile rule and a guardrail overlap, both apply.
+> A domain profile adds rules on top of the [guardrails](../guardrails/_common.md) and the
+> language profile ([python](python.md)). It does not replace them. Where a profile rule and
+> a guardrail overlap, both apply.
 
 ## Correctness is owner-verified, not test-verified
 

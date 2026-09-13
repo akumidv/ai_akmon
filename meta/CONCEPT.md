@@ -1,16 +1,38 @@
-# akmon — the AI-assistant governance baseline
+# akmon — the human–agent development standard
 
-> The **akmon** of a project group: the first stone you place, the one that holds
-> the arch and sets the geometry of everything built after it. This repository is the
-> cross-project standard for **how an AI assistant helps develop, and helps use,**
-> each project. New projects are bootstrapped from it; existing ones are realigned to
-> it.
+The cross-project standard for **how an AI assistant helps develop, and helps use,**
+each project. The [mission and priorities](../MODEL.md#mission-and-priorities) are owned
+by the operative model; this document explains the background and design direction.
+The [README](../README.md) owns the current product orientation and carrier overview.
+The single entry point in a consuming project is its root `AGENTS.md`; policy is
+LLM-agnostic, while delivered enforcement is [harness-specific](../CAPABILITIES.md).
 
-Mounted into every project as a git submodule at **`_aitna/akmon/`** (the repo is
-`ai_akmon`; the mount path is `akmon` — see [BOOTSTRAP.md](../BOOTSTRAP.md)). It is
-**LLM-agnostic**: plain Markdown/JSON any assistant (Claude, Codex, Gemini, …) or human
-can read. No vendor's tooling is privileged; the single entry point in a consuming
-project is its root `AGENTS.md`.
+## Mission rationale and development focus
+
+The intended distinction is not simply more agents, rules, or supported carriers.
+It is a coherent way to improve joint decisions and their realization while treating
+human attention and model tokens as separate scarce resources. This is product
+positioning and a direction to evaluate, not a verified comparison with competitors.
+
+The human side includes recovering goals and experience, shaping future-use scenarios,
+making choices inspectable, adapting explanations, preserving context, and challenging
+unsupported assumptions from either party. The agent side uses the existing role and
+model-routing structure, bounded delegation, reusable skills, and measured hook controls
+to invest computational effort where errors would have the greatest downstream cost.
+Neither side is optimized by shifting hidden work or risk to the other.
+
+The owner frames this as an economic model: effectiveness of resource allocation,
+not thrift at each step. Up-front investment in human understanding, design, or
+stronger model reasoning can pay off through better outcomes and less implementation,
+coordination, and rework. Its expected benefit needs checking; more spending is not
+automatically better, and the model does not invent a common unit for attention and tokens.
+
+The [research and refinement plan](design/attention-and-human-agent-collaboration.md)
+records the actual reasoning path, sources and their limits, competing approaches,
+open premises, and evaluation cases. The [roadmap](ROADMAP.md#product-priorities) sets
+direction; [TASKS](TASKS.md) owns execution state. New interaction policies still need
+their own design acceptance and implementation evidence. Established architecture is
+not reopened merely because this mission is stated more prominently.
 
 ---
 
@@ -122,20 +144,16 @@ agent). So we split definition from incarnation:
 - **Agent** — the *incarnation in a project*: inherits a role from akmon and adds
   project specifics. Lives in the project at `_aitna/agents/`.
 
-Two roles at the start:
+The current [DEVELOP triad](../MODEL.md#3-role-vs-agent--the-develop-triad)
+separates review (analysis), architect (synthesis), and engineer (realization), with
+learn and release as cross-cutting roles. MODEL and the linked role/pipeline files own
+their requirements; this concept does not maintain a second role table.
 
-| Role | Focus | Output | Pipeline |
-|---|---|---|---|
-| [**architect**](../roles/architect.md) | design, documentation, architecture, requirements, ADRs | design docs, specs, ADRs, requirement updates | [design-flow](../pipelines/design-flow.md) |
-| [**engineer**](../roles/engineer.md) | code, tests, refactoring | commits / PRs | [code-flow](../pipelines/code-flow.md) |
-
-Why separate agents and not just profiles: design vs code are **materially different
-pipelines** (documentation/architecture vs code/tests), not different settings. That is
-when a dedicated agent is justified — otherwise prefer profile-based rules/skills.
-
-Both agents live on the **DEVELOP** branch and both draw shared requirements from
-**SHARED** (akmon). architect works mostly in `docs/` (and, for a package, USAGE
-`skills/`); engineer works in `src/`/`tests/`.
+The distinction is cognitive work and its definition of good, not a requirement to
+spawn another agent for every role switch. Model tiers and task-kind delegation are
+orthogonal: the [session orchestrator](../MODEL.md#10-capability-tiers--model-routing)
+retains decomposition, routing, integration, and owner dialogue. Roles draw shared
+requirements from SHARED and apply them to the subject project's DEVELOP work.
 
 ---
 
@@ -157,7 +175,8 @@ The cycle (knowledge climbs from local insight toward the shared standard):
 3. PROMOTE   if it is general across projects, lift it into akmon (PR):
                  a cross-project skill/tool   → akmon/{skills,tools}/
                  a role requirement/pipeline  → akmon/{roles,pipelines}/
-                 a language/domain rule        → akmon/{guardrails,profiles}/
+                 a universal rule              → akmon/guardrails/
+                 a language/environment/domain rule → akmon/profiles/
 4. PROPAGATE every other project gets it on `git submodule update` (pin bump)
 ```
 
@@ -241,10 +260,12 @@ per-type checklists: [ARCHETYPES.md](../ARCHETYPES.md).
 
 ## 5. Profiles & guardrails (the project-independent baseline)
 
-- **[`guardrails/`](../guardrails/)** — per language/environment, **applied automatically**
-  by the project's language: `_common.md` + `python.md` (+ `js.md`, `rust.md` as needed).
-- **[`profiles/`](../profiles/)** — per domain, **opt-in by need**, *suggested* by the
-  project type: `quant.md` (numerics), `crypto.md`, …
+- **[`guardrails/`](../guardrails/)** — the universal floor, **applied automatically** to
+  every project: `_common.md`.
+- **[`profiles/`](../profiles/)** — language and environment profiles, **applied
+  automatically** by the project's language and by where its code runs: `python.md`,
+  `python-stdlib.md` (+ `js.md`, `rust.md` as needed); and domain profiles, **opt-in by
+  need**, *suggested* by the project type: `quant.md` (numerics), `crypto.md`, …
 
 ---
 
@@ -259,8 +280,8 @@ _aitna/
 │   ├── ROADMAP.md              #   forward plan (skill contract, evals, MCP move)
 │   ├── roles/                  #   ROLE BASELINE (cross-project): requirements + pipeline
 │   │   ├── README.md  architect.md  engineer.md
-│   ├── guardrails/             #   per-language rules (for any agent/role)
-│   ├── profiles/               #   opt-in domain profiles
+│   ├── guardrails/             #   the universal floor (for any agent/role)
+│   ├── profiles/               #   language, environment and opt-in domain profiles
 │   ├── pipelines/              #   dev cycles: pre-commit, design-flow, code-flow, …
 │   ├── skills/  tools/         #   cross-project skills (SKILL.md) + executable tools
 │   └── bin/                    #   stdlib CLIs: sync.py (pointers), verify.py (validator)

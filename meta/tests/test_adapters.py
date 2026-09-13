@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -175,13 +176,7 @@ def test_d2_ledger_reminder_fires_on_the_captured_codex_payload(monkeypatch, tmp
 # The rename literal measured on codex-cli 0.149.1 (N1/F4 §"All four patch forms"): the source
 # stays on its `*** Update File:` line and the destination arrives on `*** Move to:`. Written
 # as the probe observed it, not invented — D2-18(a) is the row that refused to guess this shape.
-_RENAME_BODY = (
-    "*** Begin Patch\n"
-    "*** Update File: notes/plan.md\n"
-    "*** Move to: src/plan.md\n"
-    "@@\n-a\n+b\n"
-    "*** End Patch"
-)
+_RENAME_BODY = "*** Begin Patch\n*** Update File: notes/plan.md\n*** Move to: src/plan.md\n@@\n-a\n+b\n*** End Patch"
 
 
 def test_patch_body_paths_include_the_rename_destination():
@@ -368,9 +363,7 @@ def test_a_patch_carried_by_the_shell_is_an_edit_not_a_shell_call():
     # The measured bypass: a denied `apply_patch` re-issued through the shell in the same
     # turn, unprompted, and it went through. One effect must not be seen or unseen by its
     # spelling, so the payload — not the route name — decides the kind.
-    heredoc = (
-        "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: src/x.py\n+x\n*** End Patch\nPATCH"
-    )
+    heredoc = "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: src/x.py\n+x\n*** End Patch\nPATCH"
     payload = {"tool_name": "Bash", "tool_input": {"command": heredoc}}
     assert codex_adapter.is_apply_patch_command(heredoc)
     assert codex_adapter.tool_kind(payload) == hook_core.EDIT_TOOL
@@ -427,9 +420,7 @@ def test_a_brace_without_a_separating_space_is_a_word_not_a_group():
 
 
 def _bash_patch_payload(root: Path, path: str, session_id: str, prefix: str = "") -> dict:
-    heredoc = (
-        f"{prefix}apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: {path}\n+x\n*** End Patch\nPATCH"
-    )
+    heredoc = f"{prefix}apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: {path}\n+x\n*** End Patch\nPATCH"
     return {
         "tool_name": "Bash",
         "tool_input": {"command": heredoc},
@@ -474,9 +465,7 @@ def test_analysis_advisory_fires_on_an_adjacent_heredoc(monkeypatch, tmp_path, c
     monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
     root = _codex_project(tmp_path)
     payload = _bash_patch_payload(root, "_aitna/design/plan.md", "sess-c49-adjacent")
-    payload["tool_input"]["command"] = payload["tool_input"]["command"].replace(
-        "apply_patch <<", "apply_patch<<", 1
-    )
+    payload["tool_input"]["command"] = payload["tool_input"]["command"].replace("apply_patch <<", "apply_patch<<", 1)
 
     _run_codex_hook(monkeypatch, "analysis-guard", payload)
 
@@ -500,29 +489,17 @@ def test_d2_advisory_fires_on_a_patch_the_shell_carried(monkeypatch, tmp_path, c
 @pytest.mark.parametrize(
     "command_text",
     (
-        (
-            "cat > saved.patch <<'PATCH'\n*** Begin Patch\n*** Add File: src/x.py\n"
-            "+x\n*** End Patch\nPATCH"
-        ),
+        ("cat > saved.patch <<'PATCH'\n*** Begin Patch\n*** Add File: src/x.py\n+x\n*** End Patch\nPATCH"),
         "grep -n '*** Add File:' saved.patch",
         "cat saved.patch",
         "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: src/x.py\n+x\nPATCH",
-        (
-            "cat <<'TEXT'\napply_patch\n*** Begin Patch\n*** Add File: src/x.py\n"
-            "+x\n*** End Patch\nTEXT"
-        ),
-        (
-            "cat <<'TEXT'\nignored; apply_patch\n*** Begin Patch\n*** Add File: src/x.py\n"
-            "+x\n*** End Patch\nTEXT"
-        ),
+        ("cat <<'TEXT'\napply_patch\n*** Begin Patch\n*** Add File: src/x.py\n+x\n*** End Patch\nTEXT"),
+        ("cat <<'TEXT'\nignored; apply_patch\n*** Begin Patch\n*** Add File: src/x.py\n+x\n*** End Patch\nTEXT"),
         (
             "printf '%s' 'ignored; apply_patch' <<'TEXT'\n*** Begin Patch\n"
             "*** Add File: src/x.py\n+x\n*** End Patch\nTEXT"
         ),
-        (
-            "apply_patch < saved.patch; cat <<'TEXT'\n*** Begin Patch\n"
-            "*** Add File: src/x.py\n+x\n*** End Patch\nTEXT"
-        ),
+        ("apply_patch < saved.patch; cat <<'TEXT'\n*** Begin Patch\n*** Add File: src/x.py\n+x\n*** End Patch\nTEXT"),
     ),
 )
 def test_patch_looking_text_without_apply_patch_invocation_stays_shell(command_text):
@@ -560,9 +537,7 @@ def test_shell_diagnostic_without_session_id_repeats_fail_visible(monkeypatch, t
 def test_shell_diagnostic_marker_is_atomic_across_handlers(monkeypatch, tmp_path):
     monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
     with ThreadPoolExecutor(max_workers=12) as pool:
-        decisions = list(
-            pool.map(lambda _: hook_core.claim_diagnostic_marker("shell-route", "sess-race"), range(24))
-        )
+        decisions = list(pool.map(lambda _: hook_core.claim_diagnostic_marker("shell-route", "sess-race"), range(24)))
     assert decisions.count(True) == 1
 
 
@@ -630,9 +605,11 @@ def test_both_vendors_emit_one_shell_route_wording(monkeypatch, tmp_path, capsys
         "analysis-guard",
         {"tool_name": "Bash", "tool_input": {"command": "ls"}, "session_id": "sess-codex-w", "cwd": str(root)},
     )
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(
-        {"tool_name": "Bash", "tool_input": {"command": "ls"}, "session_id": "sess-claude-w"}
-    )))
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}, "session_id": "sess-claude-w"})),
+    )
     assert _claude_hook("git-commit-guard.py").main() == 0
 
     lines = [line for line in capsys.readouterr().err.splitlines() if "may mutate the filesystem" in line]
@@ -797,9 +774,7 @@ def test_delegation_log_system_message_with_model_and_description():
     from pathlib import Path
 
     akmon_root = Path(hook_core.__file__).parent.parent
-    spec = importlib.util.spec_from_file_location(
-        "delegation_log", akmon_root / "hooks" / "delegation-log.py"
-    )
+    spec = importlib.util.spec_from_file_location("delegation_log", akmon_root / "hooks" / "delegation-log.py")
     deleg_log = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(deleg_log)
 
@@ -814,9 +789,7 @@ def test_delegation_log_system_message_without_model():
     from pathlib import Path
 
     akmon_root = Path(hook_core.__file__).parent.parent
-    spec = importlib.util.spec_from_file_location(
-        "delegation_log", akmon_root / "hooks" / "delegation-log.py"
-    )
+    spec = importlib.util.spec_from_file_location("delegation_log", akmon_root / "hooks" / "delegation-log.py")
     deleg_log = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(deleg_log)
 
@@ -830,9 +803,7 @@ def test_delegation_log_system_message_without_description():
     from pathlib import Path
 
     akmon_root = Path(hook_core.__file__).parent.parent
-    spec = importlib.util.spec_from_file_location(
-        "delegation_log", akmon_root / "hooks" / "delegation-log.py"
-    )
+    spec = importlib.util.spec_from_file_location("delegation_log", akmon_root / "hooks" / "delegation-log.py")
     deleg_log = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(deleg_log)
 
@@ -874,8 +845,7 @@ def test_delegation_log_role_advisory_is_system_message_only(tmp_path, monkeypat
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}})
-        + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
         encoding="utf-8",
     )
     payload = _delegation_log_payload(tmp_path, transcript, "k_mechanic")
@@ -893,8 +863,7 @@ def test_delegation_log_allowed_agent_stays_silent(tmp_path, monkeypatch, capsys
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}})
-        + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
         encoding="utf-8",
     )
     payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
@@ -964,9 +933,7 @@ def test_delegation_log_reports_no_model_without_a_bound_ladder(tmp_path, monkey
 
 
 @pytest.mark.parametrize("available", ["haiku", 42])
-def test_delegation_log_rejects_malformed_available_without_losing_record(
-    available, tmp_path, monkeypatch, capsys
-):
+def test_delegation_log_rejects_malformed_available_without_losing_record(available, tmp_path, monkeypatch, capsys):
     """Malformed local config yields no pin and cannot suppress the delegation record."""
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
@@ -996,8 +963,103 @@ def test_delegation_log_ordinary_exception_returns_zero(tmp_path, monkeypatch, c
     monkeypatch.setattr(deleg_log.routing, "delegation_log_line", fail)
     assert deleg_log.main() == 0
     captured = capsys.readouterr()
+    assert captured.err.splitlines() == ["akmon delegation-log hook: RuntimeError"]
+    notice = hook_core.hook_failure_notice("delegation-log", RuntimeError())
+    assert json.loads(captured.out) == {"systemMessage": notice}
+    assert "seeded C20 failure" not in captured.out + captured.err
+
+
+# --------------------------------------------------------------------------------------
+# the crash guard on every spawned entry point (C87/D2-45, ADR 0013 F3 as amended)
+# --------------------------------------------------------------------------------------
+
+_SEEDED_SECRET = "SEEDED-SECRET /home/owner/private.key"
+
+
+def _seeded_crash():
+    raise RuntimeError(_SEEDED_SECRET)
+
+
+def _wired_entry_points(tmp_path) -> tuple[list[str], list[str]]:
+    """The spawned entry points the generated wiring names: Claude files, then Codex routes.
+
+    Read from the wiring rather than listed, so an entry added there without the guard fails
+    the tests below instead of shipping a crash nobody sees.
+    """
+    root = tmp_path / "wiring"
+    (root / "_aitna" / "akmon").mkdir(parents=True)
+    (root / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+
+    def commands(hooks: dict) -> list[str]:
+        return [hook["command"] for groups in hooks.values() for group in groups for hook in group["hooks"]]
+
+    claude = json.loads(sync._claude_settings(root).content)["hooks"]
+    codex = sync._codex_hooks(root)["hooks"]
+    files = sorted({re.search(r"hooks/([\w-]+\.py)", command).group(1) for command in commands(claude)})
+    routes = sorted({command.rsplit(" ", 1)[1] for command in commands(codex)})
+    return files, routes
+
+
+def test_every_wired_claude_entry_reports_a_crash_to_the_owner_and_exits_zero(tmp_path, monkeypatch, capsys):
+    # One stderr line with the hook and the class, the owner's notice as the one stdout document
+    # (M69: shown as a notice, never passed to the model), exit 0 (M70: an exit 1 is silent).
+    files, _ = _wired_entry_points(tmp_path)
+    assert len(files) == 8
+    for filename in files:
+        hook = _claude_hook(filename)
+        monkeypatch.setattr(hook, "load_payload", _seeded_crash)
+        name = filename.removesuffix(".py")
+        assert hook.main() == 0, filename
+        captured = capsys.readouterr()
+        assert captured.err.splitlines() == [f"akmon {name} hook: RuntimeError"], filename
+        notice = hook_core.hook_failure_notice(name, RuntimeError())
+        assert json.loads(captured.out) == {"systemMessage": notice}, filename
+        assert "SEEDED-SECRET" not in captured.out + captured.err, filename
+
+
+def test_every_wired_codex_route_reports_a_crash_as_failed(tmp_path, monkeypatch, capsys):
+    # Exit 1 with nothing on stdout: Codex shows the hook `Failed` and the action goes ahead
+    # (M68, M71); an exit 0 would read `Completed` and hide the crash.
+    _, routes = _wired_entry_points(tmp_path)
+    assert routes == ["analysis-guard", "d2-ledger-reminder", "role-on-code", "session-start"]
+    codex_hook = _codex_hook()
+    monkeypatch.setattr(codex_hook, "load_payload", _seeded_crash)
+    for route in routes:
+        assert codex_hook.main([route]) == 1, route
+        captured = capsys.readouterr()
+        assert captured.err.splitlines() == [f"akmon codex-hook {route} hook: RuntimeError"], route
+        assert captured.out == "", route
+        assert "SEEDED-SECRET" not in captured.err, route
+
+
+def test_codex_entry_reports_a_bad_route_in_one_line(capsys):
+    # argparse would print a usage block and raise SystemExit, which passes an `except Exception`
+    # guard (ADR 0013): two lines, and a crash the guard never sees.
+    assert _codex_hook().main(["no-such-route"]) == 1
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == ["akmon codex-hook hook: UsageError"]
     assert captured.out == ""
-    assert len(captured.err.splitlines()) == 1
+
+
+def test_claude_guard_writes_one_document_when_rendering_fails(capsys):
+    # The single-write property: a result that cannot be rendered is a crash before the write,
+    # so stdout carries the owner's notice alone, never a prefix followed by a second document.
+    def unrenderable():
+        return hook_core.HookResult(event_name="PreToolUse", additional_context=object())
+
+    assert claude_adapter.run_guarded("probe-hook", unrenderable) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"systemMessage": hook_core.hook_failure_notice("probe-hook", TypeError())}
+    assert captured.err.splitlines() == ["akmon probe-hook hook: TypeError"]
+
+
+def test_hook_failure_texts_name_the_hook_and_the_class_never_the_message():
+    exc = ValueError("/home/owner/.secret token=abc")
+    assert hook_core.hook_failure_diagnostic("role-on-code", exc) == "akmon role-on-code hook: ValueError"
+    notice = hook_core.hook_failure_notice("role-on-code", exc)
+    assert "role-on-code" in notice and "ValueError" in notice
+    assert "`akmon verify`" in notice and "_aitna/akmon/bin/verify.py" in notice
+    assert "secret" not in notice and "token" not in notice
 
 
 def test_find_project_root_in_package_mode_from_nested_directory(tmp_path):
@@ -1108,9 +1170,7 @@ def test_stale_guardrail_notice_reaches_both_vendor_wirings(monkeypatch, tmp_pat
     root = _codex_project(tmp_path)
     dest = root / "_aitna" / ".akmon" / "guardrails"
     dest.mkdir(parents=True)
-    (dest / "_common.md").write_text(
-        materialized_markdown("# Common\n\nold rule\n"), encoding="utf-8"
-    )
+    (dest / "_common.md").write_text(materialized_markdown("# Common\n\nold rule\n"), encoding="utf-8")
 
     result = hook_core.session_start_result(root)
     assert result is not None

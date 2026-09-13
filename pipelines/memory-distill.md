@@ -22,7 +22,7 @@ This runs **continuously**, as work happens — not on a schedule (that is
    - **Route by generality first.** Before filing a fact as project memory, classify it: a
      **project-specific** fact (this domain, this code, this runtime) is a first-class
      `_aitna/memory/` entry. A **general methodology/process/role/convention** lesson is
-     **not** project memory — check akmon (`guardrails/`, `roles/`, `pipelines/`): if it is
+     **not** project memory — check akmon (`guardrails/`, `profiles/`, `roles/`, `pipelines/`): if it is
      already covered there, the lesson is to *follow* the existing rule (write nothing local);
      if it is missing, it is a **PROMOTE candidate** ([learning](learning.md) step 3), captured
      locally only as a brief staging note pointing at the gap. Filing a general rule as project

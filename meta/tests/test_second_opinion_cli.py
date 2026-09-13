@@ -15,9 +15,7 @@ import sys
 from pathlib import Path
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 _ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
@@ -149,9 +147,7 @@ def test_skip_branch_when_ladder_exhausted_runs_no_subprocess(tmp_path, capsys, 
     assert "ladder exhausted" in out
 
 
-def test_the_skip_states_its_reason_and_offers_the_weaker_check_with_its_limits(
-    tmp_path, capsys, monkeypatch
-):
+def test_the_skip_states_its_reason_and_offers_the_weaker_check_with_its_limits(tmp_path, capsys, monkeypatch):
     """A bare "skipped" leaves the owner with no reason and no option. The gate refuses to
     downgrade itself, but the same-model self-check is still worth offering — to a person,
     with the boundary attached, so its result is never filed as a second opinion."""
@@ -169,10 +165,14 @@ def test_the_skip_states_its_reason_and_offers_the_weaker_check_with_its_limits(
 
     second_opinion.main(
         [
-            "--project-root", str(root),
-            "--orchestrator-vendor", "anthropic",
-            "--gate", "code-verify",
-            "--gate-pack", str(_gate_pack(root)),
+            "--project-root",
+            str(root),
+            "--orchestrator-vendor",
+            "anthropic",
+            "--gate",
+            "code-verify",
+            "--gate-pack",
+            str(_gate_pack(root)),
         ]
     )
     out = capsys.readouterr().out

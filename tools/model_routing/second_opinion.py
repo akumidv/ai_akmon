@@ -63,8 +63,7 @@ def _unavailable_notice(registry: dict, config: dict, orchestrator_vendor: str, 
     reason = routing.second_opinion_unavailability(registry, config, orchestrator_vendor)
     return "\n".join(
         [
-            f"second-opinion: skipped at gate '{gate}' — ladder exhausted, no model-diverse "
-            f"reviewer is reachable.",
+            f"second-opinion: skipped at gate '{gate}' — ladder exhausted, no model-diverse reviewer is reachable.",
             f"  why: {reason}.",
             "  not downgraded: a reviewer on the author's own weights repeats the author's "
             "systematic errors and agrees confidently, which is indistinguishable from a review.",
@@ -140,8 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(output + "\n", encoding="utf-8")
     print(
-        f"second-opinion provider={provider} model={model or '(default)'} "
-        f"gate={args.gate} exit={completed.returncode}"
+        f"second-opinion provider={provider} model={model or '(default)'} gate={args.gate} exit={completed.returncode}"
     )
     print(f"report: {report.relative_to(root)}")
     if output:

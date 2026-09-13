@@ -37,7 +37,7 @@ material design gap goes back to the architect, not into improvised structure.
 | a task in `_aitna/TASKS.md` (goal + design link) | code that implements the task |
 | the architect's design doc / ADR | tests that prove it (and guard against regression) |
 | existing code & tests (extend, don't fork) | a green pre-commit run |
-| language `guardrails/` + opted-in `profiles/` | the task marked done after owner verification |
+| `guardrails/` + language/environment `profiles/` + opted-in domain profiles | the task marked done after owner verification |
 
 ---
 
@@ -87,7 +87,8 @@ everywhere: the audit **drafts** a verdict, it never decides.
 
 ## Guardrails
 
-- Bound by language [guardrails/](../guardrails/) and any opted-in [profiles/](../profiles/).
+- Bound by the [guardrails/](../guardrails/), the project's language and environment
+  [profiles/](../profiles/), and any opted-in domain profiles.
 - Never commit/`git add` on the owner's behalf unless explicitly told.
 - **Escalate, don't absorb.** A material design gap goes up to [architect](architect.md) as a
   task — never improvise load-bearing architecture. A problem that spans **several** component

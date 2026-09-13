@@ -223,18 +223,14 @@ def test_add_approve_verify_round_trip_escapes_pipe_delimiters():
         anchor="hooks/a|b.py:1",
     )
     pending, _, _ = d2.parse_ledger(added)
-    assert pending == [
-        [entry_id, "architecture", r"Bash\|apply_patch routes", r"hooks/a\|b.py:1", "", ""]
-    ]
+    assert pending == [[entry_id, "architecture", r"Bash\|apply_patch routes", r"hooks/a\|b.py:1", "", ""]]
 
     approved = d2.approve_entry(added, entry_id)
     verified_text = d2.verify_entry(approved, entry_id, commit="abc|123")
     pending, approved_rows, verified = d2.parse_ledger(verified_text)
     assert pending == []
     assert approved_rows == []
-    assert verified == [
-        [entry_id, "architecture", r"Bash\|apply_patch routes", r"hooks/a\|b.py:1", r"abc\|123"]
-    ]
+    assert verified == [[entry_id, "architecture", r"Bash\|apply_patch routes", r"hooks/a\|b.py:1", r"abc\|123"]]
 
 
 def test_verify_entry_moves_approved_row_to_top_of_verified():

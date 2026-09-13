@@ -1039,10 +1039,17 @@ tool calls with no delegation between them**, keyed per session in the temp dir 
   (`Read/Grep/Glob`)**. Reads count because the actual drift symptom *is* the read/sweep:
   pulling a wide `git diff`, grepping the tree, reading many files inline is exactly the
   work a `k_explorer` should absorb so the dump never enters orchestrator context. An
-  edit-only counter would have missed the dominant failure mode.
-- **Graduation** — advisory `additionalContext` at the nudge threshold (default 10,
+  edit-only counter would have missed the dominant failure mode. **Weighed since C88
+  (D2-46):** an edit or shell call adds 1 to the drift score and a read ½, and the first 8
+  calls of a stretch add nothing (`KEYSTONE_DELEGATION_GRACE`). Replayed over recorded
+  sessions, one point per call fired in nearly every session (M72, M75) — it measured session
+  length. The weight is keyed on the tool kind only; the shell command's text is not
+  classified (C28(c)).
+- **Graduation** — advisory `additionalContext` at the nudge threshold (default 30,
   `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`); a hard PreToolUse **`ask`** on *sustained* drift
-  at the ask threshold (default 20, `KEYSTONE_DELEGATION_ASK_THRESHOLD`, clamped ≥ advisory).
+  at the ask threshold (default 120, `KEYSTONE_DELEGATION_ASK_THRESHOLD`, clamped ≥ advisory),
+  carried by the next edit or shell call — never by a read: outside the interactive default
+  mode the ask is a deny (D2-10), and a denied read leaves the agent unable to look.
   Each fires **once per drift episode** via its own temp-dir marker.
 - **Reset + re-arm** — any subagent delegation (`Task`/`Agent`) zeroes the counter and
   clears both markers: a delegation is the exact act the nudge wants, so it re-arms the

@@ -5,33 +5,29 @@ Reminds once per session when an edit lands on a project-declared D2-sensitive p
 (``[d2_ledger] sensitive_paths`` in ``<aitna>/.akmon.toml``) so the change gets logged in the
 ledger for owner verification (design meta/design/d2-ledger.md §2.2, phase 2 of C11). The decision
 logic lives in ``hook_core.py``; this entrypoint only adapts Claude Code's payload. Advisory only —
-on any failure it logs to stderr and exits cleanly, never blocking the edit.
+a failure is reported (stderr + the owner's notice) and never blocks the edit.
 """
 
 from __future__ import annotations
 
-import sys
+from claude_adapter import load_payload, normalize_tool, project_root, run_guarded
+from hook_core import HookResult, d2_ledger_reminder_result
 
-from claude_adapter import load_payload, normalize_tool, print_result, project_root
-from hook_core import d2_ledger_reminder_result
+
+def _decide() -> HookResult | None:
+    payload = load_payload()
+    tool_input = payload.get("tool_input") or {}
+    session_id = payload.get("session_id")
+    return d2_ledger_reminder_result(
+        normalize_tool(str(payload.get("tool_name") or "")),
+        tool_input.get("file_path"),
+        session_id if isinstance(session_id, str) else None,
+        project_root(payload),
+    )
 
 
 def main() -> int:
-    try:
-        payload = load_payload()
-        tool_input = payload.get("tool_input") or {}
-        session_id = payload.get("session_id")
-        print_result(
-            d2_ledger_reminder_result(
-                normalize_tool(str(payload.get("tool_name") or "")),
-                tool_input.get("file_path"),
-                session_id if isinstance(session_id, str) else None,
-                project_root(payload),
-            )
-        )
-    except Exception as exc:
-        print(f"akmon d2-ledger-reminder hook: {type(exc).__name__}: {exc}", file=sys.stderr)
-    return 0
+    return run_guarded("d2-ledger-reminder", _decide)
 
 
 if __name__ == "__main__":

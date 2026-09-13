@@ -4,6 +4,40 @@ What a consuming project applies to follow the standard. The full vision and rat
 akmon's own development layer, which a consumer never loads; this file is the **USE surface** —
 the rules, not the why. Self-contained by design.
 
+## Mission and priorities
+
+Help people and AI agents develop projects that achieve their intended goals, through
+decisions they can understand, challenge, and verify, with effective investment of human
+attention and model tokens.
+
+This is an **economic model of resource allocation**: assess the value of the outcome
+against the total effort over the relevant project lifecycle, not the cost of one step.
+More time spent designing can reduce implementation and rework costs. For high-leverage
+analysis and synthesis, the most capable available model at its highest supported
+reasoning effort can be a better investment than repeated mechanical attempts by a
+cheaper model. Such up-front spending needs an expected downstream benefit; neither
+minimum spending nor maximum effort is an objective by itself. This states the economic
+rationale, not a new model/effort binding or a measured return-on-investment formula.
+
+Two connected priorities serve that mission:
+
+1. **Human attention and joint decision quality.** Put the owner's knowledge, experience,
+   and judgment to work on goals and consequential choices. Reduce routine investigation,
+   repeated explanation, and context reconstruction. Adapt communication to the person
+   without adapting factual conclusions merely to obtain agreement; keep material choices,
+   uncertainty, and problems visible.
+2. **Agent work and token efficiency for quality.** Separate cognitive work through roles,
+   delegate bounded work to subagents, select model capability by task kind and leverage,
+   reuse skills, and use hooks for the controls a harness can actually deliver. These are
+   means to better outcomes, not reasons to maximize agent count or minimize every call.
+
+Truthfulness, meaningful owner control, and product-goal fit constrain both priorities.
+Tokens and attention are distinct costs, not interchangeable units; reduced token spend
+does not establish lower owner effort or better decisions. The routing policy below
+already provides mechanisms for the second priority. The fuller human-interaction
+protocol is under design: this mission adds no new approval gate, report-length limit,
+automatic decision reopening, or autonomous acceptance authority.
+
 ## 1. Three orthogonal axes (do not conflate)
 
 | Axis | Answers | Values |
@@ -65,9 +99,12 @@ not its language. Full taxonomy + per-archetype checklists: [ARCHETYPES.md](ARCH
 
 ## 5. Profiles & guardrails
 
-- **[guardrails/](guardrails/)** — per language/environment, **applied automatically** by the
-  project's language (`_common.md` + `python.md`, …).
-- **[profiles/](profiles/)** — per domain, **opt-in by need** (`quant.md`, …).
+- **[guardrails/](guardrails/)** — the universal floor, **applied automatically** to every
+  project (`_common.md`).
+- **[profiles/](profiles/)** — language and environment profiles, **applied automatically**
+  by the project's language and by where its code runs (`python.md`, `python-stdlib.md`; the
+  checked Python rules live in `python.rules.toml`, enforced by `akmon check`), and domain
+  profiles **opt-in by need** (`quant.md`, …).
 
 ## 6. The learn loop (how the standard evolves)
 
@@ -104,9 +141,10 @@ The routing gradient embodies one **leverage principle: quality investment ∝ a
 leverage** (an artifact's error cost plus the operation/evolution cost everything downstream
 inherits from it). The higher the leverage, the stronger the model, the fresher the context,
 and the closer to the owner the check — so the strongest rung concentrates at a few
-low-token, high-leverage points (a design fork, the pre-fan-out plan check, the whole-gate
-audit) while fan-out execution stays cheap. The goal function is quality per unit of **tokens
-+ owner attention**; the tiers are how tokens buy quality where leverage is highest.
+high-leverage points (a design fork, the pre-fan-out plan check, the whole-gate
+audit) while fan-out execution stays cheap. The **mission and two budgets** above govern
+this policy; the tiers are how tokens buy quality where leverage is highest. The shorthand
+**tokens + owner attention** names two costs, not a literal sum or a common measurement unit.
 
 | Tier | Runs | Bound to |
 |---|---|---|
@@ -173,8 +211,10 @@ Each line is the index entry; the linked artifact owns the full statement.
 4. **Drafts vs decides** — a tier changes who *drafts*, never who *decides*: owner
    verification stays with the owner; audits and second opinions are advisory input to it
    (§10).
-5. **Two budgets** — the goal function is quality per unit of **tokens + owner attention**;
-   both are finite, measured, and spent deliberately, not by default (§10).
+5. **Two budgets** — invest **tokens + owner attention** for effective outcomes over the
+   relevant lifecycle, not minimum cost per step (Mission and priorities; §10). Both are
+   finite; distinguish measured token use from attention proxies and unmeasured human
+   effort rather than claiming one measures the other.
 6. **Isolation by construction** — a delegate's limits are structural, not prompt trust:
    clean context (the auditor receives only a gate-pack) and tool-set rights (audit tiers
    hold no write tools) (§10; worked example: [examples/gate-anatomy.md](examples/gate-anatomy.md)).

@@ -29,9 +29,7 @@ from common.runtime import (
 )
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 
 # The shape the real tree has: python3 everywhere, git only on the Codex route, both carried by
@@ -75,9 +73,7 @@ def _only(findings, code: str, severity: str = "error"):
 
 
 def _without(binary: str, **overrides):
-    return tuple(
-        replace(d, **overrides) if d.binary == binary else d for d in DECLARATIONS
-    )
+    return tuple(replace(d, **overrides) if d.binary == binary else d for d in DECLARATIONS)
 
 
 # --------------------------------------------------------------------------------------
@@ -95,9 +91,7 @@ def test_the_real_tree_satisfies_its_own_declaration():
 
 
 def test_the_derivation_reproduces_the_declared_populations():
-    per_vendor = runtime_checks.derive_generated_population(
-        runtime_checks.generated_wiring(_KEYSTONE)
-    )
+    per_vendor = runtime_checks.derive_generated_population(runtime_checks.generated_wiring(_KEYSTONE))
     assert per_vendor["claude"] == {POSIX_SHELL, "python3"}
     assert per_vendor["codex"] == {POSIX_SHELL, "python3", "git"}
 
@@ -124,9 +118,7 @@ def test_an_undeclared_own_tool_query_is_one_error(tmp_path):
 # --------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("binary", "population"), [("jq", GENERATED_WIRING), ("gemini", OWN_TOOLING)]
-)
+@pytest.mark.parametrize(("binary", "population"), [("jq", GENERATED_WIRING), ("gemini", OWN_TOOLING)])
 def test_an_unused_declaration_is_one_warn(tmp_path, binary, population):
     declarations = (*DECLARATIONS, RuntimeDeclaration(binary, population, REQUIRED))
     findings = _check(tmp_path, declarations=declarations)
@@ -200,9 +192,7 @@ def test_the_other_population_is_one_wrong_population(tmp_path, binary):
     ],
 )
 def test_a_wrong_modality_is_one_error(tmp_path, binary, wrong):
-    finding = _only(
-        _check(tmp_path, declarations=_without(binary, modality=wrong)), "runtime.wrong-modality"
-    )
+    finding = _only(_check(tmp_path, declarations=_without(binary, modality=wrong)), "runtime.wrong-modality")
     assert binary in finding.message
 
 
@@ -266,10 +256,7 @@ def test_c57_lock_text_pins_prefix_ownership_without_the_old_overclaim():
 
     assert len(entries) == 1
     entry = entries[0]
-    assert (
-        "map is the sole owner and constructor of the executable-plus-operation prefix"
-        in entry
-    )
+    assert "map is the sole owner and constructor of the executable-plus-operation prefix" in entry
     assert "sole executable owner and constructor" not in entry
 
 
@@ -278,10 +265,20 @@ def test_the_map_constructs_the_second_opinion_argv():
 
     spec = {"harness": "claude", "operation": "review", "model_flag": "--model {model}"}
     assert routing.second_opinion_command(spec, "review this") == [
-        "claude", "-p", "--output-format", "text", "review this",
+        "claude",
+        "-p",
+        "--output-format",
+        "text",
+        "review this",
     ]
     assert routing.second_opinion_command(spec, "review this", model="opus") == [
-        "claude", "-p", "--output-format", "text", "--model", "opus", "review this",
+        "claude",
+        "-p",
+        "--output-format",
+        "text",
+        "--model",
+        "opus",
+        "review this",
     ]
 
 
@@ -310,8 +307,7 @@ def test_the_version_query_comes_from_the_same_owner():
         ("python3 hook.py; rm -rf /tmp/x", {POSIX_SHELL, "python3", "rm"}),
         ("FOO=1 python3 a.py || curl -s http://x", {POSIX_SHELL, "python3", "curl"}),
         ("python3 a.py & python3 b.py", {POSIX_SHELL, "python3"}),
-        ('cd "$(git rev-parse --show-toplevel)" && python3 bin/verify.py',
-         {POSIX_SHELL, "git", "python3"}),
+        ('cd "$(git rev-parse --show-toplevel)" && python3 bin/verify.py', {POSIX_SHELL, "git", "python3"}),
         ("if test -f x; then python3 a.py; fi", {POSIX_SHELL, "python3"}),
         # An operator inside a quoted argument is data, not a segment boundary.
         ('python3 hook.py --arg "a | b"', {POSIX_SHELL, "python3"}),
@@ -354,10 +350,15 @@ def test_a_binary_hidden_behind_a_pipe_is_one_undeclared_error(tmp_path):
 @pytest.mark.parametrize("required", [True, False])
 def test_a_registry_still_using_the_retired_keys_is_refused(required):
     """`cli`/`invoke` moved into the harness map; a stale config must fail, not fall back."""
-    stale = {"anthropic": {"second_opinion": {
-        "cli": "claude", "invoke": "claude -p --output-format text",
-        "report_dir": ".codex/second-opinion/",
-    }}}
+    stale = {
+        "anthropic": {
+            "second_opinion": {
+                "cli": "claude",
+                "invoke": "claude -p --output-format text",
+                "report_dir": ".codex/second-opinion/",
+            }
+        }
+    }
     with pytest.raises(KeyError):
         routing.second_opinion_spec(stale, "anthropic", required=required)
 
@@ -371,15 +372,30 @@ def test_an_upgraded_registry_under_a_stale_overlay_is_refused(required):
     check while carrying two contradictory statements of the same command — the exact shape a
     standalone-stale fixture cannot reach.
     """
-    shipped = {"anthropic": {"second_opinion": {
-        "harness": "claude", "operation": "review", "report_dir": ".codex/second-opinion/",
-    }}}
-    overlay = {"anthropic": {"second_opinion": {
-        "cli": "claude", "invoke": "claude -p --output-format text",
-    }}}
+    shipped = {
+        "anthropic": {
+            "second_opinion": {
+                "harness": "claude",
+                "operation": "review",
+                "report_dir": ".codex/second-opinion/",
+            }
+        }
+    }
+    overlay = {
+        "anthropic": {
+            "second_opinion": {
+                "cli": "claude",
+                "invoke": "claude -p --output-format text",
+            }
+        }
+    }
     merged = routing._deep_merge(shipped, overlay)
     assert set(merged["anthropic"]["second_opinion"]) == {
-        "harness", "operation", "report_dir", "cli", "invoke",
+        "harness",
+        "operation",
+        "report_dir",
+        "cli",
+        "invoke",
     }, "the merge keeps both, which is why presence checks alone cannot catch this"
     with pytest.raises(KeyError) as raised:
         routing.second_opinion_spec(merged, "anthropic", required=required)
@@ -388,9 +404,15 @@ def test_an_upgraded_registry_under_a_stale_overlay_is_refused(required):
 
 def test_a_clean_overlay_still_resolves_after_the_merge():
     """The negative boundary: an overlay that only overrides policy must keep working."""
-    shipped = {"anthropic": {"second_opinion": {
-        "harness": "claude", "operation": "review", "report_dir": ".codex/second-opinion/",
-    }}}
+    shipped = {
+        "anthropic": {
+            "second_opinion": {
+                "harness": "claude",
+                "operation": "review",
+                "report_dir": ".codex/second-opinion/",
+            }
+        }
+    }
     overlay = {"anthropic": {"second_opinion": {"report_dir": ".local/second-opinion/"}}}
     spec = routing.second_opinion_spec(routing._deep_merge(shipped, overlay), "anthropic")
     assert spec["report_dir"] == ".local/second-opinion/"
@@ -412,10 +434,10 @@ def test_no_shipped_registry_or_document_still_spells_the_retired_keys():
 @pytest.mark.parametrize(
     "command",
     [
-        "python3 `jq -r .x` a.py",         # a substitution syntax this parser does not read
-        'python3 "unbalanced',             # a token stream shlex cannot trust
-        "python3 $((1 + 2)).py",           # arithmetic, which is not a command substitution
-        "for f in *.py; do python3 \"$f\"; done",   # a word list, not a command list
+        "python3 `jq -r .x` a.py",  # a substitution syntax this parser does not read
+        'python3 "unbalanced',  # a token stream shlex cannot trust
+        "python3 $((1 + 2)).py",  # arithmetic, which is not a command substitution
+        'for f in *.py; do python3 "$f"; done',  # a word list, not a command list
         "case $x in a) python3 a.py;; esac",
     ],
 )
@@ -427,11 +449,11 @@ def test_a_command_the_parser_cannot_read_is_refused_rather_than_under_counted(c
 @pytest.mark.parametrize(
     "command",
     [
-        "env -i python3 a.py",             # -i is an option, not the command
-        "sudo -u root python3 a.py",       # -u takes its own argument
+        "env -i python3 a.py",  # -i is an option, not the command
+        "sudo -u root python3 a.py",  # -u takes its own argument
         "nice -n 10 python3 a.py",
         "xargs -n1 jq",
-        "timeout 5 python3 a.py",          # a mandatory positional before the command
+        "timeout 5 python3 a.py",  # a mandatory positional before the command
     ],
 )
 def test_a_wrapper_carrying_its_own_options_is_refused(command):
@@ -447,18 +469,18 @@ def test_a_wrapper_carrying_its_own_options_is_refused(command):
 @pytest.mark.parametrize(
     "command",
     [
-        "foo() { python3 a.py; }",         # a definition, not an invocation of `foo`
+        "foo() { python3 a.py; }",  # a definition, not an invocation of `foo`
         "foo () { python3 a.py; }",
-        "echo() { jq .; }",                # a function may be named after a builtin
+        "echo() { jq .; }",  # a function may be named after a builtin
         "printf() { git status; }",
-        "command() { jq .; }",             # or after a wrapper
+        "command() { jq .; }",  # or after a wrapper
         "nice() { jq .; }",
-        "(( x = 1 )) && python3 a.py",     # an arithmetic command; `x` is not a binary
-        "[[ -f a ]] && python3 a.py",      # a conditional with its own operand grammar
-        "[[ -f a && -f b ]] && python3 a.py",   # the inner `&&` restarted the segment walk
+        "(( x = 1 )) && python3 a.py",  # an arithmetic command; `x` is not a binary
+        "[[ -f a ]] && python3 a.py",  # a conditional with its own operand grammar
+        "[[ -f a && -f b ]] && python3 a.py",  # the inner `&&` restarted the segment walk
         "coproc python3 a.py",
-        "time python3 a.py",               # a keyword in some shells, a program in others
-        "nice time python3 a.py",          # and the ambiguity survives behind a wrapper
+        "time python3 a.py",  # a keyword in some shells, a program in others
+        "nice time python3 a.py",  # and the ambiguity survives behind a wrapper
     ],
 )
 def test_a_construct_with_a_grammar_of_its_own_is_refused(command):
@@ -476,8 +498,8 @@ def test_a_construct_with_a_grammar_of_its_own_is_refused(command):
 @pytest.mark.parametrize(
     "command, expected",
     [
-        ("( python3 a.py )", {"python3"}),          # grouping is still read
-        ('echo "a (( b" && python3 a.py', {"python3"}),   # refused tokens only when they are tokens
+        ("( python3 a.py )", {"python3"}),  # grouping is still read
+        ('echo "a (( b" && python3 a.py', {"python3"}),  # refused tokens only when they are tokens
         ('sh -c "x [[ y" && python3 a.py', {"sh", "python3"}),
     ],
 )
@@ -486,14 +508,13 @@ def test_the_refusals_do_not_swallow_the_supported_grammar(command, expected):
     assert runtime_checks._binaries_in_command(command) == {POSIX_SHELL, *expected}
 
 
-
 @pytest.mark.parametrize(
     "command, expected",
     [
         # quoting decides what a `$(` is: data inside single quotes, a substitution otherwise
         ("printf %s '$(jq .)'", set()),
         ('echo "$(git status)" && python3 a.py', {"git", "python3"}),
-        ("echo '`date`'", set()),                  # a backtick in single quotes is data too
+        ("echo '`date`'", set()),  # a backtick in single quotes is data too
         # nesting is counted, not cut at the first `)`
         ("echo $(jq -r .x $(git rev-parse --show-toplevel)/f.json)", {"jq", "git"}),
         ('echo $(printf %s ")") && python3 a.py', {"python3"}),
@@ -513,10 +534,10 @@ def test_a_substitution_is_read_with_quoting_and_nesting_honoured(command, expec
 @pytest.mark.parametrize(
     "command",
     [
-        "$RUNNER hook.py",                 # declared a binary literally named `$RUNNER`
+        "$RUNNER hook.py",  # declared a binary literally named `$RUNNER`
         '"$RUNNER" hook.py',
         "$HOME/bin/tool a.py",
-        "$(which python3) a.py",           # the substitution names the binary, not the string
+        "$(which python3) a.py",  # the substitution names the binary, not the string
         "echo $(unterminated",
     ],
 )
@@ -545,15 +566,14 @@ def test_a_refused_word_used_as_an_argument_is_not_a_construct(command, expected
     assert runtime_checks._binaries_in_command(command) == {POSIX_SHELL, *expected}
 
 
-
 @pytest.mark.parametrize(
     "command, expected",
     [
         ('python3 a.py "&&" evil.py', {"python3"}),
         ('python3 a.py ";" evil.py', {"python3"}),
         ("python3 a.py '|' evil.py", {"python3"}),
-        ('python3 "" evil.py', {"python3"}),        # an empty token is not an operator either
-        ("python3 a.py && jq .", {"python3", "jq"}),          # the real operator still splits
+        ('python3 "" evil.py', {"python3"}),  # an empty token is not an operator either
+        ("python3 a.py && jq .", {"python3", "jq"}),  # the real operator still splits
         ('echo "a && b" && python3 a.py', {"python3"}),
     ],
 )
@@ -570,7 +590,7 @@ def test_an_argument_that_is_exactly_an_operator_is_still_an_argument(command, e
     "command, expected",
     [
         ("python3 a.py\njq .", {"python3", "jq"}),
-        ('python3 -c "a\nb" && jq .', {"python3", "jq"}),    # a quoted newline is not a break
+        ('python3 -c "a\nb" && jq .', {"python3", "jq"}),  # a quoted newline is not a break
     ],
 )
 def test_a_newline_separates_two_commands(command, expected):
@@ -591,17 +611,17 @@ def test_a_here_document_is_refused_rather_than_swallowed():
     with pytest.raises(runtime_checks.UnparsedCommand):
         runtime_checks._binaries_in_command("sh <<EOF\njq .\nEOF")
     assert runtime_checks._binaries_in_command('python3 a.py <<< "text"') == {
-        POSIX_SHELL, "python3",
+        POSIX_SHELL,
+        "python3",
     }
-
 
 
 @pytest.mark.parametrize(
     "command, expected",
     [
-        ("python3 a.py#x && jq .", {"python3", "jq"}),   # `#` mid-word is a literal
+        ("python3 a.py#x && jq .", {"python3", "jq"}),  # `#` mid-word is a literal
         ("python3 a.py --tag '#1' && jq .", {"python3", "jq"}),
-        ("python3 a.py # note\njq .", {"python3", "jq"}),   # a comment ends at the newline
+        ("python3 a.py # note\njq .", {"python3", "jq"}),  # a comment ends at the newline
         ("python3 a.py --tag #1 && jq .", {"python3"}),  # word-initial: a real comment
     ],
 )
@@ -624,7 +644,6 @@ def test_the_tab_form_of_a_here_document_is_refused_too():
     """`<<-EOF` reaches the walk as `<<` + `-EOF`, so one entry covers both spellings."""
     with pytest.raises(runtime_checks.UnparsedCommand):
         runtime_checks._binaries_in_command("sh <<-EOF\njq .\nEOF")
-
 
 
 @pytest.mark.parametrize(
@@ -653,17 +672,18 @@ def test_grouping_survives_the_arithmetic_refusal():
     with pytest.raises(runtime_checks.UnparsedCommand):
         runtime_checks._binaries_in_command("(( x = 1 )) && python3 a.py")
     assert runtime_checks._binaries_in_command("( ( python3 a.py ) ) && jq .") == {
-        POSIX_SHELL, "python3", "jq",
+        POSIX_SHELL,
+        "python3",
+        "jq",
     }
-
 
 
 @pytest.mark.parametrize(
     "command",
     [
-        "python3 a.py --re x((y",          # declared a binary called `y`
-        "python3 foo(bar)",                # declared `bar`
-        "python3 ((x))",                   # declared `x`
+        "python3 a.py --re x((y",  # declared a binary called `y`
+        "python3 foo(bar)",  # declared `bar`
+        "python3 ((x))",  # declared `x`
     ],
 )
 def test_a_parenthesis_that_cannot_be_grouping_is_refused(command):
@@ -680,7 +700,7 @@ def test_a_parenthesis_that_cannot_be_grouping_is_refused(command):
 @pytest.mark.parametrize(
     "command, expected",
     [
-        ("2>&1 python3 a.py", {"python3"}),          # declared `2` and missed `python3`
+        ("2>&1 python3 a.py", {"python3"}),  # declared `2` and missed `python3`
         ("2> /dev/null python3 a.py", {"python3"}),
         (">log python3 a.py", {"python3"}),
         ("python3 a.py 2>&1 | jq .", {"python3", "jq"}),
@@ -689,7 +709,6 @@ def test_a_parenthesis_that_cannot_be_grouping_is_refused(command):
 def test_a_redirection_may_precede_the_command(command, expected):
     """A redirection prefix is valid shell, and its file-descriptor number is not a binary."""
     assert runtime_checks._binaries_in_command(command) == {POSIX_SHELL, *expected}
-
 
 
 @pytest.mark.parametrize(
@@ -708,10 +727,14 @@ def test_process_substitution_is_refused(command):
 
 def test_an_ordinary_redirection_is_not_a_process_substitution():
     assert runtime_checks._binaries_in_command("python3 a.py < in.txt && jq .") == {
-        POSIX_SHELL, "python3", "jq",
+        POSIX_SHELL,
+        "python3",
+        "jq",
     }
     assert runtime_checks._binaries_in_command('python3 a.py --re "<(x" && jq .') == {
-        POSIX_SHELL, "python3", "jq",
+        POSIX_SHELL,
+        "python3",
+        "jq",
     }
 
 

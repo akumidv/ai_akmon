@@ -19,10 +19,8 @@ answer that came from a measurement.
 
 **Two rules bind them.** An `ask` or `deny` effect requires every route coordinate and the crash
 posture to be measured — an enforcement claim over an unmeasured route is not a guarantee. And a
-claim that measures anything must cite; a claim that measures nothing must cite nothing. Two rows
-below — the Claude commit guard and delegation nudge — are the only exception: their crash
-posture is still unmeasured, pending C52's measurement campaign, so they carry a warning rather
-than an error, and no other claim may join them.
+claim that measures anything must cite; a claim that measures nothing must cite nothing. No claim
+is exempt from either rule.
 
 One row is one **claim**: one capability on one harness. A vendor with no measured or shipped
 claim has no row — absence here means akmon asserts nothing, not that the capability is missing.
@@ -91,7 +89,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=codex-cli; version=0.146.0; event=SessionStart; matcher=startup|resume|clear|compact
 - effect: none
 - crash-posture: fail-open
-- evidence: N2 (parent-only `hookSpecificOutput`, no SubagentStart dispatch) + N1/F4 run D — a killed hook is discarded and the action proceeds; delivery is additionally host-gated, see N7
+- evidence: N2 (parent-only `hookSpecificOutput`; akmon wires no `SubagentStart`, which dispatches on 0.153.4 — M62) + N1/F4 run D — a killed hook is discarded and the action proceeds; delivery is additionally host-gated, see N7; on 0.153.4 nothing produces `clear` — `/new` arrives as `startup` (M66); a hook that exits 1 is fail-open too, and Codex shows it `Failed` (M71)
 
 ### Commit guard — owner-owned commits at the tool boundary — Claude Code
 
@@ -99,8 +97,8 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - delivered: yes
 - route: vendor=claude-code; version=2.1.221; event=PreToolUse; matcher=Bash
 - effect: deny
-- crash-posture: unmeasured
-- evidence: `meta/tests/test_hook_core.py` deny contract + D2-11 e2e wrapper runs
+- crash-posture: fail-open
+- evidence: `meta/tests/test_hook_core.py` deny contract + D2-11 e2e wrapper runs; a crash is fail-open on 2.1.270 — the C87 guard answers it with exit 0 and an owner notice and the command runs (M69), and a hook that dies with exit 1 lets it run too (M70)
 
 ### Commit guard — owner-owned commits at the tool boundary — Codex CLI
 
@@ -109,7 +107,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=codex-cli; version=0.146.0; event=n/a; matcher=n/a
 - effect: none
 - crash-posture: unmeasured
-- evidence: akmon wires no D5 entry in `.codex/hooks.json`; the raw-harness deny N2 measured is not shipped support
+- evidence: akmon wires no D5 entry in `.codex/hooks.json`; the raw-harness deny N2 measured, and M59 again on the Bash route on 0.153.4, is not shipped support
 
 ### Delegation policy reaches the orchestrator — Claude Code
 
@@ -127,7 +125,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=codex-cli; version=0.146.0; event=SessionStart; matcher=startup|resume|clear|compact
 - effect: none
 - crash-posture: fail-open
-- evidence: N2 + `meta/self_ci.py` installed-wheel smoke asserts the phrase in the real hook payload; host-gated delivery per N7
+- evidence: N2 + `meta/self_ci.py` installed-wheel smoke asserts the phrase in the real hook payload; host-gated delivery per N7; on 0.153.4 nothing produces `clear` (M66); exit 1 is fail-open, shown `Failed` (M71)
 
 ### Delegation log and drift nudge — Claude Code
 
@@ -135,8 +133,8 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - delivered: yes
 - route: vendor=claude-code; version=2.1.221; event=PreToolUse; matcher=Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob
 - effect: ask
-- crash-posture: unmeasured
-- evidence: D2-8 live run (advisory and ask both dispatched) + D2-11 escalation tests
+- crash-posture: fail-open
+- evidence: D2-8 live run (advisory and ask both dispatched) + D2-11 escalation tests; a crash is fail-open on 2.1.270 on every tool the matcher names that exists — `Bash` (M69, M70), `Read`, `Edit`, `Write`, `Agent` (M77): the C87 guard's exit 0 with an owner notice and a bare exit 1 both let the call run
 
 ### Delegation log and drift nudge — Codex CLI
 
@@ -145,7 +143,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=codex-cli; version=0.146.0; event=n/a; matcher=n/a
 - effect: none
 - crash-posture: unmeasured
-- evidence: akmon wires no delegation entry for Codex; the subagent hook payload is unverified
+- evidence: akmon wires no delegation entry for Codex; the vendor route is measured on 0.153.4 (M62 — `collaborationspawn_agent`, `SubagentStart`/`SubagentStop`), but no payload contract is chosen
 
 ### Generic subagent launch — Claude Code
 
@@ -160,10 +158,10 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 
 - documented: yes
 - delivered: yes
-- route: vendor=codex-cli; version=0.144.1; event=n/a; matcher=n/a
+- route: vendor=codex-cli; version=0.153.4; event=n/a; matcher=n/a
 - effect: none
 - crash-posture: unmeasured
-- evidence: N2 probe inventory — live launch on 0.144.1
+- evidence: N2 probe inventory — live launch on 0.144.1; again on 0.153.4, with the `SubagentStart`/`SubagentStop` lifecycle (M62)
 
 ### Named `k_*` agents and child-model routing — Claude Code
 

@@ -11,10 +11,8 @@ Two rules bind the axes to each other:
 
 * an `ask` or `deny` effect requires every route coordinate and the crash posture to be
   **measured** — an enforcement claim over an unmeasured route is the exact thing this file
-  exists to stop. The two claims ``CRASH_POSTURE_EXEMPT`` names carry an unmeasured crash
-  posture as a **warn** instead (D2-29): their numbers come from C52's measurement campaign
-  behind the D2-23 gate, and holding C57 behind an unrelated campaign is what §7 forbids. The
-  warn still fails `--strict`, so the debt stays visible, and the list only shrinks;
+  exists to stop. No claim is exempt: the two D2-29 carried as a warn until their crash posture
+  was measured (C90/D2-47) now meet the rule like any other;
 * a **measured** row must cite evidence, and a row that measures nothing must cite none.
   Requiring a citation only in free prose is rejected: a pattern cannot tell evidence from
   decoration.
@@ -46,29 +44,27 @@ CRASH_POSTURES = ("fail-open", "fail-closed", "unmeasured")
 #: The explicit "no measurement stands behind this coordinate" value.
 UNMEASURED = "unmeasured"
 
-#: The only claims whose ``ask``/``deny`` may stand on an unmeasured crash posture, as a warn
-#: (D2-29): the two enforcement claims that existed when C57 landed, whose numbers are C52's
-#: campaign. The list only shrinks. Any other claim over an unmeasured crash posture is an error,
-#: and ``meta/tests/test_capabilities.py`` fails once a listed claim records a measured posture or
-#: no live claim carries a listed title — the exemption is removed by a test, not remembered.
-#: Entries are the claims' ``###`` titles in ``CAPABILITIES.md``, matched whole.
-CRASH_POSTURE_EXEMPT = (
-    "Commit guard — owner-owned commits at the tool boundary — Claude Code",
-    "Delegation log and drift nudge — Claude Code",
-)
-
 # --- the bare-claim scan -------------------------------------------------------------------
 #
 # Shipped documentation only. `meta/` is maintainer material, and `guardrails/` runtime prose is
 # C53's F7/F8 surface — scanning it here would make two owners for one rule.
-_SHIPPED_DOC_GLOBS = ("*.md", "roles/*.md", "pipelines/*.md", "profiles/*.md",
-                      "skills/**/*.md", "tools/**/*.md", "examples/*.md")
+_SHIPPED_DOC_GLOBS = (
+    "*.md",
+    "roles/*.md",
+    "pipelines/*.md",
+    "profiles/*.md",
+    "skills/**/*.md",
+    "tools/**/*.md",
+    "examples/*.md",
+)
 
 _FORBIDDEN_CLAIM_RE = re.compile(r"\benforced\b|\benforces\b|✅|⚠️")
 # Vendors are matched as **proper nouns**, case-sensitively: a lowercase `claude` inside
 # `.claude/skills/` is a filesystem location, not a claim about a vendor's behaviour.
-_VENDOR_RE = re.compile(r"\bClaude(?: Code)?\b|\bCodex(?: CLI)?\b|\bGemini\b|\bCopilot\b"
-                        r"|\bAnthropic\b|\bOpenAI\b")
+_VENDOR_RE = re.compile(
+    r"\bClaude(?: Code)?\b|\bCodex(?: CLI)?\b|\bGemini\b|\bCopilot\b"
+    r"|\bAnthropic\b|\bOpenAI\b"
+)
 _HARNESS_EVENT_RE = re.compile(
     r"\bSessionStart\b|\bSubagentStart\b|\bSubagentStop\b|\bPreToolUse\b|\bPostToolUse\b"
     r"|\bUserPromptSubmit\b|\bPreCompact\b|\bNotification\b|\bStop\b"
@@ -76,9 +72,7 @@ _HARNESS_EVENT_RE = re.compile(
 # The one allowance the lock names: a threshold attributed to akmon's own in-process checker
 # stays valid prose. Attribution must be adjacent to the claim, not merely somewhere in the
 # block, or any page that mentions `sync.py` would buy itself an exemption.
-_OWN_CHECKER_RE = re.compile(
-    r"(?:enforced|enforces)[^.\n]{0,40}?`?(?:verify|sync|self_ci|validate)\.py`?"
-)
+_OWN_CHECKER_RE = re.compile(r"(?:enforced|enforces)[^.\n]{0,40}?`?(?:verify|sync|self_ci|validate)\.py`?")
 
 
 def _blocks(text: str) -> list[tuple[int, str]]:
@@ -137,7 +131,7 @@ def check_bare_claims(root: Path) -> list[Finding]:
             span = _region_span(text)
             if span is not None:
                 # The marked region is where these claims belong; only the rest is scanned.
-                text = text[: span[0]] + "\n" * text[span[0]: span[1]].count("\n") + text[span[1]:]
+                text = text[: span[0]] + "\n" * text[span[0] : span[1]].count("\n") + text[span[1] :]
         for line, block in _blocks(text):
             claim = _FORBIDDEN_CLAIM_RE.search(block)
             if not claim:
@@ -150,11 +144,9 @@ def check_bare_claims(root: Path) -> list[Finding]:
                 Finding(
                     "error",
                     "matrix.bare-claim",
-                    f"claims {claim.group()!r} beside a vendor or harness event outside the "
-                    f"marked matrix region",
+                    f"claims {claim.group()!r} beside a vendor or harness event outside the marked matrix region",
                     f"{relative}:{line}",
-                    f"Move this claim into the {MATRIX_FILE} matrix, or qualify it there and "
-                    f"drop the bare claim here.",
+                    f"Move this claim into the {MATRIX_FILE} matrix, or qualify it there and drop the bare claim here.",
                 )
             )
     return findings
@@ -233,8 +225,10 @@ def check_matrix(root: Path) -> list[Finding]:
     if not path.is_file():
         return [
             Finding(
-                "error", "matrix.missing-file",
-                f"top-level {MATRIX_FILE} is missing", target,
+                "error",
+                "matrix.missing-file",
+                f"top-level {MATRIX_FILE} is missing",
+                target,
                 f"Create {MATRIX_FILE} with one marked capability-matrix region.",
             )
         ]
@@ -243,8 +237,10 @@ def check_matrix(root: Path) -> list[Finding]:
     if span is None:
         return [
             Finding(
-                "error", "matrix.missing-file",
-                f"{MATRIX_FILE} carries no marked capability-matrix region", target,
+                "error",
+                "matrix.missing-file",
+                f"{MATRIX_FILE} carries no marked capability-matrix region",
+                target,
                 f"Wrap the matrix in {REGION_BEGIN} and {REGION_END}.",
             )
         ]
@@ -254,8 +250,10 @@ def check_matrix(root: Path) -> list[Finding]:
     if not rows:
         return [
             Finding(
-                "error", "matrix.missing-file",
-                f"the marked region in {MATRIX_FILE} carries no capability claim", target,
+                "error",
+                "matrix.missing-file",
+                f"the marked region in {MATRIX_FILE} carries no capability claim",
+                target,
                 "Add the capability claims back to the region, or drop the region entirely "
                 "rather than leaving an empty one that reads as a checked matrix.",
             )
@@ -264,10 +262,11 @@ def check_matrix(root: Path) -> list[Finding]:
     for number, line in stray:
         findings.append(
             Finding(
-                "error", "matrix.invalid-value",
-                f"line is outside the claim grammar: {line[:60]!r}", f"{target}:{number}",
-                "Inside the marked region write only '### <claim>' headings and their "
-                "'- <axis>: <value>' lines.",
+                "error",
+                "matrix.invalid-value",
+                f"line is outside the claim grammar: {line[:60]!r}",
+                f"{target}:{number}",
+                "Inside the marked region write only '### <claim>' headings and their '- <axis>: <value>' lines.",
             )
         )
     for row in rows:
@@ -285,8 +284,10 @@ def _check_row(row: dict, target: str) -> list[Finding]:
         if axis not in axes:
             findings.append(
                 Finding(
-                    "error", "matrix.missing-axis",
-                    f"{title}: axis {axis!r} is absent", where,
+                    "error",
+                    "matrix.missing-axis",
+                    f"{title}: axis {axis!r} is absent",
+                    where,
                     f"Add a '- {axis}:' line to this claim.",
                 )
             )
@@ -296,8 +297,10 @@ def _check_row(row: dict, target: str) -> list[Finding]:
             if coordinate not in route:
                 findings.append(
                     Finding(
-                        "error", "matrix.missing-axis",
-                        f"{title}: route coordinate {coordinate!r} is absent", where,
+                        "error",
+                        "matrix.missing-axis",
+                        f"{title}: route coordinate {coordinate!r} is absent",
+                        where,
                         f"Add {coordinate}=<value> to this claim's route.",
                     )
                 )
@@ -305,8 +308,10 @@ def _check_row(row: dict, target: str) -> list[Finding]:
     if effect is not None and effect not in EFFECTS:
         findings.append(
             Finding(
-                "error", "matrix.invalid-value",
-                f"{title}: effect {effect!r} is outside {' | '.join(EFFECTS)}", where,
+                "error",
+                "matrix.invalid-value",
+                f"{title}: effect {effect!r} is outside {' | '.join(EFFECTS)}",
+                where,
                 f"Set effect to one of {' | '.join(EFFECTS)}.",
             )
         )
@@ -314,9 +319,11 @@ def _check_row(row: dict, target: str) -> list[Finding]:
     if posture is not None and posture not in CRASH_POSTURES:
         findings.append(
             Finding(
-                "error", "matrix.invalid-value",
+                "error",
+                "matrix.invalid-value",
                 f"{title}: crash-posture {posture!r} is outside {' | '.join(CRASH_POSTURES)}",
-                where, f"Set crash-posture to one of {' | '.join(CRASH_POSTURES)}.",
+                where,
+                f"Set crash-posture to one of {' | '.join(CRASH_POSTURES)}.",
             )
         )
     # A rule that reads an absent axis would report the same defect twice: the missing axis is
@@ -328,26 +335,21 @@ def _check_row(row: dict, target: str) -> list[Finding]:
             if route.get(name) == UNMEASURED:
                 findings.append(
                     Finding(
-                        "error", "matrix.unqualified-effect",
+                        "error",
+                        "matrix.unqualified-effect",
                         f"{title}: effect {effect!r} claimed while {name!r} is {UNMEASURED}",
                         where,
                         f"Measure {name} before claiming {effect}, or lower the effect.",
                     )
                 )
         if posture == UNMEASURED:
-            # An error like any unmeasured coordinate, except on the claims the owner exempted by
-            # name (D2-29): those two predate C52's measurement campaign, and §7 forbids holding
-            # C57 behind it. The exemption is a warn, not silence, so `--strict` keeps the debt
-            # failing somewhere; a future claim cannot join it without editing the list.
-            exempt = title in CRASH_POSTURE_EXEMPT
             findings.append(
                 Finding(
-                    "warn" if exempt else "error", "matrix.unqualified-effect",
+                    "error",
+                    "matrix.unqualified-effect",
                     f"{title}: effect {effect!r} claimed while 'crash-posture' is {UNMEASURED}",
                     where,
-                    f"Record the measured crash posture from C52 before relying on {effect}."
-                    if exempt
-                    else f"Measure the crash posture before claiming {effect}, or lower the effect.",
+                    f"Measure the crash posture before claiming {effect}, or lower the effect.",
                 )
             )
     if complete:
@@ -356,16 +358,20 @@ def _check_row(row: dict, target: str) -> list[Finding]:
         if measured and not evidence:
             findings.append(
                 Finding(
-                    "error", "matrix.uncited-claim",
-                    f"{title}: measured claim carries no evidence", where,
+                    "error",
+                    "matrix.uncited-claim",
+                    f"{title}: measured claim carries no evidence",
+                    where,
                     "Cite the probe or report behind this measurement.",
                 )
             )
         elif not measured and evidence:
             findings.append(
                 Finding(
-                    "error", "matrix.uncited-claim",
-                    f"{title}: nothing is measured, yet evidence is cited", where,
+                    "error",
+                    "matrix.uncited-claim",
+                    f"{title}: nothing is measured, yet evidence is cited",
+                    where,
                     "Drop the citation, or record the measurement it belongs to.",
                 )
             )

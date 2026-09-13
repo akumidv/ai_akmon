@@ -105,8 +105,8 @@ Consequences inside the tools (C37 scope):
 
 - **Standard-tree resolution decouples from the mount:** tree root = `<AITNA_ROOT>/akmon`
   when it exists, else the installed package's embedded tree (`importlib.resources`).
-  Project-root discovery accepts `AGENTS.md` + `<AITNA_ROOT>/.akmon.toml` (today
-  `bin/sync.py::_find_project_root` requires the mount to exist).
+  Project-root discovery accepts `AGENTS.md` + `<AITNA_ROOT>/.akmon.toml` as well as the
+  mount (`common/project_root.py::is_project_root`).
 - **Hook wiring becomes mode-aware:** `python3 "<anchor>/{aitna}/akmon/hooks/<hook>.py"`
   (mounted) vs `"<anchor>/.venv/bin/akmon" hook <hook>` (package). Entry recognition covers
   every spelling the generator has emitted, including the retired materialized one, so
@@ -186,10 +186,11 @@ a submodule" let a `vendored → submodule` switch finish green with no `.gitmod
   declaration* is *the mount (ADR 0009 §4): without it no `akmon` command resolves in the
   project and the CI workflow `init` just wrote cannot run. `init` cannot write the pin — it
   cannot know every manifest dialect — so it says so in the exit code and prints the line.
-  The same classifier (`bin/sync.py::package_pin_status`, one owner shared with `verify`) reads
-  every declaration and reports the worst: a runtime dependency or an extra is the wrong class,
-  a `[tool.uv.sources]` entry is a source override rather than a declaration, and prose is not
-  a pin. `verify --strict` keeps the check alive past the attach, for projects that have a
+  The same classifier (`bin/sync.py::package_pin_status`, one owner shared with `verify`) parses
+  the manifest as TOML, reads every declaration and reports the worst: a runtime dependency or
+  an extra is the wrong class, a `[tool.uv.sources]` entry is a source override rather than a
+  declaration, and prose is not a pin; a manifest that does not parse is reported as such, not
+  as a missing pin. `verify --strict` keeps the check alive past the attach, for projects that have a
   `pyproject.toml` at all.*
 - ***The dev-layer root is validated wherever it comes from.** `--aitna-root` and `AITNA_ROOT`
   are one contract — the flag's whole effect is to set the variable — so both are refused when

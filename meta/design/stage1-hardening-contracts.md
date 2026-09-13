@@ -261,7 +261,7 @@ to this document and its ledger row:
   present, an unknown version warns and stamps the generated banner rather than failing, and the
   mechanism is seeded against its **root cause**, a second owner naming vendor tools outside the
   map. Both shapes are observed **red before green**: neither `README.md:200` nor
-  `routing.py:364`/`:470`/`:503` is repaired ahead of its task. **"Completed" was true of the
+  `routing.py:362`/`:470`/`:503` is repaired ahead of its task. **"Completed" was true of the
   paragraph each section lacked and false of its rule set**: the architect pass over D2-20's clause
   (d) found rules with no seed in all three sections named here and in six more. They are closed in
   the sections themselves and recorded in A17(g); the wording stands with its correction rather
@@ -455,7 +455,7 @@ values with contract tests. This keeps serialization beside the shared envelope 
 absence of `level` testable. C51 does not add `--json` to `verify.py`, `sync --check`,
 `meta/bin/validate.py`, or `self_ci`; C59 introduces the public JSON rendering when `akmon status`
 becomes its first process-boundary consumer. Text rendering **changes**, and C51 owns the change:
-`verify.py` prints `[{level}] {message}` today (`bin/verify.py:690`), while the canonical form
+`verify.py` prints `[{level}] {message}` today (`bin/verify.py:691`), while the canonical form
 this envelope introduces is `SEVERITY code target: message → fix`, one canonical stdout line per finding. It is
 recorded as a change rather than a continuation because the audit at A17(g) found the word
 *remains* describing a form the tree does not print — every adopter's text output moves in the
@@ -598,6 +598,11 @@ crash/nonzero-exit case; (2) a regression test pinned to that payload and observ
 files by hand. Until all three exist, crash-open remains the contract. This accepts one missed
 deny on an akmon crash in exchange for not allowing an unmeasured hook failure to brick every
 commit in a consumer repository.
+
+> **Amended by C87 / D2-45** ([ADR 0013](../decisions/0013-hook-survivability-and-crash-posture.md),
+> amendment): the guard in item 3 lands in C87 ahead of C52. A Claude entry also writes the
+> owner's `systemMessage` notice, and the Codex entry exits 1 rather than 0, so Codex shows the
+> hook `Failed` (M68–M71).
 
 **Owner choice F4 — C: probe-gated Codex timeout.** Terminal N1 evidence is a
 prerequisite to C52 as a whole; C52 is not partially runnable before it. The evidence artifact
@@ -1398,7 +1403,9 @@ documented/delivered conflation this matrix exists to break, and a pre-payment o
 measuring inside C57, which absorbs the campaign the lock detached it from; and lowering the two
 effects, which is false in the other direction on the normal path. When C52 lands the
 measurement, the two rows record it, the carrier goes red, and deleting the two list entries
-restores the unexempted rule.
+restores the unexempted rule. *(Expired in C90 / D2-47: the measurement came from the C87 guard
+and a probe — M69, M70, M77 — not from C52; both rows record `fail-open`, and the list went with
+its last two entries.)*
 
 **Post-implementation review corrections (N-review of C57).** Three defects in the delivered
 checker, fixed inside C57 rather than deferred, because each one made a rule unenforceable:
@@ -1617,9 +1624,9 @@ Fixtures isolate every rule:
 - an otherwise complete `ask` or `deny` cell keeps every axis and route coordinate present but sets,
   one at a time, each **route coordinate** explicitly to `unmeasured`; every case emits exactly one
   `error matrix.unqualified-effect`. Setting the **crash posture** to `unmeasured` emits exactly one
-  `error` of the same code, except on the two claims D2-29 exempts by name, where it is exactly one
-  **`warn`** that keeps the non-strict exit at zero; a separate carrier fails once an exempt claim
-  records a measured posture while still listed, or when a listed title names no live claim. Deletion is never this code: it is `matrix.missing-axis` as above;
+  `error` of the same code on every claim: the D2-29 exemption of two claims by name expired in
+  C90 (D2-47), once both recorded a measured posture, and a live-tree carrier fails if a shipped
+  `ask`/`deny` claim stands on an unmeasured crash posture again. Deletion is never this code: it is `matrix.missing-axis` as above;
 - a measured assertion with empty evidence and an `unmeasured` assertion with non-empty evidence
   are separate mutations, each emitting exactly one `error matrix.uncited-claim`;
 - parameterized fixtures place each of `enforced`, `enforces`, `✅` and `⚠️` beside each vendor and
@@ -1720,7 +1727,7 @@ duplicates, or changing the stated exit behavior fails.
   `sync --check` and exits 1;
 - emits `Grep` against the Claude 2.1.221 inventory; each caller emits exactly one
   `error harness.unknown-name` and exits 1. This is C46's own live red-before-green transition:
-  `routing.py:364`/`:470`/`:503` remain unchanged until C46 first observes them red, then the same
+  `routing.py:362`/`:470`/`:503` remain unchanged until C46 first observes them red, then the same
   checker passes after conversion. It is not an application of F9, which belongs only to C54;
 - removes a vendor mapping for each neutral capability in turn; every case emits the selected shell
   name plus exactly one `warn harness.capability-degraded`, names the widened boundary and exits 0.

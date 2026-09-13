@@ -110,9 +110,13 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "common/findings.py",
         "common/materialization.py",
         "common/project_root.py",
+        "common/python_rule_checks.py",
+        "common/python_rules.py",
         "common/record.py",
         "common/runtime.py",
         "common/versions.py",
+        "profiles/python.rules.toml",
+        "bin/check.py",
         "bin/sync.py",
         "bin/verify.py",
         "hooks/hook_core.py",
@@ -250,8 +254,7 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[st
     # `verify --strict` keeps reporting it, so the fixture has to look like a real consumer.
     _write(
         fixture / "pyproject.toml",
-        '[project]\nname = "package-consumer"\nversion = "0.1.0"\n\n'
-        '[dependency-groups]\ndev = ["akmon"]\n',
+        '[project]\nname = "package-consumer"\nversion = "0.1.0"\n\n[dependency-groups]\ndev = ["akmon"]\n',
     )
     # Through ``_checked`` rather than a bare ``check=True``: CalledProcessError names only the
     # command and the exit status, and this leg's most common failure — the pin lookup below —
@@ -269,9 +272,7 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[st
     # the hooks out of the wheel. Assert the absence, or the next regression re-adds the copies
     # and every check below still passes.
     materialized = sorted(
-        path.relative_to(fixture).as_posix()
-        for path in (fixture / "_aitna" / ".akmon").rglob("*")
-        if path.is_file()
+        path.relative_to(fixture).as_posix() for path in (fixture / "_aitna" / ".akmon").rglob("*") if path.is_file()
     )
     if materialized != ["_aitna/.akmon/guardrails/_common.md"]:
         raise RuntimeError(f"package mode materialized more than the imported guardrails: {materialized}")
@@ -399,9 +400,10 @@ def _wheel_smoke_report(detail: str) -> tuple[str, str]:
 
 def _run(akmon_root: Path) -> list[Finding]:
     findings: list[Finding] = []
-    with tempfile.TemporaryDirectory(prefix="akmon-self-ci-") as tmp, tempfile.TemporaryDirectory(
-        prefix="akmon-self-ci-path-"
-    ) as path_scratch:
+    with (
+        tempfile.TemporaryDirectory(prefix="akmon-self-ci-") as tmp,
+        tempfile.TemporaryDirectory(prefix="akmon-self-ci-path-") as path_scratch,
+    ):
         fixture = Path(tmp)
         # Outside the fixture: the shadow PATH directories are not part of the consumer tree.
         verify_env = _codex_free_env(Path(path_scratch))
@@ -411,31 +413,35 @@ def _run(akmon_root: Path) -> list[Finding]:
         verify_py = str(mounted_bin / "verify.py")
         # Ordered and short-circuiting: a fixture that will not sync tells us nothing about
         # what `verify` would have said, so the first red leg is the whole answer.
-        healthy = _leg(
-            findings,
-            "fixture sync",
-            [sys.executable, sync_py, "--project-root", str(fixture)],
-            code="selfci.fixture-sync",
-            ok_fix="Keep fixture sync able to materialize every generated artifact.",
-            error_fix="Run python3 meta/self_ci.py and fix the sync failure it reports.",
-        ) and _leg(
-            findings,
-            "fixture sync --check",
-            [sys.executable, sync_py, "--project-root", str(fixture), "--check"],
-            code="selfci.fixture-sync-check",
-            ok_fix="Keep sync idempotent so a second run reports no drift.",
-            error_fix="Make sync idempotent so a second run reports no drift.",
-        ) and _leg(
-            findings,
-            "fixture verify --strict",
-            [sys.executable, verify_py, "--project-root", str(fixture), "--strict", "--quiet"],
-            code="selfci.fixture-verify",
-            ok_fix="Keep the synthetic consumer compliant with the USE contract.",
-            error_fix="Fix the USE-contract finding the fixture verify reports.",
-            # This synthetic fixture never runs the live Codex `/hooks` owner-approval flow C70
-            # checks for; Codex is hidden from PATH so the check takes its absent-install skip
-            # (see the matching note on the wheel smoke).
-            env=verify_env,
+        healthy = (
+            _leg(
+                findings,
+                "fixture sync",
+                [sys.executable, sync_py, "--project-root", str(fixture)],
+                code="selfci.fixture-sync",
+                ok_fix="Keep fixture sync able to materialize every generated artifact.",
+                error_fix="Run python3 meta/self_ci.py and fix the sync failure it reports.",
+            )
+            and _leg(
+                findings,
+                "fixture sync --check",
+                [sys.executable, sync_py, "--project-root", str(fixture), "--check"],
+                code="selfci.fixture-sync-check",
+                ok_fix="Keep sync idempotent so a second run reports no drift.",
+                error_fix="Make sync idempotent so a second run reports no drift.",
+            )
+            and _leg(
+                findings,
+                "fixture verify --strict",
+                [sys.executable, verify_py, "--project-root", str(fixture), "--strict", "--quiet"],
+                code="selfci.fixture-verify",
+                ok_fix="Keep the synthetic consumer compliant with the USE contract.",
+                error_fix="Fix the USE-contract finding the fixture verify reports.",
+                # This synthetic fixture never runs the live Codex `/hooks` owner-approval flow C70
+                # checks for; Codex is hidden from PATH so the check takes its absent-install skip
+                # (see the matching note on the wheel smoke).
+                env=verify_env,
+            )
         )
         if not healthy:
             return findings

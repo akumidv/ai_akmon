@@ -8,22 +8,23 @@ can keep pointing here.
 
 from __future__ import annotations
 
-from claude_adapter import load_payload, normalize_tool, print_result, project_root
-from hook_core import analysis_write_result
+from claude_adapter import load_payload, normalize_tool, project_root, run_guarded
+from hook_core import HookResult, analysis_write_result
+
+
+def _decide() -> HookResult | None:
+    payload = load_payload()
+    tool_input = payload.get("tool_input") or {}
+    return analysis_write_result(
+        tool_name=normalize_tool(str(payload.get("tool_name") or "")),
+        file_path=tool_input.get("file_path"),
+        session_id=str(payload.get("session_id") or "nosession"),
+        project_root=project_root(payload),
+    )
 
 
 def main() -> int:
-    payload = load_payload()
-    tool_input = payload.get("tool_input") or {}
-    print_result(
-        analysis_write_result(
-            tool_name=normalize_tool(str(payload.get("tool_name") or "")),
-            file_path=tool_input.get("file_path"),
-            session_id=str(payload.get("session_id") or "nosession"),
-            project_root=project_root(payload),
-        )
-    )
-    return 0
+    return run_guarded("analysis-guard", _decide)
 
 
 if __name__ == "__main__":

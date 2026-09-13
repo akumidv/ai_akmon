@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common.findings import Finding, line_safe, print_findings  # noqa: E402
 from common.materialization import (  # noqa: E402
     GENERATED_MARKER,
+    IMPORTED_DIRS,
     generated_banner,
     materialized_markdown,
 )
@@ -81,100 +82,106 @@ def is_package_mode(project_root: Path) -> bool:
     return read_mount_mode(project_root) == "package"
 
 
-# A requirement *naming* akmon: the quoted PEP 508 form (`"akmon @ git+..."`, `"akmon==0.4.0"`)
-# anywhere in a value. `(?![\w.-])` rather than `\b` so a different distribution whose name merely
-# starts with it (`akmon-plugin`) is not read as the pin. The poetry/pdm table form
-# (`akmon = { git = ... }`) is recognised by its key instead, in ``package_pin_status``.
-_AKMON_REQUIREMENT_RE = re.compile(r"""["']\s*akmon(?![\w.-])""", re.IGNORECASE)
-
-# Sections that declare a *runtime* dependency — one that reaches the consumer's own users.
-# `optional-dependencies` (PEP 621 extras) counts: an extra ships with the distribution.
-_RUNTIME_SECTIONS = ("project", "tool.poetry")
-# Sections that say *where a package comes from*, never *that it is required*: a lockfile-ish
-# source override naming akmon is not a declaration, and reading it as one was how a manifest
-# with no akmon dependency at all classified as pinned.
-_SOURCE_SECTIONS = ("tool.uv.sources", "tool.poetry.source", "tool.pdm.source")
+# A requirement string *naming* akmon. PEP 508 puts the distribution name first, so it is matched
+# at the start: `akmon @ git+...`, `akmon==0.4.0`, `akmon[all]>=0.4; python_version >= '3.11'`.
+# `(?![\w.-])` rather than `\b` so a different distribution whose name merely starts with it
+# (`akmon-plugin`) is not read as the pin. The poetry table form (`akmon = { git = ... }`) names
+# the distribution by its key instead — ``_keys_akmon``.
+_AKMON_REQUIREMENT_RE = re.compile(r"\s*akmon(?![\w.-])", re.IGNORECASE)
 
 
-def _is_dev_dependency_section(section: str, key: str) -> bool:
-    """Whether ``section`` is a supported dev-dependency declaration table."""
-    return (
-        section == "dependency-groups"
-        or (section == "tool.uv" and key == "dev-dependencies")
-        or section == "tool.pdm.dev-dependencies"
-        or (section.startswith("tool.poetry.group.") and section.endswith(".dependencies"))
-    )
+def _read_manifest(project_root: Path) -> dict | None:
+    """The consumer's ``pyproject.toml`` parsed as TOML: ``{}`` when there is none, ``None`` when
+    it does not parse.
 
-
-def manifest_lines(project_root: Path):
-    """``pyproject.toml`` as ``(section, key, line)`` triples, comments stripped.
-
-    A deliberate line scan rather than a full TOML parse: it reads just enough structure to tell
-    *where* a requirement sits — the section header, and the key whose (possibly multi-line)
-    array is still open — without adding a runtime dependency (ADR 0009 §1).
+    A parse, not a line scan. One requirement per array line is what ``uv add --dev`` and
+    formatters write, and the scan this replaced split every line at its first ``=``: it read
+    ``"akmon==0.4.0",`` as a key named ``"akmon``, so the ordinary versioned pin classified as no
+    pin at all, and inline-table and dotted-key spellings were never read. ``tomllib`` is stdlib
+    on the 3.11 floor (ADR 0009, C68 amendment), so the parse adds no dependency. A file that
+    does not parse is reported rather than read leniently: uv cannot read it either, and "no
+    pin" would name the wrong cause.
     """
     manifest = project_root / "pyproject.toml"
     if not manifest.is_file():
-        return
-    section = ""
-    key = ""
-    for raw in manifest.read_text(encoding="utf-8").splitlines():
-        line = _strip_inline_comment(raw).strip()
-        if not line:
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            section, key = line[1:-1].strip(), ""
-            continue
-        name, sep, value = line.partition("=")
-        if sep:
-            key = name.strip()
-            yield section, key, value.strip()
-            if not value.strip().startswith("["):
-                key = ""
-            continue
-        yield section, key, line
-        if line.endswith("]"):
-            key = ""
+        return {}
+    import tomllib
+
+    try:
+        with manifest.open("rb") as handle:
+            return tomllib.load(handle)
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return None
+
+
+def _table(value: object, *keys: str) -> dict:
+    """``value[keys[0]][keys[1]]…`` when every step is a table, else ``{}`` — a manifest that
+    parses can still hold a string where a table belongs."""
+    for key in keys:
+        value = value.get(key) if isinstance(value, dict) else None
+    return value if isinstance(value, dict) else {}
+
+
+def _names_akmon(declaration: object) -> bool:
+    """Whether a requirement array — or a table of them (extras, PEP 735 groups, pdm dev groups) —
+    holds an entry naming akmon. A PEP 735 ``{include-group = ...}`` entry is not a requirement;
+    the group it names is read in its own right."""
+    groups = declaration.values() if isinstance(declaration, dict) else [declaration]
+    return any(
+        isinstance(requirement, str) and _AKMON_REQUIREMENT_RE.match(requirement)
+        for group in groups
+        if isinstance(group, list)
+        for requirement in group
+    )
+
+
+def _keys_akmon(table: object) -> bool:
+    """Whether a poetry dependency table has akmon as a key (``akmon = "^0.4"``)."""
+    return isinstance(table, dict) and any(str(key).casefold() == "akmon" for key in table)
 
 
 def package_pin_status(project_root: Path) -> str:
-    """How the consumer's manifest pins akmon: ``"dev"``, ``"runtime"`` or ``"none"``.
+    """How the consumer's manifest pins akmon: ``"dev"``, ``"runtime"``, ``"none"`` or
+    ``"unreadable"``.
 
     Mode ``package`` mounts no tree: the pin *is* the consumer's dependency declaration, and
     ADR 0009 §4 locks which class it may be — a **dev** group, never a runtime dependency and
     never an extra, because akmon is dev tooling and must not reach the consumer's own users.
-    So this reports three answers, not two: a pin in the wrong class is a finding, not a pass.
+    So a pin in the wrong class is a finding, not a pass, and so is a manifest that does not
+    parse (``_read_manifest``).
 
-    Every declaration is scanned and the **worst** answer wins — stopping at the first match
-    let a correct dev pin hide a runtime one declared further down the same file. A bare
-    mention in prose or a comment is not a pin, and neither is a `[tool.uv.sources]` entry:
-    both used to read as "declared", which let a package-mode attach finish green over a
-    project where ``uv run akmon`` cannot resolve at all.
+    Every declaration is read and the **worst** answer wins — stopping at the first match let a
+    correct dev pin hide a runtime one declared further down the same file. Only declarations
+    count: a mention in prose or a comment is not a pin, and neither is a ``[tool.uv.sources]``
+    entry, which says where a package comes from, not that it is required. Both used to read as
+    "declared", which let a package-mode attach finish green over a project where
+    ``uv run akmon`` cannot resolve at all.
 
     Shared by ``akmon init`` (which reports it as a next step) and ``verify.py`` (which gates
     on it) so the two cannot disagree about what a valid pin looks like.
     """
-    status = "none"
-    for section, key, line in manifest_lines(project_root):
-        distribution_key = key.casefold() == "akmon"
-        requirement_value = bool(_AKMON_REQUIREMENT_RE.search(line))
-        if not (requirement_value or distribution_key):
-            continue
-        if section in _SOURCE_SECTIONS or section.endswith(".sources"):
-            continue
-        runtime = (
-            # `[project] dependencies = [...]` / `[tool.poetry] dependencies = [...]`
-            (section in _RUNTIME_SECTIONS and key == "dependencies")
-            # poetry's runtime table: `[tool.poetry.dependencies]`, one key per package
-            or (section == "tool.poetry.dependencies" and distribution_key)
-            # an extra ships to the consumer's users too — ADR 0009 §4 rules it out with the rest
-            or section.endswith("optional-dependencies")
-        )
-        if runtime:
-            return "runtime"
-        if _is_dev_dependency_section(section, key):
-            status = "dev"
-    return status
+    manifest = _read_manifest(project_root)
+    if manifest is None:
+        return "unreadable"
+    project, tool = _table(manifest, "project"), _table(manifest, "tool")
+    poetry = _table(tool, "poetry")
+    if (
+        _names_akmon(project.get("dependencies"))
+        # an extra ships to the consumer's users too — ADR 0009 §4 rules it out with the rest
+        or _names_akmon(project.get("optional-dependencies"))
+        # poetry's runtime table, one key per package
+        or _keys_akmon(poetry.get("dependencies"))
+    ):
+        return "runtime"
+    if (
+        _names_akmon(manifest.get("dependency-groups"))  # PEP 735
+        or _names_akmon(_table(tool, "uv").get("dev-dependencies"))  # uv's pre-PEP 735 list
+        or _names_akmon(_table(tool, "pdm").get("dev-dependencies"))
+        or _keys_akmon(poetry.get("dev-dependencies"))  # poetry before dependency groups
+        or any(_keys_akmon(_table(group, "dependencies")) for group in _table(poetry, "group").values())
+    ):
+        return "dev"
+    return "none"
 
 
 def standard_tree_root(project_root: Path) -> Path:
@@ -593,8 +600,8 @@ def _skill_stubs(root: Path, source: Path) -> list[PlannedFile]:
 
 
 # Fenced blocks first, then inline code spans: the akmon block in AGENTS.md *documents* the
-# guardrail import as well as making it ("add this project's language guardrail on its own
-# line (e.g. `@_aitna/.akmon/guardrails/python.md`)"), and read literally the example is
+# import as well as making it ("import this project's language profile on its own line
+# (e.g. `@_aitna/.akmon/profiles/python.md`)"), and read literally the example is
 # indistinguishable from the real thing. Code spans are exactly where prose quotes a path it
 # does not mean, so stripping them separates the two without requiring a real import to sit in
 # any particular column.
@@ -604,34 +611,60 @@ _INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 # The common guardrail is materialized whether or not the scan finds its import: it is the
 # anchor ``verify`` requires of a package-mode AGENTS.md, so its absence is a finding about
 # AGENTS.md, not a licence to ship the consumer a broken import target.
-_ALWAYS_MATERIALIZED_GUARDRAIL = "_common.md"
+_ALWAYS_MATERIALIZED = "guardrails/_common.md"
+
+# Imports of a file the standard has moved, and where it went. A closed list rather than a guess
+# by file name: an unresolved ``@``-import produces no diagnostic anywhere, so the plan error is
+# the only place a consumer learns the new line, and it has to name that line exactly.
+MOVED_IMPORTS = {"guardrails/python.md": "profiles/python.md"}
 
 
-def imported_guardrails(root: Path) -> tuple[list[str], list[str]]:
-    """Guardrail file names the consumer's ``AGENTS.md`` actually ``@``-imports, and any plan
-    errors. Read from the document rather than derived from the recorded archetype: the
-    language guardrail is a line a human adds by hand (``init`` says so in as many words), an
+def import_prefix(root: Path) -> str:
+    """The ``@``-import prefix of the standard's files in this project's ``AGENTS.md``: the
+    materialized copy in package mode, the mount otherwise."""
+    return f"@{aitna_root_name()}/.akmon/" if is_package_mode(root) else f"@{aitna_root_name()}/akmon/"
+
+
+def imported_standard_files(root: Path) -> tuple[list[str], list[str]]:
+    """The standard's files the consumer's ``AGENTS.md`` actually ``@``-imports — as
+    ``guardrails/<name>`` and ``profiles/<name>`` — and any plan errors.
+
+    Read from the document rather than derived from the recorded archetype: the language
+    profile is a line a human adds by hand (``init`` says so in as many words), an
     archetype-driven list would miss it, and it would ship files to a project whose archetype
     is still ``<archetype>``.
+
+    Checked in every mode, against the tree the project runs: an import whose target the
+    standard does not ship resolves to nothing, silently, whether it names the materialized copy
+    or the mount. A mounted consumer loses a moved profile exactly as a packaged one would, and
+    this error is the only thing that says so.
     """
+    prefix = import_prefix(root)
+    names = {_ALWAYS_MATERIALIZED} if is_package_mode(root) else set()
     text_path = root / "AGENTS.md"
-    names = {_ALWAYS_MATERIALIZED_GUARDRAIL}
     if text_path.is_file():
         text = _INLINE_CODE_RE.sub(" ", _FENCED_BLOCK_RE.sub("\n", text_path.read_text(encoding="utf-8")))
-        prefix = re.escape(f"@{aitna_root_name()}/.akmon/guardrails/")
-        names.update(re.findall(prefix + r"([A-Za-z0-9._-]+)", text))
-    source = standard_tree_root(root) / "guardrails"
-    errors = [
-        f"AGENTS.md imports a guardrail the standard does not ship: guardrails/{name}"
-        for name in sorted(names)
-        if not (source / name).is_file()
-    ]
+        directories = "|".join(IMPORTED_DIRS)
+        names.update(re.findall(re.escape(prefix) + rf"((?:{directories})/[A-Za-z0-9._-]+)", text))
+    source = standard_tree_root(root)
+    errors: list[str] = []
+    for name in sorted(names):
+        if (source / name).is_file():
+            continue
+        moved = MOVED_IMPORTS.get(name)
+        if moved:
+            errors.append(
+                f"AGENTS.md imports {name}, which the standard moved to {moved}: replace the line with {prefix}{moved}"
+            )
+        else:
+            errors.append(f"AGENTS.md imports a file the standard does not ship: {name}")
     return sorted(names), errors
 
 
 def _materialized_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
-    """Package-mode materialization (ADR 0009 §4, narrowed by C77): the guardrails the
-    consumer's ``AGENTS.md`` imports, and nothing else.
+    """Package-mode materialization (ADR 0009 §4, narrowed by C77, widened to profiles by
+    ADR 0014): the guardrails and profiles the consumer's ``AGENTS.md`` imports, and nothing
+    else.
 
     Nothing executable is copied any more. The hooks, the ``common`` package they import, the
     routing library and its registry are already installed beside the consumer, inside the
@@ -649,13 +682,14 @@ def _materialized_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
     Codex does not expand the import at all (it reads ``AGENTS.md`` literally — see
     ``meta/design/codex-runtime-contract.md``), so the copy serves the one harness that does.
 
-    A no-op outside package mode.
+    Outside package mode nothing is written, but the import errors are still returned: the
+    mount is imported directly, and a target it lacks is just as silent there.
     """
+    names, errors = imported_standard_files(root)
     if not is_package_mode(root):
-        return [], []
-    names, errors = imported_guardrails(root)
-    source = standard_tree_root(root) / "guardrails"
-    dest = aitna_root(root) / ".akmon" / "guardrails"
+        return [], errors
+    source = standard_tree_root(root)
+    dest = aitna_root(root) / ".akmon"
     files = [
         PlannedFile(
             dest / name,

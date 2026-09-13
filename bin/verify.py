@@ -37,6 +37,8 @@ from common.codex_hooks import (
 )
 from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
 from common.project_root import resolve_project_root  # noqa: E402
+from common.python_rules import CONFIG_TARGET, load_catalog, read_settings  # noqa: E402
+from common.record import RecordError, read_akmon_toml_strict  # noqa: E402
 from common.runtime import codex_hooks_list_command  # noqa: E402
 from common.versions import split_version  # noqa: E402
 
@@ -49,6 +51,7 @@ def _sample(ids: list[str], limit: int = 4) -> str:
     """Name the offenders, not just their count — a finding a reader cannot locate is half a finding."""
     shown = ", ".join(ids[:limit])
     return shown if len(ids) <= limit else f"{shown}, +{len(ids) - limit} more"
+
 
 _DELEGATION_DEFAULT_RE = re.compile(r"\bdelegation\s+is\s+the\s+default\b", re.IGNORECASE)
 _GENERATED_MARKER = sync_tool.GENERATED_MARKER
@@ -781,9 +784,7 @@ class Verifier:
             "command fails silently (an unavailable executable produces no session-visible error), "
             "so the guardrails are off",
             target=relative,
-            fix=(
-                "Install the akmon dev pin into a project-local virtualenv, then re-run akmon sync."
-            ),
+            fix=("Install the akmon dev pin into a project-local virtualenv, then re-run akmon sync."),
         )
 
     def check_codex_host_trust(self) -> None:
@@ -933,11 +934,10 @@ class Verifier:
             if retired:
                 self.error(
                     "routing.second-opinion",
-                    f"project overlay {vendor} second_opinion carries the retired "
-                    f"key(s) {', '.join(retired)}",
+                    f"project overlay {vendor} second_opinion carries the retired key(s) {', '.join(retired)}",
                     target=f"{self.aitna}/model-routing.json#{vendor}",
                     fix="Delete only cli/invoke from this hand-owned overlay, leave the rest "
-                        "of the object as it is, then re-run the routing initializer.",
+                    "of the object as it is, then re-run the routing initializer.",
                 )
 
     def _check_model_routing_registry(self, registry: dict) -> None:
@@ -1179,6 +1179,14 @@ class Verifier:
                 target="pyproject.toml",
                 fix="Move the akmon requirement into a dev dependency group.",
             )
+        elif status == "unreadable":
+            self.warn(
+                "package.dev-pin",
+                "package mode: pyproject.toml is not valid TOML — no akmon pin can be read from it, "
+                "and uv cannot resolve `akmon` from it either",
+                target="pyproject.toml",
+                fix="Fix the TOML syntax in pyproject.toml; akmon stays pinned in a dev dependency group.",
+            )
         elif status == "none":
             self.warn(
                 "package.dev-pin",
@@ -1243,8 +1251,7 @@ class Verifier:
         ]:
             self.error(
                 "attach.record",
-                f"{name} has invalid version key(s): {', '.join(invalid_versions)}; "
-                "expected non-empty strings",
+                f"{name} has invalid version key(s): {', '.join(invalid_versions)}; expected non-empty strings",
                 target=name,
                 fix=f"Repair the listed keys in {name} by re-running a realign.",
             )
@@ -1318,6 +1325,36 @@ class Verifier:
         self.check_changelog()
         self.check_package_pin()
         self.check_attach_record()
+        self.check_python_config()
+
+    def check_python_config(self) -> None:
+        """The ``[python]`` table of the integration record — validated here, applied by
+        ``akmon check`` (ADR 0014 §4).
+
+        Only the table, never the project's code: code quality is ``akmon check``'s, and keeping
+        it out of ``verify`` is what lets a bump leave CI green on code the bump did not touch. The
+        table is different — a misspelled rule id or a mistyped parameter silently changes what
+        the check runs, and that is integration health.
+        """
+        try:
+            table = read_akmon_toml_strict(sync_tool.aitna_root(self.root) / ".akmon.toml").get("python")
+        except RecordError as exc:
+            self.error("python.config", str(exc), target=CONFIG_TARGET, fix="Repair the record so it parses as TOML")
+            return
+        if table is None:
+            return
+        _, problems = read_settings(load_catalog(Path(__file__).resolve().parent.parent), table)
+        for problem in problems:
+            self.error(
+                "python.config", problem, target=CONFIG_TARGET, fix="Correct or remove the key the message names"
+            )
+        if not problems:
+            self.ok(
+                "python.config",
+                "the [python] table names only rules, parameters and severities the catalog knows",
+                target=CONFIG_TARGET,
+                fix="Keep every [python] key one the rule catalog defines",
+            )
 
 
 def main(argv: list[str] | None = None) -> int:

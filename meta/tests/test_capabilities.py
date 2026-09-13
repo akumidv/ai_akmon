@@ -14,12 +14,12 @@ from pathlib import Path
 import pytest
 from checks import capabilities
 from checks.capabilities import (
-    CRASH_POSTURE_EXEMPT,
     CRASH_POSTURES,
     EFFECTS,
     MATRIX_FILE,
     REGION_BEGIN,
     REGION_END,
+    UNMEASURED,
 )
 
 # A clean non-enforcement claim: every axis present, delivery settled, nothing enforced.
@@ -66,9 +66,9 @@ def _codes(findings) -> list[str]:
 def _only(findings, code: str, severity: str = "error"):
     """Exactly one finding, carrying ``code`` at ``severity``.
 
-    Severity is pinned, not just the code: the crash-posture branch of
-    ``matrix.unqualified-effect`` is a warn on the claims ``CRASH_POSTURE_EXEMPT`` names and an
-    error everywhere else, and a code-only assertion could not tell the two apart.
+    Severity is pinned, not just the code: a warn and an error of one code are different verdicts
+    — the crash-posture branch of ``matrix.unqualified-effect`` was a warn on two named claims
+    until C90/D2-47 — and a code-only assertion could not tell the two apart.
     """
     assert [(f.severity, f.code) for f in findings] == [(severity, code)], _codes(findings)
     return findings[0]
@@ -114,9 +114,7 @@ def test_a_complete_matrix_under_meta_is_not_a_fallback(tmp_path):
 # --------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "axis", ["documented", "delivered", "route", "effect", "crash-posture", "evidence"]
-)
+@pytest.mark.parametrize("axis", ["documented", "delivered", "route", "effect", "crash-posture", "evidence"])
 def test_deleting_one_axis_is_one_missing_axis(tmp_path, axis):
     row = "\n".join(line for line in PLAIN_ROW.splitlines() if not line.startswith(f"- {axis}:"))
     finding = _only(capabilities.check_capabilities(_tree(tmp_path, row)), "matrix.missing-axis")
@@ -176,8 +174,12 @@ def test_a_crash_posture_outside_the_vocabulary_is_one_invalid_value(tmp_path):
 @pytest.mark.parametrize("coordinate", ["vendor", "version", "event", "matcher"])
 def test_an_unmeasured_route_coordinate_under_enforcement_is_unqualified(tmp_path, effect, coordinate):
     row = GUARD_ROW.replace("- effect: deny", f"- effect: {effect}")
-    for name, value in (("vendor", "claude-code"), ("version", "2.1.221"),
-                        ("event", "PreToolUse"), ("matcher", "Bash")):
+    for name, value in (
+        ("vendor", "claude-code"),
+        ("version", "2.1.221"),
+        ("event", "PreToolUse"),
+        ("matcher", "Bash"),
+    ):
         if name == coordinate:
             row = row.replace(f"{name}={value}", f"{name}=unmeasured")
     finding = _only(capabilities.check_capabilities(_tree(tmp_path, row)), "matrix.unqualified-effect")
@@ -192,7 +194,7 @@ def _guard(effect: str, *, title: str | None = None, posture: str = "unmeasured"
 
 @pytest.mark.parametrize("effect", ["ask", "deny"])
 def test_an_unmeasured_crash_posture_under_enforcement_is_unqualified(tmp_path, effect):
-    """An error for every claim the owner did not exempt by name (D2-29) — not a global warn."""
+    """An error on every claim — none is exempt by name since D2-29 expired (C90/D2-47)."""
     finding = _only(capabilities.check_capabilities(_tree(tmp_path, _guard(effect))), "matrix.unqualified-effect")
     assert "crash-posture" in finding.message
 
@@ -204,33 +206,22 @@ def test_an_unmeasured_crash_posture_fails_a_non_strict_run(tmp_path, effect):
     assert exit_code(capabilities.check_capabilities(_tree(tmp_path, _guard(effect))), strict=False) == 1
 
 
-@pytest.mark.parametrize("title", CRASH_POSTURE_EXEMPT)
+# The two claims D2-29 carried as a warn until C90/D2-47 measured them. Their titles now get the
+# rule every claim gets: a warn coming back for them is the exemption coming back.
+_FORMERLY_EXEMPT = (
+    "Commit guard — owner-owned commits at the tool boundary — Claude Code",
+    "Delegation log and drift nudge — Claude Code",
+)
+
+
+@pytest.mark.parametrize("title", _FORMERLY_EXEMPT)
 @pytest.mark.parametrize("effect", ["ask", "deny"])
-def test_an_exempt_claim_carries_an_unmeasured_crash_posture_as_a_warn(tmp_path, effect, title):
+def test_a_formerly_exempt_claim_is_an_error_like_any_other(tmp_path, effect, title):
     from common.findings import exit_code
 
     found = capabilities.check_capabilities(_tree(tmp_path, _guard(effect, title=title)))
-    finding = _only(found, "matrix.unqualified-effect", severity="warn")
-    assert "crash-posture" in finding.message
-    assert exit_code(found, strict=False) == 0
-    assert exit_code(found, strict=True) == 1
-
-
-@pytest.mark.parametrize("title", CRASH_POSTURE_EXEMPT)
-def test_the_exemption_covers_the_crash_posture_only(tmp_path, title):
-    """An exempt claim over an unmeasured route coordinate is still an error."""
-    row = _guard("deny", title=title, posture="fail-closed").replace("version=2.1.221", "version=unmeasured")
-    _only(capabilities.check_capabilities(_tree(tmp_path, row)), "matrix.unqualified-effect")
-
-
-def test_the_exemption_is_matched_on_the_whole_title(tmp_path):
-    """A claim cannot inherit the exemption by resembling a listed one."""
-    row = _guard("deny", title=CRASH_POSTURE_EXEMPT[0].replace("Claude Code", "Codex CLI"))
-    _only(capabilities.check_capabilities(_tree(tmp_path, row)), "matrix.unqualified-effect")
-
-
-# F13 carrier on C52/D2-23 — the D2-29 exemption expires by test, not by memory: it names live
-# claims, and it outlives none of their crash measurements.
+    _only(found, "matrix.unqualified-effect")
+    assert exit_code(found, strict=False) == 1
 
 
 def _live_claims() -> dict[str, dict]:
@@ -240,22 +231,12 @@ def _live_claims() -> dict[str, dict]:
     return {row["title"]: row["axes"] for row in rows}
 
 
-@pytest.mark.parametrize("title", CRASH_POSTURE_EXEMPT)
-def test_every_crash_posture_exemption_names_a_live_claim(title):
-    assert title in _live_claims(), (
-        f"CRASH_POSTURE_EXEMPT lists {title!r}, which no claim in {MATRIX_FILE} carries — a renamed "
-        "claim loses its exemption; rename the entry with it, or drop the entry"
-    )
-
-
-@pytest.mark.parametrize("title", CRASH_POSTURE_EXEMPT)
-def test_a_crash_posture_exemption_expires_once_the_claim_is_measured(title):
-    axes = _live_claims().get(title, {})
-    assert axes.get("crash-posture") == "unmeasured" and axes.get("effect") in ("ask", "deny"), (
-        f"{title!r} no longer stands on an unmeasured crash posture under ask/deny — C52 measured "
-        "it, so remove it from CRASH_POSTURE_EXEMPT (D2-29): the exemption must not outlive the "
-        "debt it covered"
-    )
+def test_every_shipped_enforcement_claim_records_a_measured_crash_posture():
+    """The shipped matrix, not a fixture: nothing in the checker excuses an ``ask``/``deny`` claim
+    over an unmeasured crash posture any more (C90/D2-47), so none may stand in the tree."""
+    enforcing = {title: axes for title, axes in _live_claims().items() if axes.get("effect") in ("ask", "deny")}
+    assert enforcing, "the shipped matrix carries no ask/deny claim — this carrier would prove nothing"
+    assert [title for title, axes in enforcing.items() if axes.get("crash-posture") == UNMEASURED] == []
 
 
 @pytest.mark.parametrize("effect", ["none", "advisory"])
@@ -299,8 +280,7 @@ def test_an_unmeasured_claim_without_evidence_is_clean(tmp_path):
 
 
 @pytest.mark.parametrize("token", ["enforced", "enforces", "✅", "⚠️"])
-@pytest.mark.parametrize("nearby", ["Claude Code", "Codex CLI", "Gemini", "Copilot",
-                                    "SessionStart", "PreToolUse"])
+@pytest.mark.parametrize("nearby", ["Claude Code", "Codex CLI", "Gemini", "Copilot", "SessionStart", "PreToolUse"])
 def test_a_forbidden_claim_beside_a_vendor_or_event_is_one_bare_claim(tmp_path, token, nearby):
     docs = {"MODEL.md": f"# Model\n\nThe guard {token} the boundary on {nearby}.\n"}
     findings = capabilities.check_capabilities(_tree(tmp_path, docs=docs))
@@ -315,8 +295,10 @@ def test_a_forbidden_claim_with_no_vendor_or_event_nearby_is_clean(tmp_path, tok
 
 def test_akmon_own_checker_prose_is_not_a_bare_claim(tmp_path):
     """The lock's named allowance: a threshold attributed to akmon's in-process checker."""
-    docs = {"pipelines/tasks.md": "# Tasks\n\n## Thresholds (enforced by `verify.py`)\n\n"
-                                  "Claude Code and Codex CLI read the same index.\n"}
+    docs = {
+        "pipelines/tasks.md": "# Tasks\n\n## Thresholds (enforced by `verify.py`)\n\n"
+        "Claude Code and Codex CLI read the same index.\n"
+    }
     assert capabilities.check_capabilities(_tree(tmp_path, docs=docs)) == []
 
 
@@ -333,8 +315,7 @@ def test_meta_material_is_not_scanned_here(tmp_path):
 
 def test_claims_inside_the_marked_region_are_not_bare_claims(tmp_path):
     """The region is where qualified claims belong; scanning it would forbid the matrix itself."""
-    row = PLAIN_ROW.replace("### Demo capability — Claude Code",
-                            "### Demo capability ✅ enforced — Claude Code")
+    row = PLAIN_ROW.replace("### Demo capability — Claude Code", "### Demo capability ✅ enforced — Claude Code")
     assert capabilities.check_capabilities(_tree(tmp_path, row)) == []
 
 
@@ -359,9 +340,7 @@ def test_a_retained_legacy_table_beside_a_valid_matrix_is_one_bare_claim(tmp_pat
 
 
 def test_an_empty_marked_region_is_not_a_matrix(tmp_path):
-    (tmp_path / MATRIX_FILE).write_text(
-        f"# Capability matrix\n\n{REGION_BEGIN}\n\n{REGION_END}\n", encoding="utf-8"
-    )
+    (tmp_path / MATRIX_FILE).write_text(f"# Capability matrix\n\n{REGION_BEGIN}\n\n{REGION_END}\n", encoding="utf-8")
     _only(capabilities.check_matrix(tmp_path), "matrix.missing-file")
 
 
@@ -395,9 +374,7 @@ def test_a_glyph_table_smuggled_into_the_region_is_one_invalid_value(tmp_path):
 
 
 def test_an_axis_line_above_every_heading_is_one_invalid_value(tmp_path):
-    (tmp_path / MATRIX_FILE).write_text(
-        _matrix("- documented: yes\n", PLAIN_ROW), encoding="utf-8"
-    )
+    (tmp_path / MATRIX_FILE).write_text(_matrix("- documented: yes\n", PLAIN_ROW), encoding="utf-8")
     _only(capabilities.check_matrix(tmp_path), "matrix.invalid-value")
 
 
@@ -418,7 +395,7 @@ def test_the_shipped_matrix_population_is_pinned():
     """
     root = Path(__file__).resolve().parents[2]
     text = (root / MATRIX_FILE).read_text(encoding="utf-8")
-    region = text[text.index(REGION_BEGIN):text.index(REGION_END)]
+    region = text[text.index(REGION_BEGIN) : text.index(REGION_END)]
     titles = [line[4:].strip() for line in region.splitlines() if line.startswith("### ")]
     assert len(titles) == 19
     assert len(set(titles)) == len(titles), "one claim per capability-and-vendor pair"
@@ -442,9 +419,7 @@ def test_a_repeated_axis_is_one_invalid_value(tmp_path):
 
 def test_an_unknown_axis_is_one_invalid_value(tmp_path):
     """A seventh key is either a typo for a real axis or an answer nothing reads."""
-    (tmp_path / MATRIX_FILE).write_text(
-        _matrix(PLAIN_ROW + "- mystery: yes\n"), encoding="utf-8"
-    )
+    (tmp_path / MATRIX_FILE).write_text(_matrix(PLAIN_ROW + "- mystery: yes\n"), encoding="utf-8")
     _only(capabilities.check_matrix(tmp_path), "matrix.invalid-value")
 
 

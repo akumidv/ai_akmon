@@ -12,9 +12,7 @@ import time
 from pathlib import Path
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 _ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
@@ -93,7 +91,6 @@ def test_aggregate_delegation_lines_counts_and_skips_malformed():
     assert result.per_pair[("k_explorer", "small")] == 2
 
 
-
 def test_digest_counts_exactly_the_rows_the_coverage_map_reads():
     """A 3-field row was counted here and skipped by the coverage map (C76): one parser now."""
     lines = [
@@ -104,6 +101,7 @@ def test_digest_counts_exactly_the_rows_the_coverage_map_reads():
     result = stats.aggregate_delegation_lines(lines)
     assert result.total == len(routing.parse_delegation_entries(lines)) == 2
     assert result.per_pair == {("k_explorer", "small"): 1, ("k_reasoner", "-"): 1}
+
 
 def test_parse_delegation_log_reads_real_file(tmp_path):
     log_path = tmp_path / "model-routing.log"

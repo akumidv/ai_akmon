@@ -87,18 +87,14 @@ def test_co_authored_by_is_denied_case_insensitively():
 
 def test_co_authored_check_precedes_branch_check():
     # Even on a feature branch (commit would otherwise pass) the trailer is denied.
-    result = git_commit_guard_result(
-        'git commit -m "Co-authored-by: x" ', branch="feature/safe"
-    )
+    result = git_commit_guard_result('git commit -m "Co-authored-by: x" ', branch="feature/safe")
     assert result is not None
     assert result.permission_decision == "deny"
 
 
 def test_push_tag_merge_ask_for_confirmation():
     for sub in ("push", "tag", "merge"):
-        result = git_commit_guard_result(
-            f"git {sub} origin main", branch="feature/x", permission_mode="default"
-        )
+        result = git_commit_guard_result(f"git {sub} origin main", branch="feature/x", permission_mode="default")
         assert result is not None, sub
         assert result.permission_decision == "ask", sub
         assert "owner owns commits" in result.permission_reason
@@ -149,9 +145,7 @@ def test_word_boundary_avoids_substring_match():
 
 def test_resolved_branch_uses_live_git_when_branch_is_none(monkeypatch):
     monkeypatch.setattr(hook_core, "current_git_branch", lambda: "main")
-    result = git_commit_guard_result(
-        'git commit -m "x"', permission_mode="default"
-    )  # branch defaults to live lookup
+    result = git_commit_guard_result('git commit -m "x"', permission_mode="default")  # branch defaults to live lookup
     assert result is not None
     assert result.permission_decision == "ask"
 
@@ -163,9 +157,7 @@ def test_resolved_branch_uses_live_git_when_branch_is_none(monkeypatch):
 
 def test_ask_escalates_to_deny_outside_interactive_default():
     for mode in (None, "acceptEdits", "plan", "dontAsk", "bypassPermissions", "somethingUnknown"):
-        result = git_commit_guard_result(
-            "git commit -m 'x'", branch="main", permission_mode=mode
-        )
+        result = git_commit_guard_result("git commit -m 'x'", branch="main", permission_mode=mode)
         assert result is not None, mode
         assert result.permission_decision == "deny", mode
         assert "escalated ask" in result.permission_reason, mode
@@ -345,9 +337,7 @@ def test_session_start_ignores_leftover_package_guardrails_in_mounted_mode(monke
     """Mounted AGENTS imports the mount directly; an old package copy is not active input."""
     mounted = tmp_path / "_aitna" / "akmon"
     (mounted / "guardrails").mkdir(parents=True)
-    (mounted / "guardrails" / "_common.md").write_text(
-        "# Common\n\nmounted rule\n", encoding="utf-8"
-    )
+    (mounted / "guardrails" / "_common.md").write_text("# Common\n\nmounted rule\n", encoding="utf-8")
     _running_tree(monkeypatch, mounted)
     _materialized(tmp_path, "# Common\n\nold package rule\n")
     _make_agent(tmp_path / "_aitna" / "agents", "engineer")
@@ -454,9 +444,7 @@ def test_path_predicates_canonicalize_relative_dot_dot_and_duplicate_separators(
     absolute = str((tmp_path / canonical).resolve(strict=False))
     assert is_code_path(relative, tmp_path) == is_code_path(absolute, tmp_path)
     assert is_planning_doc(relative, tmp_path) == is_planning_doc(absolute, tmp_path)
-    assert is_d2_sensitive_path(relative, tmp_path, _D2_GLOBS) == is_d2_sensitive_path(
-        absolute, tmp_path, _D2_GLOBS
-    )
+    assert is_d2_sensitive_path(relative, tmp_path, _D2_GLOBS) == is_d2_sensitive_path(absolute, tmp_path, _D2_GLOBS)
 
 
 @pytest.mark.parametrize(
@@ -872,9 +860,10 @@ def test_session_start_reads_custom_dev_root_agents(monkeypatch, tmp_path):
 # --------------------------------------------------------------------------------------
 
 
-def _nudge_setup(monkeypatch, tmp_path, threshold=3, ask_threshold=None):
+def _nudge_setup(monkeypatch, tmp_path, threshold=3, ask_threshold=None, grace=0):
     monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
     monkeypatch.setenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", str(threshold))
+    monkeypatch.setenv("KEYSTONE_DELEGATION_GRACE", str(grace))
     if ask_threshold is not None:
         monkeypatch.setenv("KEYSTONE_DELEGATION_ASK_THRESHOLD", str(ask_threshold))
     else:
@@ -887,16 +876,15 @@ def test_delegation_nudge_ignores_unrecognized_kinds(monkeypatch, tmp_path):
     assert hook_core.delegation_nudge_result("network", "s1") is None
 
 
-def test_delegation_nudge_counts_read_kind(monkeypatch, tmp_path):
-    # Read/Grep/Glob normalize to hook_core.READ_TOOL and now count toward the drift counter
-    # (previously only edit/shell did — the orchestrator "does everything" specifically on
-    # reads/sweeps, which the nudge used to be blind to).
+def test_delegation_nudge_counts_a_read_as_half(monkeypatch, tmp_path):
+    # Read/Grep/Glob normalize to hook_core.READ_TOOL and count toward the drift score — the
+    # orchestrator "does everything" on reads and sweeps too — but at half an edit (C88/D2-46).
     _nudge_setup(monkeypatch, tmp_path, threshold=3)
-    assert hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1") is None
-    assert hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1") is None
+    for _ in range(5):
+        assert hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1") is None
     result = hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1")
     assert isinstance(result, HookResult)
-    assert "3 consecutive" in result.additional_context
+    assert "drift score of 3" in result.additional_context
 
 
 def test_delegation_nudge_suppressed_in_subagent(monkeypatch, tmp_path):
@@ -918,10 +906,10 @@ def test_delegation_nudge_subagent_calls_do_not_charge_counter(monkeypatch, tmp_
 
     threshold = hook_core.delegation_nudge_threshold()
     for _ in range(threshold - 1):
-        assert hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1", is_subagent=False) is None
-    result = hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1", is_subagent=False)
+        assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1", is_subagent=False) is None
+    result = hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1", is_subagent=False)
     assert isinstance(result, HookResult)
-    assert f"{threshold} consecutive" in result.additional_context
+    assert f"drift score of {threshold}" in result.additional_context
 
 
 def test_delegation_nudge_fires_once_without_delegation_between(monkeypatch, tmp_path):
@@ -931,7 +919,7 @@ def test_delegation_nudge_fires_once_without_delegation_between(monkeypatch, tmp
     result = hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1")
     assert isinstance(result, HookResult)
     assert "Delegation check" in result.additional_context
-    assert "3 consecutive" in result.additional_context
+    assert "drift score of 3" in result.additional_context
     assert result.permission_decision is None  # advisory only, never blocks
     # Past the threshold in the same episode, with no delegation in between → silenced
     # by the marker, even as mutations keep piling up.
@@ -972,11 +960,11 @@ def test_delegation_nudge_rearms_after_subagent_delegation(monkeypatch, tmp_path
 
 def test_delegation_nudge_threshold_env_fallback(monkeypatch):
     monkeypatch.delenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", raising=False)
-    assert hook_core.delegation_nudge_threshold() == 10
+    assert hook_core.delegation_nudge_threshold() == 30
     monkeypatch.setenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", "not-a-number")
-    assert hook_core.delegation_nudge_threshold() == 10
+    assert hook_core.delegation_nudge_threshold() == 30
     monkeypatch.setenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", "-5")
-    assert hook_core.delegation_nudge_threshold() == 10
+    assert hook_core.delegation_nudge_threshold() == 30
     monkeypatch.setenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", "25")
     assert hook_core.delegation_nudge_threshold() == 25
 
@@ -984,13 +972,13 @@ def test_delegation_nudge_threshold_env_fallback(monkeypatch):
 def test_delegation_ask_threshold_env_fallback_and_clamp(monkeypatch):
     monkeypatch.delenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", raising=False)
     monkeypatch.delenv("KEYSTONE_DELEGATION_ASK_THRESHOLD", raising=False)
-    assert hook_core.delegation_ask_threshold() == 20
+    assert hook_core.delegation_ask_threshold() == 120
     monkeypatch.setenv("KEYSTONE_DELEGATION_ASK_THRESHOLD", "not-a-number")
-    assert hook_core.delegation_ask_threshold() == 20
+    assert hook_core.delegation_ask_threshold() == 120
     monkeypatch.setenv("KEYSTONE_DELEGATION_ASK_THRESHOLD", "-5")
-    assert hook_core.delegation_ask_threshold() == 20
-    monkeypatch.setenv("KEYSTONE_DELEGATION_ASK_THRESHOLD", "30")
-    assert hook_core.delegation_ask_threshold() == 30
+    assert hook_core.delegation_ask_threshold() == 120
+    monkeypatch.setenv("KEYSTONE_DELEGATION_ASK_THRESHOLD", "40")
+    assert hook_core.delegation_ask_threshold() == 40
     # Clamped to at least the advisory threshold: an ask threshold configured below the
     # advisory one would be reachable before the advisory itself, which makes no sense.
     monkeypatch.setenv("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", "50")
@@ -1010,11 +998,11 @@ def test_delegation_nudge_graduates_to_ask_on_sustained_drift(monkeypatch, tmp_p
     assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
     # At the ask threshold, a hard `ask` fires — with a non-empty reason — in an interactive
     # default-mode session.
-    ask = hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1", permission_mode="default")
+    ask = hook_core.delegation_nudge_result(hook_core.SHELL_TOOL, "s1", permission_mode="default")
     assert isinstance(ask, HookResult)
     assert ask.permission_decision == "ask"
     assert ask.permission_reason
-    assert "4 consecutive" in ask.permission_reason
+    assert "drift score of 4" in ask.permission_reason
     # Fires once per episode: the next call past the threshold is silenced by its own marker.
     assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
     # A subagent delegation clears BOTH markers, so a later drift can advise/ask again.
@@ -1035,7 +1023,76 @@ def test_delegation_nudge_ask_escalates_to_deny_outside_interactive_default(monk
     assert isinstance(result, HookResult)
     assert result.permission_decision == "deny"
     assert "escalated ask" in result.permission_reason
-    assert "4 consecutive" in result.permission_reason
+    assert "drift score of 4" in result.permission_reason
+
+
+def test_delegation_nudge_opening_calls_of_a_stretch_score_nothing(monkeypatch, tmp_path):
+    # C88/D2-46: orientation is free — the first `grace` calls of a stretch add nothing, and a
+    # delegation starts a new stretch with a new grace.
+    _nudge_setup(monkeypatch, tmp_path, threshold=2, grace=3)
+    for _ in range(4):
+        assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is not None
+    assert hook_core.delegation_nudge_result(hook_core.SUBAGENT_TOOL, "s1") is None
+    for _ in range(4):
+        assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is not None
+
+
+def test_delegation_nudge_read_never_carries_the_ask(monkeypatch, tmp_path):
+    # C88/D2-46: past the ask threshold a read passes untouched — no ask, no deny, and the ask
+    # is not spent on it — and the next edit or shell call carries it.
+    _nudge_setup(monkeypatch, tmp_path, threshold=2, ask_threshold=4)
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is None
+    assert hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1") is not None  # the advisory
+    for _ in range(6):  # 2 → 5 on reads alone: past the ask threshold
+        assert hook_core.delegation_nudge_result(hook_core.READ_TOOL, "s1", permission_mode="acceptEdits") is None
+    denied = hook_core.delegation_nudge_result(hook_core.SHELL_TOOL, "s1", permission_mode="acceptEdits")
+    assert isinstance(denied, HookResult)
+    assert denied.permission_decision == "deny"
+    assert "drift score of 6" in denied.permission_reason
+
+
+def test_delegation_grace_env_fallback(monkeypatch):
+    monkeypatch.delenv("KEYSTONE_DELEGATION_GRACE", raising=False)
+    assert hook_core.delegation_grace() == 8
+    monkeypatch.setenv("KEYSTONE_DELEGATION_GRACE", "not-a-number")
+    assert hook_core.delegation_grace() == 8
+    monkeypatch.setenv("KEYSTONE_DELEGATION_GRACE", "-1")
+    assert hook_core.delegation_grace() == 8
+    monkeypatch.setenv("KEYSTONE_DELEGATION_GRACE", "0")
+    assert hook_core.delegation_grace() == 0
+
+
+def test_delegation_nudge_defaults_are_the_replayed_rule(monkeypatch):
+    # C88/D2-46: the weights, the grace and the thresholds are the rule the replay chose
+    # (M72, M73) — changing any of them is a new owner decision, not a tuning edit.
+    for name in (
+        "KEYSTONE_DELEGATION_NUDGE_THRESHOLD",
+        "KEYSTONE_DELEGATION_ASK_THRESHOLD",
+        "KEYSTONE_DELEGATION_GRACE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    assert hook_core._DELEGATION_WEIGHTS == {
+        hook_core.READ_TOOL: 0.5,
+        hook_core.EDIT_TOOL: 1.0,
+        hook_core.SHELL_TOOL: 1.0,
+    }
+    assert (
+        hook_core.delegation_nudge_threshold(),
+        hook_core.delegation_ask_threshold(),
+        hook_core.delegation_grace(),
+    ) == (30, 120, 8)
+
+
+def test_delegation_nudge_reads_a_counter_written_by_the_previous_rule(monkeypatch, tmp_path):
+    # A session that spans the upgrade finds a one-number counter; it reads as calls with no
+    # score yet — neither a crash nor a fresh grace.
+    _nudge_setup(monkeypatch, tmp_path, threshold=1, grace=5)
+    (tmp_path / "akmon-delegation-nudge-s1.count").write_text("12", encoding="utf-8")
+    result = hook_core.delegation_nudge_result(hook_core.EDIT_TOOL, "s1")
+    assert isinstance(result, HookResult)
+    assert "drift score of 1" in result.additional_context
 
 
 # --------------------------------------------------------------------------------------

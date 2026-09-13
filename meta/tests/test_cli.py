@@ -18,9 +18,7 @@ from pathlib import Path
 import pytest
 
 _KEYSTONE = next(
-    parent
-    for parent in Path(__file__).resolve().parents
-    if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
+    parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 _SRC = _KEYSTONE / "src"
 if str(_SRC) not in sys.path:

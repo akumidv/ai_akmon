@@ -688,9 +688,7 @@ def test_active_role_requires_first_content_and_ignores_quoted_examples(tmp_path
         + "\n"
         + _assistant_turn("Quoted: `🧭 agent: engineer — code/tests`")
         + "\n"
-        + _assistant_turn(
-            "- **Format:** put `🧭 agent: engineer — code/tests` on the first non-blank line"
-        )
+        + _assistant_turn("- **Format:** put `🧭 agent: engineer — code/tests` on the first non-blank line")
         + "\n"
         + _assistant_turn("```text\n🧭 agent: architect — example\n```")
         + "\n"
@@ -819,9 +817,7 @@ def test_init_migrates_legacy_brief_key_and_prunes_old_generated_agent(tmp_path)
     old.write_text(f"old brief\n{routing.GENERATED_BANNER}\n", encoding="utf-8")
 
     assert (
-        _load_init().main(
-            ["--project-root", str(root), "--orchestrator", "large", "--available", "small,medium,large"]
-        )
+        _load_init().main(["--project-root", str(root), "--orchestrator", "large", "--available", "small,medium,large"])
         == 0
     )
 
