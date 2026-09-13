@@ -74,7 +74,7 @@ def test_wheel_python_floor_accepts_the_exact_field(tmp_path):
 )
 def test_wheel_python_floor_rejects_missing_stale_or_duplicate_fields(tmp_path, metadata):
     wheel = _wheel_with_metadata(tmp_path, metadata)
-    with pytest.raises(RuntimeError, match="Requires-Python must be exactly >=3.11"):
+    with pytest.raises(RuntimeError, match=r"Requires-Python must be exactly >=3\.11"):
         self_ci._assert_wheel_python_floor(wheel)
 
 

@@ -53,6 +53,8 @@ REQUIRED_ON = "required-on:"
 
 @dataclass(frozen=True)
 class RuntimeDeclaration:
+    """One runtime dependency: its binary name, which population it belongs to, and its modality."""
+
     binary: str
     population: str
     modality: str

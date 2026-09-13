@@ -660,7 +660,7 @@ def test_role_matrix_warning_d2_6_cross_cutting_extension():
     assert routing.role_matrix_warning(gated, "k_auditor", "engineer") is not None
 
 
-def _assistant_turn(text, sidechain=False):
+def _assistant_turn(text, *, sidechain=False):
     entry = {"type": "assistant", "message": {"content": text}}
     if sidechain:
         entry["isSidechain"] = True

@@ -16,7 +16,7 @@ from hook_core import HookResult, session_start_result
 
 
 def _project_root(payload: dict) -> Path:
-    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or str(Path.cwd())
     return Path(cwd)
 
 
@@ -25,6 +25,7 @@ def _decide() -> HookResult | None:
 
 
 def main() -> int:
+    """Entry point: emit the active-agent reminder, never blocking session start."""
     # Never block session start: a crash is reported (stderr + the owner's notice), exit 0.
     return run_guarded("session-start-agent", _decide)
 

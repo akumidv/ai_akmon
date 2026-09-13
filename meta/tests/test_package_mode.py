@@ -273,6 +273,49 @@ def test_a_moved_guardrail_copy_is_removed_by_the_sync_that_writes_its_profile(t
     assert (root / "_aitna" / ".akmon" / "profiles" / "python.md").is_file()
 
 
+def test_the_ruff_rules_a_project_extends_are_materialized_as_toml(tmp_path):
+    """The standard way to run akmon's Python rules is ruff's own ``extend``; in package mode its
+    target must exist in the repository exactly as an ``@``-imported profile must, and the banner
+    must leave the copy valid TOML."""
+    root = _make_package_root(tmp_path)
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "p"\n\n[tool.ruff]\nextend = "_aitna/.akmon/profiles/ruff.toml"\n', encoding="utf-8"
+    )
+    files, errors = sync._materialized_files(root)
+    assert errors == []
+    rules = next(f for f in files if f.path.name == "ruff.toml")
+    assert rules.path == root / "_aitna" / ".akmon" / "profiles" / "ruff.toml"
+    assert rules.content.startswith(f"# {sync.GENERATED_MARKER}")
+    assert tomllib.loads(rules.content)["lint"]["pydocstyle"]["convention"] == "google"
+
+
+def test_extending_a_rules_file_the_standard_does_not_ship_is_a_plan_error(tmp_path):
+    root = _make_package_root(tmp_path)
+    (root / "ruff.toml").write_text('extend = "_aitna/.akmon/profiles/nope.toml"\n', encoding="utf-8")
+    _, errors = sync.imported_standard_files(root)
+    assert errors == ["ruff.toml extends a file the standard does not ship: profiles/nope.toml"]
+
+
+def test_a_project_extending_its_own_ruff_file_is_left_alone(tmp_path):
+    root = _make_package_root(tmp_path)
+    (root / "ruff.toml").write_text('extend = "../shared/ruff.toml"\n', encoding="utf-8")
+    names, errors = sync.imported_standard_files(root)
+    assert errors == []
+    assert not any(name.endswith(".toml") for name in names)  # only AGENTS.md's imports remain
+
+
+def test_stale_materialized_names_a_ruff_rules_copy_the_package_has_moved_past(tmp_path):
+    tree = _tree_with_guardrail(tmp_path, "# Common\n\nrule\n")
+    (tree / "profiles").mkdir()
+    (tree / "profiles" / "ruff.toml").write_text("line-length = 120\n", encoding="utf-8")
+    root = tmp_path / "project"
+    rules = materialization.materialized_dir(root) / "profiles" / "ruff.toml"
+    rules.parent.mkdir(parents=True)
+    rules.write_text(materialization.materialized_text("ruff.toml", "line-length = 100\n"), encoding="utf-8")
+
+    assert materialization.stale_materialized(root, tree) == ["profiles/ruff.toml"]
+
+
 def test_stale_materialized_names_a_profile_the_package_has_moved_past(tmp_path):
     """The profile copy is held to the same freshness rule as the guardrail beside it."""
     tree = _tree_with_guardrail(tmp_path, "# Common\n\nrule\n")

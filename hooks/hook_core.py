@@ -6,6 +6,7 @@ payload and serialize ``HookResult`` into the shape their runtime expects.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import re
@@ -90,6 +91,8 @@ def runtime_root_display(project_root: Path) -> str:
 
 @dataclass(frozen=True)
 class HookResult:
+    """A hook's decision, vendor-neutral, ready for an adapter to serialize."""
+
     event_name: str
     additional_context: str | None = None
     permission_decision: str | None = None
@@ -214,10 +217,8 @@ def claim_diagnostic_marker(kind: str, identity: str | None) -> bool:
     try:
         os.close(descriptor)
     except OSError:
-        try:
+        with contextlib.suppress(OSError):
             marker.unlink(missing_ok=True)
-        except OSError:
-            pass
         return True
     return True
 
@@ -267,6 +268,7 @@ def _planning_doc_files() -> tuple[str, ...]:
 
 
 def current_git_branch() -> str:
+    """Current branch name, or ``""`` when it cannot be determined."""
     try:
         return subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -332,6 +334,7 @@ def privilege_escalation_guard_result(command: str) -> HookResult | None:
 def git_commit_guard_result(
     command: str, branch: str | None = None, *, permission_mode: str | None = None
 ) -> HookResult | None:
+    """Guard commit-shaped ``git`` commands: no AI co-author trailer, owner confirms landing history."""
     if "git" not in command:
         return None
 
@@ -375,6 +378,7 @@ def git_commit_guard_result(
 
 
 def agent_names(directory: Path) -> list[str]:
+    """Sorted names of the agent charters (subdirectories with a ``README.md``) under ``directory``."""
     if not directory.is_dir():
         return []
     return sorted(
@@ -425,6 +429,7 @@ def stale_guardrail_notice(root: Path) -> str | None:
 
 
 def session_start_result(root: Path) -> HookResult | None:
+    """SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice."""
     stale = stale_guardrail_notice(root)
     dev = agent_names(aitna_root(root) / "agents")
     desk = agent_names(root / "agents")
@@ -521,13 +526,13 @@ def _project_relative_posix(file_path: str, root: Path) -> str | None:
 
 
 def classify_target(file_path: str, root: Path | None = None) -> str:
-    """``file_path`` in the one form every classifier matches on: project-relative POSIX,
-    lowercased, with a leading ``/``.
+    """``file_path`` in the one form every classifier matches on.
 
-    The classification segments (``/docs/``, ``/<aitna>/design/``) are written with
-    surrounding slashes, so matching them against the *raw* string answered "no" for every
-    relative path — and a silent "no" is indistinguishable from "matched and stayed quiet"
-    (C47). The two forms are not hypothetical: Claude Code always sends an absolute
+    Project-relative POSIX, lowercased, with a leading ``/``. The classification segments
+    (``/docs/``, ``/<aitna>/design/``) are written with surrounding slashes, so matching them
+    against the *raw* string answered "no" for every relative path — and a silent "no" is
+    indistinguishable from "matched and stayed quiet" (C47). The two forms are not
+    hypothetical: Claude Code always sends an absolute
     ``file_path``, while Codex passes through what the patch body carried
     (``*** Add File: note.txt``), which is repo-relative. Normalizing first makes the answer
     a property of the file rather than of the vendor's spelling. Stripping the project root
@@ -554,6 +559,7 @@ def classify_target(file_path: str, root: Path | None = None) -> str:
 
 
 def is_code_path(file_path: str, root: Path | None = None) -> bool:
+    """Whether ``file_path`` is a project code file (not docs/design, and a recognized extension)."""
     target = classify_target(file_path, root)
     if any(segment in target for segment in _non_code_segments()):
         return False
@@ -561,6 +567,7 @@ def is_code_path(file_path: str, root: Path | None = None) -> bool:
 
 
 def role_on_code_message() -> str:
+    """Owner-facing text for the role-on-code reminder."""
     tasks = f"{aitna_root_name()}/TASKS.md"
     return (
         "[akmon] Role check — you are editing project code.\n"
@@ -581,6 +588,7 @@ def role_on_code_message() -> str:
 def role_on_code_result(
     tool_name: str, file_path: str | None, session_id: str | None, project_root: Path | None = None
 ) -> HookResult | None:
+    """PreToolUse guardrail: on the first code edit per session, remind to declare the engineer role."""
     if tool_name not in _EDIT_TOOL_KINDS:
         return None
     if not isinstance(file_path, str) or not is_code_path(file_path, project_root):
@@ -589,15 +597,14 @@ def role_on_code_result(
     marker = Path(tempfile.gettempdir()) / f"akmon-role-on-code-{session_id or 'nosession'}.marker"
     if marker.exists():
         return None
-    try:
+    with contextlib.suppress(OSError):
         marker.write_text("seen", encoding="utf-8")
-    except OSError:
-        pass
 
     return HookResult(event_name="PreToolUse", additional_context=role_on_code_message())
 
 
 def is_planning_doc(file_path: str, root: Path | None = None) -> bool:
+    """Whether ``file_path`` is a backlog/design/ADR/requirements/process planning doc."""
     target = classify_target(file_path, root)
     if target.endswith(_planning_doc_files()):
         return True
@@ -607,6 +614,7 @@ def is_planning_doc(file_path: str, root: Path | None = None) -> bool:
 
 
 def analysis_before_mutation_message() -> str:
+    """Owner-facing text for the analysis-before-mutation reminder."""
     return (
         "[akmon] Analysis-before-mutation check — you are editing a planning/design doc "
         "(backlog / design / ADR / requirements / akmon process).\n"
@@ -624,6 +632,7 @@ def analysis_before_mutation_message() -> str:
 def analysis_write_result(
     tool_name: str, file_path: str | None, session_id: str | None, project_root: Path | None = None
 ) -> HookResult | None:
+    """PreToolUse guardrail: on the first planning-doc edit per session, remind analysis-before-mutation."""
     if tool_name not in _EDIT_TOOL_KINDS:
         return None
     if not isinstance(file_path, str) or not is_planning_doc(file_path, project_root):
@@ -632,10 +641,8 @@ def analysis_write_result(
     marker = Path(tempfile.gettempdir()) / f"akmon-analysis-guard-{session_id or 'nosession'}.marker"
     if marker.exists():
         return None
-    try:
+    with contextlib.suppress(OSError):
         marker.write_text("seen", encoding="utf-8")
-    except OSError:
-        pass
 
     return HookResult(event_name="PreToolUse", additional_context=analysis_before_mutation_message())
 
@@ -656,7 +663,8 @@ def d2_sensitive_paths(root: Path) -> list[str]:
     Reads through the shared ``common.record`` reader (C75) rather than a second parser of its
     own: the same lenient parse every other caller gets, degrading to ``{}`` on an absent or
     unreadable record and to a partial dict on a malformed one, so an abnormal host can never
-    turn this advisory into a hook crash."""
+    turn this advisory into a hook crash.
+    """
     data = read_akmon_toml(aitna_root(root) / ".akmon.toml")
     section = data.get("d2_ledger")
     globs = section.get("sensitive_paths") if isinstance(section, dict) else None
@@ -664,9 +672,12 @@ def d2_sensitive_paths(root: Path) -> list[str]:
 
 
 def _segments_match(pattern_segments: list[str], path_segments: list[str]) -> bool:
-    """Recursive ``/``-aware glob match: ``**`` spans zero or more whole segments, ``*``/``?`` stay
-    within one segment (via ``fnmatchcase``). Mirrors ``PurePath.full_match`` but runs on any
-    the supported Python 3.11+ host, so ``full_match`` (3.13+) is not available here."""
+    """Recursive ``/``-aware glob match.
+
+    ``**`` spans zero or more whole segments, ``*``/``?`` stay within one segment (via
+    ``fnmatchcase``). Mirrors ``PurePath.full_match`` but runs on any the supported Python
+    3.11+ host, so ``full_match`` (3.13+) is not available here.
+    """
     if not pattern_segments:
         return not path_segments
     head, *rest = pattern_segments
@@ -689,6 +700,7 @@ def is_d2_sensitive_path(file_path: str, root: Path, globs: list[str]) -> bool:
 
 
 def d2_ledger_reminder_message(root: Path) -> str:
+    """Owner-facing text for the D2 ledger reminder."""
     tool = f"{runtime_root_display(root)}/tools/d2_ledger/d2_ledger.py"
     ledger = f"{aitna_root_name()}/D2_LEDGER.md"
     return (
@@ -707,6 +719,7 @@ def d2_ledger_reminder_message(root: Path) -> str:
 def d2_ledger_reminder_result(
     tool_name: str, file_path: str | None, session_id: str | None, project_root: Path | None = None
 ) -> HookResult | None:
+    """PreToolUse guardrail: on the first D2-sensitive edit per session, remind to log the ledger."""
     if tool_name not in _EDIT_TOOL_KINDS:
         return None
     if not isinstance(file_path, str):
@@ -719,10 +732,8 @@ def d2_ledger_reminder_result(
     marker = Path(tempfile.gettempdir()) / f"akmon-d2-ledger-{session_id or 'nosession'}.marker"
     if marker.exists():
         return None
-    try:
+    with contextlib.suppress(OSError):
         marker.write_text("seen", encoding="utf-8")
-    except OSError:
-        pass
 
     return HookResult(event_name="PreToolUse", additional_context=d2_ledger_reminder_message(root))
 
@@ -776,12 +787,16 @@ def d2_status_counts(root: Path) -> tuple[int, int]:
 
 
 def d2_tracking_active(root: Path) -> bool:
-    """Whether D2 tracking is in use here (sensitive paths configured, or a ledger file exists) —
-    so a project that hasn't adopted the ledger never sees the counter line."""
+    """Whether D2 tracking is in use here.
+
+    True when sensitive paths are configured or a ledger file exists — so a project that
+    hasn't adopted the ledger never sees the counter line.
+    """
     return bool(d2_sensitive_paths(root)) or (aitna_root(root) / "D2_LEDGER.md").is_file()
 
 
 def d2_status_line(pending: int, approved: int = 0) -> str:
+    """One-line D2 ledger status for the SessionStart status block."""
     return f"D2 ledger: {pending} pending, {approved} approved"
 
 
@@ -849,9 +864,11 @@ def delegation_nudge_threshold() -> int:
 
 
 def delegation_ask_threshold() -> int:
-    """Drift score that graduates the nudge to a hard `ask` (env
-    `KEYSTONE_DELEGATION_ASK_THRESHOLD`). Clamped so it never falls below the advisory
-    threshold — an ask below the advisory would be reachable before the advisory itself."""
+    """Drift score that graduates the nudge to a hard `ask` (env `KEYSTONE_DELEGATION_ASK_THRESHOLD`).
+
+    Clamped so it never falls below the advisory threshold — an ask below the advisory
+    would be reachable before the advisory itself.
+    """
     try:
         value = int(os.environ.get("KEYSTONE_DELEGATION_ASK_THRESHOLD", ""))
     except ValueError:
@@ -869,6 +886,7 @@ def _drift_score_text(score: float) -> str:
 
 
 def delegation_nudge_message(score: float) -> str:
+    """Owner-facing text for the advisory delegation-drift nudge."""
     return (
         f"[akmon] Delegation check — {_drift_score_text(score)} since the last subagent "
         "delegation.\n"
@@ -884,6 +902,7 @@ def delegation_nudge_message(score: float) -> str:
 
 
 def delegation_ask_message(score: float) -> str:
+    """Owner-facing text for the hard-ask escalation on sustained delegation drift."""
     return (
         f"[akmon] Sustained delegation drift — {_drift_score_text(score)} with no subagent "
         "delegation. A read never carries this ask, so it lands on a call that changes "
@@ -904,6 +923,7 @@ def delegation_nudge_result(
     is_subagent: bool = False,
     permission_mode: str | None = None,
 ) -> HookResult | None:
+    """PreToolUse guardrail: nudge, then hard-ask, on sustained orchestrator delegation drift."""
     # C28d: subagent-originated calls (agent_id present in the payload) must never touch
     # the counter. k_* delegates can't delegate (no Task tool), so nudging/asking them is
     # noise and the hard ask blocks their legit reads. The session_id is shared with the
@@ -917,18 +937,12 @@ def delegation_nudge_result(
     ask_marker = Path(tempfile.gettempdir()) / f"akmon-delegation-nudge-{sid}.ask-marker"
 
     if tool_name == SUBAGENT_TOOL:
-        try:
+        with contextlib.suppress(OSError):
             counter.write_text("0", encoding="utf-8")
-        except OSError:
-            pass
-        try:
+        with contextlib.suppress(OSError):
             marker.unlink(missing_ok=True)
-        except OSError:
-            pass
-        try:
+        with contextlib.suppress(OSError):
             ask_marker.unlink(missing_ok=True)
-        except OSError:
-            pass
         return None
     if tool_name not in _DELEGATION_NUDGE_TOOL_KINDS:
         return None
@@ -944,19 +958,15 @@ def delegation_nudge_result(
     seen += 1
     if seen > delegation_grace():
         score += _DELEGATION_WEIGHTS[tool_name]
-    try:
+    with contextlib.suppress(OSError):
         counter.write_text(f"{seen} {score}", encoding="utf-8")
-    except OSError:
-        pass
 
     if score >= delegation_ask_threshold():
         # A read never carries the ask and does not spend it; the next edit or shell call does.
         if ask_marker.exists() or tool_name == READ_TOOL:
             return None
-        try:
+        with contextlib.suppress(OSError):
             ask_marker.write_text("seen", encoding="utf-8")
-        except OSError:
-            pass
         return _escalate_unattended_ask(
             HookResult(
                 event_name="PreToolUse",
@@ -968,9 +978,7 @@ def delegation_nudge_result(
     if score >= delegation_nudge_threshold():
         if marker.exists():
             return None
-        try:
+        with contextlib.suppress(OSError):
             marker.write_text("seen", encoding="utf-8")
-        except OSError:
-            pass
         return HookResult(event_name="PreToolUse", additional_context=delegation_nudge_message(score))
     return None

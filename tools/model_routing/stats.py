@@ -41,12 +41,15 @@ _REPORT_DIR_REL = Path(".claude") / "stats"
 
 @dataclass(frozen=True)
 class TokenUsage:
+    """Token usage for one turn or one aggregate — the shape shared across every role."""
+
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_creation_tokens: int = 0
 
     def add(self, other: TokenUsage) -> TokenUsage:
+        """Elementwise sum with ``other``."""
         return TokenUsage(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
@@ -89,11 +92,14 @@ def _sum_usage(usages: Iterable[TokenUsage]) -> TokenUsage:
 
 @dataclass
 class DelegationStats:
+    """Aggregated delegation-log counts: total, and per (subagent, model) pair."""
+
     total: int = 0
     per_pair: Counter[tuple[str, str]] = field(default_factory=Counter)
 
     @property
     def per_subagent(self) -> Counter[str]:
+        """Delegation counts collapsed to subagent, ignoring model."""
         counts: Counter[str] = Counter()
         for (subagent, _model), count in self.per_pair.items():
             counts[subagent] += count
@@ -101,6 +107,7 @@ class DelegationStats:
 
     @property
     def per_model(self) -> Counter[str]:
+        """Delegation counts collapsed to model, ignoring subagent."""
         counts: Counter[str] = Counter()
         for (_subagent, model), count in self.per_pair.items():
             counts[model] += count
@@ -108,10 +115,10 @@ class DelegationStats:
 
 
 def aggregate_delegation_lines(lines: Iterable[str]) -> DelegationStats:
-    """Aggregate delegation-log lines, counting exactly the rows ``routing.parse_delegation_entries``
-    yields — the current 6-field schema and the legacy 4-field one; a shorter line is skipped.
+    """Aggregate delegation-log lines, counting exactly the rows ``routing.parse_delegation_entries`` yields.
 
-    One parser for both default readers, not a second reading here: this digest accepted a
+    The current 6-field schema and the legacy 4-field one; a shorter line is skipped. One
+    parser for both default readers, not a second reading here: this digest accepted a
     3-field row that the coverage map skips, so the two could disagree on which delegations
     exist (C76). An absent model counts as ``-``, as the log writes it.
     """
@@ -136,6 +143,8 @@ def parse_delegation_log(path: Path) -> DelegationStats | None:
 
 @dataclass
 class TranscriptStats:
+    """Aggregated main-session transcript stats: per-model token usage + a user-message count."""
+
     per_model: dict[str, TokenUsage] = field(default_factory=dict)
     user_message_count: int = 0
 
@@ -146,6 +155,7 @@ def munged_project_dir(project_root: Path) -> str:
 
 
 def transcripts_dir(project_root: Path, claude_home: Path | None = None) -> Path:
+    """The project's transcript directory under ``<claude_home>/projects/``."""
     home = claude_home or (Path.home() / ".claude")
     return home / "projects" / munged_project_dir(project_root)
 
@@ -195,6 +205,7 @@ def aggregate_transcript_lines(lines: Iterable[str]) -> TranscriptStats:
 
 
 def parse_main_transcript(path: Path | None) -> TranscriptStats | None:
+    """Read and aggregate the main-session transcript; None when ``path`` is absent."""
     if path is None or not path.is_file():
         return None
     return aggregate_transcript_lines(path.read_text(encoding="utf-8").splitlines())
@@ -207,6 +218,8 @@ def parse_main_transcript(path: Path | None) -> TranscriptStats | None:
 
 @dataclass
 class SubagentRecord:
+    """One subagent transcript's identity, label/tier, and total token usage."""
+
     agent_id: str
     label: str
     tier: str
@@ -229,6 +242,7 @@ def _read_json_dict(path: Path) -> dict:
 
 
 def label_and_tier(meta: dict, fallback_label: str, tier_map: dict[str, str]) -> tuple[str, str]:
+    """Display label and tier for a subagent transcript, from its ``.meta.json`` and the tier map."""
     label = str(meta.get("agentType") or fallback_label or "-")
     return label, tier_map.get(label, "-")
 
@@ -284,6 +298,8 @@ def collect_subagent_stats(subagents_dir: Path, tier_map: dict[str, str] | None 
 
 @dataclass
 class LimitSummary:
+    """One usage-endpoint limit: its label, remaining percent, and reset time."""
+
     label: str
     remaining_pct: float | None
     resets_at: str | None
@@ -291,6 +307,8 @@ class LimitSummary:
 
 @dataclass
 class BudgetSummary:
+    """Parsed ``/api/oauth/usage`` response: session/week/scoped limits, or an unavailable reason."""
+
     session: LimitSummary | None = None
     week: LimitSummary | None = None
     scoped: list[LimitSummary] = field(default_factory=list)
@@ -332,11 +350,12 @@ def parse_usage_response(data: dict) -> BudgetSummary:
                 )
             )
         return BudgetSummary(session=session, week=week, scoped=scoped)
-    except Exception as exc:  # defensive: any unexpected shape degrades, never crashes the digest
+    except Exception as exc:  # noqa: BLE001 — any unexpected shape degrades, never crashes the digest
         return BudgetSummary(unavailable=f"{type(exc).__name__}: {exc}")
 
 
 def read_access_token(credentials_path: Path) -> str | None:
+    """The OAuth access token from a ``.credentials.json`` file, or None when absent/malformed."""
     data = _read_json_dict(credentials_path)
     token = data.get("claudeAiOauth", {}).get("accessToken") if isinstance(data.get("claudeAiOauth"), dict) else None
     return token if isinstance(token, str) and token else None
@@ -344,7 +363,7 @@ def read_access_token(credentials_path: Path) -> str | None:
 
 def fetch_usage(url: str, token: str) -> dict:
     """The one network call in this module — kept tiny so tests inject a canned dict instead."""
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 (fixed https API host)
         url,
         headers={"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"},
     )
@@ -365,7 +384,7 @@ def budget_summary(
             return BudgetSummary(unavailable="no credentials found")
         data = fetch(USAGE_URL, token)
         return parse_usage_response(data)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — never raises: every failure is `unavailable`
         return BudgetSummary(unavailable=f"{type(exc).__name__}: {exc}")
 
 
@@ -390,6 +409,7 @@ def render_report(
     subagents: list[SubagentRecord],
     budget: BudgetSummary,
 ) -> str:
+    """Full markdown report (file) — delegations, per-role tokens, budget."""
     lines = [f"# Session statistics — {session_stem}", ""]
     lines.append(f"Transcript: `{transcript_path}`" if transcript_path else "Transcript: not found")
     lines.append("")
@@ -453,10 +473,10 @@ def render_report(
                 f"- week (all models) remaining: {_fmt_pct(budget.week.remaining_pct)} "
                 f"(resets {_fmt_resets(budget.week.resets_at)})"
             )
-        for scoped in budget.scoped:
-            lines.append(
-                f"- {scoped.label} remaining: {_fmt_pct(scoped.remaining_pct)} (resets {_fmt_resets(scoped.resets_at)})"
-            )
+        lines.extend(
+            f"- {scoped.label} remaining: {_fmt_pct(scoped.remaining_pct)} (resets {_fmt_resets(scoped.resets_at)})"
+            for scoped in budget.scoped
+        )
     lines.append("")
 
     lines.append("---")
@@ -515,11 +535,11 @@ def render_digest(
             f"week {_fmt_pct(week.remaining_pct) if week else '-'} remaining "
             f"(resets {_fmt_resets(week.resets_at) if week else '-'})"
         )
-        for scoped in budget.scoped:
-            lines.append(
-                f"budget: {scoped.label} {_fmt_pct(scoped.remaining_pct)} remaining "
-                f"(resets {_fmt_resets(scoped.resets_at)})"
-            )
+        lines.extend(
+            f"budget: {scoped.label} {_fmt_pct(scoped.remaining_pct)} remaining "
+            f"(resets {_fmt_resets(scoped.resets_at)})"
+            for scoped in budget.scoped
+        )
 
     lines.append(f"report: {report_path}")
     return "\n".join(lines)
@@ -531,6 +551,7 @@ def render_digest(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: assemble the digest, write the full report, print the compact digest."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, default=Path.cwd(), help="Project root (default: cwd).")
     parser.add_argument("--transcript", type=Path, help="Override the main session transcript path.")

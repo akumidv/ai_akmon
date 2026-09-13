@@ -21,9 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import routing  # noqa: E402
+import routing
 
-from common.project_root import resolve_project_root  # noqa: E402
+from common.project_root import resolve_project_root
 
 
 def _read_json(path: Path) -> dict:
@@ -90,6 +90,7 @@ def _digest(text: str, limit: int = 1200) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: run the second-opinion CLI against a gate pack and write its report."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument("--provider", help="External review provider. Defaults to configured opposite vendor.")

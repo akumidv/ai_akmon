@@ -42,6 +42,8 @@ from pathlib import Path
 DONE_STATUS = "done"
 DONE_HEADER = "## Done"
 _TASK_ID_RE = re.compile(r"^[ACLNTV]\d+$")  # typed id scheme (ADR 0002) + grandfathered T#
+#: Minimum ``·``-separated fields (id, title, status) for an entry to carry a status field.
+_STATUS_FIELD_COUNT = 3
 
 
 def _is_bullet(line: str) -> bool:
@@ -56,16 +58,17 @@ def _entry_id(bullet: str) -> str:
 def _status_of(bullet: str) -> str | None:
     """The status field (third ``·``-separated field), or ``None`` when the line has too few."""
     fields = [field.strip() for field in bullet[2:].split("·")]
-    return fields[2] if len(fields) >= 3 else None
+    return fields[2] if len(fields) >= _STATUS_FIELD_COUNT else None
 
 
 def _set_status(bullet: str, status: str) -> str:
     """Rewrite the status field (third ``·``-separated field) to ``status``, keeping its spacing.
 
     Only the status cell changes — the id, title, and detail are left verbatim. A malformed
-    bullet (fewer than three fields) is returned unchanged."""
+    bullet (fewer than three fields) is returned unchanged.
+    """
     parts = bullet.split("·")
-    if len(parts) < 3:
+    if len(parts) < _STATUS_FIELD_COUNT:
         return bullet
     field = parts[2]
     lead = field[: len(field) - len(field.lstrip())]
@@ -79,7 +82,8 @@ def mark_done(tasks_text: str, ids: list[str]) -> tuple[str, list[str]]:
 
     ``missing_ids`` are requested ids that are not a top-level entry (a likely typo). An entry
     already ``done`` is left as-is (idempotent). Deciding a task is done stays the owner's call —
-    this only mechanizes the status flip so a close is one command."""
+    this only mechanizes the status flip so a close is one command.
+    """
     lines = tasks_text.splitlines()
     wanted = list(dict.fromkeys(ids))  # de-dupe, preserve order
     found: set[str] = set()
@@ -96,7 +100,8 @@ def malformed_entries(lines: list[str]) -> list[str]:
     """Top-level bullets whose leading field looks like a task id but that lack a status field.
 
     A likely typo — a dropped ``·`` separator — rather than a prose bullet (whose leading field
-    would not match the id scheme). Advisory only: reported, never swept."""
+    would not match the id scheme). Advisory only: reported, never swept.
+    """
     return [
         lines[start]
         for start, _end in parse_entries(lines)
@@ -161,6 +166,7 @@ def insert_into_archive(archive_text: str, blocks: list[list[str]]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: optionally flip ``--done`` entries, then sweep done entries into the archive."""
     parser = argparse.ArgumentParser(description="Move done backlog entries into TASKS_ARCHIVE.md.")
     parser.add_argument("--tasks", required=True, help="Path to the TASKS.md to sweep.")
     parser.add_argument(

@@ -77,11 +77,11 @@ sixth:
 
 | reader | why it was kept local |
 |---|---|
-| `bin/sync.py:76` `read_akmon_toml` | the original, and the richest — nested, `tomllib` + stdlib fallback |
-| `tools/release/release_check.py:496` | "this tool does not import `sync`" — stale since C74; it imports `common.*` |
-| `tools/d2_ledger/d2_ledger.py:272` | self-contained tool |
+| `bin/sync.py:78` `read_akmon_toml` | the original, and the richest — nested, `tomllib` + stdlib fallback |
+| `tools/release/release_check.py:499` | "this tool does not import `sync`" — stale since C74; it imports `common.*` |
+| `tools/d2_ledger/d2_ledger.py:274` | self-contained tool |
 | `tools/model_routing/init.py:60` | narrow top-level scalar read |
-| `src/akmon/cli.py:144` | must not depend on the *consumer's* tree — still true, and it can ask the embedded one |
+| `src/akmon/cli.py:148` | must not depend on the *consumer's* tree — still true, and it can ask the embedded one |
 
 Only the hooks' reader moved. Folding the other four is [C75](../../TASKS.md): each carries a
 justification to re-examine on its own, and three of the four are weaker than when written.

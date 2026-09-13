@@ -81,18 +81,23 @@ def _requirement_name(requirement: str) -> str:
 
 
 class Validator:
+    """Runs akmon's dev-layer checks over one root and collects their findings."""
+
     def __init__(self, root: Path, *, skip_tests: bool = False) -> None:
         self.root = root
         self.skip_tests = skip_tests
         self.findings: list[Finding] = []
 
     def ok(self, code: str, message: str, *, target: str = "", fix: str) -> None:
+        """Record a passing finding."""
         self.findings.append(Finding("ok", code, line_safe(message), line_safe(target), line_safe(fix)))
 
     def warn(self, code: str, message: str, *, target: str = "", fix: str) -> None:
+        """Record a warning finding."""
         self.findings.append(Finding("warn", code, line_safe(message), line_safe(target), line_safe(fix)))
 
     def error(self, code: str, message: str, *, target: str = "", fix: str) -> None:
+        """Record a failing finding."""
         self.findings.append(Finding("error", code, line_safe(message), line_safe(target), line_safe(fix)))
 
     def check_present(self, relatives: tuple[str, ...], label: str, *, code: str, target: str) -> None:
@@ -114,6 +119,7 @@ class Validator:
             )
 
     def check_dev_layout(self) -> None:
+        """Assert the dev-layer and USE-surface file populations are present."""
         self.check_present(_DEV_LAYER_FILES, "dev layer (meta/)", code="devlayer.files", target="meta/")
         self.check_present(_USE_SOURCE_FILES, "USE-surface sources", code="devlayer.use-surface", target=".")
 
@@ -132,6 +138,7 @@ class Validator:
             [sys.executable, str(self_ci)],
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode == 0:
             self.ok(
@@ -157,6 +164,7 @@ class Validator:
             )
 
     def run_tests(self) -> None:
+        """Run akmon's own unit tests (meta/tests), unless skipped."""
         if self.skip_tests:
             self.warn(
                 "devlayer.unit-tests-skipped",
@@ -188,6 +196,7 @@ class Validator:
             cwd=self.root,
             capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode == 0:
             self.ok(
@@ -230,11 +239,11 @@ class Validator:
         import probe above has usually answered already.
         """
         try:
-            import pytest  # noqa: F401
-
-            return [sys.executable, "-m", "pytest"], ""
+            import pytest  # noqa: F401, PLC0415 — the import is the availability probe
         except ImportError:
             pass
+        else:
+            return [sys.executable, "-m", "pytest"], ""
         if not shutil.which("uv"):
             return None, "pytest is not importable and uv is not on PATH"
         resolvable, why = self._manifest_declares_pytest()
@@ -254,7 +263,7 @@ class Validator:
         if not manifest.is_file():
             return False, "this root has no pyproject.toml for uv run to provision from"
         try:
-            import tomllib
+            import tomllib  # noqa: PLC0415 — the one-reader carrier (test_record_owner) keys on the importing function
         except ImportError:
             return False, "its pyproject.toml cannot be read here (tomllib needs Python 3.11+)"
         try:
@@ -271,12 +280,14 @@ class Validator:
         return False, "its pyproject.toml declares no pytest in a group uv installs by default"
 
     def run(self) -> None:
+        """Run every check in order: dev layout, self-CI, unit tests."""
         self.check_dev_layout()
         self.run_self_ci()
         self.run_tests()
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse args, run the validator against akmon's own root, and print its findings."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict", action="store_true", help="Treat warnings as failures.")
     parser.add_argument("--quiet", action="store_true", help="Only print warnings and errors.")

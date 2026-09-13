@@ -24,6 +24,7 @@ def _decide() -> HookResult | None:
 
 
 def main() -> int:
+    """Entry point: emit the analysis-before-mutation reminder."""
     return run_guarded("analysis-guard", _decide)
 
 

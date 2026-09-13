@@ -63,11 +63,12 @@ def read_akmon_toml(path: Path) -> dict:
     treated as strings. Returns ``{}`` only when the file is absent or unreadable (``OSError``);
     a malformed file is read leniently by the fallback parser instead and can come back
     non-empty, so a caller that needs to *report* a broken record must check the file itself
-    rather than infer it from the result."""
+    rather than infer it from the result.
+    """
     if not path.is_file():
         return {}
     try:
-        import tomllib
+        import tomllib  # noqa: PLC0415 — the one-reader carrier (test_record_owner) keys on the importing function
     except ImportError:
         tomllib = None  # type: ignore[assignment]
     if tomllib is not None:
@@ -104,8 +105,10 @@ class RecordError(ValueError):
 
 
 def read_akmon_toml_strict(path: Path) -> dict:
-    """Read ``_aitna/.akmon.toml`` strictly: ``{}`` when the file is absent, the parsed table
-    otherwise, and :class:`RecordError` when it cannot be read or does not parse.
+    """Read ``_aitna/.akmon.toml`` strictly.
+
+    ``{}`` when the file is absent, the parsed table otherwise, and :class:`RecordError` when
+    it cannot be read or does not parse.
 
     :func:`read_akmon_toml` is lenient on purpose, and that is right for a caller that only
     *consults* the record. It is wrong for one that *applies* it: the Python rule configuration
@@ -115,7 +118,7 @@ def read_akmon_toml_strict(path: Path) -> dict:
     """
     if not path.is_file():
         return {}
-    import tomllib
+    import tomllib  # noqa: PLC0415 — the one-reader carrier (test_record_owner) keys on the importing function
 
     try:
         with path.open("rb") as handle:

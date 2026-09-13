@@ -92,7 +92,7 @@ Three kinds of attachment:
 - **The common guardrail and the language profile — automatic by language.** Always applied;
   derived from the language, not chosen. Both are `@`-imported, so they load at session start.
 - **Environment profiles — automatic by where code runs.** Imported when some of the project's
-  code runs in that environment; the project declares those paths in its `.akmon.toml`.
+  code runs in that environment; the project names those paths beside the import.
 - **Domain profiles — opt-in by need.** *Suggested* by archetype, attached only if the project
   actually has that concern (don't attach `quant` to an API that does no numerics).
 

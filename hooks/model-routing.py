@@ -77,6 +77,7 @@ def _load_config(root: Path) -> dict:
 
 
 def model_routing_result(root: Path, payload: dict) -> HookResult | None:
+    """Orchestrator-detection + status-line result for this hook event, or ``None`` when silent."""
     akmon = akmon_runtime_root(root)
     if not routing.registry_path(akmon).is_file():
         # Silence is the right answer for a pin that predates model routing: such a tree has no
@@ -174,7 +175,7 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
 
 
 def _project_root(payload: dict) -> Path:
-    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or str(Path.cwd())
     return find_project_root(Path(cwd))
 
 
@@ -184,6 +185,7 @@ def _decide() -> HookResult | None:
 
 
 def main() -> int:
+    """Entry point: detect orchestrator drift and emit the status line, never blocking."""
     # Never block a turn: a crash is reported (stderr + the owner's notice), exit 0.
     return run_guarded("model-routing", _decide)
 

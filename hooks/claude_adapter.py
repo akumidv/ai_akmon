@@ -33,6 +33,7 @@ def normalize_tool(name: str) -> str:
 
 
 def load_payload() -> dict[str, Any]:
+    """Parse the hook payload from stdin as a JSON object; ``{}`` on any parse failure."""
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
@@ -72,6 +73,7 @@ def render_result(result: HookResult | None) -> str | None:
 
 
 def print_result(result: HookResult | None) -> None:
+    """Print the rendered ``result`` document, or nothing when there is none."""
     document = render_result(result)
     if document is not None:
         print(document)
@@ -95,7 +97,7 @@ def run_guarded(hook_name: str, decide: Callable[[], HookResult | None]) -> int:
     """
     try:
         document = render_result(decide())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — crash-open: every failure is reported, none blocks
         print(hook_failure_diagnostic(hook_name, exc), file=sys.stderr)
         document = json.dumps({"systemMessage": hook_failure_notice(hook_name, exc)})
     if document is not None:

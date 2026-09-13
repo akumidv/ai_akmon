@@ -34,6 +34,7 @@ construction rather than by redaction.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import queue
 import subprocess
@@ -228,8 +229,10 @@ def hook_trust_problems(
 
 
 def default_runner(command: Sequence[str], cwd: Path, timeout: float) -> str:
-    """Spawn ``command`` (``codex app-server``), negotiate the minimal handshake, and return the
-    raw ``hooks/list`` response line. See the module docstring for the measured wire shape.
+    """Spawn ``command`` (``codex app-server``) and negotiate the minimal handshake.
+
+    Returns the raw ``hooks/list`` response line. See the module docstring for the measured
+    wire shape.
 
     This is the seam :func:`query_hooks_list` calls by default; a caller (a test, or a future
     caller that already has a running app-server) may pass its own ``runner`` instead — carriers
@@ -311,15 +314,11 @@ def default_runner(command: Sequence[str], cwd: Path, timeout: float) -> str:
             if isinstance(message, dict) and message.get("id") == _HOOKS_LIST_ID:
                 return line
     finally:
-        try:
+        with contextlib.suppress(OSError):
             proc.stdin.close()
-        except OSError:
-            pass
         for stop in (proc.terminate, proc.kill):
-            try:
+            with contextlib.suppress(OSError):
                 stop()
-            except OSError:
-                pass
             try:
                 proc.wait(timeout=_EXIT_GRACE_SECONDS)
                 break
@@ -386,7 +385,7 @@ def query_hooks_list(
         raw = runner(command, cwd, timeout)
     except CodexProtocolError as exc:
         raise CodexProtocolError(getattr(exc, "kind", None)) from None
-    except Exception:
+    except Exception:  # noqa: BLE001 — the seam turns any runner failure into a finding
         raise CodexProtocolError("runner-failed") from None
 
     try:

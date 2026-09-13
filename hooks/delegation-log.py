@@ -41,10 +41,8 @@ def _load_config(root: Path) -> dict:
 def _format_system_message(line: str) -> str:
     """Format a delegation-log TSV line as a user-facing system message."""
     parts = [field.strip() if field.strip() != "-" else None for field in line.split("\t")]
-    subagent = parts[2] if len(parts) > 2 else None
-    model = parts[3] if len(parts) > 3 else None
-    zone = parts[4] if len(parts) > 4 else None
-    description = parts[5] if len(parts) > 5 else None
+    padded = (parts + [None] * 6)[:6]
+    _timestamp, _session_id, subagent, model, zone, description = padded
 
     msg = f"[akmon] → {subagent}"
     if model:
@@ -61,7 +59,7 @@ def _decide() -> HookResult | None:
     tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     session_id = payload.get("session_id")
-    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or str(Path.cwd())
     root = find_project_root(Path(cwd))
 
     # Derive the recorded generated-agent pin (its frontmatter `model:` is not echoed in
@@ -96,6 +94,7 @@ def _decide() -> HookResult | None:
 
 
 def main() -> int:
+    """Entry point: log the delegation, advisory only."""
     # Advisory only: a crash is reported (stderr + the owner's notice) and never blocks the call.
     return run_guarded("delegation-log", _decide)
 

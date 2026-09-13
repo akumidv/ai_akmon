@@ -30,18 +30,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import routing  # noqa: E402
+import routing
 
-from common.project_root import resolve_project_root  # noqa: E402
-from common.record import records_package_mode  # noqa: E402
+from common.project_root import resolve_project_root
+from common.record import records_package_mode
 
 
 def _standard_tree_root(project_root: Path) -> Path:
-    """The tree this script reads ``registry.json`` from: the mount for mounted modes, this
-    script's own tree otherwise (ADR 0009 §4, mirroring ``bin/sync.py::standard_tree_root``).
+    """The tree this script reads ``registry.json`` from: the mount for mounted modes, this script's own tree otherwise.
 
-    In package mode that own tree is either the materialized ``<AITNA_ROOT>/.akmon/`` copy or
-    the installed package's embedded tree, whichever this file was executed from — both carry
+    (ADR 0009 §4, mirroring ``bin/sync.py::standard_tree_root``.) In package mode that own tree
+    is either the materialized ``<AITNA_ROOT>/.akmon/`` copy or the installed package's
+    embedded tree, whichever this file was executed from — both carry
     ``tools/model_routing/registry.json``. The recorded ``mount`` field decides, never the mere
     presence of the directory: a stale ``<AITNA_ROOT>/akmon`` left over from a prior mode must
     not shadow the pin.
@@ -86,6 +86,7 @@ def _existing_second_opinion(project_root: Path) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: compute the binding and write (or check) the generated routing artifacts."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument(
@@ -115,10 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         or _settings_model(root)
         or (available[-1] if available else fallback.get("orchestrator", "strongest"))
     )
-    if args.second_opinion is None:
-        second_opinion = _existing_second_opinion(root)
-    else:
-        second_opinion = args.second_opinion == "on"
+    second_opinion = _existing_second_opinion(root) if args.second_opinion is None else args.second_opinion == "on"
 
     binding = routing.compute_binding(registry, orchestrator, available, args.vendor)
     try:

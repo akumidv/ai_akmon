@@ -27,7 +27,7 @@ from pathlib import Path
 # mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from common.project_root import aitna_root, resolve_project_root  # noqa: E402
+from common.project_root import aitna_root, resolve_project_root
 
 # Role -> the question the pack asks its executor (design §9.4: "roles and tiers stay
 # orthogonal" — the role determines the pack's contract and question, the tier only the
@@ -176,6 +176,7 @@ def _digest(text: str, limit: int = 1200) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: build a gate pack from its inputs and write it under ``artifacts/gates/``."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument("--gate", required=True, help="Verify gate name, e.g. design-align or code-verify.")

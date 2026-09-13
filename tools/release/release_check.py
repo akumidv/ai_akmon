@@ -97,8 +97,7 @@ def _changelog_summary(akmon: Path) -> list[str]:
     if not text:
         return ["CHANGELOG.md: (missing)"]
     lines = ["CHANGELOG.md sections:"]
-    for match in re.finditer(r"^##\s+(.+)$", text, re.MULTILINE):
-        lines.append(f"  - {match.group(1).strip()}")
+    lines.extend(f"  - {match.group(1).strip()}" for match in re.finditer(r"^##\s+(.+)$", text, re.MULTILINE))
     if not _UNRELEASED_RE.search(text):
         lines.append("  ! no `## Unreleased` section — add one for pending changes")
     return lines
@@ -121,6 +120,7 @@ def _tasks_summary(tasks_dir: Path) -> list[str]:
 
 
 def run_state(root: Path, subject: str) -> int:
+    """``--state``: print the TASKS / CHANGELOG / release-charter / git-status summary."""
     akmon = aitna_root(root) / "akmon"
     # The subject decides which working tree a tag is cut from: akmon is the submodule's
     # own tree; package is the project root. For akmon the backlog lives in its dev layer
@@ -220,7 +220,7 @@ def _pyproject_version(path: Path) -> str | None:
     if not path.is_file():
         return None
     try:
-        import tomllib
+        import tomllib  # noqa: PLC0415 — the one-reader carrier (test_record_owner) keys on the importing function
 
         with path.open("rb") as handle:
             data = tomllib.load(handle)
@@ -355,7 +355,7 @@ def check_release_versions(root: Path) -> list[Finding]:
     else:
         findings.extend(_check_window(version, headings))
 
-    findings.extend(_check_tags(root, version, changelog_path.is_file(), headings))
+    findings.extend(_check_tags(root, version, has_changelog=changelog_path.is_file(), headings=headings))
     return findings
 
 
@@ -374,8 +374,11 @@ def _released_headings(headings: list[str]) -> list[tuple[str, str]]:
 
 
 def _check_window(version: str, headings: list[str]) -> list[Finding]:
-    """The changelog window rule, in its two branches: non-final wants ``## Unreleased``, final
-    wants its own released heading above every other released one."""
+    """The changelog window rule, in its two branches.
+
+    Non-final wants ``## Unreleased``; final wants its own released heading above every
+    other released one.
+    """
     base, _ = split_version(version)
     if not is_final(version):
         if headings and _UNRELEASED_HEADING_RE.match(headings[0]):
@@ -433,7 +436,7 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
     ]
 
 
-def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: list[str]) -> list[Finding]:
+def _check_tags(root: Path, version: str | None, *, has_changelog: bool, headings: list[str]) -> list[Finding]:
     """The two git-dependent rules: the re-release warn and the tag-coverage warn."""
     findings: list[Finding] = []
     tags = _git_tags(root)
@@ -461,17 +464,17 @@ def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: 
     # neither the re-release answer nor tag coverage is computed from a name the standard does
     # not recognize.
     release_tags = [tag for tag in tags if tag.startswith("v")]
-    for tag in tags:
-        if not tag.startswith("v"):
-            findings.append(
-                _finding(
-                    "warn",
-                    "release.tag-spelling",
-                    f"tag {tag} names a version but is not spelled v{tag}",
-                    tag,
-                    f"Cut release tags as v{tag} — that spelling is the release tag's only form.",
-                )
-            )
+    findings.extend(
+        _finding(
+            "warn",
+            "release.tag-spelling",
+            f"tag {tag} names a version but is not spelled v{tag}",
+            tag,
+            f"Cut release tags as v{tag} — that spelling is the release tag's only form.",
+        )
+        for tag in tags
+        if not tag.startswith("v")
+    )
 
     if final:
         base, _ = split_version(version or "")
@@ -497,17 +500,17 @@ def _check_tags(root: Path, version: str | None, has_changelog: bool, headings: 
         )
         return findings
     documented = {released for _heading, released in _released_headings(headings)}
-    for tag in release_tags:
-        if split_version(tag)[0] not in documented:
-            findings.append(
-                _finding(
-                    "warn",
-                    "release.undocumented-tag",
-                    f"tag {tag} has no `## {tag}` heading in {_CHANGELOG}",
-                    tag,
-                    f"Add the `## {tag}` section it released, or accept the historical gap.",
-                )
-            )
+    findings.extend(
+        _finding(
+            "warn",
+            "release.undocumented-tag",
+            f"tag {tag} has no `## {tag}` heading in {_CHANGELOG}",
+            tag,
+            f"Add the `## {tag}` section it released, or accept the historical gap.",
+        )
+        for tag in release_tags
+        if split_version(tag)[0] not in documented
+    )
     return findings
 
 
@@ -523,7 +526,8 @@ def _pinned_test_runner(root: Path) -> str | None:
     absent, and a Python project usually already has its own manager (poetry/pdm/pip-venv/conda)
     and an env with pytest, so the right move is to *use what is there*, decided once at attach,
     not to re-guess (or build a second `<AITNA_ROOT>/.venv`) on every run. Absent → fall back to
-    `_pytest_command`'s discovery for projects that predate this field."""
+    `_pytest_command`'s discovery for projects that predate this field.
+    """
     test = read_akmon_toml(aitna_root(root) / ".akmon.toml").get("test")
     runner = test.get("runner") if isinstance(test, dict) else None
     return runner.strip() if isinstance(runner, str) and runner.strip() else None
@@ -540,7 +544,8 @@ def _pytest_command(root: Path, tests: str) -> list[str]:
     The dev venv is invoked as `<venv>/bin/python -m pytest`, never via its `bin/pytest` console
     script: that script bakes an absolute-path shebang at creation, so a relocated/recopied venv
     leaves it pointing at a missing interpreter (FileNotFoundError) even though pytest imports fine.
-    Mirror the dev-deps in §A5 if the dev venv grows more than pytest."""
+    Mirror the dev-deps in §A5 if the dev venv grows more than pytest.
+    """
     pinned = _pinned_test_runner(root)
     if pinned:
         return [*pinned.split(), tests]
@@ -555,6 +560,7 @@ def _pytest_command(root: Path, tests: str) -> list[str]:
 
 
 def run_check(root: Path, subject: str) -> int:
+    """``--check``: run the version/changelog cross-check plus the subject's release suite."""
     # The version join runs before the suites and against the tree the tag is cut from: for the
     # akmon subject that is the standard's own tree, for package the project root.
     version_findings = check_release_versions(KEYSTONE_ROOT if subject == "akmon" else root)
@@ -667,6 +673,7 @@ def run_plan(version: str, subject: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: dispatch to ``--state``/``--check``/``--plan`` for the chosen subject."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument(

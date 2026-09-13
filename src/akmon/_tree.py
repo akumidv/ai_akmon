@@ -37,7 +37,7 @@ def embedded_tree_root() -> Path:
     if _ADJACENT_TREE.is_dir():
         return _ADJACENT_TREE
     try:
-        from importlib import resources
+        from importlib import resources  # noqa: PLC0415 — only the non-adjacent layouts reach it
 
         traversable = resources.files("akmon") / "_tree"
         if traversable.is_dir():

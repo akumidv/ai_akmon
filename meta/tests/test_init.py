@@ -415,7 +415,14 @@ def test_package_attach_verifies_strict_green(tmp_path, monkeypatch):
     materialized = sorted(
         path.relative_to(tmp_path).as_posix() for path in (tmp_path / "_aitna" / ".akmon").rglob("*") if path.is_file()
     )
-    assert materialized == ["_aitna/.akmon/guardrails/_common.md"]
+    # No linter of its own, so init set up ruff with akmon's rules — the standard `extend` — and
+    # sync materialized them beside the imported guardrail.
+    assert materialized == ["_aitna/.akmon/guardrails/_common.md", "_aitna/.akmon/profiles/ruff.toml"]
+    configs = [
+        p.read_text(encoding="utf-8") for p in (tmp_path / "pyproject.toml", tmp_path / "ruff.toml") if p.is_file()
+    ]
+    assert any('extend = "_aitna/.akmon/profiles/ruff.toml"' in text for text in configs)
+    assert "ruff check {files}" in (tmp_path / "_aitna" / ".akmon.toml").read_text(encoding="utf-8")
     assert sorted((tmp_path / ".claude" / "agents").glob("k_*.md"))
     _project_venv(tmp_path)
     assert _verify_strict(tmp_path, monkeypatch) == 0
@@ -490,7 +497,10 @@ def test_submodule_attach_verifies_strict_green(tmp_path, monkeypatch, local_git
     assert (consumer / "_aitna" / "akmon" / "bin" / "sync.py").is_file()
     assert (consumer / ".gitmodules").is_file()
     # `init` mounts and stages what git stages for a submodule, but never commits (D5).
-    assert subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(consumer), capture_output=True).returncode != 0
+    assert (
+        subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(consumer), capture_output=True, check=False).returncode
+        != 0
+    )
     assert _verify_strict(consumer, monkeypatch) == 0
 
 
@@ -501,10 +511,14 @@ def test_a_second_init_does_not_move_an_existing_pin(tmp_path, capsys, local_git
     common = ["--mode", "submodule", "--project-root", str(consumer), "--repo", f"file://{_KEYSTONE}", "--yes"]
     assert _init.main([*common, "--ref", "v0.3.0"]) == 0
     mount = consumer / "_aitna" / "akmon"
-    pinned = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(mount), capture_output=True, text=True).stdout.strip()
+    pinned = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=str(mount), capture_output=True, text=True, check=False
+    ).stdout.strip()
 
     assert _init.main(common) == 0  # a realign, not a bump
-    after = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(mount), capture_output=True, text=True).stdout.strip()
+    after = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=str(mount), capture_output=True, text=True, check=False
+    ).stdout.strip()
     assert after == pinned
     assert "left at its current pin" in capsys.readouterr().out
 
@@ -563,7 +577,7 @@ def test_aitna_root_env_is_not_left_set_by_a_refused_run(tmp_path, monkeypatch):
 
 
 def _sha(args: list[str], cwd: Path) -> str:
-    return subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True).stdout.strip()
+    return subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, check=False).stdout.strip()
 
 
 def test_submodule_index_names_the_ref_that_was_checked_out(tmp_path, local_git_repo):
@@ -588,14 +602,17 @@ def test_submodule_index_names_the_ref_that_was_checked_out(tmp_path, local_git_
 
     mount = consumer / "_aitna" / "akmon"
     staged = subprocess.run(
-        ["git", "ls-files", "-s", "_aitna/akmon"], cwd=str(consumer), capture_output=True, text=True
+        ["git", "ls-files", "-s", "_aitna/akmon"], cwd=str(consumer), capture_output=True, text=True, check=False
     ).stdout.split()
     assert staged[1] == _sha(["rev-parse", "HEAD"], cwd=mount) == _sha(["rev-parse", "v0.3.0"], cwd=mount)
     status = subprocess.run(
-        ["git", "status", "--porcelain", "_aitna/akmon"], cwd=str(consumer), capture_output=True, text=True
+        ["git", "status", "--porcelain", "_aitna/akmon"], cwd=str(consumer), capture_output=True, text=True, check=False
     ).stdout
     assert "AM" not in status  # the index and the worktree agree
-    assert subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(consumer), capture_output=True).returncode != 0
+    assert (
+        subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(consumer), capture_output=True, check=False).returncode
+        != 0
+    )
 
 
 # --------------------------------------------------------------------------------------

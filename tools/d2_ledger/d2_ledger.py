@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""D2 ledger: mechanical tracking of owner-verification points (`_aitna/D2_LEDGER.md`).
+r"""D2 ledger: mechanical tracking of owner-verification points (`_aitna/D2_LEDGER.md`).
 
 D2 (guardrails/_common.md "Owner-verify any change to math, data shape, or architecture")
 is born mid-dialogue and easily drowns before commit time. This tool gives the point a
@@ -8,7 +8,7 @@ durable, tool-parsed home: a markdown file with `## Pending`, `## Approved`, and
 Full design: `_aitna/akmon/meta/design/d2-ledger.md` (phase 1 of C11 — this tool; the
 reminder hook, session counter, and pre-commit wiring are later phases).
 
-    python3 .../tools/d2_ledger/d2_ledger.py add --ledger <path> \\
+    python3 .../tools/d2_ledger/d2_ledger.py add --ledger <path> \
         --kind math --what "reprice formula" --anchor "src/x.py:42"
     python3 .../tools/d2_ledger/d2_ledger.py list --ledger <path>
     python3 .../tools/d2_ledger/d2_ledger.py approve D2-3 --ledger <path>
@@ -129,7 +129,8 @@ def table_bounds(lines: list[str], header: str) -> tuple[int, int]:
     any other content) does. ``end`` is trimmed back to just past the last real row, so a blank
     run trailing the last row is never counted as part of the range (was: a duplicate-id bug —
     the old first-blank-line cutoff made ``add``/``next_id`` blind to any row past a mid-table
-    blank line)."""
+    blank line).
+    """
     section_at = _section_header_index(lines, header)
     i = section_at + 1
     n = len(lines)
@@ -240,7 +241,8 @@ def approve_entry(text: str, entry_id: str) -> str:
 def verify_entry(text: str, entry_id: str, *, commit: str) -> str:
     """Move ``entry_id`` from ``## Approved`` to the top of ``## Verified``, stamping ``commit``.
 
-    Raises ``ValueError`` if ``entry_id`` is not an approved entry."""
+    Raises ``ValueError`` if ``entry_id`` is not an approved entry.
+    """
     lines = text.splitlines()
     if not any(line.strip() == APPROVED_HEADER for line in lines):
         raise ValueError(f"no such approved entry: {entry_id}")
@@ -270,21 +272,22 @@ def _read_or_skeleton(path: Path) -> str:
 
 
 def _read_akmon_toml(path: Path) -> dict:
-    """Read a ``.akmon.toml`` file into a dict; ``{}`` if absent or ``tomllib`` is unavailable, and a
-    malformed file raises.
+    """Read a ``.akmon.toml`` file into a dict; ``{}`` if absent or ``tomllib`` is unavailable.
 
-    Deliberately not ``common/record.py``, which every other caller shares (C75). That reader is
-    lenient by contract — a malformed record falls through to a line parser that yields every
-    value as a string — because a hook must not end a session over a file it only consults.
+    A malformed file raises. Deliberately not ``common/record.py``, which every other caller
+    shares (C75). That reader is lenient by contract — a malformed record falls through to a
+    line parser that yields every value as a string — because a hook must not end a session
+    over a file it only consults.
     Here the same leniency would be a silent loss: ``sensitive_paths`` is an array the line parser
     cannot produce, so a record that fails to parse would quietly switch the D2 path check off.
     The lookup differs as well: it walks up from the ledger instead of resolving the dev-layer
     root. ``tomllib`` is on the Python 3.11 floor; an import failure still yields no sensitive-path
-    config rather than a lenient guess."""
+    config rather than a lenient guess.
+    """
     if not path.is_file():
         return {}
     try:
-        import tomllib
+        import tomllib  # noqa: PLC0415 — the one-reader carrier (test_record_owner) keys on the importing function
     except ImportError:
         return {}
     with path.open("rb") as handle:
@@ -311,9 +314,11 @@ def sensitive_paths_for(ledger_path: Path) -> list[str]:
 
 
 def _segments_match(pattern_segments: list[str], path_segments: list[str]) -> bool:
-    """Recursive ``/``-aware glob match: ``**`` spans zero or more whole segments, ``*``/``?`` stay
-    within one segment. Portable across Python 3.x (``PurePath.full_match`` is 3.13+, but this tool
-    is stdlib-only and may run under an older system ``python3`` — e.g. a pre-commit ``check``)."""
+    """Recursive ``/``-aware glob match: ``**`` spans zero or more whole segments, ``*``/``?`` stay within one segment.
+
+    Portable across Python 3.x (``PurePath.full_match`` is 3.13+, but this tool is stdlib-only
+    and may run under an older system ``python3`` — e.g. a pre-commit ``check``).
+    """
     if not pattern_segments:
         return not path_segments
     head, *rest = pattern_segments
@@ -409,6 +414,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: dispatch to the ``add``/``list``/``approve``/``verify``/``check`` subcommand."""
     parser = argparse.ArgumentParser(
         prog="d2_ledger", description="Track owner-verification points (D2) in a markdown ledger."
     )
