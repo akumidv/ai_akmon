@@ -998,7 +998,8 @@ def recommended_max_context(registry: dict, model_id: str | None) -> int:
     ``AKMON_CONTEXT_RECOMMENDED_MAX`` when it holds a positive integer, else the longest
     alias-substring key of ``recommended_max_by_alias`` found in the model id (e.g. a model whose
     hard limit sits below the default), else ``recommended_max``. The shipped 200000 is a
-    configurable owner policy, not an empirical optimum — C80
+    configurable owner policy checked against measurement — above where sessions get compacted
+    in practice, below the 258,400-token window Codex reports for OpenAI models — C80
     (meta/reviews/c80-context-fill-20260912.md).
     """
     try:
@@ -1021,7 +1022,7 @@ def recommended_max_context(registry: dict, model_id: str | None) -> int:
 def _context_fill_metrics(registry: dict, transcript_path: str | Path | None) -> tuple[int, int, float] | None:
     """``(fill, recommended_max, ratio)`` for the last main-chain turn; ``None`` if unavailable.
 
-    Shared by ``context_pressure_notice`` (banded warnings) and ``context_fill_ratio``
+    Shared by ``context_pressure_notice`` (the two-level reminder) and ``context_fill_ratio``
     (the C29 axis-2 coefficient) so both read the same fill/recommended-max definition.
     """
     model_id, usage = _last_main_turn(transcript_path)
@@ -1053,43 +1054,43 @@ def context_pressure_notice(
     *,
     marker_dir: Path | None = None,
 ) -> list[str]:
-    """Warning lines when the context fill crossed a *new* warn band; ``[]`` otherwise.
+    """One reminder line when the context fill reached a *new* pressure level; ``[]`` otherwise.
 
-    Banded and throttled (the delegation-nudge marker idiom): a per-session temp-dir
-    marker records the last announced band, so only a band *rise* warns — 0→high once,
-    high→max once more, a steady fill stays silent. Every band at 1.0 or above is one max
-    state, so the max warning fires once per pressure episode however many bands an overlay
-    stacks past 100%. A fill below the lowest band ends the episode and clears the marker —
-    the hook sees only the low fill, not its cause (a compact, a fresh session, anything
-    else). The share is of the recommended budget, not the model's limit, so it can pass 100%
-    on a model with a larger window. Missing/malformed usage → silent; never raises past I/O.
+    Two levels of the recommended budget (design §12.2): **info** at ``info_ratio`` and **warn**
+    at the budget itself, 1.0 — fixed, since reaching the budget is what the budget means.
+    Throttled (the delegation-nudge marker idiom): a per-session temp-dir marker records the last
+    announced level, so only a rise speaks — info once, warn once more, also when the fill jumps
+    straight past 100%; a steady fill and any fill past the budget stay silent. A fill below the
+    lowest level ends the pressure episode and clears the marker — the hook sees only the low
+    fill, not its cause (a compact, a fresh session, anything else). The share is of the
+    recommended budget, not the model's limit, so it can pass 100% on a model with a larger
+    window; going on is the developer's call. Missing/malformed usage → silent; never raises
+    past I/O.
     """
     policy = registry.get("context_pressure", {})
-    ratios = [float(r) for r in policy.get("warn_ratios") or [] if isinstance(r, (int, float))]
-    if not ratios:
-        return []
+    info_ratio = policy.get("info_ratio")
+    # Only a share strictly between 0 and 1 is a level below the budget; anything else (absent,
+    # a bool, 0, 1 or more, a string) leaves the budget's own warning alone.
+    if isinstance(info_ratio, bool) or not isinstance(info_ratio, (int, float)) or not 0 < info_ratio < 1:
+        info_ratio = None
     metrics = _context_fill_metrics(registry, transcript_path)
     if metrics is None:
         return []
-    fill, recommended, ratio = metrics
-    band: int | None = None
-    for index, threshold in enumerate(ratios):
-        if ratio >= threshold:
-            band = index
-    # Every band at 1.0 or above is the same state — the recommended budget reached — so an
-    # overlay such as [0.85, 1.0, 1.2] warns once at 100% and stays silent at 120%.
-    first_max = next((index for index, threshold in enumerate(ratios) if threshold >= 1.0), None)
-    if band is not None and first_max is not None and band > first_max:
-        band = first_max
+    _, recommended, ratio = metrics
+    level: int | None = None  # 0 = info, 1 = warn — the value the marker records
+    if ratio >= 1.0:
+        level = 1
+    elif info_ratio is not None and ratio >= info_ratio:
+        level = 0
 
     marker = (marker_dir or Path(tempfile.gettempdir())) / f"akmon-context-pressure-{session_id or 'nosession'}"
     try:
-        last_band: int | None = int(marker.read_text(encoding="utf-8"))
+        last_level: int | None = int(marker.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        last_band = None
+        last_level = None
 
-    if band is None:
-        # Below every band — the pressure episode is over and the throttle resets. The cause is
+    if level is None:
+        # Below every level — the pressure episode is over and the throttle resets. The cause is
         # not visible here: a compact, a fresh session and anything else that lowered the fill
         # look alike.
         try:
@@ -1097,29 +1098,21 @@ def context_pressure_notice(
         except OSError:
             pass
         return []
-    if last_band is not None and band <= last_band:
+    if last_level is not None and level <= last_level:
         return []
     try:
-        marker.write_text(str(band), encoding="utf-8")
+        marker.write_text(str(level), encoding="utf-8")
     except OSError:
         pass
 
-    # A band at 1.0 or above is the recommended budget itself — named by its threshold, not its
-    # position, so an overlay whose top band stays below 1.0 keeps the checkpoint advice. The
-    # advice is conditional on purpose: the hook cannot tell whether the task goes on, and a
-    # compact keeps whatever its focus names, not the current task by guarantee. Past it the
-    # session goes on at the developer's discretion: this warning fires once, and the throttle
-    # above keeps every further band and repeat silent until the episode resets.
-    at_max = ratios[band] >= 1.0
-    advice = (
-        "recommended context budget reached — same task: checkpoint and /compact with a task "
-        "focus; new task: /clear or start a new session"
-        if at_max
-        else "checkpoint decisions and state to files/TASKS; if the task continues, prepare a focused /compact"
-    )
     shown = f"{recommended // 1000}k" if recommended % 1000 == 0 else str(recommended)
-    share = f"~{ratio:.0%} of the recommended {shown} budget ({fill} tokens)"
-    return [f"⚠ context pressure: {share} — {advice}"]
+    share = f"~{ratio:.0%} of the recommended {shown} budget"
+    # A reminder to the owner and nothing more: the share and the command to type. `/compact` and
+    # `/new` exist under those names in Claude Code and in Codex alike. The marks are the hook's
+    # own: ⚠ for a warning, as the corridor's, ℹ for information.
+    if level == 1:
+        return [f"⚠ context pressure: {share} — /compact; new task: /new"]
+    return [f"ℹ context pressure: {share} — /compact"]
 
 
 def binding_artifacts(

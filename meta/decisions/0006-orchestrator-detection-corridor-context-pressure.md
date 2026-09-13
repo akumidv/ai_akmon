@@ -3,7 +3,7 @@
 - **Status:** Accepted (extends [0004](0004-model-routing-capability-tiers.md)/[0005](0005-synthesizer-gate-audit-and-role-routing.md);
   revises 0004's committed-agents point; implementation C22–C23). C22 is owner-verified at D2-37 and
   landed in `7312972`, Claude only (Codex pending); the D2-38 amendment below follows an owner-directed choice,
-  owner-approved as its ledger row and awaiting the landing commit.
+  owner-verified as its ledger row and landed in `920fe69`.
 - **Owner:** akuminov@gmail.com
 - **References:** design source [`meta/design/model-routing.md` §1 (req 9–12), §3, §4.3, §12](../design/model-routing.md) ·
   C22 landed ([archive](../TASKS_ARCHIVE.md)); C23 in the [backlog](../TASKS.md).
@@ -66,8 +66,8 @@ already reads records per-turn `usage`.
   block — both change the registry hash, so existing local configs go stale once and
   re-init.
 - Implementation: C22 (detection + corridor + two-channel delivery) landed in `7312972` and is
-  archived after owner verification at D2-37; C23 (context pressure) stays in the backlog until
-  D2-38 lands. D2 owner-verify applies to both (hook behaviour is architecture).
+  archived after owner verification at D2-37; C23 (context pressure) landed with
+  D2-38 in `920fe69` and stays in the backlog until its C80 amendment, D2-42 (owner-approved), is verified on its commit. D2 owner-verify applies to both (hook behaviour is architecture).
 
 ## Amendment — context pressure is a share of a recommended maximum (D2-38)
 
@@ -86,18 +86,21 @@ and re-init; an overlay still using the old keys is ignored. Carrier:
 `tools/model_routing/routing.py::recommended_max_context`; the operative contract is
 [D2-38](../D2_LEDGER.md) and [design §12.2](../design/model-routing.md).
 
-## Amendment — a one-task context budget, bands 0.85 and 1.0 (D2-42)
+## Amendment — a one-task context budget: info at 0.85, warn at 1.0 (D2-42)
 
 The recommended maximum is the recommended active-context budget for a session intended to carry
 one task: a session carries the task it is solving, not its history — fewer tokens, less drift
-from the task, less forgetting — and the warning is that reminder (owner-directed). The hook knows
+from the task, less forgetting — and the reminder says so (owner-directed). The hook knows
 neither the task nor what it needs; it sees only the fill, so it is a pressure sensor, and the
-boundary between tasks is A21's. 200000 stays — a configurable owner policy set from a typical
-one-task development session, not an empirical optimum (C80). The bands become 0.85 (checkpoint;
-prepare a focused compact if the task continues) and 1.0 (budget reached — same task: checkpoint
-and a task-focused `/compact`; new task: `/clear` or a new session). Every band at or above 1.0 is
-one max state whose warning fires once per pressure episode; going on past it is the developer's
-call. A fill below the lowest band ends the episode whatever lowered it — decision 5's "a
-compaction drops the fill" names one cause, not the mechanism. `AKMON_CONTEXT_RECOMMENDED_MAX`
+boundary between tasks is A21's. 200000 stays — a configurable owner policy, checked against
+measurement: above where sessions get compacted in practice, below the 258,400-token window
+Codex reports for OpenAI models (C80). Decision 5's two bands give way to two levels: **info** at
+`info_ratio` 0.85 (`/compact`) and **warn** at the budget itself, 1.0 (`/compact`; new task:
+`/new`) — the share and the command, nothing else. *Revising decision 4 for this one notice:* the
+reminder goes to the owner only, as `systemMessage`; the model has nothing to act on, and the
+line would spend the context it warns about. `warn_ratios` is replaced by `info_ratio`. Warn fires once
+per pressure episode and nothing repeats past 100% — the model may allow more, and going on is
+the developer's call. A fill below the info level ends the episode whatever lowered it —
+decision 5's "a compaction drops the fill" names one cause, not the mechanism. `AKMON_CONTEXT_RECOMMENDED_MAX`
 overrides the budget per user or project. The operative contract is [D2-42](../D2_LEDGER.md) and
 [design §12.2](../design/model-routing.md).

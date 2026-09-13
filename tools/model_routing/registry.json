@@ -47,10 +47,7 @@
   "context_pressure": {
     "recommended_max": 200000,
     "recommended_max_by_alias": {},
-    "warn_ratios": [
-      0.85,
-      1.0
-    ]
+    "info_ratio": 0.85
   },
   "task_kinds": {
     "explore-search": {

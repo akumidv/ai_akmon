@@ -595,6 +595,16 @@ def test_d2_sensitive_paths_empty_without_config(tmp_path):
     assert d2_sensitive_paths(root) == []
 
 
+def test_d2_sensitive_paths_is_empty_on_a_malformed_record(tmp_path):
+    # D2-39 (2): the shared reader is lenient and its line parser yields no arrays, so a broken
+    # record quiets this advisory instead of crashing a session. The loud side is the ledger:
+    # `d2_ledger.py::_read_akmon_toml` raises on a malformed record (test_d2_ledger.py).
+    root = _make_d2_project(tmp_path)
+    record = root / "_aitna" / ".akmon.toml"
+    record.write_text(record.read_text(encoding="utf-8") + "[unclosed\n", encoding="utf-8")
+    assert d2_sensitive_paths(root) == []
+
+
 def test_is_d2_sensitive_path_matches_relative_glob(tmp_path):
     root = _make_d2_project(tmp_path)
     globs = ["src/**/lib/**"]

@@ -88,9 +88,10 @@ justification to re-examine on its own, and three of the four are weaker than wh
 
 > **Folded — [C75](../../TASKS.md).** Three of the four now read through `common/record.py`:
 > `release_check` and `model_routing/init.py` import it, and the CLI asks the embedded tree's
-> copy — the tree that ships with it, not the consumer's tree it is judging. A caller the table
-> did not list, `src/akmon/_init.py::_recorded_mount`, borrowed the CLI's private reader and moved
-> with it. `d2_ledger.py` stays local, for a reason the table does not give: it reads an array and
+> copy — the tree that ships with it, not the consumer's tree it is judging. Two callers the table
+> did not list moved too: `src/akmon/_init.py::_recorded_mount`, which borrowed the CLI's private
+> reader, and `hooks/hook_core.py::d2_sensitive_paths`, which had kept its own bare `tomllib`
+> call. `d2_ledger.py` stays local, for a reason the table does not give: it reads an array and
 > must fail on a malformed record, and the shared reader is lenient by contract. The line numbers
 > above are the ones C69 measured.
 

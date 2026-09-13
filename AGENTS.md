@@ -28,9 +28,9 @@ no subagents; state the reason.
   `pipelines/code-flow.md` for the declared role.
 - Record non-trivial implementation work in `meta/TASKS.md` before code.
 - Architecture changes require an entry in `meta/D2_LEDGER.md` and explicit owner verification.
-- Measured harness and vendor facts live in `meta/MEASUREMENTS.md`, each with the version it was
-  verified on. Grep it before a probe or a documentation lookup and cite a row that covers the
-  version in use; add a row after a new measurement.
+- Harness and vendor facts that took an experiment — not what vendor docs state plainly — live in
+  `meta/MEASUREMENTS.md` with the version they were verified on. Grep it before a probe, cite a
+  row that covers the version in use, and add a row after a new probe, replay or source reading.
 - The owner owns commits, tags, pushes, publishing, and consumer pin bumps.
 - Never put secrets in code, docs, tests, or commits. Project files are English.
 - Do not edit consuming-project materializations as the source of truth; change this repository,

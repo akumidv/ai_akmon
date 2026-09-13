@@ -3,13 +3,15 @@
 
 The record answers "which carrier is this project on" (ADR 0009 §3), and answering it wrongly
 is never loud: a package-mode project beside a stale ``<AITNA_ROOT>/akmon`` had its hooks bind
-the stale tree's registry and print stale tool paths, silently (C69/D2-26). Five modules had
-grown their own narrow reader before this one existed, each justified in place. C75 folded four
-of them — ``release_check``, ``model_routing/init.py`` and the CLI (through the embedded tree's
-copy) — plus a sixth caller the fold-in list missed, ``hooks/hook_core.py::d2_sensitive_paths``,
-which had kept its own bare ``tomllib`` call. One reader stays local on purpose —
-``d2_ledger.py`` needs the strict parse this module deliberately is not, and its docstring says
-why.
+the stale tree's registry and print stale tool paths, silently (C69/D2-26). Before this module
+existed, ``bin/sync.py`` held the original reader and four other modules had grown narrow
+readers of their own, each justified in place. C75 folded three of those four —
+``release_check``, ``model_routing/init.py`` and the CLI (through the embedded tree's copy) —
+plus two callers that count missed: ``src/akmon/_init.py::_recorded_mount``, which borrowed the
+CLI's private reader, and ``hooks/hook_core.py::d2_sensitive_paths``, which had kept its own bare
+``tomllib`` call. One reader stays local on purpose — ``d2_ledger.py`` needs the strict parse
+this module deliberately is not, and its docstring says why (D2-39). A static carrier,
+``meta/tests/test_record_owner.py`` (C83), keeps a new reader from growing.
 
 Lifted out of ``bin/sync.py`` unchanged — the tomllib-when-present / stdlib-fallback pair and
 the quote-aware comment strip are the same code, moved rather than rewritten, so nothing about
