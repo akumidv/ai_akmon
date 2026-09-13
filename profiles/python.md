@@ -5,23 +5,27 @@ and `@`-imported from `AGENTS.md` so it loads at session start. It layers on the
 [common guardrails](../guardrails/_common.md): their § Code design states the principles for any
 language; this file says how they read in Python, and only what no checker can see.
 
-> **Checked rules are not repeated here.** Every Python rule a program can decide lives in
-> [`python.rules.toml`](python.rules.toml) — its text, its Google Python Style Guide section,
-> its default severity — and `akmon check` enforces it. A document names such a rule as
-> `python:<id>`. A project switches a rule off or changes a parameter in
-> `<AITNA_ROOT>/.akmon.toml` under `[python]`; it never edits the catalog.
+> **Checked rules are not repeated here.** akmon's Python rules are a standard ruff
+> configuration, [`ruff.toml`](ruff.toml) — each group annotated with its Google Python Style
+> Guide section — that runs with or without akmon. **The project's own rules win:** a project
+> with its own linter configuration keeps it, and `akmon check` runs whatever the project
+> declares under `[check]` in `<AITNA_ROOT>/.akmon.toml`. Where the project's configuration
+> switches a rule off or decides otherwise, follow the project, not this file.
 
 ## Toolchain — the project's own
 
 - **One declared environment manager and one lockfile;** commands run through it, and no one
   activates a virtual environment by hand. Which manager is the project's choice — akmon
   requires none.
-- **The project's linter and formatter own layout** — line length, whitespace, import order.
-  akmon's checked rules do not depend on them; a project that runs ruff can print a matching
-  configuration fragment with `akmon check --print-ruff`.
+- **The project's linter and formatter are its own**, and so is their configuration. A project
+  with none takes akmon's rules the standard way — `[tool.ruff] extend` pointing at
+  `profiles/ruff.toml` in the standard tree, which `akmon init` offers — and adjusts them in
+  its own configuration (`extend-ignore`, `per-file-ignores`), never in akmon's file.
+- **`akmon check` runs the project's checks** as declared under `[check]` — its linter, its type
+  checker, whatever it runs — and the pre-commit step calls it.
 - **Tests:** the project's runner, pinned as `[test].runner` in `<AITNA_ROOT>/.akmon.toml`.
 - **Types:** a type checker where the project adopts one. The public API is annotated either
-  way (`python:annotate-public`).
+  way (Google §2.21; ruff's `ANN` rules in akmon's configuration).
 
 ## Design — the common principles, read in Python
 
@@ -33,22 +37,22 @@ language; this file says how they read in Python, and only what no checker can s
 - **Signatures take abstract, parametrized types** — `Sequence[int]`, `Mapping[str, Path]`,
   `Iterable[T]` — and return concrete ones. Builtin generics (`list[int]`), `X | None` spelled
   out, and `from __future__ import annotations` for a forward reference (Google §2.20, §3.19).
-- **A method that never touches `self` is a module function** (`python:no-staticmethod`).
+- **A method that never touches `self` is a module function**, not a `@staticmethod`.
   `@classmethod` only as a named constructor. No getter or setter that only reads or writes an
   attribute — make the attribute public; `@property` only for a cheap, unsurprising derived
   value (§2.13, §2.17, §3.15).
 - **A nested function only to close over local values;** hide a helper with a leading `_`, not
   by nesting it (§2.6).
 - **A conditional expression only when each part fits on one line** (§2.11).
-- **Power features** (`python:no-power-features`) — what the standard library builds on them,
+- **Power features** (§2.19; ruff catches `exec` and `eval`) — what the standard library builds on them,
   `dataclasses`, `enum`, `abc`, is fine to use; writing a metaclass or a name-driven dispatch of
   your own is not.
 - **Import the module, not the symbol,** so a call site names where a name comes from
-  (`python:import-modules`, off by default). Symbols from `typing` and `collections.abc` are
+  (§2.2 — preferred, not required: no linter checks it). Symbols from `typing` and `collections.abc` are
   imported directly.
 - **Concurrency.** Never rely on a built-in type being atomic; hand data between threads through
   `queue.Queue`; prefer `threading.Condition` to bare locks (§2.18). Blocking I/O inside `async`
-  code is offloaded to a thread, never called on the event loop (`python:no-blocking-in-async`).
+  code is offloaded to a thread, never called on the event loop (ruff's `ASYNC` rules).
 - **An executable** keeps its logic in `main()`, called behind `if __name__ == "__main__":`, and
   only an executed file carries a shebang (§3.7, §3.17).
 - **Validate at the boundary** and keep internal code trusting the validated types.

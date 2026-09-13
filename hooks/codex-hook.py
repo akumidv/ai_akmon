@@ -161,7 +161,10 @@ def _dispatch(route: str, payload: dict) -> None:
     elif route == "git-commit-guard":
         # Intentionally not wired by sync.py yet; C28(b) owns the exact live-probe,
         # owner/D2-verification, then generated-wiring sequence for Bash+git behavior.
-        from hook_core import git_commit_guard_result, privilege_escalation_guard_result
+        from hook_core import (  # noqa: PLC0415 — unwired route (C28(b))
+            git_commit_guard_result,
+            privilege_escalation_guard_result,
+        )
 
         cmd = command(payload)
         print_result(privilege_escalation_guard_result(cmd) or git_commit_guard_result(cmd))
@@ -180,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         route = parser.parse_args(argv).hook
         hook = f"codex-hook {route}"
         _dispatch(route, load_payload())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — crash-open: every failure is reported, none blocks
         return report_failure(hook, exc)
     return 0
 

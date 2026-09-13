@@ -24,6 +24,7 @@ def _decide() -> HookResult | None:
 
 
 def main() -> int:
+    """Entry point: emit the design-to-code role reminder."""
     return run_guarded("role-on-code", _decide)
 
 

@@ -1,0 +1,68 @@
+# akmon's Python rules as a standard ruff configuration: the Google Python Style Guide's
+# checkable rules (section numbers below) plus akmon's stricter floor. It runs with or without
+# akmon:
+#   ruff check --config <path to this file> .           a one-off run
+#   [tool.ruff] extend = "<path to this file>"          in the project's pyproject.toml
+# A project adjusts it in its own configuration the standard way — `extend-select`,
+# `extend-ignore`, `per-file-ignores` — and never edits this file.
+#
+# `target-version` is absent on purpose: ruff infers it from the project's `requires-python`.
+
+line-length = 120 # akmon's recorded deviation from Google's 80 (§3.2)
+
+[lint]
+select = [
+  "F", "E", "W",       # pyflakes and pycodestyle
+  "I",                 # §3.13 import grouping and order
+  "UP",                # modern syntax for the declared floor
+  "B",                 # bugbear: §2.12 mutable default (B006), §2.4 raise from (B904)
+  "N",                 # §3.16 naming
+  "ANN",               # §2.21, §3.19 the public API is annotated
+  "D",                 # §3.8 docstrings, in the Google convention below
+  "S",                 # bandit: §2.4 assert as validation (S101), except-pass (S110); §2.19 exec, eval
+  "BLE",               # §2.4 no catch-all except
+  "ASYNC",             # blocking I/O inside async
+  "G", "LOG",          # §3.10.1 a logging call takes a pattern and its arguments
+  "TID",               # §2.3 absolute imports (every relative import banned below)
+  "C4", "FLY", "PERF", # §2.7, §3.10 comprehension and join idiom
+  "SIM",               # §2.8 default iterators (SIM118), §3.11 open in `with` (SIM115)
+  "RET", "RSE", "PIE", # redundant return, raise and pass
+  "TRY",               # §2.4 a narrow try body
+  "DTZ",               # no naive datetime
+  "PTH",               # pathlib over os.path
+  "FBT",               # no boolean flag parameter
+  "ARG",               # no unused argument
+  "ERA",               # no commented-out code
+  "TD",                # §3.12 TODO form (the author and next-line rules are ignored below)
+  "PGH",               # §2.1, §3.19.7 a suppression names its rule
+  "A",                 # no shadowed builtin
+  "PL",                # pylint: §2.5 global statement, §2.14 len as a test, size limits
+  "C90",               # §3.18 small functions: cyclomatic complexity
+  "RUF",               # §3.19.5 explicit Optional (RUF013), and more
+]
+ignore = [
+  "TRY003",            # a message built at the raise site is fine
+  "TRY004", "TRY301",
+  "ANN401",            # `Any` where it is the honest type
+  "ISC001",            # conflicts with the formatter
+  "TD002",             # §3.12: a TODO carries a link, not an author
+  "TD003",             # §3.12: the link sits on the TODO line itself
+  "D105", "D107",      # §3.8.4: the class docstring covers __init__; magic methods are exempt
+  "S603", "S607",      # calling a named executable; S602 still bans shell=True
+]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+# Glob patterns, so they match wherever the project keeps its tests even when this file is
+# reached through `extend` from another directory.
+[lint.per-file-ignores]
+"**/test_*.py" = ["S101", "S105", "S106", "S107", "S108", "PLR2004", "ANN", "ARG", "D", "PLC0415"]
+"**/*_test.py" = ["S101", "S105", "S106", "S107", "S108", "PLR2004", "ANN", "ARG", "D", "PLC0415"]
+"**/conftest.py" = ["S101", "S105", "S106", "S107", "S108", "PLR2004", "ANN", "ARG", "D", "PLC0415"]

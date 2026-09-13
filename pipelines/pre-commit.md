@@ -9,11 +9,11 @@ on every project regardless of role.
 
 1. **Tests** — run the project's test suite. **No commit on red.** A behaviour change
    must come with a test that covers it.
-2. **Lint / format** — run the project's linter and formatter (the project's own tools; its
-   language profile in [profiles/](../profiles/) says what akmon checks), then
-   `akmon check --changed` (mounted: `python3 _aitna/akmon/bin/check.py --changed`) — the
-   language profile's checked rules, whatever linter the project runs. An `error` finding
-   stops the commit; severities and parameters are the project's, in `.akmon.toml` `[python]`.
+2. **Lint / format** — `akmon check --changed` (mounted:
+   `python3 _aitna/akmon/bin/check.py --changed`) runs the checks the project declares under
+   `[check]` in `.akmon.toml` — its own linter and type checker, or ruff with akmon's rules
+   ([profiles/](../profiles/)) — on the changed files. A failing check stops the commit; a
+   project that declares none runs its linter and formatter directly.
 3. **Types** — run the type checker if the language has one.
 4. **Docs in sync** — if code or behaviour changed, update the doc that **owns** the
    affected fact (API, env vars, package layout, requirements). Never leave docs stale

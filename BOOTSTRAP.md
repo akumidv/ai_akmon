@@ -284,7 +284,17 @@ last_realign = "v0.2.0"            # after sync + routing init + the package dev
 
 [test]
 runner = "poetry run pytest"       # optional — the test env pinned at attach (§A5); release_check uses it verbatim
+
+[check]                            # what `akmon check` runs — the project's own commands
+ruff = "poetry run ruff check {files}"
 ```
+
+`[check]` names the project's checks — its linter, its type checker, anything it runs — and
+`akmon check` runs them, passing their output through; `{files}` becomes the project (`.`) or,
+under `--changed`, the changed files. `akmon init` writes it once: the project's own ruff,
+flake8, pylint or mypy when it is configured for them, otherwise — offered, `--checks` to decide —
+ruff with akmon's Python rules through a standard `extend` of `profiles/ruff.toml` in the
+project's ruff configuration. Edit it freely afterwards; a realign never rewrites it.
 
 `akmon_version` comes from `git describe --tags`: **the tag is the anchor**. Describe appends
 `-N-gSHA` on its own when the submodule sits *between* tags, so the commit hash rides along only
@@ -490,7 +500,9 @@ Alongside the mounted modes (`submodule` — this document's default — plus `v
   nothing at all, in any harness. The copies are banner-marked and drift-checked by
   `sync --check`, and SessionStart warns when a bump has moved the standard past them (run
   `akmon sync`, then start a new session — the `@`-import is expanded once, at session start);
-  importing a file akmon does not ship is a `sync` error, not a silent skip.
+  importing a file akmon does not ship is a `sync` error, not a silent skip. A ruff
+  configuration of the project that `extend`s akmon's rules (`profiles/ruff.toml`) gets the same:
+  `sync` materializes the file at `<AITNA_ROOT>/.akmon/profiles/ruff.toml` and keeps it fresh.
 - If `sync` reports that `AGENTS.md` imports a file that moved, replace that import line with
   the one the error names (today: `guardrails/python.md` → `profiles/python.md`).
 - Everything else (MODEL.md, roles, pipelines, skills) is read from the installed

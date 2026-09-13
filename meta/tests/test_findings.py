@@ -4,7 +4,7 @@ Every rule the envelope declares carries a seeded violation here: an invalid sev
 invalid or retired ``code``, a ``fix`` that is absent, empty, multi-line or multi-sentence, a
 serializer that mutates or drifts, a second owner for the mapping, an adopter that kept the old
 ``level`` field or its own renderer, a rendered line missing or reordering a field, a ``--json``
-mode arriving before C59, and every cell of the severity × strict-state exit matrix — the last
+mode arriving before C59, and every cell of the severity-by-strict-state exit matrix — the last
 parameterized over the three strict-capable adopters, with sync's 0/1/2 vocabulary carried
 separately, so a representative implementation cannot hide a stale one.
 """
@@ -325,10 +325,7 @@ def test_exactly_one_canonical_serializer_exists():
 
 def _returns_the_canonical_mapping(node) -> bool:
     canonical = {"severity", "code", "message", "target", "fix"}
-    for child in ast.walk(node):
-        if canonical <= _mapping_keys(child):
-            return True
-    return False
+    return any(canonical <= _mapping_keys(child) for child in ast.walk(node))
 
 
 def _mapping_keys(node) -> set[str]:
@@ -566,7 +563,7 @@ def test_no_adopter_exposes_json_output_before_c59(name):
 
 
 # --------------------------------------------------------------------------------------
-# the severity × strict-state exit matrix, over every strict-capable adopter
+# the severity-by-strict-state exit matrix, over every strict-capable adopter
 # --------------------------------------------------------------------------------------
 
 
@@ -602,7 +599,7 @@ _EXACT_LINE = "WARN area.rule some/file.md: something is off → Do the one thin
 @pytest.mark.parametrize("adopter", sorted(_STRICT_ADOPTERS))
 def test_exact_rendering_is_identical_across_adopters(adopter, monkeypatch, tmp_path, capsys):
     """A representative implementation cannot hide a stale one: every adopter prints this line."""
-    _STRICT_ADOPTERS[adopter](monkeypatch, tmp_path, [_finding()], False)
+    _STRICT_ADOPTERS[adopter](monkeypatch, tmp_path, [_finding()], strict=False)
     assert _EXACT_LINE in capsys.readouterr().out.splitlines()
 
 

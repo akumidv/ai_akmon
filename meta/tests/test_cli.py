@@ -484,6 +484,7 @@ def test_importing_the_cli_does_not_resolve_the_package_version():
         capture_output=True,
         text=True,
         env={**os.environ, "PYTHONPATH": str(_SRC)},
+        check=False,
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "False", result.stderr
@@ -499,6 +500,7 @@ def test_the_version_attribute_resolves_and_caches_on_first_access():
         capture_output=True,
         text=True,
         env={**os.environ, "PYTHONPATH": str(_SRC)},
+        check=False,
     )
     assert result.returncode == 0, result.stderr
     version, cached = result.stdout.split()

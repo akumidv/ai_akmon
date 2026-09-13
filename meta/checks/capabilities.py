@@ -203,7 +203,7 @@ def _parse_route(value: str) -> dict:
     return coordinates
 
 
-def _is_measured(axes: dict, route: dict) -> bool:
+def _is_measured(axes: dict) -> bool:
     """Whether the row asserts anything a probe or report had to establish.
 
     A settled `delivered` answer counts: "the wiring reaches the harness" — or measurably does
@@ -280,30 +280,30 @@ def _check_row(row: dict, target: str) -> list[Finding]:
     where = f"{target}:{row['line']}"
     title = row["title"]
 
-    for axis in AXES:
-        if axis not in axes:
-            findings.append(
-                Finding(
-                    "error",
-                    "matrix.missing-axis",
-                    f"{title}: axis {axis!r} is absent",
-                    where,
-                    f"Add a '- {axis}:' line to this claim.",
-                )
-            )
+    findings.extend(
+        Finding(
+            "error",
+            "matrix.missing-axis",
+            f"{title}: axis {axis!r} is absent",
+            where,
+            f"Add a '- {axis}:' line to this claim.",
+        )
+        for axis in AXES
+        if axis not in axes
+    )
     route = _parse_route(axes.get("route", ""))
     if "route" in axes:
-        for coordinate in ROUTE_COORDINATES:
-            if coordinate not in route:
-                findings.append(
-                    Finding(
-                        "error",
-                        "matrix.missing-axis",
-                        f"{title}: route coordinate {coordinate!r} is absent",
-                        where,
-                        f"Add {coordinate}=<value> to this claim's route.",
-                    )
-                )
+        findings.extend(
+            Finding(
+                "error",
+                "matrix.missing-axis",
+                f"{title}: route coordinate {coordinate!r} is absent",
+                where,
+                f"Add {coordinate}=<value> to this claim's route.",
+            )
+            for coordinate in ROUTE_COORDINATES
+            if coordinate not in route
+        )
     effect = axes.get("effect")
     if effect is not None and effect not in EFFECTS:
         findings.append(
@@ -331,17 +331,17 @@ def _check_row(row: dict, target: str) -> list[Finding]:
     # relation below therefore runs only over a row that has the axes it needs.
     complete = all(axis in axes for axis in AXES)
     if complete and effect in ("ask", "deny"):
-        for name in ROUTE_COORDINATES:
-            if route.get(name) == UNMEASURED:
-                findings.append(
-                    Finding(
-                        "error",
-                        "matrix.unqualified-effect",
-                        f"{title}: effect {effect!r} claimed while {name!r} is {UNMEASURED}",
-                        where,
-                        f"Measure {name} before claiming {effect}, or lower the effect.",
-                    )
-                )
+        findings.extend(
+            Finding(
+                "error",
+                "matrix.unqualified-effect",
+                f"{title}: effect {effect!r} claimed while {name!r} is {UNMEASURED}",
+                where,
+                f"Measure {name} before claiming {effect}, or lower the effect.",
+            )
+            for name in ROUTE_COORDINATES
+            if route.get(name) == UNMEASURED
+        )
         if posture == UNMEASURED:
             findings.append(
                 Finding(
@@ -354,7 +354,7 @@ def _check_row(row: dict, target: str) -> list[Finding]:
             )
     if complete:
         evidence = axes["evidence"]
-        measured = _is_measured(axes, route)
+        measured = _is_measured(axes)
         if measured and not evidence:
             findings.append(
                 Finding(

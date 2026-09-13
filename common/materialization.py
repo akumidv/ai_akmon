@@ -40,8 +40,9 @@ def generated_banner() -> str:
 
 
 def materialized_markdown(source_text: str) -> str:
-    """``source_text`` with the generated-pointer banner inserted as an HTML comment
-    (matching the convention the other generated ``.md`` pointers already use), right after
+    """``source_text`` with the generated-pointer banner inserted as an HTML comment.
+
+    Matching the convention the other generated ``.md`` pointers already use, right after
     a leading top-level heading when present, else at the very top.
     """
     banner_line = f"<!-- {generated_banner()} -->"
@@ -49,6 +50,18 @@ def materialized_markdown(source_text: str) -> str:
     if lines and lines[0].lstrip().startswith("#"):
         return lines[0] + banner_line + "\n\n" + "".join(lines[1:])
     return banner_line + "\n\n" + source_text
+
+
+def materialized_text(name: str, source_text: str) -> str:
+    """The materialized copy of one standard file.
+
+    Markdown carries the banner as an HTML comment (:func:`materialized_markdown`); a TOML
+    file — akmon's ruff rules — carries it as a ``#`` comment on its first line, where a
+    TOML parser skips it.
+    """
+    if name.endswith(".md"):
+        return materialized_markdown(source_text)
+    return f"# {generated_banner()}\n\n{source_text}"
 
 
 # The standard directories whose files a consumer's ``AGENTS.md`` ``@``-imports: the universal
@@ -63,10 +76,10 @@ def materialized_dir(project_root: Path) -> Path:
 
 
 def stale_materialized(project_root: Path, tree_root: Path) -> list[str]:
-    """Materialized files — ``guardrails/<name>``, ``profiles/<name>`` — whose text is no longer
-    what ``tree_root`` ships.
+    """Materialized files whose text is no longer what ``tree_root`` ships.
 
-    ``tree_root`` is the standard tree the caller is actually running from, so the comparison
+    Materialized files are named ``guardrails/<name>``, ``profiles/<name>``. ``tree_root`` is
+    the standard tree the caller is actually running from, so the comparison
     is against the code that is executing rather than against a recorded version string: a
     bump that leaves the guardrails untouched must stay silent, and a hand-edit of the copy
     must not.
@@ -84,13 +97,13 @@ def stale_materialized(project_root: Path, tree_root: Path) -> list[str]:
         dest = materialized_dir(project_root) / directory
         if not dest.is_dir():
             continue
-        for path in sorted(dest.glob("*.md")):
+        for path in sorted([*dest.glob("*.md"), *dest.glob("*.toml")]):
             relative = f"{directory}/{path.name}"
             source = tree_root / relative
             try:
-                if not source.is_file():
-                    stale.append(relative)
-                elif path.read_text(encoding="utf-8") != materialized_markdown(source.read_text(encoding="utf-8")):
+                if not source.is_file() or path.read_text(encoding="utf-8") != materialized_text(
+                    path.name, source.read_text(encoding="utf-8")
+                ):
                     stale.append(relative)
             except OSError:
                 stale.append(relative)

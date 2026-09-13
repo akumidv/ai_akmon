@@ -109,13 +109,12 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "common/codex_hooks.py",
         "common/findings.py",
         "common/materialization.py",
+        "common/check_runner.py",
         "common/project_root.py",
-        "common/python_rule_checks.py",
-        "common/python_rules.py",
         "common/record.py",
         "common/runtime.py",
         "common/versions.py",
-        "profiles/python.rules.toml",
+        "profiles/ruff.toml",
         "bin/check.py",
         "bin/sync.py",
         "bin/verify.py",
@@ -151,6 +150,7 @@ def path_without(binary: str, path: str, scratch: Path) -> str:
     entries = []
     for index, entry in enumerate(path.split(os.pathsep)):
         directory = Path(entry).absolute()
+        effective = entry
         if entry and os.path.lexists(directory / binary):
             shadow = scratch / f"path-{index}"
             shadow.mkdir(parents=True, exist_ok=True)
@@ -158,8 +158,8 @@ def path_without(binary: str, path: str, scratch: Path) -> str:
                 link = shadow / child.name
                 if child.name != binary and not os.path.lexists(link):
                     link.symlink_to(child)
-            entry = str(shadow)
-        entries.append(entry)
+            effective = str(shadow)
+        entries.append(effective)
     return os.pathsep.join(entries)
 
 
@@ -176,7 +176,7 @@ def _checked(command: list[str], *, cwd: Path | None = None, env: dict | None = 
     into this one — two envelopes on one channel read as one, and the reader cannot tell
     whose findings they are.
     """
-    result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True)
+    result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, check=False)
     if result.returncode == 0:
         return
     sys.stderr.write((result.stdout or "") + (result.stderr or ""))
@@ -198,7 +198,7 @@ def _leg(
     env: dict | None = None,
 ) -> bool:
     """Run one leg as a subprocess and record it as a finding; ``True`` when it passed."""
-    result = subprocess.run(command, capture_output=True, text=True, env=env)
+    result = subprocess.run(command, capture_output=True, text=True, env=env, check=False)
     if result.returncode == 0:
         findings.append(Finding("ok", code, f"{label} passes", "", ok_fix))
         return True
@@ -223,8 +223,9 @@ def _assert_wheel_python_floor(wheel: Path) -> None:
 
 
 def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[str, str]) -> None:
-    """The package leg: build the wheel, install it, and attach a fresh consumer with the
-    installed console script — `akmon init` → `sync` → routing init → `verify --strict`.
+    """The package leg: build the wheel, install it, and attach a fresh consumer with the installed console script.
+
+    `akmon init` → `sync` → routing init → `verify --strict`.
 
     This is the only leg where the standard tree comes from ``site-packages`` (the wheel's
     force-included ``akmon/_tree``) rather than from this checkout, so it is what proves the
@@ -274,8 +275,10 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[st
     materialized = sorted(
         path.relative_to(fixture).as_posix() for path in (fixture / "_aitna" / ".akmon").rglob("*") if path.is_file()
     )
-    if materialized != ["_aitna/.akmon/guardrails/_common.md"]:
-        raise RuntimeError(f"package mode materialized more than the imported guardrails: {materialized}")
+    # The fixture has no linter of its own, so `init` set up ruff with akmon's Python rules and
+    # `sync` materialized them beside the imported guardrail — and nothing else.
+    if materialized != ["_aitna/.akmon/guardrails/_common.md", "_aitna/.akmon/profiles/ruff.toml"]:
+        raise RuntimeError(f"package mode materialized more than the imported rules: {materialized}")
 
     nested = fixture / "src" / "package"
     nested.mkdir(parents=True)
@@ -283,21 +286,25 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[st
 
 
 def _generated_hook_commands(fixture: Path) -> list[tuple[str, str, str]]:
-    """Every ``(vendor, event, command)`` triple the two generated wirings name, read from the
-    generated files themselves — not rebuilt from the templates that wrote them."""
+    """Every ``(vendor, event, command)`` triple the two generated wirings name.
+
+    Read from the generated files themselves — not rebuilt from the templates that wrote them.
+    """
     triples: list[tuple[str, str, str]] = []
     for vendor, relative in (("claude", ".claude/settings.json"), ("codex", ".codex/hooks.json")):
         document = json.loads((fixture / relative).read_text(encoding="utf-8"))
         for event, entries in document.get("hooks", {}).items():
             for entry in entries:
-                for hook in entry.get("hooks", []):
-                    triples.append((vendor, event, hook["command"]))
+                triples.extend((vendor, event, hook["command"]) for hook in entry.get("hooks", []))
     return triples
 
 
 # A patch body in the shape codex 0.146.0 actually sends (``tool_input.command``), so the
 # advisories receive a real target instead of raising their own no-path diagnostic.
 _CODEX_PATCH = "*** Begin Patch\n*** Update File: src/package/probe.py\n+print(1)\n*** End Patch\n"
+
+# codex session-start + claude session-start-agent + claude model-routing.
+_ALWAYS_SPEAKING_HOOK_COUNT = 3
 
 
 def _hook_payload(vendor: str, event: str, cwd: Path) -> dict:
@@ -342,7 +349,7 @@ def _run_generated_hook_commands(fixture: Path, nested: Path) -> None:
         # directly, so it gets the project root.
         cwd = nested if vendor == "codex" else fixture
         payload = json.dumps(_hook_payload(vendor, event, cwd))
-        completed = subprocess.run(
+        completed = subprocess.run(  # noqa: S602 — the generated hook command runs as the harness runs it
             command,
             shell=True,
             cwd=fixture,
@@ -350,6 +357,7 @@ def _run_generated_hook_commands(fixture: Path, nested: Path) -> None:
             input=payload,
             capture_output=True,
             text=True,
+            check=False,
         )
         label = f"{vendor} {event}: {command}"
         if completed.returncode != 0:
@@ -368,7 +376,7 @@ def _run_generated_hook_commands(fixture: Path, nested: Path) -> None:
                     raise RuntimeError(f"session-start hook lost its role brief ({label})")
                 if "Delegation is the default for non-atomic work" not in context:
                     raise RuntimeError(f"session-start hook lost its delegation rule ({label})")
-    if speaking < 3:  # codex session-start + claude session-start-agent + claude model-routing
+    if speaking < _ALWAYS_SPEAKING_HOOK_COUNT:
         raise RuntimeError(f"expected the always-speaking hooks to be wired; saw {speaking}")
 
 
@@ -447,7 +455,7 @@ def _run(akmon_root: Path) -> list[Finding]:
             return findings
         try:
             _installed_wheel_smoke(akmon_root, fixture / "wheel-smoke", verify_env)
-        except Exception as exc:  # the leg owns build, install, attach and hook execution
+        except Exception as exc:  # noqa: BLE001 — the leg owns build, install, attach and hook execution
             detail = " ".join(str(exc).split()) or type(exc).__name__
             message, fix = _wheel_smoke_report(detail)
             findings.append(Finding("error", "selfci.wheel-smoke", message, "", fix))
@@ -469,6 +477,7 @@ def _run(akmon_root: Path) -> list[Finding]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run every self-CI leg against akmon's own tree and print the findings."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict", action="store_true", help="Treat warnings as failures.")
     parser.add_argument("--quiet", action="store_true", help="Only print warnings and errors.")

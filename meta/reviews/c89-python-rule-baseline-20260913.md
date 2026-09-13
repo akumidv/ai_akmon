@@ -95,7 +95,13 @@ comprehension; 1 string accumulation in a loop; no metaclass, `__del__`, 3-argum
 
 Line length: 2 632 lines over 80, 605 over 100. The consumer's own ruff config sets 120.
 
-## Addendum — `akmon check` on the same trees
+## Addendum — the first-round in-house check on the same trees
+
+> **Withdrawn.** This measures the AST checker the first design round had akmon run on consumer
+> code. The owner withdrew it in the second round — a project's own linter runs with its own
+> settings, and akmon's rules ship as a standard ruff configuration (ADR 0014). The numbers
+> stay as the record of what that checker found, and of the disagreements with ruff that ended
+> it.
 
 The check C89 ships (`bin/check.py`, catalog defaults, no `[python]` configuration), run on the
 same two trees after its first two corrections — `no-silent-except` narrowed to a catch-all

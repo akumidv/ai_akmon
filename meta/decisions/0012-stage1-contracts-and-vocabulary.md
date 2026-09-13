@@ -116,7 +116,7 @@ rather than defining a second schema. Text and JSON must carry the same ordered 
 same exit/strict semantics.
 
 **Text rendering changes, and C51 owns the change.** `verify.py` prints `[{level}] {message}`
-today (`bin/verify.py:691`); the canonical form this envelope introduces is
+today (`bin/verify.py:722`); the canonical form this envelope introduces is
 `SEVERITY code target: message → fix`, one canonical stdout line per finding. Every adopter's text output moves in
 the same commit as the `level` → `severity` rename, and the tests pinning the old form move with
 it.

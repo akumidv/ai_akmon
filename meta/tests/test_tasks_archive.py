@@ -97,7 +97,7 @@ def test_split_done_moves_continuation_with_its_entry():
 
 def test_split_done_none_when_no_done_entries():
     text = "## Active\n\n- C1 · a · active · e · g\n"
-    remaining, blocks, ids = archive.split_done(text)
+    _remaining, blocks, ids = archive.split_done(text)
     assert blocks == [] and ids == []
 
 
@@ -201,7 +201,7 @@ def test_mark_done_is_idempotent_on_already_done():
 
 
 # --------------------------------------------------------------------------------------
-# malformed_entries (advisory)
+# malformed_entries, advisory
 # --------------------------------------------------------------------------------------
 
 

@@ -22,20 +22,23 @@ _TOML_PARSERS = {
     ("common/record.py", "read_akmon_toml_strict"): (
         "the shared reader's strict entry, for a caller that applies the record (ADR 0014 §4)"
     ),
-    ("common/python_rules.py", "load_catalog"): "reads the Python rule catalog, not the record",
     ("tools/d2_ledger/d2_ledger.py", "_read_akmon_toml"): (
         "strict on purpose: a broken record must fail the D2 path check, not switch it off (D2-39)"
     ),
     ("tools/release/release_check.py", "_pyproject_version"): "reads pyproject.toml, not the record",
+    (
+        "bin/sync.py",
+        "ruff_extends",
+    ): "reads the project's ruff configuration for an extend of akmon's rules, not the record",
     ("bin/sync.py", "_read_manifest"): "reads the consumer's pyproject.toml for the akmon pin, not the record (C84)",
 }
 
 # Every module whose code names the record's path, and what it does with it.
 _RECORD_PATH_USERS = {
     "bin/sync.py": "stamps and upserts the record; reads it through the re-exported shared reader",
-    "bin/check.py": "reads [python] through the shared reader's strict entry",
+    "bin/check.py": "reads [check] through the shared reader's strict entry",
     "bin/verify.py": "validates the record, read through the shared reader",
-    "common/python_rules.py": "names the record in the target of a configuration finding",
+    "common/check_runner.py": "names the record in the target of a configuration finding",
     "common/project_root.py": "an existence check — the package-mode marker — and a notice",
     "common/record.py": "the shared reader",
     "hooks/hook_core.py": "d2_sensitive_paths, through the shared reader",

@@ -27,6 +27,7 @@ def _decide() -> HookResult | None:
 
 
 def main() -> int:
+    """Entry point: emit the D2 ledger reminder."""
     return run_guarded("d2-ledger-reminder", _decide)
 
 

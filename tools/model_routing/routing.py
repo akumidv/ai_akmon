@@ -9,6 +9,7 @@ task-kind data.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -26,8 +27,8 @@ from pathlib import Path
 # without reading the mount record and stays clear of the tree-resolution fork (C69).
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from common.project_root import aitna_root_name  # noqa: E402
-from common.runtime import harness_command  # noqa: E402
+from common.project_root import aitna_root_name
+from common.runtime import harness_command
 
 # Committed, per-project overlay (same shape as the registry, deep-merged over it; may add
 # a "briefs" map with per-agent markdown appended to the generated subagent bodies — keyed
@@ -46,10 +47,12 @@ GENERATED_BANNER = (
 
 
 def registry_path(akmon_dir: Path) -> Path:
+    """Path to the shipped ``registry.json`` under an akmon tree."""
     return akmon_dir / "tools" / "model_routing" / "registry.json"
 
 
 def overlay_path(project_root: Path) -> Path:
+    """Path to the project's committed model-routing overlay file, if any."""
     return project_root / aitna_root_name() / OVERLAY_NAME
 
 
@@ -276,7 +279,7 @@ def second_opinion_fallback_model(rungs: list[str], orchestrator: str, auditor: 
     or skips; it must never fall back to the same model.
     """
     for rung in reversed(rungs):
-        if rung != orchestrator and rung != auditor:
+        if rung not in (orchestrator, auditor):
             return rung
     return None
 
@@ -345,6 +348,8 @@ def second_opinion_unavailability(registry: dict, config: dict, orchestrator_ven
 
 @dataclass(frozen=True)
 class SecondOpinionTarget:
+    """A resolved second-opinion target: which provider, and which model to pin (if any)."""
+
     provider: str
     model: str | None  # None = the provider CLI's default model (other-vendor case)
 
@@ -408,6 +413,8 @@ def resolve_second_opinion(registry: dict, config: dict, orchestrator_vendor: st
 # via the overlay's "briefs" map.
 @dataclass(frozen=True)
 class AgentSpec:
+    """One generated ``k_*`` subagent's definition: tier, description, tools, body, task kinds."""
+
     name: str
     tier: str  # "worker" | "mid" | "reasoner" | "auditor"
     description: str
@@ -602,6 +609,7 @@ def _agent_model(spec: AgentSpec, binding: Binding) -> str | None:
 
 
 def agent_file_content(spec: AgentSpec, binding: Binding, brief_extra: str = "") -> str:
+    """Render one generated ``.claude/agents/<name>.md`` file: frontmatter, banner, body, brief."""
     lines = ["---", f"name: {spec.name}", "description: >-"]
     lines.extend(f"  {chunk}" for chunk in _wrap(spec.description, 88))
     if spec.tools:
@@ -650,8 +658,7 @@ class BriefError(ValueError):
 
 
 def agent_key(name: str) -> str:
-    """Normal form of an agent name for overlay lookups — folds case, ``-``/``_`` and surrounding
-    whitespace.
+    """Normal form of an agent name for overlay lookups — folds case, ``-``/``_`` and surrounding whitespace.
 
     Overlay brief keys are a public contract written by hand in a consumer's repository, so
     a change of *notation* (ADR 0011) must not orphan them. The tolerance line, owner-verified
@@ -665,7 +672,7 @@ def agent_key(name: str) -> str:
 
 def resolve_briefs(registry: dict) -> dict[str, str]:
     """Overlay briefs re-keyed by the **current** spec names; raises ``BriefError`` otherwise."""
-    briefs = registry["briefs"] if "briefs" in registry else {}
+    briefs = registry.get("briefs", {})
     if not isinstance(briefs, dict):
         raise BriefError(f"overlay 'briefs' must be an object, got {type(briefs).__name__}")
     by_key = {agent_key(spec.name): spec.name for spec in AGENT_SPECS}
@@ -729,10 +736,8 @@ def suppressed_rebind_warning(
     marker_name = hashlib.sha256(session.encode()).hexdigest()[:20]
     marker = (marker_dir or Path(tempfile.gettempdir())) / f"akmon-suppressed-rebind-{marker_name}"
     if warning is None or detected_model is None:
-        try:
+        with contextlib.suppress(OSError):
             marker.unlink(missing_ok=True)
-        except OSError:
-            pass
         return []
 
     condition = hashlib.sha256(f"{detected_model}\0{warning}".encode()).hexdigest()
@@ -741,10 +746,8 @@ def suppressed_rebind_warning(
             return []
     except OSError:
         pass
-    try:
+    with contextlib.suppress(OSError):
         marker.write_text(condition, encoding="utf-8")
-    except OSError:
-        pass
     return [warning]
 
 
@@ -1034,8 +1037,7 @@ def _context_fill_metrics(registry: dict, transcript_path: str | Path | None) ->
 
 
 def context_fill_ratio(registry: dict, transcript_path: str | Path | None) -> float | None:
-    """Fill as a share of the recommended maximum for the last main-chain turn (can pass 1.0);
-    ``None`` if unavailable.
+    """Fill as a share of the recommended maximum for the last main-chain turn (can pass 1.0); ``None`` if unavailable.
 
     Reused by the C29 output-weight nudge to weight cumulative tool-output bytes by how far
     into the recommended maximum the session already is — the same signal
@@ -1091,17 +1093,13 @@ def context_pressure_notice(
         # Below every level — the pressure episode is over and the throttle resets. The cause is
         # not visible here: a compact, a fresh session and anything else that lowered the fill
         # look alike.
-        try:
+        with contextlib.suppress(OSError):
             marker.unlink(missing_ok=True)
-        except OSError:
-            pass
         return []
     if last_level is not None and level <= last_level:
         return []
-    try:
+    with contextlib.suppress(OSError):
         marker.write_text(str(level), encoding="utf-8")
-    except OSError:
-        pass
 
     shown = f"{recommended // 1000}k" if recommended % 1000 == 0 else str(recommended)
     share = f"~{ratio:.0%} of the recommended {shown} budget"
@@ -1197,6 +1195,7 @@ def rebind_to(
 
 
 def local_config(binding: Binding, registry: dict, *, second_opinion: bool, available: list[str] | None) -> dict:
+    """The per-user resolved config written to ``LOCAL_CONFIG_REL`` (binding, opt-ins, staleness hash)."""
     config = {
         "vendor": binding.vendor,
         "orchestrator": binding.orchestrator,
@@ -1319,8 +1318,11 @@ def rebind_notice(config: dict, registry: dict) -> list[str]:
 
 
 def init_instruction(reason: str, runtime_root: str) -> list[str]:
-    """The one-time setup instruction. ``runtime_root``: see ``status_lines`` — the recovery
-    path must name the tree this project actually has, mounted or materialized."""
+    """The one-time setup instruction.
+
+    ``runtime_root``: see ``status_lines`` — the recovery path must name the tree this
+    project actually has, mounted or materialized.
+    """
     return [
         f"[akmon] Model routing needs initialization — {reason}.",
         "State the model you are running on and the models available in this harness, then run: "
@@ -1339,6 +1341,12 @@ _SUBAGENT_TOOLS = frozenset({"Task", "Agent"})
 
 
 ZONE_MARKER_PREFIX = "[zone:"
+
+#: Column counts for ``parse_delegation_entries``: the current schema (timestamp, session_id,
+#: subagent, model, zone, description) and the legacy one (timestamp, subagent, model,
+#: description — no session/zone).
+_CURRENT_SCHEMA_COLUMNS = 6
+_LEGACY_SCHEMA_COLUMNS = 4
 
 
 def parse_zone(description: str) -> tuple[str | None, str]:
@@ -1413,10 +1421,10 @@ def parse_delegation_entries(lines: Iterable[str]) -> list[DelegationEntry]:
         if not line:
             continue
         parts = line.split("\t")
-        if len(parts) >= 6:
+        if len(parts) >= _CURRENT_SCHEMA_COLUMNS:
             ts, sid, subagent, model, zone = parts[0], parts[1], parts[2], parts[3], parts[4]
             description = "\t".join(parts[5:])
-        elif len(parts) >= 4:
+        elif len(parts) >= _LEGACY_SCHEMA_COLUMNS:
             # Legacy: timestamp · subagent · model · description (no session / zone).
             ts, sid, subagent, model, zone = parts[0], "-", parts[1], parts[2], "-"
             description = "\t".join(parts[3:])

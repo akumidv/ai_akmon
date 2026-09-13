@@ -261,7 +261,7 @@ to this document and its ledger row:
   present, an unknown version warns and stamps the generated banner rather than failing, and the
   mechanism is seeded against its **root cause**, a second owner naming vendor tools outside the
   map. Both shapes are observed **red before green**: neither `README.md:200` nor
-  `routing.py:362`/`:470`/`:503` is repaired ahead of its task. **"Completed" was true of the
+  `routing.py:367`/`:470`/`:503` is repaired ahead of its task. **"Completed" was true of the
   paragraph each section lacked and false of its rule set**: the architect pass over D2-20's clause
   (d) found rules with no seed in all three sections named here and in six more. They are closed in
   the sections themselves and recorded in A17(g); the wording stands with its correction rather
@@ -455,7 +455,7 @@ values with contract tests. This keeps serialization beside the shared envelope 
 absence of `level` testable. C51 does not add `--json` to `verify.py`, `sync --check`,
 `meta/bin/validate.py`, or `self_ci`; C59 introduces the public JSON rendering when `akmon status`
 becomes its first process-boundary consumer. Text rendering **changes**, and C51 owns the change:
-`verify.py` prints `[{level}] {message}` today (`bin/verify.py:691`), while the canonical form
+`verify.py` prints `[{level}] {message}` today (`bin/verify.py:722`), while the canonical form
 this envelope introduces is `SEVERITY code target: message → fix`, one canonical stdout line per finding. It is
 recorded as a change rather than a continuation because the audit at A17(g) found the word
 *remains* describing a form the tree does not print — every adopter's text output moves in the
@@ -558,8 +558,8 @@ suppresses successful child output so `--quiet` remains quiet.
 3. **A top-level exception guard** in every **spawned entry point** — nine of them: the eight
    generated Claude entries (`git-commit-guard`, `role-on-code`, `analysis-guard`,
    `d2-ledger-reminder`, `delegation-log`, `delegation-nudge`, `session-start-agent`,
-   `model-routing`; `bin/sync.py:270`–`:306`) and the single Codex entry `codex-hook.py`, which
-   carries the route as an argument (emitted at `bin/sync.py:203` and `:222`–`:244` — the file
+   `model-routing`; `bin/sync.py:277`–`:306`) and the single Codex entry `codex-hook.py`, which
+   carries the route as an argument (emitted at `bin/sync.py:210` and `:222`–`:244` — the file
    is named explicitly because the bare form read as coordinates inside `codex-hook.py`, which
    has no such lines). It prints the exception class and
    the hook name to stderr and exits 0. **Five of the nine already carry such a guard and four do
@@ -1271,7 +1271,7 @@ and lowers the caps. C60's relocation-versus-deletion fork remains in-task and o
 
 **Declaration (runtime).** Akmon requires **a POSIX shell and `python3` on PATH**. The Codex route
 additionally requires **git on PATH**: generated Codex wiring resolves the project root through
-`$(git rev-parse --show-toplevel)` (`bin/sync.py:203`), while Claude wiring uses the
+`$(git rev-parse --show-toplevel)` (`bin/sync.py:210`), while Claude wiring uses the
 harness-provided `$CLAUDE_PROJECT_DIR` (`:258`). **`claude` and `codex` are optional**: §8 queries
 each one found on PATH and, independently for each absent harness, falls back to and discloses its
 declared version. **Windows is unsupported**, not merely untested.
@@ -1669,7 +1669,7 @@ measurement to these fixtures and blocks only C52.
 
 **F20/A decision — exact populations and one owner in both directions.** The neutral vocabulary is
 exactly `edit` / `shell` / `read` / `subagent`, owned by `hook_core`
-(`hooks/hook_core.py:109`–`:115`), where `read` already folds Read/Grep/Glob by that module's own
+(`hooks/hook_core.py:112`–`:115`), where `read` already folds Read/Grep/Glob by that module's own
 comment. The exact restricted-agent population is `k_explorer`, `k_reasoner` and `k_auditor`, each
 with `{read, shell}`; `k_mechanic`, `k_validator` and `k_implementer` carry one explicit
 unrestricted sentinel rather than a vendor-name list. A new capability is added to `hook_core`'s
@@ -1727,7 +1727,7 @@ duplicates, or changing the stated exit behavior fails.
   `sync --check` and exits 1;
 - emits `Grep` against the Claude 2.1.221 inventory; each caller emits exactly one
   `error harness.unknown-name` and exits 1. This is C46's own live red-before-green transition:
-  `routing.py:362`/`:470`/`:503` remain unchanged until C46 first observes them red, then the same
+  `routing.py:367`/`:470`/`:503` remain unchanged until C46 first observes them red, then the same
   checker passes after conversion. It is not an application of F9, which belongs only to C54;
 - removes a vendor mapping for each neutral capability in turn; every case emits the selected shell
   name plus exactly one `warn harness.capability-degraded`, names the widened boundary and exits 0.

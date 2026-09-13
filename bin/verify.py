@@ -16,6 +16,7 @@ import json
 import re
 import shutil
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 # The shared utilities live in the tree's ``common`` package, not beside this script:
@@ -24,9 +25,10 @@ from pathlib import Path
 # here rather than left to the caller because both launchers are entry points in their own right.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import sync as sync_tool  # noqa: E402
+import sync as sync_tool
 
-from common.codex_hooks import (  # noqa: E402
+from common.check_runner import CONFIG_TARGET, read_checks
+from common.codex_hooks import (
     CodexProtocolError,
     expected_codex_hooks,
     hook_trust_problems,
@@ -35,16 +37,23 @@ from common.codex_hooks import (  # noqa: E402
 from common.codex_hooks import (
     default_runner as _default_codex_hooks_runner,
 )
-from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
-from common.project_root import resolve_project_root  # noqa: E402
-from common.python_rules import CONFIG_TARGET, load_catalog, read_settings  # noqa: E402
-from common.record import RecordError, read_akmon_toml_strict  # noqa: E402
-from common.runtime import codex_hooks_list_command  # noqa: E402
-from common.versions import split_version  # noqa: E402
+from common.findings import Finding, exit_code, line_safe, print_findings
+from common.project_root import resolve_project_root
+from common.record import RecordError, read_akmon_toml_strict
+from common.runtime import codex_hooks_list_command
+from common.versions import split_version
 
 _TASKS_MAX_LINES = 200
 _TASK_STATUSES = ("active", "blocked", "deferred", "done")
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+# A backlog entry's ``·``-separated fields (pipelines/tasks.md): id, title, status, goal,
+# detail. Reading the status field needs at least the first three.
+_MIN_STATUS_FIELDS = 3
+# "orchestrator" is the ADR 0005/0006 dynamic default (reasoner rides the orchestrator's own
+# model, tools/model_routing/routing.py::compute_binding); "highest" is the pre-ADR-0005
+# static default, still a valid fallback for any non-"orchestrator" value there. Keep this
+# set in sync with routing.py, not with whichever one the registry happened to say last (C26).
+_REASONER_POLICY_VALUES = ("orchestrator", "highest")
 
 
 def _sample(ids: list[str], limit: int = 4) -> str:
@@ -118,7 +127,14 @@ _VENDOR_POINTERS = {
 
 
 class Verifier:
-    def __init__(self, root: Path, *, codex_hooks_runner=None) -> None:
+    """Runs every USE-contract check against one consuming project and collects findings."""
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        codex_hooks_runner: Callable[[Sequence[str], Path, float], str] | None = None,
+    ) -> None:
         self.root = root
         self.findings: list[Finding] = []
         # The dev-layer root is configurable (AITNA_ROOT, default _aitna); akmon mounts at
@@ -136,15 +152,19 @@ class Verifier:
         self._codex_hooks_runner = codex_hooks_runner or _default_codex_hooks_runner
 
     def ok(self, code: str, message: str, *, target: str = "", fix: str) -> None:
+        """Record a passing finding."""
         self.findings.append(Finding("ok", code, line_safe(message), line_safe(target), line_safe(fix)))
 
     def warn(self, code: str, message: str, *, target: str = "", fix: str) -> None:
+        """Record a warning finding."""
         self.findings.append(Finding("warn", code, line_safe(message), line_safe(target), line_safe(fix)))
 
     def error(self, code: str, message: str, *, target: str = "", fix: str) -> None:
+        """Record a failing finding."""
         self.findings.append(Finding("error", code, line_safe(message), line_safe(target), line_safe(fix)))
 
     def check_path(self, relative: str, *, kind: str = "file") -> bool:
+        """Check that a path in the consumer's own tree exists; record and return the result."""
         path = self.root / relative
         exists = path.is_dir() if kind == "dir" else path.is_file()
         if exists:
@@ -164,11 +184,13 @@ class Verifier:
         return False
 
     def _display_path(self, path: Path) -> str:
-        """``path`` rendered relative to the consumer root when possible (mounted mode: the
-        standard tree lives under ``self.root``, so this matches ``check_path``'s wording
-        exactly — byte-identical output for existing mounted consumers). Package mode's
-        embedded tree can live outside ``self.root`` entirely, so this falls back to a
-        ``standard tree:``-prefixed path relative to ``self.standard_root``.
+        """``path`` rendered relative to the consumer root when possible.
+
+        Mounted mode: the standard tree lives under ``self.root``, so this matches
+        ``check_path``'s wording exactly — byte-identical output for existing mounted
+        consumers. Package mode's embedded tree can live outside ``self.root`` entirely, so
+        this falls back to a ``standard tree:``-prefixed path relative to
+        ``self.standard_root``.
         """
         try:
             return str(path.relative_to(self.root))
@@ -176,9 +198,10 @@ class Verifier:
             return f"standard tree:{path.relative_to(self.standard_root)}"
 
     def check_standard_path(self, relative: str, *, kind: str = "file") -> bool:
-        """Like ``check_path``, resolved against ``self.standard_root`` instead of
-        ``self.root`` — for content that ships with the standard itself (roles, pipelines,
-        model-routing tools, …) rather than being generated into the consumer repo.
+        """Like ``check_path``, resolved against ``self.standard_root`` instead of ``self.root``.
+
+        For content that ships with the standard itself (roles, pipelines, model-routing
+        tools, …) rather than being generated into the consumer repo.
         """
         path = self.standard_root / relative
         exists = path.is_dir() if kind == "dir" else path.is_file()
@@ -200,6 +223,7 @@ class Verifier:
         return False
 
     def check_basic_layout(self) -> None:
+        """Check that the consumer's and the standard's required files and directories exist."""
         aitna = self.aitna
         for relative in (
             "AGENTS.md",
@@ -284,6 +308,7 @@ class Verifier:
         return found
 
     def check_agents_md(self) -> None:
+        """Check that AGENTS.md is hand-owned and its akmon block carries every required anchor."""
         path = self.root / "AGENTS.md"
         if not path.is_file():
             return
@@ -407,6 +432,7 @@ class Verifier:
                 )
 
     def check_agent_charters(self) -> None:
+        """Check that each agent directory has a README.md charter linking a akmon role."""
         agents_dir = self.root / self.aitna / "agents"
         if not agents_dir.is_dir():
             return
@@ -447,6 +473,7 @@ class Verifier:
                 )
 
     def check_memory(self) -> None:
+        """Check that the memory directory has an index and the index lists every memory file."""
         memory_dir = self.root / self.aitna / "memory"
         if not memory_dir.is_dir():
             return
@@ -542,6 +569,7 @@ class Verifier:
         return None
 
     def check_skill_contract(self, source: Path) -> None:
+        """Check one SKILL.md's frontmatter against the Agent Skills standard and akmon's own fields."""
         relative = self._display_path(source)
         fields = self._skill_frontmatter(source)
         if fields is None:
@@ -606,6 +634,7 @@ class Verifier:
             )
 
     def check_skills(self) -> None:
+        """Find the project's skill sources and validate each one's contract."""
         sources, errors = sync_tool._skill_sources(self.root)
         for error in errors:
             self.error(
@@ -629,6 +658,7 @@ class Verifier:
             )
 
     def check_generated_pointers(self) -> None:
+        """Check that every generated pointer file matches what sync.py's current plan would write."""
         files, errors = sync_tool._planned_files(self.root)
         for error in errors:
             self.error(
@@ -672,7 +702,7 @@ class Verifier:
         status plus a qualifier naming what it waits on — stays valid, as does ``**active**``.
         """
         fields = entry.split(" · ")
-        if len(fields) < 3:
+        if len(fields) < _MIN_STATUS_FIELDS:
             return None
         status = fields[2].strip().strip("*").strip()
         if not status:
@@ -680,6 +710,7 @@ class Verifier:
         return status.split()[0].strip("*:,;").lower() or None
 
     def check_tasks(self) -> None:
+        """Check TASKS.md's length, entry statuses, done-archiving, and freedom from dates."""
         path = self.root / self.aitna / "TASKS.md"
         if not path.is_file():
             return  # basic layout already reports a missing TASKS.md
@@ -952,12 +983,6 @@ class Verifier:
                 )
                 continue
             policy = spec.get("selection_policy")
-            # "orchestrator" is the ADR 0005/0006 dynamic default (reasoner rides the
-            # orchestrator's own model, tools/model_routing/routing.py::compute_binding);
-            # "highest" is the pre-ADR-0005 static default, still a valid fallback for any
-            # non-"orchestrator" value there. Keep this set in sync with routing.py, not with
-            # whichever one the registry happened to say last (C26).
-            _REASONER_POLICY_VALUES = ("orchestrator", "highest")
             if (
                 isinstance(policy, dict)
                 and policy.get("reasoner") in _REASONER_POLICY_VALUES
@@ -1022,6 +1047,7 @@ class Verifier:
                 )
 
     def check_gitignore(self) -> None:
+        """Check that .gitignore carries the akmon env-secret ignore pattern."""
         path = self.root / ".gitignore"
         if not path.is_file():
             self.warn(
@@ -1083,6 +1109,7 @@ class Verifier:
             )
 
     def check_ci(self) -> None:
+        """Check that a GitHub Actions workflow runs akmon's sync and verify commands."""
         workflow_dir = self.root / ".github" / "workflows"
         workflows = sorted(workflow_dir.glob("*.yml")) + sorted(workflow_dir.glob("*.yaml"))
         if not workflows:
@@ -1306,6 +1333,7 @@ class Verifier:
         )
 
     def run(self) -> None:
+        """Run every check in order, accumulating findings."""
         self.check_basic_layout()
         self.check_use_surface_isolation()
         self.check_agents_md()
@@ -1325,39 +1353,39 @@ class Verifier:
         self.check_changelog()
         self.check_package_pin()
         self.check_attach_record()
-        self.check_python_config()
+        self.check_check_config()
 
-    def check_python_config(self) -> None:
-        """The ``[python]`` table of the integration record — validated here, applied by
-        ``akmon check`` (ADR 0014 §4).
+    def check_check_config(self) -> None:
+        """The ``[check]`` table of the integration record — validated here, run by ``akmon check``.
 
-        Only the table, never the project's code: code quality is ``akmon check``'s, and keeping
-        it out of ``verify`` is what lets a bump leave CI green on code the bump did not touch. The
-        table is different — a misspelled rule id or a mistyped parameter silently changes what
-        the check runs, and that is integration health.
+        ADR 0014 §4. Only the table, never the checks themselves: running the project's linter is
+        ``akmon check``'s job, and keeping it out of ``verify`` is what lets a bump leave CI green
+        on code the bump did not touch. A malformed entry is different — it silently stops a check
+        from running, and that is integration health.
         """
         try:
-            table = read_akmon_toml_strict(sync_tool.aitna_root(self.root) / ".akmon.toml").get("python")
+            table = read_akmon_toml_strict(sync_tool.aitna_root(self.root) / ".akmon.toml").get("check")
         except RecordError as exc:
-            self.error("python.config", str(exc), target=CONFIG_TARGET, fix="Repair the record so it parses as TOML")
+            self.error("check.config", str(exc), target=CONFIG_TARGET, fix="Repair the record so it parses as TOML")
             return
         if table is None:
             return
-        _, problems = read_settings(load_catalog(Path(__file__).resolve().parent.parent), table)
+        checks, problems = read_checks(table)
         for problem in problems:
             self.error(
-                "python.config", problem, target=CONFIG_TARGET, fix="Correct or remove the key the message names"
+                "check.config", problem, target=CONFIG_TARGET, fix="Correct or remove the entry the message names"
             )
         if not problems:
             self.ok(
-                "python.config",
-                "the [python] table names only rules, parameters and severities the catalog knows",
+                "check.config",
+                f"[check] declares {len(checks)} check(s), each a command that splits into arguments",
                 target=CONFIG_TARGET,
-                fix="Keep every [python] key one the rule catalog defines",
+                fix="Keep every [check] entry a command the project can run",
             )
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse arguments, run every check against the project, and print findings."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument("--strict", action="store_true", help="Treat warnings as failures.")

@@ -9,6 +9,7 @@ copies. It is intentionally stdlib-only and safe to run repeatedly.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -23,20 +24,20 @@ from pathlib import Path
 # here rather than left to the caller because both launchers are entry points in their own right.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common.findings import Finding, line_safe, print_findings  # noqa: E402
-from common.materialization import (  # noqa: E402
+from common.findings import Finding, line_safe, print_findings
+from common.materialization import (
     GENERATED_MARKER,
     IMPORTED_DIRS,
     generated_banner,
-    materialized_markdown,
+    materialized_text,
 )
-from common.project_root import (  # noqa: E402
+from common.project_root import (
     aitna_root,
     aitna_root_name,
     resolve_project_root,
 )
-from common.project_root import akmon_mount as akmon_root  # noqa: E402
-from common.record import _strip_inline_comment, read_akmon_toml, recorded_mount  # noqa: E402,F401
+from common.project_root import akmon_mount as akmon_root
+from common.record import _strip_inline_comment, read_akmon_toml, recorded_mount  # noqa: F401
 
 # Two shared owners, both for the same reason a hook must reach them. The integration record
 # (C69/D2-26): the hooks needed it too, and a sixth narrow copy is what that decision refused.
@@ -62,7 +63,8 @@ _TREE_ROOT = Path(__file__).resolve().parent.parent
 
 
 def read_mount_mode(project_root: Path) -> str:
-    """The recorded ``mount`` value from ``<AITNA_ROOT>/.akmon.toml`` (ADR 0009 §3):
+    """The recorded ``mount`` value from ``<AITNA_ROOT>/.akmon.toml`` (ADR 0009 §3).
+
     ``"submodule" | "vendored" | "subtree" | "package"``. An absent record or key defaults
     to ``"submodule"`` — the traditional mounted-tree default, kept for backward
     compatibility with every project that predates this field.
@@ -91,8 +93,9 @@ _AKMON_REQUIREMENT_RE = re.compile(r"\s*akmon(?![\w.-])", re.IGNORECASE)
 
 
 def _read_manifest(project_root: Path) -> dict | None:
-    """The consumer's ``pyproject.toml`` parsed as TOML: ``{}`` when there is none, ``None`` when
-    it does not parse.
+    """The consumer's ``pyproject.toml`` parsed as TOML.
+
+    ``{}`` when there is none, ``None`` when it does not parse.
 
     A parse, not a line scan. One requirement per array line is what ``uv add --dev`` and
     formatters write, and the scan this replaced split every line at its first ``=``: it read
@@ -105,7 +108,7 @@ def _read_manifest(project_root: Path) -> dict | None:
     manifest = project_root / "pyproject.toml"
     if not manifest.is_file():
         return {}
-    import tomllib
+    import tomllib  # noqa: PLC0415 — the one-reader carrier (test_record_owner) keys on the importing function
 
     try:
         with manifest.open("rb") as handle:
@@ -115,17 +118,22 @@ def _read_manifest(project_root: Path) -> dict | None:
 
 
 def _table(value: object, *keys: str) -> dict:
-    """``value[keys[0]][keys[1]]…`` when every step is a table, else ``{}`` — a manifest that
-    parses can still hold a string where a table belongs."""
+    """``value[keys[0]][keys[1]]…`` when every step is a table, else ``{}``.
+
+    A manifest that parses can still hold a string where a table belongs.
+    """
     for key in keys:
         value = value.get(key) if isinstance(value, dict) else None
     return value if isinstance(value, dict) else {}
 
 
 def _names_akmon(declaration: object) -> bool:
-    """Whether a requirement array — or a table of them (extras, PEP 735 groups, pdm dev groups) —
-    holds an entry naming akmon. A PEP 735 ``{include-group = ...}`` entry is not a requirement;
-    the group it names is read in its own right."""
+    """Whether a requirement array — or a table of them — holds an entry naming akmon.
+
+    A table of them: extras, PEP 735 groups, pdm dev groups. A PEP 735
+    ``{include-group = ...}`` entry is not a requirement; the group it names is read in its
+    own right.
+    """
     groups = declaration.values() if isinstance(declaration, dict) else [declaration]
     return any(
         isinstance(requirement, str) and _AKMON_REQUIREMENT_RE.match(requirement)
@@ -141,8 +149,7 @@ def _keys_akmon(table: object) -> bool:
 
 
 def package_pin_status(project_root: Path) -> str:
-    """How the consumer's manifest pins akmon: ``"dev"``, ``"runtime"``, ``"none"`` or
-    ``"unreadable"``.
+    """How the consumer's manifest pins akmon: ``"dev"``, ``"runtime"``, ``"none"`` or ``"unreadable"``.
 
     Mode ``package`` mounts no tree: the pin *is* the consumer's dependency declaration, and
     ADR 0009 §4 locks which class it may be — a **dev** group, never a runtime dependency and
@@ -386,8 +393,11 @@ def _claude_hooks(root: Path) -> dict:
     launcher = launcher_relative(root) if package_mode else ""
 
     def cmd(script: str) -> str:
-        """One hook command. Package mode names the console script (see ``_codex_hook_command``
-        for why a path cannot be committed there); mounted modes name the file, unchanged."""
+        """One hook command.
+
+        Package mode names the console script (see ``_codex_hook_command`` for why a path
+        cannot be committed there); mounted modes name the file, unchanged.
+        """
         if package_mode:
             return f'"$CLAUDE_PROJECT_DIR/{launcher}" hook {script}'
         return f'python3 "$CLAUDE_PROJECT_DIR/{_mounted_hooks_dir()}/{script}.py"'
@@ -448,12 +458,16 @@ def _claude_hooks(root: Path) -> dict:
 
 @dataclass(frozen=True)
 class PlannedFile:
+    """One generated file's target path and wanted content."""
+
     path: Path
     content: str
 
 
 @dataclass
 class Result:
+    """The outcome of applying a plan: what changed, what was deleted, what was already right."""
+
     changed: list[Path]
     deleted: list[Path]
     ok: list[Path]
@@ -620,16 +634,53 @@ MOVED_IMPORTS = {"guardrails/python.md": "profiles/python.md"}
 
 
 def import_prefix(root: Path) -> str:
-    """The ``@``-import prefix of the standard's files in this project's ``AGENTS.md``: the
-    materialized copy in package mode, the mount otherwise."""
+    """The ``@``-import prefix of the standard's files in this project's ``AGENTS.md``.
+
+    The materialized copy in package mode, the mount otherwise.
+    """
     return f"@{aitna_root_name()}/.akmon/" if is_package_mode(root) else f"@{aitna_root_name()}/akmon/"
 
 
-def imported_standard_files(root: Path) -> tuple[list[str], list[str]]:
-    """The standard's files the consumer's ``AGENTS.md`` actually ``@``-imports — as
-    ``guardrails/<name>`` and ``profiles/<name>`` — and any plan errors.
+# The project's own ruff configuration files, and the table in each that holds `extend`.
+_RUFF_CONFIGS = (("pyproject.toml", ("tool", "ruff")), ("ruff.toml", ()), (".ruff.toml", ()))
 
-    Read from the document rather than derived from the recorded archetype: the language
+
+def ruff_extends(root: Path) -> list[tuple[str, str]]:
+    """``(file, value)`` for every ruff configuration of the project that ``extend``s a file.
+
+    This is how a project runs akmon's Python rules the standard way — ``extend`` pointing at
+    ``profiles/ruff.toml`` in the standard tree — so the target is owed the same guarantee an
+    ``@``-import is: it resolves, and in package mode it is materialized. A file that does not
+    parse is skipped here; ruff itself reports it.
+    """
+    import tomllib  # noqa: PLC0415 — the one-reader carrier (test_record_owner) keys on the importing function
+
+    found = []
+    for name, keys in _RUFF_CONFIGS:
+        path = root / name
+        if not path.is_file():
+            continue
+        try:
+            with path.open("rb") as handle:
+                table: object = tomllib.load(handle)
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+            continue
+        for key in keys:
+            table = table.get(key, {}) if isinstance(table, dict) else {}
+        value = table.get("extend") if isinstance(table, dict) else None
+        if isinstance(value, str):
+            found.append((name, value))
+    return found
+
+
+def imported_standard_files(root: Path) -> tuple[list[str], list[str]]:
+    """The standard's files the project actually uses, and any plan errors.
+
+    The files — as ``guardrails/<name>`` and ``profiles/<name>`` — are every file
+    ``AGENTS.md`` ``@``-imports, and the ruff rules a ruff configuration of the project
+    ``extend``s.
+
+    Read from the documents rather than derived from the recorded archetype: the language
     profile is a line a human adds by hand (``init`` says so in as many words), an
     archetype-driven list would miss it, and it would ship files to a project whose archetype
     is still ``<archetype>``.
@@ -640,31 +691,37 @@ def imported_standard_files(root: Path) -> tuple[list[str], list[str]]:
     this error is the only thing that says so.
     """
     prefix = import_prefix(root)
-    names = {_ALWAYS_MATERIALIZED} if is_package_mode(root) else set()
+    path_prefix = prefix.removeprefix("@")
+    origins = {_ALWAYS_MATERIALIZED: "AGENTS.md imports"} if is_package_mode(root) else {}
     text_path = root / "AGENTS.md"
     if text_path.is_file():
         text = _INLINE_CODE_RE.sub(" ", _FENCED_BLOCK_RE.sub("\n", text_path.read_text(encoding="utf-8")))
         directories = "|".join(IMPORTED_DIRS)
-        names.update(re.findall(re.escape(prefix) + rf"((?:{directories})/[A-Za-z0-9._-]+)", text))
+        for name in re.findall(re.escape(prefix) + rf"((?:{directories})/[A-Za-z0-9._-]+)", text):
+            origins.setdefault(name, "AGENTS.md imports")
+    for config, value in ruff_extends(root):
+        name = value.removeprefix(path_prefix)
+        if value.startswith(path_prefix) and name.split("/", 1)[0] in IMPORTED_DIRS:
+            origins.setdefault(name, f"{config} extends")
     source = standard_tree_root(root)
     errors: list[str] = []
-    for name in sorted(names):
+    for name, origin in sorted(origins.items()):
         if (source / name).is_file():
             continue
         moved = MOVED_IMPORTS.get(name)
+        line = prefix if origin == "AGENTS.md imports" else path_prefix
         if moved:
-            errors.append(
-                f"AGENTS.md imports {name}, which the standard moved to {moved}: replace the line with {prefix}{moved}"
-            )
+            errors.append(f"{origin} {name}, which the standard moved to {moved}: replace the line with {line}{moved}")
         else:
-            errors.append(f"AGENTS.md imports a file the standard does not ship: {name}")
-    return sorted(names), errors
+            errors.append(f"{origin} a file the standard does not ship: {name}")
+    return sorted(origins), errors
 
 
 def _materialized_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
-    """Package-mode materialization (ADR 0009 §4, narrowed by C77, widened to profiles by
-    ADR 0014): the guardrails and profiles the consumer's ``AGENTS.md`` imports, and nothing
-    else.
+    """Package-mode materialization (ADR 0009 §4, narrowed by C77, widened to profiles by ADR 0014).
+
+    The guardrails and profiles the consumer's ``AGENTS.md`` imports, the ruff rules its
+    ruff configuration extends, and nothing else.
 
     Nothing executable is copied any more. The hooks, the ``common`` package they import, the
     routing library and its registry are already installed beside the consumer, inside the
@@ -693,7 +750,7 @@ def _materialized_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
     files = [
         PlannedFile(
             dest / name,
-            materialized_markdown((source / name).read_text(encoding="utf-8")),
+            materialized_text(name, (source / name).read_text(encoding="utf-8")),
         )
         for name in names
         if (source / name).is_file()
@@ -702,11 +759,11 @@ def _materialized_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
 
 
 def _upsert_toml_key(text: str, key: str, value: str) -> str:
-    """Set a top-level ``key = "value"`` line in TOML-ish ``text``, preserving everything
-    else verbatim (comments, other keys, ``[section]``s).
+    """Set a top-level ``key = "value"`` line in TOML-ish ``text``, preserving everything else verbatim.
 
-    Updates an existing top-level (pre-first-``[section]``) line for ``key`` in place; else
-    inserts one just before the first ``[section]`` header (or appends at the end if none).
+    Verbatim covers comments, other keys, and ``[section]``s. Updates an existing top-level
+    (pre-first-``[section]``) line for ``key`` in place; else inserts one just before the
+    first ``[section]`` header (or appends at the end if none).
     A minimal, comment-preserving alternative to a full parse+rewrite — ``.akmon.toml`` mixes
     tool-written fields (``mount``, ``akmon_version``, and ``last_realign`` — the last written
     by ``_init._mark_realign_complete`` once every stage has succeeded, never here) with
@@ -733,13 +790,15 @@ def _upsert_toml_key(text: str, key: str, value: str) -> str:
 
 
 def _installed_akmon_version() -> str | None:
-    """The installed ``akmon`` package's version, via metadata lookup only (no import of the
-    ``akmon`` package itself — bin/ must stay standalone-runnable with zero dependency on
-    ``akmon`` being importable, e.g. when this file is the mounted-submodule copy with no
-    package installed at all). ``None`` when not installed (mounted modes, or a raw
-    embedded/editable checkout with no ``pip``/``uv`` install)."""
+    """The installed ``akmon`` package's version, via metadata lookup only.
+
+    No import of the ``akmon`` package itself — bin/ must stay standalone-runnable with
+    zero dependency on ``akmon`` being importable, e.g. when this file is the
+    mounted-submodule copy with no package installed at all. ``None`` when not installed
+    (mounted modes, or a raw embedded/editable checkout with no ``pip``/``uv`` install).
+    """
     try:
-        from importlib.metadata import PackageNotFoundError, version
+        from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415 — only this lookup needs it
 
         return version("akmon")
     except PackageNotFoundError:
@@ -747,11 +806,13 @@ def _installed_akmon_version() -> str | None:
 
 
 def _package_mode_akmon_toml(root: Path) -> PlannedFile | None:
-    """Package-mode ``.akmon.toml`` stamping (ADR 0009 §4): the installed package version *is*
-    the pin, so sync keeps ``akmon_version`` in sync with reality on every run. Only the
-    ``mount``/``akmon_version`` keys are touched; every other field is preserved verbatim (see
-    ``_upsert_toml_key``). ``None`` outside package mode, when the record does not exist yet
-    (``init`` creates it), or when the installed version cannot be determined.
+    """Package-mode ``.akmon.toml`` stamping (ADR 0009 §4).
+
+    The installed package version *is* the pin, so sync keeps ``akmon_version`` in sync
+    with reality on every run. Only the ``mount``/``akmon_version`` keys are touched; every
+    other field is preserved verbatim (see ``_upsert_toml_key``). ``None`` outside package
+    mode, when the record does not exist yet (``init`` creates it), or when the installed
+    version cannot be determined.
 
     **Stamping the pin is not a realign**, and this function must not be read as one. It moves
     the recorded pin while ``last_realign`` and the model-routing binding stay where the last
@@ -872,10 +933,8 @@ def _sweep_materialization_bytecode(root: Path) -> None:
         for entry in sorted(cache.iterdir()):
             if entry.is_file() and entry.suffix in (".pyc", ".pyo"):
                 entry.unlink()
-        try:
+        with contextlib.suppress(OSError):
             cache.rmdir()
-        except OSError:
-            pass
 
 
 def _prune_stop(root: Path, path: Path) -> Path:
@@ -967,22 +1026,24 @@ def _check_findings(result: Result, *, root: Path) -> list[Finding]:
                 "Re-run akmon sync after every change to this file's source.",
             )
         )
-    for error in result.errors:
-        findings.append(
-            Finding(
-                "error",
-                "sync.plan-error",
-                line_safe(error),
-                "",
-                "Resolve the reported planning error, then re-run akmon sync.",
-            )
+    findings.extend(
+        Finding(
+            "error",
+            "sync.plan-error",
+            line_safe(error),
+            "",
+            "Resolve the reported planning error, then re-run akmon sync.",
         )
+        for error in result.errors
+    )
     return findings
 
 
 def _print_summary(result: Result, *, root: Path, mode: str) -> None:
-    """The action log for the writing modes: ``dry-run`` and a real write (``--check`` speaks
-    findings instead, see :func:`_check_findings`)."""
+    """The action log for the writing modes: ``dry-run`` and a real write.
+
+    ``--check`` speaks findings instead, see :func:`_check_findings`.
+    """
     for path in result.changed:
         rel = path.relative_to(root)
         action = "would update" if mode == "dry-run" else "updated"
@@ -1000,6 +1061,7 @@ def _print_summary(result: Result, *, root: Path, mode: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse arguments, plan the generated files, and apply, check, or dry-run the plan."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument("--check", action="store_true", help="Do not write; exit 1 when generated files are stale.")

@@ -17,21 +17,23 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 ## Unreleased
 
 ### Added
-- **Google's Python rules, checked by akmon itself — `akmon check` and language profiles
-  (C89/D2-48).** Each rule now sits in the layer that can hold it
-  ([ADR 0014](meta/decisions/0014-code-rules-catalog-and-language-profiles.md)): a principle that
-  holds in any language is in `guardrails/_common.md` § Code design; a rule a program can check is
-  in the catalog `profiles/python.rules.toml`, with its Google Python Style Guide section, default
-  severity and parameters; the rest is in the Python language profile `profiles/python.md` and the
-  environment profile `profiles/python-stdlib.md`, for code that runs on a bare interpreter.
-  `akmon check` (mounted: `python3 _aitna/akmon/bin/check.py`) runs the catalog's rules on the
-  project's Python with the standard library alone — no linter is required of the project — and
-  the pre-commit pipeline runs `akmon check --changed`; an `error` finding exits 1. A project
-  switches a rule off or changes a parameter under `[python]` in `<AITNA_ROOT>/.akmon.toml`;
-  `akmon verify` reports an unknown rule, parameter or value there (`python.config`), never the
-  code. `akmon check --print-ruff` prints a matching fragment for a project that also runs ruff.
-  `sync` now checks a mounted consumer's `@`-imports as well: an import the mount cannot resolve
-  is a plan error, as it already was in package mode.
+- **Google's Python rules as a standard ruff configuration, and `akmon check` over the project's
+  own checks (C89/D2-48).** Each rule now sits in the layer that can hold it
+  ([ADR 0014](meta/decisions/0014-code-rules-catalog-and-language-profiles.md)): a principle for
+  any language is in `guardrails/_common.md` § Code design; a rule a linter can check is in
+  `profiles/ruff.toml`, akmon's Python rules as a plain ruff configuration annotated with Google
+  Python Style Guide sections, which runs with or without akmon (`ruff check --config …`, or
+  `extend` from the project's own ruff configuration); the rest is in the Python language profile
+  `profiles/python.md` and the environment profile `profiles/python-stdlib.md`. `akmon check`
+  (mounted: `python3 _aitna/akmon/bin/check.py`) runs the checks a project declares under
+  `[check]` in `<AITNA_ROOT>/.akmon.toml` — its own linter and type checker, or ruff with akmon's
+  rules — passing their output through and exiting 1 when one fails; the pre-commit pipeline runs
+  `akmon check --changed`, and `akmon verify` reports a malformed entry (`check.config`).
+  `akmon init` sets `[check]` up once: the project's own ruff, flake8, pylint or mypy when it has
+  them; otherwise — offered, `--checks own|akmon|none` to decide — ruff with akmon's rules through
+  a standard `extend`. Package mode materializes an extended rules file at
+  `<AITNA_ROOT>/.akmon/profiles/ruff.toml`. `sync` now checks a mounted consumer's `@`-imports
+  and ruff `extend` as well: a target the mount cannot resolve is a plan error.
 - **`akmon verify` checks live Codex hook delivery (C70/D2-27).** Generated wiring only proves
   the hooks *file* is correct; a live probe (N7) measured that a discovered `SessionStart`/
   `PreToolUse` entry can still be reported `enabled: true` while its persisted trust is absent
@@ -364,9 +366,9 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   `@_aitna/.akmon/profiles/python.md` (mounted: `@_aitna/akmon/guardrails/python.md` with
   `@_aitna/akmon/profiles/python.md`), run `akmon sync` — in package mode it writes
   `_aitna/.akmon/profiles/python.md` and removes the old copy in the same run — and commit the
-  result. Then run `akmon check` once to see where the project stands before the pre-commit step
-  starts stopping commits on `error` findings; switch off or retune what does not fit under
-  `[python.rules]` in `<AITNA_ROOT>/.akmon.toml`.
+  result. The bump's `akmon init` then records what `akmon check` runs — the
+  project's own linter by default (`--checks own`); run `akmon check` once to see where the project
+  stands before the pre-commit step starts on it.
 - **Every project with its own skills (`skills/`, `<AITNA_ROOT>/skills/`): reshape each
   `SKILL.md` frontmatter, then sync (C79/D2-41).** Move `owner: <x>` under a `metadata:` block
   (`metadata:` on its own line, then `  owner: <x>`). Put the trigger ("Use when …") in

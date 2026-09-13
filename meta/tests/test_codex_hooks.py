@@ -267,7 +267,7 @@ def test_query_hooks_list_raises_on_jsonrpc_error_object_without_echoing_it():
 
 
 def test_query_hooks_list_raises_when_result_data_is_missing():
-    with pytest.raises(CodexProtocolError, match="result.data"):
+    with pytest.raises(CodexProtocolError, match=r"result\.data"):
         _query(json.dumps({"id": 2, "result": {}}))
 
 

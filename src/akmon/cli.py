@@ -26,9 +26,13 @@ import runpy
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 import akmon
 from akmon import _tree
+
+if TYPE_CHECKING:
+    import argparse  # only for the annotation below; kept off the hook path at runtime
 
 # Two deliberate absences from that list. ``argparse`` (~18 ms) and ``subprocess`` (~12 ms) are
 # imported where they are used, because since C77 this module is on the path of every
@@ -204,16 +208,16 @@ def _skew_notice(mounted_root: Path) -> str | None:
 
 def _run_mounted(script: str, mounted_root: Path, argv: list[str]) -> int:
     """``exec`` the mounted tree's launcher as a subprocess (skew rule)."""
-    import subprocess
+    import subprocess  # noqa: PLC0415 — kept off the hook path (see the imports above)
 
     script_path = mounted_root / "bin" / f"{script}.py"
-    result = subprocess.run([sys.executable, str(script_path), *argv])
+    result = subprocess.run([sys.executable, str(script_path), *argv], check=False)
     return result.returncode
 
 
 def _run_embedded(script: str, argv: list[str]) -> int:
     """Run the embedded tree's launcher: import its ``main`` when possible, else subprocess."""
-    import subprocess
+    import subprocess  # noqa: PLC0415 — kept off the hook path (see the imports above)
 
     tree_root = _tree.embedded_tree_root()
     script_path = tree_root / "bin" / f"{script}.py"
@@ -224,9 +228,9 @@ def _run_embedded(script: str, argv: list[str]) -> int:
             _load_embedded_common(tree_root)  # every launcher imports the shared utilities.
         module = _load_module_from_path(script_path, f"_akmon_embedded_{script}")
         main = module.main
-    except Exception:
+    except Exception:  # noqa: BLE001 — any import failure falls back to the subprocess
         # Not (cleanly) importable — fall back to running the embedded file directly.
-        result = subprocess.run([sys.executable, str(script_path), *argv])
+        result = subprocess.run([sys.executable, str(script_path), *argv], check=False)
         return result.returncode
     return main(argv)
 
@@ -243,8 +247,9 @@ def _dispatch(script: str, argv: list[str], *, cwd: Path | None = None) -> int:
 
 
 def controlling_tree_root(cwd: Path | None = None) -> Path:
-    """The standard tree that governs ``cwd``'s project: the mount when one exists, else the
-    tree embedded in this package (ADR 0009 §4-5).
+    """The standard tree that governs ``cwd``'s project.
+
+    The mount when one exists, else the tree embedded in this package (ADR 0009 §4-5).
 
     One resolver for ``path`` and ``hook`` alike — the tree an agent is told to read must be
     the tree its hooks run from, and two answers to that is exactly the skew ADR 0009 §5
@@ -347,10 +352,12 @@ def _cmd_version() -> int:
 
 
 def _cmd_init(argv: list[str]) -> int:
-    """Attach the standard to a project. Imported lazily: ``_init`` imports this module back
-    (for the dev-layer root resolver and the post-mount sync dispatch), and only ``init``
-    pays for loading it."""
-    from akmon import _init
+    """Attach the standard to a project.
+
+    Imported lazily: ``_init`` imports this module back (for the dev-layer root resolver and
+    the post-mount sync dispatch), and only ``init`` pays for loading it.
+    """
+    from akmon import _init  # noqa: PLC0415 — _init imports this module back; only init pays
 
     return _init.main(argv)
 
@@ -365,7 +372,7 @@ _EPILOG = """commands:
   init      attach the standard to a project (mount + layout + sync + routing)
   sync      sync generated agent pointers (bin/sync.py)
   verify    verify a consuming project's USE contract (bin/verify.py)
-  check     check the project's Python against the rule catalog (bin/check.py)
+  check     run the checks the project declares in .akmon.toml [check] (bin/check.py)
   path      print the resolved standard-tree root
   hook      run a hook from the resolved standard tree (called by generated wiring)
   version   print the akmon package version
@@ -378,8 +385,8 @@ sync/verify/init accept their own flags, passed through verbatim, e.g.:
 """
 
 
-def _build_parser():
-    import argparse
+def _build_parser() -> argparse.ArgumentParser:
+    import argparse  # noqa: PLC0415 — kept off the hook path (see the imports above)
 
     parser = argparse.ArgumentParser(
         prog="akmon",
@@ -393,6 +400,7 @@ def _build_parser():
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse ``argv`` and dispatch to the named ``akmon`` command."""
     # `hook` short-circuits the parser: it is the hottest entry point there is (the generated
     # wiring calls it on every tool call), it takes no flags of its own, and building an
     # `argparse` parser costs more than everything the dispatch below does.

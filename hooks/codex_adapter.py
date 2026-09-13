@@ -128,6 +128,7 @@ def tool_kind(payload: dict[str, Any]) -> str:
 
 
 def load_payload() -> dict[str, Any]:
+    """Parse the hook payload from stdin; ``{"raw": ...}``/``{"payload": ...}`` on the off-shapes."""
     raw = sys.stdin.read()
     if not raw.strip():
         return {}
@@ -139,6 +140,7 @@ def load_payload() -> dict[str, Any]:
 
 
 def tool_name(payload: dict[str, Any]) -> str:
+    """The payload's tool name, tried across every measured field spelling; ``""`` if none match."""
     for key in ("tool_name", "toolName", "tool", "name"):
         value = payload.get(key)
         if isinstance(value, str):
@@ -149,6 +151,7 @@ def tool_name(payload: dict[str, Any]) -> str:
 
 
 def session_id(payload: dict[str, Any]) -> str:
+    """The payload's session identity, tried across every measured field spelling; ``"nosession"`` if none match."""
     keys = ("session_id", "sessionId", "conversation_id", "conversationId", "thread_id", "threadId")
     for key in keys:
         value = payload.get(key)
@@ -175,6 +178,7 @@ def _tool_input(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def command(payload: dict[str, Any]) -> str:
+    """The shell command or patch body, tried across every measured field spelling; ``""`` if none match."""
     tool_input = _tool_input(payload)
     for key in ("command", "cmd", "script"):
         value = tool_input.get(key) or payload.get(key)
@@ -261,6 +265,7 @@ def payload_shape(payload: dict[str, Any]) -> str:
 
 
 def cwd(payload: dict[str, Any]) -> str:
+    """The payload's working directory, tried across every measured field spelling; ``""`` if none match."""
     for key in ("cwd", "working_directory", "workingDirectory", "workdir"):
         value = payload.get(key)
         if isinstance(value, str) and value:
@@ -269,6 +274,7 @@ def cwd(payload: dict[str, Any]) -> str:
 
 
 def print_result(result: HookResult | None) -> None:
+    """Print the rendered ``result`` document, or nothing when there is none."""
     if result is None:
         return
     output: dict[str, str] = {"hookEventName": result.event_name}

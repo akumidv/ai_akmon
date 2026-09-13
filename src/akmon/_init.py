@@ -31,15 +31,22 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 
-from akmon import __version__, _tree
+from akmon import __version__, _tree, cli
 
 AKMON_REPO = "https://github.com/akumidv/ai_akmon"
 MODES = ("submodule", "vendored", "subtree", "package")
+
+# ``git ls-remote`` prints one "<sha> <ref>" pair per line — a stray line with any other
+# field count is not a ref listing and is skipped rather than misparsed.
+_LS_REMOTE_FIELD_COUNT = 2
 
 # The top-level members that *are* the standard tree, mirroring
 # ``[tool.hatch.build.targets.wheel.force-include]`` in ``pyproject.toml``: mode ``vendored``
@@ -91,7 +98,9 @@ def _is_akmon_tree(path: Path) -> bool:
 # --------------------------------------------------------------------------------------
 
 
-def _run(cmd: list[str], *, cwd: Path | None = None, capture: bool = False, timeout: int | None = None):
+def _run(
+    cmd: list[str], *, cwd: Path | None = None, capture: bool = False, timeout: int | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run ``cmd``; never inherit a credential prompt (an attach must not hang on one)."""
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
     return subprocess.run(
@@ -101,6 +110,7 @@ def _run(cmd: list[str], *, cwd: Path | None = None, capture: bool = False, time
         text=True,
         timeout=timeout,
         env=env,
+        check=False,
     )
 
 
@@ -149,9 +159,7 @@ def _remote_reachable(repo: str, root: Path) -> bool:
 def _version_key(tag: str) -> tuple:
     """Sort key for a ``vX.Y.Z`` tag; non-numeric parts sort last but stay ordered."""
     parts = tag.lstrip("v").split(".")
-    key = []
-    for part in parts:
-        key.append((0, int(part), "") if part.isdigit() else (1, 0, part))
+    key = [(0, int(part), "") if part.isdigit() else (1, 0, part) for part in parts]
     return tuple(key)
 
 
@@ -180,7 +188,7 @@ def _package_default_ref(repo: str, root: Path) -> str:
     tags = []
     for line in completed.stdout.splitlines():
         fields = line.split()
-        if len(fields) == 2 and fields[1].startswith("refs/tags/v"):
+        if len(fields) == _LS_REMOTE_FIELD_COUNT and fields[1].startswith("refs/tags/v"):
             tags.append(fields[1].removeprefix("refs/tags/"))
     if not tags:
         raise _InitError(f"repository {repo!r} advertises no release tags; pass --ref explicitly")
@@ -198,8 +206,9 @@ def _describe(repo_dir: Path) -> str | None:
 
 
 def _effective_aitna_root(flag: str | None, root: Path) -> str:
-    """The dev-layer root this run will use — from ``--aitna-root`` or from ``AITNA_ROOT`` —
-    validated whichever way it arrived.
+    """The dev-layer root this run will use — from ``--aitna-root`` or from ``AITNA_ROOT``.
+
+    Validated whichever way it arrived.
 
     The two sources are one contract, so validating only the flag validated nothing: the flag's
     entire effect is to *set* the environment variable, and a caller who exports the variable
@@ -209,8 +218,6 @@ def _effective_aitna_root(flag: str | None, root: Path) -> str:
     source = "--aitna-root" if flag is not None else "AITNA_ROOT"
     raw = flag if flag is not None else os.environ.get("AITNA_ROOT")
     if raw is None or not raw.strip():
-        from akmon import cli
-
         return cli._project_root_lib().AITNA_ROOT_DEFAULT
     return _validated_aitna_root(raw, root, source)
 
@@ -247,8 +254,6 @@ def _recorded_mount(root: Path, aitna: str) -> str | None:
     Read by the embedded tree's ``common/record.py``, the one reader (C75). The path is built
     here rather than asked for because ``aitna`` is the dev-layer name this attach resolved.
     """
-    from akmon import cli
-
     record = cli._embedded_common_module(_tree.embedded_tree_root(), "record")
     value = record.read_akmon_toml(root / aitna / ".akmon.toml").get("mount")
     return value if isinstance(value, str) and value else None
@@ -299,9 +304,11 @@ def _mode_switch_steps(previous: str, mode: str, aitna: str) -> list[str]:
 
 
 def _default_mode(root: Path, repo: str) -> tuple[str, str]:
-    """The mode to use when the caller named none, plus the reason — printed, never silent
+    """The mode to use when the caller named none, plus the reason — printed, never silent.
+
     (ADR 0009 §3): ``submodule`` for a git repository that can reach the akmon repo, else
-    ``vendored``, which needs neither git nor a network."""
+    ``vendored``, which needs neither git nor a network.
+    """
     if not _is_git_repo(root):
         return "vendored", "the project is not a git repository"
     if not _remote_reachable(repo, root):
@@ -310,15 +317,14 @@ def _default_mode(root: Path, repo: str) -> tuple[str, str]:
 
 
 def _tag_for_version(version: str) -> str:
-    """The GitHub ref a consumer's human-facing links should point at: the release tag for a
-    released version, ``main`` for a development one (no tag exists for it yet).
+    """The GitHub ref a consumer's human-facing links should point at: the release tag for a released version.
+
+    ``main`` for a development one (no tag exists for it yet).
 
     "Released" is asked of ``common/versions.py``, the sole owner of that rule (C54), rather than
     answered again here: the substring heuristic this replaced missed ``.postN`` entirely and
     would have pointed a consumer at a tag that does not exist.
     """
-    from akmon import cli
-
     versions = cli._embedded_common_module(_tree.embedded_tree_root(), "versions")
     if not versions.is_final(version):
         return "main"
@@ -330,7 +336,9 @@ def _tag_for_version(version: str) -> str:
 # --------------------------------------------------------------------------------------
 
 
-def _mount_submodule(root: Path, mount: Path, repo: str, ref: str | None, log, next_steps: list[str]) -> str | None:
+def _mount_submodule(
+    root: Path, mount: Path, repo: str, ref: str | None, log: Callable[[str], None], next_steps: list[str]
+) -> str | None:
     """``git submodule add`` + checkout of the pinned ref. Returns the recorded version.
 
     "Already mounted" is decided by **git** (``_is_submodule``), not by the tree being on disk:
@@ -397,7 +405,7 @@ def _mount_submodule(root: Path, mount: Path, repo: str, ref: str | None, log, n
     return _describe(mount) or pin
 
 
-def _mount_subtree(root: Path, mount: Path, repo: str, ref: str | None, log) -> str | None:
+def _mount_subtree(root: Path, mount: Path, repo: str, ref: str | None, log: Callable[[str], None]) -> str | None:
     """Mode ``subtree``: attach onto a subtree the **owner** added, never one ``init`` adds.
 
     ``git subtree add`` is the one mount command that *commits* — it writes a squash commit
@@ -437,7 +445,7 @@ def _mount_subtree(root: Path, mount: Path, repo: str, ref: str | None, log) -> 
     )
 
 
-def _mount_vendored(root: Path, mount: Path, ref: str | None, log) -> str:
+def _mount_vendored(root: Path, mount: Path, ref: str | None, log: Callable[[str], None]) -> str:
     """Copy the embedded tree into the mount, replacing it member by member.
 
     The pin is the installed package's version by construction — the embedded tree *is* that
@@ -497,8 +505,9 @@ def _mount_vendored(root: Path, mount: Path, ref: str | None, log) -> str:
 
 
 def _package_pin_status(root: Path) -> str:
-    """Where the consumer's manifest pins akmon: ``"dev"``, ``"runtime"``, ``"none"``, or
-    ``"unreadable"`` when ``pyproject.toml`` is not valid TOML.
+    """Where the consumer's manifest pins akmon: ``"dev"``, ``"runtime"``, ``"none"``, or ``"unreadable"``.
+
+    When ``pyproject.toml`` is not valid TOML.
 
     Delegates to ``bin/sync.py::package_pin_status``, which is also what ``verify.py`` gates on:
     `init` reporting one definition of "pinned" while the contract check enforced another is the
@@ -506,8 +515,6 @@ def _package_pin_status(root: Path) -> str:
     still never edits the manifest (it cannot know every dialect) — it reports, and mode
     ``package`` exits non-zero while the answer is not ``dev`` (ADR 0009 §4).
     """
-    from akmon import cli
-
     sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
     return sync_mod.package_pin_status(root)
 
@@ -561,7 +568,7 @@ _CHARTERS = {
 }
 
 
-def _charter(role: str, focus: str, aitna: str, package_mode: bool) -> str:
+def _charter(role: str, focus: str, aitna: str, *, package_mode: bool) -> str:
     locate = (
         f"`akmon path` prints the standard's root; a mounted consumer reads `{aitna}/akmon/roles/{role}.md`."
         if package_mode
@@ -617,7 +624,7 @@ def _merge_gitignore(existing: str, wanted: list[str]) -> str:
     return prefix + separator + "\n".join(trimmed) + "\n"
 
 
-def _ci_workflow(aitna: str, package_mode: bool) -> str:
+def _ci_workflow(aitna: str, *, package_mode: bool) -> str:
     if package_mode:
         steps = """      - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -648,17 +655,20 @@ jobs:
 BLOCK_HEADING = "## Dev layer — akmon"
 
 
-def _doc_link(name: str, aitna: str, package_mode: bool, ref: str) -> str:
-    """A link to a standard document: relative to the mount when one exists, a GitHub link at
-    the pinned ref in package mode (there is no tree in the repo to point at — ADR 0009 §4)."""
+def _doc_link(name: str, aitna: str, ref: str, *, package_mode: bool) -> str:
+    """A link to a standard document: relative to the mount when one exists.
+
+    A GitHub link at the pinned ref in package mode (there is no tree in the repo to point at —
+    ADR 0009 §4).
+    """
     if package_mode:
         return f"{AKMON_REPO}/blob/{ref}/{name}"
     return f"{aitna}/akmon/{name}"
 
 
-def _agents_block(aitna: str, package_mode: bool, ref: str, archetype: str, language: str) -> str:
+def _agents_block(aitna: str, ref: str, archetype: str, language: str, *, package_mode: bool) -> str:
     def link(name: str) -> str:
-        return _doc_link(name, aitna, package_mode, ref)
+        return _doc_link(name, aitna, ref, package_mode=package_mode)
 
     guardrails_dir = f"{aitna}/.akmon/guardrails" if package_mode else f"{aitna}/akmon/guardrails"
     profiles_dir = f"{aitna}/.akmon/profiles" if package_mode else f"{aitna}/akmon/profiles"
@@ -749,7 +759,7 @@ def _confirm(question: str) -> bool:
     return answer in ("", "y", "yes")
 
 
-def _write_if_absent(path: Path, text: str, log, label: str) -> bool:
+def _write_if_absent(path: Path, text: str, log: Callable[[str], None], label: str) -> bool:
     if path.exists():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -787,8 +797,6 @@ def _write_akmon_toml(root: Path, aitna: str, *, mode: str, version: str | None,
             encoding="utf-8",
         )
         return path
-    from akmon import cli
-
     sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
     text = path.read_text(encoding="utf-8")
     fields = sync_mod.read_akmon_toml(path)
@@ -802,6 +810,169 @@ def _write_akmon_toml(root: Path, aitna: str, *, mode: str, version: str | None,
     return path
 
 
+# --- what `akmon check` runs (ADR 0014 §4) ---------------------------------------------
+# The linters and type checkers a project can already be configured for, how each announces its
+# configuration, and the command `akmon check` runs for it. `{files}` becomes the files a run
+# covers. Detection only reads the project's files.
+_TOOLS = (
+    # name, config files, pyproject [tool.<key>], setup.cfg/tox.ini section, command
+    ("ruff", ("ruff.toml", ".ruff.toml"), "ruff", None, "ruff check {files}"),
+    ("flake8", (".flake8",), None, "flake8", "flake8 {files}"),
+    ("pylint", (".pylintrc", "pylintrc"), "pylint", None, "pylint {files}"),
+    ("mypy", ("mypy.ini", ".mypy.ini"), "mypy", "mypy", "mypy {files}"),
+)
+CHECK_CHOICES = ("own", "akmon", "none")
+
+
+def _cfg_sections(root: Path) -> set[str]:
+    sections: set[str] = set()
+    for name in ("setup.cfg", "tox.ini"):
+        path = root / name
+        try:
+            text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        except (OSError, UnicodeDecodeError):
+            continue
+        sections.update(re.findall(r"^\[([\w.:-]+)\]", text, re.MULTILINE))
+    return sections
+
+
+def _detect_tools(root: Path, sync_mod: ModuleType) -> list[tuple[str, str]]:
+    """``(name, command)`` for every linter or type checker the project is configured for."""
+    manifest = sync_mod._read_manifest(root) or {}
+    tool_tables = manifest.get("tool") if isinstance(manifest.get("tool"), dict) else {}
+    sections = _cfg_sections(root)
+    return [
+        (name, command)
+        for name, files, table, section, command in _TOOLS
+        if any((root / file).is_file() for file in files)
+        or (table is not None and table in tool_tables)
+        or (section is not None and section in sections)
+    ]
+
+
+def _run_prefix(root: Path) -> str:
+    """How the project runs its tools: through its environment manager when it has one."""
+    if (root / "uv.lock").is_file():
+        return "uv run "
+    if (root / "poetry.lock").is_file():
+        return "poetry run "
+    return ""
+
+
+def _extend_with_akmon_rules(
+    root: Path, rules_path: str, sync_mod: ModuleType, log: Callable[[str], None]
+) -> str | None:
+    """Point the project's ruff configuration at akmon's rules — the standard ``extend``.
+
+    And return a next step when that cannot be done without overriding the owner's own choice.
+    """
+    extends = sync_mod.ruff_extends(root)
+    if any(value == rules_path for _, value in extends):
+        return None
+    if extends:
+        config, value = extends[0]
+        return (
+            f"{config} already extends `{value}` and ruff takes one `extend`: to run akmon's Python rules, "
+            f"point it at `{rules_path}`"
+        )
+    line = f'extend = "{rules_path}"'
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        text = pyproject.read_text(encoding="utf-8")
+        header = re.search(r"^\[tool\.ruff\][ \t]*$", text, re.MULTILINE)
+        if header:
+            text = f"{text[: header.end()]}\n{line}{text[header.end() :]}"
+        else:
+            text = f"{text.rstrip()}\n\n[tool.ruff]\n{line}\n"
+        pyproject.write_text(text, encoding="utf-8")
+        log(f"pyproject.toml: [tool.ruff] extends akmon's Python rules ({rules_path})")
+        return None
+    for name in ("ruff.toml", ".ruff.toml"):
+        path = root / name
+        if path.is_file():
+            path.write_text(f"{line}\n{path.read_text(encoding='utf-8')}", encoding="utf-8")
+            log(f"{name}: extends akmon's Python rules ({rules_path})")
+            return None
+    (root / "ruff.toml").write_text(
+        "# ruff with akmon's Python rules; adjust them here with extend-select, extend-ignore and\n"
+        f"# per-file-ignores.\n{line}\n",
+        encoding="utf-8",
+    )
+    log(f"wrote ruff.toml extending akmon's Python rules ({rules_path})")
+    return None
+
+
+def _ruff_step(root: Path) -> str | None:
+    """The next step that makes ruff runnable, when the project does not declare it yet."""
+    pyproject = root / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8") if pyproject.is_file() else ""
+    if re.search(r"[\"']ruff\b", text):
+        return None
+    if (root / "uv.lock").is_file():
+        return "add ruff as a development dependency so `akmon check` can run it: `uv add --dev ruff`"
+    if (root / "poetry.lock").is_file():
+        return "add ruff as a development dependency so `akmon check` can run it: `poetry add --group dev ruff`"
+    return "add ruff to the project's development dependencies so `akmon check` can run it"
+
+
+def _setup_checks(
+    root: Path,
+    record: Path,
+    rules_path: str,
+    choice: str | None,
+    *,
+    ask: bool,
+    log: Callable[[str], None],
+    next_steps: list[str],
+) -> None:
+    """Decide once what ``akmon check`` runs and record it as ``[check]``.
+
+    The project's own linters when it has any; ruff with akmon's Python rules when it has none;
+    or nothing — the owner's answer at the prompt, ``--checks``, or those defaults when nobody
+    is asked. A record that already has a ``[check]`` table is left alone: a realign never
+    changes that choice.
+    """
+    sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
+    if re.search(r"^\[check\]", record.read_text(encoding="utf-8"), re.MULTILINE):
+        log("[check] already names this project's checks — left untouched")
+        return
+    tools = _detect_tools(root, sync_mod)
+    names = ", ".join(name for name, _ in tools)
+    if choice is None and tools:
+        choice = "own"
+        if ask and not _confirm(f"akmon init: `akmon check` runs the project's own {names}?"):
+            choice = "akmon" if _confirm("akmon init: set up ruff with akmon's Python rules instead?") else "none"
+    elif choice is None:
+        choice = "akmon"
+        if ask and not _confirm("akmon init: no linter configured — set up ruff with akmon's Python rules?"):
+            choice = "none"
+    prefix = _run_prefix(root)
+    if choice == "none":
+        log("akmon check: no checks recorded")
+        next_steps.append(f"name the project's checks under `[check]` in {record.name} when it has any")
+        return
+    if choice == "own" and not tools:
+        next_steps.append(
+            f"no linter configuration was found: name the project's checks under `[check]` in {record.name}"
+        )
+        return
+    if choice == "own":
+        commands = {name: prefix + command for name, command in tools}
+    else:
+        step = _extend_with_akmon_rules(root, rules_path, sync_mod, log)
+        commands = {"ruff": f"{prefix}ruff check {{files}}"}
+        next_steps.extend(item for item in (step, _ruff_step(root)) if item)
+    lines = [
+        "",
+        "[check]",
+        "# What `akmon check` runs: the project's own commands, `{files}` becoming the files a run covers.",
+        *(f'{name} = "{command}"' for name, command in commands.items()),
+    ]
+    text = record.read_text(encoding="utf-8")
+    record.write_text(f"{text.rstrip()}\n" + "\n".join(lines) + "\n", encoding="utf-8")
+    log(f"akmon check will run: {', '.join(commands)} (recorded as [check])")
+
+
 def _mark_realign_complete(path: Path, version: str | None) -> None:
     """Advance the completion marker after every generated stage has succeeded.
 
@@ -812,8 +983,6 @@ def _mark_realign_complete(path: Path, version: str | None) -> None:
     """
     if not version:
         return
-    from akmon import cli
-
     sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
     text = path.read_text(encoding="utf-8")
     path.write_text(sync_mod._upsert_toml_key(text, "last_realign", version), encoding="utf-8")
@@ -832,6 +1001,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--archetype", help="Archetype id per ARCHETYPES.md (default: left unclassified).")
     parser.add_argument("--language", help="Primary language per ARCHETYPES.md (default: left unclassified).")
     parser.add_argument("--no-ci", action="store_true", help="Do not write a CI workflow running sync/verify.")
+    parser.add_argument(
+        "--checks",
+        choices=CHECK_CHOICES,
+        help="What `akmon check` runs: the project's own linters (default when it has any), ruff with "
+        "akmon's Python rules (default when it has none), or nothing.",
+    )
     parser.add_argument(
         "--switch-mode",
         action="store_true",
@@ -940,14 +1115,16 @@ def main(argv: list[str] | None = None) -> int:
     for role, focus in _CHARTERS.items():
         _write_if_absent(
             root / aitna / "agents" / role / "README.md",
-            _charter(role, focus, aitna, package_mode),
+            _charter(role, focus, aitna, package_mode=package_mode),
             log,
             f"{aitna}/agents/{role}/README.md",
         )
 
     # --- hand-owned documents: written when absent, never rewritten ------------------
     agents_md = root / "AGENTS.md"
-    block = _agents_block(aitna, package_mode, ref, args.archetype or "<archetype>", args.language or "<language>")
+    block = _agents_block(
+        aitna, ref, args.archetype or "<archetype>", args.language or "<language>", package_mode=package_mode
+    )
     if not agents_md.is_file():
         agents_md.write_text(_AGENTS_HEADER + block, encoding="utf-8")
         log("wrote AGENTS.md with the akmon block")
@@ -983,14 +1160,16 @@ def main(argv: list[str] | None = None) -> int:
         verb = "update the akmon commands in" if switching else "add the contract checks to"
         next_steps.append(f"{verb} your existing workflow(s): `{check_cmds[0]}` and `{check_cmds[1]}`")
     else:
-        _write_if_absent(workflows / "akmon.yml", _ci_workflow(aitna, package_mode), log, ".github/workflows/akmon.yml")
+        _write_if_absent(
+            workflows / "akmon.yml", _ci_workflow(aitna, package_mode=package_mode), log, ".github/workflows/akmon.yml"
+        )
 
     record = _write_akmon_toml(root, aitna, mode=mode, version=version, archetype=archetype)
     log(f"recorded {record.relative_to(root)} (mount={mode}, akmon_version={version or 'unknown'})")
+    rules_path = f"{aitna}/.akmon/profiles/ruff.toml" if package_mode else f"{aitna}/akmon/profiles/ruff.toml"
+    _setup_checks(root, record, rules_path, args.checks, ask=not args.yes, log=log, next_steps=next_steps)
 
     # --- generated surface: sync, then model routing ---------------------------------
-    from akmon import cli
-
     log("running sync (generated pointers, hook wiring, imported guardrails)")
     code = cli._dispatch("sync", ["--project-root", str(root)], cwd=root)
     if code != 0:
@@ -1009,8 +1188,8 @@ def main(argv: list[str] | None = None) -> int:
     if archetype == "unclassified":
         next_steps.insert(
             0,
-            "classify the project (archetype + language) against ARCHETYPES.md, attach the language "
-            f"guardrail import in AGENTS.md, and set `attached_archetype` in {aitna}/.akmon.toml",
+            "classify the project (archetype + language) against ARCHETYPES.md, import the language "
+            f"profile in AGENTS.md, and set `attached_archetype` in {aitna}/.akmon.toml",
         )
     next_steps.append(
         f"pin the test environment: record the project's own pytest invocation as `[test].runner` in "
@@ -1037,9 +1216,7 @@ def main(argv: list[str] | None = None) -> int:
             "**fix pyproject.toml** — it is not valid TOML, so neither akmon nor uv can read an akmon pin "
             "from it; once it parses, the pin belongs in a **dev** group",
         )
-    from akmon import cli as _cli
-
-    if aitna != _cli._project_root_lib().AITNA_ROOT_DEFAULT:
+    if aitna != cli._project_root_lib().AITNA_ROOT_DEFAULT:
         next_steps.append(f"export AITNA_ROOT={aitna} in every shell and CI job that runs the akmon tooling")
     next_steps.append("run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)")
 

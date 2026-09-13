@@ -41,6 +41,7 @@ def _decide() -> HookResult | None:
 
 
 def main() -> int:
+    """Entry point: score delegation drift and nudge or ask, never blocking outright."""
     # Never block a tool call: a crash is reported (stderr + the owner's notice), exit 0.
     return run_guarded("delegation-nudge", _decide)
 

@@ -44,9 +44,9 @@ from pathlib import Path
 # mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import routing  # noqa: E402
+import routing
 
-from common.project_root import aitna_root, resolve_project_root  # noqa: E402
+from common.project_root import aitna_root, resolve_project_root
 
 _UNLABELLED = "(unlabelled)"
 
@@ -102,8 +102,7 @@ def build_coverage_map(entries: Iterable[routing.DelegationEntry], zone_plan: li
     # No "## Coverage map" heading: the gate-pack owns that section header and embeds this
     # body under it (standalone --stdout still reads fine, leading with the table).
     lines = ["| zone | workers | count |", "|------|---------|-------|"]
-    for zone in order:
-        lines.append(f"| {zone} | {', '.join(workers[zone])} | {counts[zone]} |")
+    lines.extend(f"| {zone} | {', '.join(workers[zone])} | {counts[zone]} |" for zone in order)
 
     if zone_plan is not None:
         labelled = {z for z in order if z != _UNLABELLED}
@@ -175,6 +174,7 @@ def _describe_scope(session: str | None, entries: list[routing.DelegationEntry])
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: assemble the scoped coverage map and write it under ``artifacts/gates/``."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument("--log", type=Path, help="Delegation log. Defaults to <root>/.claude/model-routing.log.")

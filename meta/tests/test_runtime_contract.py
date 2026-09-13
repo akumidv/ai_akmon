@@ -442,7 +442,7 @@ def test_no_shipped_registry_or_document_still_spells_the_retired_keys():
     ],
 )
 def test_a_command_the_parser_cannot_read_is_refused_rather_than_under_counted(command):
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command(command)
 
 
@@ -462,7 +462,7 @@ def test_a_wrapper_carrying_its_own_options_is_refused(command):
     Each wrapper has its own option grammar, and encoding five of them correctly only moves the
     defect to the sixth. A refusal states the limit; a confident wrong answer hides it.
     """
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command(command)
 
 
@@ -491,7 +491,7 @@ def test_a_construct_with_a_grammar_of_its_own_is_refused(command):
     shell reserved word in some shells and `/usr/bin/time` in others, so the command string does
     not say whether a host binary is needed at all.
     """
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command(command)
 
 
@@ -543,7 +543,7 @@ def test_a_substitution_is_read_with_quoting_and_nesting_honoured(command, expec
 )
 def test_a_head_the_command_string_does_not_spell_is_refused(command):
     """An expansion in head position is not a binary name; it is the absence of one."""
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command(command)
 
 
@@ -608,7 +608,7 @@ def test_a_here_document_is_refused_rather_than_swallowed():
     silent under-count the refusal set exists to prevent. `<<<` stays readable: a here-string is
     one word, not a body.
     """
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command("sh <<EOF\njq .\nEOF")
     assert runtime_checks._binaries_in_command('python3 a.py <<< "text"') == {
         POSIX_SHELL,
@@ -636,13 +636,13 @@ def test_a_comment_starts_only_at_a_word_start(command, expected):
 
 def test_an_empty_word_is_not_a_binary():
     """`"" evil.py` declared a runtime whose name is the empty string."""
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command('"" evil.py')
 
 
 def test_the_tab_form_of_a_here_document_is_refused_too():
     """`<<-EOF` reaches the walk as `<<` + `-EOF`, so one entry covers both spellings."""
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command("sh <<-EOF\njq .\nEOF")
 
 
@@ -669,7 +669,7 @@ def test_a_word_that_mixes_quoting_is_still_one_word(command, expected):
 
 def test_grouping_survives_the_arithmetic_refusal():
     """`((` is refused as one token; `( (` with a space is ordinary nested grouping."""
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command("(( x = 1 )) && python3 a.py")
     assert runtime_checks._binaries_in_command("( ( python3 a.py ) ) && jq .") == {
         POSIX_SHELL,
@@ -693,7 +693,7 @@ def test_a_parenthesis_that_cannot_be_grouping_is_refused(command):
     `((` is refused wherever it appears — quoted it is a word and never arrives as an operator,
     so unlike `case` or `time` it cannot be a legitimate argument.
     """
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command(command)
 
 
@@ -721,7 +721,7 @@ def test_process_substitution_is_refused(command):
     `python3 a.py <(jq .)` reported no `jq`; `diff <(jq . a) <(jq . b)` reported one — the same
     construct read two ways depending on where it sat, which is worse than either answer.
     """
-    with pytest.raises(runtime_checks.UnparsedCommand):
+    with pytest.raises(runtime_checks.UnparsedCommandError):
         runtime_checks._binaries_in_command(command)
 
 

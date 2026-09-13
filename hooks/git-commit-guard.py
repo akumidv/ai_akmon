@@ -37,6 +37,7 @@ def _decide() -> HookResult | None:
 
 
 def main() -> int:
+    """Entry point: guard privilege-escalation and commit-shaped ``Bash`` calls."""
     # Deny-class, and still crash-open (ADR 0013 F3): a crash lets the command through and says so.
     return run_guarded("git-commit-guard", _decide)
 

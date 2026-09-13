@@ -69,6 +69,9 @@ rules inferred from the research:
     economy. Additional design time can avoid much larger implementation and rework
     costs; high-leverage analysis and synthesis can justify the most capable model
     at its highest reasoning effort instead of repeated mechanical cheap-model trials.
+14. Proceed with A22 refinement and the project modification plan while akmon is
+    simultaneously being developed for applied tasks. Preserve independent work and
+    distinguish real dependencies from unnecessary whole-project blocking.
 
 ### Research questions
 
@@ -103,6 +106,11 @@ The [refinement and implementation plan](#refinement-and-implementation-plan) no
 gives a proposed sequence, concrete evaluation cases, dependencies, and exit
 conditions. Resume at AP0 using the already collected episodes; do not restart a
 broad literature or transcript survey unless a material gap remains.
+
+The current A22 refinement is in the [first applied slice plan](attention-collaboration-plan.md).
+It narrows AP0/AP1 to one consequential decision point, compares existing guidance
+with a minimal clarification, and maps changes around parallel applied development.
+Use its next-decision cursor; the real applied case and comparison results remain open.
 
 The mission direction and the request to record work come from the owner; the
 proposed interaction architecture is not locked here. A22 tracks refinement, C86
@@ -847,6 +855,10 @@ The important unresolved question is not "how short can an agent answer?" It is
 the agent complete before asking for that attention?"
 
 ## Refinement and implementation plan
+
+The focused [A22 first-slice plan](attention-collaboration-plan.md) applies the
+sequence below to a proposed increment and owns its current case selection,
+modification map, and coordination boundaries. The broader sequence remains here.
 
 ### Outcome and the two meanings of adaptation
 

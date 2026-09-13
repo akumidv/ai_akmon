@@ -125,7 +125,7 @@ def test_deleting_one_axis_is_one_missing_axis(tmp_path, axis):
 def test_deleting_one_route_coordinate_is_one_missing_axis(tmp_path, coordinate):
     route = "; ".join(
         part.strip()
-        for part in "vendor=claude-code; version=2.1.221; event=SessionStart; matcher=n/a".split(";")
+        for part in ["vendor=claude-code", " version=2.1.221", " event=SessionStart", " matcher=n/a"]
         if not part.strip().startswith(f"{coordinate}=")
     )
     row = PLAIN_ROW.replace(

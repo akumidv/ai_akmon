@@ -473,11 +473,11 @@ def test_a_pre_release_heading_does_not_count_as_a_released_one(tmp_path, monkey
 def test_a_version_literal_carrying_a_line_separator_is_escaped_not_crashed(tmp_path, monkeypatch):
     # The literals are read out of files; the envelope refuses to construct on a raw separator,
     # so a hostile or corrupt literal must be escaped at the boundary rather than raise.
-    _tree(tmp_path, static="0.4.0 dev", version="0.4.0")
+    _tree(tmp_path, static="0.4.0\u2028dev", version="0.4.0")
     findings = _check(tmp_path, monkeypatch, tags=())
     literals = [finding for finding in findings if finding.code == "release.version-literals"]
     assert [finding.severity for finding in literals] == ["error"]
-    assert "\\u2028" in literals[0].message and " " not in literals[0].message
+    assert "\\u2028" in literals[0].message and "\u2028" not in literals[0].message
 
 
 # --- the five mutations that survived the first adversarial pass -------------------------

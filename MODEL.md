@@ -103,7 +103,7 @@ not its language. Full taxonomy + per-archetype checklists: [ARCHETYPES.md](ARCH
   project (`_common.md`).
 - **[profiles/](profiles/)** — language and environment profiles, **applied automatically**
   by the project's language and by where its code runs (`python.md`, `python-stdlib.md`; the
-  checked Python rules live in `python.rules.toml`, enforced by `akmon check`), and domain
+  checkable Python rules are a standard ruff configuration, `ruff.toml`), and domain
   profiles **opt-in by need** (`quant.md`, …).
 
 ## 6. The learn loop (how the standard evolves)

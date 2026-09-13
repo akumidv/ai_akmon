@@ -33,7 +33,7 @@ def __getattr__(name: str) -> str:
     """
     if name != "__version__":
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    from importlib.metadata import PackageNotFoundError, version
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415 — the point of the lazy attribute
 
     try:
         resolved = version("akmon")
