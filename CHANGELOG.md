@@ -150,12 +150,21 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   log silently, so one round's worker could hide a zone another round never touched. The summary
   names the session set either way (`scope: …`). A script that calls the assembler without a scope
   must add one.
-- **Context-pressure warnings are a share of a recommended maximum context, not the model's window
-  (C23/D2-38).** The model-routing hook's bands (0.85/0.95) are now taken of
-  `context_pressure.recommended_max` (200000 by default) and read
-  `⚠ context pressure: ~86% of the recommended 200k max (172000 tokens) — …`; on a model with a
-  larger window the share can pass 100%. The registry keys changed (see Migration), which changes
-  the registry hash: the routing binding goes stale once and the bump's `akmon init` rebinds it.
+- **Context-pressure warnings are a share of a recommended context budget — the active context of
+  a session intended to carry one task — not the model's window (C23/D2-38, C80/D2-42).** The
+  model-routing hook's bands are 0.85 and 1.0 of `context_pressure.recommended_max` (200000 by
+  default, a configurable owner policy) and read
+  `⚠ context pressure: ~86% of the recommended 200k budget (172000 tokens) — …`. At 0.85 the
+  advice is to checkpoint decisions and state to files/TASKS and, if the task continues, prepare
+  a focused `/compact`; at 1.0 it reads `recommended context budget reached — same task:
+  checkpoint and /compact with a task focus; new task: /clear or start a new session`. Every band
+  at or above 1.0 is one state: its warning fires once (also when the fill jumps straight past
+  100%), then no further band or repeated warning until the fill drops below the lowest band,
+  whatever lowered it. An overlay whose top band stays below 1.0 keeps the checkpoint advice there.
+  `AKMON_CONTEXT_RECOMMENDED_MAX` (a positive integer) overrides the maximum per user or per
+  project — the shell, or `env` in Claude Code's user or project settings. On a model with a
+  larger window the share can pass 100%. The registry changed (see Migration), which changes the
+  registry hash: the routing binding goes stale once and the bump's `akmon init` rebinds it.
 - **A bump now runs `akmon init` before `akmon sync` (C78/D2-36).** Installing the pin is not
   aligning to it. `sync` refreshes the generated pointers and, in mode `package`, restamps
   `akmon_version` in `<AITNA_ROOT>/.akmon.toml` with the installed version. `init` runs that sync,

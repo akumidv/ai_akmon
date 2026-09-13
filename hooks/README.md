@@ -68,8 +68,8 @@ project-local hook surface.
   [`../tools/model_routing/init.py`](../tools/model_routing/init.py), confirm the binding +
   second-opinion opt-in with the owner — the one-time setup that records the available ladder).
   UserPromptSubmit is silent unless a switch just landed (one-line rebind notice) or the
-  **context fill crossed a warn band** (design §12: banded 0.85/0.95 of the recommended maximum context, not the model's limit; throttled per band,
-  reset by compaction). Owner-addressed output — init instruction, corridor/pressure
+  **context fill crossed a warn band** (design §12: banded 0.85/1.0 of the recommended context budget for a session carrying one task, not the model's limit; `AKMON_CONTEXT_RECOMMENDED_MAX` overrides it per user or project; throttled per band,
+  reset when the fill drops below the lowest band). Owner-addressed output — init instruction, corridor/pressure
   warnings, rebind notice — also goes out as `systemMessage` so the owner sees it in the
   host UI (ADR 0006). Logic
   in [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).

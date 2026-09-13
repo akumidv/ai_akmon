@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shlex
 import sys
@@ -980,14 +981,32 @@ def context_fill(usage: dict | None) -> int | None:
     return sum(components)
 
 
-def recommended_max_context(registry: dict, model_id: str | None) -> int:
-    """The recommended maximum context, in tokens — what pressure percentages are a share of.
+#: Overrides the recommended maximum for every model when it holds a positive integer — per user
+#: (the shell, or ``env`` in ``~/.claude/settings.json``) or per project (``env`` in
+#: ``.claude/settings.json``). Any other value is ignored and the registry decides.
+RECOMMENDED_MAX_ENV = "AKMON_CONTEXT_RECOMMENDED_MAX"
 
-    A working ceiling, not the model's hard limit (design §12.2): quality degrades with length
-    whatever the limit, the limit is not in the transcript, and limits grow faster than the
-    registry is edited. ``recommended_max_by_alias`` overrides it per alias substring (longest
-    match) — e.g. for a model whose hard limit sits below the default — else ``recommended_max``.
+
+def recommended_max_context(registry: dict, model_id: str | None) -> int:
+    """The recommended context budget, in tokens — what pressure percentages are a share of.
+
+    The recommended active-context budget for a session intended to carry one task, not the
+    model's hard limit (design §12.2): a session should carry the task it is solving, not its
+    history — fewer tokens spent, less drift from the task, less forgetting — and quality
+    degrades with length whatever the limit. This code knows neither which task a session
+    carries nor what that task needs; it sees only the prompt fill. Resolution:
+    ``AKMON_CONTEXT_RECOMMENDED_MAX`` when it holds a positive integer, else the longest
+    alias-substring key of ``recommended_max_by_alias`` found in the model id (e.g. a model whose
+    hard limit sits below the default), else ``recommended_max``. The shipped 200000 is a
+    configurable owner policy, not an empirical optimum — C80
+    (meta/reviews/c80-context-fill-20260912.md).
     """
+    try:
+        override = int(os.environ.get(RECOMMENDED_MAX_ENV, ""))
+    except ValueError:
+        override = 0
+    if override > 0:
+        return override
     policy = registry.get("context_pressure", {})
     default = int(policy.get("recommended_max") or 200000)
     by_alias = policy.get("recommended_max_by_alias", {})
@@ -1038,11 +1057,12 @@ def context_pressure_notice(
 
     Banded and throttled (the delegation-nudge marker idiom): a per-session temp-dir
     marker records the last announced band, so only a band *rise* warns — 0→high once,
-    high→critical once more, a steady fill stays silent. A fill dropping below the lowest
-    band (a compaction landed) clears the marker, so each compaction cycle gets its own
-    warnings. The share is of the recommended maximum, not the model's limit, so it can
-    pass 100% on a model with a larger window. Missing/malformed usage → silent; never
-    raises past I/O.
+    high→max once more, a steady fill stays silent. Every band at 1.0 or above is one max
+    state, so the max warning fires once per pressure episode however many bands an overlay
+    stacks past 100%. A fill below the lowest band ends the episode and clears the marker —
+    the hook sees only the low fill, not its cause (a compact, a fresh session, anything
+    else). The share is of the recommended budget, not the model's limit, so it can pass 100%
+    on a model with a larger window. Missing/malformed usage → silent; never raises past I/O.
     """
     policy = registry.get("context_pressure", {})
     ratios = [float(r) for r in policy.get("warn_ratios") or [] if isinstance(r, (int, float))]
@@ -1056,6 +1076,11 @@ def context_pressure_notice(
     for index, threshold in enumerate(ratios):
         if ratio >= threshold:
             band = index
+    # Every band at 1.0 or above is the same state — the recommended budget reached — so an
+    # overlay such as [0.85, 1.0, 1.2] warns once at 100% and stays silent at 120%.
+    first_max = next((index for index, threshold in enumerate(ratios) if threshold >= 1.0), None)
+    if band is not None and first_max is not None and band > first_max:
+        band = first_max
 
     marker = (marker_dir or Path(tempfile.gettempdir())) / f"akmon-context-pressure-{session_id or 'nosession'}"
     try:
@@ -1064,7 +1089,9 @@ def context_pressure_notice(
         last_band = None
 
     if band is None:
-        # Below every band — a compaction (or a fresh session) resets the throttle.
+        # Below every band — the pressure episode is over and the throttle resets. The cause is
+        # not visible here: a compact, a fresh session and anything else that lowered the fill
+        # look alike.
         try:
             marker.unlink(missing_ok=True)
         except OSError:
@@ -1077,13 +1104,21 @@ def context_pressure_notice(
     except OSError:
         pass
 
-    critical = band == len(ratios) - 1 and len(ratios) > 1
+    # A band at 1.0 or above is the recommended budget itself — named by its threshold, not its
+    # position, so an overlay whose top band stays below 1.0 keeps the checkpoint advice. The
+    # advice is conditional on purpose: the hook cannot tell whether the task goes on, and a
+    # compact keeps whatever its focus names, not the current task by guarantee. Past it the
+    # session goes on at the developer's discretion: this warning fires once, and the throttle
+    # above keeps every further band and repeat silent until the episode resets.
+    at_max = ratios[band] >= 1.0
     advice = (
-        "critical — compact now (/compact) or finish the current unit of work first"
-        if critical
-        else "checkpoint durable state (files/TASKS) and plan compaction"
+        "recommended context budget reached — same task: checkpoint and /compact with a task "
+        "focus; new task: /clear or start a new session"
+        if at_max
+        else "checkpoint decisions and state to files/TASKS; if the task continues, prepare a focused /compact"
     )
-    share = f"~{ratio:.0%} of the recommended {recommended // 1000}k max ({fill} tokens)"
+    shown = f"{recommended // 1000}k" if recommended % 1000 == 0 else str(recommended)
+    share = f"~{ratio:.0%} of the recommended {shown} budget ({fill} tokens)"
     return [f"⚠ context pressure: {share} — {advice}"]
 
 
