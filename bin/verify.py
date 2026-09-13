@@ -374,6 +374,21 @@ class Verifier:
             return
         agents_text = agents_md.read_text(encoding="utf-8")
 
+        self._check_vendor_pointers()
+
+        if ".claude/skills" in agents_text or ".agents/skills" in agents_text:
+            self.warn(
+                "agents.skill-stub-link",
+                "AGENTS.md should not point to generated .claude/skills or .agents/skills stubs; "
+                "link source skill roots instead",
+                target="AGENTS.md",
+                fix="Replace the generated stub path in AGENTS.md with the source skill root.",
+            )
+
+        self._check_skill_roots(agents_text)
+
+    def _check_vendor_pointers(self) -> None:
+        """Every vendor pointer file must import its guardrail and link back to AGENTS.md."""
         missing_agents_links = []
         present_pointers = 0
         for relative, (agents_anchor, required_import) in _VENDOR_POINTERS.items():
@@ -404,32 +419,26 @@ class Verifier:
                 fix="Keep every vendor pointer aimed at AGENTS.md.",
             )
 
-        if ".claude/skills" in agents_text or ".agents/skills" in agents_text:
-            self.warn(
-                "agents.skill-stub-link",
-                "AGENTS.md should not point to generated .claude/skills or .agents/skills stubs; "
-                "link source skill roots instead",
-                target="AGENTS.md",
-                fix="Replace the generated stub path in AGENTS.md with the source skill root.",
-            )
-
+    def _check_skill_roots(self, agents_text: str) -> None:
+        """When skills exist, AGENTS.md must name their source roots (not a generated stub)."""
         skill_sources, _ = sync_tool._skill_sources(self.root)
-        if skill_sources:
-            skill_roots = ("skills/", f"{self.aitna}/skills", f"{self.akmon}/skills")
-            if any(root_hint in agents_text for root_hint in skill_roots):
-                self.ok(
-                    "agents.skill-roots",
-                    "AGENTS.md references source skill roots",
-                    target="AGENTS.md",
-                    fix="Keep the source skill roots named in AGENTS.md.",
-                )
-            else:
-                self.warn(
-                    "agents.skill-roots",
-                    "skills exist, but AGENTS.md does not mention source skill roots",
-                    target="AGENTS.md",
-                    fix="Name the source skill roots in AGENTS.md so agents find the skills.",
-                )
+        if not skill_sources:
+            return
+        skill_roots = ("skills/", f"{self.aitna}/skills", f"{self.akmon}/skills")
+        if any(root_hint in agents_text for root_hint in skill_roots):
+            self.ok(
+                "agents.skill-roots",
+                "AGENTS.md references source skill roots",
+                target="AGENTS.md",
+                fix="Keep the source skill roots named in AGENTS.md.",
+            )
+        else:
+            self.warn(
+                "agents.skill-roots",
+                "skills exist, but AGENTS.md does not mention source skill roots",
+                target="AGENTS.md",
+                fix="Name the source skill roots in AGENTS.md so agents find the skills.",
+            )
 
     def check_agent_charters(self) -> None:
         """Check that each agent directory has a README.md charter linking a akmon role."""
@@ -575,6 +584,13 @@ class Verifier:
         if fields is None:
             return
 
+        self._check_skill_required_fields(relative, fields)
+        self._check_skill_name(relative, source, fields)
+        self._check_skill_description_length(relative, fields)
+        self._check_skill_frontmatter_yaml(relative, fields)
+
+    def _check_skill_required_fields(self, relative: str, fields: dict[str, str]) -> None:
+        """Every required frontmatter key must be present and non-empty."""
         missing = [field for field in _SKILL_REQUIRED_FRONTMATTER if field not in fields]
         empty = [field for field in _SKILL_REQUIRED_FRONTMATTER if field in fields and not fields[field]]
         if missing:
@@ -591,6 +607,9 @@ class Verifier:
                 target=relative,
                 fix="Give every required frontmatter key a value.",
             )
+
+    def _check_skill_name(self, relative: str, source: Path, fields: dict[str, str]) -> None:
+        """The frontmatter name must match its directory and the Agent Skills name format."""
         if fields.get("name") and fields["name"] != source.parent.name:
             self.error(
                 "skills.name-matches-dir",
@@ -607,6 +626,9 @@ class Verifier:
                 target=relative,
                 fix="Rename the skill and its directory to lowercase letters, digits and hyphens.",
             )
+
+    def _check_skill_description_length(self, relative: str, fields: dict[str, str]) -> None:
+        """The description must fit in the trigger budget the Agent Skills standard allows."""
         description = fields.get("description", "")
         if len(description) > _SKILL_DESCRIPTION_MAX:
             self.error(
@@ -615,6 +637,9 @@ class Verifier:
                 target=relative,
                 fix="Shorten the description to the result and the trigger; move detail into the body.",
             )
+
+    def _check_skill_frontmatter_yaml(self, relative: str, fields: dict[str, str]) -> None:
+        """Flag unquoted frontmatter values that YAML and a plain reading disagree about."""
         # The frontmatter is YAML, read here line by line, so the two unquoted shapes a YAML
         # parser reads differently from how they look are flagged (M56, M57).
         for key, value in fields.items():

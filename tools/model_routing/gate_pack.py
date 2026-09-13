@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 # The tree root, so the shared ``common`` package resolves: it holds the single owner of
@@ -46,24 +47,35 @@ def _require_known_role(role: str) -> None:
         raise ValueError(f"unknown role {role!r}; known roles: {known}")
 
 
+@dataclass(frozen=True)
+class OptionalSections:
+    """The full pack's optional sections, each rendered only when given.
+
+    ``decisions`` (architect's decisions register), ``coverage_map`` (assembled from the
+    delegation log by code — this builder only embeds it; C17), and ``dep_graph`` (opt-in
+    per gate, §9.7 #3) travel together as the pack's non-mandatory extras.
+    """
+
+    decisions: str | None = None
+    coverage_map: str | None = None
+    dep_graph: str | None = None
+
+
 def build_full_pack(
     gate: str,
     role: str,
     yardstick: str,
     artifacts: list[tuple[str, str]],
-    *,
-    decisions: str | None = None,
-    coverage_map: str | None = None,
-    dep_graph: str | None = None,
+    extras: OptionalSections | None = None,
 ) -> str:
     """Assemble the post-fan-out audit pack (design §9.4).
 
     ``artifacts`` is a list of ``(name, text)`` pairs — findings-with-evidence (review) or
-    options-with-trade-offs (architect). ``decisions`` (architect's decisions register),
-    ``coverage_map`` (assembled from the delegation log by code — this builder only embeds
-    it; C17), and ``dep_graph`` (opt-in per gate, §9.7 #3) are each optional sections.
+    options-with-trade-offs (architect). ``extras`` carries the pack's optional sections
+    (see ``OptionalSections``); omit it when none apply.
     """
     _require_known_role(role)
+    extras = extras or OptionalSections()
     lines = [
         f"# Gate-pack — {gate}",
         "",
@@ -88,22 +100,22 @@ def build_full_pack(
         lines.append("_No artifacts supplied._")
         lines.append("")
 
-    if decisions is not None:
+    if extras.decisions is not None:
         lines.append("## Decisions register")
         lines.append("")
-        lines.append(decisions)
+        lines.append(extras.decisions)
         lines.append("")
 
     lines.append("## Coverage map")
     lines.append("")
     coverage_sentinel = "_Coverage map not provided (assemble via coverage_map.py)._"
-    lines.append(coverage_map if coverage_map is not None else coverage_sentinel)
+    lines.append(extras.coverage_map if extras.coverage_map is not None else coverage_sentinel)
     lines.append("")
 
-    if dep_graph is not None:
+    if extras.dep_graph is not None:
         lines.append("## Dependency-graph excerpt")
         lines.append("")
-        lines.append(dep_graph)
+        lines.append(extras.dep_graph)
         lines.append("")
 
     lines.append("## What to return")
@@ -228,9 +240,11 @@ def main(argv: list[str] | None = None) -> int:
             args.role,
             yardstick_text,
             artifacts,
-            decisions=decisions_text,
-            coverage_map=coverage_map_text,
-            dep_graph=dep_graph_text,
+            OptionalSections(
+                decisions=decisions_text,
+                coverage_map=coverage_map_text,
+                dep_graph=dep_graph_text,
+            ),
         )
 
     out = args.out or _report_path(root, args.gate, args.kind)

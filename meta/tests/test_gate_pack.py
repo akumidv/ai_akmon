@@ -32,7 +32,7 @@ def test_full_pack_review_header_and_sections():
         "review",
         "Acceptance: the endpoint returns 200 for valid input.",
         [("worker-a.md", "Finding A: seam X is uncovered."), ("worker-b.md", "Finding B: no issue.")],
-        coverage_map="zone A: checked by worker-a\nzone B: not checked",
+        gate_pack.OptionalSections(coverage_map="zone A: checked by worker-a\nzone B: not checked"),
     )
 
     assert "# Gate-pack — code-verify" in pack
@@ -73,8 +73,10 @@ def test_full_pack_architect_optional_sections_present_and_absent():
         "architect",
         "Goal: the two options must not assume incompatible storage backends.",
         [("options.md", "Option 1 vs option 2.")],
-        decisions="Decision: use option 1 for storage.",
-        dep_graph="a.py -> b.py -> c.py",
+        gate_pack.OptionalSections(
+            decisions="Decision: use option 1 for storage.",
+            dep_graph="a.py -> b.py -> c.py",
+        ),
     )
     assert f"Question: {gate_pack.ROLE_QUESTION['architect']}" in with_extras
     assert "## Decisions register" in with_extras

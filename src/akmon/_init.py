@@ -36,6 +36,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 
@@ -336,15 +337,51 @@ def _tag_for_version(version: str) -> str:
 # --------------------------------------------------------------------------------------
 
 
-def _mount_submodule(
-    root: Path, mount: Path, repo: str, ref: str | None, log: Callable[[str], None], next_steps: list[str]
-) -> str | None:
+@dataclass
+class _Attach:
+    """One ``init`` run: the project, its dev layer, the mount mode, and the steps left to a person.
+
+    ``previous`` is the mount mode the integration record held before this run; ``next_steps``
+    collects what the run reports at its end instead of doing itself.
+    """
+
+    root: Path
+    aitna: str
+    mode: str
+    previous: str | None
+    next_steps: list[str] = field(default_factory=list)
+
+    @property
+    def package_mode(self) -> bool:
+        """Mode ``package`` mounts no tree: the installed package is the standard."""
+        return self.mode == "package"
+
+    @property
+    def switching(self) -> bool:
+        """The run changes a recorded mount mode — a migration, not a realign."""
+        return bool(self.previous) and self.previous != self.mode
+
+    @property
+    def mount(self) -> Path:
+        """Where a mounted mode puts the standard tree."""
+        return self.root / self.aitna / "akmon"
+
+    @property
+    def rules_path(self) -> str:
+        """The project-root-relative path an ``extend`` of akmon's ruff rules names."""
+        return (
+            f"{self.aitna}/.akmon/profiles/ruff.toml" if self.package_mode else f"{self.aitna}/akmon/profiles/ruff.toml"
+        )
+
+
+def _mount_submodule(attach: _Attach, repo: str, ref: str | None, log: Callable[[str], None]) -> str | None:
     """``git submodule add`` + checkout of the pinned ref. Returns the recorded version.
 
     "Already mounted" is decided by **git** (``_is_submodule``), not by the tree being on disk:
     a vendored copy or a subtree carries the same files, and reading either as an existing
     submodule is how a mode switch used to finish green with no ``.gitmodules`` and no gitlink.
     """
+    root, mount = attach.root, attach.mount
     relative = mount.relative_to(root).as_posix()
     if not _is_git_repo(root):
         raise _InitError(
@@ -394,7 +431,7 @@ def _mount_submodule(
             # that a human reviews. `init` checks it out so the tree matches what it records, and
             # leaves the index alone — staging it here would hand the owner a pre-made commit.
             log(f"moved {relative} to {pin} — left unstaged")
-            next_steps.append(
+            attach.next_steps.append(
                 f"review the pin bump and stage it yourself — `git add -- {relative}` (D5: the pin bump and "
                 "its commit are the owner's; read the CHANGELOG window between the two versions first)"
             )
@@ -405,7 +442,7 @@ def _mount_submodule(
     return _describe(mount) or pin
 
 
-def _mount_subtree(root: Path, mount: Path, repo: str, ref: str | None, log: Callable[[str], None]) -> str | None:
+def _mount_subtree(attach: _Attach, repo: str, ref: str | None, log: Callable[[str], None]) -> str | None:
     """Mode ``subtree``: attach onto a subtree the **owner** added, never one ``init`` adds.
 
     ``git subtree add`` is the one mount command that *commits* — it writes a squash commit
@@ -416,6 +453,7 @@ def _mount_subtree(root: Path, mount: Path, repo: str, ref: str | None, log: Cal
     once merged, nothing on disk can tell `init` which ref the owner took, and the
     integration record must not invent one.
     """
+    root, mount = attach.root, attach.mount
     relative = mount.relative_to(root).as_posix()
     if not _is_git_repo(root):
         raise _InitError(f"{root} is not a git repository — mode 'subtree' needs one (or use `--mode vendored`).")
@@ -445,7 +483,7 @@ def _mount_subtree(root: Path, mount: Path, repo: str, ref: str | None, log: Cal
     )
 
 
-def _mount_vendored(root: Path, mount: Path, ref: str | None, log: Callable[[str], None]) -> str:
+def _mount_vendored(attach: _Attach, ref: str | None, log: Callable[[str], None]) -> str:
     """Copy the embedded tree into the mount, replacing it member by member.
 
     The pin is the installed package's version by construction — the embedded tree *is* that
@@ -464,6 +502,7 @@ def _mount_vendored(root: Path, mount: Path, ref: str | None, log: Callable[[str
             f"package's version ({__version__}) and `--ref {ref}` cannot change it. Pin a ref with "
             "`--mode submodule`/`--mode subtree`, or install the akmon version you want to vendor."
         )
+    root, mount = attach.root, attach.mount
     source = _tree.embedded_tree_root()
     relative = mount.relative_to(root).as_posix()
     if _is_git_repo(root) and _is_submodule(root, relative):
@@ -915,16 +954,7 @@ def _ruff_step(root: Path) -> str | None:
     return "add ruff to the project's development dependencies so `akmon check` can run it"
 
 
-def _setup_checks(
-    root: Path,
-    record: Path,
-    rules_path: str,
-    choice: str | None,
-    *,
-    ask: bool,
-    log: Callable[[str], None],
-    next_steps: list[str],
-) -> None:
+def _setup_checks(attach: _Attach, record: Path, choice: str | None, *, ask: bool, log: Callable[[str], None]) -> None:
     """Decide once what ``akmon check`` runs and record it as ``[check]``.
 
     The project's own linters when it has any; ruff with akmon's Python rules when it has none;
@@ -932,6 +962,7 @@ def _setup_checks(
     is asked. A record that already has a ``[check]`` table is left alone: a realign never
     changes that choice.
     """
+    root, next_steps = attach.root, attach.next_steps
     sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
     if re.search(r"^\[check\]", record.read_text(encoding="utf-8"), re.MULTILINE):
         log("[check] already names this project's checks — left untouched")
@@ -959,7 +990,7 @@ def _setup_checks(
     if choice == "own":
         commands = {name: prefix + command for name, command in tools}
     else:
-        step = _extend_with_akmon_rules(root, rules_path, sync_mod, log)
+        step = _extend_with_akmon_rules(root, attach.rules_path, sync_mod, log)
         commands = {"ruff": f"{prefix}ruff check {{files}}"}
         next_steps.extend(item for item in (step, _ruff_step(root)) if item)
     lines = [
@@ -1017,160 +1048,216 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-
-    def log(message: str) -> None:
-        # flush: the sync and model-routing steps run as subprocesses writing straight to the
-        # terminal, so a block-buffered parent would narrate the run in the wrong order.
-        print(f"akmon init: {message}", flush=True)
-
+    args = _build_parser().parse_args(argv)
     root = (args.project_root or Path.cwd()).resolve()
     if not root.is_dir():
         print(f"akmon init: {root} is not a directory", file=sys.stderr)
         return 2
 
-    next_steps: list[str] = []
     try:
-        # Every path in the tooling derives from this env var (sync/verify/hooks read it at call
-        # time), so resolving it once here — from the flag or from the environment, validated
-        # either way — makes the whole run, including the sync and routing subprocesses that
-        # inherit the environment, agree on one dev-layer root that is inside the project.
-        aitna = _effective_aitna_root(args.aitna_root, root)
-        os.environ["AITNA_ROOT"] = aitna
-
-        previous = _recorded_mount(root, aitna)
-        if args.mode:
-            mode, reason = args.mode, "requested"
-        elif previous in MODES:
-            mode, reason = previous, "recorded"
-        else:
-            mode, reason = _default_mode(root, args.repo)
-        package_mode = mode == "package"
-        mount = root / aitna / "akmon"
-
-        switching = bool(previous) and previous != mode
-        if switching and args.switch_mode and not package_mode and mount.exists() and any(mount.iterdir()):
-            # Between two *mounted* modes the mount itself has to change shape — a submodule's
-            # gitlink and `.git`, a subtree's tracked files, a vendored copy's plain files are
-            # mutually exclusive states of one path. Retiring the old one deletes tracked files
-            # and rewrites git bookkeeping, which is the owner's commit (D5), so `init` refuses
-            # rather than half-migrating: the previous shape used to survive underneath the new
-            # record, leaving a project that claimed one mode and carried another.
-            relative = mount.relative_to(root).as_posix()
-            raise _InitError(
-                f"switching mount mode {previous!r} → {mode!r} needs the old mount gone first — `init` does not "
-                f"delete a tree it did not create, and the removal is your commit (D5). Retire {relative}, then "
-                f"re-run:\n{_old_mount_removal(previous, relative)}\n"
-                f"    akmon init --mode {mode} --switch-mode"
-            )
-        if switching and not args.switch_mode:
-            raise _InitError(
-                f"this project is attached in mount mode {previous!r}; {mode!r} is a **migration**, not a realign — "
-                "the AGENTS.md akmon block still points at the old layout and the old mount is still on disk, so "
-                "finishing silently would leave `akmon verify --strict` red. Re-run with `--switch-mode` and init "
-                "will attach in the new mode and print the edits it must not make for you."
-            )
-
-        log(f"attaching to {root}")
-        log(f"mount mode: {mode} ({reason}) · dev layer: {aitna}/")
-        if switching:
-            log(f"migrating the mount mode: {previous} → {mode}")
+        attach, reason = _plan(args, root)
+        _log(f"attaching to {root}")
+        _log(f"mount mode: {attach.mode} ({reason}) · dev layer: {attach.aitna}/")
+        if attach.switching:
+            _log(f"migrating the mount mode: {attach.previous} → {attach.mode}")
         if not args.yes and not _confirm(f"akmon init: attach akmon to {root}?"):
             print("akmon init: aborted", file=sys.stderr)
             return 1
-
-        pin_status = "dev"  # only mode `package` pins akmon in the consumer's own manifest
-        if mode == "submodule":
-            version = _mount_submodule(root, mount, args.repo, args.ref, log, next_steps)
-        elif mode == "subtree":
-            version = _mount_subtree(root, mount, args.repo, args.ref, log)
-        elif mode == "vendored":
-            version = _mount_vendored(root, mount, args.ref, log)
-        else:
-            version = __version__
-            pin_status = _package_pin_status(root)
-        # Package-mode links and pin instructions name a remote release. Mounted modes derive
-        # their recorded ref from the mounted tree instead. Only a *first* package attach asks the
-        # remote for its latest release tag: on a realign the ref feeds nothing but the AGENTS.md
-        # block `init` preserves and the pin instruction, and the installed version already names
-        # it — while a network round-trip there would make the first step of every bump fail
-        # offline, with exit 2, for a value the run does not use.
-        first_attach = not (root / aitna / ".akmon.toml").is_file()
-        ref = args.ref or (
-            _package_default_ref(args.repo, root)
-            if package_mode and first_attach
-            else _tag_for_version(version or __version__)
-        )
+        version, pin_status = _mount(attach, repo=args.repo, ref=args.ref)
+        ref = _pin_ref(attach, version, ref=args.ref, repo=args.repo)
     except _InitError as exc:
         print(f"akmon init: {exc}", file=sys.stderr)
         return 2
 
     archetype = "/".join(part for part in (args.archetype, args.language) if part) or "unclassified"
     # --- local layout (LOCAL layer) --------------------------------------------------
+    _write_local_layout(attach)
+
+    # --- hand-owned documents: written when absent, never rewritten ------------------
+    block = _agents_block(
+        attach.aitna,
+        ref,
+        args.archetype or "<archetype>",
+        args.language or "<language>",
+        package_mode=attach.package_mode,
+    )
+    _write_agents_block(attach, block)
+    if attach.switching:
+        attach.next_steps.extend(_mode_switch_steps(attach.previous, attach.mode, attach.aitna))
+    _write_gitignore(attach)
+    _write_ci(attach, no_ci=args.no_ci)
+
+    record = _write_akmon_toml(root, attach.aitna, mode=attach.mode, version=version, archetype=archetype)
+    _log(f"recorded {record.relative_to(root)} (mount={attach.mode}, akmon_version={version or 'unknown'})")
+    _setup_checks(attach, record, args.checks, ask=not args.yes, log=_log)
+
+    # --- generated surface: sync, then model routing ---------------------------------
+    code = _generate(root)
+    if code != 0:
+        return code
+
+    # --- the judgment steps init deliberately did not do -----------------------------
+    _add_closing_steps(attach, archetype=archetype, pin_status=pin_status, ref=ref)
+    return _report(attach, pin_status, record, version)
+
+
+def _log(message: str) -> None:
+    # flush: the sync and model-routing steps run as subprocesses writing straight to the
+    # terminal, so a block-buffered parent would narrate the run in the wrong order.
+    print(f"akmon init: {message}", flush=True)
+
+
+def _plan(args: argparse.Namespace, root: Path) -> tuple[_Attach, str]:
+    """The run's dev layer and mount mode, and why that mode; refuses a migration not asked for."""
+    # Every path in the tooling derives from this env var (sync/verify/hooks read it at call
+    # time), so resolving it once here — from the flag or from the environment, validated
+    # either way — makes the whole run, including the sync and routing subprocesses that
+    # inherit the environment, agree on one dev-layer root that is inside the project.
+    aitna = _effective_aitna_root(args.aitna_root, root)
+    os.environ["AITNA_ROOT"] = aitna
+
+    previous = _recorded_mount(root, aitna)
+    if args.mode:
+        mode, reason = args.mode, "requested"
+    elif previous in MODES:
+        mode, reason = previous, "recorded"
+    else:
+        mode, reason = _default_mode(root, args.repo)
+    attach = _Attach(root, aitna, mode, previous)
+    _refuse_unready_switch(attach, switch_mode=args.switch_mode)
+    return attach, reason
+
+
+def _refuse_unready_switch(attach: _Attach, *, switch_mode: bool) -> None:
+    """Refuse a mount-mode change without ``--switch-mode``, or with the old mount still on disk."""
+    if not attach.switching:
+        return
+    previous, mode, mount = attach.previous, attach.mode, attach.mount
+    if switch_mode and not attach.package_mode and mount.exists() and any(mount.iterdir()):
+        # Between two *mounted* modes the mount itself has to change shape — a submodule's
+        # gitlink and `.git`, a subtree's tracked files, a vendored copy's plain files are
+        # mutually exclusive states of one path. Retiring the old one deletes tracked files
+        # and rewrites git bookkeeping, which is the owner's commit (D5), so `init` refuses
+        # rather than half-migrating: the previous shape used to survive underneath the new
+        # record, leaving a project that claimed one mode and carried another.
+        relative = mount.relative_to(attach.root).as_posix()
+        raise _InitError(
+            f"switching mount mode {previous!r} → {mode!r} needs the old mount gone first — `init` does not "
+            f"delete a tree it did not create, and the removal is your commit (D5). Retire {relative}, then "
+            f"re-run:\n{_old_mount_removal(previous, relative)}\n"
+            f"    akmon init --mode {mode} --switch-mode"
+        )
+    if not switch_mode:
+        raise _InitError(
+            f"this project is attached in mount mode {previous!r}; {mode!r} is a **migration**, not a realign — "
+            "the AGENTS.md akmon block still points at the old layout and the old mount is still on disk, so "
+            "finishing silently would leave `akmon verify --strict` red. Re-run with `--switch-mode` and init "
+            "will attach in the new mode and print the edits it must not make for you."
+        )
+
+
+def _mount(attach: _Attach, *, repo: str, ref: str | None) -> tuple[str | None, str]:
+    """Mount the standard in ``attach.mode``: the version to record, and the manifest pin's status.
+
+    Only mode ``package`` pins akmon in the consumer's own manifest; a mounted tree reports ``dev``.
+    """
+    if attach.mode == "submodule":
+        return _mount_submodule(attach, repo, ref, _log), "dev"
+    if attach.mode == "subtree":
+        return _mount_subtree(attach, repo, ref, _log), "dev"
+    if attach.mode == "vendored":
+        return _mount_vendored(attach, ref, _log), "dev"
+    return __version__, _package_pin_status(attach.root)
+
+
+def _pin_ref(attach: _Attach, version: str | None, *, ref: str | None, repo: str) -> str:
+    """The release the package-mode links and the pin instruction name.
+
+    Package-mode links and pin instructions name a remote release. Mounted modes derive their
+    recorded ref from the mounted tree instead. Only a *first* package attach asks the remote for
+    its latest release tag: on a realign the ref feeds nothing but the AGENTS.md block `init`
+    preserves and the pin instruction, and the installed version already names it — while a
+    network round-trip there would make the first step of every bump fail offline, with exit 2,
+    for a value the run does not use.
+    """
+    first_attach = not (attach.root / attach.aitna / ".akmon.toml").is_file()
+    return ref or (
+        _package_default_ref(repo, attach.root)
+        if attach.package_mode and first_attach
+        else _tag_for_version(version or __version__)
+    )
+
+
+def _write_local_layout(attach: _Attach) -> None:
+    """The dev layer's directories, task list, memory index and agent charters, each when absent."""
+    root, aitna = attach.root, attach.aitna
     for name in ("agents", "skills", "tools", "memory"):
         (root / aitna / name).mkdir(parents=True, exist_ok=True)
-    _write_if_absent(root / aitna / "TASKS.md", _tasks_skeleton(aitna), log, f"{aitna}/TASKS.md")
-    _write_if_absent(root / aitna / "memory" / "README.md", _memory_index(), log, f"{aitna}/memory/README.md")
+    _write_if_absent(root / aitna / "TASKS.md", _tasks_skeleton(aitna), _log, f"{aitna}/TASKS.md")
+    _write_if_absent(root / aitna / "memory" / "README.md", _memory_index(), _log, f"{aitna}/memory/README.md")
     for role, focus in _CHARTERS.items():
         _write_if_absent(
             root / aitna / "agents" / role / "README.md",
-            _charter(role, focus, aitna, package_mode=package_mode),
-            log,
+            _charter(role, focus, aitna, package_mode=attach.package_mode),
+            _log,
             f"{aitna}/agents/{role}/README.md",
         )
 
-    # --- hand-owned documents: written when absent, never rewritten ------------------
-    agents_md = root / "AGENTS.md"
-    block = _agents_block(
-        aitna, ref, args.archetype or "<archetype>", args.language or "<language>", package_mode=package_mode
-    )
+
+def _write_agents_block(attach: _Attach, block: str) -> None:
+    """Write AGENTS.md with the akmon block, or append the block; one already there stays untouched."""
+    agents_md = attach.root / "AGENTS.md"
     if not agents_md.is_file():
         agents_md.write_text(_AGENTS_HEADER + block, encoding="utf-8")
-        log("wrote AGENTS.md with the akmon block")
+        _log("wrote AGENTS.md with the akmon block")
     elif BLOCK_HEADING in agents_md.read_text(encoding="utf-8"):
-        log("AGENTS.md already carries an akmon block — left untouched")
-        if not switching:
-            next_steps.append("`akmon verify --strict` checks the existing AGENTS.md block against the contract")
+        _log("AGENTS.md already carries an akmon block — left untouched")
+        if not attach.switching:
+            attach.next_steps.append("`akmon verify --strict` checks the existing AGENTS.md block against the contract")
     else:
         text = agents_md.read_text(encoding="utf-8")
         separator = "" if text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
         agents_md.write_text(text + separator + block, encoding="utf-8")
-        log("appended the akmon block to AGENTS.md (existing content preserved)")
-    if switching:
-        next_steps.extend(_mode_switch_steps(previous, mode, aitna))
+        _log("appended the akmon block to AGENTS.md (existing content preserved)")
 
-    gitignore = root / ".gitignore"
+
+def _write_gitignore(attach: _Attach) -> None:
+    """Add the akmon entries the project's ``.gitignore`` lacks."""
+    gitignore = attach.root / ".gitignore"
     existing = gitignore.read_text(encoding="utf-8") if gitignore.is_file() else ""
-    merged = _merge_gitignore(existing, _gitignore_lines(aitna))
+    merged = _merge_gitignore(existing, _gitignore_lines(attach.aitna))
     if merged != existing:
         gitignore.write_text(merged, encoding="utf-8")
-        log(".gitignore: added the akmon entries (secrets, dev-layer venv, routing artifacts)")
+        _log(".gitignore: added the akmon entries (secrets, dev-layer venv, routing artifacts)")
 
-    workflows = root / ".github" / "workflows"
+
+def _write_ci(attach: _Attach, *, no_ci: bool) -> None:
+    """Write the contract-check workflow, or name the step when the project's CI is its own."""
+    aitna = attach.aitna
+    workflows = attach.root / ".github" / "workflows"
     existing_workflows = sorted(workflows.glob("*.yml")) + sorted(workflows.glob("*.yaml"))
     check_cmds = (
         ("akmon sync --check", "akmon verify --strict")
-        if package_mode
+        if attach.package_mode
         else (f"python3 {aitna}/akmon/bin/sync.py --check", f"python3 {aitna}/akmon/bin/verify.py --strict")
     )
-    if args.no_ci:
-        next_steps.append(f"add the contract checks to CI: `{check_cmds[0]}` and `{check_cmds[1]}`")
+    if no_ci:
+        attach.next_steps.append(f"add the contract checks to CI: `{check_cmds[0]}` and `{check_cmds[1]}`")
     elif existing_workflows:
-        verb = "update the akmon commands in" if switching else "add the contract checks to"
-        next_steps.append(f"{verb} your existing workflow(s): `{check_cmds[0]}` and `{check_cmds[1]}`")
+        verb = "update the akmon commands in" if attach.switching else "add the contract checks to"
+        attach.next_steps.append(f"{verb} your existing workflow(s): `{check_cmds[0]}` and `{check_cmds[1]}`")
     else:
         _write_if_absent(
-            workflows / "akmon.yml", _ci_workflow(aitna, package_mode=package_mode), log, ".github/workflows/akmon.yml"
+            workflows / "akmon.yml",
+            _ci_workflow(aitna, package_mode=attach.package_mode),
+            _log,
+            ".github/workflows/akmon.yml",
         )
 
-    record = _write_akmon_toml(root, aitna, mode=mode, version=version, archetype=archetype)
-    log(f"recorded {record.relative_to(root)} (mount={mode}, akmon_version={version or 'unknown'})")
-    rules_path = f"{aitna}/.akmon/profiles/ruff.toml" if package_mode else f"{aitna}/akmon/profiles/ruff.toml"
-    _setup_checks(root, record, rules_path, args.checks, ask=not args.yes, log=log, next_steps=next_steps)
 
-    # --- generated surface: sync, then model routing ---------------------------------
-    log("running sync (generated pointers, hook wiring, imported guardrails)")
+def _generate(root: Path) -> int:
+    """Run sync, then the model-routing initializer; the first failing exit code, else 0."""
+    _log("running sync (generated pointers, hook wiring, imported guardrails)")
     code = cli._dispatch("sync", ["--project-root", str(root)], cwd=root)
     if code != 0:
         print(f"akmon init: sync failed ({code}); the attach is incomplete", file=sys.stderr)
@@ -1178,57 +1265,63 @@ def main(argv: list[str] | None = None) -> int:
 
     standard_root = cli._mounted_akmon_root(root) or _tree.embedded_tree_root()
     routing_init = standard_root / "tools" / "model_routing" / "init.py"
-    log("running model-routing init (subagent definitions + local routing config)")
+    _log("running model-routing init (subagent definitions + local routing config)")
     completed = _run([sys.executable, str(routing_init), "--project-root", str(root)], cwd=root)
     if completed.returncode != 0:
         print(f"akmon init: model-routing init failed ({completed.returncode})", file=sys.stderr)
         return completed.returncode
+    return 0
 
-    # --- the judgment steps init deliberately did not do -----------------------------
+
+def _add_closing_steps(attach: _Attach, *, archetype: str, pin_status: str, ref: str) -> None:
+    """The judgment steps ``init`` deliberately did not take, a missing pin first."""
+    aitna = attach.aitna
     if archetype == "unclassified":
-        next_steps.insert(
+        attach.next_steps.insert(
             0,
             "classify the project (archetype + language) against ARCHETYPES.md, import the language "
             f"profile in AGENTS.md, and set `attached_archetype` in {aitna}/.akmon.toml",
         )
-    next_steps.append(
+    attach.next_steps.append(
         f"pin the test environment: record the project's own pytest invocation as `[test].runner` in "
         f"{aitna}/.akmon.toml (BOOTSTRAP §A5 — do not build a venv when the project already has one)"
     )
-    if package_mode and pin_status == "none":
-        next_steps.insert(
-            0,
-            "**pin akmon in the project's dependency manifest**, in a **dev** group (never a runtime "
-            f'dependency): "akmon @ git+{AKMON_REPO}@{ref}" — then install it into a virtualenv inside '
-            "the project root. Until both are done, `akmon` cannot resolve here: the CI checks cannot "
-            "run, and the generated hook commands fail silently because the console script they name "
-            "does not exist",
-        )
-    elif package_mode and pin_status == "runtime":
-        next_steps.insert(
-            0,
-            "**move the akmon pin** out of the project's runtime dependencies (or extras) into a **dev** "
-            "group: akmon is dev tooling and must not reach this project's own users (ADR 0009 §4)",
-        )
-    elif package_mode and pin_status == "unreadable":
-        next_steps.insert(
-            0,
-            "**fix pyproject.toml** — it is not valid TOML, so neither akmon nor uv can read an akmon pin "
-            "from it; once it parses, the pin belongs in a **dev** group",
-        )
+    pin_step = _pin_step(pin_status, ref) if attach.package_mode else None
+    if pin_step:
+        attach.next_steps.insert(0, pin_step)
     if aitna != cli._project_root_lib().AITNA_ROOT_DEFAULT:
-        next_steps.append(f"export AITNA_ROOT={aitna} in every shell and CI job that runs the akmon tooling")
-    next_steps.append("run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)")
+        attach.next_steps.append(f"export AITNA_ROOT={aitna} in every shell and CI job that runs the akmon tooling")
+    attach.next_steps.append(
+        "run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)"
+    )
 
+
+def _pin_step(pin_status: str, ref: str) -> str | None:
+    """The step a package attach needs when its manifest pin is missing, misplaced or unreadable."""
+    return {
+        "none": "**pin akmon in the project's dependency manifest**, in a **dev** group (never a runtime "
+        f'dependency): "akmon @ git+{AKMON_REPO}@{ref}" — then install it into a virtualenv inside '
+        "the project root. Until both are done, `akmon` cannot resolve here: the CI checks cannot "
+        "run, and the generated hook commands fail silently because the console script they name "
+        "does not exist",
+        "runtime": "**move the akmon pin** out of the project's runtime dependencies (or extras) into a **dev** "
+        "group: akmon is dev tooling and must not reach this project's own users (ADR 0009 §4)",
+        "unreadable": "**fix pyproject.toml** — it is not valid TOML, so neither akmon nor uv can read an akmon "
+        "pin from it; once it parses, the pin belongs in a **dev** group",
+    }.get(pin_status)
+
+
+def _report(attach: _Attach, pin_status: str, record: Path, version: str | None) -> int:
+    """Print the steps left; exit 1 while a package attach has no pin it can run from."""
     # Mode `package` mounts no tree, so the manifest pin *is* the mount: an attach that ends
     # without one has produced a project that looks attached and cannot run a single akmon
     # command. `init` cannot write the pin (it cannot know every manifest dialect), so it says so
     # in the exit code rather than reporting success over an unusable project — the CI job this
     # very run wrote would be the next thing to discover it.
-    incomplete = package_mode and pin_status != "dev"
+    incomplete = attach.package_mode and pin_status != "dev"
     print()
-    log("attached, with steps left to a human/agent decision:" if not incomplete else "attached, but INCOMPLETE:")
-    for index, step in enumerate(next_steps, start=1):
+    _log("attached, with steps left to a human/agent decision:" if not incomplete else "attached, but INCOMPLETE:")
+    for index, step in enumerate(attach.next_steps, start=1):
         print(f"  {index}. {step}", flush=True)
     if incomplete:
         missing, remedy = (
@@ -1237,7 +1330,7 @@ def main(argv: list[str] | None = None) -> int:
             else ("has no akmon pin in a dev group yet (step 1) — nothing else attaches it", "adding it")
         )
         print()
-        log(
+        _log(
             f"exit 1: mode 'package' {missing}, so this attach is not finished. Re-run `akmon init` after "
             f"{remedy} (it keeps the recorded mode), or `akmon verify --strict` to re-check."
         )

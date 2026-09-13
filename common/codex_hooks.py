@@ -127,6 +127,29 @@ class CodexWiringError(ValueError):
     """Wiring handed to :func:`expected_codex_hooks` is not the shape akmon's generator emits."""
 
 
+def _expected_hooks_from_group(event: str, group: object) -> list[tuple[str, str | None, str]]:
+    """The ``(eventName, matcher, command)`` triples one wiring group expects."""
+    if not isinstance(group, dict):
+        raise CodexWiringError(f"Codex wiring event {event!r} has a group that is not an object")
+    matcher = group.get("matcher")
+    if matcher is not None and not isinstance(matcher, str):
+        raise CodexWiringError(f"Codex wiring event {event!r} has a non-string matcher")
+    hooks = group.get("hooks", [])
+    if not isinstance(hooks, list):
+        raise CodexWiringError(f"Codex wiring event {event!r} has a group whose hooks is not a list")
+    expected: list[tuple[str, str | None, str]] = []
+    for hook in hooks:
+        if not isinstance(hook, dict):
+            raise CodexWiringError(f"Codex wiring event {event!r} has a hook that is not an object")
+        if hook.get("type") != "command":
+            continue
+        command = hook.get("command")
+        if not isinstance(command, str):
+            raise CodexWiringError(f"Codex wiring event {event!r} has a command hook without a command")
+        expected.append((_EVENT_NAMES[event], matcher, command))
+    return expected
+
+
 def expected_codex_hooks(wiring: object) -> list[tuple[str, str | None, str]]:
     """``(eventName, matcher, command)`` triples generated Codex wiring expects to be live.
 
@@ -150,23 +173,7 @@ def expected_codex_hooks(wiring: object) -> list[tuple[str, str | None, str]]:
         if not isinstance(groups, list):
             raise CodexWiringError(f"Codex wiring event {event!r} is not a list of groups")
         for group in groups:
-            if not isinstance(group, dict):
-                raise CodexWiringError(f"Codex wiring event {event!r} has a group that is not an object")
-            matcher = group.get("matcher")
-            if matcher is not None and not isinstance(matcher, str):
-                raise CodexWiringError(f"Codex wiring event {event!r} has a non-string matcher")
-            hooks = group.get("hooks", [])
-            if not isinstance(hooks, list):
-                raise CodexWiringError(f"Codex wiring event {event!r} has a group whose hooks is not a list")
-            for hook in hooks:
-                if not isinstance(hook, dict):
-                    raise CodexWiringError(f"Codex wiring event {event!r} has a hook that is not an object")
-                if hook.get("type") != "command":
-                    continue
-                command = hook.get("command")
-                if not isinstance(command, str):
-                    raise CodexWiringError(f"Codex wiring event {event!r} has a command hook without a command")
-                expected.append((_EVENT_NAMES[event], matcher, command))
+            expected.extend(_expected_hooks_from_group(event, group))
     return expected
 
 
@@ -228,30 +235,10 @@ def hook_trust_problems(
     return problems
 
 
-def default_runner(command: Sequence[str], cwd: Path, timeout: float) -> str:
-    """Spawn ``command`` (``codex app-server``) and negotiate the minimal handshake.
-
-    Returns the raw ``hooks/list`` response line. See the module docstring for the measured
-    wire shape.
-
-    This is the seam :func:`query_hooks_list` calls by default; a caller (a test, or a future
-    caller that already has a running app-server) may pass its own ``runner`` instead — carriers
-    inject the command runner and a canned protocol result rather than spawn a real subprocess.
-
-    Reads happen on a dedicated daemon thread that only ever blocks on ``readline()`` and posts
-    decoded lines to a queue; the timeout is enforced on ``queue.get`` in this thread instead of
-    ``select()`` on the raw file descriptor. ``select()`` reports OS-level readability only — once
-    ``TextIOWrapper``/``BufferedReader`` has pulled two already-sent lines into its own userspace
-    buffer in a single read, a second ``select()`` call sees no *new* bytes at the fd and times out
-    even though the second line is already fully available to ``readline()``; the reader thread
-    never has that ambiguity because it always calls the blocking read directly.
-
-    Every wait is bounded, cleanup included: ``terminate()`` then at most
-    :data:`_EXIT_GRACE_SECONDS`, ``kill()`` then at most that again, and a child that survives
-    both is abandoned (the daemon reader never blocks interpreter exit).
-    """
+def _spawn_codex_process(command: Sequence[str], cwd: Path) -> subprocess.Popen:
+    """Start ``codex app-server``, translating a failure to start into a protocol error."""
     try:
-        proc = subprocess.Popen(
+        return subprocess.Popen(
             list(command),
             cwd=cwd,
             stdin=subprocess.PIPE,
@@ -263,6 +250,18 @@ def default_runner(command: Sequence[str], cwd: Path, timeout: float) -> str:
     except OSError:
         raise CodexProtocolError("unstartable") from None
 
+
+def _start_stdout_reader(proc: subprocess.Popen) -> queue.Queue:
+    """Start the daemon thread that pumps ``proc.stdout`` lines onto a queue.
+
+    Reads happen on a dedicated daemon thread that only ever blocks on ``readline()`` and posts
+    decoded lines to the queue; the timeout is enforced on ``queue.get`` in the caller's thread
+    instead of ``select()`` on the raw file descriptor. ``select()`` reports OS-level readability
+    only — once ``TextIOWrapper``/``BufferedReader`` has pulled two already-sent lines into its
+    own userspace buffer in a single read, a second ``select()`` call sees no *new* bytes at the
+    fd and times out even though the second line is already fully available to ``readline()``;
+    the reader thread never has that ambiguity because it always calls the blocking read directly.
+    """
     lines: queue.Queue[str | None] = queue.Queue()
 
     def _pump() -> None:
@@ -274,56 +273,88 @@ def default_runner(command: Sequence[str], cwd: Path, timeout: float) -> str:
         finally:
             lines.put(None)
 
-    reader = threading.Thread(target=_pump, daemon=True)
-    reader.start()
+    threading.Thread(target=_pump, daemon=True).start()
+    return lines
 
+
+def _send_handshake_requests(proc: subprocess.Popen, cwd: Path) -> None:
+    """Write the ``initialize`` and ``hooks/list`` requests akmon needs answered."""
     try:
-        try:
-            proc.stdin.write(
-                json.dumps(
-                    {
-                        "id": _INITIALIZE_ID,
-                        "method": "initialize",
-                        "params": {"clientInfo": {"name": "akmon", "title": "akmon verify", "version": "1"}},
-                    }
-                )
-                + "\n"
+        proc.stdin.write(
+            json.dumps(
+                {
+                    "id": _INITIALIZE_ID,
+                    "method": "initialize",
+                    "params": {"clientInfo": {"name": "akmon", "title": "akmon verify", "version": "1"}},
+                }
             )
-            proc.stdin.write(
-                json.dumps({"id": _HOOKS_LIST_ID, "method": "hooks/list", "params": {"cwds": [str(cwd)]}}) + "\n"
-            )
-            proc.stdin.flush()
-        except OSError:
-            raise CodexProtocolError("stdin-closed") from None
+            + "\n"
+        )
+        proc.stdin.write(
+            json.dumps({"id": _HOOKS_LIST_ID, "method": "hooks/list", "params": {"cwds": [str(cwd)]}}) + "\n"
+        )
+        proc.stdin.flush()
+    except OSError:
+        raise CodexProtocolError("stdin-closed") from None
 
-        deadline = time.monotonic() + timeout
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise CodexProtocolError("timeout")
-            try:
-                line = lines.get(timeout=remaining)
-            except queue.Empty:
-                raise CodexProtocolError("timeout") from None
-            if line is None:
-                raise CodexProtocolError("stdout-closed")
-            try:
-                message = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(message, dict) and message.get("id") == _HOOKS_LIST_ID:
-                return line
-    finally:
+
+def _read_hooks_list_response(lines: queue.Queue, timeout: float) -> str:
+    """Read queued stdout lines until the one answering ``_HOOKS_LIST_ID`` arrives or times out."""
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise CodexProtocolError("timeout")
+        try:
+            line = lines.get(timeout=remaining)
+        except queue.Empty:
+            raise CodexProtocolError("timeout") from None
+        if line is None:
+            raise CodexProtocolError("stdout-closed")
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(message, dict) and message.get("id") == _HOOKS_LIST_ID:
+            return line
+
+
+def _cleanup_codex_process(proc: subprocess.Popen) -> None:
+    """Close stdin, then ``terminate()``/``kill()`` with a bounded wait after each.
+
+    Every wait is bounded: ``terminate()`` then at most :data:`_EXIT_GRACE_SECONDS`, ``kill()``
+    then at most that again, and a child that survives both is abandoned (the daemon reader
+    never blocks interpreter exit).
+    """
+    with contextlib.suppress(OSError):
+        proc.stdin.close()
+    for stop in (proc.terminate, proc.kill):
         with contextlib.suppress(OSError):
-            proc.stdin.close()
-        for stop in (proc.terminate, proc.kill):
-            with contextlib.suppress(OSError):
-                stop()
-            try:
-                proc.wait(timeout=_EXIT_GRACE_SECONDS)
-                break
-            except subprocess.TimeoutExpired:
-                continue
+            stop()
+        try:
+            proc.wait(timeout=_EXIT_GRACE_SECONDS)
+            break
+        except subprocess.TimeoutExpired:
+            continue
+
+
+def default_runner(command: Sequence[str], cwd: Path, timeout: float) -> str:
+    """Spawn ``command`` (``codex app-server``) and negotiate the minimal handshake.
+
+    Returns the raw ``hooks/list`` response line. See the module docstring for the measured
+    wire shape.
+
+    This is the seam :func:`query_hooks_list` calls by default; a caller (a test, or a future
+    caller that already has a running app-server) may pass its own ``runner`` instead — carriers
+    inject the command runner and a canned protocol result rather than spawn a real subprocess.
+    """
+    proc = _spawn_codex_process(command, cwd)
+    lines = _start_stdout_reader(proc)
+    try:
+        _send_handshake_requests(proc, cwd)
+        return _read_hooks_list_response(lines, timeout)
+    finally:
+        _cleanup_codex_process(proc)
 
 
 def _check_hook_metadata(hook: object) -> None:
@@ -351,6 +382,66 @@ def _check_hook_metadata(hook: object) -> None:
         raise CodexProtocolError("hook-matcher")
 
 
+def _call_hooks_list_runner(
+    runner: Callable[[Sequence[str], Path, float], str], command: Sequence[str], cwd: Path, timeout: float
+) -> str:
+    """Call ``runner`` and translate any failure into a :class:`CodexProtocolError`.
+
+    A :class:`CodexProtocolError` the ``runner`` raises is rebuilt here from its ``kind`` alone,
+    so a subclass with its own ``__str__`` cannot carry text past this seam either. Any other
+    exception the ``runner`` raises — a write or flush failure, an exec race, a bug in an
+    injected test runner — becomes ``runner-failed`` rather than escape as a bare traceback.
+    """
+    try:
+        return runner(command, cwd, timeout)
+    except CodexProtocolError as exc:
+        raise CodexProtocolError(getattr(exc, "kind", None)) from None
+    except Exception:  # noqa: BLE001 — the seam turns any runner failure into a finding
+        raise CodexProtocolError("runner-failed") from None
+
+
+def _parse_hooks_list_message(raw: str) -> dict:
+    """Decode ``raw`` and check it answers this exchange before anything else reads it."""
+    try:
+        message = json.loads(raw)
+    except (TypeError, ValueError):
+        raise CodexProtocolError("not-json") from None
+    if not isinstance(message, dict):
+        raise CodexProtocolError("not-object")
+    if message.get("id") != _HOOKS_LIST_ID:
+        raise CodexProtocolError("id-mismatch")
+    if "error" in message:
+        raise CodexProtocolError("jsonrpc-error")
+    return message
+
+
+def _hooks_list_project_entry(message: dict, cwd: Path) -> dict:
+    """The one ``result.data`` entry answering ``cwd``, checked for shape and discovery errors.
+
+    Exactly one entry may answer ``cwd``: only that one cwd was asked about, and choosing between
+    two answers for it — first, last, or a merge — would make the result depend on their order
+    (fourth C70 review: ``[trusted, empty]`` read green and the reverse read missing). Merging is
+    a delivery-semantics choice this module does not make, so a second answer is uninspectable.
+    """
+    result = message.get("result")
+    data = result.get("data") if isinstance(result, dict) else None
+    if not isinstance(data, list):
+        raise CodexProtocolError("no-data")
+
+    cwd_str = str(cwd)
+    answers = [entry for entry in data if isinstance(entry, dict) and entry.get("cwd") == cwd_str]
+    if not answers:
+        raise CodexProtocolError("no-project")
+    if len(answers) > 1:
+        raise CodexProtocolError("duplicate-project")
+    (entry,) = answers
+    if not all(isinstance(entry.get(field), list) for field in ("hooks", "warnings", "errors")):
+        raise CodexProtocolError("project-shape")
+    if entry["errors"]:
+        raise CodexProtocolError("discovery-errors")
+    return entry
+
+
 def query_hooks_list(
     command: Sequence[str],
     cwd: Path,
@@ -368,52 +459,13 @@ def query_hooks_list(
     :func:`_check_hook_metadata`). A caller must not read a caught exception as "no hooks" — that
     is a distinct, positively reported state (an empty ``data[].hooks`` list, not an exception).
 
-    Exactly one entry may answer ``cwd``: only that one cwd was asked about, and choosing between
-    two answers for it — first, last, or a merge — would make the result depend on their order
-    (fourth C70 review: ``[trusted, empty]`` read green and the reverse read missing). Merging is a
-    delivery-semantics choice this module does not make, so a second answer is uninspectable.
-
-    Every message is one of :data:`_PROTOCOL_FAILURES` (see the module docstring). A
-    :class:`CodexProtocolError` the ``runner`` raises is rebuilt here from its ``kind`` alone, so a
-    subclass with its own ``__str__`` cannot carry text past this seam either. Any other exception
-    the ``runner`` raises — a write or flush failure, an exec race, a bug in an injected test
-    runner — becomes ``runner-failed`` rather than escape as a bare traceback: this function is the
-    one seam ``verify`` trusts to turn "codex resolved but is uninspectable" into a `Finding`,
-    never a crash.
+    Every message is one of :data:`_PROTOCOL_FAILURES` (see the module docstring), a failure of
+    the ``runner`` included: this function is the one seam ``verify`` trusts to turn "codex
+    resolved but is uninspectable" into a `Finding`, never a crash.
     """
-    try:
-        raw = runner(command, cwd, timeout)
-    except CodexProtocolError as exc:
-        raise CodexProtocolError(getattr(exc, "kind", None)) from None
-    except Exception:  # noqa: BLE001 — the seam turns any runner failure into a finding
-        raise CodexProtocolError("runner-failed") from None
-
-    try:
-        message = json.loads(raw)
-    except (TypeError, ValueError):
-        raise CodexProtocolError("not-json") from None
-    if not isinstance(message, dict):
-        raise CodexProtocolError("not-object")
-    if message.get("id") != _HOOKS_LIST_ID:
-        raise CodexProtocolError("id-mismatch")
-    if "error" in message:
-        raise CodexProtocolError("jsonrpc-error")
-    result = message.get("result")
-    data = result.get("data") if isinstance(result, dict) else None
-    if not isinstance(data, list):
-        raise CodexProtocolError("no-data")
-
-    cwd_str = str(cwd)
-    answers = [entry for entry in data if isinstance(entry, dict) and entry.get("cwd") == cwd_str]
-    if not answers:
-        raise CodexProtocolError("no-project")
-    if len(answers) > 1:
-        raise CodexProtocolError("duplicate-project")
-    (entry,) = answers
-    if not all(isinstance(entry.get(field), list) for field in ("hooks", "warnings", "errors")):
-        raise CodexProtocolError("project-shape")
-    if entry["errors"]:
-        raise CodexProtocolError("discovery-errors")
+    raw = _call_hooks_list_runner(runner, command, cwd, timeout)
+    message = _parse_hooks_list_message(raw)
+    entry = _hooks_list_project_entry(message, cwd)
     for hook in entry["hooks"]:
         _check_hook_metadata(hook)
     return entry["hooks"]

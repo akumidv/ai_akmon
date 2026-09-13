@@ -74,21 +74,3 @@ target-version = "py311"
 [tool.ruff.lint]
 # ℹ is the notice glyph akmon's hooks print — meant, not a mistyped `i`.
 allowed-confusables = ["ℹ"]
-
-# C91: the size family's exceptions, one entry per file that still offends. The list only
-# shrinks — meta/tests/test_ruff_profile.py fails on an entry added and on one no longer needed.
-# `extend-` keeps the profile's test-file ignores; a plain `per-file-ignores` would replace them.
-[tool.ruff.lint.extend-per-file-ignores]
-"bin/verify.py" = ["C901"]
-"common/codex_hooks.py" = ["C901", "PLR0912"]
-"common/findings.py" = ["C901"]
-"hooks/hook_core.py" = ["PLR0911"]
-"meta/checks/runtime.py" = ["C901", "PLR0912", "PLR0915"]
-"meta/self_ci.py" = ["PLR0913"]
-"meta/tests/test_coverage_map.py" = ["PLR0913"]
-"meta/tests/test_findings.py" = ["PLR0913"]
-"src/akmon/_init.py" = ["C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
-"src/akmon/cli.py" = ["PLR0911"]
-"tools/model_routing/gate_pack.py" = ["PLR0913"]
-"tools/model_routing/stats.py" = ["C901", "PLR0912", "PLR0913"]
-"tools/tasks/archive.py" = ["PLR0911"]

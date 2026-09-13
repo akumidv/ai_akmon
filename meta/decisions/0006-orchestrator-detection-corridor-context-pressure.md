@@ -67,7 +67,7 @@ already reads records per-turn `usage`.
   re-init.
 - Implementation: C22 (detection + corridor + two-channel delivery) landed in `7312972` and is
   archived after owner verification at D2-37; C23 (context pressure) landed with
-  D2-38 in `920fe69` and stays in the backlog until its C80 amendment, D2-42 (owner-approved), is verified on its commit. D2 owner-verify applies to both (hook behaviour is architecture).
+  D2-38 in `920fe69`; its C80 amendment, D2-42, is Verified in `996fdea`, so C23 awaits only its close-out. D2 owner-verify applies to both (hook behaviour is architecture).
 
 ## Amendment — context pressure is a share of a recommended maximum (D2-38)
 
