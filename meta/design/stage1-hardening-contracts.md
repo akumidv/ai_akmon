@@ -455,7 +455,7 @@ values with contract tests. This keeps serialization beside the shared envelope 
 absence of `level` testable. C51 does not add `--json` to `verify.py`, `sync --check`,
 `meta/bin/validate.py`, or `self_ci`; C59 introduces the public JSON rendering when `akmon status`
 becomes its first process-boundary consumer. Text rendering **changes**, and C51 owns the change:
-`verify.py` prints `[{level}] {message}` today (`bin/verify.py:722`), while the canonical form
+`verify.py` prints `[{level}] {message}` today (`bin/verify.py`, before C51), while the canonical form
 this envelope introduces is `SEVERITY code target: message → fix`, one canonical stdout line per finding. It is
 recorded as a change rather than a continuation because the audit at A17(g) found the word
 *remains* describing a form the tree does not print — every adopter's text output moves in the

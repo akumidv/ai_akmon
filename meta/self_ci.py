@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 _KEYSTONE_ROOT = Path(__file__).resolve().parents[1]
@@ -187,25 +188,39 @@ def _checked(command: list[str], *, cwd: Path | None = None, env: dict | None = 
     raise RuntimeError(f"{' '.join(command)}: {tail}")
 
 
+@dataclass(frozen=True)
+class LegInvocation:
+    """How to run one self-CI leg's subprocess — its argv and (optionally) its environment."""
+
+    command: list[str]
+    env: dict | None = None
+
+
+@dataclass(frozen=True)
+class LegFixes:
+    """The two fix hints for one leg's finding, one for each outcome (pass, fail)."""
+
+    ok_fix: str
+    error_fix: str
+
+
 def _leg(
     findings: list[Finding],
     label: str,
-    command: list[str],
+    invocation: LegInvocation,
     *,
     code: str,
-    ok_fix: str,
-    error_fix: str,
-    env: dict | None = None,
+    fixes: LegFixes,
 ) -> bool:
     """Run one leg as a subprocess and record it as a finding; ``True`` when it passed."""
-    result = subprocess.run(command, capture_output=True, text=True, env=env, check=False)
+    result = subprocess.run(invocation.command, capture_output=True, text=True, env=invocation.env, check=False)
     if result.returncode == 0:
-        findings.append(Finding("ok", code, f"{label} passes", "", ok_fix))
+        findings.append(Finding("ok", code, f"{label} passes", "", fixes.ok_fix))
         return True
     detail = (result.stdout or result.stderr).strip().splitlines()
     tail = detail[-1] if detail else f"exit {result.returncode}"
     sys.stderr.write((result.stdout or "") + (result.stderr or ""))
-    findings.append(Finding("error", code, f"{label} failed: {tail}", "", error_fix))
+    findings.append(Finding("error", code, f"{label} failed: {tail}", "", fixes.error_fix))
     return False
 
 
@@ -425,30 +440,38 @@ def _run(akmon_root: Path) -> list[Finding]:
             _leg(
                 findings,
                 "fixture sync",
-                [sys.executable, sync_py, "--project-root", str(fixture)],
+                LegInvocation([sys.executable, sync_py, "--project-root", str(fixture)]),
                 code="selfci.fixture-sync",
-                ok_fix="Keep fixture sync able to materialize every generated artifact.",
-                error_fix="Run python3 meta/self_ci.py and fix the sync failure it reports.",
+                fixes=LegFixes(
+                    ok_fix="Keep fixture sync able to materialize every generated artifact.",
+                    error_fix="Run python3 meta/self_ci.py and fix the sync failure it reports.",
+                ),
             )
             and _leg(
                 findings,
                 "fixture sync --check",
-                [sys.executable, sync_py, "--project-root", str(fixture), "--check"],
+                LegInvocation([sys.executable, sync_py, "--project-root", str(fixture), "--check"]),
                 code="selfci.fixture-sync-check",
-                ok_fix="Keep sync idempotent so a second run reports no drift.",
-                error_fix="Make sync idempotent so a second run reports no drift.",
+                fixes=LegFixes(
+                    ok_fix="Keep sync idempotent so a second run reports no drift.",
+                    error_fix="Make sync idempotent so a second run reports no drift.",
+                ),
             )
             and _leg(
                 findings,
                 "fixture verify --strict",
-                [sys.executable, verify_py, "--project-root", str(fixture), "--strict", "--quiet"],
+                LegInvocation(
+                    [sys.executable, verify_py, "--project-root", str(fixture), "--strict", "--quiet"],
+                    # This synthetic fixture never runs the live Codex `/hooks` owner-approval flow C70
+                    # checks for; Codex is hidden from PATH so the check takes its absent-install skip
+                    # (see the matching note on the wheel smoke).
+                    env=verify_env,
+                ),
                 code="selfci.fixture-verify",
-                ok_fix="Keep the synthetic consumer compliant with the USE contract.",
-                error_fix="Fix the USE-contract finding the fixture verify reports.",
-                # This synthetic fixture never runs the live Codex `/hooks` owner-approval flow C70
-                # checks for; Codex is hidden from PATH so the check takes its absent-install skip
-                # (see the matching note on the wheel smoke).
-                env=verify_env,
+                fixes=LegFixes(
+                    ok_fix="Keep the synthetic consumer compliant with the USE contract.",
+                    error_fix="Fix the USE-contract finding the fixture verify reports.",
+                ),
             )
         )
         if not healthy:

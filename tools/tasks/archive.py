@@ -165,6 +165,25 @@ def insert_into_archive(archive_text: str, blocks: list[list[str]]) -> str:
     raise ValueError(f"archive has no '{DONE_HEADER}' section")
 
 
+def _apply_archive(
+    tasks_path: Path, archive_path: Path, remaining: str, blocks: list[list[str]], ids: list[str]
+) -> int:
+    """Write the swept ``TASKS.md`` and updated archive; the ``--apply`` half of ``main``."""
+    if not archive_path.is_file():
+        print(f"error: no archive file: {archive_path}", file=sys.stderr)
+        return 2
+    try:
+        new_archive = insert_into_archive(archive_path.read_text(encoding="utf-8"), blocks)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    tasks_path.write_text(remaining, encoding="utf-8")
+    archive_path.write_text(new_archive, encoding="utf-8")
+    print(f"archived {len(ids)}: {', '.join(ids)}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: optionally flip ``--done`` entries, then sweep done entries into the archive."""
     parser = argparse.ArgumentParser(description="Move done backlog entries into TASKS_ARCHIVE.md.")
@@ -204,19 +223,7 @@ def main(argv: list[str] | None = None) -> int:
         print("re-run with --apply to move them")
         return 1
 
-    if not archive_path.is_file():
-        print(f"error: no archive file: {archive_path}", file=sys.stderr)
-        return 2
-    try:
-        new_archive = insert_into_archive(archive_path.read_text(encoding="utf-8"), blocks)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-
-    tasks_path.write_text(remaining, encoding="utf-8")
-    archive_path.write_text(new_archive, encoding="utf-8")
-    print(f"archived {len(ids)}: {', '.join(ids)}")
-    return 0
+    return _apply_archive(tasks_path, archive_path, remaining, blocks, ids)
 
 
 if __name__ == "__main__":

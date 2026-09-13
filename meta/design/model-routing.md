@@ -865,7 +865,7 @@ cross-model tiering of its built-ins by task economics — akmon's core addition
 ## 12. Runtime weakness signals — context pressure and the intelligence axis
 
 > **Status: built ([ADR 0006](../decisions/0006-orchestrator-detection-corridor-context-pressure.md);
-> C23 — owner-verified at [D2-38](../D2_LEDGER.md), landed in `920fe69`; amended by C80 at D2-42, owner-approved).** Requirement 12.
+> C23 — owner-verified at [D2-38](../D2_LEDGER.md), landed in `920fe69`; amended by C80 at D2-42, owner-verified, landed in `996fdea`).** Requirement 12.
 
 A model can be "weak" for the running session on two axes; each already has (or now gets)
 a distinct detector — no overlap:

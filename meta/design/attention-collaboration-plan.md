@@ -1,6 +1,19 @@
-# A22 — first applied collaboration slice
+# A22 — earlier first-slice proposal
 
-## Status and next decision
+## Current direction supersedes this provisional frame
+
+The owner has now supplied the real applied obstacle: D2 walkthrough repeatedly
+becomes redesign, followed by separate acceptance/landing bookkeeping. The owner
+proposes an accepted-decision register, with open design work in tasks. The current
+case evidence, alternatives, and modification plan live in
+[decision work and the D2 register](decision-workflow-and-d2-register.md).
+
+The proposal below is retained as the **earlier hypothesis**, including its rejected
+branches and constructed case; its unanswered-question cursor and non-D2-first
+boundary are no longer current. Its moving-baseline and economic evaluation criteria
+remain useful. No contract or implementation was accepted under this earlier plan.
+
+## Status and next decision in the earlier proposal
 
 This is the living implementation-direction note for A22, not an accepted interaction
 contract. The [research concept](attention-and-human-agent-collaboration.md) owns the
@@ -9,11 +22,11 @@ narrows that sequence alongside ongoing applied development. [TASKS](../TASKS.md
 owns execution state; [D2-44](../D2_LEDGER.md) accepts the mission and economic framing,
 not this slice. No implementation is authorized by this note.
 
-**Resume here:** obtain the owner's nearest applied outcome and the interaction
-obstacle that matters to it; replace the constructed case below with that case.
-Then compare existing guidance with the proposed clarification on the same evidence.
-Do not restart the literature survey or ask the owner to restate the mission.
-The applied-outcome question has been asked; no answer is assumed here.
+**Earlier resume cursor, now superseded:** obtain the owner's applied outcome,
+replace the constructed case, and compare existing guidance with the proposed
+clarification. The owner has since answered with the D2 obstacle; follow the
+[current cursor](decision-workflow-and-d2-register.md#status-and-resume-point),
+not another intake question. No broad literature restart or mission restatement is needed.
 
 ## Essence and first boundary
 
@@ -70,7 +83,7 @@ These are design positions, not duplicate TASKS or D2 states:
 
 | Point | Position | What settles or revisits it |
 | --- | --- | --- |
-| Real applied outcome | Pending owner context | A concrete useful result and the interaction obstacle that matters to it |
+| Real applied outcome | Initially pending; now supplied | D2 redesign/verification friction; see the current plan linked above |
 | First behavioral boundary | Leaning toward one consequential decision point | Confirm against that case; revise if its actual loss occurs elsewhere |
 | Additional guidance | Open between A and B | Same-baseline examples and the agreed usefulness/cost rubric; A may win |
 | Specialized walkthrough or runtime support | Deferred | A repeated distinct failure that the smaller approach cannot adequately address |
@@ -246,5 +259,5 @@ comparison, not every accepted decision.
 If A suffices, the owner may reduce implementation to useful examples or decide that
 no new implementation is needed; do not close C86 as though unperformed work shipped.
 An A22 design question pauses only its proposed behavior, not unrelated applied fixes,
-delivery, or already accepted implementation. The next discussion concerns a concrete
-applied outcome, not reapproval of the mission or the whole research catalogue.
+delivery, or already accepted implementation. This earlier sequence awaited a concrete
+applied outcome; the owner has now supplied it and the current plan above takes over.

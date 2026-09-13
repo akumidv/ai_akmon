@@ -399,6 +399,20 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _dispatch_fixed_command(parser: argparse.ArgumentParser, command: str, argv: list[str]) -> int:
+    """Dispatch the commands that take no script pass-through of their own."""
+    if command == "path":
+        return _cmd_path()
+    if command == "hook":
+        return _cmd_hook(argv)
+    if command == "version":
+        return _cmd_version()
+    if command == "init":
+        return _cmd_init(argv)
+    parser.error(f"unknown command {command!r}")  # pragma: no cover - choices already restrict this
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse ``argv`` and dispatch to the named ``akmon`` command."""
     # `hook` short-circuits the parser: it is the hottest entry point there is (the generated
@@ -412,16 +426,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command in _DISPATCHED_COMMANDS:
         return _dispatch(args.command, args.args)
-    if args.command == "path":
-        return _cmd_path()
-    if args.command == "hook":
-        return _cmd_hook(args.args)
-    if args.command == "version":
-        return _cmd_version()
-    if args.command == "init":
-        return _cmd_init(args.args)
-    parser.error(f"unknown command {args.command!r}")  # pragma: no cover - choices already restrict this
-    return 2
+    return _dispatch_fixed_command(parser, args.command, args.args)
 
 
 if __name__ == "__main__":

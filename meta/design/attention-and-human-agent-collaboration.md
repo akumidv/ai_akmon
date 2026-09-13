@@ -72,6 +72,12 @@ rules inferred from the research:
 14. Proceed with A22 refinement and the project modification plan while akmon is
     simultaneously being developed for applied tasks. Preserve independent work and
     distinguish real dependencies from unnecessary whole-project blocking.
+15. Use slow D2 walkthrough as the first concrete applied obstacle: it often becomes
+    renewed design, not simple verification. Analyze the existing Claude session,
+    distinguish substantive review from approval/verify/SHA bookkeeping, and consider
+    D2 as an index of accepted decisions rather than an approval queue. Open design
+    questions should live in tasks. This is owner-proposed redesign direction, not
+    acceptance of a replacement schema or permission to change existing D2 statuses.
 
 ### Research questions
 
@@ -97,20 +103,23 @@ specific population and activity. Re-read current source documents and ledger st
 before relying on repository observations; historical session excerpts explain
 friction but do not establish current implementation or acceptance state.
 
-The next design pass should select a small pilot across problem discovery,
-implementation reporting, and D2 review, then settle the interaction contract from
-observed usefulness. It should not reopen the entire subject as a D2-only problem,
-replace open discovery with a menu, or equate fewer words with better collaboration.
+The owner has selected difficult D2 walkthrough as the first concrete case. Use it
+to investigate problem discovery, decision records, and implementation verification,
+then test transfer beyond D2. The mission remains whole-lifecycle collaboration;
+do not replace open discovery with a menu or equate fewer words with better work.
 
 The [refinement and implementation plan](#refinement-and-implementation-plan) now
 gives a proposed sequence, concrete evaluation cases, dependencies, and exit
 conditions. Resume at AP0 using the already collected episodes; do not restart a
 broad literature or transcript survey unless a material gap remains.
 
-The current A22 refinement is in the [first applied slice plan](attention-collaboration-plan.md).
-It narrows AP0/AP1 to one consequential decision point, compares existing guidance
-with a minimal clarification, and maps changes around parallel applied development.
-Use its next-decision cursor; the real applied case and comparison results remain open.
+The current A22 refinement is [decision work and the D2 register](decision-workflow-and-d2-register.md).
+It records two recent Claude episodes and an adjacent Codex review, the actual SHA
+guarantee, competing ADR practices, and a proposed separation of open design work,
+accepted decisions, and implementation evidence. Use its next-decision cursor;
+the case is now supplied, while the replacement contract and comparison results
+remain open. The [earlier slice plan](attention-collaboration-plan.md) preserves the
+prior narrower hypothesis and its evaluation rubric, not a competing current plan.
 
 The mission direction and the request to record work come from the owner; the
 proposed interaction architecture is not locked here. A22 tracks refinement, C86
@@ -500,7 +509,7 @@ proposals for a later contract, not a new mandatory schema.
 | R4 | Coherent causal account | Can the reader connect the task and criteria to the choice, implementation, result, and remaining work? |
 | R5 | Proportional structure | Do meaningful sections grow with complexity without turning a small edit into a formal essay? |
 | R6 | Low verification cost | Can the owner inspect the decisive evidence without reconstructing raw logs or the entire repository? |
-| R7 | Status precision | Are implemented, tested, reviewed, owner-approved, landed, and D2 Verified kept distinct? |
+| R7 | Status precision | Are implementation, testing, review, owner acceptance, and landing distinguished, with any operative D2 status reported accurately rather than treated as proof of all five? |
 | R8 | Decision provenance | Is it clear what the owner chose, what the agent assumed within authority, and what remains undecided? |
 | R9 | Actionable residuals | Does every material unresolved issue have a clear disposition, without claiming an uncreated task exists? |
 | R10 | Goal and scope fit | Does the report assess the intended outcome, including non-goals and important costs, not just feature completion? |
@@ -856,9 +865,10 @@ the agent complete before asking for that attention?"
 
 ## Refinement and implementation plan
 
-The focused [A22 first-slice plan](attention-collaboration-plan.md) applies the
-sequence below to a proposed increment and owns its current case selection,
-modification map, and coordination boundaries. The broader sequence remains here.
+The current [decision-workflow plan](decision-workflow-and-d2-register.md) applies
+the sequence below to the owner's D2 case and owns its case selection, modification
+map, and coordination boundaries. The [earlier slice proposal](attention-collaboration-plan.md)
+preserves the prior narrower hypothesis. The broader sequence remains here.
 
 ### Outcome and the two meanings of adaptation
 
@@ -944,11 +954,12 @@ changed, determine whether this is merely a context-restoration problem.
 | AP1 — Specify the smallest behavior change | Draft a compact situation/action table, truth-preservation checklist, and accepted-choice versus premise-recheck boundary. Link state to existing rationale, evidence, and task owners | Every proposed behavior has a positive example and a counterexample. No new approval authority, mandatory questionnaire, global profile, or duplicated ledger; open architecture points remain marked |
 | AP2 — Evaluate examples before machinery | Compare current guidance with the minimal candidate on the paired cases below. Use fictional or minimized authorized material. Record outputs, evidence subjects, material omissions, unnecessary questions, and reasons recommendations change | Evaluation distinguishes responsiveness from agreement-seeking and rigidity. It can reveal failure of either condition. No known false closure, hidden material risk, or unauthorized action is accepted; results remain scoped to tested cases |
 | AP3 — Refine with a small owner-facing pilot and lock the first slice | After agreement to the trial, use bounded discovery, implementation handoff, and acceptance/resumption cases. Capture a short owner correction and observed reconstruction effort. Compare existing-guidance-only, minimal guidance, and optional walkthrough where appropriate | A concrete benefit is visible without loss of understanding/control. Remove ineffective ceremony. Owner accepts only the useful first contract slice through existing design/ADR/D2 gates, not this entire research catalogue |
-| AP4 — Implement and verify that slice | Record authorized implementation tasks first. Update the owning guidance and worked examples; add a skill only if AP3 establishes a distinct trigger and result. Add deterministic tooling only for demonstrated repetitive mechanics, with tests | Changed behavior is evidenced on the cases, not merely by mandatory words appearing. Source-of-truth, delivery, negative contracts, tests, and limitations are checked. Approval, implementation, landing, and D2 Verified stay separate |
+| AP4 — Implement and verify that slice | Record authorized implementation tasks first. Update the owning guidance and worked examples; add a skill only if AP3 establishes a distinct trigger and result. Add deterministic tooling only for demonstrated repetitive mechanics, with tests | Changed behavior is evidenced on the cases, not merely by mandatory words appearing. Source-of-truth, delivery, negative contracts, tests, and limitations are checked. Acceptance, implementation correctness, and landing remain distinguishable; the existing D2 lifecycle applies until an explicitly accepted replacement takes effect, not as a permanent constraint on that replacement |
 | AP5 — Controlled adoption and simplification | Apply to a small set of normal tasks; compare useful owner insights, repeated-context questions, omitted caveats, unnecessary reopening, and later rework. Keep a clear disable/revert path for optional behavior | Decide to retain, adjust, shrink, or remove the mechanism. Broader propagation requires evidence appropriate to its claim; no population-wide productivity claim from a small local pilot |
 
-AP0 is the proposed next action, not completed case preparation. The research and
-sample already exist; use them to reduce that work. AP2 should start with inspectable
+AP0 has the owner's applied obstacle and a bounded follow-up sample; paired case
+preparation and comparison remain to be done. Use the focused current plan's cursor
+rather than restart extraction. AP2 should start with inspectable
 example evaluation; any model-running experiment has its own explicit execution
 scope and budget. This plan launches neither Codex nor Claude and authorizes no new
 operative interaction rules. A conversational pilot does not require a new runtime
@@ -1022,11 +1033,14 @@ behavioral efficacy require their own evidence, not only green code checks.
 
 ### First increment and deferred ambitions
 
-Recommended first increment: paired cases, a small clarification of existing
-interaction/reporting guidance, and a resumable decision packet demonstrated in
-both a non-D2 task and a D2 walkthrough. Keep skill creation optional until a
-distinct reusable need appears. A pure existing-guidance baseline remains a real
-alternative: if applying it consistently solves the cases, adopt less new machinery.
+The initial recommendation was paired cases and a small clarification of existing
+guidance, first outside D2. The owner-supplied case changes that boundary: compare
+better preparation under the existing process with the proposed separation of
+design work, accepted decisions, and implementation evidence. The focused
+[current plan](decision-workflow-and-d2-register.md) preserves the evidence and
+migration questions. Transfer beyond D2 remains necessary for a whole-lifecycle
+claim. Keep skill creation optional; if the existing process handles the cases,
+adopt less new machinery rather than treating migration as the success criterion.
 
 Defer a psychological user model, passive emotion inference, adaptive notification
 engine, approval auto-detection, new arbitrator role, decision-validity database,
@@ -1073,10 +1087,19 @@ assuming every additional review round is waste.
 Alternatives remain in [placement alternatives](#placement-alternatives). A fixed
 report cap is insufficient for truthfulness; a D2-only skill is too narrow; a
 universal profile/arbitration system creates premature infrastructure and authority
-risks. The current recommendation is minimal shared guidance plus inspectable
+risks. The initial recommendation was minimal shared guidance plus inspectable
 examples, with an on-demand walkthrough only if its separate value is demonstrated.
 Existing-guidance-only remains a real baseline. These are agent recommendations,
 not owner-accepted operational choices.
+
+The later applied-case clarification changed that recommendation: the owner described
+D2 as repeated design plus acceptance/landing bookkeeping and proposed a register
+of accepted decisions. The [focused investigation](decision-workflow-and-d2-register.md)
+found both late premise discovery and useful repeated verification, and confirmed
+that the SHA transition itself supplies no correctness proof. It therefore proposes
+separating the work and record boundaries, not merely shortening walkthroughs or
+abolishing review. This revises the earlier plan's first-case boundary; it does not
+accept a new process or change D2-44's already accepted mission.
 
 For the documentation update, "mission" was selected because the owner proposed
 it for a stable product purpose. "Product priorities" names the two investment
@@ -1168,7 +1191,9 @@ table here. The owner requested both the plan and its implementation task.
   owner authorization to realize it. Start with owning guidance and examples;
   skills/tools are conditional. Done requires conformance evidence, behavioral
   evidence and limitations against accepted premises, accurate follow-up disposition,
-  and the existing owner verification/landing process. A failed premise returns the
+  and the applicable owner-verification/landing contract, including any explicitly
+  accepted replacement transition. Until then, the existing process still applies.
+  A failed premise returns the
   affected choice to A22, not to silent feature growth or rewritten success criteria.
 - **D2-44 — mission wording and top-document alignment.** The owner accepted the
   framing, including the economic clarification: lifecycle resource effectiveness,

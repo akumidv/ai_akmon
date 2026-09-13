@@ -220,17 +220,20 @@ ruff`). Nothing is written on `own` or `none`.
 - akmon's `pyproject.toml` extends `profiles/ruff.toml` (slice 3), so akmon runs exactly the
   rules it offers; `line-length = 120` is a recorded override of Google's 80 (5 849 of akmon's
   lines are over 80, 709 over 100). Beside the `extend` it sets only `allowed-confusables` (`ℹ`,
-  the notice glyph akmon's hooks print) and the C91 exception list; a carrier holds it to that.
+  the notice glyph akmon's hooks print) — no rule, ignore or per-file exception of its own; a
+  carrier holds it to that.
 - **Deliberate exceptions** are inline — `# noqa: CODE — reason` on the line, never a per-file
   ignore that would also hide the next, accidental one: a function-level import kept off the
   per-tool-call hook path or keyed by the one-reader carrier (`tomllib`, C83), and a broad
-  `except` at a crash-open hook entry or a seam that never raises.
+  `except` at a crash-open hook entry or a seam that never raises. Never for the size family: a
+  size limit is met, not waived, and its carrier runs with `--ignore-noqa`.
 - **Rollout.** 361 findings under the strict set at the design measurement, 386 under the
   profile as shipped. The size family — C901 16, PLR0912 8, PLR0913 6, PLR0911 4, PLR0915 4 —
   are refactors of load-bearing code (`sync`, `verify`), not lint fixes: everything else lands
-  with slice 3, the size family is **C91**. `[tool.ruff.lint.extend-per-file-ignores]` names
-  each offending file and code — `extend-`, so the profile's test-file ignores still apply — and
-  `meta/tests/test_ruff_profile.py` fails on an entry added and on one no longer needed.
+  with slice 3, the size family is **C91**. C91 first listed the 22 remaining file-and-rule
+  pairs in `[tool.ruff.lint.extend-per-file-ignores]` — `extend-`, since a plain
+  `per-file-ignores` replaces the profile's test-file ignores — then brought each one under its
+  limit; the table is gone.
 
 ## 9. Owner decisions
 

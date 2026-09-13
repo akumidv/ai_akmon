@@ -6,8 +6,8 @@ extended configuration must still reach the project's tests, and ``target-versio
 from the project's own ``requires-python``.
 
 akmon itself runs exactly the rules it offers — its ``pyproject.toml`` extends the profile and adds
-no rule of its own — except the size family, whose per-file exceptions are C91's ratchet: an entry
-may leave the list, none may join it, and one no longer needed fails until it is removed.
+no rule, ignore or per-file exception of its own. The size family included (C91): a limit is met,
+never waived, so an inline ``noqa`` on one of its codes counts as an offender.
 """
 
 from __future__ import annotations
@@ -85,66 +85,28 @@ def test_a_project_extending_the_profile_keeps_the_test_ignores_and_its_own_targ
 
 
 # --------------------------------------------------------------------------------------
-# akmon's own configuration, and the C91 size ratchet
+# akmon's own configuration, and the size family (C91)
 # --------------------------------------------------------------------------------------
 
 SIZE_FAMILY = ("C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915")
-
-# The size-family offenders when C91 opened. An entry may leave; none may join.
-_C91_BASELINE = frozenset(
-    {
-        ("bin/verify.py", "C901"),
-        ("common/codex_hooks.py", "C901"),
-        ("common/codex_hooks.py", "PLR0912"),
-        ("common/findings.py", "C901"),
-        ("hooks/hook_core.py", "PLR0911"),
-        ("meta/checks/runtime.py", "C901"),
-        ("meta/checks/runtime.py", "PLR0912"),
-        ("meta/checks/runtime.py", "PLR0915"),
-        ("meta/self_ci.py", "PLR0913"),
-        ("meta/tests/test_coverage_map.py", "PLR0913"),
-        ("meta/tests/test_findings.py", "PLR0913"),
-        ("src/akmon/_init.py", "C901"),
-        ("src/akmon/_init.py", "PLR0911"),
-        ("src/akmon/_init.py", "PLR0912"),
-        ("src/akmon/_init.py", "PLR0913"),
-        ("src/akmon/_init.py", "PLR0915"),
-        ("src/akmon/cli.py", "PLR0911"),
-        ("tools/model_routing/gate_pack.py", "PLR0913"),
-        ("tools/model_routing/stats.py", "C901"),
-        ("tools/model_routing/stats.py", "PLR0912"),
-        ("tools/model_routing/stats.py", "PLR0913"),
-        ("tools/tasks/archive.py", "PLR0911"),
-    }
-)
 
 
 def _akmon_ruff() -> dict:
     return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["ruff"]
 
 
-def _c91_exceptions() -> set[tuple[str, str]]:
-    ignores = _akmon_ruff()["lint"]["extend-per-file-ignores"]
-    return {(path, code) for path, codes in ignores.items() for code in codes}
-
-
 def test_akmon_runs_exactly_the_rules_it_offers():
     ruff = _akmon_ruff()
     assert ruff["extend"] == "profiles/ruff.toml"
     assert set(ruff) <= {"extend", "target-version", "lint"}
-    assert set(ruff["lint"]) <= {"allowed-confusables", "extend-per-file-ignores"}
+    assert set(ruff["lint"]) <= {"allowed-confusables"}  # no rule, ignore or per-file exception of its own
 
 
-def test_the_c91_exceptions_are_the_size_family_and_never_grow():
-    exceptions = _c91_exceptions()
-    assert {code for _, code in exceptions} <= set(SIZE_FAMILY)
-    assert exceptions <= _C91_BASELINE, "C91 only shrinks: bring the new offender under the limit instead"
-
-
-def test_every_c91_exception_is_still_needed():
+def test_akmon_meets_every_size_limit_without_an_exception():
+    # --ignore-noqa: `ruff check` honours an inline suppression of a size code; this carrier does not.
     result = subprocess.run(
         [
-            *(sys.executable, "-m", "ruff", "check", "--no-cache", "--output-format", "json"),
+            *(sys.executable, "-m", "ruff", "check", "--no-cache", "--ignore-noqa", "--output-format", "json"),
             *("--config", str(PROFILE), "--select", ",".join(SIZE_FAMILY), "."),
         ],
         cwd=ROOT,
@@ -153,6 +115,8 @@ def test_every_c91_exception_is_still_needed():
         check=False,
     )
     assert result.returncode in (0, 1), result.stderr
-    offenders = {(Path(f["filename"]).relative_to(ROOT).as_posix(), f["code"]) for f in json.loads(result.stdout)}
-    assert _c91_exceptions() - offenders == set(), "no longer offending: remove these from pyproject.toml"
-    assert offenders - _c91_exceptions() == set(), "a new size-family offender: bring it under the limit"
+    offenders = [
+        f"{Path(f['filename']).relative_to(ROOT).as_posix()}:{f['location']['row']} {f['code']}"
+        for f in json.loads(result.stdout)
+    ]
+    assert offenders == [], "bring these under the profile's size limits"

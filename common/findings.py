@@ -104,20 +104,35 @@ class Finding:
     fix: str
 
     def __post_init__(self) -> None:
+        self._validate_severity()
+        self._validate_code()
+        self._validate_message()
+        self._validate_target()
+        self._validate_fix()
+
+    def _validate_severity(self) -> None:
         if self.severity not in SEVERITIES:
             raise ValueError(f"severity must be one of {' | '.join(SEVERITIES)}, got {self.severity!r}")
+
+    def _validate_code(self) -> None:
         if not isinstance(self.code, str) or not CODE_RE.fullmatch(self.code):
             raise ValueError(f"code must be a dotted slug like 'area.rule', got {self.code!r}")
         if self.code in RETIRED_CODES:
             raise ValueError(f"code {self.code!r} is retired and must not be reused by a live check")
+
+    def _validate_message(self) -> None:
         if not isinstance(self.message, str) or not self.message.strip():
             raise ValueError(f"message must be non-empty, got {self.message!r}")
         if _LINE_SEPARATOR_RE.search(self.message):
             raise ValueError(f"message must be one line, got {self.message!r}")
+
+    def _validate_target(self) -> None:
         if not isinstance(self.target, str):
             raise ValueError(f"target must be a string (possibly empty), got {self.target!r}")
         if _LINE_SEPARATOR_RE.search(self.target):
             raise ValueError(f"target must be one line, got {self.target!r}")
+
+    def _validate_fix(self) -> None:
         if not isinstance(self.fix, str) or not self.fix.strip():
             raise ValueError(f"fix is required and must be non-empty, got {self.fix!r}")
         if _LINE_SEPARATOR_RE.search(self.fix):

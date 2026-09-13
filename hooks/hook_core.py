@@ -916,6 +916,62 @@ def delegation_ask_message(score: float) -> str:
     )
 
 
+def _reset_delegation_counters(counter: Path, marker: Path, ask_marker: Path) -> None:
+    """Zero the drift counter and clear both markers on a real delegation."""
+    with contextlib.suppress(OSError):
+        counter.write_text("0", encoding="utf-8")
+    with contextlib.suppress(OSError):
+        marker.unlink(missing_ok=True)
+    with contextlib.suppress(OSError):
+        ask_marker.unlink(missing_ok=True)
+
+
+def _update_delegation_counter(counter: Path, tool_name: str) -> float:
+    """Read, bump and persist the stretch's call count and drift score; the score after this call."""
+    # Two numbers in one file: `seen` is the stretch's calls (the grace is counted in calls),
+    # `score` what they were worth. A one-number counter from the previous rule reads as calls
+    # with no score yet.
+    try:
+        raw_seen, _, raw_score = counter.read_text(encoding="utf-8").partition(" ")
+        seen, score = int(raw_seen), float(raw_score or 0)
+    except (OSError, ValueError):
+        seen, score = 0, 0.0
+    seen += 1
+    if seen > delegation_grace():
+        score += _DELEGATION_WEIGHTS[tool_name]
+    with contextlib.suppress(OSError):
+        counter.write_text(f"{seen} {score}", encoding="utf-8")
+    return score
+
+
+def _delegation_ask_result(
+    score: float, tool_name: str, ask_marker: Path, permission_mode: str | None
+) -> HookResult | None:
+    """The hard ask: fires once per stretch, never on a read."""
+    # A read never carries the ask and does not spend it; the next edit or shell call does.
+    if ask_marker.exists() or tool_name == READ_TOOL:
+        return None
+    with contextlib.suppress(OSError):
+        ask_marker.write_text("seen", encoding="utf-8")
+    return _escalate_unattended_ask(
+        HookResult(
+            event_name="PreToolUse",
+            permission_decision="ask",
+            permission_reason=delegation_ask_message(score),
+        ),
+        permission_mode,
+    )
+
+
+def _delegation_soft_nudge_result(score: float, marker: Path) -> HookResult | None:
+    """The soft nudge: fires once per stretch, below the hard-ask threshold."""
+    if marker.exists():
+        return None
+    with contextlib.suppress(OSError):
+        marker.write_text("seen", encoding="utf-8")
+    return HookResult(event_name="PreToolUse", additional_context=delegation_nudge_message(score))
+
+
 def delegation_nudge_result(
     tool_name: str,
     session_id: str | None,
@@ -937,48 +993,15 @@ def delegation_nudge_result(
     ask_marker = Path(tempfile.gettempdir()) / f"akmon-delegation-nudge-{sid}.ask-marker"
 
     if tool_name == SUBAGENT_TOOL:
-        with contextlib.suppress(OSError):
-            counter.write_text("0", encoding="utf-8")
-        with contextlib.suppress(OSError):
-            marker.unlink(missing_ok=True)
-        with contextlib.suppress(OSError):
-            ask_marker.unlink(missing_ok=True)
+        _reset_delegation_counters(counter, marker, ask_marker)
         return None
     if tool_name not in _DELEGATION_NUDGE_TOOL_KINDS:
         return None
 
-    # Two numbers in one file: `seen` is the stretch's calls (the grace is counted in calls),
-    # `score` what they were worth. A one-number counter from the previous rule reads as calls
-    # with no score yet.
-    try:
-        raw_seen, _, raw_score = counter.read_text(encoding="utf-8").partition(" ")
-        seen, score = int(raw_seen), float(raw_score or 0)
-    except (OSError, ValueError):
-        seen, score = 0, 0.0
-    seen += 1
-    if seen > delegation_grace():
-        score += _DELEGATION_WEIGHTS[tool_name]
-    with contextlib.suppress(OSError):
-        counter.write_text(f"{seen} {score}", encoding="utf-8")
+    score = _update_delegation_counter(counter, tool_name)
 
     if score >= delegation_ask_threshold():
-        # A read never carries the ask and does not spend it; the next edit or shell call does.
-        if ask_marker.exists() or tool_name == READ_TOOL:
-            return None
-        with contextlib.suppress(OSError):
-            ask_marker.write_text("seen", encoding="utf-8")
-        return _escalate_unattended_ask(
-            HookResult(
-                event_name="PreToolUse",
-                permission_decision="ask",
-                permission_reason=delegation_ask_message(score),
-            ),
-            permission_mode,
-        )
+        return _delegation_ask_result(score, tool_name, ask_marker, permission_mode)
     if score >= delegation_nudge_threshold():
-        if marker.exists():
-            return None
-        with contextlib.suppress(OSError):
-            marker.write_text("seen", encoding="utf-8")
-        return HookResult(event_name="PreToolUse", additional_context=delegation_nudge_message(score))
+        return _delegation_soft_nudge_result(score, marker)
     return None

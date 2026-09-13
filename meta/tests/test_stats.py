@@ -328,7 +328,11 @@ def _sample_pieces():
 def test_render_report_contains_key_numbers(tmp_path):
     delegation, transcript_stats, subagents, budget = _sample_pieces()
     report = stats.render_report(
-        "session-stem", tmp_path / "session-stem.jsonl", delegation, transcript_stats, subagents, budget
+        stats.SessionRef("session-stem", tmp_path / "session-stem.jsonl"),
+        delegation,
+        transcript_stats,
+        subagents,
+        budget,
     )
     assert "session-stem" in report
     assert "k_explorer" in report and "small" in report
@@ -341,7 +345,7 @@ def test_render_report_contains_key_numbers(tmp_path):
 
 def test_render_report_degrades_when_everything_missing():
     budget = stats.BudgetSummary(unavailable="no credentials found")
-    report = stats.render_report("-", None, None, None, [], budget)
+    report = stats.render_report(stats.SessionRef("-", None), None, None, [], budget)
     assert "no delegations logged" in report
     assert "no subagent transcripts" in report
     assert "unavailable: no credentials found" in report

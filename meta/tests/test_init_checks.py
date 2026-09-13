@@ -19,9 +19,10 @@ def _setup(root: Path, choice: str | None = None, record_text: str = 'mount = "s
     record = root / "_aitna" / ".akmon.toml"
     record.parent.mkdir(parents=True, exist_ok=True)
     record.write_text(record_text, encoding="utf-8")
-    next_steps: list[str] = []
-    _init._setup_checks(root, record, RULES, choice, ask=False, log=lambda message: None, next_steps=next_steps)
-    return tomllib.loads(record.read_text(encoding="utf-8")), next_steps
+    attach = _init._Attach(root, "_aitna", "submodule", previous=None)
+    assert attach.rules_path == RULES
+    _init._setup_checks(attach, record, choice, ask=False, log=lambda message: None)
+    return tomllib.loads(record.read_text(encoding="utf-8")), attach.next_steps
 
 
 def test_a_project_with_its_own_linters_runs_them_through_its_manager_untouched(tmp_path):

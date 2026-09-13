@@ -22,9 +22,14 @@ if str(_ROUTING_DIR) not in sys.path:
 import coverage_map  # noqa: E402
 import routing  # noqa: E402
 
+#: Fixed across every test entry — no test varies these, only zone/subagent/model.
+_TS = "T0"
+_SESSION = "sess-1"
+_DESC = "d"
 
-def _entry(zone, subagent="k_explorer", model="small", ts="T0", session="sess-1", desc="d"):
-    return routing.DelegationEntry(ts, session, subagent, model, zone, desc)
+
+def _entry(zone, subagent="k_explorer", model="small"):
+    return routing.DelegationEntry(_TS, _SESSION, subagent, model, zone, _DESC)
 
 
 # --------------------------------------------------------------------------------------

@@ -268,46 +268,58 @@ def _tokenize(text: str) -> list:
             in_word = True
             index += 2
             continue
-        if character == "'":
-            closing = text.index("'", index + 1)  # balance guaranteed by the scanner
-            word.append(text[index + 1 : closing])
+        if character in "'\"":
+            quoted, index = _read_quoted(text, index)
+            word.append(quoted)
             in_word = True
-            index = closing + 1
             continue
-        if character == '"':
-            index += 1
-            in_word = True
-            while index < len(text) and text[index] != '"':
-                if text[index] == "\\":
-                    word.append(text[index + 1 : index + 2])
-                    index += 2
-                    continue
-                word.append(text[index])
-                index += 1
-            index += 1
-            continue
-        if text.startswith("<(", index) or text.startswith(">(", index):
-            # process substitution: a bash extension that *runs* the command inside it. The
-            # redirection branch ate the `(` and the command behind it was read as an argument,
-            # so `python3 a.py <(jq .)` reported no `jq` — and `diff <(jq . a) <(jq . b)` did,
-            # which is worse than either answer alone.
-            raise UnparsedCommandError("process substitution is a bash extension this parser does not read")
-        if character == "(" and in_word and not text.startswith("()", index):
-            # `foo()` is a definition and `_heads` names it; `x((y` and `foo(bar)` are shell
-            # syntax errors, and the walk answered them with a binary called `y` / `bar`.
-            raise UnparsedCommandError("a '(' glued to a word is not a construct this parser reads")
-        for operator in _OPERATORS:
-            if text.startswith(operator, index):
-                flush()
-                tokens.append((operator, operator))
-                index += len(operator)
-                break
-        else:
+        _refuse_unread_paren(text, index, in_word=in_word)
+        operator = next((operator for operator in _OPERATORS if text.startswith(operator, index)), None)
+        if operator is None:
             word.append(character)
             in_word = True
             index += 1
+            continue
+        flush()
+        tokens.append((operator, operator))
+        index += len(operator)
     flush()
     return tokens
+
+
+def _read_quoted(text: str, index: int) -> tuple:
+    """The content of the quoted run opened at ``index``, and the index just past its close.
+
+    Single quotes keep every character; inside double quotes a backslash still escapes the next
+    one. Balance is guaranteed by the scanner, `_split_substitutions`.
+    """
+    if text[index] == "'":
+        closing = text.index("'", index + 1)
+        return text[index + 1 : closing], closing + 1
+    content = []
+    index += 1
+    while index < len(text) and text[index] != '"':
+        if text[index] == "\\":
+            content.append(text[index + 1 : index + 2])
+            index += 2
+            continue
+        content.append(text[index])
+        index += 1
+    return "".join(content), index + 1
+
+
+def _refuse_unread_paren(text: str, index: int, *, in_word: bool) -> None:
+    """Refuse the two unquoted ``(`` constructs the tokenizer does not read."""
+    if text.startswith("<(", index) or text.startswith(">(", index):
+        # process substitution: a bash extension that *runs* the command inside it. The
+        # redirection branch ate the `(` and the command behind it was read as an argument,
+        # so `python3 a.py <(jq .)` reported no `jq` — and `diff <(jq . a) <(jq . b)` did,
+        # which is worse than either answer alone.
+        raise UnparsedCommandError("process substitution is a bash extension this parser does not read")
+    if text[index] == "(" and in_word and not text.startswith("()", index):
+        # `foo()` is a definition and `_heads` names it; `x((y` and `foo(bar)` are shell
+        # syntax errors, and the walk answered them with a binary called `y` / `bar`.
+        raise UnparsedCommandError("a '(' glued to a word is not a construct this parser reads")
 
 
 def _heads(text: str) -> set:
@@ -323,79 +335,103 @@ def _heads(text: str) -> set:
     last_head = None
     tokens = _tokenize(text)
     for index, (operator, token) in enumerate(tokens):
-        # `foo()` reaches this as two operator tokens, and `(` would otherwise reset `last_head`
-        # as an ordinary segment break, so the pair is recognised before that happens.
-        if operator == "(" and last_head is not None and index + 1 < len(tokens) and tokens[index + 1][0] == ")":
-            raise UnparsedCommandError(f"{last_head!r} is a function definition, not an invocation of a host binary")
-        if pending_wrapper is not None:
-            wrapper, pending_wrapper = pending_wrapper, None
-            if operator is None and token.startswith("-"):
-                raise UnparsedCommandError(
-                    f"{wrapper!r} is followed by the option {token!r}; this parser does not "
-                    f"read wrapper option grammars"
-                )
-            if operator in _SEPARATORS:
-                raise UnparsedCommandError(f"{wrapper!r} is not followed by a command")
+        _refuse_definition(tokens, index, last_head)
+        _refuse_unwrapped(pending_wrapper, operator, token)
+        pending_wrapper = None
         if skip_target:
             skip_target = False
             continue
-        if operator == "((":
-            # unlike the words below, `((` cannot *be* an argument: quoted, it is a word and
-            # never reaches here. `python3 ((x))` declared a binary called `x`.
-            raise UnparsedCommandError(_REFUSED_TOKENS["(("])
-        if expect_head and operator is None and token in _REFUSED_TOKENS:
-            raise UnparsedCommandError(_REFUSED_TOKENS[token])
-        if operator in _HEREDOCS:
-            raise UnparsedCommandError("a here-document body is data, not a command list; this parser does not read it")
-        if operator in _REDIRECTIONS:
-            skip_target = True
-            continue
         if operator is not None:
-            expect_head = True
-            last_head = None
+            _refuse_operator(operator)
+            skip_target = operator in _REDIRECTIONS
+            if not skip_target:
+                expect_head = True
+                last_head = None
             continue
         if not expect_head:
             last_head = None  # only a word *immediately* followed by `()` defines one
             continue
-        if not token:
-            raise UnparsedCommandError("an empty word is not a command name")
         if token.isdigit() and index + 1 < len(tokens) and tokens[index + 1][0] in _REDIRECTIONS:
             continue  # an fd prefix: `2>&1 python3 a.py` still runs `python3`
-
-        if token in _UNSUPPORTED_KEYWORDS:
-            raise UnparsedCommandError(f"the {token!r} construct is outside the supported grammar")
-        if token in _POSITIONAL_WRAPPERS:
-            raise UnparsedCommandError(
-                f"{token!r} takes a positional argument before the command it runs; this parser "
-                f"does not read wrapper option grammars"
-            )
-        if _ASSIGNMENT_RE.match(token) or token in _SHELL_KEYWORDS:
+        kind = _head_kind(token)
+        if kind is None:
             continue
-        if _SUBSTITUTION_MARKER in token:
-            raise UnparsedCommandError(
-                "a command substitution supplies the binary name; the command string does not say what runs"
-            )
-        if _EXPANSION_RE.search(token):
-            raise UnparsedCommandError(f"the head {token!r} is an expansion; the command string does not say what runs")
         # A function may be *named* after a builtin or a wrapper — `echo() { jq .; }` is valid
         # shell — so every word consumed in head position is a candidate definition name, not
         # only the ones that end up in `binaries`.
-        if token in _WRAPPERS:
-            if token in _EXTERNAL_WRAPPERS:
-                binaries.add(token)
-            pending_wrapper = token
-            last_head = token
-            continue
-        if token in _SHELL_BUILTINS:
-            last_head = token
-            expect_head = False
-            continue
-        binaries.add(token)
         last_head = token
-        expect_head = False
+        if kind == "binary" or token in _EXTERNAL_WRAPPERS:
+            binaries.add(token)
+        # a wrapper's command is still to come, so the walk keeps expecting a head
+        expect_head = kind == "wrapper"
+        pending_wrapper = token if expect_head else None
     if pending_wrapper is not None:
         raise UnparsedCommandError(f"{pending_wrapper!r} is not followed by a command")
     return binaries
+
+
+def _refuse_definition(tokens: list, index: int, last_head: str | None) -> None:
+    """Refuse ``name()`` — a function definition, not an invocation of a host binary.
+
+    `foo()` reaches the walk as two operator tokens, and `(` would otherwise reset `last_head` as
+    an ordinary segment break, so the pair is recognised before that happens.
+    """
+    if last_head is None or tokens[index][0] != "(":
+        return
+    if index + 1 < len(tokens) and tokens[index + 1][0] == ")":
+        raise UnparsedCommandError(f"{last_head!r} is a function definition, not an invocation of a host binary")
+
+
+def _refuse_unwrapped(wrapper: str | None, operator: str | None, token: str) -> None:
+    """Refuse the token after a wrapper unless it is the plain word the wrapper runs."""
+    if wrapper is None:
+        return
+    if operator is None and token.startswith("-"):
+        raise UnparsedCommandError(
+            f"{wrapper!r} is followed by the option {token!r}; this parser does not read wrapper option grammars"
+        )
+    if operator in _SEPARATORS:
+        raise UnparsedCommandError(f"{wrapper!r} is not followed by a command")
+
+
+def _refuse_operator(operator: str) -> None:
+    """Refuse an operator that opens something other than a command list."""
+    if operator == "((":
+        # unlike a refused word, `((` cannot *be* an argument: quoted, it is a word and never
+        # reaches here. `python3 ((x))` declared a binary called `x`.
+        raise UnparsedCommandError(_REFUSED_TOKENS["(("])
+    if operator in _HEREDOCS:
+        raise UnparsedCommandError("a here-document body is data, not a command list; this parser does not read it")
+
+
+def _head_kind(token: str) -> str | None:
+    """``"wrapper"``, ``"builtin"`` or ``"binary"`` for a word in head position.
+
+    ``None`` when the head is still to come — an assignment prefix or a shell keyword. Raises
+    ``UnparsedCommandError`` for a head the command string does not name.
+    """
+    if token in _REFUSED_TOKENS:
+        raise UnparsedCommandError(_REFUSED_TOKENS[token])
+    if not token:
+        raise UnparsedCommandError("an empty word is not a command name")
+    if token in _UNSUPPORTED_KEYWORDS:
+        raise UnparsedCommandError(f"the {token!r} construct is outside the supported grammar")
+    if token in _POSITIONAL_WRAPPERS:
+        raise UnparsedCommandError(
+            f"{token!r} takes a positional argument before the command it runs; this parser "
+            f"does not read wrapper option grammars"
+        )
+    if _ASSIGNMENT_RE.match(token) or token in _SHELL_KEYWORDS:
+        return None
+    if _SUBSTITUTION_MARKER in token:
+        raise UnparsedCommandError(
+            "a command substitution supplies the binary name; the command string does not say what runs"
+        )
+    if _EXPANSION_RE.search(token):
+        raise UnparsedCommandError(f"the head {token!r} is an expansion; the command string does not say what runs")
+    if token in _WRAPPERS:
+        return "wrapper"
+    return "builtin" if token in _SHELL_BUILTINS else "binary"
 
 
 #: The operative Python surface the duplicate-owner scan covers. Tests are excluded: a fixture
@@ -414,25 +450,23 @@ def _read_substitution(text: str, start: int) -> tuple:
     quote = None
     while index < len(text):
         character = text[index]
-        if quote == "'":
-            if character == "'":
-                quote = None
-        elif character == "\\":
+        if character == "\\" and quote != "'":
             index += 2
             continue
-        elif quote == '"':
-            if character == '"':
-                quote = None
-        elif character in "'\"":
-            quote = character
-        elif character == "(":
-            depth += 1
-        elif character == ")":
-            depth -= 1
+        if quote is None and character in "()":
+            depth += 1 if character == "(" else -1
             if depth == 0:
                 return text[start:index], index + 1
+        quote = _next_quote(quote, character)
         index += 1
     raise UnparsedCommandError("an unterminated $( ... ) substitution")
+
+
+def _next_quote(quote: str | None, character: str) -> str | None:
+    """The quote in force after ``character``, given the one in force before it."""
+    if quote is None:
+        return character if character in "'\"" else None
+    return None if character == quote else quote
 
 
 def _split_substitutions(text: str) -> tuple:
@@ -450,40 +484,31 @@ def _split_substitutions(text: str) -> tuple:
     quote = None
     while index < len(text):
         character = text[index]
-        if quote == "'":
-            out.append(character)
-            if character == "'":
-                quote = None
-            index += 1
-            continue
-        if character == "\\":
-            out.append(text[index : index + 2])
-            index += 2
-            continue
-        if character == "`":
-            raise UnparsedCommandError("backtick command substitution is not read by this parser")
-        if text.startswith("$((", index):
-            raise UnparsedCommandError("arithmetic expansion is not read by this parser")
-        if text.startswith("$(", index):
-            body, index = _read_substitution(text, index + 2)
-            bodies.append(body)
-            out.append(_SUBSTITUTION_MARKER)
-            continue
-        if quote == '"':
-            if character == '"':
-                quote = None
-        elif character in "'\"":
-            quote = character
-        elif character == "\n":
+        if quote != "'":  # outside single quotes, and inside double ones, these still act
+            if character == "\\":
+                out.append(text[index : index + 2])
+                index += 2
+                continue
+            if character == "`":
+                raise UnparsedCommandError("backtick command substitution is not read by this parser")
+            if text.startswith("$((", index):
+                raise UnparsedCommandError("arithmetic expansion is not read by this parser")
+            if text.startswith("$(", index):
+                body, index = _read_substitution(text, index + 2)
+                bodies.append(body)
+                out.append(_SUBSTITUTION_MARKER)
+                continue
+        if quote is None and character == "\n":
             # an unquoted newline separates two commands exactly as `;` does
             out.append(";")
             index += 1
             continue
-        elif character == "#" and (not out or out[-1][-1] in _WORD_BREAK):
+        if quote is None and character == "#" and (not out or out[-1][-1] in _WORD_BREAK):
             # a comment, but only at a word start: `a.py#x` is a literal argument
-            while index < len(text) and text[index] != "\n":
-                index += 1
+            end = text.find("\n", index)
+            index = len(text) if end == -1 else end
             continue
+        quote = _next_quote(quote, character)
         out.append(character)
         index += 1
     if quote is not None:

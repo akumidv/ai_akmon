@@ -16,6 +16,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -603,21 +604,29 @@ def test_exact_rendering_is_identical_across_adopters(adopter, monkeypatch, tmp_
     assert _EXACT_LINE in capsys.readouterr().out.splitlines()
 
 
+class _ExitCase(NamedTuple):
+    """One cell of the severity-by-strict-state exit matrix — always exercised together."""
+
+    severity: str
+    strict: bool
+    expected: int
+
+
 @pytest.mark.parametrize("adopter", sorted(_STRICT_ADOPTERS))
 @pytest.mark.parametrize(
-    ("severity", "strict", "expected"),
+    "case",
     [
-        ("ok", False, 0),
-        ("ok", True, 0),
-        ("warn", False, 0),
-        ("warn", True, 1),
-        ("error", False, 1),
-        ("error", True, 1),
+        _ExitCase("ok", strict=False, expected=0),
+        _ExitCase("ok", strict=True, expected=0),
+        _ExitCase("warn", strict=False, expected=0),
+        _ExitCase("warn", strict=True, expected=1),
+        _ExitCase("error", strict=False, expected=1),
+        _ExitCase("error", strict=True, expected=1),
     ],
 )
-def test_exit_matrix_is_identical_across_adopters(adopter, severity, strict, expected, monkeypatch, tmp_path):
-    seeded = [_finding(severity=severity)]
-    assert _STRICT_ADOPTERS[adopter](monkeypatch, tmp_path, seeded, strict) == expected
+def test_exit_matrix_is_identical_across_adopters(adopter, case, monkeypatch, tmp_path):
+    seeded = [_finding(severity=case.severity)]
+    assert _STRICT_ADOPTERS[adopter](monkeypatch, tmp_path, seeded, case.strict) == case.expected
 
 
 @pytest.mark.parametrize(
@@ -701,10 +710,9 @@ def test_self_ci_leg_uses_a_success_specific_invariant(monkeypatch):
     assert self_ci._leg(
         emitted,
         "fixture sync",
-        ["sync"],
+        self_ci.LegInvocation(["sync"]),
         code="selfci.fixture-sync",
-        ok_fix="Keep fixture sync green.",
-        error_fix="Fix the sync failure.",
+        fixes=self_ci.LegFixes(ok_fix="Keep fixture sync green.", error_fix="Fix the sync failure."),
     )
     assert emitted == [Finding("ok", "selfci.fixture-sync", "fixture sync passes", "", "Keep fixture sync green.")]
 

@@ -401,38 +401,34 @@ def _fmt_resets(value: str | None) -> str:
     return value or "-"
 
 
-def render_report(
-    session_stem: str,
-    transcript_path: Path | None,
-    delegation: DelegationStats | None,
-    transcript_stats: TranscriptStats | None,
-    subagents: list[SubagentRecord],
-    budget: BudgetSummary,
-) -> str:
-    """Full markdown report (file) — delegations, per-role tokens, budget."""
-    lines = [f"# Session statistics — {session_stem}", ""]
-    lines.append(f"Transcript: `{transcript_path}`" if transcript_path else "Transcript: not found")
-    lines.append("")
+@dataclass(frozen=True)
+class SessionRef:
+    """Which session a report is about — its stem and the transcript path it was parsed from.
 
-    lines.append("## Delegations")
-    lines.append("")
+    The two travel together everywhere a report is rendered: ``stem`` is only ever derived
+    from ``transcript_path`` (or stands in for a missing one), never chosen independently.
+    """
+
+    stem: str
+    transcript_path: Path | None
+
+
+def _render_delegations_section(delegation: DelegationStats | None) -> list[str]:
+    """The '## Delegations' body: total plus the per-subagent/model breakdown table."""
     if delegation is None:
-        lines.append("no delegations logged")
-    elif delegation.total == 0:
-        lines.append("no delegations recorded")
-    else:
-        lines.append(f"Total: {delegation.total}")
-        lines.append("")
-        lines.append("| subagent | requested model | count |")
-        lines.append("|---|---|---|")
-        for (subagent, model), count in sorted(delegation.per_pair.items()):
-            lines.append(f"| {subagent} | {model} | {count} |")
-    lines.append("")
+        return ["no delegations logged"]
+    if delegation.total == 0:
+        return ["no delegations recorded"]
+    lines = [f"Total: {delegation.total}", "", "| subagent | requested model | count |", "|---|---|---|"]
+    lines.extend(
+        f"| {subagent} | {model} | {count} |" for (subagent, model), count in sorted(delegation.per_pair.items())
+    )
+    return lines
 
-    lines.append("## Tokens")
-    lines.append("")
-    lines.append("| role/agent | tier | input | output | cache-read | cache-created |")
-    lines.append("|---|---|---|---|---|---|")
+
+def _render_tokens_section(transcript_stats: TranscriptStats | None, subagents: list[SubagentRecord]) -> list[str]:
+    """The '## Tokens' body: per-role/tier token table plus the totals row."""
+    lines = ["| role/agent | tier | input | output | cache-read | cache-created |", "|---|---|---|---|---|---|"]
     total = TokenUsage()
     if transcript_stats is None:
         lines.append("| orchestrator | orchestrator | - | - | - | - |")
@@ -456,27 +452,57 @@ def render_report(
     if not subagents:
         lines.append("")
         lines.append("no subagent transcripts")
+    return lines
+
+
+def _render_budget_section(budget: BudgetSummary) -> list[str]:
+    """The '## Budget' body: unavailable notice, or the session/week/scoped remaining lines."""
+    if budget.unavailable:
+        return [f"unavailable: {budget.unavailable}"]
+    lines = []
+    if budget.session:
+        lines.append(
+            f"- session remaining: {_fmt_pct(budget.session.remaining_pct)} "
+            f"(resets {_fmt_resets(budget.session.resets_at)})"
+        )
+    if budget.week:
+        lines.append(
+            f"- week (all models) remaining: {_fmt_pct(budget.week.remaining_pct)} "
+            f"(resets {_fmt_resets(budget.week.resets_at)})"
+        )
+    lines.extend(
+        f"- {scoped.label} remaining: {_fmt_pct(scoped.remaining_pct)} (resets {_fmt_resets(scoped.resets_at)})"
+        for scoped in budget.scoped
+    )
+    return lines
+
+
+def render_report(
+    session: SessionRef,
+    delegation: DelegationStats | None,
+    transcript_stats: TranscriptStats | None,
+    subagents: list[SubagentRecord],
+    budget: BudgetSummary,
+) -> str:
+    """Full markdown report (file) — delegations, per-role tokens, budget."""
+    transcript_path = session.transcript_path
+    lines = [f"# Session statistics — {session.stem}", ""]
+    lines.append(f"Transcript: `{transcript_path}`" if transcript_path else "Transcript: not found")
+    lines.append("")
+
+    lines.append("## Delegations")
+    lines.append("")
+    lines.extend(_render_delegations_section(delegation))
+    lines.append("")
+
+    lines.append("## Tokens")
+    lines.append("")
+    lines.extend(_render_tokens_section(transcript_stats, subagents))
     lines.append("")
 
     lines.append("## Budget")
     lines.append("")
-    if budget.unavailable:
-        lines.append(f"unavailable: {budget.unavailable}")
-    else:
-        if budget.session:
-            lines.append(
-                f"- session remaining: {_fmt_pct(budget.session.remaining_pct)} "
-                f"(resets {_fmt_resets(budget.session.resets_at)})"
-            )
-        if budget.week:
-            lines.append(
-                f"- week (all models) remaining: {_fmt_pct(budget.week.remaining_pct)} "
-                f"(resets {_fmt_resets(budget.week.resets_at)})"
-            )
-        lines.extend(
-            f"- {scoped.label} remaining: {_fmt_pct(scoped.remaining_pct)} (resets {_fmt_resets(scoped.resets_at)})"
-            for scoped in budget.scoped
-        )
+    lines.extend(_render_budget_section(budget))
     lines.append("")
 
     lines.append("---")
@@ -578,7 +604,9 @@ def main(argv: list[str] | None = None) -> int:
     report_dir.mkdir(parents=True, exist_ok=True)
     report_file = report_dir / f"stats-{time.strftime('%Y%m%d-%H%M%S')}.md"
     report_file.write_text(
-        render_report(session_stem, transcript_path, delegation, transcript_stats, subagent_records, budget),
+        render_report(
+            SessionRef(session_stem, transcript_path), delegation, transcript_stats, subagent_records, budget
+        ),
         encoding="utf-8",
     )
 
