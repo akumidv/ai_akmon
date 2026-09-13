@@ -53,9 +53,9 @@ Owner requirements:
     never overridden, only detected (§3).
 11. **Owner-facing warnings reach the owner.** `additionalContext` reaches only the
     model; the owner never sees it in the host UI. Anything addressed to the owner — the
-    init instruction, corridor and context-pressure warnings, the rebind notice — must
-    also go out as `systemMessage` (UI-visible). A warning only the model sees fails
-    this requirement.
+    init instruction, the corridor warning, the rebind notice — must also go out as
+    `systemMessage` (UI-visible); the context-pressure reminder goes out as `systemMessage`
+    alone (§12.3). A warning only the model sees fails this requirement.
 12. **Context pressure is detected** (§12) — the hook warns when the session's
     context-window fill crosses recorded thresholds, before quality degrades or a forced
     compaction lands mid-task.
@@ -292,9 +292,10 @@ moved — before producing their output:
 **Delivery — two channels (requirement 11).** `hookSpecificOutput.additionalContext` is
 injected into the *model's* context only; the host UI does not show it to the owner.
 Everything owner-addressed — the init instruction, the corridor warning, the mid-session
-rebind notice, the context-pressure warning (§12) — is therefore *also* returned as the
-top-level `systemMessage` (UI-visible; the claude adapter already carries the field, same
-idiom as C21's delegation indication). The steady-state status line stays context-only so
+rebind notice — is therefore *also* returned as the top-level `systemMessage`; the
+context-pressure reminder (§12) is returned as `systemMessage` only, since the model has
+nothing to act on in it. `systemMessage` is UI-visible; the claude adapter already carries the
+field, same idiom as C21's delegation indication. The steady-state status line stays context-only so
 the UI is not noisy when nothing needs the owner's attention.
 
 Same rule-plus-hook split akmon already uses (commit guard, role declaration).
@@ -864,7 +865,7 @@ cross-model tiering of its built-ins by task economics — akmon's core addition
 ## 12. Runtime weakness signals — context pressure and the intelligence axis
 
 > **Status: built ([ADR 0006](../decisions/0006-orchestrator-detection-corridor-context-pressure.md);
-> C23 — owner-approved at [D2-38](../D2_LEDGER.md), awaiting the landing commit).** Requirement 12.
+> C23 — owner-verified at [D2-38](../D2_LEDGER.md), landed in `920fe69`; amended by C80 at D2-42, owner-approved).** Requirement 12.
 
 A model can be "weak" for the running session on two axes; each already has (or now gets)
 a distinct detector — no overlap:
@@ -896,7 +897,7 @@ fill — the detector adds **zero extra I/O** to the per-turn hook.
 "context_pressure": {
   "recommended_max": 200000,
   "recommended_max_by_alias": {},
-  "warn_ratios": [0.85, 1.0]
+  "info_ratio": 0.85
 }
 ```
 
@@ -907,11 +908,12 @@ fill — the detector adds **zero extra I/O** to the per-turn hook.
   session carries nor what that task needs — it sees only the prompt fill (§12.1) — so this is
   a pressure sensor and nothing more: where one task ends and the next begins is A21's axis,
   the Codex port is C81's, and keeping large raw results out of the main context is C29's.
-  The bands are shares **of this, not of the model's hard limit** (owner-directed,
+  The levels are shares **of this, not of the model's hard limit** (owner-directed,
   [D2-38](../D2_LEDGER.md)): quality degrades with length whatever the limit, the limit is not
   in the transcript, and limits grow faster than the registry is edited. **200000 is a
-  configurable owner policy, not an empirical optimum** — set from a typical one-task
-  development session (C80, §12.5). A
+  configurable owner policy, checked against measurement** (C80, §12.5): it sits above where
+  sessions get compacted in practice and below the 258,400-token window Codex reports for every
+  OpenAI model here, gpt-6-astra included. A
   live `claude-opus-5` session filled 411,203 tokens with no compaction — twice the 200k this
   block used to assume was the window; a share above 100% is reported as such.
   `recommended_max_by_alias` maps alias substrings to exceptions (longest match wins), e.g.
@@ -920,17 +922,14 @@ fill — the detector adds **zero extra I/O** to the per-turn hook.
   user (the shell, or `env` in `~/.claude/settings.json`) or per project (`env` in
   `.claude/settings.json`, which Claude Code applies once the folder is trusted). It wins over
   both registry keys; a value that is not a positive integer is ignored.
-- `warn_ratios` — ordered warning bands: **high** at 0.85 (checkpoint decisions and state to
-  files/TASKS; if the task continues, prepare a focused `/compact`) and **max** at 1.0 (the
-  same choice, pressed: same task — checkpoint and `/compact` with a task focus; new task —
-  `/clear` or a new session). The advice is conditional because the hook cannot see whether
-  the task goes on, and a compact keeps what its focus names — nothing guarantees it keeps
-  only the current task. A band is a max band by its threshold (≥ 1.0), not by its position,
-  so an overlay that keeps [0.85, 0.95] keeps the checkpoint advice on its top band; and every
-  max band is one state, so an overlay such as [0.85, 1.0, 1.2] warns once at 100% and not
-  again at 120%. The max-band warning fires once per pressure episode — also when the fill
-  jumps straight past 100% — and after it no further band or repeated warning fires until the
-  episode resets (§12.3). Going on past 100% is the developer's call.
+- `info_ratio` — the share of the budget where the **info** reminder fires, 0.85: `/compact`.
+  The **warn** reminder fires at the budget itself, 1.0 — fixed, because reaching the budget is
+  what the budget means; to move it, move `recommended_max`. It reads `/compact`; new task:
+  `/new` (§12.3). Each level speaks once per
+  pressure episode — warn also when the fill jumps straight past 100% — and nothing repeats
+  past the budget (§12.3): the model may allow more, and whether to go on, compact or start
+  over is the developer's call. An `info_ratio` that is not a number strictly between 0 and 1
+  leaves only the warn level; the pre-C80 band list `warn_ratios` is not read.
 
 ### 12.3 Mechanism — same hook, banded, throttled
 
@@ -938,25 +937,27 @@ Runs inside the §4.3 UserPromptSubmit pass (and at SessionStart, where a resume
 may already be deep):
 
 1. compute `fill / recommended_max` for the last main-chain turn;
-2. find the highest crossed band (or none);
-3. **throttle by band, not by turn:** a per-session temp-dir marker
+2. find the level reached: **warn** at 1.0 or more, else **info** at `info_ratio` or more,
+   else none;
+3. **throttle by level, not by turn:** a per-session temp-dir marker
    (`akmon-context-pressure-<session_id>`, the delegation-nudge idiom) records the last
-   announced band; warn only when the band *rises* — 0→85% warns once, 85%→100% warns once
-   more (a fill that jumps straight past 100% gets that one max-band warning), a steady fill
-   stays silent, and after the max-band warning no further band or repeated warning fires
-   until the episode resets — every band at or above 1.0 counts as the one max band;
-4. **pressure-episode reset:** a fill below the lowest band ends the episode and clears the
-   marker, so a later re-crossing warns again. The hook sees only the low fill, not its
+   announced level; only a rise speaks — info once, warn once more (a fill that jumps straight
+   past 100% gets that one warn), a steady fill stays silent, and nothing repeats past the
+   budget until the episode resets;
+4. **pressure-episode reset:** a fill below the info level ends the episode and clears the
+   marker, so a later re-crossing speaks again. The hook sees only the low fill, not its
    cause — a compact, a fresh session and anything else that lowered it look alike;
-5. delivery per requirement 11: `systemMessage` (the owner acts — `/compact`, checkpoint)
-   **and** `additionalContext` (the model acts — stop opening new fronts, persist durable
-   state, propose the checkpoint), e.g.
-   `⚠ context pressure: ~86% of the recommended 200k budget (172000 tokens) — checkpoint
-   decisions and state to files/TASKS; if the task continues, prepare a focused /compact`, and
-   at the max band `… — recommended context budget reached — same task: checkpoint and
-   /compact with a task focus; new task: /clear or start a new session`. The budget shows as `200k` when it is a whole
-   thousand and as its exact token count otherwise (`1500`), so an env override never prints
-   a rounded or `0k` maximum.
+5. **delivery to the owner only** — `systemMessage`, no `additionalContext`: a reminder the
+   owner acts on, nothing for the model to do, so it spends none of the context it warns
+   about. Marked like the hook's other notices — `⚠` for the warning, as the corridor's, `ℹ`
+   for the info — and only the essence, the share and the command to type:
+   `ℹ context pressure: ~86% of the recommended 200k budget — /compact`, and at the budget
+   `⚠ context pressure: ~100% of the recommended 200k budget — /compact; new task: /new`. The
+   budget shows as `200k` when it is a whole thousand and as its exact token count otherwise
+   (`1500`), so an env override never prints a rounded or `0k` maximum;
+6. **the same commands on both harnesses:** `/compact` and `/new` exist under those names in
+   Claude Code (`/new` is an alias of `/clear`) and in Codex, so the Codex port (C81) can name
+   them as they are ([C80 evidence](../reviews/c80-context-fill-20260912.md)).
 
 Missing/malformed `usage` → silent (never block a turn, the hook's standing rule).
 
@@ -966,11 +967,11 @@ Missing/malformed `usage` → silent (never block a turn, the hook's standing ru
   reliably, and narration costs the very tokens under pressure; the transcript states the
   fact for free (requirement 8 discipline: code cost, not token cost).
 - **Warn every turn above a threshold** — rejected: a nag the model and owner learn to
-  ignore; banded one-shot warnings with a pressure-episode reset keep the signal rare and real.
+  ignore; one reminder per level and a pressure-episode reset keep the signal rare and real.
 - **A share of the model's hard limit** — rejected (owner-directed; approved at D2-38): the limit is not in the
   transcript, so it has to be registry data that goes stale with every model release, and a
   larger limit does not move the point where quality degrades.
-- **Auto-compact / auto-checkpoint on the max band** — rejected: mutating the session is the
+- **Auto-compact / auto-checkpoint at the warn level** — rejected: mutating the session is the
   owner's move (same never-override stance as the orchestrator choice); the hook informs.
 
 ### 12.5 Evidence behind the recommended maximum
@@ -978,15 +979,18 @@ Missing/malformed `usage` → silent (never block a turn, the hook's standing ru
 > **Status: C80 evidence; the owner's decisions taken on it are [D2-42](../D2_LEDGER.md)
 > (§12.2).** Measurements and quotes: [C80 evidence](../reviews/c80-context-fill-20260912.md).
 
-- **200000 is a configurable owner policy, not an empirical optimum** — set from a typical
-  one-task development session. The replay of this machine's transcripts measures habits and
-  warning frequency, not model quality or real savings: transcripts carry no quality signal,
-  so it cannot confirm the number, but it settles what 200k is *not*: a limit. Claude main
-  chains run to 412k, and Claude Code runs Opus 5 with a 1M window, compacting near 967K. With
-  no akmon warning wired, the owner compacted by hand at a median of 167,968 tokens (0.84 of
-  200k). On one corpus snapshot (13 sessions, 4,320 turns) the adopted bands [0.85, 1.0] raise 46 warnings
-  against 48 for the baseline at replay, [0.85, 0.95]; adding a first band at 0.67 would nearly
-  double the count (85).
+- **200000 is a configurable owner policy, checked against measurement.** The replay of this
+  machine's transcripts measures habits, windows and reminder frequency, not model quality or
+  real savings — transcripts carry no quality signal — but it bounds the number from both
+  sides. Below it, compaction already happens: with no akmon warning wired, the owner
+  compacted Claude sessions by hand at a median of 167,968 tokens (0.84 of 200k), and Codex
+  main sessions compacted at a median of 174,193 on gpt-5.5 and 123,180 on gpt-5.6-sol. Above
+  it sits the window Codex reports for every OpenAI model in its catalog, gpt-6-astra
+  included: 258,400 tokens (272,000 × 95%), compacted by default near 245K — 200k stays 58,400
+  under it. It is not a limit: Claude main chains run to 412k, and Claude Code runs Opus 5 with
+  a 1M window, compacting near 967K. On one corpus snapshot (13 sessions, 4,320 turns) info at
+  0.85 and warn at 1.0 raise 46 reminders; adding a level at 0.67 would nearly double the
+  count (85).
 - **Published evidence agrees on direction, not on a number:** quality falls with length,
   gradually and differently per model (Chroma's Context Rot, NoLiMa, Lost in the Middle,
   RULER); Anthropic's documentation names context rot and gives no threshold. None of those

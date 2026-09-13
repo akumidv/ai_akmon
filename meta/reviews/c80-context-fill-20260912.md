@@ -1,17 +1,20 @@
 # C80 — how full sessions get against the recommended maximum
 
-> **Verdict: `recommended_max: 200000` is a configurable owner policy — set from a typical
-> one-task development session, not an empirical optimum — and this replay neither confirms
-> nor moves it.** The replay measures habits and warning frequency, not model quality or real
-> savings: transcripts show where sessions *go* and where they get compacted; they carry no
-> quality signal, so they cannot show where quality *drops*. The owner's decisions taken on this evidence (bands 0.85
-> and 1.0, an env override, no stored limit) are [D2-42](../D2_LEDGER.md). What the replay does
-> settle: (1) 200k is not a technical limit on either harness — Claude
-> main chains run to 412k, Codex to its own reported window; (2) the owner, with no akmon
-> warning wired, compacts Claude sessions by hand at a median of 167,968 tokens (0.84 of 200k);
-> (3) Codex writes the model's window into every `token_count` record, so on Codex the limit
-> is read, not guessed; (4) the per-model samples are too small, and too dependent on when the
-> owner compacts, to justify a per-model entry in `recommended_max_by_alias`.
+> **Verdict: `recommended_max: 200000` is a configurable owner policy that the measurements
+> bound from both sides; none of them measures quality.** The replay measures habits, windows
+> and reminder frequency, not model quality or real savings: transcripts show where sessions
+> *go* and where they get compacted; they carry no quality signal, so they cannot show where
+> quality *drops*. The owner's decisions taken on this evidence (info at 0.85, warn at 1.0, an
+> env override, no stored limit) are [D2-42](../D2_LEDGER.md). What the replay does settle:
+> (1) 200k is not a technical limit on either harness — Claude main chains run to 412k, Codex
+> to its own reported window; (2) 200k sits above where sessions get compacted — the owner,
+> with no akmon warning wired, compacts Claude sessions by hand at a median of 167,968 tokens
+> (0.84 of 200k), and Codex main sessions compact at medians of 123–174k (§Re-check); (3) it
+> sits 58,400 tokens under the 258,400-token window Codex reports for every OpenAI model in
+> its catalog, gpt-6-astra included, and Codex writes that window into every `token_count`
+> record, so on Codex the limit is read, not guessed; (4) the per-model samples are too small,
+> and too dependent on when the owner compacts, to justify a per-model entry in
+> `recommended_max_by_alias`.
 >
 > Owned by [C80](../TASKS.md). Policy context: [design §12](../design/model-routing.md),
 > [D2-38](../D2_LEDGER.md).
@@ -76,18 +79,18 @@ run whose corpus the continuing session has since grown, so no row compares acro
 
 | policy | sessions warned | warnings | most in one session |
 |---|---|---|---|
-| **adopted** ([D2-42](../D2_LEDGER.md)): 200k × [0.85, 1.0] | 7 / 13 | 46 | 16 |
+| **adopted** ([D2-42](../D2_LEDGER.md)): 200k, info 0.85 / warn 1.0 | 7 / 13 | 46 | 16 |
 | baseline at replay (shipped before D2-42): 200k × [0.85, 0.95] | 7 / 13 | 48 | 17 |
 | 200k × [0.67, 0.85, 1.0] | 10 / 13 | 85 | 30 |
 | 200k × [0.67, 0.85, 0.95] | 10 / 13 | 87 | 31 |
 | 200k × [0.70, 0.95] | 10 / 13 | 61 | 21 |
 | 150k × [0.85, 1.0] | 10 / 13 | 75 | 26 |
 
-A warning fires once per band rise and re-arms when the fill falls below the lowest band, so
-the count tracks pressure episodes: the 16-warning session is one long session compacted many
-times. The max-band warning fires once per episode — also when the fill jumps straight past
-100% — and after it no further band or repeated warning fires until the episode resets. A first band at
-two thirds of 200k nearly doubles the total (46 → 85).
+A reminder fires once per level rise and re-arms when the fill falls below the lowest level, so
+the count tracks pressure episodes: the 16-reminder session is one long session compacted many
+times. The warn at 100% fires once per episode — also when the fill jumps straight past it —
+and nothing repeats past the budget until the episode resets. A first level at two thirds of
+200k nearly doubles the total (46 → 85).
 
 ## Codex — the window is in the transcript
 
@@ -115,6 +118,37 @@ and fill to the window.
 
 The C23 detector does not run on Codex (D2-37: accepted Claude-only, Codex-pending); this is
 the data a Codex half would read.
+
+## Re-check — Codex windows and compaction points
+
+Run on 2026-09-13 at the owner's request, read-only, codex-cli 0.154.0. Rows M51–M52 in
+[MEASUREMENTS](../MEASUREMENTS.md).
+
+| source | finding |
+|---|---|
+| model catalog `~/.codex/models_cache.json` (`client_version` 0.154.0) | all 7 models — gpt-6-astra, gpt-reserve, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, codex-auto-review — carry `context_window` 272,000 and `effective_context_window_percent` 95; `max_context_window` is 872,000 on six and 272,000 on gpt-5.5 |
+| rollouts (157) — `token_count.info.model_context_window` | 258,400 (= 272,000 × 95%) on every record of every model, gpt-6-astra's 37 included |
+| rollouts — last fill before `context_compacted`, main (non-subagent) sessions only | gpt-5.5: 15 compactions, median 174,193; gpt-5.6-sol: 61, median 123,180 |
+
+The "258k" Codex shows is the catalog's 272,000 at its 95%, the same for gpt-6-astra as for the
+models of the first run. 200k sits 58,400 tokens (22.6%) under it and about 45K under the 245K
+where Codex compacts by default; the compaction points of Codex main sessions, like the owner's
+manual Claude compactions, fall below 200k. None of this measures quality.
+
+## Commands the reminder names
+
+Read on 2026-09-13. The reminder names what the user types: `/compact`, and at the budget also
+`/new` — both exist under those names on both harnesses.
+
+| step | Claude Code 2.1.270 | codex-cli 0.154.0 |
+|---|---|---|
+| free context, same task | `/compact [instructions]` — focus instructions accepted ([commands reference](https://code.claude.com/docs/en/commands)) | `/compact` — "summarize the current conversation now" (binary); the [slash-command page](https://learn.chatgpt.com/docs/developer-commands?surface=cli) documents no argument |
+| new task | `/clear [name]` — a new conversation with empty context; aliases `/reset`, `/new` | `/new` — "start a new chat during a conversation"; `/clear` also clears the terminal and starts a new chat |
+
+**Not "checkpoint":** in the Claude Code bundle the command table reads
+`name:"rewind",aliases:["checkpoint","undo"]`, while the commands reference lists `/rewind`
+without that alias. A reminder that said "checkpoint" would send the user to the command that
+rolls code and conversation back. Row M53.
 
 ## Where the limit can be read
 

@@ -1,36 +1,37 @@
 # Measurements — harness and vendor facts, as measured
 
 Project memory for facts akmon relies on but does not control: how Claude Code, Codex and the
-vendor APIs behave. **Grep here before a probe or a documentation lookup**; if a row covers the
-question at the version in use, cite it instead of measuring again. **After a new measurement,
-add a row.**
+vendor APIs behave. **What belongs here:** a fact that does not follow quickly and plainly from
+the vendor's documentation, so establishing it took an experiment — a live probe, a replay of
+transcripts or logs, or a reading of the shipped binary or vendor source. **Not a retelling of
+vendor documentation:** a fact the docs state plainly is cited from the docs where it is used,
+not copied here; a documented fact earns a row only when an experiment confirmed it on a
+version, contradicted it or made it sharper, and the row then records that experiment. **Grep
+here before a probe**; if a row covers the question at the version in use, cite it instead of
+measuring again. **After a new measurement, add a row.**
 
 A row is only as current as the version it names. A version change makes the row a candidate
 for re-verification, not a stale fact: re-check it when the question comes up again, then either
 append the new version to the row (result unchanged) or add a new row and mark the old one
-`superseded by M<n>` (result changed). Rows are never deleted.
+`superseded by M<n>` (result changed). A measured row is never deleted. The ids M4–M7, M10 and
+M11 were retired when this file stopped holding documentation readings — their sources stay in
+the [C80 evidence](reviews/c80-context-fill-20260912.md) — and a retired id is not reused.
 
 **Row format** — one line per fact, so a grep returns the whole record:
 
 `- M<n> · <fact, with the searchable names in it> · <harness/vendor + version> · <date> · <method> · evidence: <link> · used by: <task/D2 ids>`
 
-**Method** says how strong the row is: `probe` (a live harness run), `replay` (existing
-transcripts or logs read back), `source` (vendor source code), `docs` (vendor documentation —
-not probed; say so when it matters). Relative links resolve from `meta/`. Owned by C82.
+**Method** says how the fact was established: `probe` (a live harness run), `replay` (existing
+transcripts or logs read back), `source` (the shipped binary or the vendor source code read).
+Relative links resolve from `meta/`. Owned by C82.
 
 ## Rows
 
 - M1 · Claude transcript: no context-window field; context fill = `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` of the main-chain `message.usage` (output excluded) · Claude Code 2.1.270 · 2026-09-12 · replay (22 main-chain transcripts) · evidence: [C80](reviews/c80-context-fill-20260912.md) · used by: C23, C80
 - M2 · Claude compaction record: `system`/`compact_boundary` with `compactMetadata.trigger` (`manual`/`auto`), `preTokens`, `postTokens`; on this machine 53 records, every one `manual` · Claude Code 2.1.270 · 2026-09-12 · replay · evidence: [C80](reviews/c80-context-fill-20260912.md) · used by: C80
 - M3 · Claude main chain runs past 200K without error: claude-opus-5 to 411,203 fill (412,072 `preTokens`), claude-sonnet-5 to 319,730 · Claude Code 2.1.270 · 2026-09-12 · replay · evidence: [C80](reviews/c80-context-fill-20260912.md) · used by: D2-38, C80
-- M4 · Claude Code 1M window and auto-compaction: on the Anthropic API, Fable 5.1, Fable 5, Sonnet 5 and Opus 4.7+ run the 1M window by default and auto-compact near 967K; set with `/autocompact`, `autoCompactWindow`, `--autocompact`, `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (100K–1M); `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` treats native-1M models as 200K; `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` is not on the official page · Claude Code docs (local build 2.1.270) · 2026-09-12 · docs · evidence: [model-config](https://code.claude.com/docs/en/model-config) · used by: C80
-- M5 · Claude status-line stdin carries `context_window.context_window_size`, `used_percentage`, `remaining_percentage`, `current_usage` (the owner's status-line script reads the first two) · Claude Code 2.1.270 · 2026-09-12 · docs + local script · evidence: [statusline](https://code.claude.com/docs/en/statusline) · used by: C80
-- M6 · Claude hook input carries no context-window or usage field (common fields; SessionStart adds an optional `model`); the UserPromptSubmit-specific section was not rendered in full, so that event is unverified · Claude Code docs · 2026-09-12 · docs · evidence: [hooks](https://code.claude.com/docs/en/hooks) · used by: C80
-- M7 · Claude settings `env` reaches hook commands: `env` sets variables "for every session and its subprocesses" from any settings file (user, project, local); project-scope `env` applies only once the folder is trusted — **not probed**; no earlier record found in akmon or in this machine's transcripts · Claude Code docs (local build 2.1.270) · 2026-09-13 · docs · evidence: [settings-reference](https://code.claude.com/docs/en/settings-reference), [settings](https://code.claude.com/docs/en/settings) · used by: C80/D2-42 (`AKMON_CONTEXT_RECOMMENDED_MAX`)
 - M8 · Codex rollout `token_count`: `info.model_context_window` on every record — 258,400 for gpt-5.6-sol, gpt-5.5, gpt-5.6-luna, gpt-5.4-mini, gpt-5.6-terra; fill = `info.last_token_usage.input_tokens`; `context_compacted` carries no trigger; `session_meta.source` is `cli`, `exec` or a subagent object · codex-cli up to 0.154.0 (150 rollouts on this machine) · 2026-09-12 · replay · evidence: [C80](reviews/c80-context-fill-20260912.md) · used by: C80, C81
 - M9 · Codex auto-compaction: with `model_auto_compact_token_limit` unset the effective window is 95% of `model_context_window` (`effective_context_window_percent: 95`); observed top fill 239,604 = 92.7% of 258,400 · openai/codex `main` + codex-cli 0.154.0 rollouts · 2026-09-12 · source + replay · evidence: [openai/codex](https://github.com/openai/codex) `codex-rs/models-manager/src/model_info.rs`, `codex-rs/core/src/session/context_window.rs`; [C80](reviews/c80-context-fill-20260912.md) · used by: C80, C81
-- M10 · Claude API Models: `ModelInfo.max_input_tokens` — "Maximum input context window size in tokens for this model"; the request needs an API key · Claude API docs · 2026-09-12 · docs · evidence: [models](https://platform.claude.com/docs/en/api/models/list) · used by: C80
-- M11 · Claude API context editing (beta `context-management-2025-06-27`, tool-result and thinking-block clearing, all supported models) and server-side compaction (beta `compact-2026-01-12`, 4.6-and-later models) — Messages API features, not harness settings · Claude API docs · 2026-09-12 · docs · evidence: [context-editing](https://platform.claude.com/docs/en/build-with-claude/context-editing), [compaction](https://platform.claude.com/docs/en/build-with-claude/compaction) · used by: C80
 - M12 · Codex hooks stayed inert in an untrusted scratch repo even with `--dangerously-bypass-hook-trust` and a `-c projects."<path>".trust_level="trusted"` override, cause unisolated at the time (superseded by M25) · codex-cli 0.149.1 · 2026-08-25 · probe · evidence: [N1](reviews/n1-f4-codex-timeout-20260825.md) · used by: D2-23
 - M13 · Codex hook `timeout` key (seconds) is honoured: a 12 s fixture hook (heartbeat every 250 ms) was killed at the configured timeout; `timeoutSec` and any other unknown hook-object key are silently accepted and ignored · codex-cli 0.149.1 · 2026-08-25 · probe · evidence: [N1](reviews/n1-f4-codex-timeout-20260825.md) · used by: C52, D2-23
 - M14 · Codex PreToolUse/SessionStart hook timeout is fail-open: the tool call proceeds after the hook is killed (shell and apply_patch routes both); a hook that traps `SIGTERM`/`SIGINT`/`SIGHUP` receives none of them — no catchable signal is delivered — and codex reports only `hook: <Event> Failed` · codex-cli 0.149.1 · 2026-08-25 · probe · evidence: [N1](reviews/n1-f4-codex-timeout-20260825.md) · used by: C52, D2-23
@@ -70,3 +71,6 @@ not probed; say so when it matters). Relative links resolve from `meta/`. Owned 
 - M48 · On a real package-mode venv, Python stdlib import costs: lazy `__version__` first access about 89ms, `importlib.resources` when wheel data isn't a plain directory about 45ms (pulls `inspect`/`typing`/`tempfile`), `argparse` about 18ms, `subprocess` about 12ms; deferring them cut `import akmon.cli` from 88ms to 32ms · Python 3.14 · 2026-09-06 · probe · evidence: [D2-35](D2_LEDGER.md) · used by: C77, D2-35
 - M49 · Codex `codex app-server` `hooks/list` on 0.154.0 answers akmon's C70 query in the shape `common/codex_hooks.py` validates — the request id echoed, exactly one `result.data` entry for the cwd with list-typed `hooks`/`warnings`/`errors`, each hook in the `HookMetadata` shape; a root with no Codex wiring gets a clean answer with zero hooks. An all-`trusted` population was not observed on this version · codex-cli 0.154.0 · 2026-09-13 · probe · evidence: [C70 on 0.154.0](reviews/c70-hooks-list-0154-20260913.md) · used by: C70, D2-40
 - M50 · A synced consumer whose `.codex/hooks.json` changed after approval (commands moved to package mode, one matcher changed) gets `trustStatus: modified` for every expected entry from `hooks/list` — 4 of 4 on alphavar — the per-entry trust of M19–M21, observed again · codex-cli 0.154.0 · 2026-09-13 · probe · evidence: [C70 on 0.154.0](reviews/c70-hooks-list-0154-20260913.md) · used by: C70
+- M51 · Codex model catalog (`~/.codex/models_cache.json`): all 7 models — gpt-6-astra, gpt-reserve, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, codex-auto-review — carry `context_window` 272,000 with `effective_context_window_percent` 95; rollouts report `model_context_window` 258,400 (= 272,000 × 95%) for every model, gpt-6-astra included — the "258k" Codex shows · codex-cli 0.154.0 · 2026-09-13 · replay (catalog + 157 rollouts) · evidence: [C80 re-check](reviews/c80-context-fill-20260912.md) · used by: C80, D2-42, C81
+- M52 · Codex main (non-subagent) sessions compact below 200k: last fill before `context_compacted` has a median of 174,193 on gpt-5.5 (15 compactions) and 123,180 on gpt-5.6-sol (61); the event carries no trigger, so manual and automatic are not separable · codex-cli 0.154.0 · 2026-09-13 · replay (157 rollouts) · evidence: [C80 re-check](reviews/c80-context-fill-20260912.md) · used by: C80, D2-42
+- M53 · Claude Code `/checkpoint` and `/undo` are aliases of `/rewind` (rolls code and conversation back): the command table in the shipped bundle reads `name:"rewind",aliases:["checkpoint","undo"]`, while the commands reference lists `/rewind` with no aliases — so advice to "checkpoint" leads a user who types `/checkpoint` into a rollback · Claude Code 2.1.270 · 2026-09-13 · source (shipped bundle) · evidence: [C80 evidence](reviews/c80-context-fill-20260912.md) · used by: C80, D2-42

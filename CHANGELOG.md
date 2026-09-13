@@ -152,15 +152,13 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   must add one.
 - **Context-pressure warnings are a share of a recommended context budget — the active context of
   a session intended to carry one task — not the model's window (C23/D2-38, C80/D2-42).** The
-  model-routing hook's bands are 0.85 and 1.0 of `context_pressure.recommended_max` (200000 by
-  default, a configurable owner policy) and read
-  `⚠ context pressure: ~86% of the recommended 200k budget (172000 tokens) — …`. At 0.85 the
-  advice is to checkpoint decisions and state to files/TASKS and, if the task continues, prepare
-  a focused `/compact`; at 1.0 it reads `recommended context budget reached — same task:
-  checkpoint and /compact with a task focus; new task: /clear or start a new session`. Every band
-  at or above 1.0 is one state: its warning fires once (also when the fill jumps straight past
-  100%), then no further band or repeated warning until the fill drops below the lowest band,
-  whatever lowered it. An overlay whose top band stays below 1.0 keeps the checkpoint advice there.
+  model-routing hook speaks at two levels of `context_pressure.recommended_max` (200000 by
+  default, a configurable owner policy): **info** at `info_ratio` 0.85 —
+  `ℹ context pressure: ~86% of the recommended 200k budget — /compact` — and **warn** at the
+  budget itself — `⚠ context pressure: ~100% of the recommended 200k budget — /compact; new task:
+  /new`. The reminder is shown to the owner only (`systemMessage`); the model no longer receives
+  it. Each level speaks once (warn also when the fill jumps straight past 100%), nothing repeats past the
+  budget, and a fill below the info level starts over, whatever lowered it.
   `AKMON_CONTEXT_RECOMMENDED_MAX` (a positive integer) overrides the maximum per user or per
   project — the shell, or `env` in Claude Code's user or project settings. On a model with a
   larger window the share can pass 100%. The registry changed (see Migration), which changes the

@@ -15,11 +15,12 @@ only *detected* here.
   ``available`` + the second-opinion opt-in).
 - **UserPromptSubmit:** silent unless the orchestrator changed — then a one-line notice
   naming the recomputed binding (plus the corridor warning when the switch left the
-  healthy range) — or the context fill crossed a warn band (design §12).
+  healthy range) — or the context fill reached a new pressure level (design §12).
 
-Owner-addressed output — the init instruction, corridor and context-pressure warnings,
-the rebind notice — goes out on **two channels** (requirement 11): ``additionalContext``
-(the model acts on it) and ``systemMessage`` (the owner sees it in the host UI). The
+Owner-addressed output — the init instruction, the corridor warning, the rebind notice —
+goes out on **two channels** (requirement 11): ``additionalContext`` (the model acts on it)
+and ``systemMessage`` (the owner sees it in the host UI). The context-pressure reminder is
+the owner's alone — ``systemMessage`` only: the model has nothing to do with it. The
 steady-state status line stays context-only.
 
 Logic lives in ``tools/model_routing/routing.py``; this entrypoint only adapts the payload.
@@ -126,15 +127,19 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     )
 
     if event != "SessionStart":
-        # Per-turn: silent unless a switch or a pressure-band crossing just landed — zero
-        # token cost otherwise. Both are owner-addressed → dual-channel (requirement 11).
-        # A suppressed rebind speaks up here too: the delegates stay pinned to the old model
-        # until the overlay is fixed, which the owner has to know at the moment it happens.
-        lines = (routing.rebind_notice(config, registry) if rebound else []) + suppressed + pressure
-        if not lines:
+        # Per-turn: silent unless a switch or a new context-pressure level just landed — zero
+        # token cost otherwise. A rebind is owner-addressed → dual-channel (requirement 11);
+        # the pressure reminder goes to the owner only. A suppressed rebind speaks up here too:
+        # the delegates stay pinned to the old model until the overlay is fixed, which the owner
+        # has to know at the moment it happens.
+        dual = (routing.rebind_notice(config, registry) if rebound else []) + suppressed
+        if not dual and not pressure:
             return None
-        text = "\n".join(lines)
-        return HookResult(event_name=event, additional_context=text, system_message=text)
+        return HookResult(
+            event_name=event,
+            additional_context="\n".join(dual) or None,
+            system_message="\n".join(dual + pressure),
+        )
 
     # SessionStart: the transcript (when it named a model) is ground truth, so suppress the
     # weaker settings-model staleness signal once we have detected + bound to it.
@@ -142,16 +147,17 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     reason = routing.staleness(config, registry, settings_model)
     overlay = [brief_warn] if brief_warn else []
     if reason is not None:
-        lines = routing.init_instruction(reason, runtime_rel) + overlay + pressure
+        lines = routing.init_instruction(reason, runtime_rel) + overlay
         return HookResult(
             event_name="SessionStart",
             additional_context="\n".join(lines),
             system_message="\n".join([lines[0], *overlay, *pressure]),
         )
-    lines = routing.status_lines(config, registry, runtime_rel) + overlay + pressure
-    # Owner-addressed subset: warnings (corridor/pressure) and the fact of a rebind; the
-    # steady-state status line itself stays context-only so the UI is quiet when healthy.
-    owner = [line for line in lines if line.startswith("⚠")]
+    lines = routing.status_lines(config, registry, runtime_rel) + overlay
+    # Owner-addressed subset: the corridor warning, the fact of a rebind and — for the owner
+    # alone — the context-pressure reminder at either level (its info line carries ℹ, not ⚠);
+    # the steady-state status line itself stays context-only so the UI is quiet when healthy.
+    owner = [line for line in lines if line.startswith("⚠")] + pressure
     if rebound:
         owner.insert(0, routing.rebind_notice(config, registry)[0])
     # D2 ledger counter (phase 3 of C11): appended to the status block when tracking is in use;
