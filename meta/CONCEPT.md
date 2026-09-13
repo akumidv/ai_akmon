@@ -286,14 +286,16 @@ requirements and pipeline, and adds only project specifics. The role changes in 
 The source of truth is the **markdown instruction and the executable code**; each
 vendor's entry point is a thin **generated** pointer (no duplicated content).
 
-- **skill** = `SKILL.md` (frontmatter + instruction). Native for Claude; a linked
-  document for Codex/Gemini. Required frontmatter is minimal and stable:
-  `name`, `description`, `when_to_use`, `owner`; `name` must match the skill directory.
+- **skill** = `SKILL.md` (frontmatter + instruction), in the Agent Skills format every
+  harness selects from. Required frontmatter is minimal and stable: `name`, `description`
+  (the expected result, then the trigger) and `metadata.owner`; `name` must match the skill
+  directory, and both keep the standard's limits (C79).
 - **tool** = code under `tools/<name>/`; secrets from `.env`. A skill *calls* a tool.
 - **`bin/sync.py`** writes thin generated pointers (`CLAUDE.md`, `GEMINI.md`,
   `.codex/README.md`, `.github/copilot-instructions.md`), deployable hook wiring
-  (`.claude/settings.json`, `.codex/hooks.json`), and `.claude/skills/<name>/SKILL.md`
-  stubs. These deterministic pointers are committed; vendor-local state is not. It does
+  (`.claude/settings.json`, `.codex/hooks.json`), and skill stubs in
+  `.claude/skills/<name>/SKILL.md` and `.agents/skills/<name>/SKILL.md`, each carrying its
+  source's frontmatter. These deterministic pointers are committed; vendor-local state is not. It does
   **not** rewrite `AGENTS.md`; the project block there stays hand-reviewed. Not symlinks
   (break on Windows / in submodules); not a Claude plugin (Claude-only) — we feed Claude +
   Codex + Gemini from one source.

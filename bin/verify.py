@@ -52,7 +52,14 @@ def _sample(ids: list[str], limit: int = 4) -> str:
 
 _DELEGATION_DEFAULT_RE = re.compile(r"\bdelegation\s+is\s+the\s+default\b", re.IGNORECASE)
 _GENERATED_MARKER = sync_tool.GENERATED_MARKER
-_SKILL_REQUIRED_FRONTMATTER = ("name", "description", "when_to_use", "owner")
+# The Agent Skills standard's two required keys, plus akmon's owner, which the standard only
+# admits under `metadata` (C79/D2-41). A nested key is spelled `parent.child`.
+_SKILL_REQUIRED_FRONTMATTER = ("name", "description", "metadata.owner")
+# The standard's limits (agentskills.io/specification), which Anthropic, Copilot and Codex's
+# own validator state as well: a name of lowercase letters, digits and single inner hyphens.
+_SKILL_NAME_MAX = 64
+_SKILL_NAME_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+_SKILL_DESCRIPTION_MAX = 1024
 
 # USE-surface isolation: the documentary surface a consumer reads as guidance must be
 # self-contained and must not even *name* akmon's own development artifacts. A deployed
@@ -369,10 +376,11 @@ class Verifier:
                 fix="Keep every vendor pointer aimed at AGENTS.md.",
             )
 
-        if ".claude/skills" in agents_text:
+        if ".claude/skills" in agents_text or ".agents/skills" in agents_text:
             self.warn(
                 "agents.skill-stub-link",
-                "AGENTS.md should not point to generated .claude/skills stubs; link source skill roots instead",
+                "AGENTS.md should not point to generated .claude/skills or .agents/skills stubs; "
+                "link source skill roots instead",
                 target="AGENTS.md",
                 fix="Replace the generated stub path in AGENTS.md with the source skill root.",
             )
@@ -500,6 +508,7 @@ class Verifier:
             return None
 
         fields: dict[str, str] = {}
+        parent: str | None = None
         for line in lines[1:]:
             if line.strip() == "---":
                 return fields
@@ -512,7 +521,14 @@ class Verifier:
                 )
                 continue
             key, value = line.split(":", 1)
-            fields[key.strip()] = value.strip()
+            key, value = key.strip(), value.strip()
+            # One level of nesting, as `metadata:` needs: an indented line under a key with no
+            # value of its own belongs to that key.
+            if parent is not None and line[:1] in (" ", "\t"):
+                fields[f"{parent}.{key}"] = value
+                continue
+            fields[key] = value
+            parent = None if value else key
 
         self.error(
             "skills.frontmatter-close",
@@ -535,7 +551,7 @@ class Verifier:
                 "skills.required-fields",
                 f"{relative} frontmatter is missing: {', '.join(missing)}",
                 target=relative,
-                fix="Add the listed frontmatter keys to this skill.",
+                fix="Add the listed frontmatter keys to this skill; owner goes under metadata:.",
             )
         if empty:
             self.error(
@@ -550,6 +566,40 @@ class Verifier:
                 f"{relative} frontmatter name must match its skill directory ({source.parent.name})",
                 target=relative,
                 fix=f"Set the frontmatter name to {source.parent.name}.",
+            )
+        name = fields.get("name", "")
+        if name and (len(name) > _SKILL_NAME_MAX or not _SKILL_NAME_RE.fullmatch(name)):
+            self.error(
+                "skills.name-format",
+                f"{relative} frontmatter name {name!r} is not 1-{_SKILL_NAME_MAX} lowercase letters, "
+                "digits and single inner hyphens",
+                target=relative,
+                fix="Rename the skill and its directory to lowercase letters, digits and hyphens.",
+            )
+        description = fields.get("description", "")
+        if len(description) > _SKILL_DESCRIPTION_MAX:
+            self.error(
+                "skills.description-length",
+                f"{relative} description is {len(description)} characters; the limit is {_SKILL_DESCRIPTION_MAX}",
+                target=relative,
+                fix="Shorten the description to the result and the trigger; move detail into the body.",
+            )
+        # The frontmatter is YAML, read here line by line, so the two unquoted shapes a YAML
+        # parser reads differently from how they look are flagged (M56, M57).
+        for key, value in fields.items():
+            if not value or value[0] in "\"'":
+                continue
+            if " #" in value or value.startswith("#"):
+                problem = "an unquoted ' #' starts a YAML comment, and Claude Code and Codex cut the value there"
+            elif ": " in value:
+                problem = "an unquoted ': ' is not valid YAML, and the Agent Skills validator rejects it"
+            else:
+                continue
+            self.error(
+                "skills.frontmatter-yaml",
+                f"{relative} frontmatter {key}: {problem}",
+                target=relative,
+                fix=f"Wrap the {key} value in double quotes.",
             )
 
     def check_skills(self) -> None:

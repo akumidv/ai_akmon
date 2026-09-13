@@ -1,8 +1,8 @@
 ---
 name: release
-description: Conduct a akmon-or-project release as the release role — frame the subject, collect state, classify impact, gate with the owner, verify, and hand off owner-run commands (never execute them).
-when_to_use: When the owner wants to cut a release for a subject (a project package, the akmon tag, or a akmon pin bump) or bump a akmon pin in a consuming project.
-owner: akmon
+description: Leaves one release subject — a project package, the akmon tag, or an akmon pin bump — ready for the owner to land, with the changes since the last release classified by impact, CHANGELOG.md and the version literals bumped, the release suite green, and in chat the exact commit, tag and push commands with the residual risk, which the owner runs and the skill never does. Use when the owner wants to cut a release or bump the akmon pin in a consuming project.
+metadata:
+  owner: akmon
 ---
 
 # release

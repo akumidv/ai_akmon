@@ -261,7 +261,7 @@ This keeps the canonical rules — including the always-on prime directives (D2,
 
 Mechanically-enforced rules (e.g. D5 via the commit-guard hook, step 8) hold regardless;
 the import covers the rules that rely on the agent having *read* them (D2, memory). The
-`.claude/skills/` pointers also apply (written by `sync.py`).
+`.claude/skills/` and `.agents/skills/` stubs also apply (written by `sync.py`).
 
 ### Integration record — `<AITNA_ROOT>/.akmon.toml`
 
@@ -331,7 +331,7 @@ clone:
 - `.codex/hooks.json` (project hook wiring only)
 - `.github/copilot-instructions.md`
 - `.claude/settings.json` (project hook wiring only)
-- `.claude/skills/*/SKILL.md` stubs
+- `.claude/skills/*/SKILL.md` and `.agents/skills/*/SKILL.md` stubs
 
 Do **not** commit vendor-local state or secrets: `.claude/settings.local.json`, caches,
 logs, credentials, and real `.env` files stay local/gitignored. `AGENTS.md` is not
@@ -391,7 +391,7 @@ uvx --from git+https://github.com/akumidv/ai_akmon@<to> akmon init   # or: akmon
 python3 _aitna/akmon/bin/sync.py --check  # confirm no pointer drift
 python3 _aitna/akmon/bin/verify.py --strict
 # Codex only: open /hooks and review/trust changed project-local hooks after .codex/hooks.json changes
-git add _aitna/akmon CLAUDE.md GEMINI.md .codex .github/copilot-instructions.md .claude/settings.json .claude/skills
+git add _aitna/akmon CLAUDE.md GEMINI.md .codex .github/copilot-instructions.md .claude/settings.json .claude/skills .agents/skills
 git commit -m "bump akmon"             # owner commits if the pin/pointers moved
 ```
 In **mode `package`** the same procedure runs without the submodule step, and `to` is the

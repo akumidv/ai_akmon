@@ -51,9 +51,9 @@ CHANGELOG_MD = "# Changelog\n\n## Unreleased\n\n### Added\n- fixture\n"
 
 SKILL_MD = """---
 name: demo
-description: Demonstrates the akmon skill contract.
-when_to_use: Use for verifier fixture coverage.
-owner: akmon
+description: Demonstrates the akmon skill contract. Use for verifier fixture coverage.
+metadata:
+  owner: akmon
 ---
 
 # demo
@@ -469,7 +469,97 @@ def test_skill_missing_required_frontmatter_field_is_error(tmp_path):
     )
     verifier = verify.Verifier(root)
     verifier.run()
-    assert any("frontmatter is missing: owner" in message for message in _messages(verifier.findings, "error"))
+    assert any("frontmatter is missing: metadata.owner" in message for message in _messages(verifier.findings, "error"))
+
+
+def _skill_codes(root: Path, text: str, name: str = "demo") -> set[str]:
+    skill = root / "_aitna" / "akmon" / "skills" / name / "SKILL.md"
+    skill.parent.mkdir(parents=True, exist_ok=True)
+    skill.write_text(text, encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    return {
+        finding.code
+        for finding in verifier.findings
+        if finding.code.startswith("skills.") and finding.severity == "error"
+    }
+
+
+def test_skill_contract_accepts_the_fixture_without_when_to_use(tmp_path):
+    assert "when_to_use" not in SKILL_MD
+    assert _skill_codes(_make_project(tmp_path), SKILL_MD) == set()
+
+
+def test_skill_owner_at_the_top_level_is_not_metadata_owner(tmp_path):
+    root = _make_project(tmp_path)
+    text = SKILL_MD.replace("metadata:\n  owner: akmon\n", "owner: akmon\n")
+    assert _skill_codes(root, text) == {"skills.required-fields"}
+
+
+@pytest.mark.parametrize("name", ["Demo", "-demo", "demo-", "de--mo", "de_mo", "a" * 65])
+def test_skill_name_outside_the_standard_is_error(tmp_path, name):
+    root = _make_project(tmp_path)
+    assert "skills.name-format" in _skill_codes(root, SKILL_MD.replace("name: demo\n", f"name: {name}\n"), name)
+
+
+def test_skill_name_of_64_characters_is_accepted(tmp_path):
+    root = _make_project(tmp_path)
+    name = "a" * 64
+    assert _skill_codes(root, SKILL_MD.replace("name: demo\n", f"name: {name}\n"), name) == set()
+
+
+@pytest.mark.parametrize(("length", "codes"), [(1024, set()), (1025, {"skills.description-length"})])
+def test_skill_description_limit(tmp_path, length, codes):
+    root = _make_project(tmp_path)
+    text = SKILL_MD.replace(
+        "description: Demonstrates the akmon skill contract. Use for verifier fixture coverage.\n",
+        f"description: {'d' * length}\n",
+    )
+    assert _skill_codes(root, text) == codes
+
+
+@pytest.mark.parametrize(
+    ("description", "codes"),
+    [
+        ("Produces a report: counts per herd. Use when asked.", {"skills.frontmatter-yaml"}),
+        ("Produces the okapi #1 digest. Use when asked.", {"skills.frontmatter-yaml"}),
+        ("#1 digest of okapis. Use when asked.", {"skills.frontmatter-yaml"}),
+        ('"Produces a report: counts, the #1 digest. Use when asked."', set()),
+        ("'Produces a report: counts, the #1 digest. Use when asked.'", set()),
+        ("Produces a C# report. Use when asked.", set()),
+    ],
+)
+def test_skill_frontmatter_yaml_hazards(tmp_path, description, codes):
+    root = _make_project(tmp_path)
+    text = SKILL_MD.replace(
+        "description: Demonstrates the akmon skill contract. Use for verifier fixture coverage.\n",
+        f"description: {description}\n",
+    )
+    assert _skill_codes(root, text) == codes
+
+
+def test_skill_frontmatter_yaml_hazard_in_a_nested_value(tmp_path):
+    root = _make_project(tmp_path)
+    text = SKILL_MD.replace("  owner: akmon\n", "  owner: team: akmon\n")
+    assert _skill_codes(root, text) == {"skills.frontmatter-yaml"}
+
+
+def test_agents_md_should_not_link_generated_agents_skill_stubs(tmp_path):
+    root = _make_project(tmp_path)
+    (root / "AGENTS.md").write_text(AGENTS_MD + "\nUse `.agents/skills/demo/SKILL.md`.\n", encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert any(".agents/skills stubs" in message for message in _messages(verifier.findings, "warn"))
+
+
+def test_obsolete_generated_agents_skill_stub_is_error(tmp_path):
+    root = _make_project(tmp_path)
+    stale = root / ".agents" / "skills" / "old-skill" / "SKILL.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text(f"---\n# {sync.GENERATED_MARKER}\nname: old-skill\n---\n", encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert any(".agents/skills/old-skill/SKILL.md" in message for message in _messages(verifier.findings, "error"))
 
 
 def test_skill_frontmatter_name_must_match_directory(tmp_path):
@@ -491,7 +581,10 @@ def test_agents_md_should_not_link_generated_skill_stubs(tmp_path):
     )
     verifier = verify.Verifier(root)
     verifier.run()
-    assert any("generated .claude/skills stubs" in message for message in _messages(verifier.findings, "warn"))
+    assert any(
+        "generated .claude/skills or .agents/skills stubs" in message
+        for message in _messages(verifier.findings, "warn")
+    )
 
 
 def test_stale_generated_pointer_is_error(tmp_path):

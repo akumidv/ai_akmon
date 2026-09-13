@@ -31,14 +31,16 @@ not this task. This task is about the **inventory surface**, not the skill schem
 
 - `AGENTS.md` references `skills/` only as **prose** (the USAGE-layer description); it enumerates
   neither individual skills nor roles. Hand-maintained.
-- `sync.py` generates **stub** pointers per vendor (`.claude/skills/<name>/SKILL.md` →
-  "read the source SKILL.md") and the vendor entry files (`CLAUDE.md`, `GEMINI.md`,
+- `sync.py` generates **stub** pointers per vendor (`.claude/skills/<name>/SKILL.md` and
+  `.agents/skills/<name>/SKILL.md`: the source's frontmatter, then "read the source SKILL.md";
+  C79) and the vendor entry files (`CLAUDE.md`, `GEMINI.md`,
   `.codex/README.md`, copilot). It does **not** write any skill/role inventory into `AGENTS.md`.
 - `verify.py` (T1) checks: vendor pointers import `AGENTS.md`; `AGENTS.md` is **not** itself
   generated (errors on the whole-file `GENERATED` banner); `AGENTS.md` mentions *some* source
-  skill root (coarse); warns if it points at the generated `.claude/skills` stubs.
-- `SKILL.md` frontmatter (T2) is structured and validated: `name` / `description` / `when_to_use`
-  / `owner`. Roles live as `roles/*.md` with a table in `roles/README.md`.
+  skill root (coarse); warns if it points at the generated `.claude/skills` or `.agents/skills` stubs.
+- `SKILL.md` frontmatter (T2, reshaped by C79) is structured and validated: `name` /
+  `description` / `metadata.owner`, within the Agent Skills limits. Roles live as `roles/*.md`
+  with a table in `roles/README.md`.
 
 ## The binding constraint
 

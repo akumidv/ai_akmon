@@ -269,6 +269,99 @@ def test_apply_does_not_delete_user_authored_skill_stub(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
+# skill stubs (C79/D2-41)
+# --------------------------------------------------------------------------------------
+
+_ALPHA_FRONTMATTER = (
+    "name: alpha\ndescription: Produces an alpha report. Use when asked for alpha.\nmetadata:\n  owner: demo"
+)
+
+
+def _planned_stubs(root: Path) -> dict[str, str]:
+    files, errors = sync._planned_files(root)
+    assert errors == []
+    return {
+        planned.path.relative_to(root).as_posix(): planned.content
+        for planned in files
+        if planned.path.name == "SKILL.md"
+    }
+
+
+def test_skill_stub_carries_the_source_frontmatter_in_both_harness_dirs(tmp_path):
+    root = _make_root(tmp_path)
+    source = root / "skills" / "alpha" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(f"---\n{_ALPHA_FRONTMATTER}\n---\n\n# alpha\n\nBody.\n", encoding="utf-8")
+
+    expected = (
+        f"---\n# {sync.generated_banner()}\n{_ALPHA_FRONTMATTER}\n---\n\n# alpha\n\n"
+        "Source skill: [../../../skills/alpha/SKILL.md](../../../skills/alpha/SKILL.md)\n\n"
+        "Read and follow the source SKILL.md. Do not duplicate its contents here.\n"
+    )
+    assert _planned_stubs(root) == {
+        ".claude/skills/alpha/SKILL.md": expected,
+        ".agents/skills/alpha/SKILL.md": expected,
+    }
+
+
+def test_skill_stub_without_source_frontmatter_stays_a_bare_pointer(tmp_path):
+    root = _make_root(tmp_path)
+    _make_skill(root, "skills", "beta")
+
+    stubs = _planned_stubs(root)
+
+    assert set(stubs) == {".claude/skills/beta/SKILL.md", ".agents/skills/beta/SKILL.md"}
+    for content in stubs.values():
+        assert content.startswith(f"# beta\n\n<!-- {sync.generated_banner()} -->\n\nSource skill: ")
+
+
+def test_skill_stub_outside_the_repository_points_through_akmon_path(tmp_path):
+    (tmp_path / "project").mkdir()
+    root = _make_root(tmp_path / "project")
+    source = tmp_path / "wheel" / "skills" / "alpha" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(f"---\n{_ALPHA_FRONTMATTER}\n---\n", encoding="utf-8")
+
+    stubs = sync._skill_stubs(root, source)
+
+    assert [stub.path.relative_to(root).as_posix() for stub in stubs] == [
+        ".claude/skills/alpha/SKILL.md",
+        ".agents/skills/alpha/SKILL.md",
+    ]
+    for stub in stubs:
+        assert "Source skill: `$(akmon path)/skills/alpha/SKILL.md`" in stub.content
+        assert stub.content.startswith(f"---\n# {sync.generated_banner()}\n{_ALPHA_FRONTMATTER}\n---\n")
+
+
+@pytest.mark.parametrize(
+    ("text", "block"),
+    [
+        ("---\nname: a\nmetadata:\n  owner: b\n---\n# a\n", "name: a\nmetadata:\n  owner: b"),
+        ("---\n---\n", ""),
+        ("---\nname: a\n", None),
+        ("# a\n---\nname: a\n---\n", None),
+        ("", None),
+    ],
+)
+def test_skill_frontmatter_block(text, block):
+    assert sync._skill_frontmatter_block(text) == block
+
+
+def test_apply_write_deletes_obsolete_generated_agents_skill_stub(tmp_path):
+    root = _make_root(tmp_path)
+    stale = root / ".agents" / "skills" / "old-skill" / "SKILL.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text(f"---\n# {sync.GENERATED_MARKER}\nname: old-skill\n---\n", encoding="utf-8")
+
+    files, _ = sync._planned_files(root)
+    result = sync._apply(files, write=True, root=root)
+
+    assert result.deleted == [stale]
+    assert not stale.parent.exists()
+    assert (root / ".agents" / "skills").is_dir()  # pruning stops at the skills directory
+
+
+# --------------------------------------------------------------------------------------
 # main()
 # --------------------------------------------------------------------------------------
 

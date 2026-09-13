@@ -1110,8 +1110,9 @@ claims are mechanically true:
 
 **Scanner boundary.** The reverse scanner covers only generator-declared bannered output surfaces:
 the root vendor-pointer population (`CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`,
-`.codex/README.md`), generated `.claude/skills/*/SKILL.md` stubs, and banner-capable package
-materialization below the configured `<aitna>/.akmon/`. It does not turn those parent directories
+`.codex/README.md`), generated `.claude/skills/*/SKILL.md` and `.agents/skills/*/SKILL.md` stubs
+(C79 added the second; a stub carries its banner in the `#`-comment form on line 2, inside its
+frontmatter), and banner-capable package materialization below the configured `<aitna>/.akmon/`. It does not turn those parent directories
 into general scan roots. Arbitrary consumer-root paths and subtrees are out, as are `AGENTS.md`,
 the mounted standard source tree `<aitna>/akmon/`, VCS/cache paths, and every `structured-file` or
 `field-owned` output. Do not follow symlinks; inspect regular UTF-8 files only. A candidate must
@@ -1165,11 +1166,12 @@ boundary is a property of a tree `sync` has run in. The contract suite keeps eac
   with a previous configured root in its `<root>` segment produces exactly one error
   `boundary.stale-generated`. Moving the position limit or matching only the current root fails the
   corresponding isolated fixture;
-- **scanner population:** three positive stale fixtures independently exercise a root vendor
-  pointer, a generated `.claude/skills/*/SKILL.md` stub and a banner-capable package materialization;
+- **scanner population:** four positive stale fixtures independently exercise a root vendor
+  pointer, a generated `.claude/skills/*/SKILL.md` stub, a generated `.agents/skills/*/SKILL.md`
+  stub and a banner-capable package materialization;
   each must emit exactly one error `boundary.stale-generated`. Separate negative fixtures put the
   exact head marker in `AGENTS.md`, the mounted akmon source tree, an arbitrary root user file, an
-  arbitrary file under `.github/`, `.codex/` or `.claude/`, a VCS path and a cache path; each must
+  arbitrary file under `.github/`, `.codex/`, `.claude/` or `.agents/`, a VCS path and a cache path; each must
   emit no boundary finding. Dropping or widening any one scope boundary therefore fails without
   another zone masking it;
 - **non-banner modes:** representatives of `structured-file` and `field-owned` omit the banner and
