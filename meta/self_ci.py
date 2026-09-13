@@ -61,9 +61,9 @@ jobs:
 
 SKILL_MD = """---
 name: demo
-description: Demonstrates the akmon skill contract.
-when_to_use: Use for akmon self-CI fixture coverage.
-owner: akmon
+description: Demonstrates the akmon skill contract. Use for akmon self-CI fixture coverage.
+metadata:
+  owner: akmon
 ---
 
 # demo

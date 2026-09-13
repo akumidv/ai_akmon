@@ -534,8 +534,32 @@ def _skill_sources(root: Path) -> tuple[list[Path], list[str]]:
     return sources, errors
 
 
-def _claude_skill_stub(root: Path, source: Path) -> PlannedFile:
-    """A pointer to one skill's source.
+# Where a harness looks for project skills: Claude Code reads `.claude/skills`; Codex, and
+# Copilot, Gemini CLI and Cursor beside it, read `.agents/skills` (C79/D2-41).
+_SKILL_STUB_DIRS = (".claude/skills", ".agents/skills")
+
+
+def _skill_frontmatter_block(text: str) -> str | None:
+    """The lines between a SKILL.md's opening and closing ``---``, or ``None`` without both."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return "\n".join(lines[1:index])
+    return None
+
+
+def _skill_stubs(root: Path, source: Path) -> list[PlannedFile]:
+    """One skill's stub in each harness's skills directory: its frontmatter, then a pointer.
+
+    The frontmatter is the source's, copied verbatim, because it is what a harness selects a
+    skill by — and only from the file in its own directory: Claude Code lists a stub without
+    frontmatter under its first line, the bare name, and Codex refuses to load it at all
+    (M54, M55). The body stays a pointer, so the instructions keep one source. The banner goes
+    inside the frontmatter as a YAML comment, since the frontmatter has to open the file and
+    both harnesses read the comment as a comment (M54, M55). A source without frontmatter
+    keeps the bare pointer; ``verify`` reports that source.
 
     A relative link whenever the source is in the repository — the project's own skills, and
     every mounted mode. When it is not (mode ``package``: the source is inside the installed
@@ -545,26 +569,27 @@ def _claude_skill_stub(root: Path, source: Path) -> PlannedFile:
     docs — reach the standard through ``akmon path``, not through a path that is not there.
     """
     name = source.parent.name
-    path = root / ".claude" / "skills" / name / "SKILL.md"
+    frontmatter = _skill_frontmatter_block(source.read_text(encoding="utf-8"))
     try:
         source.relative_to(root)
         in_repo = True
     except ValueError:
         in_repo = False
-    if in_repo:
-        relative_source = os.path.relpath(source, path.parent).replace(os.sep, "/")
-        pointer = f"Source skill: [{relative_source}]({relative_source})"
-    else:
-        pointer = f"Source skill: `$({_CLI_NAME} path)/skills/{name}/SKILL.md`"
-    content = f"""# {name}
-
-<!-- {generated_banner()} -->
-
-{pointer}
-
-Read and follow the source SKILL.md. Do not duplicate its contents here.
-"""
-    return PlannedFile(path, content)
+    stubs = []
+    for skills_dir in _SKILL_STUB_DIRS:
+        path = root / skills_dir / name / "SKILL.md"
+        if in_repo:
+            relative_source = os.path.relpath(source, path.parent).replace(os.sep, "/")
+            pointer = f"Source skill: [{relative_source}]({relative_source})"
+        else:
+            pointer = f"Source skill: `$({_CLI_NAME} path)/skills/{name}/SKILL.md`"
+        body = f"{pointer}\n\nRead and follow the source SKILL.md. Do not duplicate its contents here.\n"
+        if frontmatter is None:
+            content = f"# {name}\n\n<!-- {generated_banner()} -->\n\n{body}"
+        else:
+            content = f"---\n# {generated_banner()}\n{frontmatter}\n---\n\n# {name}\n\n{body}"
+        stubs.append(PlannedFile(path, content))
+    return stubs
 
 
 # Fenced blocks first, then inline code spans: the akmon block in AGENTS.md *documents* the
@@ -741,7 +766,8 @@ def _planned_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
         errors.append(str(exc))
     sources, skill_errors = _skill_sources(root)
     errors.extend(skill_errors)
-    files.extend(_claude_skill_stub(root, source) for source in sources)
+    for source in sources:
+        files.extend(_skill_stubs(root, source))
     materialized, materialization_errors = _materialized_files(root)
     files.extend(materialized)
     errors.extend(materialization_errors)
@@ -762,9 +788,9 @@ def materialization_root(root: Path) -> Path:
 def _obsolete_generated_files(root: Path, files: list[PlannedFile]) -> list[Path]:
     """Generated files present on disk that the current plan no longer wants.
 
-    Two directories, two recognition rules, and the difference is deliberate. Under
-    ``.claude/skills/`` the project keeps its **own** skills beside ours, so only a file
-    carrying the generated banner is ours to delete. Under ``<AITNA_ROOT>/.akmon/`` nobody
+    Two kinds of directory, two recognition rules, and the difference is deliberate. Under
+    ``.claude/skills/`` and ``.agents/skills/`` the project keeps its **own** skills beside
+    ours, so only a file carrying the generated banner is ours to delete. Under ``<AITNA_ROOT>/.akmon/`` nobody
     writes but us, so everything unplanned is stale **whether or not it carries a banner** —
     which is load-bearing rather than tidy: the materialized routing registry never carried one
     (it has to stay parseable JSON), so a banner-only sweep would leave exactly that file
@@ -773,9 +799,8 @@ def _obsolete_generated_files(root: Path, files: list[PlannedFile]) -> list[Path
     planned_paths = {planned.path for planned in files}
     obsolete: list[Path] = []
 
-    skills_dir = root / ".claude" / "skills"
-    if skills_dir.is_dir():
-        for path in sorted(skills_dir.glob("*/SKILL.md")):
+    for skills_dir in _SKILL_STUB_DIRS:
+        for path in sorted((root / skills_dir).glob("*/SKILL.md")):
             if path in planned_paths:
                 continue
             if GENERATED_MARKER in path.read_text(encoding="utf-8"):
@@ -823,12 +848,15 @@ def _prune_stop(root: Path, path: Path) -> Path:
     """How far up to prune emptied directories after deleting ``path``.
 
     ``<AITNA_ROOT>`` for the materialization, so ``.akmon`` itself disappears once its last
-    file is gone; the skills directory otherwise.
+    file is gone; the skills directory the stub sat in otherwise.
     """
     try:
         path.relative_to(materialization_root(root))
     except ValueError:
-        return root / ".claude" / "skills"
+        return next(
+            (root / skills_dir for skills_dir in _SKILL_STUB_DIRS if (root / skills_dir) in path.parents),
+            root / ".claude" / "skills",
+        )
     return aitna_root(root)
 
 

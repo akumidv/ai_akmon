@@ -1,8 +1,8 @@
 ---
 name: stats-digest
-description: On-demand session statistics digest — delegation/tier stats from the routing log, tokens per role from the transcript, remaining session/week budget from the Claude API, plus learn-loop recommendations gated on owner confirmation. Digest to chat, full report to a file.
-when_to_use: When the owner asks for work statistics in chat — "статистика работы", "session stats", "work statistics", "usage report", "сколько потратили".
-owner: akmon
+description: Prints a work-statistics digest to chat — delegations by subagent, tier and model from the routing log, tokens per role from the session transcript, the remaining session and week budget — and writes the full report to .claude/stats/, along with learn-loop proposals that are persisted only after the owner confirms them. Use when the owner asks for work statistics in chat, such as "статистика работы", "session stats", "work statistics", "usage report" or "сколько потратили".
+metadata:
+  owner: akmon
 ---
 
 # stats-digest

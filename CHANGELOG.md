@@ -145,6 +145,14 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   silence by a filter that would hide it from them and say nothing.
 
 ### Changed
+- **Skill stubs now carry their source's frontmatter and are written for Codex too (C79/D2-41).**
+  `sync` writes each skill's stub into `.claude/skills/<name>/SKILL.md` **and**
+  `.agents/skills/<name>/SKILL.md`: the source `SKILL.md`'s frontmatter copied verbatim (the
+  generated banner is a YAML comment on its line 2), then the usual pointer. Before, the stub had
+  no frontmatter: Claude Code listed every skill under its bare name, so no description reached
+  its selector, and Codex — which reads `.agents/skills`, as do Copilot, Gemini CLI and Cursor —
+  refused to load a stub without frontmatter and had no stubs anyway. The shipped `release` and
+  `stats-digest` descriptions now state the expected result, then the trigger.
 - **`tools/model_routing/coverage_map.py` requires a scope (C76):** pass `--session <id>` or
   `--all-sessions`. A run that names neither now exits 2. It used to union every session in the
   log silently, so one round's worker could hide a zone another round never touched. The summary
@@ -291,6 +299,13 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   inspect that host state ([N7 evidence](meta/reviews/n7-codex-hook-delivery-20260825.md)).
 
 ### Breaking
+- **The skill frontmatter contract is the Agent Skills format (C79/D2-41).** `verify` now requires
+  `name`, `description` and `metadata.owner`, and no longer requires `when_to_use`. A skill with
+  a top-level `owner:` fails `verify` with `skills.required-fields` (`missing: metadata.owner`).
+  New checks: `skills.name-format` (1–64 lowercase letters, digits and single inner hyphens),
+  `skills.description-length` (at most 1,024 characters) and `skills.frontmatter-yaml` (an
+  unquoted value containing ` #`, which Claude Code and Codex cut there, or `: `, which the Agent
+  Skills validator rejects).
 - **Python 3.11 is now the single runtime floor (C68/D2-34).** Python 3.9 and 3.10 are
   unsupported for both the package and every shipped venv-free entry point. Before adopting this
   release, make both `python3 --version` on the generated-hook host and the interpreter used to
@@ -298,6 +313,13 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   `akmon verify --strict`. This requires a pre-1.0 `x` bump.
 
 ### Migration
+- **Every project with its own skills (`skills/`, `<AITNA_ROOT>/skills/`): reshape each
+  `SKILL.md` frontmatter, then sync (C79/D2-41).** Move `owner: <x>` under a `metadata:` block
+  (`metadata:` on its own line, then `  owner: <x>`). Put the trigger ("Use when …") in
+  `description`, after the expected result, and delete `when_to_use` if it only repeats it — only
+  Claude Code reads that key. Double-quote any value that contains `: ` or ` #`. Then run `akmon sync` and
+  commit the rewritten `.claude/skills/` stubs and the new `.agents/skills/` directory; `akmon
+  verify --strict` confirms the contract. Check: `verify` reports no `skills.*` error.
 - **Projects overlaying `context_pressure` in `<AITNA_ROOT>/model-routing.json`: rename `window_default` →
   `recommended_max` and `windows` → `recommended_max_by_alias` (C23/D2-38).** The old keys are no
   longer read; an overlay that still sets them silently falls back to the 200000 default. Projects

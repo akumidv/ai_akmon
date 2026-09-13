@@ -89,8 +89,9 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
 
 ### O5. Skill contract — PARTIALLY DONE
 
-- **Status.** The minimal contract is closed (T2): required `name` / `description` /
-  `when_to_use` / `owner` frontmatter, checked by `verify.py`. **Remaining:** a richer schema
+- **Status.** The minimal contract is closed (T2, reshaped by C79 to the Agent Skills format):
+  required `name` / `description` / `metadata.owner` frontmatter within the standard's limits,
+  checked by `verify.py`. **Remaining:** a richer schema
   (inputs / outputs / constraints / safety / eval) and **eval gates** in CI before a
   shared-layer change merges.
 - **Gap.** "skill = SKILL.md" is stated, but there is no schema. Skills will not be
