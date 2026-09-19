@@ -32,7 +32,7 @@ project-local hook surface.
   [`../guardrails/_common.md`](../guardrails/_common.md) "Commits & ownership": denies an AI
   `Co-Authored-By` trailer; asks the owner before `push`/`tag`/`merge` and before a `commit`
   on the default branch (landing history). Runs as a **PreToolUse → Bash** hook, and carries the
-  neutral **unclassified-shell-route diagnostic** (C49/D2-19): the advisories below key off a
+  neutral **unclassified-shell-route diagnostic** ([ADR 0012 D02](../meta/decisions/0012-stage1-contracts-and-vocabulary.md)): the advisories below key off a
   file path, so a write that arrives through the shell is invisible to them on Claude as well —
   said once per session on the hook process's stderr, never blocking, never model context.
 - [`session-start-agent.py`](session-start-agent.py) — Claude SessionStart wrapper for the
@@ -95,15 +95,15 @@ project-local hook surface.
   Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob** hook (one combined-matcher entry
   seeing the mutations, the reads/sweeps, and the delegation resets).
 - [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for SessionStart,
-  role-on-code, analysis, and D2 reminders. It emits Codex `hookSpecificOutput` context.
+  role-on-code and analysis reminders. It emits Codex `hookSpecificOutput` context.
   Its PreToolUse matcher is **`Bash|apply_patch`** — one name per *route*, measured on codex
   0.146.0, where `Edit`/`Write`/`apply_patch` are three aliases for the same patch call and
   the shell matches as `Bash`. A Bash command is classified as an edit only when a recognized
   `apply_patch` invocation carries a valid patch envelope (and therefore depends on C47/C48).
-  Every other Bash call stays unclassified. The three separately launched hooks share one atomic
+  Every other Bash call stays unclassified. The two separately launched path advisories share one atomic
   marker, so exactly the first process emits one combined stderr diagnostic per reliable session
   id that the route **may mutate files unseen**; the diagnostic repeats when the id is missing.
-  A malformed edit payload is louder per event but not per handler: the three handlers share an
+  A malformed edit payload is louder per event but not per handler: the two handlers share an
   atomic marker for a reliable session/tool-use pair, the next bad event emits again, and missing
   identity repeats fail-visible.
   Whether Codex surfaces that stderr to the owner is unverified (design
@@ -119,9 +119,9 @@ project-local hook surface.
 
 ## Crash posture (C87)
 
-Every spawned entry point runs under one top-level guard: the eight Claude wrappers and
-`codex-hook.py` ([ADR 0013](../meta/decisions/0013-hook-survivability-and-crash-posture.md) F3,
-amended by C87/D2-45). A crash never blocks the action, and it is always reported:
+Every spawned entry point runs under one top-level guard: the seven Claude wrappers and
+`codex-hook.py` ([ADR 0013 D01](../meta/decisions/0013-hook-survivability-and-crash-posture.md)).
+A crash never blocks the action, and it is always reported:
 
 - **stderr:** one line, `akmon <hook> hook: <ExceptionClass>`. It never carries the exception's
   message, which can hold a path, a key or a payload fragment.

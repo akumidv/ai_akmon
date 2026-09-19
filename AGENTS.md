@@ -27,7 +27,9 @@ no subagents; state the reason.
 - Follow `pipelines/review-flow.md`, `pipelines/design-flow.md`, or
   `pipelines/code-flow.md` for the declared role.
 - Record non-trivial implementation work in `meta/TASKS.md` before code.
-- Architecture changes require an entry in `meta/D2_LEDGER.md` and explicit owner verification.
+- Significant architecture choices require explicit owner acceptance and a stable decision
+  block in a thematic ADR under `meta/decisions/`. Open choices stay in design/tasks;
+  implementation evidence and remaining verification stay with the implementing task.
 - Harness and vendor facts that took an experiment — not what vendor docs state plainly — live in
   `meta/MEASUREMENTS.md` with the version they were verified on. Grep it before a probe, cite a
   row that covers the version in use, and add a row after a new probe, replay or source reading.

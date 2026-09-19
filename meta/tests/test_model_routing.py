@@ -1027,20 +1027,6 @@ def test_hook_session_start_status_line_without_transcript(tmp_path):
     assert "orchestrator=fable" in result.additional_context
 
 
-def test_hook_session_start_status_line_reports_pending_and_approved(tmp_path):
-    root = _init_project(tmp_path)
-    (root / "_aitna" / "D2_LEDGER.md").write_text(
-        "## Pending\n\n| id | x |\n|----|---|\n| D2-1 | p |\n\n"
-        "## Approved\n\n| id | x |\n|----|---|\n| D2-2 | a |\n| D2-3 | a |\n\n"
-        "## Verified\n\n| id | x |\n|----|---|\n",
-        encoding="utf-8",
-    )
-    result = _load_hook().model_routing_result(root, {"hook_event_name": "SessionStart"})
-    expected = "D2 ledger: 1 pending, 2 approved"
-    assert expected in result.additional_context
-    assert expected in result.system_message
-
-
 def test_hook_session_start_rebinds_to_detected_model(tmp_path):
     root = _init_project(tmp_path, "fable")
     transcript = tmp_path / "t.jsonl"

@@ -362,7 +362,14 @@ def _cmd_init(argv: list[str]) -> int:
     return _init.main(argv)
 
 
-_COMMANDS = ("init", "sync", "verify", "check", "path", "hook", "version")
+def _cmd_update(argv: list[str]) -> int:
+    """Move the project to another akmon release, then realign it (A23/C92). Imported lazily, as init is."""
+    from akmon import _update  # noqa: PLC0415 — _update imports _init, which imports this module back
+
+    return _update.main(argv)
+
+
+_COMMANDS = ("init", "update", "sync", "verify", "check", "path", "hook", "version")
 
 # `argparse.add_subparsers` + a REMAINDER positional mis-parses a remainder that starts
 # with "-" (e.g. `akmon sync --check`) — a known argparse limitation. A single top-level
@@ -370,6 +377,7 @@ _COMMANDS = ("init", "sync", "verify", "check", "path", "hook", "version")
 # supplied via the epilog instead of per-subparser help.
 _EPILOG = """commands:
   init      attach the standard to a project (mount + layout + sync + routing)
+  update    move the project to another akmon release, then realign it (init + checks)
   sync      sync generated agent pointers (bin/sync.py)
   verify    verify a consuming project's USE contract (bin/verify.py)
   check     run the checks the project declares in .akmon.toml [check] (bin/check.py)
@@ -377,8 +385,9 @@ _EPILOG = """commands:
   hook      run a hook from the resolved standard tree (called by generated wiring)
   version   print the akmon package version
 
-sync/verify/init accept their own flags, passed through verbatim, e.g.:
+sync/verify/init/update accept their own flags, passed through verbatim, e.g.:
   akmon init --mode package
+  akmon update --ref v0.4.0
   akmon sync --check
   akmon verify --strict
   akmon init --help
@@ -409,6 +418,8 @@ def _dispatch_fixed_command(parser: argparse.ArgumentParser, command: str, argv:
         return _cmd_version()
     if command == "init":
         return _cmd_init(argv)
+    if command == "update":
+        return _cmd_update(argv)
     parser.error(f"unknown command {command!r}")  # pragma: no cover - choices already restrict this
     return 2
 

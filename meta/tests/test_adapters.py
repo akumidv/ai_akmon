@@ -119,13 +119,10 @@ def test_patch_body_paths_cover_add_update_and_delete():
     assert codex_adapter.file_paths(payload) == ["docs/new.md", "src/x.py", "old.txt"]
 
 
-def _codex_project(tmp_path: Path, *, sensitive: str | None = None) -> Path:
+def _codex_project(tmp_path: Path) -> Path:
     root = tmp_path / "proj"
     (root / "_aitna" / "akmon").mkdir(parents=True)
     (root / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
-    if sensitive is not None:
-        config = root / "_aitna" / ".akmon.toml"
-        config.write_text(f"[d2_ledger]\nsensitive_paths = {sensitive}\n", encoding="utf-8")
     return root
 
 
@@ -160,15 +157,6 @@ def test_role_on_code_fires_on_the_captured_codex_payload(monkeypatch, tmp_path,
     assert emitted["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message()
 
 
-def test_d2_ledger_reminder_fires_on_the_captured_codex_payload(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
-    root = _codex_project(tmp_path, sensitive='["src/**"]')
-    _run_codex_hook(monkeypatch, "d2-ledger-reminder", _patch_payload(root, "src/x.py"))
-
-    emitted = json.loads(capsys.readouterr().out)
-    assert "D2" in emitted["hookSpecificOutput"]["additionalContext"]
-
-
 # --------------------------------------------------------------------------------------
 # C67: the rename form — `*** Move to:` names a path the `File:` lines never carry
 # --------------------------------------------------------------------------------------
@@ -196,26 +184,6 @@ def test_the_rename_destination_is_a_measured_path_not_a_guessed_one():
     assert unmeasured == []
     assert measured == ["notes/plan.md", "src/plan.md"]
     assert codex_adapter.unmeasured_path_source(payload) is False
-
-
-def test_a_file_moved_into_a_sensitive_path_reaches_the_d2_advisory(monkeypatch, tmp_path, capsys):
-    # The case the gap cost: neither endpoint is unusual on its own, but the *destination* is
-    # D2-sensitive and the source is not, so reading the `File:` lines alone skipped the
-    # reminder in silence — a hook with nothing to say and a hook that cannot see the path
-    # print the same nothing (C48's shape, one form over).
-    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
-    root = _codex_project(tmp_path, sensitive='["src/**"]')
-    payload = dict(
-        _CODEX_0_146_APPLY_PATCH,
-        tool_input={"command": _RENAME_BODY},
-        cwd=str(root),
-        session_id="sess-c67-move",
-    )
-    _run_codex_hook(monkeypatch, "d2-ledger-reminder", payload)
-
-    captured = capsys.readouterr()
-    assert "D2" in json.loads(captured.out)["hookSpecificOutput"]["additionalContext"]
-    assert captured.err == ""
 
 
 def test_a_rename_carried_by_the_shell_is_still_an_edit(monkeypatch, tmp_path):
@@ -297,7 +265,7 @@ def test_one_bad_edit_event_emits_one_defect_signal_across_handlers(monkeypatch,
         tool_use_id="call-bad-1",
     )
 
-    for hook in ("role-on-code", "analysis-guard", "d2-ledger-reminder"):
+    for hook in ("role-on-code", "analysis-guard"):
         _run_codex_hook(monkeypatch, hook, payload)
 
     assert capsys.readouterr().err.count("no file path could be read") == 1
@@ -328,10 +296,10 @@ def test_bad_edit_without_event_identity_repeats_fail_visible(monkeypatch, tmp_p
         "cwd": str(root),
     }
 
-    for hook in ("role-on-code", "analysis-guard", "d2-ledger-reminder"):
+    for hook in ("role-on-code", "analysis-guard"):
         _run_codex_hook(monkeypatch, hook, payload)
 
-    assert capsys.readouterr().err.count("no file path could be read") == 3
+    assert capsys.readouterr().err.count("no file path could be read") == 2
 
 
 def test_the_defect_signal_stays_off_the_shell_route(monkeypatch, tmp_path, capsys):
@@ -476,16 +444,6 @@ def test_analysis_advisory_fires_on_an_adjacent_heredoc(monkeypatch, tmp_path, c
     assert "may mutate the filesystem" not in captured.err
 
 
-def test_d2_advisory_fires_on_a_patch_the_shell_carried(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
-    root = _codex_project(tmp_path, sensitive='["src/**"]')
-    payload = _bash_patch_payload(root, "src/x.py", "sess-c49-d2")
-    _run_codex_hook(monkeypatch, "d2-ledger-reminder", payload)
-
-    emitted = json.loads(capsys.readouterr().out)
-    assert "D2" in emitted["hookSpecificOutput"]["additionalContext"]
-
-
 @pytest.mark.parametrize(
     "command_text",
     (
@@ -513,7 +471,7 @@ def test_every_nonpatch_shell_route_gets_one_generic_diagnostic_across_handlers(
     root = _codex_project(tmp_path)
     payload = {"tool_name": "Bash", "tool_input": {"command": "ls -la"}, "session_id": "sess-c49", "cwd": str(root)}
 
-    for hook in ("role-on-code", "analysis-guard", "d2-ledger-reminder"):
+    for hook in ("role-on-code", "analysis-guard"):
         _run_codex_hook(monkeypatch, hook, payload)
 
     captured = capsys.readouterr()
@@ -1004,7 +962,7 @@ def test_every_wired_claude_entry_reports_a_crash_to_the_owner_and_exits_zero(tm
     # One stderr line with the hook and the class, the owner's notice as the one stdout document
     # (M69: shown as a notice, never passed to the model), exit 0 (M70: an exit 1 is silent).
     files, _ = _wired_entry_points(tmp_path)
-    assert len(files) == 8
+    assert len(files) == 7
     for filename in files:
         hook = _claude_hook(filename)
         monkeypatch.setattr(hook, "load_payload", _seeded_crash)
@@ -1021,7 +979,7 @@ def test_every_wired_codex_route_reports_a_crash_as_failed(tmp_path, monkeypatch
     # Exit 1 with nothing on stdout: Codex shows the hook `Failed` and the action goes ahead
     # (M68, M71); an exit 0 would read `Completed` and hide the crash.
     _, routes = _wired_entry_points(tmp_path)
-    assert routes == ["analysis-guard", "d2-ledger-reminder", "role-on-code", "session-start"]
+    assert routes == ["analysis-guard", "role-on-code", "session-start"]
     codex_hook = _codex_hook()
     monkeypatch.setattr(codex_hook, "load_payload", _seeded_crash)
     for route in routes:

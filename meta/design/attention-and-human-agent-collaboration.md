@@ -78,6 +78,13 @@ rules inferred from the research:
     D2 as an index of accepted decisions rather than an approval queue. Open design
     questions should live in tasks. This is owner-proposed redesign direction, not
     acceptance of a replacement schema or permission to change existing D2 statuses.
+16. Reconsider mandatory commit-hash recording: the committed acceptance can be found
+    in Git, so a separate verify transition may add no useful information. D2 also
+    contains decisions originating in ordinary tasks, not only ADRs. Avoid recording
+    every question; investigate significant decision records linked from tasks/ADRs
+    versus thematic compound ADRs with independent subsections/statuses and useful
+    keywords/tags. Extend the session sample using simple subagents, including other
+    Codex reviews of Claude changes and other Claude sessions; do not launch the apps.
 
 ### Research questions
 
@@ -113,18 +120,38 @@ gives a proposed sequence, concrete evaluation cases, dependencies, and exit
 conditions. Resume at AP0 using the already collected episodes; do not restart a
 broad literature or transcript survey unless a material gap remains.
 
-The current A22 refinement is [decision work and the D2 register](decision-workflow-and-d2-register.md).
+The first applied A22 refinement is [decision work and the former D2 register](decision-workflow-and-d2-register.md).
 It records two recent Claude episodes and an adjacent Codex review, the actual SHA
-guarantee, competing ADR practices, and a proposed separation of open design work,
-accepted decisions, and implementation evidence. Use its next-decision cursor;
-the case is now supplied, while the replacement contract and comparison results
-remain open. The [earlier slice plan](attention-collaboration-plan.md) preserves the
+guarantee, competing ADR practices, and the separation of open design work, accepted
+decisions, and implementation evidence now accepted in ADR 0016. The decision-record
+carrier is settled; broader A22 behavioral comparison and pilot results remain open.
+The [earlier slice plan](attention-collaboration-plan.md) preserves the
 prior narrower hypothesis and its evaluation rubric, not a competing current plan.
 
-The mission direction and the request to record work come from the owner; the
-proposed interaction architecture is not locked here. A22 tracks refinement, C86
-tracks the gated implementation, and D2-44 isolates verification of the mission
-wording. Those records do not authorize unaccepted contracts, new skills, automatic
+The latest refinement challenges the separate D2 surface itself: Git-derived
+acceptance history, a significance threshold, task-origin decisions and thematic
+organization are now explicit alternatives in that focused plan. Additional session
+evidence is collected in [cross-session review cycles](decision-review-session-cycles.md),
+with attribution limits preserved rather than treating matching task IDs as proof
+of a Claude-to-Codex handoff.
+
+The [thematic ADR comparison](thematic-adr-comparison.md) now works through task-origin
+decisions, independent amendments and a no-record correction. Its recommendation is
+a thematic carrier with stable decision-block identities, no separate D2 authority,
+and individual records when a topic needs splitting. That record model is now accepted
+in [ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md); shared-context
+drift and preservation of old open obligations were explicit C94 migration tests.
+
+The [legacy D2 migration sample](d2-legacy-migration.md) decomposes current examples
+into accepted meaning, evidence, implementation work and historical navigation. It
+shows why D2-49 could not be copied into an accepted ADR and records two status/gate
+contradictions resolved by the cutover. C94 completed routing and legacy lookup for
+all D2 IDs; unresolved timeout evidence remains task-owned by N6.
+
+The mission direction is accepted in
+[ADR 0015 D01](../decisions/0015-mission-and-resource-allocation.md#d01--product-mission-and-economic-criterion);
+the proposed interaction architecture is not locked here. A22 tracks refinement and C86
+tracks gated implementation. Those records do not authorize unaccepted contracts, new skills, automatic
 approval, or consumer changes. See [tracked work](#tracked-work-and-acceptance-boundaries).
 
 ## Working synthesis
@@ -509,7 +536,7 @@ proposals for a later contract, not a new mandatory schema.
 | R4 | Coherent causal account | Can the reader connect the task and criteria to the choice, implementation, result, and remaining work? |
 | R5 | Proportional structure | Do meaningful sections grow with complexity without turning a small edit into a formal essay? |
 | R6 | Low verification cost | Can the owner inspect the decisive evidence without reconstructing raw logs or the entire repository? |
-| R7 | Status precision | Are implementation, testing, review, owner acceptance, and landing distinguished, with any operative D2 status reported accurately rather than treated as proof of all five? |
+| R7 | Status precision | Are decision acceptance, implementation, testing, review, and Git history distinguished rather than one being treated as proof of all the others? |
 | R8 | Decision provenance | Is it clear what the owner chose, what the agent assumed within authority, and what remains undecided? |
 | R9 | Actionable residuals | Does every material unresolved issue have a clear disposition, without claiming an uncreated task exists? |
 | R10 | Goal and scope fit | Does the report assess the intended outcome, including non-goals and important costs, not just feature completion? |
@@ -649,7 +676,7 @@ observations, not claims that every session followed the documents.
 | Delegation of mechanical work | [Common guardrails](../../guardrails/_common.md), lines 105–114 | Keep extraction/checking below the owner-facing synthesis layer |
 | Evidence-based findings, adversarial review, bounded reround, owner resolution | [Review flow](../../pipelines/review-flow.md), lines 20–60 | Integrate factual challenge without an unlimited review loop |
 | Advisory second opinion at selected gates | [Model-routing design](model-routing.md), lines 365–385 | A second opinion can expose disagreement; it is not a neutral final arbiter |
-| Pending, Approved, and Verified distinct from task lifecycle | [D2 design](d2-ledger.md), lines 20–40 and 67–81; [ledger](../D2_LEDGER.md), lines 3–7 | Preserve explicit acceptance and landing evidence in every compact report |
+| Accepted decisions distinct from task and evidence lifecycle | [ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md) | Preserve explicit acceptance, implementation state, and evidence without duplicating Git landing metadata |
 | Attention metrics deferred; current statistics cover other process data | [Tasks](../TASKS.md), C19; [model-routing design](model-routing.md), lines 329–347 and 666–677; [stats implementation](../../tools/model_routing/stats.py), lines 471–525 | Token/delegation counts do not establish comprehension, active attention, or decision quality |
 
 The existing [D2 design](d2-ledger.md), lines 8–16, explicitly addresses owner
@@ -745,8 +772,8 @@ approval, ledger transition, implementation, landing, or task creation is implie
    authorized. Silence, discussion, or acceptance of a recommendation is not
    automatically approval of implementation correctness or a wider clause set.
 7. Hand off only the action permitted by existing rules and explicit owner wording.
-   Approved and Verified remain distinct; existing D2 verification requires the
-   landing commit. Preserve unresolved findings and a clear next step.
+   Decision acceptance, implementation conformance, evidence, and Git history remain
+   distinct. Preserve unresolved findings and a clear next step.
 
 A packet needs stable references to the evidence subject so that a changed diff
 or clause does not inherit stale approval. How to represent that subject and
@@ -763,7 +790,7 @@ acceptance and no formal ADR rejection is recorded by this note.
 | --- | --- | --- | --- |
 | Fixed universal report template and length cap | Easy to remember and lint | Can hide exceptions, induce boilerplate, and ignore discovery | Not suitable as the whole solution; test small editorial defaults only |
 | One comprehensive collaboration skill for every task | Centralized guidance | Always-on overhead; risks duplicating roles and pipelines | Keep open, but avoid making every interaction a ceremony |
-| Small shared principles plus pipeline guidance and an on-demand D2 walkthrough | Reuses current architecture; places extra effort at difficult decisions | Boundaries and invocation need careful design | Best current pilot candidate, not a settled architecture |
+| Small shared principles plus pipeline guidance and an on-demand decision walkthrough | Reuses current architecture; places extra effort at difficult decisions | Boundaries and invocation need careful design | Best current pilot candidate, not a settled architecture |
 | Dedicated arbitrator/verifier agent | Additional review perspective | Correlated errors, unclear authority, new role and coordination cost | Do not make it an acceptance authority; use bounded advisory checks where justified |
 | Tool-generated packet and status display | Reduces assembly and stale-status errors | Can certify syntax while missing a wrong goal or misleading claim | Consider after the useful packet and evidence boundaries are demonstrated |
 | No new mechanism; tighten use of existing architect/review guidance | Minimal maintenance and conceptual cost | Existing pieces may still fail to guide live dialogue | Include as the pilot baseline, not a straw-man alternative |
@@ -953,8 +980,8 @@ changed, determine whether this is merely a context-restoration problem.
 | AP0 — Ground the target | Orchestrator selects a small set of existing discovery, implementation, and acceptance/resumption episodes. A delegate extracts the minimal evidence. Produce case cards: intended outcome, owner contribution, avoidable work, observed failure, desired behavior | Each case has an identifiable loss or missed insight, not just a long message. Ask the owner only for a consequential missing experience or priority; do not repeat the earlier requirements interview |
 | AP1 — Specify the smallest behavior change | Draft a compact situation/action table, truth-preservation checklist, and accepted-choice versus premise-recheck boundary. Link state to existing rationale, evidence, and task owners | Every proposed behavior has a positive example and a counterexample. No new approval authority, mandatory questionnaire, global profile, or duplicated ledger; open architecture points remain marked |
 | AP2 — Evaluate examples before machinery | Compare current guidance with the minimal candidate on the paired cases below. Use fictional or minimized authorized material. Record outputs, evidence subjects, material omissions, unnecessary questions, and reasons recommendations change | Evaluation distinguishes responsiveness from agreement-seeking and rigidity. It can reveal failure of either condition. No known false closure, hidden material risk, or unauthorized action is accepted; results remain scoped to tested cases |
-| AP3 — Refine with a small owner-facing pilot and lock the first slice | After agreement to the trial, use bounded discovery, implementation handoff, and acceptance/resumption cases. Capture a short owner correction and observed reconstruction effort. Compare existing-guidance-only, minimal guidance, and optional walkthrough where appropriate | A concrete benefit is visible without loss of understanding/control. Remove ineffective ceremony. Owner accepts only the useful first contract slice through existing design/ADR/D2 gates, not this entire research catalogue |
-| AP4 — Implement and verify that slice | Record authorized implementation tasks first. Update the owning guidance and worked examples; add a skill only if AP3 establishes a distinct trigger and result. Add deterministic tooling only for demonstrated repetitive mechanics, with tests | Changed behavior is evidenced on the cases, not merely by mandatory words appearing. Source-of-truth, delivery, negative contracts, tests, and limitations are checked. Acceptance, implementation correctness, and landing remain distinguishable; the existing D2 lifecycle applies until an explicitly accepted replacement takes effect, not as a permanent constraint on that replacement |
+| AP3 — Refine with a small owner-facing pilot and lock the first slice | After agreement to the trial, use bounded discovery, implementation handoff, and acceptance/resumption cases. Capture a short owner correction and observed reconstruction effort. Compare existing-guidance-only, minimal guidance, and optional walkthrough where appropriate | A concrete benefit is visible without loss of understanding/control. Remove ineffective ceremony. Owner accepts only the useful first contract slice in an addressable thematic ADR block, not this entire research catalogue |
+| AP4 — Implement and verify that slice | Record authorized implementation tasks first. Update the owning guidance and worked examples; add a skill only if AP3 establishes a distinct trigger and result. Add deterministic tooling only for demonstrated repetitive mechanics, with tests | Changed behavior is evidenced on the cases, not merely by mandatory words appearing. Source-of-truth, delivery, negative contracts, tests, and limitations are checked. Decision acceptance, implementation correctness, evidence, and Git history remain distinguishable under ADR 0016 |
 | AP5 — Controlled adoption and simplification | Apply to a small set of normal tasks; compare useful owner insights, repeated-context questions, omitted caveats, unnecessary reopening, and later rework. Keep a clear disable/revert path for optional behavior | Decide to retain, adjust, shrink, or remove the mechanism. Broader propagation requires evidence appropriate to its claim; no population-wide productivity claim from a small local pilot |
 
 AP0 has the owner's applied obstacle and a bounded follow-up sample; paired case
@@ -1009,9 +1036,11 @@ every task.
   [review flow](../../pipelines/review-flow.md), and
   [code flow](../../pipelines/code-flow.md). Reuse Frame, rationale/revisit-if,
   bounded review, and the design-to-implementation handoff.
-- Acceptance walkthrough: existing [D2 attachments and lifecycle](d2-ledger.md).
-  A skill is a candidate presentation/assembly layer, not an alternative owner of
-  acceptance state. C79 becomes relevant to delivery only if a skill is chosen.
+- Acceptance walkthrough: accepted thematic decision blocks under
+  [ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md), with the
+  former [D2 lifecycle](d2-ledger.md) retained only as historical rationale. A skill
+  is a candidate presentation/assembly layer, not an alternative owner of acceptance
+  state. C79 becomes relevant to delivery only if a skill is chosen.
 - Context and reuse: A21 owns task/session transitions; C80/C81 concern machine
   context pressure, not human cognitive load; C82 concerns measured harness facts.
   Reuse their boundaries. A version change is a relevance-check candidate, not a
@@ -1072,7 +1101,7 @@ not another copy of the operative mission or a new decision database.
 | Efficiency is lifecycle resource allocation, not local saving | Owner clarification during D2-44 discussion: invest more in design or capable high-effort analysis/synthesis when downstream benefit warrants it | Relevant horizon, expected benefit and uncertainty, total costs and achieved outcome; neither cheap calls nor maximum effort prove efficiency |
 | Adapt presentation, not facts to social pressure | Owner's symmetric-challenge requirement; sycophancy and verification-cost research [^21][^25][^26] | Cases must also reward legitimate revision after new constraints; anti-sycophancy must not become rigidity |
 | Cognitive findings can inform akmon interactions | Published evidence above, with different populations and activities | The local pilot may show no benefit or harm; report budgets and transfer effects remain hypotheses |
-| A minimal extension of existing guidance may be enough | Agent recommendation based on existing Frame, rationale, review, D2, and checkpoint mechanisms | If current guidance solves the cases, adopt less; a distinct repeated failure could justify a skill/tool |
+| A minimal extension of existing guidance may be enough | Agent recommendation based on existing Frame, rationale, review, decision-block, and checkpoint mechanisms | If current guidance solves the cases, adopt less; a distinct repeated failure could justify a skill/tool |
 | The combined approach may differentiate the product | Owner's positioning hypothesis | Comparative outcome evidence is absent here; do not promote intent into a superiority claim |
 
 ### Actual choices made in this planning path
@@ -1166,7 +1195,7 @@ into a claimed measured return. This adds an evaluation question, not a new rout
 | --- | --- |
 | What problem, owner knowledge, and premise motivated this? | Task brief, attributed premise table, research sources, bounded session evidence |
 | Which alternatives and criteria led to the recommendation? | This concept's alternative/open-point registers and cases; later the accepted ADR |
-| What exactly was accepted and what is still proposed? | Owning decision record and exact D2 scope, not a summary's implied consensus |
+| What exactly was accepted and what is still proposed? | Exact scope of the owning ADR decision block, not a summary's implied consensus or a legacy lifecycle label |
 | What implementation was authorized and what actually changed? | TASKS design link, accepted slice, actual diff/commit, reported deviations |
 | Does the result conform, and does the premise still hold? | Tests/probes for conformance, separately from behavioral/owner evidence of usefulness |
 | What would require reconsideration? | Premise and scope/version where relevant, counterevidence or changed goal, affected decisions and revisit condition |
@@ -1185,23 +1214,21 @@ table here. The owner requested both the plan and its implementation task.
 - **A22 — design refinement.** AP0–AP3: ground the cases, specify the smallest behavior
   change, evaluate alternatives, and prepare independently acceptable slices. Done
   requires explicit owner acceptance of the slice's premises, criteria, and behavior,
-  its decision record/ADR, and linked acceptance examples. D2-44 verifies the mission
+  its thematic ADR block and linked acceptance examples. ADR 0015 D01 accepts the mission
   wording separately; it does not accept a report protocol or skill.
 - **C86 — implementation.** AP4–AP5, blocked on A22 locking an implementable slice and
   owner authorization to realize it. Start with owning guidance and examples;
   skills/tools are conditional. Done requires conformance evidence, behavioral
   evidence and limitations against accepted premises, accurate follow-up disposition,
-  and the applicable owner-verification/landing contract, including any explicitly
-  accepted replacement transition. Until then, the existing process still applies.
+  and the applicable decision/conformance contract in ADR 0016.
   A failed premise returns the
   affected choice to A22, not to silent feature growth or rewritten success criteria.
-- **D2-44 — mission wording and top-document alignment.** The owner accepted the
+- **ADR 0015 D01 — mission wording and top-document alignment** (`Legacy-ID: D2-44`). The owner accepted the
   framing, including the economic clarification: lifecycle resource effectiveness,
   not local saving, with justified up-front investment in design and model reasoning.
   Acceptance does not extend to the proposed interaction protocol or routing/effort
-  changes. Operational forks receive their own points when specified; they must not
-  borrow this approval. The ledger owns approval/landing state; no other D2 point or
-  task status is changed by this acceptance.
+  changes. Operational forks receive their own blocks when specified; they must not
+  borrow this acceptance. No task status or implementation claim follows from it.
 
 The immediate authorized change is mission/priority documentation and the requested
 backlog/verification records. No runtime implementation, new skill/hook, consumer

@@ -24,8 +24,8 @@ problem (analysis) and building the solution (synthesis) are separate modes.
   instructions.
 - Documentation: design docs, specs, the project's requirement docs, READMEs that
   describe *design* (not usage).
-- Decisions: ADRs (Architecture Decision Records) — one decision, the options, the
-  rationale, the consequences.
+- Decisions: thematic ADRs (Architecture Decision Records) — stable, separately addressable
+  accepted commitments, with their options, rationale, consequences and replacement links.
 - Requirements: deriving and updating the project's R# (architecture) requirements.
 
 **Does NOT:**
@@ -45,7 +45,7 @@ problem (analysis) and building the solution (synthesis) are separate modes.
 | Inputs | Outputs |
 |---|---|
 | a change request / new capability | a **living design concept** (durable, multi-session) — folded into an ADR only when locked |
-| existing code & docs (verify against, don't trust memory) | an ADR for any non-trivial **locked** decision |
+| existing code & docs (verify against, don't trust memory) | an accepted ADR block for any significant **locked** commitment |
 | domain knowledge (`profiles/`, project knowledge) | a **rejected-branches register** (why + revisit-if) |
 | the engineer's questions / friction | updated requirement docs (R#) |
 | | a **design backlog**, separate from the implementation backlog |
@@ -119,9 +119,10 @@ verdict — *adopting* a plan, the recommendation, and the decision are never de
   all roles).
 - **One owner per fact.** Before adding a table/flow/diagram, check whether another doc
   owns it; if so, link instead of duplicating. Update the owner when the fact changes.
-- **Owner-verify load-bearing design.** Any architecture / data-model / math-shaping
+- **Owner-accept load-bearing design.** Any architecture / data-model / math-shaping
   decision must be explained and **explicitly agreed by the owner** before it is written
-  as a requirement — passing examples or plausibility are not enough.
+  as a requirement — passing examples or plausibility are not enough. Acceptance names
+  the bounded meaning; it does not require a second command or one turn per block.
 - **Record rationale and process, not just the choice.** When fixating a decision (ADR,
   contract, task), capture three things: the chosen option; the *justification*,
   including the owner's own comments made during the walkthrough (attribute and keep
@@ -129,6 +130,10 @@ verdict — *adopting* a plan, the recommendation, and the decision are never de
   concretely enough to implement against later. A bare "option B was chosen" loses the
   constraints and the worked-out mechanism that a later, cold implementation session
   needs. The owner's clarifying remarks *are* the specification.
+- **Read the theme and its consequential dependencies.** A grep hit locates a block;
+  it does not establish the whole context. Preserve stable identities when a topic moves
+  or splits. Material replacements get new identities and explicit affected-scope links;
+  shared introductory wording must not silently change previously accepted meaning.
 - **No advisory/dev-history files in the live tree.** Point-in-time reviews are archived;
   decisions become ADRs; git history is the changelog. **A living design concept is the
   exception** — it is neither a review nor a final decision, so it *is* allowed in the
@@ -176,6 +181,7 @@ verdict — *adopting* a plan, the recommendation, and the decision are never de
 - The design is written and linked from the relevant requirement doc.
 - The recommendation includes alternatives/trade-offs and the rationale for the selected
   option, or the change is explicitly small enough that alternatives were not material.
-- Every non-trivial decision has an ADR.
+- Every significant accepted commitment has an identifiable block in its owning thematic
+  ADR; a single-decision ADR remains valid for a small or independently evolving topic.
 - The implementing task exists in `_aitna/TASKS.md` with a clear goal and the design link.
 - The owner has agreed to any architecture/data-model decision.

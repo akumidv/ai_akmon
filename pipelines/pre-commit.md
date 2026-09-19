@@ -18,17 +18,12 @@ on every project regardless of role.
 4. **Docs in sync** — if code or behaviour changed, update the doc that **owns** the
    affected fact (API, env vars, package layout, requirements). Never leave docs stale
    after a code change.
-5. **D2 ledger** *(advisory — warn-first, not a blocking gate)* — when the project tracks
-   owner-verification points, run
-   `python3 _aitna/akmon/tools/d2_ledger/d2_ledger.py check --ledger _aitna/D2_LEDGER.md --changed $(git diff --cached --name-only)`.
-   It **warns** (never blocks) when the staged diff touches a D2-sensitive path
-   (`[d2_ledger] sensitive_paths` in `_aitna/.akmon.toml`) while the ledger still holds
-   `pending` entries — a prompt to log or approve the verify point before the owner commits, so
-   Verify stops being skippable by momentum. An `approved` entry is intentionally clean for
-   landing. After the owner commit exists, `verify --commit <sha>` records it under `Verified`
-   in a follow-up closure commit. Advisory until the fill-habit holds, then promoted to red with
-   `--strict`. A *forgotten* entry (sensitive edit never logged) is caught earlier, per-edit, by
-   the reminder hook — this step covers open `pending` points.
+5. **Decision and evidence continuity** — significant choices in the diff have an accepted
+   thematic ADR block; the task links its implementation evidence and any remaining work.
+   An unaccepted material delta returns to design-flow before implementation proceeds.
+   A correction within an accepted contract needs no new ADR. Do not ask the owner to
+   accept unchanged intent again or create a post-commit SHA/approval bookkeeping step.
+   This is a semantic review of the changed scope, not a replacement ledger command.
 6. **Generated pointers in sync** — run `python3 _aitna/akmon/bin/sync.py --check`
    when the project uses akmon. If it reports drift, run `python3 _aitna/akmon/bin/sync.py`,
    review the generated files, and include the deterministic pointers in the owner's commit.

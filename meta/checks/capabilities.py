@@ -11,8 +11,8 @@ Two rules bind the axes to each other:
 
 * an `ask` or `deny` effect requires every route coordinate and the crash posture to be
   **measured** — an enforcement claim over an unmeasured route is the exact thing this file
-  exists to stop. No claim is exempt: the two D2-29 carried as a warn until their crash posture
-  was measured (C90/D2-47) now meet the rule like any other;
+  exists to stop. No claim is exempt: the two formerly exempt claims carried as a warn until their
+  crash posture was measured (C90, ADR-0012/D05) and now meet the rule like any other;
 * a **measured** row must cite evidence, and a row that measures nothing must cite none.
   Requiring a citation only in free prose is rejected: a pattern cannot tell evidence from
   decoration.

@@ -11,14 +11,13 @@
 > caps here are owner-verified, because before the bounds exist timings are a stress corpus rather
 > than a worst case.
 >
-> **Status: proposed, not verified; C66(b) required.** Every cap below is a proposal. F6 requires explicit owner
-> verification of each cap, each entry mapping and the combined supported corpus; until that
-> happens D2-23 stays pending and C52 stays blocked. Rounds 1–3 are complete, but the axis-7
-> boundary fixture refuted the proposed glob envelope. The owner chose C66 option (b): call-local
-> matcher memoization, followed by the exact boundary rerun and explicit D2-23 owner verification.
-> The two earlier forks — the
-> transcript cap and the `sync` boundary — are **decided** (§6); that is not the same as the cap
-> table being verified.
+> **Status: owner-approved at D2-23.** The owner verified each cap, each entry mapping and the
+> combined supported corpus, with the two cap choices §11 forced: Claude's `file_path` takes axis
+> 4's per-path caps, 4,000 bytes and 64 segments, and a combined cap of 6,000 path × glob pairs
+> bounds a multi-path patch. N6 measures inside this envelope; C52 stays blocked behind D2-49 (F5).
+> Rounds 1–3 are complete. The axis-7 boundary fixture refuted the first glob envelope; the owner
+> chose C66 option (b), and its rerun (§11) holds the caps for one path. The two earlier forks —
+> the transcript cap and the `sync` boundary — were decided before the table (§6).
 
 ## Method and scope
 
@@ -147,8 +146,9 @@ fit that sentence increases timeout cost without evidence.
 | 3 command bytes | 45,167 (§8) | **500,000** | bytes — *raised from 100,000 by round 2* |
 | 3 description bytes | 73 (§8; 93 was a whole log record) | **8,000** | bytes |
 | 4 patch path count | **51** (§9) | **500** | paths |
-| 4 per-path bytes | **143** (§9) | **4,000** | bytes |
-| 4 per-path depth | **11** (§9) | **64** | segments |
+| 4 per-path bytes — Codex patch paths and Claude `file_path` (§11) | **143** (§9); `file_path` 127 | **4,000** | bytes |
+| 4 per-path depth — Codex patch paths and Claude `file_path` (§11) | **11** (§9); `file_path` 10 | **64** | segments |
+| 4 × 7 path × glob pairs per invocation (§11) | 204 | **6,000** | pairs |
 | 5 transcript total bytes | 19,326,201 | **64,000,000** | bytes |
 | 5 transcript line bytes | 113,552 | **1,000,000** | bytes |
 | 5 transcript matching records | 2,311 | **100,000** | records |
@@ -239,6 +239,18 @@ stays outside F6 by the lock's own rule: streaming or indexing an expensive sour
 architecture and evidence work that must bound time and memory, prove equivalence to full
 processing, and rederive the F5 budgets. It carries its own id **[A19](../TASKS.md)** so that the
 cost (b) accepts has an owner instead of living in this paragraph.
+
+**A19 outcome — owner choice (a).** The relocated work landed as an exact change, not as a bound.
+Both scanners read from the end and stop at the first qualifying record, which is the record the
+forward scan kept, and `model-routing` reads once per run instead of twice. The 64,000,000-byte cap
+stands; its cost moves. On the three largest transcripts on this machine (19.3–33.6 MB, warm,
+median of five), one `model-routing` run fell from 437–755 ms to 0.3 ms. `active_role` keeps a
+whole-file worst case, because a record-count bound would forget a role declared early and was
+rejected: a transcript with no main-chain declaration still reads to its first byte, 131 ms on
+33.6 MB against the forward scan's 202 ms, about 0.25 s at the cap by extrapolation, paid by
+`delegation-log` only. The equivalence carriers, and the one intended difference (a line that is
+not UTF-8 is skipped where the forward scan raised), are [C93](../TASKS.md)'s. N6 measures this
+code, so the 1.2 s planning figure above no longer describes `model-routing`.
 
 **Owner choice: `sync` is not covered.** F6 is the hook entry envelope only. `sync --check` reads
 the same config and settings files with the same absence of bounds, but it is not a spawned hook
@@ -555,3 +567,71 @@ peak resident is measured. **F6 is complete as measurement evidence and not yet 
 verification**, because the current matcher cannot support one proposed boundary. C66(b), its
 differential corpus and the exact boundary rerun must complete before the table returns to the owner
 for explicit D2-23 verification.
+
+## 11. C66 — the axis-7 boundary rerun
+
+C66 replaced the recursive matcher in both copies (`hook_core` and the ledger tool) with one table
+per call over (pattern index, path index); [C66](../TASKS.md) names the carriers — a differential
+corpus against the recursion, and a call count that fails the recursion at the boundary. Top-down
+memoization of the recursion was measured first and dropped: its `**` step still branches per
+split, 0.81 s for 200 globs at target depth 64 against the table's 0.028 s.
+
+The fixture is harsher than §10's: 200 globs of 32 segments, four `**` each, `*` in every other
+position and a never-matching tail, so no literal segment prunes the search (16,231 bytes of
+config). Targets sit at 64 segments, axis 4's depth cap. Python 3.11.15; process rows are the
+median of five runs, and a matching variant of the same fixture made every route speak, so the
+silent rows did run the matcher.
+
+| measured | recursion (before) | table (after) |
+|---|---:|---:|
+| matcher, one glob, target depth 64 | 1.5 s | 0.16 ms |
+| matcher, 200 globs, target depth 64 | ~300 s (200 × 1.5 s, extrapolated) | 32 ms |
+| hook process, Claude `Edit`, one path at depth 64 | — | 0.18 s |
+| hook process, Codex `apply_patch`, one path | — | 0.19 s |
+| hook process, Codex `apply_patch`, 500 paths | — | **20.8 s** |
+
+**For one path the axis-7 caps now hold**: the proposed boundary costs 32 ms of matching inside a
+0.18 s process. **Two mappings still do not close**, so the table does not yet go to D2-23:
+
+- **Claude's `file_path` has no target-side cap.** §10 requires the rerun at the deepest target a
+  route admits. Codex patch paths have one (axis 4: 64 segments, 4,000 bytes); a Claude
+  `Edit`/`Write`/`MultiEdit` `file_path` is bounded only by axis 2's 1,000,000-byte string — about
+  500,000 segments. The recorded population is small: 1,506 Claude edit calls in the 51 transcript
+  files on this machine, `file_path` at most 127 bytes and 10 segments (p99 106 bytes, 8 segments).
+  The Claude row above is measured at depth 64; beyond that the mapping stays open until a cap
+  exists. Option: extend axis 4's per-path caps to Claude's `file_path`.
+- **A 500-path patch multiplies the boundary.** The Codex route checks every extracted path until
+  one matches, so a non-matching patch at axis 4's path-count cap pays 500 × 200 glob matches:
+  20.8 s in a `PreToolUse` hook. Reading the globs once instead of per path would not change it —
+  the config read is 2.7 ms of the 33 ms per path. The largest real case is 51 paths (§9) against
+  4 globs (§4), 204 path × glob pairs; the caps admit 100,000. Options: a combined cap on
+  path × glob pairs per invocation, degrading through F6's oversize path; or lower the axis-4 path
+  count or the axis-7 glob count for this route.
+
+Both are cap choices, so they went to the owner rather than to the implementation.
+
+**Owner choice: one per-path cap for both routes.** Claude's `file_path` takes axis 4's per-path
+caps, 4,000 bytes and 64 segments, the same as a Codex patch path. The rerun at depth 64 above is
+therefore the deepest target every path-bearing route admits, and the Claude row closes. The
+recorded maximum, 127 bytes and 10 segments, sits 31× and 6× below it.
+
+**Owner choice: a combined cap on path × glob pairs per invocation.** The product of the extracted
+path count and the configured glob count is checked before any matching; over the cap the reminder
+matches nothing and degrades through F6's oversize path, fail-open with exactly one diagnostic. The
+per-axis caps stay as they are. Only Codex's multi-path route can reach it: a Claude call carries
+one path, so its product is the glob count, at most 200. Measured at the boundary with the same
+fixture (Codex `apply_patch`, target depth 64, median of five whole-process runs):
+
+| paths × globs | pairs | no match | match |
+|---|---:|---:|---:|
+| 1 × 200 | 200 | 0.24 s | 0.20 s |
+| 30 × 200 | 6,000 | 1.60 s | 0.18 s |
+| 31 × 200 | 6,200 | 1.70 s | 0.18 s |
+
+**Proposed cap: 6,000 pairs**, 29× the largest real product (204). The recommendation this choice
+followed estimated about 1 s at 6,000 pairs from the matcher alone; the whole process measures
+1.6 s, about 47 ms per non-matching path rather than the 32 ms of matching above. If the envelope
+should hold near 1 s instead, 4,000 pairs (20 paths × 200 globs) extrapolates to about 1.1 s.
+**Owner choice at D2-23: 6,000 pairs**; the 4,000-pair alternative was not taken. The combined supported corpus (§8) takes
+the pair cap as its Codex-route boundary: its largest supported patch is 500 paths against 12
+globs, or 30 paths against 200, never both maxima at once.

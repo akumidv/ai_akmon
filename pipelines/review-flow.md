@@ -19,7 +19,8 @@ thing* goes to code-flow.
 
 1. **Frame** — fix the **subject** (product / component / element) and the **level**, and name
    the **yardstick** the subject is judged against (goal, vision, requirement, environment,
-   user expectation). An unstated yardstick produces unfalsifiable findings.
+   user expectation). Link the applicable accepted decision blocks and distinguish checking
+   conformance from challenging their premises. An unstated yardstick produces unfalsifiable findings.
 2. **Decompose** — break the subject into parts and relations. Sweep deliberately: top-down
    (does the structure serve the goal?), bottom-up (do the parts add up?), and horizontal (do
    components and their interfaces fit?). Read the code/docs/runtime — verify against source,
@@ -43,7 +44,9 @@ thing* goes to code-flow.
    yardstick or a problem spanning several boundaries → escalate. **Stop at construction** —
    proposing the new structure is synthesis, not review.
 6. **Report** *(gate)* — deliver the findings in chat first. Write it into a review doc or the
-   backlog only after the owner agrees (Analysis before mutation).
+   backlog only after the owner agrees (Analysis before mutation). Separate implementation
+   defects, changed premises and missing evidence; none is resolved merely by an ADR's
+   acceptance. Reuse unchanged rationale without waiving requested full review or checks.
 
 ## Gates (must hold to advance)
 

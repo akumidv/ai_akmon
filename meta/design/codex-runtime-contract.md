@@ -1,8 +1,8 @@
 # Design: Codex runtime contract and package-mode hardening
 
-> Implementation task: [C39](../TASKS_ARCHIVE.md). Owner-verified in
-> [D2-13](../D2_LEDGER.md) (clauses a–c, **Approved**), with the capability-matrix clause signed
-> against the delivery caveat N7 added to the matrix.
+> Implementation task: [C39](../TASKS_ARCHIVE.md). The runtime choice is accepted in
+> [ADR 0009 D02](../decisions/0009-packaging-package-carrier-and-mount-modes.md#d02--executable-and-runtime-ownership),
+> with the capability-matrix clause interpreted against the delivery caveat N7 added to the matrix.
 
 ## Frame
 

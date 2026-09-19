@@ -11,7 +11,7 @@ release-time version join (C54, F9/6) — so the rule has one owner rather than 
 Stdlib-only and dependency-free by contract: it ships in ``bin/`` beside ``findings.py`` and
 must import on the declared Python floor with no venv.
 
-Two questions are answered here and nowhere else:
+Three questions are answered here and nowhere else:
 
 :func:`split_version`
     What part of a recorded string names the version, and how far past it the tree is. A
@@ -25,6 +25,10 @@ Two questions are answered here and nowhere else:
     ``.postN``, ``+local``), any unrecognized spelling, and any version a ``describe`` distance
     says the tree has already moved past — is non-final. No spelling falls between the two, so
     no caller needs a third branch and no version escapes both rules.
+:func:`order_key`
+    Which of two versions comes first — what ``akmon update`` asks before it moves a pin, so
+    that it never moves one backwards unasked (A23). A development version comes before its
+    release, a ``git describe`` distance after it.
 """
 
 from __future__ import annotations
@@ -59,3 +63,31 @@ def is_final(recorded: str) -> bool:
     """True when ``recorded`` names a release: exactly ``X.Y.Z``, and not past a tag."""
     base, ahead = split_version(recorded)
     return ahead is None and FINAL_RE.fullmatch(base) is not None
+
+
+#: The release a version names or is on the way to: its leading ``X.Y.Z``.
+_RELEASE_PREFIX_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+
+def order_key(recorded: str) -> tuple[int, int, int, int] | None:
+    """Where ``recorded`` sits among releases, for ordering versions; ``None`` when unrecognized.
+
+    ``(X, Y, Z, position)``. ``position`` is 0 for the release itself, -1 for a PEP 440
+    pre-release or development version of it (``aN``, ``bN``, ``rcN``, ``.devN``), which comes
+    before it, and 1 for anything past it: a ``git describe`` distance, a ``-dirty`` tree, a
+    ``.postN`` or a ``+local`` build. Two versions past the same release compare equal, because
+    their order is not a fact a version string carries.
+    """
+    base, ahead = split_version(recorded)
+    match = _RELEASE_PREFIX_RE.match(base)
+    if match is None:
+        return None
+    rest = base[match.end() :]
+    if ahead is not None or rest.startswith(("-", ".post", "+")):
+        position = 1
+    elif rest:
+        position = -1
+    else:
+        position = 0
+    major, minor, patch = (int(part) for part in match.groups())
+    return major, minor, patch, position

@@ -107,6 +107,47 @@ surface in the consumer repository and runs the hooks out of the installed packa
   recorded `mount`. This supersedes D2-26 for that one function; see the
   [note](../design/packaging/mount-resolution-owner.md).
 
+## Addressable accepted decision blocks
+
+### D01 — Supported carriers and source ownership
+
+`Decision-ID: ADR-0009/D01`
+`Legacy-ID: D2-12, D2-25`
+
+The supported carriers are `submodule`, `vendored`, `subtree`, and `package`. Akmon's source tree
+remains authoritative; generated or materialized files are derived, never a second source. Package
+mode is a development dependency and materializes only documentary assets that cannot be addressed
+portably from the installed package.
+
+### D02 — Executable and runtime surface
+
+`Decision-ID: ADR-0009/D02`
+`Legacy-ID: D2-13, D2-26, D2-33, D2-35`
+
+Mounted carriers execute their recorded tree; package mode executes the installed package through
+the CLI and does not copy the hook/tool runtime. Project-root discovery, executing-tree resolution
+and shared utilities have distinct owners. Later package-execution amendments replace only older
+materialization/runtime-root premises, not the shared reader or root contracts.
+
+### D03 — Project root and integration-record reading
+
+`Decision-ID: ADR-0009/D03`
+`Legacy-ID: D2-32, D2-39`
+
+One shared resolver owns project and development-root discovery. One lenient reader owns ordinary
+integration-record consumers; strict reading is used only where malformed configuration must fail
+visibly. Removing the legacy ledger removes its special strict reader rather than changing the
+meaning of the shared reader.
+
+### D04 — Python floor and manifest pin semantics
+
+`Decision-ID: ADR-0009/D04`
+`Legacy-ID: D2-34, D2-43`
+
+The supported Python floor is 3.11 for package metadata, tooling and generated bare-Python entry
+points. Manifest inspection parses supported TOML structures and returns an explicit `unreadable`
+result when it cannot establish the pin; text search is not a substitute for parsing.
+
 ### Considered alternatives
 
 - **Keep materializing the executable surface.** It existed for exactly one reason — the wiring

@@ -106,6 +106,37 @@ no declared model remain counted under the `-` requested-model bucket and are no
 named model; Codex has no equivalent attribution. Rejected: payload-only attribution, because
 ordinary generated-agent calls omit the frontmatter pin; rendering semantic tier labels as model
 names, because that asserts a pin that does not exist; and reconstructing old rows from the current
-binding, because a rebind would rewrite historical attribution. The operative contract and carriers
-are [D2-5](../D2_LEDGER.md) and the design's
+binding, because a rebind would rewrite historical attribution. The operative decision is
+[ADR-0004/D01](#d01--provider-selection-diversity-and-observable-attribution), with carriers in the design's
 [§4.4](../design/model-routing.md#44-routing-observability-code--delegation-log-outside-model-context).
+
+## Addressable accepted decision blocks
+
+### D01 — Provider selection, diversity, and observable attribution
+
+`Decision-ID: ADR-0004/D01`
+`Legacy-ID: D2-1, D2-5`
+
+The semantic task kind selects a capability tier; local vendor discovery binds that tier to a
+model. Diversity is advisory input, never a substitute for owner acceptance. Attribution reports
+only an explicit invocation override or a generated binding Akmon can observe; it never infers
+runtime identity from a tier name.
+
+### D02 — Second-opinion executable ownership
+
+`Decision-ID: ADR-0004/D02`
+`Legacy-ID: D2-30`
+
+The versioned vendor command map is the sole constructor of second-opinion invocations. The
+executable prefix is narrow and unambiguous; shell-string interpretation and duplicated
+constructors are rejected. Vendor capability validation remains separate evidence.
+
+### D03 — Tail-first transcript retrieval
+
+`Decision-ID: ADR-0004/D03`
+`Legacy-ID: D2-50`
+
+Transcript consumers searching for the last qualifying record read from the end and stop when the
+answer is established. The routing hook shares one transcript read per run. A record-count window
+is rejected because it can discard an early declaration still governing the session; invalid
+UTF-8 records are skipped rather than making the advisory hook fail.

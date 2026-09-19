@@ -1,14 +1,16 @@
 # 0014 — Code rules: principles, a standard ruff configuration, language and environment profiles
 
-- **Status:** Proposed — owner decisions taken (this session, two rounds); **D2-48** Pending.
+- **Status:** Accepted.
 - **Owner:** akuminov@gmail.com
 - **References:** [design `code-rules-and-profiles`](../design/code-rules-and-profiles.md) (the
   full classification and slices) ·
   [C89 baseline](../reviews/c89-python-rule-baseline-20260913.md) ·
   [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html) ·
   [ADR 0009](0009-packaging-package-carrier-and-mount-modes.md) (package mode, the materialized
-  guardrails) · tasks [C89, C91](../TASKS.md), C83 (the one integration-record reader) · ledger
-  row D2-48.
+  guardrails) · tasks [C89, C91](../TASKS.md), C83 (the one integration-record reader).
+
+`Decision-ID: ADR-0014/D01`
+`Legacy-ID: D2-48`
 
 ## Context
 

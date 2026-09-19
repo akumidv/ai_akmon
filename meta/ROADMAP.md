@@ -12,8 +12,10 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
 
 1. **Human attention and joint decision quality.** Improve the whole collaboration:
    goals and future-use knowledge, plans, truthful proportional reporting, useful
-   disagreement, and resumption without repeated context reconstruction. D2 is a pilot
-   case, not the boundary. Start with the [research and AP0–AP5 plan](design/attention-and-human-agent-collaboration.md#refinement-and-implementation-plan)
+   disagreement, and resumption without repeated context reconstruction. The former D2
+   workflow is the first case study, not the boundary; its replacement is recorded in
+   [ADR 0016](decisions/0016-decision-records-and-owner-acceptance.md). Start with the
+   [research and AP0–AP5 plan](design/attention-and-human-agent-collaboration.md#refinement-and-implementation-plan)
    and its design/implementation tasks A22/C86.
 2. **Token efficiency for quality.** Develop the existing roles, subagent delegation,
    model selection, skills, and hook controls against the cost of errors and rework.

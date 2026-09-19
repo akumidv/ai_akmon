@@ -1,13 +1,16 @@
 # 0007 — D2 ledger: mechanical tracking of owner-verification points
 
-- **Status:** Accepted (mechanizes the guardrails/_common.md owner-verify rule; implementation
-  C11; details + rationale in the design source, which stays the detail owner).
+- **Status:** Superseded by [ADR 0016](0016-decision-records-and-owner-acceptance.md).
 - **Owner:** akuminov@gmail.com
 - **References:** design source [`meta/design/d2-ledger.md`](../design/d2-ledger.md) (§4 locked
   decisions, §5 mechanism, §6 build phases) · backlog [C11](../TASKS.md) · guardrail
   [`guardrails/_common.md`](../../guardrails/_common.md) "Verify against reality" (owner-verify).
 
 ## Context
+
+> Historical record only. The ledger lifecycle, reminder, counter, sensitive-path configuration
+> and manually supplied landing SHA described below are no longer operative. This text is retained
+> to explain the replaced mechanism and its original trade-offs.
 
 D2 — the owner-verify prime directive (changes to math, DataFrame/data shape, architecture) —
 is enforced only by memory today. A verify point is born mid-dialogue ("D2 pending" in chat) and

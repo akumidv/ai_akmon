@@ -166,7 +166,9 @@ packet is owner-verified.
 
 It does **not** choose a duration. The sentinel `3` proves mechanics only and is explicitly not a
 production budget; the literal is F5's, owned by [N6](../TASKS.md), and still needs N5's caps
-verified first. D2-23 stays pending until the F4 + F6 + F5 packet is complete and owner-verified.
+verified first. The owner later split the packet's verification: [D2-23](../D2_LEDGER.md) verifies
+this F4 evidence with the F6 caps, and D2-49 verifies F5. F4 is stamped to the build probed here, so
+D2-49's live verification re-establishes it on a newer Codex build before that row can be approved.
 
 
 ## Exact matcher — the `apply_patch` route

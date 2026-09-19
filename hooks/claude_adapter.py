@@ -82,7 +82,7 @@ def print_result(result: HookResult | None) -> None:
 def run_guarded(hook_name: str, decide: Callable[[], HookResult | None]) -> int:
     """Run one Claude entry point under the crash guard every spawned entry carries.
 
-    ADR 0013 F3 as amended by C87/D2-45. ``decide`` computes the entry's whole result and writes
+    ADR-0013/D01. ``decide`` computes the entry's whole result and writes
     nothing to stdout; the one document is rendered first and written after, so a crash can only
     land before the write — the single-write property the guard rests on, and the reason a render
     failure is caught here too. A crash is reported to two readers: one stderr line naming the

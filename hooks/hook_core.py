@@ -14,7 +14,6 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
-from fnmatch import fnmatchcase
 from pathlib import Path
 
 # Where the dev layer is, what it is called, and how the project root is found are not this
@@ -36,7 +35,6 @@ from common.project_root import (  # noqa: E402
     akmon_mount,
     find_project_root,
 )
-from common.record import read_akmon_toml  # noqa: E402
 
 
 def akmon_runtime_root(project_root: Path) -> Path:
@@ -47,7 +45,7 @@ def akmon_runtime_root(project_root: Path) -> Path:
     the wheel's embedded ``akmon/_tree`` when the wiring called ``akmon hook`` (C77). No
     record read, no directory probe, and no way for the two to disagree.
 
-    This replaces the record-vetoes-the-directory rule (C69/D2-26), which was correct only while
+    This replaces the record-vetoes-the-directory rule (C69, ADR-0009/D02), which was correct only while
     mode ``package`` copied the hooks — and the whole runtime surface they read — into
     ``<AITNA_ROOT>/.akmon/``. With the materialization narrowed to the guardrails the
     consumer's ``AGENTS.md`` imports, that directory holds no registry at all, and pointing
@@ -109,7 +107,7 @@ def hook_failure_diagnostic(hook_name: str, exc: BaseException) -> str:
 
 
 def hook_failure_notice(hook_name: str, exc: BaseException) -> str:
-    """What the owner is told when an entry point crashed (C87/D2-45): the fact, then the command.
+    """What the owner is told when an entry point crashed (C87, ADR-0013/D01): the fact, then the command.
 
     The same two facts as :func:`hook_failure_diagnostic` and nothing from the exception's text.
     It is written inside a crash handler, so it reads nothing that can raise — the dev-layer
@@ -190,7 +188,7 @@ def claim_diagnostic_marker(kind: str, identity: str | None) -> bool:
     """Atomically claim one stderr diagnostic for ``identity``; True means "emit now".
 
     Two throttle domains, deliberately different and stated here because the difference reads
-    as an inconsistency otherwise (D2-19 c, D2-21 a):
+    as an inconsistency otherwise (ADR-0012/D02):
 
     - **route-level** diagnostics describe what a *route* can do, so they throttle by session
       id — one statement per session, even though a later call on the same route is silent;
@@ -201,7 +199,7 @@ def claim_diagnostic_marker(kind: str, identity: str | None) -> bool:
     marker, which would let one early session hide every later gap. The name is hashed so a
     session id containing ``/`` cannot escape the tempdir — not for secrecy: the three
     advisory markers in this module still carry a literal session id, which is the convention
-    gap C36(a) owns (D2-21 b). Marker lifecycle — stale files outliving their session, and
+    gap C36(a) owns (ADR-0012/D02). Marker lifecycle — stale files outliving their session, and
     migrating those three onto this helper — is the rest of C36(a).
     """
     if not identity or identity == "nosession":
@@ -226,7 +224,7 @@ def claim_diagnostic_marker(kind: str, identity: str | None) -> bool:
 UNCLASSIFIED_SHELL_ROUTE_NOTICE = (
     "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot "
     "classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard "
-    "and the D2 reminder receive no inferred target"
+    "and the path-keyed reminders receive no inferred target"
 )
 
 
@@ -237,7 +235,7 @@ def report_unclassified_shell_route(session_id: str | None) -> None:
     command string is a guess — so this route is *reported*, never classified. It states the
     route's capability, not a guessed effect (C49).
 
-    Vendor-neutral by owner decision at D2-19(e): the blind spot is not Codex's. On Claude the
+    Vendor-neutral by ADR-0012/D02: the blind spot is not Codex's. On Claude the
     same effect reaches the filesystem through ``Bash`` while the advisories sit on the edit
     tools, so the route was not merely unclassified there — it was unreported. Both vendors now
     emit one message from one implementation, because two copies of a diagnostic are two things
@@ -281,7 +279,7 @@ def current_git_branch() -> str:
         return ""
 
 
-# ask->deny escalation for unattended sessions (C31/D2-10, owner decision). A live test
+# ask->deny escalation for unattended sessions (C31, ADR-0006/D02). A live test
 # showed a hook-forced `ask` is a silent no-op — no prompt, no block — in a Claude Code
 # background/child session running in `acceptEdits` mode; the PreToolUse payload carries a
 # `permission_mode` field (same enum on Codex) that tells a hook whether an interactive
@@ -302,7 +300,7 @@ def _escalate_unattended_ask(result: HookResult, permission_mode: str | None) ->
         permission_reason=(
             f"{result.permission_reason} [escalated ask→deny: permission_mode="
             f"{permission_mode!r} is not the interactive default, so 'ask' cannot be trusted "
-            "to reach the owner (D2-10/C31) — re-run from an attended default-mode session if "
+            "to reach the owner (ADR-0006/D02, C31) — re-run from an attended default-mode session if "
             "this was genuinely intended.]"
         ),
         system_message=result.system_message,
@@ -506,7 +504,7 @@ def _project_relative_posix(file_path: str, root: Path) -> str | None:
     one directory through different symlinked aliases (``/tmp`` vs ``/private/tmp``, a
     checkout reached through a linked home). A traversal escapes both, so the guard holds.
 
-    That guard is **advisory-grade, not containment** (D2-17 d): it stops ``..``, but a link
+    That guard is **advisory-grade, not containment** (ADR-0012/D01): it stops ``..``, but a link
     inside the tree pointing out of the repository stays lexically inside the root and still
     classifies as a project target. Catching it would require resolving, which is the
     silencing failure above. Harmless for reminders — one extra reminder at worst — and not
@@ -546,7 +544,7 @@ def classify_target(file_path: str, root: Path | None = None) -> str:
     # one cannot safely decide whether an arbitrary absolute fixture lies outside a project.
     # The pre-C47 unstripped behaviour therefore survives behind this default, and a payload
     # with no `cwd` still reaches `find_project_root(None)` → `Path.cwd()`. Both are accepted
-    # (D2-17 a): no wired path takes either branch, and a mandatory `root` would change three
+    # (ADR-0012/D01): no wired path takes either branch, and a mandatory `root` would change three
     # signatures without changing a single answer.
     if root is None and path.is_absolute():
         normalized = path.as_posix()
@@ -647,159 +645,6 @@ def analysis_write_result(
     return HookResult(event_name="PreToolUse", additional_context=analysis_before_mutation_message())
 
 
-# D2 ledger reminder — an edit to a project-declared D2-sensitive path (math / data shape /
-# architecture; the owner-verify guardrail) should be logged in the ledger so the point survives
-# to commit time, where Verify is caught (design meta/design/d2-ledger.md §2.2, phase 2 of C11).
-# PreToolUse reminds once per session on the first such edit. The sensitive-path globs are the
-# project's, read from ``<aitna>/.akmon.toml`` ``[d2_ledger] sensitive_paths`` (§5.A). When
-# unconfigured the hook stays silent — a per-edit reminder can't guess what's sensitive without
-# fatiguing every edit; the coarse `check` gate and the session counter are the nets there.
-# Advisory only — task classification is the agent's call, so it never blocks.
-
-
-def d2_sensitive_paths(root: Path) -> list[str]:
-    """The project's ``[d2_ledger] sensitive_paths`` globs from ``<aitna>/.akmon.toml`` (``[]`` if unset).
-
-    Reads through the shared ``common.record`` reader (C75) rather than a second parser of its
-    own: the same lenient parse every other caller gets, degrading to ``{}`` on an absent or
-    unreadable record and to a partial dict on a malformed one, so an abnormal host can never
-    turn this advisory into a hook crash.
-    """
-    data = read_akmon_toml(aitna_root(root) / ".akmon.toml")
-    section = data.get("d2_ledger")
-    globs = section.get("sensitive_paths") if isinstance(section, dict) else None
-    return [g for g in globs if isinstance(g, str)] if isinstance(globs, list) else []
-
-
-def _segments_match(pattern_segments: list[str], path_segments: list[str]) -> bool:
-    """Recursive ``/``-aware glob match.
-
-    ``**`` spans zero or more whole segments, ``*``/``?`` stay within one segment (via
-    ``fnmatchcase``). Mirrors ``PurePath.full_match`` but runs on any the supported Python
-    3.11+ host, so ``full_match`` (3.13+) is not available here.
-    """
-    if not pattern_segments:
-        return not path_segments
-    head, *rest = pattern_segments
-    if head == "**":
-        return any(_segments_match(rest, path_segments[i:]) for i in range(len(path_segments) + 1))
-    if not path_segments:
-        return False
-    if fnmatchcase(path_segments[0], head):
-        return _segments_match(rest, path_segments[1:])
-    return False
-
-
-def is_d2_sensitive_path(file_path: str, root: Path, globs: list[str]) -> bool:
-    """Whether ``file_path`` matches one of the project's D2-sensitive ``globs`` (``**``-aware)."""
-    relative = _project_relative_posix(file_path.replace("\\", "/"), root)
-    if relative is None:
-        return False
-    path_segments = [s for s in relative.split("/") if s]
-    return any(_segments_match([s for s in glob.split("/") if s], path_segments) for glob in globs)
-
-
-def d2_ledger_reminder_message(root: Path) -> str:
-    """Owner-facing text for the D2 ledger reminder."""
-    tool = f"{runtime_root_display(root)}/tools/d2_ledger/d2_ledger.py"
-    ledger = f"{aitna_root_name()}/D2_LEDGER.md"
-    return (
-        "[akmon] D2 ledger check — you are editing a D2-sensitive path (math / data shape / "
-        "architecture).\n"
-        "D2 (guardrails/_common.md § Verify against reality) means the owner verifies this class "
-        "of change — passing tests are necessary, not sufficient. If you have not already logged "
-        "it, add a ledger entry so the point survives to commit time:\n"
-        f"  python3 {tool} add --ledger {ledger} \\\n"
-        '      --kind {math|data-shape|architecture} --what "<what changed>" --anchor "<file:line>"\n'
-        "The owner (or you on their word) records the decision with `approve <id>`; after landing, "
-        "`verify <id> --commit <sha>` closes it. Fires once per session; `list` shows both open states."
-    )
-
-
-def d2_ledger_reminder_result(
-    tool_name: str, file_path: str | None, session_id: str | None, project_root: Path | None = None
-) -> HookResult | None:
-    """PreToolUse guardrail: on the first D2-sensitive edit per session, remind to log the ledger."""
-    if tool_name not in _EDIT_TOOL_KINDS:
-        return None
-    if not isinstance(file_path, str):
-        return None
-    root = project_root or find_project_root()
-    globs = d2_sensitive_paths(root)
-    if not globs or not is_d2_sensitive_path(file_path, root, globs):
-        return None
-
-    marker = Path(tempfile.gettempdir()) / f"akmon-d2-ledger-{session_id or 'nosession'}.marker"
-    if marker.exists():
-        return None
-    with contextlib.suppress(OSError):
-        marker.write_text("seen", encoding="utf-8")
-
-    return HookResult(event_name="PreToolUse", additional_context=d2_ledger_reminder_message(root))
-
-
-# D2 ledger session counter — at SessionStart the model-routing status block gains a
-# ``D2 ledger: N pending, M approved`` line so both owner-decision and landing state are visible
-# up front, next to the routing status. Owner-addressed (dual-channel
-# systemMessage, ADR 0006) when either count is non-zero — no open state keeps the host UI quiet.
-# The authoritative ledger parse lives in the ledger tool; here we only count rows tolerantly.
-
-
-def _count_d2_rows(ledger_text: str) -> tuple[int, int]:
-    """``(pending, approved)`` data-row counts from either a two- or three-section ledger."""
-    section = None
-    counts = {"## Pending": 0, "## Approved": 0}
-    for line in ledger_text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("## "):
-            section = stripped if stripped in counts else None
-            continue
-        if section is not None and stripped.startswith("| D2-"):
-            counts[section] += 1
-    return counts["## Pending"], counts["## Approved"]
-
-
-def _count_pending_rows(ledger_text: str) -> int:
-    """Backward-compatible pending-only view used by existing hook consumers."""
-    return _count_d2_rows(ledger_text)[0]
-
-
-def d2_pending_count(root: Path) -> int:
-    """Number of pending entries in the project's D2 ledger (``0`` if absent/unreadable)."""
-    ledger = aitna_root(root) / "D2_LEDGER.md"
-    if not ledger.is_file():
-        return 0
-    try:
-        return _count_pending_rows(ledger.read_text(encoding="utf-8"))
-    except OSError:
-        return 0
-
-
-def d2_status_counts(root: Path) -> tuple[int, int]:
-    """Pending and approved entry counts (``(0, 0)`` if the ledger is absent/unreadable)."""
-    ledger = aitna_root(root) / "D2_LEDGER.md"
-    if not ledger.is_file():
-        return 0, 0
-    try:
-        return _count_d2_rows(ledger.read_text(encoding="utf-8"))
-    except OSError:
-        return 0, 0
-
-
-def d2_tracking_active(root: Path) -> bool:
-    """Whether D2 tracking is in use here.
-
-    True when sensitive paths are configured or a ledger file exists — so a project that
-    hasn't adopted the ledger never sees the counter line.
-    """
-    return bool(d2_sensitive_paths(root)) or (aitna_root(root) / "D2_LEDGER.md").is_file()
-
-
-def d2_status_line(pending: int, approved: int = 0) -> str:
-    """One-line D2 ledger status for the SessionStart status block."""
-    return f"D2 ledger: {pending} pending, {approved} approved"
-
-
 # Delegation nudge — the routing rule (guardrails/_common.md § Route by task kind + the
 # SessionStart status line) is prose the orchestrator can silently skip mid-task. This counts
 # consecutive orchestrator edit/shell/read calls since session start or the last subagent
@@ -817,7 +662,7 @@ def d2_status_line(pending: int, approved: int = 0) -> str:
 # entirely: no counter touch, no advisory, no ask.
 
 #
-# Calibrated, not guessed (C88/D2-46). Replayed over akmon's own Claude sessions (M72), the rule
+# Calibrated, not guessed (C88, ADR-0006/D02). Replayed over akmon's own Claude sessions (M72), the rule
 # this replaced — every call worth 1, advisory at 10, ask at 20 — fired the advisory in 10 of 11
 # sessions and the ask in 10 of 11; 16 of those 17 asks came in a non-default permission mode,
 # where an ask escalates to a deny, and 3 of the denies fell on a read. An earlier replay on

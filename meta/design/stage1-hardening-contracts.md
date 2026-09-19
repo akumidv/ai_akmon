@@ -1,19 +1,23 @@
 # Design: stage 1 — deterministic hardening contracts (A12 locked)
 
 > **Status: locked.** The register below is walked in full (F1–F22; F8–F22 decided), its
-> clean-context coherence findings are repaired, and [D2-20](../D2_LEDGER.md) is Verified at
-> `e89f3fe`. ADRs [0012](../decisions/0012-stage1-contracts-and-vocabulary.md) and
-> [0013](../decisions/0013-hook-survivability-and-crash-posture.md) are Accepted. D2-23 remains
-> the separate gate for C52's measured literals.
+> clean-context coherence findings are repaired, and
+> [ADR 0012 D06](../decisions/0012-stage1-contracts-and-vocabulary.md#d06--stage-1-accepted-scope)
+> plus [ADR 0013 D02](../decisions/0013-hook-survivability-and-crash-posture.md#d02--bounded-input-and-timeout-evidence-sequence)
+> own the accepted scope. N6 remains the task-owned gate for C52's measured timeout literals.
 > Scope: plan items **P1.1–P1.7** plus the **P0.2 / P0.4 declarations** the stage-0 probes
 > made fillable, plus the **tool-name half of [C46](../TASKS.md)**. The lock splits
 > implementation per shape into **C51–C59** (+ C46; C60 carries the later cap reduction, outside
-> this lock); the umbrella C40 is superseded and archived after D2-20 owner verification. Sources:
+> this lock); the umbrella C40 is superseded and archived after owner acceptance. Sources:
 > [plan §Phase 0–1](../reviews/alternatives/plan-akmon-from-alternatives-20260718.md),
 > [ADR 0010](../decisions/0010-alternatives-adoption-a11-verdicts.md),
 > [N2 findings](../reviews/alternatives/n2-stage0-probes-inventory-20260807.md).
 > The first slice of A12 locked earlier and separately:
 > [ADR 0011](../decisions/0011-agent-name-notation-k-underscore.md) (agent-name notation).
+>
+> **C94 cutover:** sections below that describe the D2 reminder, D2 ledger checks/configuration,
+> or Pending/Approved/Verified transitions are historical rationale only. ADR 0016 removed those
+> carriers; open measurements live in N6 and implementation conformance in the affected tasks.
 
 ## Frame
 
@@ -41,8 +45,8 @@ Two boundaries this proposal holds deliberately:
 
 ## Owner walkthrough register
 
-The draft remains unlocked until every material fork is walked, the resulting set is audited
-for coherence, the decision set is recorded in ADR(s), and D2-20 is owner-verified.
+The draft remained unlocked until every material fork was walked, the resulting set was audited
+for coherence, and the decision set was accepted in ADRs 0012 and 0013.
 
 | # | fork | owner choice | status |
 |---|---|---|---|
@@ -372,7 +376,7 @@ it is stable and it governs how every contract in both ADRs is written.
 | # | shape | plan | task | depends on |
 |---|---|---|---|---|
 | 1 | shared finding envelope | P1.6 | C51 | — |
-| 2 | hook survivability | P1.1 | C52 | D2-23 evidence gate |
+| 2 | hook survivability | P1.1 | C52 | D2-23 + D2-49 evidence gates |
 | 3 | invariant canary | P1.2 | C53 | C51, P0.3 inventory (N2, done), F8 table (§3); writes into the always-loaded surface C56 caps |
 | 4 | version ↔ changelog cross-check | P1.3 | C54 | C51 |
 | 5 | source/generated boundary check | P1.7 | C55 | C51; always-loaded set definition (§6 declaration — not C56's cap check) |
@@ -383,8 +387,8 @@ it is stable and it governs how every contract in both ADRs is written.
 | 10 | `akmon status` | P1.4 | C59 | rows 1–9, **C46 included**, plus the D2-27 C70 extension |
 
 Every implementation edge below also depends on owner verification of D2-20; the table shows
-only dependencies internal to the proposed package. C52 alone has the additional D2-23 evidence
-gate, so missing runtime numbers cannot hold C51 or C57 behind an unrelated measurement campaign.
+only dependencies internal to the proposed package. C52 alone has the additional D2-23 and D2-49 evidence
+gates, so missing runtime numbers cannot hold C51 or C57 behind an unrelated measurement campaign.
 
 Four entries in the depends-on column are not task dependencies and are spelled out so they are
 not read as such (three of them counted at A17(f), the fourth found at A17(g); the paragraph said
@@ -413,7 +417,7 @@ the complete `verify` provider, and never gains a third provider or a host query
 resulting acyclic path is `C51 → C57 → C70 → C59`.
 
 P1.6 leads because eight of the nine remaining shapes emit findings. P1.1 shares no findings
-dependency and can be engineered in parallel with C51 only after D2-23 is verified. P1.4 is last
+dependency and can be engineered in parallel with C51 only after D2-23 and D2-49 are verified. P1.4 is last
 on purpose: it aggregates a finished vocabulary
 instead of inventing one.
 
@@ -643,8 +647,11 @@ sentinel literal; F6 bounds supported inputs; N6 measures entrypoints directly w
 timeout; F5 derives exact literals; scratch wiring live-verifies them; the owner verifies the
 class/literal table; only then may C52 implement it. Live validation covers both individual entry
 expiry and aggregate latency/behavior where a single event schedules a group of hook processes.
-Together this F4 → F6 → F5 packet is the measured evidence owned by D2-23; it does not amend or
-reopen D2-20 unless the measurements force a change to the stable architecture protocol.
+Together this F4 → F6 → F5 packet is the measured evidence owned by D2-23 and D2-49; it does not
+amend or reopen D2-20 unless the measurements force a change to the stable architecture protocol.
+The owner split its verification at the F6/F5 seam: D2-23 verifies F4 and the F6 caps, so N6
+measures inside a verified envelope, and D2-49 verifies F5's class/literal table and the live
+verification. D2-20's exclusion of the concrete results to D2-23 covers the two rows together.
 
 Ordinary CI does not assert wall-clock timing. Durable regressions prove exhaustive entry-to-class
 mapping, exact owner-verified literals/units, omission on unsupported or unprobed Codex scopes, and
@@ -663,7 +670,8 @@ generated-output bytes; agent roster count/name/output bytes; generated-agent di
 per-file/total bytes and rebind/prune population; and akmon-owned marker/counter bytes. The
 evidence proposes a numeric cap and unit for every applicable generated command entry. Each cap,
 entry mapping, and combined supported fixture corpus require explicit owner verification; until
-then F6 is decided in direction, D2-23 remains pending, and C52 is blocked.
+then F6 is decided in direction, D2-23 remains pending, and C52 is blocked. The owner verified them
+at D2-23; C52 stays blocked behind D2-49.
 
 At runtime, raw stdin is read as cap+1 before decode; files are preflighted and bounded-read to
 handle growth races; directories/lists enumerate at most cap+1 and discard the whole collection
@@ -727,7 +735,7 @@ what C52's seeded crash tests forbid", and the named mutation never reached it.
 
 **`timeout`.** Split, because the literal and the presence have different gates: a generated
 Claude entry emitted **without** a `timeout` key fails `sync --check` now, while the literal's
-correctness stays behind the D2-23 evidence gate and is pinned there by C52's entry→class→literal
+correctness stays behind the D2-49 evidence gate and is pinned there by C52's entry→class→literal
 table. The split is F13's rule applied rather than an exception to it — the half that is
 checkable today is checked today, and the remainder names the gate it waits on instead of
 disappearing into prose. Deleting the timeout contract from `hooks/README.md`, omitting its table,
@@ -767,7 +775,7 @@ fails the fixture.
 Two obligations remain explicitly **process-owned**, not silently exempted from F13. Raising a cap
 requires the separate architecture/evidence and owner-verification process above; C52 mechanically
 pins the verified literal but cannot prove that a future author opened that process. Likewise the
-reproducible D2-23 performance corpus, not ordinary CI, decides whether measured runtime has
+reproducible D2-49 performance corpus, not ordinary CI, decides whether measured runtime has
 regressed and must re-block C52. The residual cost is that bypassing either process can only be
 caught in review; no wall-clock or intent checker is claimed.
 
@@ -1662,8 +1670,8 @@ runtime checker. Fixtures independently:
   zero.
 
 Deleting either population join, changing the warn/error severity or a code, duplicating a finding,
-or producing the wrong normal exit fails its exact oracle. D2-23 contributes no literal or
-measurement to these fixtures and blocks only C52.
+or producing the wrong normal exit fails its exact oracle. D2-23 and D2-49 contribute no literal
+or measurement to these fixtures and block only C52.
 
 ## 8. Tool names: neutral capability + vendor map (C46, tool-name half)
 
@@ -1951,7 +1959,7 @@ bring the parked JSON option spelling or D1 mutable levels into this lock.
   not at the end. **The unit is the rule, not the shape** (F13): rules that cannot fail separately
   may share one seed, a rule that can be violated on its own carries its own, and a rule whose seed
   needs evidence that does not exist yet is **split** — the checkable half is checked now and the
-  remainder names the gate it waits on, as §2's `timeout` rule does against D2-23. **No exemption
+  remainder names the gate it waits on, as §2's `timeout` rule does against D2-49. **No exemption
   class exists** (F11): a shape that adds no check of its own is seeded against its *fidelity*
   to the sources it composes. A semantic or process-owned obligation is outside the mechanical
   guarantee only when the lock labels it, names the tested subset and states the residual cost;

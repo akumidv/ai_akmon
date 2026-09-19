@@ -87,11 +87,11 @@ architect work.
 
 Moving from a **design** role (`architect`) to a **build** role (`engineer`) — from *deciding
 structure* to *writing code* — is a **gate**, not a relabel. It is the seam where
-[design-flow](../pipelines/design-flow.md) step 8 (Hand off) meets [code-flow](../pipelines/code-flow.md)
+[design-flow](../pipelines/design-flow.md) step 9 (Hand off) meets [code-flow](../pipelines/code-flow.md)
 step 1 (Take). **Before the first code edit**, in order:
 
-1. **Land the task** — the locked design is recorded as an implementation task in
-   `_aitna/TASKS.md`, **as a one-line index entry linked to its design doc** (design-flow step 8,
+1. **Record the task** — the accepted decision scope is recorded as an implementation task in
+   `_aitna/TASKS.md`, **as a one-line index entry linked to its design and ADR blocks** (design-flow step 9,
    format: [tasks](../pipelines/tasks.md) — detail by reference, not inlined). A **cold engineer
    session must be able to pick the work from `_aitna/TASKS.md` + the linked doc alone** — do not
    carry it only in the current session's head.

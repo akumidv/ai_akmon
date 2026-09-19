@@ -1,8 +1,8 @@
 # 0013 — Hook survivability: crash-open posture, measured timeouts, bounded input envelope
 
-- **Status:** Accepted — the stable protocol was owner-verified at **D2-20** and landed at
-  `e89f3fe`. Concrete literals remain gated by **D2-23**, which stays Pending and blocks only
-  [C52](../TASKS.md).
+- **Status:** Accepted. [D01](#d01--crash-open-protocol-and-owner-visible-failure) owns crash
+  posture; [D02](#d02--bounded-input-and-timeout-evidence-sequence) owns the accepted envelope.
+  N6 still owns timeout measurements and literals and blocks only [C52](../TASKS.md).
 - **Owner:** akuminov@gmail.com
 - **References:** [design lock `stage1-hardening-contracts` §2, §7](../design/stage1-hardening-contracts.md)
   (full contracts and the F3–F6 rationale) ·
@@ -10,14 +10,17 @@
   policy-ID join) · [codex-runtime-contract](../design/codex-runtime-contract.md) ·
   [ADR 0010](0010-alternatives-adoption-a11-verdicts.md) ·
   [N2 findings](../reviews/alternatives/n2-stage0-probes-inventory-20260807.md) ·
-  carriers [C52](../TASKS.md), [C57](../TASKS.md), N1/F4, N5/F6 and N6/F5 ·
-  ledger rows D2-20, D2-23.
+  carriers [C52](../TASKS.md), [C57](../TASKS.md), N1/F4, N5/F6 and N6/F5.
+
+> **C94 applicability note.** The D2 reminder entry and D2 ledger/config input axes described
+> below were removed with the former ledger workflow under ADR 0016. They remain historical
+> rationale, not members of the current hook population or timeout envelope.
 
 ## Context
 
-akmon's hooks are advisory processes the harness spawns: **nine spawned entry points** — the eight
-generated Claude entries (`git-commit-guard`, `role-on-code`, `analysis-guard`, `d2-ledger-reminder`,
-`delegation-log`, `delegation-nudge`, `session-start-agent`, `model-routing`) and the single Codex
+akmon's hooks are advisory processes the harness spawns: **eight spawned entry points** — the seven
+generated Claude entries (`git-commit-guard`, `role-on-code`, `analysis-guard`, `delegation-log`,
+`delegation-nudge`, `session-start-agent`, `model-routing`) and the single Codex
 entry `codex-hook.py`, which carries its route as an argument. The adapters and `hook_core` are
 imported, never spawned.
 
@@ -31,8 +34,8 @@ Four do not: `role-on-code`, `analysis-guard`, the single Codex entry `codex-hoo
 and "crashes closed" is the difference between a missed warning and a repository where no commit
 can be made. So what a consumer sees when an akmon hook raises depends on which hook it was.
 
-**The five that exist are not the contract below**, which is why C52 *changes* five entries and
-adds four rather than adding nine. They print `{type(exc).__name__}: {exc}` — the exception
+**The historical partial guards were not the contract below.** C87 later applied one uniform
+guard to the current population. The earlier entries printed `{type(exc).__name__}: {exc}` — the exception
 *message*, which routinely carries a path, a key or a payload fragment, and the diagnostic rule
 below forbids exactly that. They also catch `Exception`, so a `SystemExit` — what `argparse`
 raises on a bad argument in the Codex entry — passes straight through. A guard that exists and
@@ -45,7 +48,7 @@ everywhere else).
 a hung hook — has never been probed. A number written from intuition would be indistinguishable
 from a measured one once it is in the tree.
 
-**Valid inputs are unbounded.** Transcripts, ledgers, agent rosters, glob configurations and patch
+**Valid inputs were unbounded.** Transcripts, agent rosters, path/glob configurations and patch
 path counts all grow with the consumer, and every one is read whole. Without bounds there is no
 worst case, so there is no honest budget to time against — and an oversize input degrades into
 whatever the reader happens to do, which is the silence stage 1 exists to remove.
@@ -319,3 +322,47 @@ C52.
 - The exception text in the notice: F3 already forbids it.
 - Exit 1 on Claude: the crash would be silent (M70).
 - Exit 0 on Codex: it hides the `Failed` status that M68 and M71 show.
+
+## Amendment — D2-23 is verified in two rows (D2-49)
+
+The D2-20 / D2-23 boundary above stands; what changes is how D2-23's side is verified. As one row
+it could be approved only once F4, F6 and F5 were all in, but F5 is measured inside the F6 caps
+and cannot start before the owner verifies them — so that verification had no row to land in.
+The owner split it:
+
+- **D2-23 — F4 and F6:** F4 support or omission per Codex entry; F6 caps, units, sources, entry
+  mappings and the combined supported corpus. N6 starts once it is Verified.
+- **D2-49 — F5:** the entry→class table, timings, formula, literals and units, event-group latency
+  and the live verification. F4 evidence is version-scoped, so when the Codex build the live
+  verification runs on is newer than the evidence D2-23 verified, it re-establishes F4 there first.
+
+C52 waits for both. Where this ADR gates timeout literals or the performance corpus on D2-23,
+read D2-49; caps stay with D2-23. D2-20 is Verified and keeps its wording: its exclusion of the
+concrete results to D2-23 now covers the two rows together.
+
+**Rejected:**
+- One row: the F6 verification the design requires before N6 would be recorded nowhere.
+- Waiting for the A22 register, which treats this as a missing-evidence obligation: it is not
+  locked yet.
+
+## Addressable accepted decision blocks
+
+### D01 — Crash-open protocol and owner-visible failure
+
+`Decision-ID: ADR-0013/D01`
+`Legacy-ID: D2-45`
+
+All spawned hook entries guard their top level and expose one safe failure fact without exception
+text. Claude returns an owner `systemMessage` and exits zero; Codex uses its measured failed-entry
+signal and exits one; both remain fail-open. Fail-closed requires a separate measured recovery
+decision.
+
+### D02 — Bounded input and timeout evidence sequence
+
+`Decision-ID: ADR-0013/D02`
+`Legacy-ID: D2-23`
+
+F4 support or omission and F6 caps define the accepted envelope in which timeout budgets may be
+measured. Their evidence unblocks N6 but does not invent F5 results. N6 and C52 own the remaining
+class table, timings, formula and literal conformance; a newer host reruns version-sensitive F4
+evidence first.

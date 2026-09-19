@@ -3,11 +3,11 @@
 
 Scores orchestrator edit/shell/read calls since session start or the last subagent delegation
 (``Task``/``Agent`` resets the score and re-arms the reminder) — an edit or shell call counts
-1, a read ½, the first calls of a stretch nothing (C88/D2-46) — and, past the threshold,
+1, a read ½, the first calls of a stretch nothing (C88, ADR-0006/D02) — and, past the threshold,
 injects a soft reminder — once per drift episode — that the work may belong to a ``k_*``
 delegate (MODEL.md § Capability tiers). Below the ask threshold, advisory only — nothing is
 blocked; past it, the next edit or shell call (never a read) carries a hard ``ask``, which
-escalates to ``deny`` outside the interactive default permission mode (C31/D2-10 — an
+escalates to ``deny`` outside the interactive default permission mode (C31, ADR-0006/D02 — an
 unattended ``ask`` was observed to be a silent no-op). This fires only for main-chain calls: a
 subagent call (detected via the payload's ``agent_id``, present only inside a subagent) is
 exempt, since Claude Code shares the ``session_id`` between the main chain and its subagents

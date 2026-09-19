@@ -65,7 +65,7 @@ def _sample(ids: list[str], limit: int = 4) -> str:
 _DELEGATION_DEFAULT_RE = re.compile(r"\bdelegation\s+is\s+the\s+default\b", re.IGNORECASE)
 _GENERATED_MARKER = sync_tool.GENERATED_MARKER
 # The Agent Skills standard's two required keys, plus akmon's owner, which the standard only
-# admits under `metadata` (C79/D2-41). A nested key is spelled `parent.child`.
+# admits under `metadata` (C79, ADR-0017/D01). A nested key is spelled `parent.child`.
 _SKILL_REQUIRED_FRONTMATTER = ("name", "description", "metadata.owner")
 # The standard's limits (agentskills.io/specification), which Anthropic, Copilot and Codex's
 # own validator state as well: a name of lowercase letters, digits and single inner hyphens.
@@ -334,7 +334,6 @@ class Verifier:
                 "akmon path pointer": "akmon path",
                 "archetype link": "ARCHETYPES.md",
                 "memory rule": f"{self.aitna}/memory",
-                "owner verifies directive": "D2",
                 "owner owns commits directive": "D5",
                 "secrets rule": ".env",
             }
@@ -345,11 +344,16 @@ class Verifier:
                 "archetype link": "ARCHETYPES.md",
                 "role link": f"{self.akmon}/roles/",
                 "memory rule": f"{self.aitna}/memory",
-                "owner verifies directive": "D2",
                 "owner owns commits directive": "D5",
                 "secrets rule": ".env",
             }
         missing = [name for name, snippet in required.items() if snippet not in text]
+        # C94 migrates the source contract, but consumer AGENTS.md blocks are hand-owned and
+        # explicitly outside that cutover. Accept the former exact anchor until consumer
+        # migration gets its own task; new blocks emit the ADR wording above.
+        legacy_owner_anchor = re.search(r"\*\*D2\*\*\s+—\s+the owner\s+verifies", text)
+        if "owner verifies" not in text and legacy_owner_anchor is None:
+            missing.append("owner verifies directive")
         if not _DELEGATION_DEFAULT_RE.search(text):
             missing.append("direct delegation-default rule")
         if missing:
@@ -844,7 +848,7 @@ class Verifier:
         )
 
     def check_codex_host_trust(self) -> None:
-        """C70 — the live host-trust gap N7 measured (design §7, D2-27).
+        """C70 — the live host-trust gap N7 measured (design §7, ADR-0012/D03).
 
         Generated wiring is structural proof only: a discovered ``hooks/list`` entry can stay
         ``enabled: true`` while its persisted project or per-entry trust is absent or stale, and

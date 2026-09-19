@@ -1,7 +1,7 @@
 # Code rules — common principles, a standard ruff configuration, language and environment profiles
 
 Task **C89** (the size ratchet: **C91**). Status: **decided (§9, two rounds)** —
-[ADR 0014](../decisions/0014-code-rules-catalog-and-language-profiles.md), D2-48 Pending; slices 1–2
+[ADR 0014 D01](../decisions/0014-code-rules-catalog-and-language-profiles.md#d01--code-rules-catalog-and-language-profiles); slices 1–2
 of §11 are in the tree. The rule source is the
 [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html); section numbers
 below (`§2.12`) are that guide's.
@@ -238,7 +238,7 @@ ruff`). Nothing is written on `own` or `none`.
 ## 9. Owner decisions
 
 Decided by the owner (this session); recorded in
-[ADR 0014](../decisions/0014-code-rules-catalog-and-language-profiles.md) and D2-48.
+[ADR 0014 D01](../decisions/0014-code-rules-catalog-and-language-profiles.md#d01--code-rules-catalog-and-language-profiles).
 
 **First round.**
 
@@ -276,7 +276,7 @@ Decided by the owner (this session); recorded in
    old import is a plan error naming the fix, in package and mounted mode.
 2. **Rules and the wrapper** — in the tree. `profiles/ruff.toml`; `akmon check` over `[check]`;
    `init --checks`; `sync` materializing an extended rules file; `verify` validating `[check]`;
-   the pre-commit step. Carriers: D2-48.
+   the pre-commit step. Decision carrier: ADR 0014 D01.
 3. **akmon's own ruff** — `pyproject.toml` extends `profiles/ruff.toml`, the fixes outside the
    size family, and the per-file exceptions C91 then shrinks. After the owner's commit of 1–2.
 4. **The size ratchet** — **C91**.

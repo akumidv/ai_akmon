@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""C70 — bounded live query of Codex host-side hook delivery (D2-27, design §7).
+"""C70 — bounded live query of Codex host-side hook delivery (ADR-0012/D03, design §7).
 
 Generated wiring is structural proof only (N7 — meta/reviews/n7-codex-hook-delivery-20260825.md):
 a discovered hook entry can be reported ``enabled: true`` while its persisted trust is absent or

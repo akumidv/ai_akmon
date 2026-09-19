@@ -5,7 +5,7 @@ agent can load cheaply and act on: **`TASKS.md` is an index, not a document.**
 
 Why it matters: agents re-read the backlog at session start (code-flow step 1). A paragraph
 per task costs ~150–300 tokens; a one-line entry costs ~20–30. The detail belongs in design
-docs / ADRs / ledgers — link it, don't restate it.
+docs / accepted ADR blocks / task evidence — link it, don't restate it.
 
 ## The entry format
 
@@ -39,8 +39,8 @@ One task = **one line**:
 - **status** — exactly one of `active | blocked | deferred | done`. `blocked` = waiting on an
   external dependency; `deferred` = a deliberate not-now (still a real intent, just parked).
 - **goal** — ≤12 words, the outcome. Not the plan.
-- **detail link** — design doc, ADR, or ledger row. Required once detail exists; omit only for
-  a one-line task that needs none.
+- **detail link** — design doc, accepted ADR block, or task/evidence record. Required once
+  detail exists; omit only for a one-line task that needs none.
 
 A short multi-line note under an entry is allowed **only** for a genuine loose end that has no
 other home yet — and that is a signal to write the design doc, not to grow the entry.
@@ -56,8 +56,8 @@ scheme applies to the live backlog and every new task. Don't renumber history.
   `tools/tasks/archive.py` (`--tasks <path>`; `--done <id>…` closes named entries then sweeps,
   `--apply` to write) — it works on **any** `TASKS.md` in this format, akmon's or a consuming
   project's `_aitna/TASKS.md`.
-- **Detail** — lives in `design/` docs, `decisions/` ADRs, or a verification ledger. `TASKS.md`
-  links; it does not duplicate.
+- **Detail** — lives in `design/` docs, thematic `decisions/` ADR blocks, or task/evidence
+  records. `TASKS.md` links; it does not duplicate.
 - An optional **Status** block at the top of `TASKS.md` is fine: ≤5 lines, current focus only.
 
 ## When to write
@@ -77,8 +77,10 @@ detail link exists:
 - small & self-contained → one line, **no link** (the goal is the whole spec);
 - needs a sentence of context → the 1–3 line loose-end note (a hint to write an artifact if it
   grows);
-- turns out to be a *decision*, not a fix → write an ADR / short design note now and link it —
-  implementation may **originate** a design artifact, design need not precede code.
+- turns out to be a significant *decision*, not a fix → pause the affected implementation,
+  frame it in design/task detail, obtain owner acceptance, then record the accepted ADR
+  block and link it. Implementation may **discover** a design fork; it does not authorize
+  coding an unaccepted choice first. Routine corrections need no new decision block.
 
 Reusable *knowledge* found mid-task goes to `_aitna/memory/` via the learn loop, **not** here.
 
@@ -86,10 +88,15 @@ Reusable *knowledge* found mid-task goes to `_aitna/memory/` via the learn loop,
 
 | Kind of detail | Lives in | TASKS.md does |
 | --- | --- | --- |
-| What/why of a design | `design/` doc or ADR | link it |
-| Math / DataFrame / verification | the project's D2-style ledger | link the row |
+| Open design question and alternatives | `design/` doc or task detail | link it |
+| Accepted architecture / math / data commitment and rationale | the owning thematic ADR block | link its stable ID/anchor |
+| Implementation conformance / missing measurements / residuals | the implementing or investigating task's evidence | link the evidence and remaining work |
 | Step-by-step plan | the design doc's touch-list | link it |
 | Acceptance / done-criteria | the linked doc | one-line goal only |
+
+Accepting a design does not complete its implementation task. Removing legacy approval
+bookkeeping does not complete an outstanding measurement or review. Keep the actual
+dependency and remaining work visible without a parallel decision-status ledger.
 
 ## No dates
 

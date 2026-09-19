@@ -1,6 +1,6 @@
 # Design — model routing: task-kind matrix, capability ladder, session-init binding
 
-> **Status: locked — owner verified (D2), decisions recorded in
+> **Status: locked — decisions recorded in addressable blocks of
 > [ADR 0004](../decisions/0004-model-routing-capability-tiers.md).
 > Built — all three phases (§8) are code-complete**: registry + init tool
 > (`akmon/tools/model_routing/`), the SessionStart status-line hook
@@ -8,7 +8,7 @@
 > wired by `sync.py`, the §6 doc edits landed, and alphavar consumed (init run —
 > generated `k_*` agents supersede the hand-written set; project overlay
 > `_aitna/model-routing.json` carries the alphavar brief extras; local config/log
-> gitignored). **Implementation owner-verified (D2) — C10 closed.** Remaining follow-ups
+> gitignored). **Implementation evidence is closed in C10.** Remaining follow-ups
 > live as their own tasks in akmon's backlog: statistics digest (C13) —
 > [TASKS.md](../TASKS.md). Codex hook payload compatibility was closed in C12; the
 > in-the-moment delegation nudge in C14.
@@ -155,7 +155,9 @@ read as code — no owner action per session after the one-time setup):
 1. the hook reads the session transcript (`transcript_path` in its payload), which records
    `message.model` per turn; it takes the **last main-chain** assistant message (sidechain =
    subagent turns are skipped so a delegate's model never masquerades as the orchestrator's)
-   and maps the concrete id to an alias — pure code;
+   and maps the concrete id to an alias — pure code. The read starts at the end of the file and
+   stops at that message (A19), so its cost does not grow with the session, and the same read
+   feeds the context-pressure notice (§12);
 2. when the detected alias differs from the recorded orchestrator — a session launched on a
    different model, or a mid-session `/model` switch — the hook recomputes the binding and
    **regenerates the `k_*` defs** so subagents follow the live model. SessionStart carries it
@@ -380,9 +382,9 @@ points where the second opinion *disagrees* with the orchestrator's analysis, an
 file link; the call itself is recorded by the delegation-log hook (§4.4). Token cost is
 bounded: a digest per gate, opt-in only; the full report enters context only on request.
 
-The external review is *advisory input to the owner's verification*, never a replacement
-for D2: it widens what the owner sees, it does not sign off. Tiers change who *drafts*,
-never who *decides*.
+The external review is *advisory input to the owner's decision or conformance review*,
+never a replacement for owner acceptance: it widens what the owner sees, it does not
+sign off. Tiers change who *drafts*, never who *decides*.
 
 ## 5. Session flow (end to end)
 
@@ -453,10 +455,10 @@ During work (orchestrator):
   (Phase-1 CAPTURE). *Revisit-if:* a subject demands standing context no operation row
   carries.
 - **Delegating the owner loop (`k-domain-resolver`, `k-verifier` as agents)** —
-  rejected: owner dialogue and D2 verification are the orchestrator's matrix row,
-  *never delegated*. The real need behind `k-verifier` — catching what awaits
-  verification — is hooks + data, not an agent: see
-  [d2-ledger design](d2-ledger.md).
+  rejected: owner dialogue, decision acceptance, and owner-facing conformance review
+  are the orchestrator's matrix row, *never delegated*. The historical need behind
+  `k-verifier` — catching what awaited D2 verification — was hooks + data, not an
+  agent; the former mechanism is preserved in the [D2 design](d2-ledger.md).
 
 ## 8. Decided register (owner-locked) and phasing
 
@@ -532,7 +534,7 @@ hypothesis about the task's level**. The binding respects it (never overrides), 
 which always runs on the maximal available model, sees the whole collected material at a
 gate and includes a **level verdict** in its output: does the material suggest the task
 exceeded the hypothesis (contested forks resolved shallowly, contradictions the
-orchestrator missed, D2-dense territory)? If so, it names the *specific* piece to redo
+orchestrator missed, decision-dense territory)? If so, it names the *specific* piece to redo
 on a higher rung, or recommends `/model` up. Advisory — the owner decides. The static
 init-time floor warning (§3, requirement 9) is retained as a weak prior but demoted:
 the evidence-based gate check is the authoritative signal.
@@ -583,7 +585,7 @@ auditor + second opinion.
      the **level verdict** (§9.2) · an explicit "could not verify" list;
    - **delivery mirrors §4.6:** full report to a file, digest to chat (verdict +
      disagreements + level verdict), the call logged by the delegation hook; the report
-     attaches to the D2 ledger entry (§9.6);
+     links from the owning task, decision block, or evidence packet (§9.6);
    - **escalation signal:** if the pack lacks what the audit needs (no coverage map, no
      yardstick), it returns the precise gap instead of a diluted verdict.
 
@@ -593,7 +595,7 @@ auditor + second opinion.
    never contained cannot surface as an uncovered seam (circular blindness). Two
    mechanisms close it, **no new standing agent**:
    - **Drafting:** for ordinary tasks the orchestrator plans itself (its own matrix
-     row). On leverage signals — a cross-zone task, D2-dense territory, an expected
+     row). On leverage signals — a cross-zone task, decision-dense territory, an expected
      gate-qualifying fan-out — the decomposition draft (the zone plan §10.3, risks,
      ordering) is delegated as `plan-draft` to the reasoner in fresh context, escalating
      up the ladder as usual. Not `design-fork`: that drafts *product* structure, this
@@ -669,13 +671,13 @@ advisory does not warn against it.**
 The owner is the apex decision node; the framework's goal is quality per unit of
 **tokens + owner attention**, and only the first had a mechanism. Two integrations:
 
-- **d2-ledger attachment:** the auditor's gate report attaches to the D2 ledger
-  entry alongside the reasoner draft and second-opinion digest (d2-ledger §2.5) — the
-  owner opens one entry and sees the change, the drafted rationale, the whole-picture
-  audit, and where the independent review disagrees, then decides.
-- **attention metrics:** the stats digest (C13) reports owner load next to token spend —
-  D2 entries pending/approved/verified, decisions taken per session — so both halves of the goal
-  function are measured.
+- **decision/evidence attachment:** the auditor's gate report links from the owning
+  task, decision block, or evidence packet alongside the reasoner draft and
+  second-opinion digest — the owner can inspect the change, drafted rationale,
+  whole-picture audit, and disagreement without a second status ledger.
+- **attention metrics:** the deferred C19 extension may report owner interaction load
+  next to token spend — accepted decisions, material reopenings, avoidable questions,
+  and reconstruction effort — without recreating pending/approved/verified counters.
 
 ### 9.7 Decided register (A5 owner lock)
 
@@ -842,7 +844,7 @@ tool and its quality patterns). Verified against the live tool surface, not memo
 | `k_mechanic` / `k_validator` / `k_implementer` | `general-purpose` / `claude` (catch-alls) | no per-kind split in the host — akmon's task-kind granularity is finer |
 | `auditor` | **Workflow "completeness critic"** pattern ("what's missing — claim unverified, modality not run?") + "adversarial verify" | the closest prior art to `audit` — but in the host it is a *workflow stage pattern*, not a standing agent with a pinned model |
 | second-opinion | — | absent (single-vendor harness); akmon addition |
-| level-hypothesis check, owner-attention budget (D2 ledger) | — | absent; akmon additions |
+| level-hypothesis check, owner-attention budget (decision/evidence path) | — | absent; akmon additions |
 | orchestrator = main session, never delegated | same in the host | both systems keep decomposition/synthesis/user dialogue in the main loop |
 
 Adopted into this design from the comparison:

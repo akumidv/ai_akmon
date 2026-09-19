@@ -73,7 +73,7 @@ def test_expected_codex_hooks_maps_every_event_the_real_generator_wires(tmp_path
     """The generator and `_EVENT_NAMES` must not drift: an event it starts wiring with no
     hooks/list mapping would otherwise only surface as a CodexWiringError inside `verify`."""
     expected = expected_codex_hooks(sync._codex_hooks(tmp_path))
-    assert len(expected) == 4
+    assert len(expected) == 3
     assert {event for event, _, _ in expected} == {"preToolUse", "sessionStart"}
 
 
