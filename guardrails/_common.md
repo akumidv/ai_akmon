@@ -60,8 +60,10 @@ the user's last message, not from the language of your own reasoning.
 
 - Confirm names, signatures, enums, env-var names, and file paths **in the code/docs**
   before relying on or documenting them — they drift.
-- **Owner-verify** any change to math, data shape, or architecture. Passing tests and
-  plausibility are necessary, not sufficient.
+- **Owner-accept consequential choices** in math, data shape, or architecture before
+  implementation; record the accepted scope in a thematic ADR block. Verify the resulting
+  implementation against that intent and its evidence, without requesting acceptance of
+  unchanged design again. Passing tests and plausibility are necessary, not sufficient.
 
 ## Analysis before mutation
 
@@ -86,6 +88,9 @@ Applies to **every role and every agent** (architect and engineer alike).
 
 - **One owner per fact.** Before adding a table / flow / list, check whether another doc
   owns it; if so, link instead of duplicating. Update the owner when the fact changes.
+- Accepted decision blocks own commitments and rationale; design/tasks own open questions,
+  and tasks/evidence own implementation state. A new block never inherits acceptance from
+  its containing ADR. Follow [design-flow](../pipelines/design-flow.md).
 - **No advisory / dev-history files in the live tree.** Point-in-time reviews are archived
   with a banner; decisions become ADRs; git history is the changelog.
 - **Keep the entry point single.** `AGENTS.md` is the source of truth; vendor files

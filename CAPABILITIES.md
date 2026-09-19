@@ -98,7 +98,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=claude-code; version=2.1.221; event=PreToolUse; matcher=Bash
 - effect: deny
 - crash-posture: fail-open
-- evidence: `meta/tests/test_hook_core.py` deny contract + D2-11 e2e wrapper runs; a crash is fail-open on 2.1.270 — the C87 guard answers it with exit 0 and an owner notice and the command runs (M69), and a hook that dies with exit 1 lets it run too (M70)
+- evidence: `meta/tests/test_hook_core.py` deny contract + [ADR 0006 D02](meta/decisions/0006-orchestrator-detection-corridor-context-pressure.md) e2e wrapper runs; a crash is fail-open on 2.1.270 — the C87 guard answers it with exit 0 and an owner notice and the command runs (M69), and a hook that dies with exit 1 lets it run too (M70)
 
 ### Commit guard — owner-owned commits at the tool boundary — Codex CLI
 
@@ -134,7 +134,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=claude-code; version=2.1.221; event=PreToolUse; matcher=Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob
 - effect: ask
 - crash-posture: fail-open
-- evidence: D2-8 live run (advisory and ask both dispatched) + D2-11 escalation tests; a crash is fail-open on 2.1.270 on every tool the matcher names that exists — `Bash` (M69, M70), `Read`, `Edit`, `Write`, `Agent` (M77): the C87 guard's exit 0 with an owner notice and a bare exit 1 both let the call run
+- evidence: [ADR 0006 D02](meta/decisions/0006-orchestrator-detection-corridor-context-pressure.md) live run (advisory and ask both dispatched) and escalation tests; a crash is fail-open on 2.1.270 on every tool the matcher names that exists — `Bash` (M69, M70), `Read`, `Edit`, `Write`, `Agent` (M77): the C87 guard's exit 0 with an owner notice and a bare exit 1 both let the call run
 
 ### Delegation log and drift nudge — Codex CLI
 

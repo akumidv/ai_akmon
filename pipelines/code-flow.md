@@ -15,9 +15,10 @@ does not decide architecture or process contracts.
 
 ## Steps
 
-1. **Take** — pick a task from `_aitna/TASKS.md`; confirm its goal and the design it
-   implements. If the design has a gap, return it to the [architect](../roles/architect.md)
-   role as a task — do not improvise load-bearing structure.
+1. **Take** — pick a task from `_aitna/TASKS.md`; confirm its goal, applicable accepted
+   decision blocks, and the evidence needed to establish conformance. Restore settled
+   rationale without asking for acceptance again. If the design has a gap, return it to
+   the [architect](../roles/architect.md) role as a task — do not improvise load-bearing structure.
    - **A load-bearing decision that *emerges mid-build* is the same gate, in reverse.** When,
      while coding, you find yourself *deciding* structure (not just applying it) — a new
      convention, an interface reshape, a contract change — **pause**: switch back to
@@ -45,13 +46,19 @@ does not decide architecture or process contracts.
 4. **Pre-commit** *(gate)* — run the [pre-commit](pre-commit.md) cycle. Tests are
    mandatory; **no commit on red**. *Tier:* the run→parse→fix→re-run loop delegates to
    `worker` (`validate-loop`); a non-mechanical red escalates back.
-5. **Verify** *(gate)* — for any change to **math, DataFrame/data shape, or
-   architecture**, explain it and obtain **owner verification**. Green tests are
-   necessary, not sufficient. *Tier:* a `reasoner` review plus an optional
+5. **Verify conformance** *(gate)* — for any change to **math, DataFrame/data shape, or
+   architecture**, show actual behavior against the accepted intent and obtain **owner
+   verification of the implementation**. Identify the checked subject, deviations,
+   limitations and unresolved work. Green tests are necessary, not sufficient; an accepted
+   design neither proves the implementation nor needs acceptance again merely to record
+   its landing. A changed premise or material decision delta returns to design-flow.
+   *Tier:* a `reasoner` review plus an optional
    `second-opinion` advisory may widen what the owner sees — they never replace the
    owner's verification.
 6. **Close** — mark the task done in `_aitna/TASKS.md` *only after* owner verification.
-   Capture any reusable insight to `_aitna/memory/` (feeds the learn loop).
+   Preserve remaining obligations in actual linked tasks/evidence. Do not require a
+   separate ADR lifecycle transition or copied landing SHA. Capture any reusable insight
+   to `_aitna/memory/` (feeds the learn loop).
 
 ## Gates (must hold to advance)
 

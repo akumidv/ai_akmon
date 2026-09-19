@@ -18,15 +18,8 @@ from hook_core import (
     HookResult,
     agent_names,
     analysis_write_result,
-    d2_ledger_reminder_result,
-    d2_pending_count,
-    d2_sensitive_paths,
-    d2_status_counts,
-    d2_status_line,
-    d2_tracking_active,
     git_commit_guard_result,
     is_code_path,
-    is_d2_sensitive_path,
     is_planning_doc,
     privilege_escalation_guard_result,
     role_on_code_result,
@@ -402,15 +395,11 @@ _PATH_FORM_CORPUS = (
     "notes.txt",
 )
 
-_D2_GLOBS = ["src/**/*.py", "_aitna/design/**", "**/TASKS.md"]
-
-
 @pytest.mark.parametrize("relative", _PATH_FORM_CORPUS)
 def test_path_predicates_agree_on_relative_and_absolute_forms(tmp_path, relative):
     absolute = str(tmp_path / relative)
     assert is_code_path(relative, tmp_path) == is_code_path(absolute, tmp_path)
     assert is_planning_doc(relative, tmp_path) == is_planning_doc(absolute, tmp_path)
-    assert is_d2_sensitive_path(relative, tmp_path, _D2_GLOBS) == is_d2_sensitive_path(absolute, tmp_path, _D2_GLOBS)
 
 
 def test_relative_paths_get_the_right_answer_not_merely_a_consistent_one(tmp_path):
@@ -444,7 +433,6 @@ def test_path_predicates_canonicalize_relative_dot_dot_and_duplicate_separators(
     absolute = str((tmp_path / canonical).resolve(strict=False))
     assert is_code_path(relative, tmp_path) == is_code_path(absolute, tmp_path)
     assert is_planning_doc(relative, tmp_path) == is_planning_doc(absolute, tmp_path)
-    assert is_d2_sensitive_path(relative, tmp_path, _D2_GLOBS) == is_d2_sensitive_path(absolute, tmp_path, _D2_GLOBS)
 
 
 @pytest.mark.parametrize(
@@ -458,14 +446,12 @@ def test_path_predicates_canonicalize_relative_dot_dot_and_duplicate_separators(
 def test_path_predicates_reject_relative_traversal_outside_project(tmp_path, outside):
     assert not is_code_path(outside, tmp_path)
     assert not is_planning_doc(outside, tmp_path)
-    assert not is_d2_sensitive_path(outside, tmp_path, _D2_GLOBS)
 
 
 def test_path_predicates_reject_absolute_targets_outside_project(tmp_path):
     outside = tmp_path.parent / "_aitna" / "design" / "probe.md"
     assert not is_code_path(str(outside), tmp_path)
     assert not is_planning_doc(str(outside), tmp_path)
-    assert not is_d2_sensitive_path(str(outside), tmp_path, ["**"])
 
 
 def test_a_symlinked_subtree_is_still_a_project_target(tmp_path):
@@ -486,7 +472,6 @@ def test_a_symlinked_subtree_is_still_a_project_target(tmp_path):
     assert is_planning_doc("_aitna/TASKS.md", project)
     assert is_planning_doc("_aitna/design/probe.md", project)
     assert is_code_path("src/shared/x.py", project)
-    assert is_d2_sensitive_path("src/shared/x.py", project, _D2_GLOBS)
     # The absolute form through the same link agrees — the C47 invariant, on linked paths.
     assert is_planning_doc(str(project / "_aitna" / "TASKS.md"), project)
     assert is_code_path(str(project / "src" / "shared" / "x.py"), project)
@@ -555,165 +540,6 @@ def test_role_on_code_fires_once_per_session(monkeypatch, tmp_path):
     # Different session → fires again.
     other = role_on_code_result(edit, "src/alphavar/z.py", "session-B")
     assert isinstance(other, HookResult)
-
-
-# --------------------------------------------------------------------------------------
-# d2_ledger_reminder_result + config/glob helpers
-# --------------------------------------------------------------------------------------
-
-
-def _make_d2_project(tmp_path: Path, *, globs: str | None = '["src/**/lib/**"]') -> Path:
-    """A minimal project root with AGENTS.md + <aitna>/akmon; optional [d2_ledger] config."""
-    root = tmp_path / "proj"
-    aitna = root / "_aitna"
-    (aitna / "akmon").mkdir(parents=True)
-    (root / "AGENTS.md").write_text("x", encoding="utf-8")
-    if globs is not None:
-        (aitna / ".akmon.toml").write_text(f"[d2_ledger]\nsensitive_paths = {globs}\n", encoding="utf-8")
-    return root
-
-
-def test_d2_sensitive_paths_reads_configured_globs(tmp_path):
-    root = _make_d2_project(tmp_path)
-    assert d2_sensitive_paths(root) == ["src/**/lib/**"]
-
-
-def test_d2_sensitive_paths_empty_without_config(tmp_path):
-    root = _make_d2_project(tmp_path, globs=None)
-    assert d2_sensitive_paths(root) == []
-
-
-def test_d2_sensitive_paths_is_empty_on_a_malformed_record(tmp_path):
-    # D2-39 (2): the shared reader is lenient and its line parser yields no arrays, so a broken
-    # record quiets this advisory instead of crashing a session. The loud side is the ledger:
-    # `d2_ledger.py::_read_akmon_toml` raises on a malformed record (test_d2_ledger.py).
-    root = _make_d2_project(tmp_path)
-    record = root / "_aitna" / ".akmon.toml"
-    record.write_text(record.read_text(encoding="utf-8") + "[unclosed\n", encoding="utf-8")
-    assert d2_sensitive_paths(root) == []
-
-
-def test_is_d2_sensitive_path_matches_relative_glob(tmp_path):
-    root = _make_d2_project(tmp_path)
-    globs = ["src/**/lib/**"]
-    assert is_d2_sensitive_path(str(root / "src/pkg/lib/x.py"), root, globs)
-    assert not is_d2_sensitive_path(str(root / "README.md"), root, globs)
-
-
-def test_d2_ledger_reminder_ignores_non_edit_and_missing_path(monkeypatch, tmp_path):
-    _isolate_marker_dir(monkeypatch, tmp_path)
-    root = _make_d2_project(tmp_path)
-    assert d2_ledger_reminder_result("bash", str(root / "src/pkg/lib/x.py"), "s1", root) is None
-    assert d2_ledger_reminder_result(hook_core.EDIT_TOOL, None, "s1", root) is None
-
-
-def test_d2_ledger_reminder_silent_when_unconfigured(monkeypatch, tmp_path):
-    # No [d2_ledger] config -> the hook can't tell what's sensitive, so it stays silent (design §5.A).
-    _isolate_marker_dir(monkeypatch, tmp_path)
-    root = _make_d2_project(tmp_path, globs=None)
-    assert d2_ledger_reminder_result(hook_core.EDIT_TOOL, str(root / "src/pkg/lib/x.py"), "s1", root) is None
-
-
-def test_d2_ledger_reminder_silent_on_non_sensitive_path(monkeypatch, tmp_path):
-    _isolate_marker_dir(monkeypatch, tmp_path)
-    root = _make_d2_project(tmp_path)
-    assert d2_ledger_reminder_result(hook_core.EDIT_TOOL, str(root / "README.md"), "s1", root) is None
-
-
-def test_d2_ledger_reminder_fires_once_per_session(monkeypatch, tmp_path):
-    _isolate_marker_dir(monkeypatch, tmp_path)
-    root = _make_d2_project(tmp_path)
-    edit = hook_core.EDIT_TOOL
-    sensitive = str(root / "src/pkg/lib/x.py")
-
-    first = d2_ledger_reminder_result(edit, sensitive, "sess-A", root)
-    assert isinstance(first, HookResult)
-    assert first.event_name == "PreToolUse"
-    assert "D2 ledger" in first.additional_context
-
-    # Same session → suppressed by the marker file.
-    assert d2_ledger_reminder_result(edit, sensitive, "sess-A", root) is None
-    # Different session → fires again.
-    assert isinstance(d2_ledger_reminder_result(edit, sensitive, "sess-B", root), HookResult)
-
-
-# --------------------------------------------------------------------------------------
-# d2 ledger session counter (phase 3)
-# --------------------------------------------------------------------------------------
-
-
-_LEDGER_TWO_PENDING = (
-    "# D2 ledger\n\n## Pending\n\n"
-    "| id | kind | what | anchor | draft | second_opinion |\n"
-    "|----|------|------|--------|-------|----------------|\n"
-    "| D2-1 | math | a | x:1 |  |  |\n"
-    "| D2-3 | data-shape | b | y:2 |  |  |\n\n"
-    "## Verified\n\n"
-    "| id | kind | what | anchor | commit |\n"
-    "|----|------|------|--------|--------|\n"
-    "| D2-2 | architecture | c | z:1 | abc1234 |\n"
-)
-
-_LEDGER_PENDING_AND_APPROVED = _LEDGER_TWO_PENDING.replace(
-    "## Verified",
-    "## Approved\n\n"
-    "| id | kind | what | anchor | draft | second_opinion |\n"
-    "|----|------|------|--------|-------|----------------|\n"
-    "| D2-4 | architecture | d | q.py:1 | draft | review |\n\n"
-    "## Verified",
-)
-
-
-def test_count_pending_rows_counts_only_the_pending_section():
-    # The verified row also starts with "| D2-", so the counter must stop at "## Verified".
-    assert hook_core._count_pending_rows(_LEDGER_TWO_PENDING) == 2
-
-
-def test_count_pending_rows_zero_on_empty_tables():
-    assert hook_core._count_pending_rows("## Pending\n\n## Verified\n") == 0
-
-
-def test_count_d2_rows_reports_pending_and_approved():
-    assert hook_core._count_d2_rows(_LEDGER_PENDING_AND_APPROVED) == (2, 1)
-
-
-def _write_ledger(root: Path, text: str) -> None:
-    (root / "_aitna" / "D2_LEDGER.md").write_text(text, encoding="utf-8")
-
-
-def test_d2_pending_count_zero_without_ledger(tmp_path):
-    assert d2_pending_count(_make_d2_project(tmp_path)) == 0
-
-
-def test_d2_pending_count_reads_pending_rows(tmp_path):
-    root = _make_d2_project(tmp_path)
-    _write_ledger(root, _LEDGER_TWO_PENDING)
-    assert d2_pending_count(root) == 2
-
-
-def test_d2_status_counts_reads_both_open_states(tmp_path):
-    root = _make_d2_project(tmp_path)
-    _write_ledger(root, _LEDGER_PENDING_AND_APPROVED)
-    assert d2_status_counts(root) == (2, 1)
-
-
-def test_d2_tracking_active_with_config(tmp_path):
-    assert d2_tracking_active(_make_d2_project(tmp_path)) is True
-
-
-def test_d2_tracking_active_with_ledger_only(tmp_path):
-    root = _make_d2_project(tmp_path, globs=None)
-    _write_ledger(root, "## Pending\n\n## Verified\n")
-    assert d2_tracking_active(root) is True
-
-
-def test_d2_tracking_active_false_when_unused(tmp_path):
-    assert d2_tracking_active(_make_d2_project(tmp_path, globs=None)) is False
-
-
-def test_d2_status_line_format():
-    assert d2_status_line(3, 2) == "D2 ledger: 3 pending, 2 approved"
-    assert d2_status_line(0, 0) == "D2 ledger: 0 pending, 0 approved"
 
 
 def test_core_names_no_vendor_tools():
@@ -801,7 +627,6 @@ def test_runtime_root_display_is_project_relative_when_the_tree_is_in_the_repo(m
     mount.mkdir(parents=True)
     monkeypatch.setattr(hook_core, "_TREE_ROOT", mount)
     assert hook_core.runtime_root_display(tmp_path) == "_aitna/akmon"
-    assert "_aitna/akmon/tools/d2_ledger/d2_ledger.py" in hook_core.d2_ledger_reminder_message(tmp_path)
 
 
 def test_runtime_root_display_uses_the_cli_when_the_tree_is_not_the_mount(tmp_path):
@@ -809,9 +634,6 @@ def test_runtime_root_display_uses_the_cli_when_the_tree_is_not_the_mount(tmp_pa
     venv's Python version and is wrong on the next bump. ``akmon path`` is spelled instead."""
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
     assert hook_core.runtime_root_display(tmp_path) == "$(akmon path)"
-    message = hook_core.d2_ledger_reminder_message(tmp_path)
-    assert "$(akmon path)/tools/d2_ledger/d2_ledger.py" in message
-    assert "site-packages" not in message
 
 
 def test_runtime_root_display_rejects_the_wheels_tree_inside_the_project_venv(monkeypatch, tmp_path):
@@ -823,7 +645,6 @@ def test_runtime_root_display_rejects_the_wheels_tree_inside_the_project_venv(mo
     wheel_tree.mkdir(parents=True)
     monkeypatch.setattr(hook_core, "_TREE_ROOT", wheel_tree)
     assert hook_core.runtime_root_display(tmp_path) == "$(akmon path)"
-    assert "site-packages" not in hook_core.d2_ledger_reminder_message(tmp_path)
 
 
 def test_is_code_path_excludes_custom_dev_root(monkeypatch):

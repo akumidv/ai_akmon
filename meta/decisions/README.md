@@ -7,16 +7,16 @@ inherits keystone's ADRs here.
 
 Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipelines/tasks.md) §No dates):
 
-- One ADR = one decision: the context, the locked choice, the consequences. Options/rationale may
-  live in a [`design/`](../design/) concept the ADR references.
+- One ADR = one cohesive topic. Independently replaceable choices inside it are addressable
+  decision blocks with a stable `Decision-ID: ADR-NNNN/DNN`.
 - **Numbered, not dated** — `NNNN-kebab-title.md`; the commit history is the timeline.
 - Write an ADR only for a **locked, non-trivial** decision (the architect role gate). In-progress
-  thinking stays in `design/` until it locks.
-- **One exception, stated rather than improvised:** when the decision's own owner-verify gate
-  verifies the **ADR boundary itself**, the ADR has to exist before the gate can run. Such an ADR
-  carries `Status: Proposed`, names the ledger row that will flip it to `Accepted`, and adds nothing
-  the design doc has not already settled. Nothing else is written ahead of its lock. ADRs 0012 and
-  0013 were the case that forced this clause; they remained Proposed until D2-20 was Verified.
+  thinking stays in `design/` until the owner accepts a clearly bounded semantic scope.
+- ADR status is `Accepted` or `Superseded`. Implementation progress and versioned evidence live in
+  tasks and reviews/measurements, not in ADR status.
+- A material change creates a new replacing block or ADR and names what it supersedes. Editorial
+  correction does not manufacture another acceptance event.
+- `Legacy-ID: D2-N` is a unique compatibility alias for pre-cutover lookup, not a status field.
 
 ## Index
 
@@ -47,12 +47,8 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   (`systemMessage` + context); context-pressure detection from transcript `usage`.
   Extends 0004/0005.
 - [0007 — D2 ledger: mechanical tracking of owner-verification points](0007-d2-ledger.md)
-  — mechanizes the owner-verify guardrail as data + hooks: `_aitna/D2_LEDGER.md` (one entry
-  per verify point, ids `D2-<n>`, `pending → approved → verified` by deliberate commands);
-  PreToolUse
-  reminder on project-configured (`.keystone.toml`) sensitive paths; SessionStart `D2: N
-  pending/approved` counter; warn-first pre-commit `check` kept separate from commit-guard; entry is
-  the unit routing verify gates / second-opinion digests attach to. Implementation C11.
+  — **Superseded historical record** of the former ledger, reminder, counter and
+  `pending → approved → verified` lifecycle; replaced by 0016.
 - [0008 — Mythological naming: `_aitna` / `akmon` / Kyklōpes](0008-mythological-naming-aitna-akmon-kyklopes.md)
   — seats the whole system in one myth cluster (Hephaestus's forge beneath Etna): the workspace
   `_aitna/` → `_aitna/` (the volcano-forge, begins with **ai**), the standard `keystone` → `akmon`
@@ -62,7 +58,7 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   in V1. Grandfathers older ADRs.
 - [0009 — Packaging: the `akmon` package as carrier, four mount modes incl. `package`](0009-packaging-package-carrier-and-mount-modes.md)
   — one distribution (thin CLI + full tree as package data, hatchling, zero runtime deps, floor
-  Python 3.11 as amended by C68/D2-34,
+  Python 3.11 as amended by [ADR 0009 D04](0009-packaging-package-carrier-and-mount-modes.md#d04--python-floor-and-package-manifest),
   PyPI name `akmon`); mount modes `submodule|vendored|subtree|package`; `package` = dev-group pin,
   no tree in the repo, no skew by construction; as amended by C77 it runs the hooks out of the
   installed package via `akmon hook` and materializes only the guardrails `AGENTS.md` imports;
@@ -86,11 +82,25 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   transcript-owned active role left explicit as unavailable to the separate status process;
   and the stage's acceptance yardstick — the
   seeding unit is the **independently violable rule**, split rather than waived, with no exemption
-  class. **Accepted**; owner-verified at D2-20 (`e89f3fe`).
+  class. **Accepted** in [ADR 0012 D06](0012-stage1-contracts-and-vocabulary.md#d06--stage-1-accepted-scope).
 - [0013 — Hook survivability and crash posture](0013-hook-survivability-and-crash-posture.md) — the
-  measurement-amendable half: top-level guard in all nine spawned entry points with **crash-open**
+  measurement-amendable half: top-level guard in all eight spawned entry points with **crash-open**
   posture including deny-class hooks (fail-closed gated on a live probe + test + tested recovery),
   **probe-gated** Codex timeout support where parse acceptance is not support, timeout budgets
   derived by hook class from measured worst cases, and a **bounded input envelope** whose oversize
   path degrades fail-open with exactly one safe diagnostic. Caps are compatibility boundaries, not
-  tuning constants. **Accepted** at D2-20 (`e89f3fe`); literals remain gated by D2-23.
+  tuning constants. **Accepted** in [ADR 0013 D02](0013-hook-survivability-and-crash-posture.md#d02--bounded-input-and-timeout-evidence-sequence);
+  N6 owns the still-open timeout evidence and literals.
+- [0014 — Code rules: principles, standard ruff configuration, and profiles](0014-code-rules-catalog-and-language-profiles.md)
+  — universal principles, standard linter configuration, language/environment profiles and the
+  `akmon check` wrapper over project-owned checks.
+- [0015 — Mission and effective resource allocation](0015-mission-and-resource-allocation.md)
+  — human attention, joint decision quality and model work optimized for total outcome, bounded
+  by truthfulness and product-goal fit.
+- [0016 — Thematic decision records and owner acceptance](0016-decision-records-and-owner-acceptance.md)
+  — separates open design, accepted blocks, implementation state and evidence; supersedes the D2
+  lifecycle and defines stable block IDs plus legacy lookup.
+- [0017 — Skill discovery and delivery](0017-skill-discovery-and-delivery.md)
+  — one result-first selector description and compatible Claude/Codex delivery.
+- [0018 — Release alignment and update lifecycle](0018-release-alignment-and-update-lifecycle.md)
+  — version consistency, hand-owned alignment boundaries, explicit update and rollback.

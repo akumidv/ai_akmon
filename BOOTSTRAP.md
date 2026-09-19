@@ -113,8 +113,8 @@ When the user asks "attach akmon", the agent:
    Then **generate/refresh the vendor pointers** (§C): for Claude Code write a `CLAUDE.md`
    that **imports** AGENTS.md via `@AGENTS.md` — Claude Code auto-loads `CLAUDE.md` but
    **not** `AGENTS.md`, so the import makes the canonical rules (including the always-on
-   D2/D5 and "read `_aitna/memory/` at session start") present at session start instead of
-   one hop behind a prose pointer.
+   owner acceptance, commit ownership and "read `_aitna/memory/` at session start") present
+   at session start instead of one hop behind a prose pointer.
 7. **Update `.gitignore`** for secrets (see §D).
 8. **Wire the hooks** ([`hooks/README.md`](hooks/README.md)) into vendor config, pointing
    at the akmon paths. `sync.py` keeps the supported project-local wiring current:
@@ -248,8 +248,8 @@ Do not assume nested `@path` lines are expanded by either harness; load-bearing 
 delegation must be stated directly and verified. **Claude Code does not** read `AGENTS.md`
 automatically; it only auto-loads `CLAUDE.md`. So
 `CLAUDE.md` must **import** AGENTS.md rather than just prose-point at it — otherwise the
-always-on rules (D2/D5) sit one hop behind a pointer the agent may never follow in a session
-that jumps straight to a task:
+always-on owner-acceptance and commit-ownership rules sit one hop behind a pointer the
+agent may never follow in a session that jumps straight to a task:
 
 ```markdown
 # CLAUDE.md
@@ -258,15 +258,15 @@ This project uses [AGENTS.md](AGENTS.md) as the single source of guidance for AI
 agents (including Claude Code).
 
 Claude Code auto-loads `CLAUDE.md` but **not** `AGENTS.md`, so AGENTS.md is imported below.
-This keeps the canonical rules — including the always-on prime directives (D2, D5) and
+This keeps the canonical rules — including owner acceptance and commit ownership — and
 "read `_aitna/memory/` at session start" — present in context from the start.
 
 @AGENTS.md
 ```
 
 Mechanically-enforced rules (e.g. D5 via the commit-guard hook, step 8) hold regardless;
-the import covers the rules that rely on the agent having *read* them (D2, memory). The
-`.claude/skills/` and `.agents/skills/` stubs also apply (written by `sync.py`).
+the import covers the rules that rely on the agent having *read* them (owner acceptance,
+memory). The `.claude/skills/` and `.agents/skills/` stubs also apply (written by `sync.py`).
 
 ### Integration record — `<AITNA_ROOT>/.akmon.toml`
 
@@ -402,6 +402,16 @@ keeps its own copy of them (the CHANGELOG is the single owner of "what changed")
    tree that runs.
 6. If `sync` reports that `AGENTS.md` imports a file that moved, replace that import line with
    the one the error names (today: `guardrails/python.md` → `profiles/python.md`).
+
+**One command runs the mechanical steps: `akmon update`** (where akmon is not installed:
+`uvx --from git+https://github.com/akumidv/ai_akmon akmon update`). It moves the pin to the newest
+release tag the way this project's mount mode keeps it — `--ref <tag>` picks a specific one, and an
+older tag is a rollback it announces; without `--ref` it never moves the pin back — then runs
+`akmon init` from that release, `sync --check` and `verify --strict`. It never commits: it prints
+the CHANGELOG window to read (step 3), what to stage, and the Codex `/hooks` step. Mode `package`
+needs uv (`uv add` moves the pin in its dependency group), mode `vendored` needs uvx (the target
+release's own `init` re-copies the tree), and mode `subtree` gets the `git subtree pull` printed,
+because that command commits. The commands below are what it runs.
 ```bash
 git submodule update --remote _aitna/akmon
 uvx --from git+https://github.com/akumidv/ai_akmon@<to> akmon init   # or: akmon init

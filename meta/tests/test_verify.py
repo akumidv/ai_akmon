@@ -30,7 +30,7 @@ AGENTS_MD = """# AGENTS.md
 Model: `_aitna/akmon/README.md`. Archetype: `ARCHETYPES.md`. Roles:
 `_aitna/akmon/roles/`. Read `_aitna/memory` at session start.
 
-Prime directives D2 and D5 are always-on. Secrets come from `.env`.
+The owner verifies consequential decisions recorded in ADRs. D5 is always-on. Secrets come from `.env`.
 Delegation is the default.
 Skills live in `_aitna/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
 """
@@ -996,7 +996,7 @@ Read `akmon path` to find the standard tree locally (roles, MODEL.md). Archetype
 
 @_aitna/.akmon/guardrails/_common.md
 
-Prime directives D2 and D5 are always-on. Secrets come from `.env`.
+The owner verifies consequential decisions recorded in ADRs. D5 is always-on. Secrets come from `.env`.
 Delegation is the default.
 Skills live in `_aitna/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
 """
@@ -1208,10 +1208,10 @@ def _unusable_wiring(root: Path, kind: str) -> str:
     }[kind]
 
 
-def test_the_generated_population_is_four_command_entries(tmp_path):
+def test_the_generated_population_is_three_command_entries(tmp_path):
     """The carriers below derive their fixture from the real generator; pin its size so a
     shrinking population cannot quietly thin the corpus."""
-    assert len(_generated_entries(tmp_path)) == 4
+    assert len(_generated_entries(tmp_path)) == 3
 
 
 def test_check_codex_host_trust_is_silent_without_generated_wiring(tmp_path, monkeypatch):
@@ -1304,10 +1304,10 @@ def test_check_codex_host_trust_zero_discovered_entries_is_every_one_missing(tmp
     verifier = _live_query_verifier(tmp_path, monkeypatch, _hooks_list_runner([]))
     verifier.check_codex_host_trust()
     assert _levels(verifier.findings) == {"warn"}
-    assert _only_host_trust_message(verifier) == "Codex hook delivery is incomplete: missing (4)"
+    assert _only_host_trust_message(verifier) == "Codex hook delivery is incomplete: missing (3)"
 
 
-@pytest.mark.parametrize("index", range(4))
+@pytest.mark.parametrize("index", range(3))
 def test_check_codex_host_trust_warns_when_any_one_generated_entry_is_missing(tmp_path, monkeypatch, index):
     _write_codex_wiring(tmp_path)
     entries = _generated_entries(tmp_path)
@@ -1327,7 +1327,7 @@ def test_check_codex_host_trust_warns_when_any_one_generated_entry_is_missing(tm
         ({"trustStatus": "modified"}, "modified"),
     ],
 )
-@pytest.mark.parametrize("index", range(4))
+@pytest.mark.parametrize("index", range(3))
 def test_check_codex_host_trust_names_each_inert_state_of_each_entry(tmp_path, monkeypatch, index, change, problem):
     _write_codex_wiring(tmp_path)
     entries = _generated_entries(tmp_path)
@@ -1343,7 +1343,7 @@ def test_check_codex_host_trust_aggregates_mixed_problems_into_one_warning(tmp_p
     entries = _generated_entries(tmp_path)
     entries[0] = {**entries[0], "trustStatus": "untrusted"}
     entries[1] = {**entries[1], "enabled": False}
-    del entries[3]
+    del entries[2]
     verifier = _live_query_verifier(tmp_path, monkeypatch, _hooks_list_runner(entries))
     verifier.check_codex_host_trust()
     assert _levels(verifier.findings) == {"warn"}
@@ -1713,7 +1713,7 @@ def test_check_agents_md_package_mode_contract(tmp_path):
         "## Dev layer — akmon\n\n"
         "@_aitna/.akmon/guardrails/_common.md\n\n"
         "Read `akmon path`. Archetype: ARCHETYPES.md. Memory: _aitna/memory.\n"
-        "D2 and D5 always-on. Secrets from .env. Delegation is the default.\n",
+        "The owner verifies consequential ADR decisions. D5 always-on. Secrets from .env. Delegation is the default.\n",
     )
     verifier = verify.Verifier(root)
     verifier.check_agents_md()
@@ -1728,7 +1728,7 @@ def test_check_agents_md_requires_direct_delegation_rule(tmp_path):
         "## Dev layer — akmon\n\n"
         "@_aitna/.akmon/guardrails/_common.md\n\n"
         "Read `akmon path`. Archetype: ARCHETYPES.md. Memory: _aitna/memory.\n"
-        "D2 and D5 always-on. Secrets from .env.\n",
+        "The owner verifies consequential ADR decisions. D5 always-on. Secrets from .env.\n",
     )
     verifier = verify.Verifier(root)
     verifier.check_agents_md()
@@ -1746,7 +1746,7 @@ def test_check_agents_md_package_mode_does_not_accept_mounted_snippets_alone(tmp
         "## Dev layer — akmon\n\n"
         "Model: `_aitna/akmon/README.md`. Roles: `_aitna/akmon/roles/`.\n"
         "Archetype: ARCHETYPES.md. Memory: _aitna/memory.\n"
-        "D2 and D5 always-on. Secrets from .env.\n",
+        "The owner verifies consequential ADR decisions. D5 always-on. Secrets from .env.\n",
     )
     verifier = verify.Verifier(root)
     verifier.check_agents_md()

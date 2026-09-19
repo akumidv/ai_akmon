@@ -3,14 +3,13 @@
 
 The record answers "which carrier is this project on" (ADR 0009 §3), and answering it wrongly
 is never loud: a package-mode project beside a stale ``<AITNA_ROOT>/akmon`` had its hooks bind
-the stale tree's registry and print stale tool paths, silently (C69/D2-26). Before this module
+the stale tree's registry and print stale tool paths, silently (C69, ADR-0009/D02). Before this module
 existed, ``bin/sync.py`` held the original reader and four other modules had grown narrow
 readers of their own, each justified in place. C75 folded three of those four —
 ``release_check``, ``model_routing/init.py`` and the CLI (through the embedded tree's copy) —
 plus two callers that count missed: ``src/akmon/_init.py::_recorded_mount``, which borrowed the
 CLI's private reader, and ``hooks/hook_core.py::d2_sensitive_paths``, which had kept its own bare
-``tomllib`` call. One reader stays local on purpose — ``d2_ledger.py`` needs the strict parse
-this module deliberately is not, and its docstring says why (D2-39). A static carrier,
+``tomllib`` call. A static carrier,
 ``meta/tests/test_record_owner.py`` (C83), keeps a new reader from growing.
 
 Lifted out of ``bin/sync.py`` unchanged — the tomllib-when-present / stdlib-fallback pair and
@@ -79,7 +78,7 @@ def read_akmon_toml(path: Path) -> dict:
             # A malformed record falls through to the lenient parser below rather than raising.
             # Two reasons, both measured. It is what this function documents ("absent or
             # unreadable"), and a hook consulting the record must not abort a session over a file
-            # it only reads (C69/D2-26). It also keeps strict and lenient parsing aligned on
+            # it only reads (C69, ADR-0009/D02). It also keeps strict and lenient parsing aligned on
             # inline comments instead of making malformed-input behavior parser-dependent.
             pass
         except OSError:
@@ -147,7 +146,7 @@ def records_package_mode(project_root: Path) -> bool:
     answers ``False``. A malformed record is parsed leniently instead — the fallback line parser
     can still resolve a ``mount = "package"`` line out of an otherwise-broken file, so this can
     answer ``True`` off a record that would fail a strict parse. Either way no caller aborts a
-    session over a file it only consults; a caller that must *reject* a broken record has to check
-    the file itself, as ``d2_ledger.py`` does (C75).
+    session over a file it only consults; a caller that must *reject* a broken record uses
+    ``read_akmon_toml_strict`` instead (C75).
     """
     return recorded_mount(project_root) == _PACKAGE_MODE

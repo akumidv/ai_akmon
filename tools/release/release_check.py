@@ -204,7 +204,7 @@ _UNRELEASED_HEADING_RE = re.compile(r"^\[?unreleased\]?$", re.IGNORECASE)
 _PYPROJECT_VERSION_RE = re.compile(r"^version\s*=\s*[\"\']([^\"\']+)[\"\']")
 _SECTION_RE = re.compile(r"^\[([^\]]+)\]\s*$")
 # What *could* be a release tag: a version-shaped name in either spelling. Only `vX.Y.Z` is an
-# admissible release tag (owner ruling on D2-31 (8)); the bare form is matched here so that a
+# admissible release tag (ADR-0018/D01); the bare form is matched here so that a
 # tag cut as `1.2.3` is reported as misspelled rather than dropped in silence — a filter that
 # quietly excludes it would hide the tag from both git-dependent rules and say nothing.
 _TAG_SHAPE_RE = re.compile(r"^v?\d+\.\d+\.\d+$")

@@ -1,6 +1,8 @@
 # Design — D2 ledger: mechanical tracking of owner-verification points
 
-> **Status: locked — §4 decisions owner-confirmed; ready for phased build (C11).**
+> **Status: superseded by [ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md).**
+> This document preserves the former D2 mechanism and its rationale as history; none of the
+> ledger commands, states, reminders or counters below are operative after C94.
 > Task: [TASKS.md](../TASKS.md) C11. Companion to
 > [model-routing](model-routing.md) — same rule-plus-hook pattern; the ledger entry
 > becomes the unit its verify gates and second-opinion digests attach to.

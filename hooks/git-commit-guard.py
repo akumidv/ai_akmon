@@ -5,7 +5,7 @@ The guardrail logic lives in ``hook_core.py`` and returns a vendor-neutral ``Hoo
 This entrypoint only adapts Claude Code's JSON payload/output shape so existing
 ``.claude/settings.json`` wiring can keep pointing here.
 
-It also carries the unclassified-shell-route diagnostic (C49, owner decision at D2-19 e).
+It also carries the unclassified-shell-route diagnostic (C49, ADR-0012/D02).
 The blind spot it reports is not Codex-specific — Claude's advisories sit on the edit tools,
 so a write that reaches the filesystem through ``Bash`` was unreported here while Codex at
 least said the route may mutate files unseen. This is the hook Claude already runs on every

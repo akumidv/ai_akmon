@@ -40,7 +40,7 @@ from common.project_root import akmon_mount as akmon_root
 from common.record import _strip_inline_comment, read_akmon_toml, recorded_mount  # noqa: F401
 
 # Two shared owners, both for the same reason a hook must reach them. The integration record
-# (C69/D2-26): the hooks needed it too, and a sixth narrow copy is what that decision refused.
+# (C69, ADR-0009/D02): the hooks needed it too, and a sixth narrow copy is what that decision refused.
 # The banner rule and the materialized-guardrail format (C77): a hook answers "is this copy of
 # the guardrails still current?" at SessionStart, and it must not hold a second copy of the
 # format to answer with. Both are re-exported here because `verify`, `init` and the tests
@@ -364,11 +364,6 @@ def _codex_hooks(root: Path) -> dict:
                             "command": f"{base} analysis-guard",
                             "statusMessage": "Checking analysis-before-mutation",
                         },
-                        {
-                            "type": "command",
-                            "command": f"{base} d2-ledger-reminder",
-                            "statusMessage": "Checking D2 ledger",
-                        },
                     ],
                 }
             ],
@@ -407,7 +402,7 @@ def _claude_hooks(root: Path) -> dict:
             "PreToolUse": [
                 {
                     # This one process also carries the unclassified-shell-route diagnostic
-                    # (C49, D2-19 e): the advisories below sit on the edit tools, so a write
+                    # (C49, ADR-0012/D02): the advisories below sit on the edit tools, so a write
                     # that arrives through Bash is invisible to them on Claude too. Reusing
                     # the already-wired guard keeps that statement free — no second process
                     # on the hottest tool.
@@ -419,7 +414,6 @@ def _claude_hooks(root: Path) -> dict:
                     "hooks": [
                         {"type": "command", "command": cmd("role-on-code")},
                         {"type": "command", "command": cmd("analysis-guard")},
-                        {"type": "command", "command": cmd("d2-ledger-reminder")},
                     ],
                 },
                 {
@@ -556,7 +550,7 @@ def _skill_sources(root: Path) -> tuple[list[Path], list[str]]:
 
 
 # Where a harness looks for project skills: Claude Code reads `.claude/skills`; Codex, and
-# Copilot, Gemini CLI and Cursor beside it, read `.agents/skills` (C79/D2-41).
+# Copilot, Gemini CLI and Cursor beside it, read `.agents/skills` (C79, ADR-0017/D01).
 _SKILL_STUB_DIRS = (".claude/skills", ".agents/skills")
 
 

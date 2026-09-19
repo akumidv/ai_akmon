@@ -35,7 +35,7 @@ material design gap goes back to the architect, not into improvised structure.
 | Inputs | Outputs |
 |---|---|
 | a task in `_aitna/TASKS.md` (goal + design link) | code that implements the task |
-| the architect's design doc / ADR | tests that prove it (and guard against regression) |
+| the architect's design and accepted ADR blocks | tests of conformance (and guards against regression) |
 | existing code & tests (extend, don't fork) | a green pre-commit run |
 | `guardrails/` + language/environment `profiles/` + opted-in domain profiles | the task marked done after owner verification |
 
@@ -71,8 +71,10 @@ everywhere: the audit **drafts** a verdict, it never decides.
 ## Requirements
 
 - **Tests are mandatory before commit.** No commit on red.
-- **Owner-verify math / DataFrame / architecture changes.** Explain the change and have
-  the owner explicitly confirm it; passing tests alone do not make it Done.
+- **Owner-verify material implementation.** For math / DataFrame / architecture changes,
+  explain actual conformance, deviations and remaining uncertainty against the accepted
+  intent. Passing tests alone do not make it Done; verification is not renewed acceptance
+  of unchanged design. A material decision delta returns to architect before implementation.
 - **Reuse, don't re-implement.** Use the project's existing code and the akmon
   `tools/` rather than ad-hoc scripts; deterministic mechanics belong in a tool.
 - **Verify against code, not memory.** Confirm signatures, enums, and names in `src/` or

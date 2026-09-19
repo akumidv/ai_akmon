@@ -2,22 +2,28 @@
 
 ## Status and resume point
 
-This is the current first-case design for A22. It records the owner's reported
-problem, a bounded session investigation, alternatives, and a proposed modification
-plan. It does **not** replace the operative D2 lifecycle, accept an ADR, change a
-ledger row, or authorize implementation. [TASKS](../TASKS.md) owns execution state:
-A22 refines the design; C86 remains its gated implementation task.
+This is the design and evidence trail behind the accepted replacement in
+[ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md). The owner authorized the
+full Akmon cutover; [C94](../TASKS.md) owns migration implementation. A22/C86 still own the broader
+attention-aware interaction protocol, which this workflow change does not accept by implication.
 
 The [research concept](attention-and-human-agent-collaboration.md) owns the broader
 human-attention, cognition, dialogue, and economic rationale. D2 is now the primary
 applied case, not the boundary of that mission. The [earlier slice proposal](attention-collaboration-plan.md)
 is retained to explain the change of direction, not as a competing current plan.
 
-**Resume here:** use the cases below to work through the proposed separation,
-especially exact acceptance scope, material changes after acceptance, and ownership
-of implementation evidence. Then prepare a small migration example without changing
-live statuses. Do not ask again for the owner's applied obstacle or reapprove D2-44.
-No comparative behavioral pilot has run, and this workflow is not yet locked.
+**Resume here:** the [worked carrier comparison](thematic-adr-comparison.md) now
+recommends thematic ADRs with stable decision-block identities and no separate D2
+authority, retaining individual records as a small-topic/split-out form. It compares
+task-origin decisions, independent amendments and a mundane no-record correction.
+The accepted replacement is ADR 0016. The [legacy migration sample](d2-legacy-migration.md)
+now tests task-origin decisions, amendments, expiry and mixed evidence gates without
+changing historical statuses, and supplied thematic routing for every legacy D2
+ID. Its [cutover reference map](d2-cutover-reference-map.md) now separates operative
+machinery from historical provenance and records the topic boundaries C94 applied.
+The machine-checked alias map completes row-by-row lookup. Mandatory SHA bookkeeping
+is retired. Do not ask again for the applied obstacle or reapprove the mission block. No comparative
+behavioral pilot has run, so the broader interaction design remains unevaluated.
 
 ## Owner problem and intended result
 
@@ -31,6 +37,14 @@ The owner's proposed direction is to make D2 a register of **accepted decisions*
 not a queue of things to accept again. Open issues belong to design tasks, where
 iteration has a purpose. This is more substantial than shortening a report or adding
 a walkthrough skill.
+
+The owner subsequently sharpened three points. First, Git can reveal when an
+acceptance record entered history, so copying its commit into a separate field and
+running verify is potentially redundant. Second, D2 also arises from ordinary tasks;
+it is not simply an ADR index. Third, recording every question would create noise.
+Alternatives now include significant decisions linked from tasks or ADRs, or thematic
+ADRs with identifiable decision subsections and their own acceptance state, discovered
+through keywords/tags. These are attributed design directions, not a final selection.
 
 The intended result is less avoidable reconstruction and administrative confirmation,
 with better decisions before implementation and truthful verification afterwards.
@@ -75,6 +89,11 @@ The two Claude episodes below and one adjacent Codex episode are qualitative cas
 not a complete session census, vendor comparison, or measurement of active attention.
 Historical implementation/check claims are attributed session reports, not a fresh
 audit of the code they described. The trace key is at the end of this document.
+
+The owner's request for other sessions produced a separate
+[cross-session evidence note](decision-review-session-cycles.md): additional Codex
+and Claude episodes, their proposed correspondences, and the boundary between a
+shared subject and a proven cross-model handoff. The original sample below is retained.
 
 ### D2-41 / C79: several different kinds of repetition
 
@@ -139,14 +158,14 @@ Direct Codex review of the selected D2-41/48 episodes was **not established**. T
 example is adjacent evidence; it does not prove the claimed frequency of cross-model
 cycles for every D2. Timestamp gaps are not owner attention measurements.
 
-## Proposed separation
+## Selected separation
 
 Three different questions need distinct ownership, not three new forms to fill:
 
 | Question | Owning artifact | What should happen there |
 | --- | --- | --- |
 | What do we need to understand or decide? | Design task and its living concept | Problem, future use, inspectable facts, owner-only knowledge, alternatives, unresolved risks, and the next useful investigation or dialogue |
-| What was accepted, on what grounds? | Decision record/ADR; D2 as its small navigational index | Exact accepted scope, rationale, consequences, and links to related/replacing decisions; no implementation-progress stages |
+| What was accepted, on what grounds? | One owning decision record in an ADR or task detail; optional navigational index | Exact accepted scope, rationale, consequences, and links to related/replacing decisions; no implementation-progress stages and no duplicated acceptance authority |
 | Does the result meet the accepted intent, and what was checked/landed? | Implementation or verification task, linking its evidence | Conformance, behavioral limitations, version/diff, follow-ups, and integration status; no implied redesign or repeated acceptance of unchanged intent |
 
 A plain specification check belongs to review/verification unless it exposes an
@@ -156,7 +175,7 @@ new parallel registry. Task index rows remain small pointers to the owning detai
 
 ### Acceptance and later changes
 
-Proposed behavior: recognize **unambiguous explicit acceptance of a specific scope**
+Accepted behavior: recognize **unambiguous explicit acceptance of a specific scope**
 in ordinary language. Do not demand a magic `approve` word after the same decision
 has already been clearly accepted. An exploratory preference, approval to investigate,
 or choosing sub-options does not imply acceptance of a hidden larger design.
@@ -173,20 +192,46 @@ and show which decision applies now; “no workflow stages” must not mean “n
 challenge or supersede a decision.” A known invalid premise must remain visible while
 replacement work is open, not be hidden by an accepted label.
 
-D2 should not duplicate the complete ADR plus tests plus task status in a huge row.
-The owning record holds the rationale; the index provides stable identity and a link.
-The exact representation for small math/data-shape decisions and the relation between
-existing D2 and ADR identifiers remain open. Do not create two authorities for one
-acceptance fact merely to preserve two filenames.
+The selected model removes D2 as a second index beside ADRs, tests, and task state.
+The owning thematic ADR block holds stable identity and rationale; a unique
+`Legacy-ID` alias preserves lookup for old IDs. Task-origin decisions remain
+representable: for example, D2-43's former anchors name package-pin code/tests and
+C84, while its durable choice now belongs to ADR 0009 D08. Small local corrections
+still remain task work rather than forcing every clarification into a new ADR.
 
 ### Verification and SHA
 
-Remove the **mandatory manual D2 closure transition** in the candidate, not the
-ability to establish what was tested or landed. Evidence belongs with the work it
-supports: a commit where sufficient, plus the relevant working-tree/index diff or
-other exact artifact identity when necessary. One decision can span several commits;
-one commit can implement several decisions. A single per-decision hash is not a
-universal verification subject.
+The accepted replacement removes the **mandatory manual D2 closure transition and
+mandatory copied SHA**. Do not move the same clerical obligation into the implementation
+task under a different name. Ordinary accepted records need a clear accepted scope
+and preserved history, not another manually maintained commit field.
+
+An on-demand Git check supports the owner's point on a real example. D2-44 first
+appears on the inspected branch in `0617402` already under `## Approved`; `4c6acee`
+still has it there. `bc52998` moves it to `## Verified` with `0617402` as the stored
+commit. The acceptance-bearing snapshot was recoverable without that later field.
+These hashes identify this research example, not mandatory metadata for future
+decision records. Read-only commands used for the check included:
+
+```bash
+git log --format='%h %s' -S'D2-44' -- meta/D2_LEDGER.md
+git show 0617402:meta/D2_LEDGER.md | awk '/^## / { section = $0 } /^\| D2-44 \|/ { print section; print $0 }'
+```
+
+Search must identify the acceptance of that decision in context, not the first
+`approve` anywhere in a file. A count-based `git log -S` search can find introduction
+but miss a later move with unchanged occurrence count; inspect the relevant diffs
+and containing section. Git recovers committed recorded content, not an unrecorded
+conversation or the original time of owner agreement. An incomplete checkout/export
+may lack history. These limits call for honest reporting, not a routine SHA ceremony.
+
+The first committed acceptance and the subject of an implementation review are
+different facts. For a particular review, measurement, or test result, identify its
+subject sufficiently to reproduce or assess it: an existing CI/PR reference, artifact,
+commit, or relevant worktree/index diff as appropriate. Reuse that evidence location
+instead of copying identifiers into every linked task/decision. A specific evidence
+need can justify a version reference; it is not a blanket field requirement. One
+decision can span several commits and one commit can implement several decisions.
 
 The implementation-acceptance boundary still needs to be specified by risk and the
 existing owner-verification obligations. Requested full reviews and material domain
@@ -221,13 +266,20 @@ declaring a universal word count or a “seven items” interface law.
 | --- | --- | --- |
 | R0 — existing lifecycle, better preparation and examples | Smallest migration; may address much of the premature design/late discovery | Keeps a separate landing transition and distributed closure metadata; compare honestly rather than assume it cannot work |
 | R1 — separate decision work, accepted-decision index, and work evidence | Matches the owner's direction; makes each question explicit and removes manual D2 landing closure | Requires compatibility work and protection against lost open questions, detached evidence, and duplicate D2/ADR authority |
-| R2 — ADR index only, retire D2 as a separate surface | Potentially fewer artifacts and no duplicate decision identifiers for new work | Must cover non-architectural D2 scopes, old IDs, links, and consumers; may be a representation of R1 rather than a different behavioral model |
+| R2 — individual decision records with thematic navigation, no separate D2 workflow | Independent acceptance/replacement with a compact view by subject; fewer competing state owners | Must cover task-origin decisions, legacy IDs and links; a manually duplicated status index would recreate the problem |
 | R3 — keep lifecycle and add a walkthrough skill first | Can assemble context for difficult existing decisions | Does not by itself fix acceptance/landing semantics or the hidden premise in C89; adds delivery and maintenance cost |
+| R4 — thematic compound ADR with independently identified decision blocks | Related rationale stays together; no new file for every meaningful addition | A global Accepted status cannot cover independent new blocks; growing documents, coupled edits, anchors and partial replacement need care |
 
-**Recommendation:** develop R1 and test it against R0. Resolve R2 as a representation
-choice after checking existing references; retaining the D2 name is not an outcome.
-Defer R3 unless the worked examples expose a distinct repeatable need. Do not assume
-that deleting a transition solves early problem framing.
+The earlier recommendation preferred R1 while deferring representation. The owner's
+clarification makes representation part of the current problem, not an optional
+later detail. **Previous comparison recommendation:** compare R2 and R4 against a thin R1, with
+R0 retained as the no-migration baseline. Prefer one authoritative acceptance record
+and thematic navigation; a separately maintained D2 registry has to earn its cost.
+That was the comparison starting point. The [worked comparison](thematic-adr-comparison.md)
+now prefers R4 for cohesive topics, with R2 as its small-topic/split-out form and no
+separate D2 authority; ADR 0016 accepts that choice and C94 owns its migration. Defer R3
+unless the examples expose a distinct repeatable need. Removing a transition alone
+does not solve early problem framing.
 
 External practice supports rationale preservation but does not mandate this exact
 separation. [Nygard's original ADR proposal](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
@@ -242,6 +294,107 @@ useful here: confirmation means checks/review, not a second approval token or me
 a commit string. These are practitioner designs, not measured evidence of savings
 in akmon; the proposed placement of work evidence is a local inference.
 
+## Significant decisions and thematic organization
+
+### What deserves a durable decision record?
+
+The candidate threshold is **a consequential commitment whose rationale a later
+task or reviewer will need**, not the existence of two imaginable options. Record
+choices that materially set product scope, shared contracts or semantics, substantial
+risk/quality/cost trade-offs, hard-to-reverse commitments, or non-obvious departures
+from established policy. A short change can qualify; a long discussion alone does not.
+This threshold is a proposed refinement, not an exemption from the current guardrails.
+
+An ordinary correction under an accepted contract is normally task work plus its
+verification. A local reversible implementation detail need not become an ADR.
+A measured fact belongs with its evidence. A still-open research question belongs in
+design or the relevant task until it yields a decision. If a bug exposes a genuine
+policy fork, record that fork's resolution, not every intermediate patch attempt.
+
+This follows the direction, not a mandatory template, of
+[arc42's significance guidance](https://docs.arc42.org/tips/9-1/): focus on important,
+risky, costly, lasting or unusual choices instead of every development detail.
+Akmon's existing [design-flow](../../pipelines/design-flow.md) already distinguishes
+material changes from trivial local ones. The candidate must make that distinction
+usable rather than attach a new record to every edit matching a sensitive path.
+
+### Topic, decision, and task are different units
+
+- **Design** is the workspace for a larger problem: evidence, scenarios, alternatives,
+  related decisions and unresolved questions. It need not be created for every task.
+- **A decision** has an identifiable scope, rationale, consequences and acceptance.
+  It may arise during design or ordinary implementation. Significant enduring choices
+  need durable ownership; a task-local choice can remain in the task's linked detail
+  when that adequately preserves its scope and discoverability.
+- **A thematic view** groups related decisions without granting them shared approval.
+  It can be sections in one file, a topic page linking records, or a folder.
+- **A task** owns the work to resolve or implement something, not another copy of all
+  accepted decision states. Promotion from a task-local note to a durable ADR should
+  preserve its history and leave a link, not create two competing current versions.
+
+The existing repository already contains compound records: [ADR 0012](../decisions/0012-stage1-contracts-and-vocabulary.md)
+has separately named F-points, and [ADR 0014](../decisions/0014-code-rules-catalog-and-language-profiles.md)
+groups six choices about code rules, profiles, checks, initialization and configuration.
+ADR 0012 also explains separating stable vocabulary from measurement-amendable ADR 0013
+so timing changes do not disturb stable decisions. The issue is not whether a file
+may contain related clauses, but which clauses can evolve independently.
+
+Do not turn a Proposed ADR block into a second copy of the living design's research
+queue. The design owns exploration; a draft decision block can state the bounded
+proposition and link its rationale. Once accepted, the decision record owns the
+accepted meaning and the design links to it. A change of carrier must not require
+the owner to accept unchanged content again. Allowing such draft blocks is itself
+part of the proposal: current design-flow says ADRs contain locked decisions only.
+
+**Earlier mixed-status organization example, not a change to ADR 0014 or its live
+status:** the [worked comparison](thematic-adr-comparison.md#accepted-record-not-an-approval-queue)
+now prefers keeping proposals in design rather than adding a Proposed state to ADR
+blocks by default. This earlier option is retained for comparison:
+
+| Theme: project checks | Independent decision scope | Example state |
+| --- | --- | --- |
+| `checks.runner` | Run project-declared linters rather than implement a custom linter | Accepted |
+| `checks.setup` | How initialization selects and records those commands | Proposed |
+| `checks.rule-placement` | Place machine-checkable rules in standard tool configuration | Accepted |
+
+If `checks.setup` changes, it must not reopen unchanged `checks.runner`. Conversely,
+adding a Proposed block under a thematic file must not inherit acceptance from an
+old file-level header. A file with independently evolving decisions cannot truthfully
+use one authoritative Accepted/Proposed status for all of them. A genuinely indivisible
+decision with explanatory subclauses can keep one status; do not split it artificially.
+The example labels are not an adopted ID syntax or a new state-machine specification.
+
+Statuses here describe decision disposition (for example proposed, accepted, rejected,
+or replaced), not implementation progress. No obligatory Reviewed/Verified/Released
+ladder is proposed. A changed accepted meaning needs explicit affected-scope handling;
+editorial edits do not warrant automatic reapproval. A compound document remains
+viable only while finding and checking the relevant block is easier than reconstructing
+the entire topic. Split on independent evolution or difficult navigation, not a magic
+word count.
+
+[arc42 section 9](https://docs.arc42.org/section-9/) permits lists, tables, separate
+decision sections, and local placement, while warning against redundant text. This
+supports several carriers rather than a universal one-file-per-decision law.
+[MADR's category decision](https://adr.github.io/madr/decisions/0010-support-categories.html)
+chooses topic subfolders with local IDs but explicitly notes discoverability, identity
+and extra-index costs. It is an alternative to tags, not evidence that tags must win.
+
+### Keywords and tags help retrieval, not acceptance
+
+Start by finding existing topics and their accepted constraints before drafting a
+new decision. Reuse recognizable names; use links when a decision affects several
+topics. A few useful keywords/tags can provide another retrieval route, but keyword
+overlap alone does not justify merging decisions or appending under an accepted scope.
+Do not require a tagging taxonomy or automatic classifier before trying the examples.
+If an index is useful, keep it navigational or derive it from owning records; do not
+manually synchronize status, rationale and hashes across it, ADRs and tasks.
+
+A contrary provenance practice is worth retaining: [arc42 also recommends an explicit
+decision timestamp](https://docs.arc42.org/tips/9-8/). Akmon currently uses Git history
+instead of dates in design/ADR files. That is a local trade-off, not universal ADR
+practice; exports without history may need an explicit provenance view. It does not
+establish a need for manual commit-hash fields or a second verification transition.
+
 ## Modification and evaluation plan
 
 1. **Case readiness, within A22.** Use C89 for early framing, D2-41 for material
@@ -249,31 +402,34 @@ in akmon; the proposed placement of work evidence is a local inference.
    under R0 and R1 from the same information available at each point. Later owner
    clarifications must not be smuggled into the earlier agent's knowledge. These are
    inspectable specifications until actual comparative runs are separately authorized.
-2. **Decision boundary and ownership, within A22.** Settle acceptance wording/scope,
-   record versus index, current applicability/supersession, implementation acceptance,
-   and evidence ownership. Use a worked record and counterexample, not another broad
-   questionnaire. Preserve the existing mission and product scope.
-3. **Migration example before implementation.** Classify a few old rows without
-   changing them: accepted decision, design question, missing measurement, or mixed
+2. **Decision boundary and ownership — completed for the record carrier.** The
+   significance threshold and task-origin/theme examples compared R1/R2/R4 and ADR 0016
+   settled the acceptance unit, record versus index, independent amendments,
+   implementation acceptance, and evidence ownership. Broader owner-facing interaction
+   remains A22 work.
+3. **Migration dry-run and reference map — completed.** The migration work classified
+   old rows without changing their historical states: accepted decision, design
+   question, missing measurement, or mixed
    record. D2-23 is a useful missing-evidence case; D2-45/46 mix choice, implementation,
    and limits; D2-47 includes expiry of an earlier exception. Do not automatically
    convert Pending to accepted or to design work. Preserve ID/links, attachments,
    supersession, and unresolved obligations; ambiguous provenance stays unresolved.
-4. **Lock only the useful slice.** Compare the examples and any separately scoped
-   pilot using the rubric below. Record the accepted replacement contract through
-   the still-operative design/ADR/D2 process; this note cannot exempt itself. The
-   transition should not require all historical D2 decisions to be accepted again.
-5. **C86, only after lock and implementation authority.** Implement compatible record
-   handling and align prose, CLI, reminders, and tests as one coherent migration.
-   Do not land guidance that assumes a new schema while tools still enforce the old
-   one. Maintain a readable legacy path; never silently promote old rows. The exact
-   deprecation policy for commands is a remaining design choice.
+   Test one decision with no ADR, one compound topic with different acceptance scopes,
+   and one mundane task that should create no decision record. Legacy links need a
+   readable mapping, not a second required registry for every future decision.
+4. **Lock only the useful slice — completed for the workflow.** The owner accepted the bounded
+   D2-to-ADR replacement as ADR 0016 without reapproving historical decisions. This does not lock
+   the broader A22 interaction behaviours.
+5. **C94 implements the workflow cutover; C86 remains separate.** C94 aligns record
+   handling, prose, CLI, reminders, and tests as one coherent migration. The old path
+   is a compatibility tombstone, the final ledger is archived, and the retired commands
+   are removed rather than emulated. Old rows are never silently promoted.
 6. **Assess and integrate.** Check conformance and observed behavioral usefulness,
    including costs and new failure modes. Retain, shrink, or remove the candidate
    according to results. Release and consumer realignment remain owner-controlled;
    unrelated applied development continues throughout.
 
-### Later touch map — not this turn's edit scope
+### Pre-cutover implementation touch map — retained as design history
 
 | Owning surface | Reason it may change |
 | --- | --- |
@@ -290,7 +446,8 @@ findings, initialization, routing and task-archive work already overlaps these a
 Do not rewrite carrier wiring or claim new harness capabilities from prose changes.
 
 The earlier plan's [comparison baseline and cost rubric](attention-collaboration-plan.md#evaluation-amid-a-moving-project)
-remain applicable, but R0/R1 replace its narrower A/B comparison. Evaluate accurate
+remain applicable, but workflow R0/R1 and record-carrier R1/R2/R4 comparisons replace
+its narrower A/B comparison. Evaluate accurate
 scope and acceptance, visible limitations, useful challenge, and preservation of
 open work as a quality floor. Count avoidable questions/context reconstruction and
 use a short voluntary owner assessment; never infer attention from timestamp gaps.
@@ -318,12 +475,18 @@ research-note update.
   X:12481 and X:12672 are assistant final reports; X:12488 is the intervening owner
   request. These are local trace pointers, not portable public evidence.
 
-Open: the exact replacement schema/commands, small-decision record placement,
-owner implementation-acceptance boundary, migration/deprecation details, and measured
-usefulness/cost. The evidence supports redesigning the framing and record boundaries;
-it does not establish one final protocol, universal time savings, or model superiority.
+Open for the broader A22 work: behavioral usefulness and cost, including whether the
+accepted recording threshold and owner-facing presentation reduce avoidable attention
+without hiding material uncertainty. ADR 0016 and C94 settle the decision-record carrier,
+legacy lookup, command retirement, and implementation-acceptance boundary; they do not
+establish a universal interaction protocol, universal time savings, or model superiority.
 
 A bounded independent document/source check found stale current-plan ownership and
 an AP4 exit condition that still required the old D2 closure stage for the replacement.
 Both were corrected and specifically rechecked. That review did not independently
 reinspect raw sessions or validate the proposed workflow's behavioral effectiveness.
+
+The later Git/organization/session extension received a bounded consistency check
+against explicit acceptance scope, corrected history, attribution limits, and removal
+of mandatory SHA bookkeeping. It reported no material conflicts; this was not the
+formal ADR acceptance gate or a full transcript audit.

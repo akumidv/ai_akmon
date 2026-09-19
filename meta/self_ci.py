@@ -27,7 +27,7 @@ sys.path.insert(0, str(_KEYSTONE_ROOT / "bin"))
 sys.path.insert(0, str(_KEYSTONE_ROOT))
 sys.path.insert(0, str(_KEYSTONE_ROOT / "meta"))
 
-from checks import capabilities  # noqa: E402
+from checks import capabilities, decision_records  # noqa: E402
 from checks import runtime as runtime_checks  # noqa: E402
 
 from common.findings import Finding, exit_code, print_findings  # noqa: E402
@@ -40,7 +40,7 @@ AGENTS_MD = """# AGENTS.md
 Model: `_aitna/akmon/README.md`. Archetype: `ARCHETYPES.md`. Roles:
 `_aitna/akmon/roles/`. Read `_aitna/memory` at session start.
 
-Prime directives D2 and D5 are always-on. Secrets come from `.env`.
+The owner verifies consequential decisions recorded in ADRs. D5 is always-on. Secrets come from `.env`.
 Skills live in `_aitna/skills/` and root `skills/`; generated vendor skill stubs are pointers only.
 
 **Delegation is the default.** For every non-trivial task, delegate independent mechanical
@@ -495,6 +495,7 @@ def _run(akmon_root: Path) -> list[Finding]:
     # Akmon's own declarations, checked against akmon's own tree rather than the fixture: the
     # capability matrix is a property of what akmon ships, not of a synthetic consumer's use of it.
     findings.extend(capabilities.check_capabilities(akmon_root))
+    findings.extend(decision_records.check_decision_records(akmon_root))
     findings.extend(runtime_checks.check_declared_runtimes(akmon_root))
     return findings
 

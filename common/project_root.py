@@ -72,7 +72,7 @@ def find_project_root(start: Path | None = None) -> Path:
     there the fallback is a guess with a file written on top of it.
 
     ``hooks/hook_core.py`` imports this rather than repeating it. That was previously deferred
-    on the belief that it waited on the C69/D2-26 fork; it does not. That fork is about which
+    on the belief that it waited on the C69/ADR-0009/D02 fork; it does not. That fork is about which
     *tree* the hooks read (``akmon_runtime_root``), not about where the project root is, and the
     only real dependency — that this package sit beside ``hooks/`` — holds in every carrier by
     construction, since C77 leaves the hooks running inside the tree that ships them.

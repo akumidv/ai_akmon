@@ -38,6 +38,20 @@ already provides mechanisms for the second priority. The fuller human-interactio
 protocol is under design: this mission adds no new approval gate, report-length limit,
 automatic decision reopening, or autonomous acceptance authority.
 
+## Decision records and verification
+
+Keep open questions in design/tasks and significant accepted commitments in thematic
+ADR blocks with stable identities. Explicit owner acceptance covers a clear scope, not
+a file or a magic approval word. One coherent acceptance can cover related blocks;
+unchanged decisions are not reapproved because a session, carrier or commit changed.
+
+Tasks own implementation, conformance evidence, limitations and remaining work. Tests
+do not prove the product premise, and design acceptance does not prove implementation.
+Preserve accepted rationale and partial replacement links; expose a changed premise
+before extending the accepted scope. There is no separate D2 approval/landing ledger
+or mandatory copied commit hash. [Design-flow](pipelines/design-flow.md) owns the
+recording and acceptance procedure.
+
 ## 1. Three orthogonal axes (do not conflate)
 
 | Axis | Answers | Values |

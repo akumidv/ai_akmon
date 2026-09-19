@@ -23,7 +23,7 @@ ISO fails a time-scoped run rather than being silently kept or dropped.
 ``session_id`` is the finest key that exists today, so two fan-out rounds inside one
 session assemble as one map — narrow them with ``--since``/``--until``. This docstring
 previously said a ``gate_id`` refinement "rides on the C20 session-state marker": there is
-no such marker. C20 reads the active role from the transcript instead (D2-4), and the
+no such marker. C20 reads the active role from the transcript instead (ADR-0006/D01), and the
 design row that promised the marker (§10.4 decision 1) was never reconciled with it. A
 finer key, whenever one is built, changes only the key — not the scope-by-key shape here.
 

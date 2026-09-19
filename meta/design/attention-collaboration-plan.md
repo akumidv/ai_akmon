@@ -6,7 +6,7 @@ The owner has now supplied the real applied obstacle: D2 walkthrough repeatedly
 becomes redesign, followed by separate acceptance/landing bookkeeping. The owner
 proposes an accepted-decision register, with open design work in tasks. The current
 case evidence, alternatives, and modification plan live in
-[decision work and the D2 register](decision-workflow-and-d2-register.md).
+[decision work and the former D2 register](decision-workflow-and-d2-register.md).
 
 The proposal below is retained as the **earlier hypothesis**, including its rejected
 branches and constructed case; its unanswered-question cursor and non-D2-first
@@ -19,8 +19,9 @@ This is the living implementation-direction note for A22, not an accepted intera
 contract. The [research concept](attention-and-human-agent-collaboration.md) owns the
 literature, historical evidence, wider alternatives, and AP0–AP5 sequence. This note
 narrows that sequence alongside ongoing applied development. [TASKS](../TASKS.md)
-owns execution state; [D2-44](../D2_LEDGER.md) accepts the mission and economic framing,
-not this slice. No implementation is authorized by this note.
+owns execution state; [ADR 0015 D01](../decisions/0015-mission-and-resource-allocation.md#d01--product-mission-and-economic-criterion)
+accepts the mission and economic framing, not this slice. No implementation is
+authorized by this note.
 
 **Earlier resume cursor, now superseded:** obtain the owner's applied outcome,
 replace the constructed case, and compare existing guidance with the proposed
@@ -213,7 +214,7 @@ after acceptance; the owner accepts the slice.
 | `roles/architect.md` | Link the example only if needed; no duplicate contract | C89 changes role/profile references; preserve its work |
 | `pipelines/code-flow.md`, `pipelines/review-flow.md` | Reuse mid-build handoff and evidence checks | No first-slice changes unless the case establishes a missing contract |
 | MODEL, README, `_common`, profiles | Reuse mission and current ownership boundaries | No new universal rule or profile-placement choice; these surfaces overlap C89 |
-| D2 ledger + TASKS | Existing acceptance and task owners | D2-44 does not approve A22 behavior; C86 remains gated |
+| ADR decision blocks + TASKS | Current acceptance and task owners | ADR 0015 D01 (`Legacy-ID: D2-44`) does not approve A22 behavior; C86 remains gated |
 | Skills, hooks, routing, sync/verify | No first-slice mechanism by default | Follow-up only after a distinct need and relevant delivery evidence |
 
 The integration map below is not a copied status board; [TASKS](../TASKS.md) owns
@@ -246,7 +247,8 @@ comparison, not every accepted decision.
 2. **A22 next — AP2/AP3:** compare examples, agree any model-run scope, and conduct a
    small authorized pilot. Accept a named behavior, examples/negative cases, evidence
    limits, allowed modification surface, and economic horizon. Record the operational
-   choice through the existing design/ADR/D2 process separately from D2-44.
+   choice through the current design and thematic-ADR process separately from
+   ADR 0015 D01 (`Legacy-ID: D2-44`).
 3. **C86 — AP4:** implement only the accepted delta, starting with owning guidance and
    examples. Re-read concurrent changes; check links, contract consistency, and behavior.
    Executable additions, if separately justified, need regressions and the existing

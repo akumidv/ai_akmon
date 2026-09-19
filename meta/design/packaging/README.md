@@ -66,7 +66,8 @@ mechanizes the mechanical steps and prints pointers for the judgment steps.
 `package version == standard version`, always. `init --mode submodule` keeps today's
 default distribution intent (deterministic pin, PR governance); `--mode vendored` copies
 the embedded tree into `<AITNA_ROOT>/akmon` and records the version in `.akmon.toml`
-(pin = recorded version, updates via re-run of a future `akmon bump`); `--mode subtree`
+(pin = recorded version, updated by `akmon update`, which runs the target release's own `init`
+— [A23](update-command.md)); `--mode subtree`
 documented, delegated to git. Default mode: `submodule` when the project is a git repo
 with network, else `vendored` — always printed, never silent. *(lock)*
 
@@ -143,6 +144,7 @@ a pin: reading one as declared let a package-mode attach finish green over a pro
 
 ```
 uvx akmon init [--mode submodule|vendored|subtree|package] [--aitna-root PATH] [--yes]
+akmon update [--ref REF]        # A23: move the pin, then realign — design in update-command.md
 akmon sync  [--check|--dry-run]
 akmon verify [--strict]
 akmon path
@@ -234,7 +236,10 @@ a submodule" let a `vendored → submodule` switch finish green with no `.gitmod
   `subprocess` (~12 ms), with `main` dispatching `hook` before it builds a parser.
   `import akmon.cli`: 88 ms → 32 ms. Anything added to that path is paid on every tool call of
   every package-mode session.*
-- Out of scope for now: `akmon bump` (pin bump = deferred C2), publishing an MCP surface.
+- **`update`** — move the pin to a release and realign (A23, [its own note](update-command.md)):
+  the mechanical half of a pin bump, which this list once left out of scope as `akmon bump`. C2
+  keeps the release-subject record of a bump.
+- Out of scope for now: publishing an MCP surface.
 
 ## Packaging mechanics
 

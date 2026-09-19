@@ -1,18 +1,24 @@
 # 0012 — Stage 1 contracts and vocabulary: findings, policy IDs, ownership, load caps, capabilities, and the seeded-violation yardstick
 
-- **Status:** Accepted — owner-verified at **D2-20** and landed at `e89f3fe`. This is the stable
-  half of the A12 stage-1 lock; D2-20 clause (b) verifies its boundary with ADR 0013.
+- **Status:** Accepted. [D06](#d06--stage-1-accepted-scope) is the stable half of the A12
+  stage-1 lock and defines its boundary with ADR 0013. Former D2 acceptance and landing data
+  remain historical provenance, not current state.
 - **Owner:** akuminov@gmail.com
 - **References:** [design lock `stage1-hardening-contracts`](../design/stage1-hardening-contracts.md)
   (the full rationale, per-shape contracts and the owner walkthrough register F1–F22) ·
   [ADR 0010](0010-alternatives-adoption-a11-verdicts.md) (A12 owns the decisions riding the N2
   inventory) · [ADR 0011](0011-agent-name-notation-k-underscore.md) (the first, separately locked
-  A12 slice) · [ADR 0007](0007-d2-ledger.md) §4 (warn-first, which F8/3 must not contradict) ·
+  A12 slice) · [ADR 0016](0016-decision-records-and-owner-acceptance.md) (the current decision
+  record and acceptance contract) ·
   [ADR 0013](0013-hook-survivability-and-crash-posture.md) (the measurement-amendable half) ·
   carriers [C51](../TASKS.md), [C53](../TASKS.md), [C55](../TASKS.md), [C56](../TASKS.md),
   [C57](../TASKS.md), [C58](../TASKS.md),
-  [C59](../TASKS.md), [C46](../TASKS.md) ·
-  ledger rows D2-20, D2-23.
+  [C59](../TASKS.md), [C46](../TASKS.md).
+
+> **C94 applicability note.** The old F8 binding for `d2_ledger_reminder_result`,
+> `verify.owner-verify-d2`, `[d2_ledger] sensitive_paths`, and `d2_ledger.py check --changed`
+> is retired by ADR 0016. It remains below only as rationale and an audit trail of the
+> superseded mechanism. The other stage-1 contracts remain operative.
 
 ## Context
 
@@ -638,6 +644,63 @@ is written rather than what any single one says:
   form — that none of the four may appear at all — was rejected once implementation was
   considered: an implementer reading an ADR with no trace of a neighbouring decision cannot tell
   deliberate absence from a lost requirement, and re-deciding it is the cheaper mistake to make.
+
+## Addressable accepted decision blocks
+
+### D01 — Target normalization and measured payload sources
+
+`Decision-ID: ADR-0012/D01`
+`Legacy-ID: D2-17, D2-18`
+
+Advisory target predicates share project-relative lexical normalization; it is not a containment
+or security boundary. Payload readers prefer measured fields, identify guessed sources, and report
+an unreadable edit target without exposing values. A new payload spelling is measured before it
+becomes silent authority.
+
+### D02 — Vendor route ownership and event diagnostics
+
+`Decision-ID: ADR-0012/D02`
+`Legacy-ID: D2-19, D2-21`
+
+Vendor tool and matcher names have one versioned inventory and a neutral internal vocabulary.
+Unknown routes fail visibly at generation or emit a bounded event diagnostic. Marker claims are
+atomic, private, age-bounded, and repeat when reliable identity is absent.
+
+### D03 — Host-trust capability is queried, not inferred
+
+`Decision-ID: ADR-0012/D03`
+`Legacy-ID: D2-27, D2-40`
+
+Codex hook delivery status comes from the host's authoritative query and is reported independently
+from configured wiring. A stale or modified trust hash remains a visible limitation; a versioned
+observation does not prove later-host parity or silently close its task.
+
+### D04 — Stable findings and bounded capability claims
+
+`Decision-ID: ADR-0012/D04`
+`Legacy-ID: D2-28`
+
+Findings use the stable envelope and capability claims preserve route, normal effect, crash
+posture, input envelope and evidence as separate facts. One green or configured flag cannot stand
+for those dimensions.
+
+### D05 — Crash-posture exemption is expired
+
+`Decision-ID: ADR-0012/D05`
+`Legacy-ID: D2-29, D2-47`
+
+The named exemption for unmeasured Claude commit/delegation crash posture is expired. Both routes
+record measured fail-open posture; the checker has no empty or reusable exemption list. A future
+exception needs a new explicit decision rather than repopulating dead machinery.
+
+### D06 — Stage-1 accepted scope
+
+`Decision-ID: ADR-0012/D06`
+`Legacy-ID: D2-20`
+
+This ADR and ADR 0013 jointly own the accepted A12 stage-1 architecture. This block is the unique
+legacy lookup for that acceptance scope; concrete timing and cap measurements remain task evidence,
+not retroactive contents of the architecture decision.
 
 ## Alternatives
 

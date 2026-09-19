@@ -78,13 +78,14 @@ assumed a 200k window. Each model release would make it wrong again, and a large
 move the point where quality degrades.
 
 The bands are therefore shares of a **recommended maximum context**, not of the model's limit
-(owner-directed; the exact contract is the D2-38 row, owner-approved). The registry block's `window_default`/`windows` become `recommended_max`
+(owner-directed; the accepted scope is [ADR-0006/D03](#d03--recommended-context-budget-and-pressure-delivery)). The registry block's `window_default`/`windows` become `recommended_max`
 (default 200000) and `recommended_max_by_alias` (alias-substring exceptions, longest match — e.g.
 a model whose hard limit sits below the default); `warn_ratios` is unchanged. A share above 100%
 is reported as such. The rename changes the registry hash, so local routing configs go stale once
 and re-init; an overlay still using the old keys is ignored. Carrier:
-`tools/model_routing/routing.py::recommended_max_context`; the operative contract is
-[D2-38](../D2_LEDGER.md) and [design §12.2](../design/model-routing.md).
+`tools/model_routing/routing.py::recommended_max_context`; the operative decision is
+[ADR-0006/D03](#d03--recommended-context-budget-and-pressure-delivery), with detail in
+[design §12.2](../design/model-routing.md).
 
 ## Amendment — a one-task context budget: info at 0.85, warn at 1.0 (D2-42)
 
@@ -102,5 +103,38 @@ line would spend the context it warns about. `warn_ratios` is replaced by `info_
 per pressure episode and nothing repeats past 100% — the model may allow more, and going on is
 the developer's call. A fill below the info level ends the episode whatever lowered it —
 decision 5's "a compaction drops the fill" names one cause, not the mechanism. `AKMON_CONTEXT_RECOMMENDED_MAX`
-overrides the budget per user or project. The operative contract is [D2-42](../D2_LEDGER.md) and
+overrides the budget per user or project. The operative decision is
+[ADR-0006/D03](#d03--recommended-context-budget-and-pressure-delivery), with detail in
 [design §12.2](../design/model-routing.md).
+
+## Addressable accepted decision blocks
+
+### D01 — Active role and orchestrator detection
+
+`Decision-ID: ADR-0006/D01`
+`Legacy-ID: D2-4, D2-37`
+
+Akmon derives the active role and orchestrating model from the last qualifying main-chain
+transcript record rather than a second writable marker. Detection and rebind are delivered only on
+measured vendor routes; absence of a Codex delivery path is not parity.
+
+### D02 — Delegation nudge and unattended posture
+
+`Decision-ID: ADR-0006/D02`
+`Legacy-ID: D2-8, D2-9, D2-10, D2-11, D2-46`
+
+The nudge tracks an undelegated stretch on the main orchestrator only. The first eight calls score
+nothing; reads weigh one half, edit and shell calls one; advisory is 30 and ask is 120. A read never
+carries or spends the ask. An ask actually formed outside interactive default mode becomes a deny.
+The old 10/20 equal-weight rule is historical, and shell command text is not classified merely to
+lower its score.
+
+### D03 — Recommended context budget and pressure delivery
+
+`Decision-ID: ADR-0006/D03`
+`Legacy-ID: D2-38, D2-42`
+
+Context pressure is measured against a configurable recommended one-task budget, not a claimed
+model limit. The current default is 200,000 tokens, with owner-only info at 0.85 and warn at 1.0,
+once per pressure episode; dropping below info resets the episode. The sensor cannot infer task
+identity, and its notice does not add to model context.

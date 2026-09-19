@@ -20,9 +20,10 @@ recording it before agreement.
 
 ## Steps (a loop, not a line — expect several passes)
 
-1. **Frame** — state the problem, the constraints, and what "good" looks like (the
-   acceptance condition). If the request is ambiguous, resolve it with the owner before
-   designing.
+1. **Frame** — state the problem, intended use, constraints, and what "good" looks like
+   (the acceptance condition). Investigate accessible facts; ask an open, consequential
+   question where only the owner can supply missing experience or priorities. Reuse known
+   answers rather than repeating intake or narrowing an unclear problem to a menu.
 2. **Survey** — read the relevant code and docs. Confirm the **current** design *as it
    is*, not as remembered — module names, layers, the data dictionary, the provider
    contracts drift. Check new names for **collisions** in `src/`. Cite what you read.
@@ -54,9 +55,10 @@ recording it before agreement.
    examples (signatures, call sites, data shapes). Move dead-ends to a **rejected
    register** with *why* + *revisit-if* — **never delete them**.
 6. **Iterate** — revisit on new constraints; a rejected branch may revive. Repeat 3–5
-   until the open points are resolved.
-7. **Consolidate** — a coherence pass across the whole concept; **then** fold the locked
-   decisions into an **ADR** (the options, the choice, the rationale, the consequences).
+   until the selected scope's open points are resolved.
+7. **Consolidate** — check the selected decision scope against the whole concept and its
+   dependencies. Prepare the exact proposition, alternatives, rationale and consequences
+   in the living design; do not put an unaccepted proposal into an accepted ADR.
    - *Gate — audit (post-fan-out):* when a trigger fires — a **count floor**
      (`architect_min_options`, registry data) or the **structural trigger** (the design
      fan-out spanned ≥2 independently-decomposed zones) — route an `audit` pass
@@ -65,9 +67,13 @@ recording it before agreement.
      contradictions between independently-correct options, uncovered seams between zones,
      re-ranking deltas, and a level verdict. Advisory; skip above the floor is
      silent-but-logged. One bounded **loop-back** re-round on a material gap, then the owner.
-8. **Align** *(gate)* — get **explicit owner agreement** on any architecture / data-model
-   / math-shaping decision *before* it is written as a requirement. Plausibility and
-   passing examples are not agreement.
+8. **Align and record acceptance** *(gate)* — get **explicit owner agreement** on the
+   coherent architecture / data-model / math-shaping scope before writing it as a
+   requirement or accepted ADR block. Ordinary unambiguous acceptance is sufficient;
+   no magic approval word, repeated per-block confirmation, or file-level approval follows.
+   Record the accepted scope and the owner's rationale in its thematic ADR block(s).
+   Plausibility and passing examples are not agreement. Clarify ambiguous scope; a new
+   material delta needs acceptance only for the affected meaning.
 9. **Hand off** — a task in the **design backlog**; an implementation task in
    `_aitna/TASKS.md` (goal + design link) only **once the design is locked**.
 
@@ -81,27 +87,58 @@ recording it before agreement.
 - **Before Record:** the owner has explicitly agreed to write/update the relevant design,
   backlog, requirement, ADR, or process file unless the original request was already an
   edit command.
-- **Before Consolidate→ADR:** the open-point register has no blocking `pending`; dead-ends
-  are in the rejected register, not deleted; and — when a trigger fired (count floor or ≥2
-  zones) — the audit ran on the gate-pack (or the skip above the floor is logged),
+- **Before Consolidate→Align:** the selected scope has no blocking open choice; unrelated
+  open work stays in design/tasks. Dead-ends are in the rejected register, not deleted;
+  and — when a trigger fired (count floor or ≥2 zones) — the audit ran on the gate-pack
+  (or the skip above the floor is logged),
   with one bounded loop-back re-round on a material gap.
 - **Before a requirement (Align):** the owner has explicitly agreed to load-bearing
   decisions.
-- **At Hand off:** the design is locked and linked; an ADR exists for every non-trivial
-  decision.
+- **Before an accepted ADR block:** the owner has accepted its exact scope. A containing
+  topic's acceptance cannot approve an added or changed block.
+- **At Hand off:** the design is locked and linked; significant commitments have accepted
+  ADR blocks, and implementation/verification work has a task owner.
 
 ## Artifacts
 
 - **Living design concept** — durable, multi-session, resumable by a cold agent (hub +
   "how to resume"; a folder when it grows). The live source until decisions lock.
 - **Rejected-branches register** — why + revisit-if.
-- **ADR(s)** — the locked decisions only. Order them by **number**, not a date; **no dates** in
-  design docs or ADRs (the commit history is the timeline — see [tasks](tasks.md) §No dates).
+- **Thematic ADRs** — accepted commitments only, grouped by subject with stable block IDs.
+  A single-decision ADR is a valid small-topic form. Order ADRs by **number**, not a date;
+  **no dates** in design docs or ADRs (see [tasks](tasks.md) §No dates).
 - **Design backlog** — separate from the implementation backlog; same index format and the same
   no-dates rule ([tasks](tasks.md)).
 
+## Decision blocks and later changes
+
+Record a significant commitment whose rationale future work needs: a shared contract,
+product boundary, consequential math/data choice, substantial risk/cost trade-off, or
+hard-to-reverse departure. A routine correction under accepted rules does not need a
+new decision record. The same threshold applies when a decision emerges during coding.
+
+Use a stable canonical marker in the project's chosen decision-record namespace; for example,
+`Decision-ID: DEC-0042/D03` can be referenced in prose as **decision 0042 D03**, with a readable
+title and a durable anchor.
+The suffix identifies the decision, not its display position; never reuse it. Retain a `Legacy-ID: D2-N`
+alias only when migrating that historical identity. A title change or topic split keeps
+the identity and a navigational pointer, not a second authoritative copy.
+
+A block preserves the accepted scope, decisive premises, choice, rationale, material
+consequences and reconsideration conditions. Link research and implementation evidence
+instead of duplicating them. Common topic context must not silently change the meaning
+of an unchanged block. Material replacement gets a new ID and an explicit supersession
+link covering only the affected scope. Preserve the old rationale and make challenged
+premises visible while replacement work is open; do not apply a known-invalid premise.
+
+Implementation status, missing measurements and conformance checks belong to tasks and
+their evidence, not to an ADR approval queue. Git supplies committed history on demand;
+there is no mandatory copied SHA or separate post-landing verification transition.
+An evidence reference identifies the subject actually checked, not proof of acceptance.
+
 ## Done
 
-A locked, linked design with alternatives/trade-offs and recommendation rationale; an ADR
-per non-trivial decision; the updated requirement(s); and an implementation task in
-`_aitna/TASKS.md`. Code is **not** part of this pipeline — it is [code-flow](code-flow.md).
+A locked, linked design with alternatives/trade-offs and recommendation rationale;
+accepted ADR blocks for significant commitments; updated requirement(s); and an
+implementation task in `_aitna/TASKS.md`. Code is **not** part of this pipeline — it is
+[code-flow](code-flow.md).

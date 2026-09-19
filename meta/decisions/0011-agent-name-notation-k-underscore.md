@@ -118,6 +118,26 @@ non-existent tools of C46, with nothing warning.
   fail loudly on a name the target harness does not know. This ADR removes one instance of
   the problem; it does not remove the class.
 
+## Addressable accepted decision blocks
+
+### D01 — Cross-vendor agent notation
+
+`Decision-ID: ADR-0011/D01`
+`Legacy-ID: D2-15`
+
+Generated agent identities use `k_*` on every vendor. Historical names are not rewritten and
+historical statistics are not silently merged across the rename.
+
+### D02 — Overlay-key compatibility and visible refusal
+
+`Decision-ID: ADR-0011/D02`
+`Legacy-ID: D2-16, D2-22`
+
+Consumer overlay keys tolerate case, surrounding whitespace and hyphen/underscore notation, but
+not changes in significant spelling. Unmatched, colliding or malformed keys stop regeneration and
+are reported to the owner; the last valid binding stays in place. Temporary best-effort warning
+delivery expires when the common episode-marker contract lands.
+
 ## Alternatives
 
 - **Per-vendor name map (`k-explorer` on Claude, `k_explorer` on Codex)** — rejected. It

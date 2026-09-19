@@ -38,7 +38,6 @@ from hook_core import (
     HookResult,
     analysis_write_result,
     claim_diagnostic_marker,
-    d2_ledger_reminder_result,
     find_project_root,
     report_unclassified_shell_route,
     role_on_code_result,
@@ -88,7 +87,7 @@ def _report_unmeasured_path_source(payload: dict) -> None:
     guess that happens to match is worse than one that misses: an empty list raises the
     no-path signal, while a wrong path is classified in silence. So the advisories still run
     on it — a probable target beats no target — and the provenance is stated instead of being
-    presented as measured fact (D2-18 a, owner choice iii).
+    presented as measured fact (ADR-0012/D01, owner choice iii).
     """
     sid = session_id(payload)
     event_id = tool_use_id(payload)
@@ -135,7 +134,7 @@ def _session_start(payload: dict) -> None:
     print_result(session_start_result(find_project_root(start)))
 
 
-_ROUTES = ("analysis-guard", "role-on-code", "d2-ledger-reminder", "session-start", "git-commit-guard")
+_ROUTES = ("analysis-guard", "role-on-code", "session-start", "git-commit-guard")
 
 
 class UsageError(Exception):
@@ -154,13 +153,11 @@ def _dispatch(route: str, payload: dict) -> None:
         _advisory(payload, analysis_write_result)
     elif route == "role-on-code":
         _advisory(payload, role_on_code_result)
-    elif route == "d2-ledger-reminder":
-        _advisory(payload, d2_ledger_reminder_result)
     elif route == "session-start":
         _session_start(payload)
     elif route == "git-commit-guard":
         # Intentionally not wired by sync.py yet; C28(b) owns the exact live-probe,
-        # owner/D2-verification, then generated-wiring sequence for Bash+git behavior.
+        # owner verification, then generated-wiring sequence for Bash+git behavior.
         from hook_core import (  # noqa: PLC0415 — unwired route (C28(b))
             git_commit_guard_result,
             privilege_escalation_guard_result,
@@ -174,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
     """Run one route under the crash guard: a crash exits 1 so Codex shows the hook ``Failed``.
 
     Every route writes at most one document, as its last step, so a crash cannot leave a
-    partial one behind it (ADR 0013 F3 as amended by C87/D2-45).
+    partial one behind it (ADR-0013/D01).
     """
     hook = "codex-hook"
     try:

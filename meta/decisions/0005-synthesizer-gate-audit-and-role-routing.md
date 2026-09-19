@@ -140,11 +140,13 @@ out of the transcript — the last main-chain turn whose first non-whitespace te
 written marker for consistency with the C22/C23 transcript scanning already in the hooks, a
 single source of the role, and nothing an orchestrator can forget to write. Restricting the
 marker to first text prevents later inline and Markdown-prefixed examples from changing the active
-role; a first-position marker is a declaration by definition. Recorded at
-[D2-4](../D2_LEDGER.md); the same correction is under the design's §10.2 and §10.4.
+role; a first-position marker is a declaration by definition. The current owner is
+[ADR-0006/D01](0006-orchestrator-detection-corridor-context-pressure.md#d01--active-role-and-orchestrator-detection);
+the same correction is under the design's §10.2 and §10.4.
 
 **No session-state marker exists**, so no other decision may name one as a carrier. One had:
-`coverage_map.py` claimed a `gate_id` refinement would ride on it (C17/[D2-3](../D2_LEDGER.md));
+`coverage_map.py` claimed a `gate_id` refinement would ride on it
+(C17/[ADR-0005/D01](#d01--gate-pack-coverage-and-independent-audit));
 that claim is withdrawn, and gate-level precision has no carrier today. Decision #9's first
 half — matrix as doc rule plus registry data — shipped as written.
 
@@ -158,3 +160,33 @@ per-kind agents were rejected as disproportionate churn that would reopen the gr
 design. D2-4 owns the predicate and transcript source; the A7/C18/D2-6 addendum above separately
 owns the membership of `cross_cutting_kinds` added to the effective set. No Codex runtime claim is
 made for this Claude-only hook.
+
+## Addressable accepted decision blocks
+
+### D01 — Gate pack, coverage, and independent audit
+
+`Decision-ID: ADR-0005/D01`
+`Legacy-ID: D2-2, D2-3`
+
+A gate pack joins the accepted yardstick, reviewed material and an explicit coverage map. The map
+reports delegated zones and uncovered seams using the strongest available session key; it does
+not claim task completion or agent success. Accepting the architecture never promotes a defective
+or incomplete implementation task.
+
+### D02 — Cross-cutting verification kinds
+
+`Decision-ID: ADR-0005/D02`
+`Legacy-ID: D2-6`
+
+Audit and independent review are cross-cutting kinds available to every role. Their membership is
+owned once in registry data and unioned into each role's allowed set; copying it into each role is
+rejected as drift-prone.
+
+### D03 — Auditor identity
+
+`Decision-ID: ADR-0005/D03`
+`Legacy-ID: D2-7`
+
+The clean-context whole-material gate role is named `auditor`, task kind `audit`, and generated
+agent `k_auditor`. Historical synthesizer names remain historical; the rename does not change the
+gate's authority or make its verdict an owner decision.

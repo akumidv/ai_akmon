@@ -17,9 +17,10 @@ import re
 import shlex
 import sys
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import BinaryIO
 
 # The optional-harness command map lives in the standard tree's ``bin/`` (C57, §7). Two parents
 # up from ``tools/model_routing/`` is that tree root in every mount mode — the mounted
@@ -662,7 +663,7 @@ def agent_key(name: str) -> str:
 
     Overlay brief keys are a public contract written by hand in a consumer's repository, so
     a change of *notation* (ADR 0011) must not orphan them. The tolerance line, owner-verified
-    at D2-16(b): invisible and notational differences are forgiven — surrounding whitespace does
+    at ADR-0011/D02: invisible and notational differences are forgiven — surrounding whitespace does
     not survive a diff, so failing on it costs more to diagnose than the tolerance costs to hold
     — while any difference in significant characters, an internal space included, still fails
     (see ``resolve_briefs``).
@@ -718,7 +719,7 @@ def suppressed_rebind_warning(
     the notice; a cleared condition removes the marker so a later recurrence speaks again.
 
     Delivery here is **best-effort, and this is the one place akmon accepts fail-quiet**
-    (D2-22). A stale marker hides the switch-time notice only when three things coincide: a
+    (ADR-0011/D02). A stale marker hides the switch-time notice only when three things coincide: a
     session id that survived a crash or was reused, the same detected model, and the same
     warning text. It is tolerable only because the same condition is reported loudly
     elsewhere — SessionStart's ``BriefError`` and a direct ``init.py`` run — so this must not
@@ -822,6 +823,74 @@ def _assistant_text(entry: dict) -> str:
     return ""
 
 
+#: Block size of the tail read. A line longer than one block is assembled across blocks.
+_TAIL_BLOCK_BYTES = 1 << 16
+# The line breaks a forward text-mode read splits on (universal newlines): the tail read has to
+# see exactly the lines the forward scan saw.
+_LINE_BREAK = re.compile(rb"\r\n|\r|\n")
+
+
+def _transcript_file(transcript_path: str | Path | None) -> Path | None:
+    if not transcript_path:
+        return None
+    path = Path(transcript_path)
+    return path if path.is_file() else None
+
+
+def _lines_from_end(handle: BinaryIO, needle: bytes) -> Iterator[str]:
+    r"""The lines of ``handle`` that contain ``needle``, last line first (A19).
+
+    Both transcript scanners want the *last* record that qualifies, so reading from the end and
+    stopping at the first qualifying record returns what a full forward scan returns, at a cost
+    set by the distance from the end rather than by the file's size. Lines split on ``\r\n``,
+    ``\r`` and ``\n``, as a forward text-mode read splits them, and each line decodes as strict
+    UTF-8. A line that does not decode is skipped: the forward read raised on it instead, losing
+    every other line with it. Memory stays at one block plus the longest line.
+    """
+    handle.seek(0, os.SEEK_END)
+    position = handle.tell()
+    carry: list[bytes] = []  # the start of the line that runs past the current block, in file order
+    while position > 0:
+        size = min(_TAIL_BLOCK_BYTES, position)
+        position -= size
+        handle.seek(position)
+        block = handle.read(size)
+        # JSON escapes a carriage return, so a real transcript carries none, and bytes.split is
+        # several times faster than the regex. A block holding one takes the exact split.
+        pieces = _LINE_BREAK.split(block) if b"\r" in block else block.split(b"\n")
+        if len(pieces) == 1:
+            carry.insert(0, pieces[0])
+            continue
+        complete = [b"".join([pieces[-1], *carry]), *reversed(pieces[1:-1])]
+        carry = [pieces[0]]
+        yield from _decoded(complete, needle)
+    yield from _decoded([b"".join(carry)], needle)
+
+
+def _decoded(lines: Iterable[bytes], needle: bytes) -> Iterator[str]:
+    for raw in lines:
+        if needle in raw:
+            try:
+                yield raw.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+
+
+def _main_chain_assistant(line: str) -> dict | None:
+    """The record on ``line`` when it is a main-chain assistant turn, else None.
+
+    Sidechain (subagent) turns are skipped, and so is a line that is not JSON — a torn last line
+    included, since the harness may be writing it while a hook reads.
+    """
+    try:
+        entry = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(entry, dict) or entry.get("type") != "assistant" or entry.get("isSidechain"):
+        return None
+    return entry
+
+
 def active_role(transcript_path: str | Path | None) -> str | None:
     """The role from the last qualifying ``🧭 agent: <name>`` transcript declaration.
 
@@ -831,32 +900,26 @@ def active_role(transcript_path: str | Path | None) -> str | None:
     declaration. A declaration qualifies only as the first non-whitespace text of its turn,
     so later inline and Markdown-prefixed examples cannot change state. A first-position marker
     is a declaration by definition. Returns the case-normalized role name, else None.
+
+    Read from the end (A19), stopping at the first qualifying declaration, which is the last one.
+    A session that never declared a role still reads the whole file: bounding the read would
+    forget a role declared early, and the owner chose the exact scan.
     """
-    if not transcript_path:
+    path = _transcript_file(transcript_path)
+    if path is None:
         return None
-    path = Path(transcript_path)
-    if not path.is_file():
-        return None
-    role: str | None = None
     try:
-        with path.open(encoding="utf-8") as handle:
-            for line in handle:
-                # Cheap ascii pre-filter: the emoji may be \u-escaped in the JSONL, but
-                # "agent:" is always literal. json.loads then decodes the real marker.
-                if "agent:" not in line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(entry, dict) or entry.get("type") != "assistant" or entry.get("isSidechain"):
-                    continue
-                match = _ROLE_DECL_RE.match(_assistant_text(entry))
+        with path.open("rb") as handle:
+            # Cheap ascii pre-filter: the emoji may be \u-escaped in the JSONL, but "agent:" is
+            # always literal. json.loads then decodes the real marker.
+            for line in _lines_from_end(handle, b"agent:"):
+                entry = _main_chain_assistant(line)
+                match = _ROLE_DECL_RE.match(_assistant_text(entry)) if entry is not None else None
                 if match:
-                    role = match.group(1).casefold()
+                    return match.group(1).casefold()
     except OSError:
         return None
-    return role
+    return None
 
 
 def role_matrix_warning(registry: dict, subagent_type: str, role: str | None) -> str | None:
@@ -911,53 +974,49 @@ def resolve_alias(model_id: str | None, available: list[str] | None) -> str | No
     return max(matches, key=len) if matches else None
 
 
-def _last_main_turn(transcript_path: str | Path | None) -> tuple[str | None, dict | None]:
+#: ``(model id, usage)`` of the last main-chain assistant turn — what ``last_main_turn`` returns.
+MainTurn = tuple[str | None, dict | None]
+
+
+def last_main_turn(transcript_path: str | Path | None) -> MainTurn:
     """(model id, usage) of the last *main-chain* assistant turn in the session transcript.
 
     The transcript (a JSONL the harness records; its path arrives in the hook payload)
     carries ``message.model`` and ``message.usage`` per assistant turn. Sidechain
     (subagent) turns and synthetic entries are skipped, so a delegate's model or usage
-    never masquerades as the orchestrator's. One pass yields both facts — orchestrator
-    detection and context-pressure detection share it. ``(None, None)`` when the
-    transcript is missing/empty/unreadable or names no model yet.
+    never masquerades as the orchestrator's. One read yields both facts: the hook passes it to
+    orchestrator detection and to context-pressure detection as ``turn``. Read from the end
+    (A19) and stopped at the first qualifying turn, so the cost does not grow with the session.
+    ``(None, None)`` when the transcript is missing/empty/unreadable or names no model yet.
     """
-    if not transcript_path:
+    path = _transcript_file(transcript_path)
+    if path is None:
         return None, None
-    path = Path(transcript_path)
-    if not path.is_file():
-        return None, None
-    model_id: str | None = None
-    usage: dict | None = None
     try:
-        with path.open(encoding="utf-8") as handle:
-            for line in handle:
-                if '"model"' not in line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(entry, dict) or entry.get("type") != "assistant" or entry.get("isSidechain"):
-                    continue
-                message = entry.get("message")
+        with path.open("rb") as handle:
+            for line in _lines_from_end(handle, b'"model"'):
+                entry = _main_chain_assistant(line)
+                message = entry.get("message") if entry is not None else None
                 model = message.get("model") if isinstance(message, dict) else None
                 if isinstance(model, str) and model and not model.startswith("<"):
-                    model_id = model
-                    entry_usage = message.get("usage")
-                    usage = entry_usage if isinstance(entry_usage, dict) else None
+                    usage = message.get("usage")
+                    return model, usage if isinstance(usage, dict) else None
     except OSError:
         return None, None
-    return model_id, usage
+    return None, None
 
 
-def detect_orchestrator(transcript_path: str | Path | None, available: list[str] | None) -> str | None:
+def detect_orchestrator(
+    transcript_path: str | Path | None, available: list[str] | None, *, turn: MainTurn | None = None
+) -> str | None:
     """Alias of the model the *main chain* last ran on, read from the session transcript.
 
     ``None`` when the transcript names no model yet or the model maps to no known alias
     (a fresh session before the first turn, or an unrecognized id): the caller then keeps
-    the recorded orchestrator instead of guessing.
+    the recorded orchestrator instead of guessing. ``turn`` is a ``last_main_turn`` result the
+    caller already read; the transcript is read only without one.
     """
-    model_id, _ = _last_main_turn(transcript_path)
+    model_id, _ = turn if turn is not None else last_main_turn(transcript_path)
     return resolve_alias(model_id, available)
 
 
@@ -1020,13 +1079,16 @@ def recommended_max_context(registry: dict, model_id: str | None) -> int:
     return default
 
 
-def _context_fill_metrics(registry: dict, transcript_path: str | Path | None) -> tuple[int, int, float] | None:
+def _context_fill_metrics(
+    registry: dict, transcript_path: str | Path | None, turn: MainTurn | None = None
+) -> tuple[int, int, float] | None:
     """``(fill, recommended_max, ratio)`` for the last main-chain turn; ``None`` if unavailable.
 
     Shared by ``context_pressure_notice`` (the two-level reminder) and ``context_fill_ratio``
-    (the C29 axis-2 coefficient) so both read the same fill/recommended-max definition.
+    (the C29 axis-2 coefficient) so both read the same fill/recommended-max definition. ``turn``
+    is a ``last_main_turn`` result the caller already read; the transcript is read only without one.
     """
-    model_id, usage = _last_main_turn(transcript_path)
+    model_id, usage = turn if turn is not None else last_main_turn(transcript_path)
     fill = context_fill(usage)
     if fill is None:
         return None
@@ -1053,6 +1115,7 @@ def context_pressure_notice(
     session_id: str | None,
     *,
     marker_dir: Path | None = None,
+    turn: MainTurn | None = None,
 ) -> list[str]:
     """One reminder line when the context fill reached a *new* pressure level; ``[]`` otherwise.
 
@@ -1073,7 +1136,7 @@ def context_pressure_notice(
     # a bool, 0, 1 or more, a string) leaves the budget's own warning alone.
     if isinstance(info_ratio, bool) or not isinstance(info_ratio, (int, float)) or not 0 < info_ratio < 1:
         info_ratio = None
-    metrics = _context_fill_metrics(registry, transcript_path)
+    metrics = _context_fill_metrics(registry, transcript_path, turn)
     if metrics is None:
         return []
     _, recommended, ratio = metrics
@@ -1244,7 +1307,7 @@ def _second_opinion_status(registry: dict, config: dict, orchestrator_vendor: st
     """
     enabled = bool(config.get("second_opinion"))
     state = "on" if enabled else "off"
-    # A retired-key overlay (C57/D2-30) raises out of here, deliberately and not only here:
+    # A retired-key overlay (C57, ADR-0004/D02) raises out of here, deliberately and not only here:
     # ``compute_binding`` reaches the same spec through ``opposite_vendor``, so a stale
     # overlay costs the whole status block, not this field. Catching it locally would look
     # like resilience while changing nothing, so the raise is left to travel.

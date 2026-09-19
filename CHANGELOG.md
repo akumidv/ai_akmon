@@ -16,9 +16,26 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 
 ## Unreleased
 
+### Breaking
+- **Decision acceptance moves from the D2 ledger to thematic ADR blocks (C94 / ADR 0016).**
+  Akmon no longer ships the D2 reminder hook, session counter, `tools/d2_ledger` CLI, or the
+  `Pending → Approved → Verified` / manual commit-SHA workflow. Accepted choices use stable
+  `Decision-ID: ADR-NNNN/DNN` blocks; implementation and evidence remain in tasks and reviews.
+  The old `meta/D2_LEDGER.md` path is a compatibility tombstone and the frozen table lives under
+  `meta/archive/`. Consumer migration is deliberately outside C94; remove `[d2_ledger]`
+  configuration and old commands when a consumer next realigns.
+
 ### Added
+- **`akmon update` moves a project to another akmon release and realigns it (A23/C92; ADR 0018 D03).**
+  Without `--ref` it takes the newest release tag of the akmon repository and never moves the pin
+  backwards; `--ref <tag>` picks one, and an older tag is a rollback it announces. It moves the pin
+  the way the mount mode keeps it — a submodule checkout left unstaged, `uv add` into the pin's
+  dependency group in mode `package` (uv only; other managers get the command printed), the target
+  release's own `init` through `uvx` in mode `vendored` — then runs `akmon init`, `sync --check` and
+  `verify --strict`. It never commits; mode `subtree` gets the `git subtree pull` printed. `init`'s
+  "latest release" no longer counts a pre-release tag.
 - **Google's Python rules as a standard ruff configuration, and `akmon check` over the project's
-  own checks (C89/D2-48).** Each rule now sits in the layer that can hold it
+  own checks (C89; ADR 0014 D01).** Each rule now sits in the layer that can hold it
   ([ADR 0014](meta/decisions/0014-code-rules-catalog-and-language-profiles.md)): a principle for
   any language is in `guardrails/_common.md` § Code design; a rule a linter can check is in
   `profiles/ruff.toml`, akmon's Python rules as a plain ruff configuration annotated with Google
@@ -34,7 +51,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   a standard `extend`. Package mode materializes an extended rules file at
   `<AITNA_ROOT>/.akmon/profiles/ruff.toml`. `sync` now checks a mounted consumer's `@`-imports
   and ruff `extend` as well: a target the mount cannot resolve is a plan error.
-- **`akmon verify` checks live Codex hook delivery (C70/D2-27).** Generated wiring only proves
+- **`akmon verify` checks live Codex hook delivery (C70; ADR 0012 D03).** Generated wiring only proves
   the hooks *file* is correct; a live probe (N7) measured that a discovered `SessionStart`/
   `PreToolUse` entry can still be reported `enabled: true` while its persisted trust is absent
   (`untrusted`) or stale (`modified`), and the handler simply never fires. `verify` now asks the
@@ -162,6 +179,12 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   silence by a filter that would hide it from them and say nothing.
 
 ### Changed
+- **The model-routing hook no longer re-reads the whole session transcript on every prompt
+  (A19/C93/D2-50).** Both transcript scans read from the end and stop at the last main-chain turn
+  or role declaration, and `model-routing` reads once per run instead of twice: on a 33.6 MB
+  transcript one run fell from 755 ms to 0.3 ms. The answers are unchanged, except that a
+  transcript line that is not UTF-8 is now skipped instead of silencing the hook. A session that
+  never declares a role still reads the whole transcript on each delegation.
 - **`self_ci --strict` passes: the Claude commit guard and delegation nudge record a measured
   crash posture (C90/D2-47).** The two `matrix.unqualified-effect` warns are gone. On Claude Code
   2.1.270 a crashing hook — answered by the C87 guard with exit 0 and a notice, or dead with exit

@@ -58,6 +58,9 @@ classification and the `[test].runner` pin. Then:
 akmon verify --strict   # the contract check; also what CI should run, next to `akmon sync --check`
 ```
 
+Later, `akmon update` moves the project to the newest akmon release (`--ref vX.Y.Z` for a specific
+one) and realigns it; it never commits — [BOOTSTRAP](BOOTSTRAP.md) has the bump procedure it runs.
+
 With `--mode package` there is no tree in the repo, so the pin lives in your manifest and
 `init` cannot write it: add `akmon` to a **dev** group (never a runtime dependency) —
 `"akmon @ git+https://github.com/akumidv/ai_akmon@vX.Y.Z"` until the first publish. `init`
@@ -68,9 +71,9 @@ the standard in that mode.
 
 Attach one supported carrier — get a working discipline for AI-assisted development:
 
-- **The owner decides with context.** Plans, design rationale, and verification points
-  connect work to its purpose; agent advice does not replace owner acceptance. Improving
-  that interaction across the whole task is a primary development direction.
+- **The owner decides with context.** Open questions stay in design/tasks; accepted
+  commitments live in addressable thematic ADR blocks. Plans, rationale, and implementation
+  evidence connect work to its purpose; agent advice does not replace owner acceptance.
 - **One entry point.** The root `AGENTS.md` is the single source of guidance; thin
   generated pointers (`CLAUDE.md`, `GEMINI.md`, …) keep every assistant reading it.
 - **Rules that bite.** The invariants ship as hooks (commit guard, delegation nudge,
@@ -149,7 +152,7 @@ tracked as **N1** in [meta/TASKS.md](meta/TASKS.md).
 | [guardrails/](guardrails/) | always-on hard rules for every project (`_common`) |
 | [profiles/](profiles/) | always-on language and environment profiles (`python`, `python-stdlib`) and opt-in domain rules (`quant`, …) |
 | [skills/](skills/) | shared know-how any consuming project can use |
-| [tools/](tools/) | executable mechanics: model routing (registry · init · gate-pack · coverage map · second opinion), tasks, release checks, the D2 ledger |
+| [tools/](tools/) | executable mechanics: model routing (registry · init · gate-pack · coverage map · second opinion), tasks, release checks |
 | [hooks/](hooks/) | the forcing functions — vendor-wired session/pre-tool guards (commit guard, analysis guard, delegation log + nudge, model routing) — [hooks/README.md](hooks/README.md) |
 | [bin/](bin/) | the two launchers: `sync.py` — generates the thin vendor pointers · `verify.py` — validates the project contract (reports, never modifies) |
 | [common/](common/) | the shared stdlib-only utilities every carrier imports: project-root discovery · the finding envelope · the harness command map · the version-spelling rule |

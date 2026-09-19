@@ -1,5 +1,8 @@
 # 0010 — Alternatives adoption: the A11 verdict set
 
+`Decision-ID: ADR-0010/D01`
+`Legacy-ID: D2-14`
+
 - **Status:** Accepted (all 7 themes of the alternatives plan; detailed per-theme rationale
   lives in the walkthrough record, which stays the detail owner; each downstream lock —
   A12/A13/A14/A16 — gets its own ADR when it locks). Owner-verify point: D2-14.

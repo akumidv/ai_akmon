@@ -25,8 +25,8 @@ SHELL_TOOLS = frozenset({"Bash"})
 # followed by `*** Move to: <destination>`, so the destination has its own literal and is
 # invisible to a pattern that reads the `File:` lines alone: the file was classified under
 # where it came *from* and never under where it landed, which silently skipped any advisory
-# keyed on the destination — a file moved *into* a D2-sensitive path being the case that
-# costs most (C67). D2-18(a) recorded the rename as unmeasured and refused to widen the
+# keyed on the destination — a file moved *into* a sensitive path being the case that
+# costs most (C67). ADR-0012/D01 records the rename as unmeasured and refuses to widen the
 # pattern on a guess; all four literals here are now observed on codex-cli 0.149.1
 # ([N1/F4](../meta/reviews/n1-f4-codex-timeout-20260825.md)), which is what makes the
 # widening measurement rather than inference. Kept as one alternation because these lines
@@ -196,7 +196,7 @@ def _paths_by_source(payload: dict[str, Any]) -> tuple[list[str], list[str]]:
 
     Kept apart so a caller can say *how* it learned a path. No measured Codex version sends
     any of the guessed keys; they are tolerated in case a future shape uses one, but a path
-    that only they produced is a claim no measurement backs (D2-18 a). Ranking them below the
+    that only they produced is a claim no measurement backs (ADR-0012/D01). Ranking them below the
     patch body is not enough on its own — a speculative key that matches something *other*
     than an edited file would classify it silently, which is worse than the empty list C48
     started from, so the wrapper reports the provenance instead of trusting it.
@@ -292,7 +292,7 @@ def print_result(result: HookResult | None) -> None:
 
 
 def report_failure(hook_name: str, exc: BaseException) -> int:
-    """The crash half of the Codex entry point (ADR 0013 F3 as amended by C87/D2-45): exit 1.
+    """The crash half of the Codex entry point (ADR-0013/D01): exit 1.
 
     One stderr line naming the route and the exception class — never its message — and nothing
     on stdout. Codex has no measured text channel to the owner, but it does show each hook's

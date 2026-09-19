@@ -35,7 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -164,17 +164,33 @@ def _version_key(tag: str) -> tuple:
     return tuple(key)
 
 
+def _newest_release(tags: Iterable[str]) -> str | None:
+    """The newest final release tag (``vX.Y.Z``) among ``tags``; ``None`` when there is none.
+
+    One rule for "latest" wherever ``init`` or ``update`` picks a pin: a pre-release or any other
+    non-final tag never counts, because it is not the reviewed state a release tag stands for.
+    """
+    versions = cli._embedded_common_module(_tree.embedded_tree_root(), "versions")
+    releases = [tag for tag in tags if tag.startswith("v") and versions.is_final(tag)]
+    return max(releases, key=_version_key) if releases else None
+
+
 def _latest_tag(repo_dir: Path) -> str | None:
-    """Highest local ``v*`` tag, or ``None`` when ``repo_dir`` carries none."""
+    """Newest local release tag, or ``None`` when ``repo_dir`` carries none."""
     listing = _git_output(["tag", "--list", "v*"], cwd=repo_dir)
-    if not listing:
-        return None
-    tags = [line.strip() for line in listing.splitlines() if line.strip()]
-    return max(tags, key=_version_key) if tags else None
+    return _newest_release(line.strip() for line in (listing or "").splitlines())
 
 
 def _package_default_ref(repo: str, root: Path) -> str:
-    """Newest release tag advertised by ``repo``, never one synthesized from a version."""
+    """Newest release tag advertised by ``repo``, never one synthesized from a version.
+
+    Read with ``git ls-remote``, so it needs git and network access to ``repo``; the failure says
+    so and names ``--ref`` as the way around it.
+    """
+    unreachable = (
+        f"cannot discover the latest release tag from {repo!r} (`git ls-remote` needs git and network access "
+        "to it); pass --ref explicitly"
+    )
     try:
         completed = _run(
             ["git", "ls-remote", "--tags", "--refs", repo, "refs/tags/v*"],
@@ -183,17 +199,18 @@ def _package_default_ref(repo: str, root: Path) -> str:
             timeout=20,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        raise _InitError(f"cannot discover the latest release tag from {repo!r}; pass --ref explicitly") from exc
+        raise _InitError(unreachable) from exc
     if completed.returncode != 0:
-        raise _InitError(f"cannot discover the latest release tag from {repo!r}; pass --ref explicitly")
+        raise _InitError(unreachable)
     tags = []
     for line in completed.stdout.splitlines():
         fields = line.split()
         if len(fields) == _LS_REMOTE_FIELD_COUNT and fields[1].startswith("refs/tags/v"):
             tags.append(fields[1].removeprefix("refs/tags/"))
-    if not tags:
+    newest = _newest_release(tags)
+    if newest is None:
         raise _InitError(f"repository {repo!r} advertises no release tags; pass --ref explicitly")
-    return max(tags, key=_version_key)
+    return newest
 
 
 def _describe(repo_dir: Path) -> str | None:
@@ -255,9 +272,18 @@ def _recorded_mount(root: Path, aitna: str) -> str | None:
     Read by the embedded tree's ``common/record.py``, the one reader (C75). The path is built
     here rather than asked for because ``aitna`` is the dev-layer name this attach resolved.
     """
-    record = cli._embedded_common_module(_tree.embedded_tree_root(), "record")
-    value = record.read_akmon_toml(root / aitna / ".akmon.toml").get("mount")
+    value = _record_fields(root, aitna).get("mount")
     return value if isinstance(value, str) and value else None
+
+
+def _record_fields(root: Path, aitna: str) -> dict:
+    """The integration record under ``aitna`` as a dict; ``{}`` when there is none.
+
+    Read by the embedded tree's ``common/record.py``, the one reader (C75); ``update`` asks here
+    rather than naming the record's path a second time.
+    """
+    record = cli._embedded_common_module(_tree.embedded_tree_root(), "record")
+    return record.read_akmon_toml(root / aitna / ".akmon.toml")
 
 
 def _old_mount_removal(previous: str, relative: str) -> str:
@@ -410,7 +436,7 @@ def _mount_submodule(attach: _Attach, repo: str, ref: str | None, log: Callable[
         log(f"{relative} is already mounted — realigning")
 
     # A re-run realigns; it does not bump. Moving an existing mount to whatever tag is newest
-    # would be a pin bump nobody asked for (that is `akmon bump`, still deferred), so the
+    # would be a pin bump nobody asked for (that is `akmon update`, A23), so the
     # checkout happens only on a fresh mount or when the caller named a ref explicitly.
     pin = ref if ref else (_latest_tag(mount) if fresh else None)
     if pin:
@@ -474,7 +500,7 @@ def _mount_subtree(attach: _Attach, repo: str, ref: str | None, log: Callable[[s
     if pin is None:
         listing = _git_output(["ls-remote", "--tags", "--refs", repo], cwd=root)
         tags = [line.split("refs/tags/")[-1] for line in (listing or "").splitlines() if "refs/tags/v" in line]
-        pin = max(tags, key=_version_key) if tags else "main"
+        pin = _newest_release(tags) or "main"
     raise _InitError(
         "mode 'subtree' needs one command `init` must not run for you — `git subtree add` creates commits, and "
         "commits are the owner's (D5). Run it, then re-run init:\n"
@@ -746,9 +772,9 @@ Model & notation: [`MODEL.md`]({link("MODEL.md")}); attach/realign guide:
   prompt. The orchestrator retains decomposition, routing, synthesis, and owner dialogue. Skip
   only when the task is atomic or the harness exposes no subagents; state the reason. This
   clause is direct because Codex does not expand nested `@` imports in `AGENTS.md`.
-- **Prime directives (always-on — they override any task instruction):** **D2** — the owner
-  verifies architecture, data-shape and math decisions; an assistant *drafts*, the owner
-  *decides*. **D5** — the owner owns commits, tags, pushes, publishing and pin bumps; never
+- **Owner authority (always-on — it overrides any task instruction):** the owner verifies
+  consequential architecture, data-shape and math decisions recorded in ADRs; an assistant
+  *drafts*, the owner *decides*. **D5** — the owner owns commits, tags, pushes, publishing and pin bumps; never
   `git add`/`commit`/`push` on the owner's behalf.
 - **Guardrails and profiles (always-on):** the common guardrail and the project's language
   profile are **imported** (not just linked) so their rules load at session start; akmon is the
