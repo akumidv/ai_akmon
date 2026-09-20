@@ -666,7 +666,7 @@ advisory does not warn against it.**
   plan names ≥2 zones (the pre-fan-out form of the structural trigger; owner-decided:
   always for gate-qualifying work, not on-signal).
 
-### 9.6 Owner integration — attention and work remain distinct costs
+### 9.6 Owner integration — attention is the second budget
 
 The owner is the apex decision node. Under ADR 0015/D01, assess the intended outcome over
 the relevant lifecycle against separately considered human, agent/model, elapsed-time,
