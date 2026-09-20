@@ -774,7 +774,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   discriminator (decompose → review · construct → architect · realize → engineer) up front, when
   the project has dev agents, instead of a vague "pick the one the task calls for". The agent gets
   the picking rule at session start, not only after a code/planning edit. OPERATE-only projects
-  keep the generic line. (A10)
+  keep the generic line. (A10 — renumbered A29)
 - **Configurable dev-layer root** — `_aitna/` is now the *default*, not a hard-coded literal. A
   project may relocate the dev layer by declaring **`AITNA_ROOT`** (a project-root-relative path,
   e.g. `tools/ai`); akmon then mounts at `<AITNA_ROOT>/akmon` and `sync.py` / `verify.py` /
