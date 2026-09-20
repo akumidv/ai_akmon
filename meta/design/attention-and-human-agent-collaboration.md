@@ -20,6 +20,14 @@ scenarios, planning, exploring alternatives, deciding, implementing, reviewing,
 reporting limitations, following up problems, and returning in a later session.
 The difficult D2 walkthrough is a concrete case study, not the scope boundary.
 
+The current bounded question is which minimal changes to existing guidance and
+examples help agents establish consequential decision ground, obtain the owner's
+necessary contribution, verify the result, and retain the rationale for later work.
+Assess decision quality alongside owner and agent costs; a justified outcome may
+require no new rule. The [consolidated session-analysis review](a22-session-analysis-synthesis.md)
+records why claim calibration is the first comparison and decision-ground routing
+the next. Their usefulness has not yet been demonstrated by an executed comparison.
+
 ### Owner requirements captured from the discussion
 
 These are attributed English paraphrases of the owner's instructions, not additional
@@ -104,33 +112,48 @@ rules inferred from the research:
 
 ## How to resume
 
-Start with this task brief, then the evidence synthesis and open questions below.
-Treat numerical budgets as hypotheses unless a cited study directly supports the
-specific population and activity. Re-read current source documents and ledger state
-before relying on repository observations; historical session excerpts explain
-friction but do not establish current implementation or acceptance state.
+Start with the [consolidated review](a22-session-analysis-synthesis.md), then
+[current comparison design](attention-frame-comparison.md#current-comparison-design)
+and the [next-session steps](#next-session-steps). This section is the single current
+resume point; older slice and D2 plans preserve their history.
 
-The owner has selected difficult D2 walkthrough as the first concrete case. Use it
-to investigate problem discovery, decision records, and implementation verification,
-then test transfer beyond D2. The mission remains whole-lifecycle collaboration;
-do not replace open discovery with a menu or equate fewer words with better work.
+The owner requested saving the review and starting the proposed documentation/plan
+updates. That authorizes this refinement, not an operative interaction rule, a
+behavioral experiment, or automatic acceptance. A22 is active; C86 remains blocked.
+The mission and decision-record carrier are accepted in ADR 0015 and ADR 0016;
+the broader interaction behavior remains under evaluation.
 
-The [refinement and implementation plan](#refinement-and-implementation-plan) now
-gives a proposed sequence, concrete evaluation cases, dependencies, and exit
-conditions. Resume at AP0 using the already collected episodes; do not restart a
-broad literature or transcript survey unless a material gap remains.
+**Next action: prepare the claim-calibration case packet (AP2 refinement).** Write
+the exact baseline, one candidate clause, paired case inputs and pass/fail rubric in
+the comparison document. Reconcile only external claims actually needed by those
+cases; unavailable external source checks remain explicit gaps. Hand off a bounded
+execution proposal with run budget and stopping conditions. No model comparison or
+owner-facing pilot has run. Do not restart AP0, the mission discussion, or the
+completed D2 carrier redesign.
+
+The milestone is a reviewable case packet, not more general research. Re-read the
+current files and relevant staged/unstaged diff before editing; historical session
+excerpts do not establish current implementation or acceptance. Numerical budgets
+remain proposals until the trial scope is agreed.
 
 The first applied A22 refinement is [decision work and the former D2 register](decision-workflow-and-d2-register.md).
 It records two recent Claude episodes and an adjacent Codex review, the actual SHA
 guarantee, competing ADR practices, and the separation of open design work, accepted
 decisions, and implementation evidence now accepted in ADR 0016. The decision-record
 carrier is settled; broader A22 behavioral comparison and pilot results remain open.
+The proposed `Frame` extensions — intended-use framing, accessible-fact investigation
+before asking, focused questions for owner-only knowledge, and reuse of known
+answers without premature menus — remain A22 design candidates. Compare them with the
+existing guidance on the paired examples before owner acceptance or operative adoption.
+The [AP2 retrospective comparison](attention-frame-comparison.md) now evaluates them
+separately on C89, D2-41/C79, and C80. Its earlier combined candidate is preserved as
+history; the revised comparison isolates claim calibration first and decision-ground
+routing next. Current guidance and examples-only remain viable outcomes.
 The [earlier slice plan](attention-collaboration-plan.md) preserves the
 prior narrower hypothesis and its evaluation rubric, not a competing current plan.
 
-The latest refinement challenges the separate D2 surface itself: Git-derived
-acceptance history, a significance threshold, task-origin decisions and thematic
-organization are now explicit alternatives in that focused plan. Additional session
+The completed decision-record refinement examined Git-derived acceptance history,
+a significance threshold, task-origin decisions and thematic organization. Additional session
 evidence is collected in [cross-session review cycles](decision-review-session-cycles.md),
 with attribution limits preserved rather than treating matching task IDs as proof
 of a Claude-to-Codex handoff.
@@ -892,10 +915,13 @@ the agent complete before asking for that attention?"
 
 ## Refinement and implementation plan
 
-The current [decision-workflow plan](decision-workflow-and-d2-register.md) applies
-the sequence below to the owner's D2 case and owns its case selection, modification
-map, and coordination boundaries. The [earlier slice proposal](attention-collaboration-plan.md)
-preserves the prior narrower hypothesis. The broader sequence remains here.
+This section owns the current sequence and resume steps. The
+[comparison document](attention-frame-comparison.md) owns candidate wording, case
+packets and evaluation specifications; the [consolidated review](a22-session-analysis-synthesis.md)
+preserves the evidence synthesis and modification rationale. The
+[decision-workflow plan](decision-workflow-and-d2-register.md) records the completed
+carrier redesign, and the [earlier slice proposal](attention-collaboration-plan.md)
+preserves the prior hypothesis. Neither is a competing current plan.
 
 ### Outcome and the two meanings of adaptation
 
@@ -979,18 +1005,60 @@ changed, determine whether this is merely a context-restoration problem.
 | --- | --- | --- |
 | AP0 — Ground the target | Orchestrator selects a small set of existing discovery, implementation, and acceptance/resumption episodes. A delegate extracts the minimal evidence. Produce case cards: intended outcome, owner contribution, avoidable work, observed failure, desired behavior | Each case has an identifiable loss or missed insight, not just a long message. Ask the owner only for a consequential missing experience or priority; do not repeat the earlier requirements interview |
 | AP1 — Specify the smallest behavior change | Draft a compact situation/action table, truth-preservation checklist, and accepted-choice versus premise-recheck boundary. Link state to existing rationale, evidence, and task owners | Every proposed behavior has a positive example and a counterexample. No new approval authority, mandatory questionnaire, global profile, or duplicated ledger; open architecture points remain marked |
-| AP2 — Evaluate examples before machinery | Compare current guidance with the minimal candidate on the paired cases below. Use fictional or minimized authorized material. Record outputs, evidence subjects, material omissions, unnecessary questions, and reasons recommendations change | Evaluation distinguishes responsiveness from agreement-seeking and rigidity. It can reveal failure of either condition. No known false closure, hidden material risk, or unauthorized action is accepted; results remain scoped to tested cases |
-| AP3 — Refine with a small owner-facing pilot and lock the first slice | After agreement to the trial, use bounded discovery, implementation handoff, and acceptance/resumption cases. Capture a short owner correction and observed reconstruction effort. Compare existing-guidance-only, minimal guidance, and optional walkthrough where appropriate | A concrete benefit is visible without loss of understanding/control. Remove ineffective ceremony. Owner accepts only the useful first contract slice in an addressable thematic ADR block, not this entire research catalogue |
+| AP2 — Prepare and compare case specifications | Extend the existing retrospective cases using the sanitized synthesis. First specify claim calibration; next specify decision-ground routing. Compare current guidance, examples-only and one targeted clause; keep resumption as a continuity control | Exact inputs, candidate delta, positive/negative cases, rubric, evidence gaps and proposed execution budget are reviewable. Authored traces remain specifications, not executed outputs |
+| AP3 — Execute a bounded comparison and fresh-task pilot | After agreement to the trial scope and budget, run matched cases with one delta at a time, then test surviving behavior on fresh owner-facing work and cold resumption. Record actual outputs, corrections, limitations and available costs | Owner chooses a supported bounded change, retention of current guidance/examples, or an inconclusive result with a named remaining question. Only an accepted operative commitment enters a thematic ADR block; an inconclusive result does not silently complete A22 |
 | AP4 — Implement and verify that slice | Record authorized implementation tasks first. Update the owning guidance and worked examples; add a skill only if AP3 establishes a distinct trigger and result. Add deterministic tooling only for demonstrated repetitive mechanics, with tests | Changed behavior is evidenced on the cases, not merely by mandatory words appearing. Source-of-truth, delivery, negative contracts, tests, and limitations are checked. Decision acceptance, implementation correctness, evidence, and Git history remain distinguishable under ADR 0016 |
 | AP5 — Controlled adoption and simplification | Apply to a small set of normal tasks; compare useful owner insights, repeated-context questions, omitted caveats, unnecessary reopening, and later rework. Keep a clear disable/revert path for optional behavior | Decide to retain, adjust, shrink, or remove the mechanism. Broader propagation requires evidence appropriate to its claim; no population-wide productivity claim from a small local pilot |
 
-AP0 has the owner's applied obstacle and a bounded follow-up sample; paired case
-preparation and comparison remain to be done. Use the focused current plan's cursor
-rather than restart extraction. AP2 should start with inspectable
-example evaluation; any model-running experiment has its own explicit execution
+AP0 has the owner's applied obstacle and a bounded follow-up sample. The
+[inspectable AP2 comparison](attention-frame-comparison.md) prepares the three case
+cards and historical candidate assessments. The external review motivates an AP2
+refinement, not a reset of discovery or a completed trial. A fresh owner-facing pilot
+and any behavioral model comparison remain to be
+done; any model-running experiment has its own explicit execution
 scope and budget. This plan launches neither Codex nor Claude and authorizes no new
 operative interaction rules. A conversational pilot does not require a new runtime
 framework; it also does not authorize tool use outside the underlying task.
+
+### Next-session steps
+
+These are ordered design outputs, not a second task-status board. Begin with step 1;
+continue to the next independent preparation step when its prerequisites are available.
+
+1. **Prepare the claim-calibration packet.** In the comparison document, capture the
+   exact current instructions, a single proposed clause and paired cases for indirect
+   evidence, incomplete checks and justified confidence. Name the checked subject,
+   permitted action, material failure and expected evidence boundary. Record which
+   details are observed, reconstructed or constructed. Reconcile external scoring
+   only where it affects selection; do not invent access to the other machine.
+   **Output:** a self-contained packet ready for review, with no execution claim.
+2. **Specify the comparison and budget.** Hold inputs, authority, model/harness and
+   available tools fixed. Separate baseline, examples and clause effects using the
+   [comparison conditions](attention-frame-comparison.md#current-comparison-design).
+   Propose a bounded run count, resource limit and stopping condition, plus a fresh
+   variation not used to tune the wording. **Output:** an executable trial proposal;
+   obtain agreement to its scope/budget before running model comparisons or a pilot.
+3. **Evaluate claim calibration.** Preserve actual outputs and failures, including
+   correct confidence and wrong action hidden behind a caveat. If examples suffice,
+   prefer them; if evidence is inconclusive, identify the remaining uncertainty.
+   **Output:** a bounded result with costs and limitations, not a general effect claim.
+4. **Prepare and evaluate decision-ground routing separately.** Use unknown/known use,
+   inspectable fact/owner priority and consequential/reversible pairs, including useful
+   early menus. Do not bundle its clause into step 3. Preparation can proceed while
+   an unrelated external verification gap is open; execution has its own agreed scope.
+5. **Check fresh-task use and cold resumption.** Test whether the existing decision/task
+   record preserves rationale and unresolved work. A repeated owner assessment of the
+   same learned case is not independent evidence. Record observed rework separately
+   from hypothetical avoided cost; unavailable attention/time/token measures stay unknown.
+6. **Dispose of the selected scope.** Present evidence for a minimal change, an
+   examples-only/no-new-rule outcome, or further bounded investigation. Record owner
+   acceptance of significant commitments through the existing ADR process. Give C86
+   the resulting scope, or explicitly record that implementation is not required.
+
+The next session need not reapprove documentation work already requested. New
+operative behavior, an experiment budget, and implementation beyond the accepted
+scope remain distinct choices. Routine preparation is not blocked by C19, C56/C60,
+or completion of unrelated project tasks.
 
 ### Paired cases and negative controls
 
@@ -1046,7 +1114,7 @@ every task.
   Reuse their boundaries. A version change is a relevance-check candidate, not a
   reason to repeat every historical experiment.
 - Metrics and automation: coordinate any later attention-metric change with C19,
-  packet assembly with C24, and a reusable behavioral-evaluation framework with
+  packet assembly with C96, and a reusable behavioral-evaluation framework with
   A14/C42. Do not silently revive A18's deferred automatic plan-draft trigger.
   These are integration seams, not blanket prerequisites for trying a small
   example-based interaction improvement. Current task ownership lives in
@@ -1211,11 +1279,14 @@ A second model's endorsement does not close either question.
 Execution state lives in [TASKS](../TASKS.md), not the AP labels or a copied status
 table here. The owner requested both the plan and its implementation task.
 
-- **A22 — design refinement.** AP0–AP3: ground the cases, specify the smallest behavior
-  change, evaluate alternatives, and prepare independently acceptable slices. Done
-  requires explicit owner acceptance of the slice's premises, criteria, and behavior,
-  its thematic ADR block and linked acceptance examples. ADR 0015 D01 accepts the mission
-  wording separately; it does not accept a report protocol or skill.
+- **A22 — design refinement.** AP0–AP3: ground the cases, compare the smallest changes,
+  and prepare independently decidable scopes. Done requires an explicit owner-accepted
+  disposition with premises, criteria, evidence limits and linked cases: either a
+  useful operative slice recorded in a thematic ADR block, or retention of current
+  guidance with examples only or no new rule. A significant no-change commitment uses
+  the same ADR significance threshold; no record is invented for every observation.
+  State the resulting C86 scope or no-implementation disposition. Insufficient evidence
+  alone does not satisfy Done. ADR 0015 D01 accepts the mission separately, not a protocol.
 - **C86 — implementation.** AP4–AP5, blocked on A22 locking an implementable slice and
   owner authorization to realize it. Start with owning guidance and examples;
   skills/tools are conditional. Done requires conformance evidence, behavioral
@@ -1223,6 +1294,9 @@ table here. The owner requested both the plan and its implementation task.
   and the applicable decision/conformance contract in ADR 0016.
   A failed premise returns the
   affected choice to A22, not to silent feature growth or rewritten success criteria.
+  An owner-accepted no-implementation outcome is recorded as a terminal disposition
+  under the task convention, never as delivery of unperformed work. A22's first
+  bounded result does not claim to complete the whole collaboration mission.
 - **ADR 0015 D01 — mission wording and top-document alignment** (`Legacy-ID: D2-44`). The owner accepted the
   framing, including the economic clarification: lifecycle resource effectiveness,
   not local saving, with justified up-front investment in design and model reasoning.
@@ -1230,9 +1304,10 @@ table here. The owner requested both the plan and its implementation task.
   changes. Operational forks receive their own blocks when specified; they must not
   borrow this acceptance. No task status or implementation claim follows from it.
 
-The immediate authorized change is mission/priority documentation and the requested
-backlog/verification records. No runtime implementation, new skill/hook, consumer
-change, automatic acceptance, or vendor experiment is claimed by this update.
+The owner authorized preserving the consolidated analysis and starting its proposed
+documentation and plan updates for stepwise continuation. This records that work;
+it does not accept a runtime protocol, new skill/hook, consumer change, automatic
+acceptance, or vendor experiment.
 
 ### Review of this documentation increment
 

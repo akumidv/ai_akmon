@@ -22,10 +22,11 @@ rationale, not a new model/effort binding or a measured return-on-investment for
 Two connected priorities serve that mission:
 
 1. **Human attention and joint decision quality.** Put the owner's knowledge, experience,
-   and judgment to work on goals and consequential choices. Reduce routine investigation,
-   repeated explanation, and context reconstruction. Adapt communication to the person
-   without adapting factual conclusions merely to obtain agreement; keep material choices,
-   uncertainty, and problems visible.
+   and judgment to work on goals and consequential choices. Let agents carry routine
+   investigation and evidence assembly; reduce avoidable repeated explanation and context
+   reconstruction that the owner must supply. Adapt communication to the person while
+   preserving independent factual assessment rather than adapting conclusions to obtain
+   agreement; keep material choices, uncertainty, and problems visible.
 2. **Agent work and token efficiency for quality.** Separate cognitive work through roles,
    delegate bounded work to subagents, select model capability by task kind and leverage,
    reuse skills, and use hooks for the controls a harness can actually deliver. These are

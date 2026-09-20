@@ -2,7 +2,8 @@
 
 > **What this is.** The first evidence round for owner choice **F6/C**
 > ([stage-1 lock §2](../design/stage1-hardening-contracts.md)), owned by
-> [N5](../TASKS.md) and gating [D2-23](../D2_LEDGER.md), which in turn gates only C52.
+> [N5](../TASKS_ARCHIVE.md) and gating [D2-23](../decisions/0013-hook-survivability-and-crash-posture.md#d02--bounded-input-and-timeout-evidence-sequence),
+> whose alias now resolves to ADR-0013/D02 (C95), and which in turn gates only C52.
 > Rounds 1–2 answer most of F6's four questions — *which axes exist*, *which entries consume them*,
 > *what a real consumer measures today*, and *what the combined supported corpus is*. Round 1
 > (§1–§7) mapped the initial axes and measured the file-side ones; round 2 (§8) measured the
@@ -237,7 +238,7 @@ is a waiver.
 bounded number of records is the answer that makes this axis cheap regardless of file size, and it
 stays outside F6 by the lock's own rule: streaming or indexing an expensive source is separate
 architecture and evidence work that must bound time and memory, prove equivalence to full
-processing, and rederive the F5 budgets. It carries its own id **[A19](../TASKS.md)** so that the
+processing, and rederive the F5 budgets. It carries its own id **[A19](../TASKS_ARCHIVE.md)** so that the
 cost (b) accepts has an owner instead of living in this paragraph.
 
 **A19 outcome — owner choice (a).** The relocated work landed as an exact change, not as a bound.
@@ -249,7 +250,7 @@ whole-file worst case, because a record-count bound would forget a role declared
 rejected: a transcript with no main-chain declaration still reads to its first byte, 131 ms on
 33.6 MB against the forward scan's 202 ms, about 0.25 s at the cap by extrapolation, paid by
 `delegation-log` only. The equivalence carriers, and the one intended difference (a line that is
-not UTF-8 is skipped where the forward scan raised), are [C93](../TASKS.md)'s. N6 measures this
+not UTF-8 is skipped where the forward scan raised), are [C93](../TASKS_ARCHIVE.md)'s. N6 measures this
 code, so the 1.2 s planning figure above no longer describes `model-routing`.
 
 **Owner choice: `sync` is not covered.** F6 is the hook entry envelope only. `sync --check` reads
@@ -558,7 +559,7 @@ from the glob cap.
 
 The §4 caps remain proposed and unratified after code landing. They become eligible for ratification
 only after the differential corpus passes, the exact boundary rerun supports them, and the owner
-explicitly verifies D2-23. Recorded as [C66](../TASKS.md).
+explicitly verifies D2-23. Recorded as [C66](../TASKS_ARCHIVE.md).
 
 ### Where this leaves the packet
 
@@ -571,7 +572,7 @@ for explicit D2-23 verification.
 ## 11. C66 — the axis-7 boundary rerun
 
 C66 replaced the recursive matcher in both copies (`hook_core` and the ledger tool) with one table
-per call over (pattern index, path index); [C66](../TASKS.md) names the carriers — a differential
+per call over (pattern index, path index); [C66](../TASKS_ARCHIVE.md) names the carriers — a differential
 corpus against the recursion, and a call count that fails the recursion at the boundary. Top-down
 memoization of the recursion was measured first and dropped: its `**` step still branches per
 split, 0.81 s for 200 globs at target depth 64 against the table's 0.028 s.
@@ -635,3 +636,34 @@ should hold near 1 s instead, 4,000 pairs (20 paths × 200 globs) extrapolates t
 **Owner choice at D2-23: 6,000 pairs**; the 4,000-pair alternative was not taken. The combined supported corpus (§8) takes
 the pair cap as its Codex-route boundary: its largest supported patch is 500 paths against 12
 globs, or 30 paths against 200, never both maxima at once.
+
+## 12. Amendment — which of these caps lost their consumer at the C94 cutover
+
+> Added by [C95](../TASKS_ARCHIVE.md). Nothing measured above is restated or withdrawn: the rounds, the
+> numbers and the owner's approval keep their original language and remain the dated record. This
+> section records only which of them no longer bound anything shipped after the D2 reminder, the
+> D2 CLI and the ledger were removed, so that F5 does not budget for an axis nothing reads.
+
+- **Axes 6 and 7 have no current consumer.** In the measured hook population, axis 6 (ledger bytes
+  and rows) was read only by SessionStart model routing; axis 7 (the consumer's configured
+  `sensitive_paths` globs, measured as path × glob pairs) was read by the Claude reminder,
+  SessionStart model routing and the Codex reminder. The D2 CLI also read the configured globs
+  outside that hook population. C94 removed all of those D2 reads, and no `fnmatch` or glob matcher
+  remains under `hooks/`. Their rows in §4 (`:151`), the refutation in §10 and the rerun in §11
+  stand as measurement; they bound nothing in the current tree.
+- **The combined 6,000 path × glob pair cap goes with them.** It existed as the Codex patch
+  route's boundary. What is *not* affected: axis 4's per-path caps — 4,000 bytes and 64 segments —
+  still bound Claude's `file_path` and every path extracted from a Codex patch body, and the
+  500-path patch measurement stands as the path-count evidence for that route.
+- **The entry population in §1 is one Claude entry and one Codex scope shorter.** Row 4
+  (`d2-ledger-reminder.py`) is gone, and rows 10–12 are now two scopes, not three. The current
+  population is **eight Claude command entries across seven scripts** — `model-routing.py` is still
+  wired twice — plus **three Codex scopes** through the one `codex-hook.py` process. F5's table is
+  written against that population, not against the thirteen rows above.
+- **§8's corpus loses its largest row.** The 5,004,000-byte supported fixture for
+  `d2-ledger-reminder.py` / codex `d2-ledger-reminder` (`:364`) has no entry to feed; the combined
+  supported corpus for F5 is recomposed without it.
+- **C66's subject no longer exists.** §11's rerun memoized `_segments_match`, which the cutover
+  deleted along with both of its copies; the task is superseded rather than delivered (C95).
+- **Unaffected, and what F5 actually budgets against:** the transcript axis, the roster and briefs
+  axes, the payload axes of §8, axis 4, and the peak-resident measurement.

@@ -10,7 +10,7 @@
   policy-ID join) · [codex-runtime-contract](../design/codex-runtime-contract.md) ·
   [ADR 0010](0010-alternatives-adoption-a11-verdicts.md) ·
   [N2 findings](../reviews/alternatives/n2-stage0-probes-inventory-20260807.md) ·
-  carriers [C52](../TASKS.md), [C57](../TASKS.md), N1/F4, N5/F6 and N6/F5.
+  carriers [C52 and N6/F5](../TASKS.md), [C57 and N5/F6](../TASKS_ARCHIVE.md), and N1/F4.
 
 > **C94 applicability note.** The D2 reminder entry and D2 ledger/config input axes described
 > below were removed with the former ledger workflow under ADR 0016. They remain historical
@@ -199,8 +199,9 @@ only if they force a change to it.
 ### F13 verification carriers
 
 The independently violable rules above keep distinct checker/seed/failure triples. The crash
-matrix covers all nine spawned entries and injects at every applicable wrapper, adapter and handler
-layer; a Codex-boundary `SystemExit` is separate from ordinary handler exceptions. Every crash must exit 0,
+matrix covers all eight current spawned files (nine at lock time, before C94 removed the D2
+reminder) and injects at every applicable wrapper, adapter and handler layer; a Codex-boundary
+`SystemExit` is separate from ordinary handler exceptions. Every crash must exit 0,
 emit exactly one safe class-and-hook diagnostic and no blocking or partial stdout, while the paired
 healthy deny remains a deny. A mid-render failure separately proves the adapters' single-write
 property, and a BOM-prefixed valid payload must reach its handler.
@@ -285,7 +286,8 @@ F3's guard leaves C52 and lands on its own. C52 stays blocked behind D2-23 for t
 literals of F4–F6, and the guard needs none of them. What changes in F3 is who hears about a
 crash.
 
-- **The guard, on all nine spawned entries.** In substance this is F3 unchanged. Any exception in
+- **The guard, on all nine lock-time spawned entries; eight remain after C94.** In substance this is
+  F3 unchanged. Any exception in
   a wrapper, adapter or handler is caught at the entry's top level, and one stderr line names the
   hook and the exception class, never the message. The action goes ahead: crash-open, the
   deny-class `git-commit-guard` included. The Codex entry also catches a bad route argument,

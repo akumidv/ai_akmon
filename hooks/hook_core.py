@@ -102,6 +102,12 @@ def hook_failure_diagnostic(hook_name: str, exc: BaseException) -> str:
     """The one stderr line a crashed entry point writes (ADR 0013 F3): the hook and the class.
 
     Never the exception's message — it routinely carries a path, a key or a payload fragment.
+
+    Runtime classification: operational
+    Rationale: crash posture (ADR 0013 F3), not a guardrail policy — it reports that a hook failed
+    and authors no rule of its own. An adapter renders it into the hook process's stderr, so it
+    reaches the owner from outside the ``*_result`` join, where ADR-0012/D07 requires the
+    classification to be stated rather than left silent.
     """
     return f"akmon {hook_name} hook: {type(exc).__name__}"
 
@@ -112,6 +118,12 @@ def hook_failure_notice(hook_name: str, exc: BaseException) -> str:
     The same two facts as :func:`hook_failure_diagnostic` and nothing from the exception's text.
     It is written inside a crash handler, so it reads nothing that can raise — the dev-layer
     name is an environment lookup with a default, not a filesystem question.
+
+    Runtime classification: operational
+    Rationale: the owner-facing half of the same crash report (ADR-0013/D01) — it states that a
+    hook was skipped and names the recovery command, and authors no guardrail rule. An adapter
+    renders it into the vendor's owner channel, so ADR-0012/D07 requires this classification on it
+    even though it sits outside the ``*_result`` join.
     """
     return (
         f"⚠ akmon: the {hook_name} hook failed ({type(exc).__name__}) and was skipped — this action "
@@ -243,6 +255,12 @@ def report_unclassified_shell_route(session_id: str | None) -> None:
 
     Never blocks and never becomes model context: every caller keeps its exit code. Whether a
     harness surfaces hook stderr to the owner is unverified on both vendors and is not claimed.
+
+    Runtime classification: operational
+    Rationale: it reports a *gap* in what the advisories can see, which is the opposite of
+    enforcing a rule — no guardrail subset is claimed, and none could be, since the route it
+    describes is the one nothing classifies. It writes to stderr itself, so ADR-0012/D07 puts it
+    among the owner-visible callables outside the join that must say what they are.
     """
     if claim_diagnostic_marker("shell-route", session_id):
         print(UNCLASSIFIED_SHELL_ROUTE_NOTICE, file=sys.stderr)
@@ -318,6 +336,8 @@ def privilege_escalation_guard_result(command: str) -> HookResult | None:
     exists on purpose (e.g. a root-owned file). Neither is something the agent decides for
     itself — if elevated access is genuinely needed, the owner runs it themselves. No ask:
     the answer does not depend on session attentiveness, so there is nothing to escalate.
+
+    Policy ID: privilege.no-escalation
     """
     if not _SUDO_RE.search(command):
         return None
@@ -332,7 +352,10 @@ def privilege_escalation_guard_result(command: str) -> HookResult | None:
 def git_commit_guard_result(
     command: str, branch: str | None = None, *, permission_mode: str | None = None
 ) -> HookResult | None:
-    """Guard commit-shaped ``git`` commands: no AI co-author trailer, owner confirms landing history."""
+    """Guard commit-shaped ``git`` commands: no AI co-author trailer, owner confirms landing history.
+
+    Policy ID: commits.owner-owned
+    """
     if "git" not in command:
         return None
 
@@ -427,7 +450,15 @@ def stale_guardrail_notice(root: Path) -> str | None:
 
 
 def session_start_result(root: Path) -> HookResult | None:
-    """SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice."""
+    """SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice.
+
+    Runtime classification: operational
+    Rationale: it authors no rule. It aggregates the agent roster and re-delivers rules owned
+    elsewhere — role declaration, the memory-read rule, delegation-by-default — at session start,
+    and on Codex it is the only delivery channel for the delegation rule, because ``@``-imports are
+    not expanded there (C39). Delivery is not ownership, so the classification stands; without that
+    second fact "operational" would read as "incidental", which it is not.
+    """
     stale = stale_guardrail_notice(root)
     dev = agent_names(aitna_root(root) / "agents")
     desk = agent_names(root / "agents")
@@ -586,7 +617,10 @@ def role_on_code_message() -> str:
 def role_on_code_result(
     tool_name: str, file_path: str | None, session_id: str | None, project_root: Path | None = None
 ) -> HookResult | None:
-    """PreToolUse guardrail: on the first code edit per session, remind to declare the engineer role."""
+    """PreToolUse guardrail: on the first code edit per session, remind to declare the engineer role.
+
+    Policy ID: role.declaration
+    """
     if tool_name not in _EDIT_TOOL_KINDS:
         return None
     if not isinstance(file_path, str) or not is_code_path(file_path, project_root):
@@ -630,7 +664,10 @@ def analysis_before_mutation_message() -> str:
 def analysis_write_result(
     tool_name: str, file_path: str | None, session_id: str | None, project_root: Path | None = None
 ) -> HookResult | None:
-    """PreToolUse guardrail: on the first planning-doc edit per session, remind analysis-before-mutation."""
+    """PreToolUse guardrail: on the first planning-doc edit per session, remind analysis-before-mutation.
+
+    Policy ID: analysis.before-mutation
+    """
     if tool_name not in _EDIT_TOOL_KINDS:
         return None
     if not isinstance(file_path, str) or not is_planning_doc(file_path, project_root):
@@ -824,7 +861,10 @@ def delegation_nudge_result(
     is_subagent: bool = False,
     permission_mode: str | None = None,
 ) -> HookResult | None:
-    """PreToolUse guardrail: nudge, then hard-ask, on sustained orchestrator delegation drift."""
+    """PreToolUse guardrail: nudge, then hard-ask, on sustained orchestrator delegation drift.
+
+    Policy ID: delegation.tier-floor
+    """
     # C28d: subagent-originated calls (agent_id present in the payload) must never touch
     # the counter. k_* delegates can't delegate (no Task tool), so nudging/asking them is
     # noise and the hard ask blocks their legit reads. The session_id is shared with the

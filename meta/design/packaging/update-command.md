@@ -2,7 +2,7 @@
 
 > **Status: owner-decided in
 > [ADR 0018 D03](../../decisions/0018-release-alignment-and-update-lifecycle.md#d03--explicit-update-and-rollback);
-> implemented in the tree as C92, awaiting the owner's commit.** Extends the
+> implemented as [C92](../../TASKS_ARCHIVE.md) and landed in `816eb52`.** Extends the
 > [packaging design](README.md) CLI contract.
 
 ## Problem

@@ -17,7 +17,7 @@
 > `Edit|Write|apply_patch` → `Bash|apply_patch` transition alphavar faces. akmon's own `verify`
 > does not inspect either host-side state.
 >
-> Owned by [N7](../TASKS.md). Corrects one incidental claim in
+> Owned by [N7](../TASKS_ARCHIVE.md). Corrects one incidental claim in
 > [the N1/F4 probe](n1-f4-codex-timeout-20260825.md) — see §The N1 false negative.
 
 ## Environment and method

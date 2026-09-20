@@ -4,7 +4,7 @@
 > in the harness's own skills directory, and until C79 no akmon stub carried any.** Claude Code
 > listed each generated stub under its bare name (M54), and Codex refused to load one (M55), so
 > no description akmon or a consumer wrote reached a selector. The owner's decisions taken on
-> this evidence are [D2-41](../D2_LEDGER.md). Owned by [C79](../TASKS.md).
+> this evidence are [D2-41](../D2_LEDGER.md). Owned by [C79](../TASKS_ARCHIVE.md).
 
 ## Sources — vendor documentation only
 

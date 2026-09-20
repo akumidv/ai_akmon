@@ -27,7 +27,7 @@ sys.path.insert(0, str(_KEYSTONE_ROOT / "bin"))
 sys.path.insert(0, str(_KEYSTONE_ROOT))
 sys.path.insert(0, str(_KEYSTONE_ROOT / "meta"))
 
-from checks import capabilities, decision_records  # noqa: E402
+from checks import canary, capabilities, decision_records  # noqa: E402
 from checks import runtime as runtime_checks  # noqa: E402
 
 from common.findings import Finding, exit_code, print_findings  # noqa: E402
@@ -495,6 +495,7 @@ def _run(akmon_root: Path) -> list[Finding]:
     # Akmon's own declarations, checked against akmon's own tree rather than the fixture: the
     # capability matrix is a property of what akmon ships, not of a synthetic consumer's use of it.
     findings.extend(capabilities.check_capabilities(akmon_root))
+    findings.extend(canary.check_canary(akmon_root))
     findings.extend(decision_records.check_decision_records(akmon_root))
     findings.extend(runtime_checks.check_declared_runtimes(akmon_root))
     return findings

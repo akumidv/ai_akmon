@@ -250,9 +250,17 @@ def test_the_real_tree_spells_no_harness_binary_outside_the_map():
 
 
 def test_c57_lock_text_pins_prefix_ownership_without_the_old_overclaim():
-    """The task lock states the same narrow ownership boundary as the implementation."""
-    tasks = (_KEYSTONE / "meta" / "TASKS.md").read_text(encoding="utf-8")
-    entries = [line for line in tasks.splitlines() if line.startswith("- C57 · ")]
+    """The task lock states the same narrow ownership boundary as the implementation.
+
+    The lock travels with its row rather than with the live file: C57 closed out into
+    ``TASKS_ARCHIVE.md`` (C95). Both backlog files are read and exactly one C57 entry must exist
+    across them, so archiving a task cannot become a way to drop the sentence pinned here.
+    """
+    backlog = "\n".join(
+        (_KEYSTONE / "meta" / name).read_text(encoding="utf-8")
+        for name in ("TASKS.md", "TASKS_ARCHIVE.md")
+    )
+    entries = [line for line in backlog.splitlines() if line.startswith("- C57 · ")]
 
     assert len(entries) == 1
     entry = entries[0]

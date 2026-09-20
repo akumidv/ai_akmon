@@ -237,7 +237,7 @@ def test_session_start_none_when_no_agents(tmp_path):
 
 
 def test_session_start_includes_develop_discriminator_when_dev_agents_exist(tmp_path):
-    # A10: the routing rule (decompose→review · construct→architect · realize→engineer) is
+    # A29: the routing rule (decompose→review · construct→architect · realize→engineer) is
     # surfaced up front, not only after a code/planning edit.
     _make_agent(tmp_path / "_aitna" / "agents", "engineer")
     ctx = session_start_result(tmp_path).additional_context

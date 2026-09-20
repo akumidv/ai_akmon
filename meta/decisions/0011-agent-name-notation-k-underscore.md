@@ -109,7 +109,7 @@ non-existent tools of C46, with nothing warning.
   the spec name exactly, so the rename orphaned them silently — the generated definition
   shipped without the project's hand-authored instructions and the sweep above then deleted
   the `k-*.md` that still carried them. Found in review, carried as
-  [C50](../TASKS.md) and fixed there: the lookup now folds case and `-`/`_`, and a brief key
+  [C50](../TASKS_ARCHIVE.md) and fixed there: the lookup now folds case and `-`/`_`, and a brief key
   matching no agent is a hard error that stops the regeneration instead of an empty string.
   The general lesson for the scope boundary above: a rename reaches further than the files
   akmon generates, into the keys by which a consumer addresses them.

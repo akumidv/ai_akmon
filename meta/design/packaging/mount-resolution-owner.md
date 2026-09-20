@@ -83,10 +83,10 @@ sixth:
 | `tools/model_routing/init.py:60` | narrow top-level scalar read |
 | `src/akmon/cli.py:148` | must not depend on the *consumer's* tree — still true, and it can ask the embedded one |
 
-Only the hooks' reader moved. Folding the other four is [C75](../../TASKS.md): each carries a
+Only the hooks' reader moved. Folding the other four is [C75](../../TASKS_ARCHIVE.md): each carries a
 justification to re-examine on its own, and three of the four are weaker than when written.
 
-> **Folded — [C75](../../TASKS.md).** Three of the four now read through `common/record.py`:
+> **Folded — [C75](../../TASKS_ARCHIVE.md).** Three of the four now read through `common/record.py`:
 > `release_check` and `model_routing/init.py` import it, and the CLI asks the embedded tree's
 > copy — the tree that ships with it, not the consumer's tree it is judging. Two callers the table
 > did not list moved too: `src/akmon/_init.py::_recorded_mount`, which borrowed the CLI's private

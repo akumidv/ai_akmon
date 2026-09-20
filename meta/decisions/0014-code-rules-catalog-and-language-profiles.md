@@ -7,7 +7,8 @@
   [C89 baseline](../reviews/c89-python-rule-baseline-20260913.md) ·
   [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html) ·
   [ADR 0009](0009-packaging-package-carrier-and-mount-modes.md) (package mode, the materialized
-  guardrails) · tasks [C89, C91](../TASKS.md), C83 (the one integration-record reader).
+  guardrails) · archived tasks [C89, C91, C83](../TASKS_ARCHIVE.md) (C83 is the one
+  integration-record reader).
 
 `Decision-ID: ADR-0014/D01`
 `Legacy-ID: D2-48`

@@ -666,18 +666,25 @@ advisory does not warn against it.**
   plan names ≥2 zones (the pre-fan-out form of the structural trigger; owner-decided:
   always for gate-qualifying work, not on-signal).
 
-### 9.6 Owner integration — attention is the second budget
+### 9.6 Owner integration — attention and work remain distinct costs
 
-The owner is the apex decision node; the framework's goal is quality per unit of
-**tokens + owner attention**, and only the first had a mechanism. Two integrations:
+The owner is the apex decision node. Under ADR 0015/D01, assess the intended outcome over
+the relevant lifecycle against separately considered human, agent/model, elapsed-time,
+implementation, and rework costs; do not reduce this to a quality-per-unit ratio or an
+exchange rate between tokens and attention. Two integrations:
 
 - **decision/evidence attachment:** the auditor's gate report links from the owning
   task, decision block, or evidence packet alongside the reasoner draft and
   second-opinion digest — the owner can inspect the change, drafted rationale,
   whole-picture audit, and disagreement without a second status ledger.
-- **attention metrics:** the deferred C19 extension may report owner interaction load
-  next to token spend — accepted decisions, material reopenings, avoidable questions,
-  and reconstruction effort — without recreating pending/approved/verified counters.
+- **interaction evidence:** the deferred C19 extension may record observable interaction
+  events next to token and agent-work statistics — for example repeated owner questions,
+  owner corrections, accepted decisions, material reopenings, and reconstruction episodes —
+  together with a voluntary owner assessment. These are event counts and weak proxies, not
+  measurements of attention, comprehension, decision quality, or causal benefit; active
+  attention remains unknown without an agreed observation method. C19 must not create a
+  second ledger or automate interaction scoring/reopening, and implementation waits until
+  pilot evidence shows that the measurement is useful at acceptable cost.
 
 ### 9.7 Decided register (A5 owner lock)
 

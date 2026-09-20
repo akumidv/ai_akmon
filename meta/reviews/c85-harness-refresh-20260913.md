@@ -6,7 +6,7 @@
 > shell routes, raw Bash deny, the timeout and per-entry trust behave as the older rows say.**
 > The owner ran these probes on 2026-09-09, 2026-09-10 and 2026-09-11, each with disposable
 > fixtures outside any repository and a scratch `CODEX_HOME`. They are recorded here as measured,
-> not re-run. Rows M58–M68 in [MEASUREMENTS](../MEASUREMENTS.md). Owned by [C85](../TASKS.md).
+> not re-run. Rows M58–M68 in [MEASUREMENTS](../MEASUREMENTS.md). Owned by [C85](../TASKS_ARCHIVE.md).
 
 ## A — Codex hook surface, decisions, trust and subagents (0.153.4, 2026-09-09)
 

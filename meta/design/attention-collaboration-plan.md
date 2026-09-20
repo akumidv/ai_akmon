@@ -2,6 +2,11 @@
 
 ## Current direction supersedes this provisional frame
 
+For current work use the [master resume point](attention-and-human-agent-collaboration.md#how-to-resume)
+and [consolidated session analysis](a22-session-analysis-synthesis.md). This document's
+sequence and combined candidate are historical; the current plan prepares separate
+claim-calibration and decision-ground comparisons before any operative adoption.
+
 The owner has now supplied the real applied obstacle: D2 walkthrough repeatedly
 becomes redesign, followed by separate acceptance/landing bookkeeping. The owner
 proposes an accepted-decision register, with open design work in tasks. The current
@@ -26,7 +31,7 @@ authorized by this note.
 **Earlier resume cursor, now superseded:** obtain the owner's applied outcome,
 replace the constructed case, and compare existing guidance with the proposed
 clarification. The owner has since answered with the D2 obstacle; follow the
-[current cursor](decision-workflow-and-d2-register.md#status-and-resume-point),
+[current cursor](attention-and-human-agent-collaboration.md#how-to-resume),
 not another intake question. No broad literature restart or mission restatement is needed.
 
 ## Essence and first boundary
@@ -230,7 +235,7 @@ changing execution state:
   notification-channel guarantee.
 - **A21 and C80/C81:** task/session transitions and machine-context pressure.
   Resume examples reuse their boundaries; prompt fill is not human attention.
-- **C19, C24, C82/C85 and routing tasks:** metrics, gate assembly, evidence reuse, and
+- **C19, C96, C82/C85 and routing tasks:** metrics, gate assembly, evidence reuse, and
   model controls remain separately owned. Manual examples need neither a new metrics
   platform nor closure of all these tasks.
 
@@ -241,10 +246,14 @@ comparison, not every accepted decision.
 
 ## Acceptance and implementation sequence
 
-1. **A22 now — AP0/AP1:** select the real applied outcome, finish its case card and
-   baseline, and settle the smallest candidate delta. The constructed specifications
-   above exist; the real applied case and A/B results are still missing.
-2. **A22 next — AP2/AP3:** compare examples, agree any model-run scope, and conduct a
+Historical sequence, superseded by the [current AP plan](attention-and-human-agent-collaboration.md#proposed-sequence-and-exit-conditions).
+The next work is AP2 refinement and a bounded trial proposal, not an already authorized AP3 run.
+
+1. **A22 AP0/AP1 — retrospectively completed by the current path:** the real applied
+   cases, baseline, and smallest candidate delta are now prepared in the
+   [AP2 comparison](attention-frame-comparison.md). This earlier note's constructed
+   specification remains design history, not the comparison result.
+2. **A22 next — AP3:** agree any model-run scope and conduct a
    small authorized pilot. Accept a named behavior, examples/negative cases, evidence
    limits, allowed modification surface, and economic horizon. Record the operational
    choice through the current design and thematic-ADR process separately from
