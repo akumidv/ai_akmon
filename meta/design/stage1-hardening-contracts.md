@@ -18,6 +18,9 @@
 > **C94 cutover:** sections below that describe the D2 reminder, D2 ledger checks/configuration,
 > or Pending/Approved/Verified transitions are historical rationale only. ADR 0016 removed those
 > carriers; open measurements live in N6 and implementation conformance in the affected tasks.
+> **C95** then corrected, in place, the counts the live contracts still stand on — the spawned-entry
+> population is **eight**, not nine — and marks each superseded passage where it sits, so a number
+> below is either current or explicitly labelled as the lock-time record.
 
 ## Frame
 
@@ -57,27 +60,27 @@ for coherence, and the decision set was accepted in ADRs 0012 and 0013.
 | F5 | hook timeout budget for Claude and a supported Codex route | **C — measurement-derived budgets by hook class** | decided |
 | F6 | timeout support envelope for currently unbounded valid inputs | **C — bounded fast path; fail-visible/open oversize** | decided |
 | F7 | invariant declaration owner and check direction | **B — stable policy IDs in prose and callable metadata; bidirectional** | decided |
-| F8 | initial policy-ID and operational classification table | **six policy IDs + `session_start_result` operational; `role.declaration` gains guardrail prose; D2 coverage declared as the consumer's, defaulted narrow at a future `init`** | decided |
+| F8 | initial policy-ID and operational classification table | **lock-time set: six policy IDs + `session_start_result` operational; `role.declaration` gains guardrail prose; the retired D2 coverage row remains historical evidence** | decided |
 | F9 | version/changelog consistent-state repair | **`0.4.0.dev0` + `## Unreleased`, repaired inside C54; two literals joined by an equality check; PEP 440 non-final grammar; missing source and history gaps stay visible, not fatal** | decided |
 | F10 | execution-ledger scope (§9) | **dispatch-only now; the completion half spawns its own probe ([N4](../TASKS.md))** | decided |
 | F11 | does the acceptance yardstick admit an exemption class | **no — for an aggregating shape the seeded violation is *fidelity to its sources*** | decided |
 | F12 | ADR shape for stage 1 | **two: contracts/vocabulary (F1, F2, F7, F8, the F14/F15/F17/F18/F19/F20/F21/F22 amendments, and the F11/F13 yardstick) separate from survivability/crash posture (F3–F6)** | decided |
 | F13 | the seeding unit — a shape or a rule | **the independently violable rule; a rule whose seed needs unmeasured evidence is split, not waived** | decided |
 | F14 | how `code` stability survives a removed check (§1) | **a retired-name record in `findings.py`; a live code that appears in it fails** | decided |
-| F15 | what pins the F8 classification set (§3) | **a contract test binding the seven shipped callable classifications — six callable↔policy-ID pairs plus one operational assignment — a regression pin, not a join mechanism** | decided |
+| F15 | what pins the F8 classification set (§3) | **at lock time, a contract test binding seven callable classifications — six callable↔policy-ID pairs plus one operational assignment — a regression pin, not a join mechanism; post-C94, under ADR-0012/D07, C53 targets the five surviving pairs, one operational assignment, and the explicit classification on each owner-visible callable outside the `*_result` scope** | decided |
 | F16 | what the runtime binary declaration is joined to (§7) | **two populations — generated wiring and akmon's own tooling — each compared against its own source, with modality declared and checked** | decided |
 | F17 | how one generator declaration represents files it fully owns, structured files that cannot carry comments, and fields inside hand-owned files (§5) | **A — typed `PlannedFile` ownership modes: `bannered-file`, `structured-file`, and `field-owned`; no parallel exception or ownership list** | decided |
 | F18 | how the always-loaded ratchet separates akmon-owned context from the whole consumer context (§6) | **A — two inclusive decimal line/byte caps: shipped ≤210 / 12,000 is a `self_ci` error; consumer total ≤460 / 25,000 is a `verify.py` warn whose strict-mode exit is non-zero** | decided |
 | F19 | where the axis-complete vendor capability matrix lives (§7) | **A — shipped top-level `CAPABILITIES.md`; README keeps a claim-free delivery summary; A16 later replaces C57's prose cells with generated data** | decided |
 | F20 | how C46 makes neutral and vendor tool-name ownership exhaustive (§8) | **A — one exact neutral vocabulary and agent population; one version-stamped vendor tool/matcher inventory consumed by frontmatter, hook generation and adapters; exact findings and isolated two-direction carrier checks** | decided |
 | F21 | how C58 makes a dispatch ledger trustworthy within a bounded local-file contract (§9) | **A — observed Claude dispatch-request event; versioned seven-field records at one neutral path; one writer and two readers; serialized bounded append; explicit migration, failure and no-authenticity/no-rotation boundaries** | decided |
-| F22 | what `akmon status` may observe and touch (§10) | **A — fresh `verify` then `sync --check` owner streams; D2/caps once through verify; read-only exact equality with no cache, direct re-read or persisted active-role fiction** | decided |
+| F22 | what `akmon status` may observe and touch (§10) | **A — fresh `verify` then `sync --check` owner streams; caps once through verify; read-only exact equality with no cache, direct re-read or persisted active-role fiction** | decided |
 
 **What enters this register** (the counting rule the `F10+` placeholder lacked, locked with F10–F12):
 a fork is registered when **all three** hold — it has two or more defensible answers; the answer
 changes what a stage-1 task implements or what the lock claims; and it cannot be deferred into a
 task without the lock asserting something unverified. Failing the first makes it a **repair**
-([A17](../TASKS.md) (d) and (f)); failing the third makes it an **in-task decision** (C60's
+([A17](../TASKS_ARCHIVE.md) (d) and (f)); failing the third makes it an **in-task decision** (C60's
 relocation-vs-deletion, C57's git-dependency trigger); failing the second makes it **parked
 elsewhere** (D1 mutable status levels, A16 matrix-as-data, N1/N5/N6 measurement, the public
 `akmon status` option name). Measurement gates — the F4/F5/F6 literals — are not forks at all:
@@ -230,7 +233,7 @@ contract required fidelity to “its sources” but did not select whether C59 c
 owners' live streams, caches their last result, or re-reads their files into status-specific facts;
 nor did it say whether a standalone process should persist an active role that exists only in the
 harness transcript. **Owner choice F22/A:** invoke the fresh consumer `verify` stream and then the
-fresh `sync --check` stream, with C53's D2 state and C56's caps state present exactly once through
+fresh `sync --check` stream, with C56's caps state present exactly once through
 verify; preserve exact ordered equality; write nothing; add no direct read or status cache; and state
 the transcript-only active-role residual instead of inventing persistence. Rejected: a cached status
 snapshot, because it can be green after materialized state drifts; direct reparsing, because it makes
@@ -240,7 +243,7 @@ Accepted cost: the provider population and order become contract surface, each s
 fresh checks, and a standalone `akmon status` cannot report the active role. **F22 is carried into
 0012** as the stable source/read-only/actual-state contract; detailed mutations remain in §10/C59.
 
-### Pre-lock closure ([A17](../TASKS.md))
+### Pre-lock closure ([A17](../TASKS_ARCHIVE.md))
 
 The register is not the whole gate. Before D2-20 can be verified, A17 also owns five repairs
 to this document and its ledger row:
@@ -319,7 +322,7 @@ which is the argument for writing a criterion down rather than holding it. The r
 the record because an unrecorded change of criterion is how the next audit legitimately reports the
 same finding again. The stage-wide yardstick (F11, F13) travels with 0012, because
 it is stable and it governs how every contract in both ADRs is written.
-- **The internal contradictions are repaired — done** ([A17](../TASKS.md) (f)). Five
+- **The internal contradictions are repaired — done** ([A17](../TASKS_ARCHIVE.md) (f)). Five
   were listed and a sixth surfaced while repairing them; none was purely editorial, so each is
   recorded with what it changed. (1) The order table's C53 row now names the **F8 table**, marked
   as a decision rather than a task to wait for. (2) The C55 row read `P0.4 declaration (§6)`,
@@ -333,13 +336,14 @@ it is stable and it governs how every contract in both ADRs is written.
   status cost nothing at that stage; after the lock it remains blocked on C57. A third status
   level for *decided but not locked* would be more precise
   and is deliberately **not** invented here: that is D1, and it is parked. (5) §2's guard is
-  scoped to the **nine spawned entry points**; adapters and `hook_core` are imported, have no top
+  scoped to the **eight spawned entry points** (nine at lock time; the C94 cutover removed
+  `d2-ledger-reminder` — C95); adapters and `hook_core` are imported, have no top
   level, and are covered by the caller's guard — which turns their single-write output into a
   contract, since a guard cannot un-write truncated stdout. (6) Found while repairing (1): C53
   **writes into the surface C56 caps**, an edge the graph omitted. The numbers do not collide
   today (+1…+2 lines against 13 lines of slack), which is the reason to record the edge rather
   than to skip it — nothing else would show when they begin to.
-- **The clean-context coherence audit has run — done** ([A17](../TASKS.md) (g)). It was run
+- **The clean-context coherence audit has run — done** ([A17](../TASKS_ARCHIVE.md) (g)). It was run
   deliberately outside the context that wrote this document, because an author checking a document
   against their memory of what they meant is not checking the document. Twenty-four findings, of
   which four landed on repairs made earlier in A17 — the surest sign the separation was worth its
@@ -354,7 +358,7 @@ it is stable and it governs how every contract in both ADRs is written.
   single-write rules, the last because the coverage it claimed was asserted but never exercised;
   §4 and §8 gained the seeds F13 requires; and the order graph gained C58's collision with the
   always-loaded caps — the twin of the C53 edge found at (f), missed by the same reading.
-- **The seeded-violation contracts are audited against F13 — done** ([A17](../TASKS.md) (g), the
+- **The seeded-violation contracts are audited against F13 — done** ([A17](../TASKS_ARCHIVE.md) (g), the
   architect pass over D2-20's clause (d)). **Twenty-one rules across nine of the ten sections were
   declared normative here and reachable by no named mutation.** F13 makes the independently
   violable rule the seeding unit, so the shape-level reading under which this document would have
@@ -559,22 +563,26 @@ suppresses successful child output so `--quiet` remains quiet.
    truncate-then-parse: it follows the distinct F6 oversize contract and exits 0.
 2. **BOM tolerance.** Decode as `utf-8-sig`, so a BOM-prefixed payload parses instead of
    landing in the malformed-JSON fallback.
-3. **A top-level exception guard** in every **spawned entry point** — nine of them: the eight
-   generated Claude entries (`git-commit-guard`, `role-on-code`, `analysis-guard`,
-   `d2-ledger-reminder`, `delegation-log`, `delegation-nudge`, `session-start-agent`,
-   `model-routing`; `bin/sync.py:277`–`:306`) and the single Codex entry `codex-hook.py`, which
+3. **A top-level exception guard** in every **spawned entry point** — **eight of them after the C94 cutover (C95); nine at lock time**: the seven
+   generated Claude wrappers (`git-commit-guard`, `role-on-code`, `analysis-guard`,
+   `delegation-log`, `delegation-nudge`, `session-start-agent`,
+   `model-routing`; `bin/sync.py:277`–`:306`), wired as eight command entries because
+   `model-routing` runs on both `SessionStart` and `UserPromptSubmit`, and the single Codex entry `codex-hook.py`, which
    carries the route as an argument (emitted at `bin/sync.py:210` and `:222`–`:244` — the file
    is named explicitly because the bare form read as coordinates inside `codex-hook.py`, which
    has no such lines). It prints the exception class and
-   the hook name to stderr and exits 0. **Five of the nine already carry such a guard and four do
+   the hook name to stderr and exits 0. **Superseded twice, and kept as the lock-time record (C95): C87 landed the guard
+   on every spawned entry, and the cutover then removed one of them. At lock time five of the nine
+   carried such a guard and four did
    not** (found at the ADR audit, and measured rather than assumed): `d2-ledger-reminder`,
    `delegation-log`, `delegation-nudge`, `session-start-agent` and `model-routing` wrap the whole of
    `main()`; `git-commit-guard` — the deny-class hook — `role-on-code`, `analysis-guard` and
-   `codex-hook.py` do not. C52 therefore **changes five entries and adds four**, and the five that
+   `codex-hook.py` do not. C52 was therefore to **change five entries and add four**, and the five that
    exist are red against this contract rather than compliant with it: they print
    `{type(exc).__name__}: {exc}`, disclosing the exception *message* that the diagnostic rule below
    forbids, and they catch `Exception`, so an `argparse` `SystemExit` in the Codex entry passes
-   through. The seeded test is observed red on today's five as well as on the missing four. **The adapters and `hook_core` get no guard of their
+   through. The seeded test was observed red on the five existing wrappers at lock time as well as
+   on the missing four; C87 later guarded every current entry. **The adapters and `hook_core` get no guard of their
    own**: they are imported, never spawned, so they have no top level — an exception inside
    `claude_adapter.load_payload` propagates into the wrapper's `main()` and is caught there.
    They are covered *by* the guard, not *with* it, which is also why F5 below states that the
@@ -711,17 +719,17 @@ seed. A17(g) first exposed the gap; the D2-20(d) walkthrough completed the decom
 
 **Guard.** A wrapper without it fails a test that feeds it a payload
 engineered to raise inside the handler and asserts exit 0 + exactly one stderr diagnostic. The
-same matrix is parameterized over all nine entries and injects the failure at each applicable
+same matrix is parameterized over all eight entries (nine at lock time — C95) and injects the failure at each applicable
 wrapper, adapter and handler layer, so coverage through the wrapper is proved rather than inferred
 from one call site. A separate `SystemExit` injection at the Codex argument boundary proves that
 the top-level posture covers the non-`Exception` exit already named above. A deny-class fixture
 proves both halves: an explicit handled deny remains deny, while an exception
 on the same route exits 0 and is reported. The crash path emits no deny/ask, malformed JSON, or
 partial stdout. Its stderr names only the hook and exception class — never payload values,
-commands, file content, session ids, or secrets. This contract is parameterized over all nine
-spawned entry points rather than demonstrated on one representative — and it is **red on five of
-them today** for the disclosure clause alone, which is what makes this seed meet the tree rather
-than a fixture in the five places a reader would assume were already done.
+commands, file content, session ids, or secrets. This contract is parameterized over all eight
+spawned entry points rather than demonstrated on one representative. At lock time the disclosure
+clause was **red on five** existing wrappers; C87 later guarded all current entries. The historical
+seed therefore met the tree rather than only a fixture.
 
 **Single write.** The guard seed crashes *before* anything is rendered, so it cannot tell a
 one-shot write from a prefix-then-crash: the assertion "no partial stdout" passes whether or not
@@ -804,9 +812,10 @@ no `INVARIANTS.md`, central mapping constant, decorator registry or generated an
 fact lives either with the policy prose or with the callable it classifies. Function names and
 paths are not policy identity; a rename that preserves the stable ID preserves the join.
 
-**Owner choice F8 — the initial table, exhaustive over the seven current public
-`hook_core.*_result` callables.** Six policy IDs and one operational classification. C53 checks
-this set; a callable added later joins it the same way or the check fails.
+**Owner choice F8 — the initial table, exhaustive over the seven public
+`hook_core.*_result` callables present at lock time.** Six policy IDs and one operational
+classification formed that snapshot. C53 checks the surviving set; a callable added later joins it
+the same way or the check fails.
 
 | callable | classification | prose owner and the subset the marker claims |
 |---|---|---|
@@ -817,6 +826,14 @@ this set; a callable added later joins it the same way or the check fails.
 | `delegation_nudge_result` | `delegation.tier-floor` | § Route by task kind — the tier floor — **subset**: uninterrupted read/shell/edit volume without a delegation raises a nudge, then an ask in interactive default mode; a missing or non-default `permission_mode` escalates that ask to deny |
 | `role_on_code_result` | `role.declaration` | § Role declaration — **new prose, written by C53** (see F8/1) — **subset**: the first edit to a code file in a session, which is the design→code switch the SessionStart reminder cannot catch |
 | `session_start_result` | `Runtime classification: operational` | — see F8/2 for the required rationale |
+
+> **Post-C94 applicability.** The `d2_ledger_reminder_result` row, its
+> `verify.owner-verify-d2` ID, the claimed guardrail subset and its reporting seam were retired with
+> the D2 carrier under [ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md)/C94.
+> The table above is the accepted lock-time record. The current C53 target is the five surviving
+> policy-ID pairs plus `session_start_result` as operational. The rule that replaces this snapshot —
+> the join over the *current* population, and an explicit classification on every owner-visible
+> callable outside it — is accepted as [ADR-0012/D07](../decisions/0012-stage1-contracts-and-vocabulary.md#d07--canary-population-and-no-silent-owner-visible-callable) (C95).
 
 **F8/1 — `role.declaration` gets prose in the guardrails, not an exemption (owner: a).** The rule
 ("state which agent you are operating as, and restate it on every switch") is today asserted only
@@ -839,7 +856,9 @@ the classification stands; without the second half a reader mistakes "operationa
 `role.declaration.switch`, which is legal under the one-to-one rule (different subsets) but spends
 two IDs and two prose markers on one rule.
 
-**F8/3 — `verify.owner-verify-d2` declares that its coverage is the consumer's (owner: a + c3).**
+**F8/3 — `verify.owner-verify-d2` declares that its coverage is the consumer's (owner: a + c3).
+Retired with its carrier under [ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md)/C94
+and kept here as the lock-time record; the reporting seam it invented has no host.**
 The callable observes only the globs a consumer sets in `[d2_ledger] sensitive_paths`; unset, it
 returns `None`. The marker therefore states the dependency, and C59 reports `configured` /
 `not configured` so the state is visible rather than assumed. What the unconfigured state actually
@@ -868,9 +887,13 @@ human readers have. C53 must state this rather than leave it to be inferred.
 **Implementation scope, deliberately not done at design time.** F8 fixes the table; C53 performs
 the tree changes it implies, in one pass under its own gate: convert the three live
 `> **Enforced** (not just documented) by …` blocks (Privilege escalation, Commits & ownership,
-Analysis before mutation) to marker lines, add the two missing markers (`verify.owner-verify-d2`,
-`delegation.tier-floor`), write the `## Role declaration` section, and add `Policy ID:` /
-`Runtime classification:` metadata to the seven docstrings. Converting the prose before the
+Analysis before mutation) to marker lines, add the one remaining missing marker
+(`delegation.tier-floor`; `verify.owner-verify-d2` was retired with its carrier under ADR 0016/C94),
+write the `## Role declaration` section, and add `Policy ID:` / `Runtime classification:` metadata
+to the six remaining `*_result` docstrings, plus the explicit classification [ADR-0012/D07](../decisions/0012-stage1-contracts-and-vocabulary.md#d07--canary-population-and-no-silent-owner-visible-callable) requires on each
+owner-visible callable outside that scope — today `report_unclassified_shell_route`,
+`hook_failure_diagnostic`, `hook_failure_notice` and `model_routing_result`, selected by a predicate
+derived from the source rather than by a hand-maintained list. Converting the prose before the
 checker exists would leave the tree asserting a join that nothing verifies — the exact stage-1
 defect this shape targets. Annotation growth is remeasured by C56 against the always-loaded caps;
 the draft no longer assumes a fixed nine-line cost or that it fits before measurement.
@@ -884,8 +907,9 @@ or delete on either side makes `self_ci` fail.
 per F13). **The F8 set itself is unpinned:** every mutation there is structural, so an ID renamed
 consistently on both sides preserves the one-to-one join and passes, and *unknown* has nothing to be
 unknown against, because F7 rejects a central mapping constant. C53 therefore ships a **contract
-test pinning the seven shipped callable classifications: six callable↔policy-ID pairs plus
-`session_start_result`'s operational assignment**; a coordinated ID rename or a changed operational
+test pinning the current callable classifications: five callable↔policy-ID pairs,
+`session_start_result`'s operational assignment, and the explicit classification each owner-visible
+callable outside the `*_result` scope carries**; a coordinated ID rename or a changed operational
 assignment fails there. It is a regression pin, not a join mechanism — the join still runs
 prose→docstring at check time, and what F7 forbids is a constant standing *between* the two sides.
 
@@ -1007,7 +1031,7 @@ need `git`; absent, they degrade into the same explicit skip as F9/4.
 `__version__` by raw string equality and prints `v{pinned}`, so a mounted `v0.3.0` pin fires the
 notice on every command and renders it "v v0.3.0". That is a defect with a right answer, not a
 fork the owner should have to vote on; F9 fixes only the *rule* (normalize before comparing) and
-[C61](../TASKS.md) owns the code.
+[C61](../TASKS_ARCHIVE.md) owns the code.
 
 **Seeded violation.** The two consistent states pass. Their negatives are separate: a non-final
 version whose topmost CHANGELOG heading is not `## Unreleased` fails `release_check`, and a final
@@ -1813,7 +1837,7 @@ per-record and total-ledger inputs before this normal path, and D2-23 owns their
 C58 does **not** rotate, truncate, delete or deduplicate the ledger and makes no exceptional-write
 completeness claim. Total cap+1 and lock/open/write failures belong to C52's exact fail-open
 diagnostic/exit contract; a failed write may leave no record or a malformed trailing record, and the
-ledger is explicitly incomplete after that visible operational failure. Rotation requires its own owner/D2 contract covering
+ledger is explicitly incomplete after that visible operational failure. Rotation requires its own owner-accepted ADR amendment covering
 segment naming, reader order, crash recovery and retention; introducing any rotation owner inside
 C58 fails the source-owner check.
 
@@ -1995,7 +2019,7 @@ bring the parked JSON option spelling or D1 mutable levels into this lock.
   and write-failure oracle stays with the §2/C52 corpus and C58 does not duplicate it. The record
   is a dispatch **request** and claims no launch — completion stays with N4;
 - C59's suite pins the exact provider population and order — the fresh `verify` stream, then the
-  fresh `sync --check` stream — with C53's D2 state and C56's caps state present exactly once
+  fresh `sync --check` stream — with C56's caps state present exactly once
   through verify and C70's fresh Codex host-trust state present exactly once through the same
   provider; exact ordered equality with those sources; no project/config/approval write, no direct
   re-read or host query from C59 and no status cache; rendering parity between text and JSON with one exit result per source set in

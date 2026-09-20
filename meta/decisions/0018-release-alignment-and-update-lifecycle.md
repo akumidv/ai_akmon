@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Owner:** akuminov@gmail.com
 - **References:** [ADR 0009](0009-packaging-package-carrier-and-mount-modes.md) ·
-  [update design](../design/packaging/update-command.md) · [A23/C92](../TASKS.md)
+  [update design](../design/packaging/update-command.md) · [A23/C92](../TASKS_ARCHIVE.md)
 
 ## Accepted decision blocks
 

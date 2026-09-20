@@ -153,7 +153,9 @@ learning · `V` release · **`N` analysis/review**; role derived from the letter
   cordoned and inert, not removed. Sparse-checkout to physically exclude it is a future option
   (revisit-if).
 - **Migration is tracked** as `A5–A10` / `C3–C8` in `meta/TASKS.md` (the `develop/`→`meta/`
-  rename + the verify split are `C7`).
+  rename + the verify split are `C7`). **Amended:** the migration rows `A5`, `A6`, `A7` and
+  `A10` were renumbered `A26`–`A29` to clear an id collision — each later reused the number for a
+  different task — so this range now reads `A8`–`A9` plus `A26`–`A29`.
 
 ## Relates to
 

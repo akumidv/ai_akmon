@@ -9,7 +9,8 @@
 > at all on this vendor**, exactly the reason [owner choice F4/C](../design/stage1-hardening-contracts.md)
 > refuses it as evidence.
 >
-> Owned by [N1](../TASKS.md); feeds [D2-23](../D2_LEDGER.md), which gates only C52.
+> Owned by [N1](../TASKS.md); feeds [D2-23](../decisions/0013-hook-survivability-and-crash-posture.md#d02--bounded-input-and-timeout-evidence-sequence),
+> whose alias now resolves to ADR-0013/D02 (C95), and which gates only C52.
 
 ## Environment and method
 

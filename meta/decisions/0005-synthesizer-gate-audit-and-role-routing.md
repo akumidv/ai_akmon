@@ -7,7 +7,7 @@
   [MODEL.md § Capability tiers](../../MODEL.md) · [d2-ledger design](../design/d2-ledger.md) (§2.5
   attachment unit) · pipelines [review-flow](../../pipelines/review-flow.md) /
   [design-flow](../../pipelines/design-flow.md) (gate anchors) · backlog
-  [A5, C15–C20](../TASKS.md).
+  [A5, C15–C18, C20](../TASKS_ARCHIVE.md) and [C19](../TASKS.md).
 
 ## Context
 

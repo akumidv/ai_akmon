@@ -20,10 +20,9 @@ recording it before agreement.
 
 ## Steps (a loop, not a line — expect several passes)
 
-1. **Frame** — state the problem, intended use, constraints, and what "good" looks like
-   (the acceptance condition). Investigate accessible facts; ask an open, consequential
-   question where only the owner can supply missing experience or priorities. Reuse known
-   answers rather than repeating intake or narrowing an unclear problem to a menu.
+1. **Frame** — state the problem, the constraints, and what "good" looks like (the
+   acceptance condition). If the request is ambiguous, resolve it with the owner before
+   designing.
 2. **Survey** — read the relevant code and docs. Confirm the **current** design *as it
    is*, not as remembered — module names, layers, the data dictionary, the provider
    contracts drift. Check new names for **collisions** in `src/`. Cite what you read.

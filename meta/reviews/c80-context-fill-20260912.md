@@ -16,7 +16,7 @@
 > and too dependent on when the owner compacts, to justify a per-model entry in
 > `recommended_max_by_alias`.
 >
-> Owned by [C80](../TASKS.md). Policy context: [design §12](../design/model-routing.md),
+> Owned by [C80](../TASKS_ARCHIVE.md). Policy context: [design §12](../design/model-routing.md),
 > [D2-38](../D2_LEDGER.md).
 
 ## Environment and method

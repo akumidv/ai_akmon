@@ -4,7 +4,7 @@
 
 This is the design and evidence trail behind the accepted replacement in
 [ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md). The owner authorized the
-full Akmon cutover; [C94](../TASKS.md) owns migration implementation. A22/C86 still own the broader
+full Akmon cutover; archived [C94](../TASKS_ARCHIVE.md) owns migration implementation. A22/C86 still own the broader
 attention-aware interaction protocol, which this workflow change does not accept by implication.
 
 The [research concept](attention-and-human-agent-collaboration.md) owns the broader
@@ -12,7 +12,11 @@ human-attention, cognition, dialogue, and economic rationale. D2 is now the prim
 applied case, not the boundary of that mission. The [earlier slice proposal](attention-collaboration-plan.md)
 is retained to explain the change of direction, not as a competing current plan.
 
-**Resume here:** the [worked carrier comparison](thematic-adr-comparison.md) now
+**For broader A22 work, resume at the [current plan](attention-and-human-agent-collaboration.md#how-to-resume).**
+The [consolidated session analysis](a22-session-analysis-synthesis.md) explains the
+next comparison. This page preserves the completed carrier redesign and its evidence.
+
+**Carrier-design history:** the [worked carrier comparison](thematic-adr-comparison.md) now
 recommends thematic ADRs with stable decision-block identities and no separate D2
 authority, retaining individual records as a small-topic/split-out form. It compares
 task-origin decisions, independent amendments and a mundane no-record correction.
@@ -420,7 +424,7 @@ establish a need for manual commit-hash fields or a second verification transiti
 4. **Lock only the useful slice — completed for the workflow.** The owner accepted the bounded
    D2-to-ADR replacement as ADR 0016 without reapproving historical decisions. This does not lock
    the broader A22 interaction behaviours.
-5. **C94 implements the workflow cutover; C86 remains separate.** C94 aligns record
+5. **C94 completed the workflow cutover; C86 remains separate.** C94 aligned record
    handling, prose, CLI, reminders, and tests as one coherent migration. The old path
    is a compatibility tombstone, the final ledger is archived, and the retired commands
    are removed rather than emulated. Old rows are never silently promoted.

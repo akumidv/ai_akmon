@@ -11,8 +11,8 @@
   A12 slice) · [ADR 0016](0016-decision-records-and-owner-acceptance.md) (the current decision
   record and acceptance contract) ·
   [ADR 0013](0013-hook-survivability-and-crash-posture.md) (the measurement-amendable half) ·
-  carriers [C51](../TASKS.md), [C53](../TASKS.md), [C55](../TASKS.md), [C56](../TASKS.md),
-  [C57](../TASKS.md), [C58](../TASKS.md),
+  carriers [C51 and C57](../TASKS_ARCHIVE.md), [C53](../TASKS.md), [C55](../TASKS.md),
+  [C56](../TASKS.md), [C58](../TASKS.md),
   [C59](../TASKS.md), [C46](../TASKS.md).
 
 > **C94 applicability note.** The old F8 binding for `d2_ledger_reminder_result`,
@@ -100,7 +100,7 @@ constructor rejects `level=`; positional construction alone is not migration evi
 
 ### F2 — the schema lands with the envelope; the public JSON surface lands with its first consumer
 
-[C51](../TASKS.md) owns exactly **one** canonical pure serializer (`Finding.to_dict()` or one
+[C51](../TASKS_ARCHIVE.md) owns exactly **one** canonical pure serializer (`Finding.to_dict()` or one
 shared function, never both) and pins its keys and values with contract tests. Any adopter or later
 consumer that serializes a Finding calls that serializer; the C51 adopters render text only, and
 C59 is its first serialization consumer. A local field mapping in an adopter is rejected by test. Its output
@@ -154,18 +154,30 @@ callable observes; the marker never claims the whole section is enforced.
 `self_ci` checks both directions and reports the policy ID, the callable and the prose location.
 There is **no** `INVARIANTS.md`, central mapping constant, decorator registry or generated
 annotation: each fact lives either with the policy prose or with the callable it classifies.
-**The shipped set is pinned by a contract test** (F15): six callable→policy-ID bindings plus the
-`session_start_result`→operational-classification assignment. An ID renamed consistently on both
+**The shipped set is pinned by a contract test** (F15): the callable→policy-ID bindings the tree
+currently carries — six at lock time, five after
+[D07](#d07--canary-population-and-no-silent-owner-visible-callable) retired the D2 pair with its
+carrier — plus the `session_start_result`→operational-classification assignment and the explicit
+classification each owner-visible callable outside that scope carries.
+An ID renamed consistently on both
 sides — which preserves the one-to-one join and passes every structural check — fails where someone
 can see it. The pin is a test fixture, not a constant the checker consults; the join still runs
 prose→docstring, and what the sentence above forbids is something standing between the two sides.
 Function names and paths are not policy identity — a rename that preserves the stable ID preserves
 the join.
 
-### F8 — the initial table, exhaustive over the seven current public callables
+### F8 — the initial table, exhaustive over the seven lock-time public callables
 
-Six policy IDs and one operational classification. [C53](../TASKS.md) checks this set; a callable
-added later joins it the same way or the check fails.
+At lock time, six policy IDs and one operational classification. [C53](../TASKS.md) checks the
+surviving set; a callable added later joins it the same way or the check fails.
+
+> **Post-C94 applicability.** The row for `d2_ledger_reminder_result`, its
+> `verify.owner-verify-d2` ID, the claimed guardrail subset and its reporting seam were retired with
+> the D2 carrier under [ADR 0016](0016-decision-records-and-owner-acceptance.md)/C94. The table is
+> preserved as the accepted lock-time snapshot. F7 and the surviving classifications stay
+> operative; the population rule that replaces this snapshot, and the obligation on owner-visible
+> callables outside the join, are accepted as
+> [D07](#d07--canary-population-and-no-silent-owner-visible-callable).
 
 | callable | classification | prose owner and the subset the marker claims |
 |---|---|---|
@@ -701,6 +713,40 @@ exception needs a new explicit decision rather than repopulating dead machinery.
 This ADR and ADR 0013 jointly own the accepted A12 stage-1 architecture. This block is the unique
 legacy lookup for that acceptance scope; concrete timing and cap measurements remain task evidence,
 not retroactive contents of the architecture decision.
+
+### D07 — Canary population, and no silent owner-visible callable
+
+`Decision-ID: ADR-0012/D07`
+
+F8 locked an initial table and called it exhaustive over seven callables. One of the seven,
+`d2_ledger_reminder_result`, was removed with the D2 reminder (C94), and with it the policy ID
+`verify.owner-verify-d2`, the guardrail subset that ID claimed, and the `d2_ledger.py check`
+emission F8/3 had assigned to C53. F8 stands as the accepted lock-time record; this block states
+the rule it stood in for, so that the next removal needs no further act of acceptance.
+
+The join keeps F8's boundary: it is scoped to the public `hook_core.*_result` callables, and its
+population is whatever that set currently holds — six, at the time of writing. Adding or removing
+such a callable is implementation conformance in the owning task, not a further act of acceptance.
+What remains accepted is the join itself: one unique `Runtime check: <policy-id>` marker on exactly
+the rule prose a callable enforces, exactly one `Policy ID:` or `Runtime classification:
+operational` per callable, each ID occurring once on each side, and no central registry.
+
+A retired carrier retires its whole row — the policy ID, the guardrail subset naming it, and any
+reporting seam invented to satisfy that subset. Nothing inherits `verify.owner-verify-d2`, and the
+status aggregator has one provider fewer rather than a substitute source.
+
+Outside the join's scope, a public callable that reaches the owner states its classification
+**explicitly** and carries no policy ID. Silence is not a valid state for it. What selects that
+population is what the callable *does*, not where it sits: it **writes to a stream itself**, or an
+adapter **renders its return value into a vendor channel**. A text builder reached only through an
+already-classified `*_result` is outside it — classifying those would let one policy ID be claimed
+from two places and break the one-to-one join. Under that predicate the population today is
+`report_unclassified_shell_route`, `hook_failure_diagnostic`, `hook_failure_notice` and
+`model_routing_result`; the last is a public `*_result` outside `hook_core`, so the join's scope
+excludes it while this obligation does not. They are unclassified today only because they postdate
+the table's scoping rule, and an owner-visible emission nobody classified is indistinguishable from
+one nobody reviewed. The predicate is derived from the source and parsed, never a hand-maintained
+list, on the same terms as the rest of the canary.
 
 ## Alternatives
 

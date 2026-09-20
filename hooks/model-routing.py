@@ -74,7 +74,15 @@ def _load_config(root: Path) -> dict:
 
 
 def model_routing_result(root: Path, payload: dict) -> HookResult | None:
-    """Orchestrator-detection + status-line result for this hook event, or ``None`` when silent."""
+    """Orchestrator-detection + status-line result for this hook event, or ``None`` when silent.
+
+    Runtime classification: operational
+    Rationale: it authors no guardrail rule. It detects the model the session runs on, rebinds the
+    delegates and delivers the status line, the init instruction and the corridor warning; the tier
+    floor those warnings restate is owned by ``delegation.tier-floor``, and delivery is not
+    ownership. It is a public ``*_result`` outside ``hook_core``, so the join's scope excludes it
+    while ADR-0012/D07's obligation on owner-visible callables does not.
+    """
     akmon = akmon_runtime_root(root)
     if not routing.registry_path(akmon).is_file():
         # Silence is the right answer for a pin that predates model routing: such a tree has no

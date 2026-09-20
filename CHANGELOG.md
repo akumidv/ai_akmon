@@ -26,6 +26,17 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   configuration and old commands when a consumer next realigns.
 
 ### Added
+- **A guardrail rule that a hook checks at runtime now names that check, and akmon verifies the
+  join (C53; ADR 0012 F7/F8, D07).** `guardrails/_common.md` replaces its three
+  `> **Enforced** (not just documented) by …` blocks with `Runtime check: <policy-id> — <subset>`
+  markers, adds the missing marker for the tier floor, and gains a `## Role declaration` section —
+  the role rule was previously asserted only by a hook message and owned by no prose. Each marker
+  states the **subset** the hook actually covers, so a rule that is only partly machine-checked no
+  longer reads as covered whole: the commit marker says in as many words that "tests pass before a
+  commit is offered" is not machine-checked. A self-check now fails when the two sides disagree —
+  a marker with no callable, a callable with no marker, an unclassified public result, or a legacy
+  bare claim — so the prose cannot quietly outlive the hook it names. Consumers see the new text
+  after `akmon sync` and a fresh session; nothing to configure and no command changed.
 - **`akmon update` moves a project to another akmon release and realigns it (A23/C92; ADR 0018 D03).**
   Without `--ref` it takes the newest release tag of the akmon repository and never moves the pin
   backwards; `--ref <tag>` picks one, and an older tag is a rollback it announces. It moves the pin

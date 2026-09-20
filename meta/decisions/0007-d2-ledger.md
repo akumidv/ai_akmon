@@ -3,7 +3,7 @@
 - **Status:** Superseded by [ADR 0016](0016-decision-records-and-owner-acceptance.md).
 - **Owner:** akuminov@gmail.com
 - **References:** design source [`meta/design/d2-ledger.md`](../design/d2-ledger.md) (§4 locked
-  decisions, §5 mechanism, §6 build phases) · backlog [C11](../TASKS.md) · guardrail
+  decisions, §5 mechanism, §6 build phases) · backlog [C11](../TASKS_ARCHIVE.md) · guardrail
   [`guardrails/_common.md`](../../guardrails/_common.md) "Verify against reality" (owner-verify).
 
 ## Context

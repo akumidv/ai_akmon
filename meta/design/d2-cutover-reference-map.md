@@ -3,7 +3,7 @@
 ## Status and resume point
 
 Implementation map for [ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md) and
-[C94](../TASKS.md). It continues the [legacy migration](d2-legacy-migration.md) by separating references
+[C94](../TASKS_ARCHIVE.md). It continues the [legacy migration](d2-legacy-migration.md) by separating references
 that enforce the current D2 workflow from references that merely preserve decision
 or evidence provenance. It also stress-tests actual thematic boundaries rather than
 assuming each broad preliminary routing group should become one file.
@@ -370,3 +370,150 @@ Consumer migration and compatibility duration remain outside C94, as does implem
 broader A22/C86 interaction design. The original source counts and classification remain design
 evidence, not measured reductions in attention or tokens; implementation verification is recorded
 with C94 rather than inferred from this map.
+
+## Residual drift after the cutover
+
+Registered as [C95](../TASKS_ARCHIVE.md), addressed by the sweep below. The cutover removed the
+carriers; these statements *about* the
+carriers survived it. Each item names what the surface still asserts, what the tree holds, and how
+the repair is registered. The inventory records the post-cutover review scope; `self_ci`
+(including `decision.records`) and the 1,542-test suite are green throughout, because none of this
+is machine-checkable — which is exactly why it needs a written owner.
+
+### Decision-level — resolved applicability, and the rule accepted in its place
+
+- **ADR 0012's F8 table is one callable short.** The accepted table — "exhaustive over the seven
+  current public callables" — pairs `d2_ledger_reminder_result` with `verify.owner-verify-d2`, and
+  that callable no longer exists. The same pair is C53's live contract and is repeated in the
+  stage-1 design at `:825`, `:859` and `:887`. Exhaustiveness is the table's whole claim, so this
+  is not a typo. **Resolved applicability:** [ADR 0016](../decisions/0016-decision-records-and-owner-acceptance.md)
+  and C94 retired the carrier, so its policy ID, claimed guardrail subset and reporting seam retire
+  with it; F8 remains the accepted lock-time snapshot and the five surviving pairs plus the one
+  operational result remain C53's implementation target. **Answered by the owner as [ADR-0012/D07](../decisions/0012-stage1-contracts-and-vocabulary.md#d07--canary-population-and-no-silent-owner-visible-callable).**
+  The snapshot is replaced by the rule it stood in for: the join keeps F8's `*_result` boundary and
+  runs over the *current* population, so adding or removing such a callable is conformance in the
+  owning task rather than a further acceptance; a retired carrier retires its whole row — policy ID,
+  guardrail subset and any reporting seam invented for it; and a public callable outside that scope
+  which reaches the owner states its classification explicitly instead of standing silent. The
+  predicate is what the callable does — it writes to a stream itself, or an adapter renders its
+  return value into a vendor channel — which today selects `report_unclassified_shell_route`,
+  `hook_failure_diagnostic`, `hook_failure_notice` and `model_routing_result`. C53's row carries the
+  obligation.
+- **Four amendments have no record anywhere.** The staged deletion of the `C94 cutover
+  interpretation` note removed the only written statement that C36's marker population loses
+  `akmon-d2-ledger-*`, that C52's entry count falls, that C53's policy set loses one ID, and that
+  C66 is superseded. This map does not carry them either. They belong in the four rows themselves;
+  restoring the note instead re-creates the second owner that losing it exposed.
+
+### Live task rows that specify removed code (`meta/TASKS.md`)
+
+- **C66** — "memoize the D2 glob matcher · active (complete in the tree)" names
+  `hooks/hook_core.py::_segments_match` and `tools/d2_ledger/d2_ledger.py::_segments_match`.
+  Neither exists, and both named carriers are gone from `meta/tests/test_hook_core.py`. **A
+  mechanical history audit (C95) then found something stronger: the memoization never landed in any
+  commit.** Both copies carried the plain recursive body from `0198d97` until `816eb52` removed
+  them, and neither carrier test name occurs anywhere in the history of that test file — only in
+  the row's own prose, written by `816eb52`. The row is archived as superseded *and* unlanded, not
+  as delivered work whose subject was later removed.
+- **C52** — enumerates nine spawned entry points including `d2-ledger-reminder`, and concludes
+  "changes five and adds four". The population is now **eight spawned files** — seven Claude
+  wrappers plus `codex-hook.py` — behind **nine generated command entries**, because
+  `model-routing` is wired on both `SessionStart` and `UserPromptSubmit` (`bin/sync.py:436`,
+  `:445`). C87 has since landed the top-level guard on every one of them, so the five-and-four
+  split is historical as well as miscounted. The status token still reads "blocked (after D2-49 —
+  D2-23 owner-approved)": the dependency is N6's open evidence behind the accepted ADR-0013/D02
+  envelope, stated without the lifecycle spelling.
+- **C53** — six policy IDs including `verify.owner-verify-d2`, plus the A17(g) requirement that
+  `d2_ledger.py check` emit `configured` / `not configured`. That CLI is gone, so the emitting seam
+  has no host and the F8/3 requirement it was invented for dies with it; the F13 carrier list names
+  the removed callable as one of six pinned pairs.
+- **C36** — the marker migration still lists `akmon-d2-ledger-*` among the names to move onto
+  `hook_core.claim_diagnostic_marker`. Three remain, not four.
+
+### Stage-1 design (`stage1-hardening-contracts.md`)
+
+The header disclaimer at `:18` declares D2 sections historical. That is true of rationale and false
+of the contracts C52 and C53 are still built from, so the numbers are corrected rather than
+disclaimed. **Corrected in place (C95):** the enumeration and the guard split at `:566`–`:574`, the
+repeated entry counts at `:339`, `:722` and `:729`, and `:18`, which now states which numbers are
+current and which are kept as the lock-time record. The F8 pair is marked in place at `:825`,
+`:859` and `:887`: the table row and F8/3 keep their lock-time wording under an applicability note,
+while the implementation scope names one remaining marker, six docstrings and D07's
+explicit-classification obligation. Checked and
+deliberately left alone: `:362` and `:423` count design sections and finding shapes, not entry
+points.
+
+### Evidence
+
+[N5](../reviews/n5-f6-input-envelope-20260825.md) is owner-approved and dated, so it takes an
+**amendment section**, never a rewrite — **added as §12 (C95)**: axes 6 and 7 — ledger bytes/rows,
+and D2 config globs at `:152` — lost their consumer, since no `fnmatch` and no glob matcher remain
+under `hooks/`. The combined 6,000 path × glob pair cap (`:629`–`:636`) and the axis-7 boundary
+rerun (§11) therefore bound nothing shipped, while axis 4's per-path caps keep their owner on both
+vendors (Claude's `file_path`, Codex's patch paths); §8's 5,004,000-byte reminder fixture (`:365`)
+loses the entry it fed. **Repointed (C95):** the N5 header (`:5`) and N1's (`:12`) described the
+ledger as a live gate and now resolve D2-23 to its current owner, ADR-0013/D02.
+
+### Tree leftovers
+
+- `tools/d2_ledger/` survived as an empty directory holding only `__pycache__`, nothing tracked —
+  **removed (C95)**.
+- `common/record.py:11` cited `hooks/hook_core.py::d2_sensitive_paths` as a current caller of the
+  shared reader, and that function is gone — **the docstring now records that it was removed with
+  the reminder it served (C95)**, keeping the C75 history it documents intact.
+
+### Deliberately not swept
+
+Provenance links into `D2_LEDGER.md` from `MEASUREMENTS.md` (M33–M36, M48), the dated reviews and
+the design docs resolve to the tombstone, which explains the move — navigation and provenance is
+exactly what [ADR 0016 D03](../decisions/0016-decision-records-and-owner-acceptance.md) preserves.
+The one exception was the A12-gate note in `meta/TASKS.md` (`:91` after the close-out sweep), not provenance but a live claim that D2-20 "is
+**Verified**", inside the note that also called D2-23 and D2-49 the stage's remaining gates.
+**Restated (C95):** the note now resolves D2-20 to ADR 0012 and names N6's single open measurement
+instead of a ledger gate.
+
+### Close-out
+
+Thirteen rows still carry a status of the form "awaiting the owner's commit", "verify on its sha"
+or "awaiting only the owner's close-out": A19, C57, C66, C76, C78, C85, C87, C88, C89, C90, C91,
+C92, C93 — and three of them additionally spell their gate as "D2-45/46/47 owner-approved". The
+work landed in `0617402`, `920fe69`, `07f46ad`, `c41eeb1` and `816eb52`. Under ADR 0016 D01 a
+landing hash is not a status, so these rows wait on a transition that no longer exists: each is
+either archived or restated as the work that actually remains.
+
+**Done (C95).** A mechanical history audit resolved every carrier each row names against committed
+history: twelve of the thirteen are fully present in HEAD, and no row's own sha claim is
+contradicted by `git show --stat`. All thirteen were swept into `TASKS_ARCHIVE.md` with
+`tools/tasks/archive.py --done … --apply`. C66 is the exception and is archived on the finding
+above — superseded *and* never landed. The same sweep found no remaining work in C17 after C76's
+landed conformance repairs, or in A23 after landed C92 implemented its accepted design; both are
+archived rather than kept alive for an administrative close-out.
+
+The sweep also moved one test carrier's subject.
+`meta/tests/test_runtime_contract.py::test_c57_lock_text_pins_prefix_ownership_without_the_old_overclaim`
+pinned C57's prefix-ownership sentence in the **live** backlog, and archiving the row emptied its
+population — caught by the suite, not by review. It now reads both backlog files and still requires
+exactly one C57 entry across them, so a close-out cannot become a way to drop a pinned sentence.
+
+### What the D2 migration still leaves open
+
+C95 is archived in the same change as this repair. Removed-carrier vocabulary drift is closed: no
+live contract now requires the retired D2 provider. The population rule that replaced F8's snapshot,
+and the obligation on owner-visible callables outside the join, are not smuggled into that cleanup:
+they are accepted in their own block, [ADR-0012/D07](../decisions/0012-stage1-contracts-and-vocabulary.md#d07--canary-population-and-no-silent-owner-visible-callable). Other work the
+ledger was never the owner of is listed here so the cutover does not read as its completion.
+
+- **N6's F5 evidence** — the single open measurement of the stage, parked by the owner. It is the
+  only thing behind C52's `blocked`, its plan and harness placement are written in the row, and its
+  acceptance becomes a new `ADR-0013/D03`, which is also where the `D2-49` alias moves.
+- **C53's implementation** — the canary join, the marker/docstring pass and D07's
+  explicit-classification obligation are specified and unbuilt. D07 settled *what* is checked,
+  including the predicate that selects the owner-visible population; nothing checks it yet.
+- **C17 and A23** — both have no remaining work: C17's implementation and C76 conformance repairs
+  landed, while A23's accepted design was implemented by landed C92. Both are archived by C95.
+- **Consumer migration and tombstone compatibility duration** — outside C94 when the cutover was
+  written (§ Cutover outcome), and still unowned. The tombstone at the old ledger path has no
+  stated end of life.
+- **Provenance into the tombstone** stays as it is, by [ADR 0016
+  D03](../decisions/0016-decision-records-and-owner-acceptance.md): it is navigation, never status,
+  and sweeping it would destroy the history the cutover preserved.

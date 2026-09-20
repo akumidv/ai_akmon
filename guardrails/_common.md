@@ -38,10 +38,7 @@ the user's last message, not from the language of your own reasoning.
   write) is information, not an obstacle to route around — explain it to the owner and stop;
   do not `sudo`, `chown`, `chmod` the way past it, or otherwise reach for elevated access.
 
-> **Enforced** (not just documented) by
-> [`../hooks/hook_core.py::privilege_escalation_guard_result`](../hooks/hook_core.py) — a
-> PreToolUse hook that denies any Bash command containing `sudo` outright, wired through the
-> same entrypoint as the commit guard ([`git-commit-guard.py`](../hooks/git-commit-guard.py)).
+Runtime check: privilege.no-escalation — the whole rule: any Bash command containing `sudo` is denied.
 
 ## Commits & ownership
 
@@ -52,9 +49,10 @@ the user's last message, not from the language of your own reasoning.
   [pre-commit](../pipelines/pre-commit.md)).
 - Branch for non-trivial work; do not commit straight to the default branch unless asked.
 
-> **Enforced** (not just documented) by [`../hooks/git-commit-guard.py`](../hooks/git-commit-guard.py)
-> — a PreToolUse hook that asks/denies at commit time, so the rule holds even after the docs
-> fall out of context. Wired per vendor on attach (BOOTSTRAP) and kept wired by `sync.py`.
+Runtime check: commits.owner-owned — subset: an AI `Co-Authored-By` trailer is denied, and
+`push`/`tag`/`merge` or a commit on the default branch or a detached/unresolved HEAD asks in
+interactive `default` permission mode and denies otherwise. "Tests pass before a commit is
+offered" and "branch for non-trivial work" are not machine-checked.
 
 ## Verify against reality, not memory
 
@@ -80,9 +78,16 @@ Applies to **every role and every agent** (architect and engineer alike).
 - A rule that says **where** something is recorded (e.g. `TASKS.md` is the backlog sink) applies
   only **after** the decision to record it — it is **not** a license to write during analysis.
 
-> **Enforced** (not just documented) by [`../hooks/analysis-guard.py`](../hooks/analysis-guard.py)
-> — a PreToolUse hook that, on the first edit to a planning/design doc in a session, reminds you
-> to confirm when the turn is analysis-only. Wired per vendor and kept wired by `sync.py`.
+Runtime check: analysis.before-mutation — subset: the first edit to a planning/design doc in a
+session raises a reminder; whether the turn is analysis-only is not decidable by a hook.
+
+## Role declaration
+
+- **State which agent you are operating as before project work, and restate it on every switch.**
+  Format: `🧭 agent: <name> — <focus>`; pick the role by operation ([roles/](../roles/README.md)).
+
+Runtime check: role.declaration — subset: the first edit to a code file in a session raises the
+design→code reminder; the switch itself is not observable, so the restatement is not checked.
 
 ## Documentation hygiene
 
@@ -118,6 +123,10 @@ Applies to **every role and every agent** (architect and engineer alike).
 - Escalate on signal, not by default: start at the cheapest adequate rung and move up one
   rung only on failure signals (gates red twice, the delegate flags uncertainty, a
   contested fork emerges mid-task).
+
+Runtime check: delegation.tier-floor — subset: uninterrupted read/shell/edit volume with no
+delegation raises a nudge, then an ask in interactive `default` permission mode; a missing or
+non-default mode escalates that ask to a deny.
 
 ## Code design — the principles every language inherits
 

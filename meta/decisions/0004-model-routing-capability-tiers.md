@@ -8,7 +8,7 @@
   [pipelines/{review,code,design}-flow](../../pipelines/) (gain step tier annotations) ·
   [hooks/](../../hooks/) (`session-start-agent.py` wiring contract, `claude_adapter` /
   `codex_adapter`) · design concept in [`meta/design/model-routing.md`](../design/model-routing.md)
-  (options, rejected branches, examples) · akmon backlog task [C10](../TASKS.md).
+  (options, rejected branches, examples) · akmon backlog task [C10](../TASKS_ARCHIVE.md).
 
 ## Context
 

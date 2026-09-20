@@ -38,6 +38,16 @@ One task = **one line**:
   `[#…]` is provenance, not the id. Distinct from the trailing `[detail](link)`.
 - **status** — exactly one of `active | blocked | deferred | done`. `blocked` = waiting on an
   external dependency; `deferred` = a deliberate not-now (still a real intent, just parked).
+- **a status must be checkable.** "complete in the tree", "done locally" and their variants are not
+  statuses: they describe an uncommitted working copy nobody else can verify, and they outlive the
+  code they claim — a task can end up asserting finished work that no commit ever carried and whose
+  subject has since been deleted. A task is either **landed**, meaning the carriers it names resolve
+  in committed history; **conclusively superseded or withdrawn**, meaning no implementation remains
+  intended and the archive says explicitly whether any carrier landed; or **open**, with the
+  remaining work stated. A commit may be named as implementation evidence; the history is the
+  timeline, but a hash is not a status. A `done` row prepared in the same change as its carriers is
+  proposed closure until that change lands; it must not describe the uncommitted tree as historical
+  fact.
 - **goal** — ≤12 words, the outcome. Not the plan.
 - **detail link** — design doc, accepted ADR block, or task/evidence record. Required once
   detail exists; omit only for a one-line task that needs none.
@@ -51,8 +61,9 @@ scheme applies to the live backlog and every new task. Don't renumber history.
 ## Files & lifecycle
 
 - **`TASKS.md`** — `active` + `blocked` + `deferred` only. Capped; see thresholds.
-- **`TASKS_ARCHIVE.md`** — `done`, one terse line each. Move an entry here **in the same
-  session it lands** — done work never accumulates in the live file. The move is mechanized by
+- **`TASKS_ARCHIVE.md`** — terminal `done` entries: landed work and explicitly superseded or
+  withdrawn work, with the terminal reason stated. Move an entry here **in the same change as its
+  carriers land** — done work never accumulates in the live file. The move is mechanized by
   `tools/tasks/archive.py` (`--tasks <path>`; `--done <id>…` closes named entries then sweeps,
   `--apply` to write) — it works on **any** `TASKS.md` in this format, akmon's or a consuming
   project's `_aitna/TASKS.md`.
