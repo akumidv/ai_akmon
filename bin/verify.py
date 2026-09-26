@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import sync as sync_tool
 
+from common import always_loaded
 from common.check_runner import CONFIG_TARGET, read_checks
 from common.codex_hooks import (
     CodexProtocolError,
@@ -125,6 +126,24 @@ _VENDOR_POINTERS = {
     ".codex/README.md": ("AGENTS.md", None),
 }
 
+
+#: Every hook script the generated wiring names, in every mode. A wired hook whose file is
+#: missing fails silently, so `check_hooks` asserts each one — and the test and self-CI
+#: fixtures build their trees from this same tuple, so the list has one owner.
+WIRED_HOOK_SCRIPTS: tuple[str, ...] = (
+    "hook_core.py",
+    "claude_adapter.py",
+    "codex_adapter.py",
+    "codex-hook.py",
+    "git-commit-guard.py",
+    "session-start-agent.py",
+    "role-on-code.py",
+    "analysis-guard.py",
+    "model-routing.py",
+    "delegation-log.py",
+    "delegation-nudge.py",
+    "gate-audit.py",
+)
 
 class Verifier:
     """Runs every USE-contract check against one consuming project and collects findings."""
@@ -390,6 +409,33 @@ class Verifier:
             )
 
         self._check_skill_roots(agents_text)
+        self._check_always_loaded(agents_text)
+
+    def _check_always_loaded(self, agents_text: str) -> None:
+        """ADR 0012 F18, consumer-total scope: warn over the cap, report the measurement every run.
+
+        The consumer owns most of this population, so the finding stays ``warn``; ``--strict``
+        turns it into a non-zero exit through the shared exit policy, not by changing severity.
+        """
+        found = always_loaded.populations(agents_text, self.root)
+        if found is None:
+            return  # no marked akmon block: check_agents_md already reports the missing anchor
+        population, cap = found[always_loaded.CONSUMER], always_loaded.CAPS[always_loaded.CONSUMER]
+        message = always_loaded.report(population, cap)
+        if always_loaded.over(population, cap):
+            self.warn(
+                "caps.always-loaded",
+                message,
+                target="AGENTS.md",
+                fix="Move on-demand material out of AGENTS.md and its imported guardrails, or link it instead",
+            )
+        else:
+            self.ok(
+                "caps.always-loaded",
+                message,
+                target="AGENTS.md",
+                fix="Keep AGENTS.md and the guardrails it imports within the always-loaded cap",
+            )
 
     def _check_vendor_pointers(self) -> None:
         """Every vendor pointer file must import its guardrail and link back to AGENTS.md."""
@@ -799,18 +845,7 @@ class Verifier:
         out of the wheel, so their existence in the tree *is* what the wiring rests on. Nothing
         else covers it, and a missing one fails the way every hook failure fails — silently.
         """
-        for script in (
-            "hook_core.py",
-            "claude_adapter.py",
-            "codex_adapter.py",
-            "codex-hook.py",
-            "git-commit-guard.py",
-            "session-start-agent.py",
-            "role-on-code.py",
-            "analysis-guard.py",
-            "model-routing.py",
-            "delegation-log.py",
-        ):
+        for script in WIRED_HOOK_SCRIPTS:
             self.check_standard_path(f"hooks/{script}")
 
     def check_hook_launcher(self) -> None:

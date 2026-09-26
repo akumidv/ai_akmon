@@ -63,14 +63,8 @@ def _settings_model(project_root: Path) -> str | None:
 
 
 def _load_config(root: Path) -> dict:
-    config_path = root / routing.LOCAL_CONFIG_REL
-    if not config_path.is_file():
-        return {}
-    try:
-        loaded = json.loads(config_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
+    """This project's recorded binding (one reader, ``routing.read_local_config``)."""
+    return routing.read_local_config(root)
 
 
 def model_routing_result(root: Path, payload: dict) -> HookResult | None:

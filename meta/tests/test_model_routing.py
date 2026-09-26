@@ -1533,3 +1533,251 @@ def test_init_runs_in_package_mode_against_the_shipped_registry(tmp_path):
     root = _make_package_project(tmp_path)
     assert _load_init().main(["--project-root", str(root), "--available", "small,medium,large"]) == 0
     assert sorted((root / ".claude" / "agents").glob("k_*.md"))
+
+
+# --------------------------------------------------------------------------------------
+# C32 — task-kind floors and the escalation path are read, not just recorded
+# --------------------------------------------------------------------------------------
+
+
+def _ladder_config(orchestrator: str, ladder: list[str]) -> dict:
+    binding = routing.compute_binding(REGISTRY, orchestrator, available=ladder)
+    return routing.local_config(binding, REGISTRY, second_opinion=False, available=ladder)
+
+
+def test_floor_gap_when_the_reasoner_follows_an_orchestrator_below_the_top():
+    gaps = routing.floor_gaps(_ladder_config("medium", ["small", "medium", "large"]))
+    assert gaps == [routing.FloorGap(kind="quant-derivation", agent="k_reasoner", floor="large", bound="medium")]
+
+
+def test_no_floor_gap_with_the_orchestrator_on_the_top_rung():
+    assert routing.floor_gaps(_fresh_config()) == []
+
+
+def test_no_floor_gap_under_semantic_fallback():
+    binding = routing.compute_binding(REGISTRY, "large", available=None)
+    config = routing.local_config(binding, REGISTRY, second_opinion=False, available=None)
+    assert routing.floor_gaps(config) == []
+
+
+def test_status_lines_name_the_floor_gap_and_the_override():
+    config = _ladder_config("medium", ["small", "medium", "large"])
+    joined = "\n".join(routing.status_lines(config, REGISTRY, "x"))
+    assert "⚠ task kind quant-derivation has a large floor, but k_reasoner is bound to medium" in joined
+    assert "with model=large" in joined
+
+
+def test_rebind_notice_carries_the_floor_gap():
+    config = _ladder_config("medium", ["small", "medium", "large"])
+    assert "quant-derivation has a large floor" in "\n".join(routing.rebind_notice(config, REGISTRY))
+
+
+def test_status_lines_name_the_escalation_path_only_with_a_bound_ladder():
+    bound = "\n".join(routing.status_lines(_ladder_config("large", ["small", "medium", "large"]), REGISTRY, "x"))
+    assert "(escalation path: medium)" in bound
+    binding = routing.compute_binding(REGISTRY, "large", available=None)
+    semantic = routing.local_config(binding, REGISTRY, second_opinion=False, available=None)
+    assert "escalation path" not in "\n".join(routing.status_lines(semantic, REGISTRY, "x"))
+
+
+def test_delegation_floor_warning_is_conditional_on_the_kind_and_silenced_by_an_override():
+    config = _ladder_config("medium", ["small", "medium", "large"])
+    warning = routing.delegation_floor_warning(config, "k_reasoner", None)
+    assert warning is not None
+    assert "quant-derivation (floor large)" in warning
+    assert "if this delegation is one of those kinds" in warning
+    assert routing.delegation_floor_warning(config, "k_reasoner", "large") is None
+    assert routing.delegation_floor_warning(config, "k_reasoner", "medium") is not None
+    assert routing.delegation_floor_warning(config, "k_explorer", None) is None
+
+
+# --------------------------------------------------------------------------------------
+# C33 — tolerant zone markers, the convention where the orchestrator reads it, unlabelled warn
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        ("zone:auth check tokens", ("auth", "check tokens")),
+        ("Zone:auth, check tokens", ("auth", "check tokens")),
+        ("[ zone : auth ] check tokens", ("auth", "check tokens")),
+        ("[ZONE:auth] check tokens", ("auth", "check tokens")),
+        ("zone:auth", ("auth", "")),
+        ("zone: the auth module", (None, "zone: the auth module")),
+        ("mid-sentence zone:auth stays prose", (None, "mid-sentence zone:auth stays prose")),
+    ],
+)
+def test_parse_zone_tolerates_the_observed_spellings(description, expected):
+    assert routing.parse_zone(description) == expected
+
+
+def _entry(session: str, zone: str | None, subagent: str = "k_explorer") -> routing.DelegationEntry:
+    return routing.DelegationEntry("t", session, subagent, None, zone, "d")
+
+
+def test_unlabelled_fanout_warns_only_in_a_zoned_session():
+    earlier = [_entry("s1", "auth"), _entry("s1", "io"), _entry("s2", None)]
+    warning = routing.unlabelled_fanout_warning(earlier, "s1", "k_explorer", None)
+    assert warning is not None and "(auth, io)" in warning and "[zone:<label>]" in warning
+    assert routing.unlabelled_fanout_warning(earlier, "s2", "k_explorer", None) is None
+    assert routing.unlabelled_fanout_warning(earlier, "s1", "k_explorer", "auth") is None
+
+
+def test_unlabelled_fanout_exempts_the_auditor_host_agents_and_missing_sessions():
+    earlier = [_entry("s1", "auth")]
+    assert routing.unlabelled_fanout_warning(earlier, "s1", "k_auditor", None) is None
+    assert routing.unlabelled_fanout_warning(earlier, "s1", "general-purpose", None) is None
+    assert routing.unlabelled_fanout_warning(earlier, None, "k_explorer", None) is None
+
+
+def test_zone_convention_reaches_fanout_agents_and_the_status_line_not_the_auditor():
+    binding = routing.compute_binding(REGISTRY, "large", available=["small", "medium", "large"])
+    by_name = {spec.name: routing.agent_file_content(spec, binding) for spec in routing.AGENT_SPECS}
+    frontmatter = {name: text.split("---")[1] for name, text in by_name.items()}
+    squashed = {name: " ".join(fm.split()) for name, fm in frontmatter.items()}
+    assert all(routing.ZONE_CONVENTION in text for name, text in squashed.items() if name != "k_auditor")
+    assert routing.ZONE_CONVENTION not in squashed["k_auditor"]
+    assert routing.ZONE_CONVENTION in "\n".join(routing.status_lines(_fresh_config(), REGISTRY, "x"))
+
+
+# --------------------------------------------------------------------------------------
+# C25 — the gate's count floors: what counts as an item, and what the hold asks for
+# --------------------------------------------------------------------------------------
+
+_REVIEW_RULE = routing.gate_rule_for("review")
+_ARCHITECT_RULE = routing.gate_rule_for("architect")
+
+_FINDINGS_TURN = """Here is the pass.
+
+## Findings
+
+- F1 · the thing is wrong
+  - a nested detail, part of F1
+- F2 · the other thing
+- F3 · and this
+
+## Next steps
+
+- not a finding
+"""
+
+
+def test_only_items_under_the_counted_section_count():
+    assert routing.count_gate_items(_FINDINGS_TURN, _REVIEW_RULE) == 3
+    assert routing.count_gate_items(_FINDINGS_TURN, _ARCHITECT_RULE) == 0
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("## Findings\n\n1. one\n2. two\n3. three\n", 3),
+        ("**Findings**\n\n- one\n- two\n", 2),
+        ("### 3 findings\n\n- one\n- two\n- three\n", 3),
+        ("## Findings\n\n| id | what |\n|---|---|\n| F1 | a |\n| F2 | b |\n", 2),
+        ("## Findings\n\nProse only, no items.\n", 0),
+        ("## Summary\n\n- one\n- two\n- three\n", 0),
+        ("## Findings\n\n- one\n\n### Detail\n\n- still inside the section\n", 2),
+        ("## Findings\n\n- one\n\n## Findings (second pass)\n\n- two\n", 2),
+    ],
+    ids=[
+        "numbered",
+        "bold-heading",
+        "count-in-heading",
+        "table",
+        "prose",
+        "other-heading",
+        "subsection",
+        "two-sections",
+    ],
+)
+def test_the_structural_count_reads_the_shapes_a_role_actually_writes(body, expected):
+    assert routing.count_gate_items(body, _REVIEW_RULE) == expected
+
+
+@pytest.mark.parametrize(
+    ("triggers", "expected"),
+    [
+        ({"review_min_findings": 3}, 3),
+        ({}, None),
+        ({"review_min_findings": 0}, None),
+        ({"review_min_findings": True}, None),
+    ],
+    ids=["count", "absent", "zero", "bool"],
+)
+def test_a_floor_is_a_positive_count_or_no_floor_at_all(triggers, expected):
+    assert routing.gate_threshold({"gate_triggers": triggers}, _REVIEW_RULE) == expected
+
+
+def test_the_shipped_registry_carries_both_floors():
+    registry = routing.load_registry(_KEYSTONE)
+    assert routing.gate_threshold(registry, _REVIEW_RULE) == 3
+    assert routing.gate_threshold(registry, _ARCHITECT_RULE) == 2
+
+
+@pytest.mark.parametrize(
+    ("role", "body", "held"),
+    [
+        ("review", _FINDINGS_TURN, True),
+        ("review", "## Findings\n\n- one\n- two\n", False),
+        ("architect", "## Options\n\n- A\n- B\n", True),
+        ("architect", "## Alternatives\n\n- A\n", False),
+        ("engineer", _FINDINGS_TURN, False),
+        (None, _FINDINGS_TURN, False),
+    ],
+    ids=["at-floor", "below-floor", "options", "one-option", "role-without-a-gate", "no-role"],
+)
+def test_the_gate_asks_only_at_or_above_its_own_floor(role, body, held):
+    registry = {"gate_triggers": {"review_min_findings": 3, "architect_min_options": 2}}
+    request = routing.gate_audit_request(registry, {}, role, body)
+    assert (request is not None) is held
+
+
+def test_the_request_names_the_count_the_floor_and_the_routed_auditor():
+    registry = {"gate_triggers": {"review_min_findings": 3}}
+    config = {"binding": {"auditor": "big"}, "available": ["small", "big"]}
+    request = routing.gate_audit_request(registry, config, "review", _FINDINGS_TURN)
+    assert "3 findings" in request
+    assert "review_min_findings" in request and "floor of 3" in request
+    assert "`k_auditor` (model=big)" in request
+    assert "skipping" in request  # the flows allow the skip; only the silence is removed
+    assert "(model=" not in routing.gate_audit_request(registry, {}, "review", _FINDINGS_TURN)
+
+
+def test_one_hold_per_gate_and_a_changed_count_is_a_new_gate(tmp_path):
+    more = _FINDINGS_TURN.replace("- F3 · and this\n", "- F3 · and this\n- F4 · one more\n")
+    assert routing.gate_audit_once("review", _FINDINGS_TURN, "s1", marker_dir=tmp_path) is True
+    assert routing.gate_audit_once("review", _FINDINGS_TURN, "s1", marker_dir=tmp_path) is False
+    assert routing.gate_audit_once("review", more, "s1", marker_dir=tmp_path) is True
+    assert routing.gate_audit_once("review", _FINDINGS_TURN, "s2", marker_dir=tmp_path) is True
+    # An unidentified session never claims a shared marker (C36): it asks every time.
+    assert routing.gate_audit_once("review", _FINDINGS_TURN, None, marker_dir=tmp_path) is True
+    assert routing.gate_audit_once("review", _FINDINGS_TURN, None, marker_dir=tmp_path) is True
+    assert routing.gate_audit_once("engineer", _FINDINGS_TURN, "s3", marker_dir=tmp_path) is False
+
+
+def test_the_local_config_reader_tolerates_absence_and_damage(tmp_path):
+    assert routing.read_local_config(tmp_path) == {}
+    config = tmp_path / routing.LOCAL_CONFIG_REL
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text("{not json", encoding="utf-8")
+    assert routing.read_local_config(tmp_path) == {}
+    config.write_text('["a list is not a config"]', encoding="utf-8")
+    assert routing.read_local_config(tmp_path) == {}
+    config.write_text('{"orchestrator": "big"}', encoding="utf-8")
+    assert routing.read_local_config(tmp_path) == {"orchestrator": "big"}
+
+
+def test_a_heading_is_split_into_words_in_any_script(tmp_path):
+    """C98: a latin-only split read every non-latin heading as wordless, so nothing counted.
+
+    The shipped nouns are English, so a Cyrillic heading still opens no section — what the
+    fix removes is the script dependence, leaving the noun list the only lever.
+    """
+    assert routing._HEADING_WORD_RE.findall("две находки") == ["две", "находки"]
+    assert routing._HEADING_WORD_RE.findall("3 findings") == ["findings"]
+    assert routing._opens_section("Находки — findings", _REVIEW_RULE.headings) is True
+    assert routing._opens_section("Находки", _REVIEW_RULE.headings) is False
+    # The three-word window counts real words, so a noun buried past them stays uncounted.
+    assert routing._opens_section("разбор находок по зонам finding", _REVIEW_RULE.headings) is False
+    assert routing.count_gate_items("## Находки — findings\n\n- a\n- b\n", _REVIEW_RULE) == 2

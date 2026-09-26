@@ -962,7 +962,7 @@ def test_every_wired_claude_entry_reports_a_crash_to_the_owner_and_exits_zero(tm
     # One stderr line with the hook and the class, the owner's notice as the one stdout document
     # (M69: shown as a notice, never passed to the model), exit 0 (M70: an exit 1 is silent).
     files, _ = _wired_entry_points(tmp_path)
-    assert len(files) == 7
+    assert len(files) == 8
     for filename in files:
         hook = _claude_hook(filename)
         monkeypatch.setattr(hook, "load_payload", _seeded_crash)
@@ -1141,3 +1141,139 @@ def test_stale_guardrail_notice_reaches_both_vendor_wirings(monkeypatch, tmp_pat
     _run_codex_hook(monkeypatch, "session-start", {"cwd": str(root)})
     codex_payload = json.loads(capsys.readouterr().out)
     assert "_common.md" in codex_payload["hookSpecificOutput"]["additionalContext"]
+
+
+
+def test_delegation_log_warns_when_the_agent_runs_below_a_kind_floor(tmp_path, monkeypatch, capsys):
+    """C32: the recorded floor reaches the delegation, and an explicit model override meets it."""
+    deleg_log = _claude_hook("delegation-log.py")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: architect — fork"}}) + "\n",
+        encoding="utf-8",
+    )
+    config = _bound_config(["haiku", "sonnet", "opus", "fable"])
+    payload = _delegation_log_payload(tmp_path, transcript, "k_reasoner")
+    _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, config=config)
+    assert deleg_log.main() == 0
+    message = json.loads(capsys.readouterr().out)["systemMessage"]
+    assert "below the floor of quant-derivation (floor fable)" in message
+
+    payload["tool_input"]["model"] = "fable"
+    assert deleg_log.main() == 0
+    assert "floor" not in json.loads(capsys.readouterr().out)["systemMessage"]
+
+
+
+def test_delegation_log_warns_on_an_unlabelled_call_in_a_zoned_session(tmp_path, monkeypatch, capsys):
+    """C33: once the session's fan-out is zoned, an unlabelled call is named before the map misses it."""
+    deleg_log = _claude_hook("delegation-log.py")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — sweep"}}) + "\n",
+        encoding="utf-8",
+    )
+    payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
+    _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload)
+
+    payload["tool_input"]["description"] = "zone:auth read the token code"
+    assert deleg_log.main() == 0
+    assert "⚠" not in json.loads(capsys.readouterr().out)["systemMessage"]
+
+    payload["tool_input"]["description"] = "read the pricing code"
+    assert deleg_log.main() == 0
+    assert "carries no zone label while this session's fan-out is zoned (auth)" in json.loads(
+        capsys.readouterr().out
+    )["systemMessage"]
+    zones = [ln.split("\t")[4] for ln in (tmp_path / deleg_log.routing.DELEGATION_LOG_REL).read_text().splitlines()]
+    assert zones == ["auth", "-"]
+
+
+# --------------------------------------------------------------------------------------
+# C25 — the Stop gate: what holds a turn, what never does, and how the decision is rendered
+# --------------------------------------------------------------------------------------
+
+
+def _gate_project(tmp_path, transcript_role: str = "review") -> tuple[Path, dict]:
+    """A project with akmon mounted and a transcript whose last main turn declares a role."""
+    root = tmp_path / "project"
+    akmon = root / "_aitna" / "akmon" / "tools" / "model_routing"
+    akmon.mkdir(parents=True)
+    source = Path(routing.__file__).parent / "registry.json"
+    (akmon / "registry.json").write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    transcript = tmp_path / "transcript.jsonl"
+    record = {
+        "type": "assistant",
+        "message": {"role": "assistant", "content": [{"type": "text", "text": f"🧭 agent: {transcript_role} — focus"}]},
+    }
+    transcript.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    payload = {
+        "hook_event_name": "Stop",
+        "session_id": "gate-session",
+        "cwd": str(root),
+        "transcript_path": str(transcript),
+        "stop_hook_active": False,
+        "last_assistant_message": "## Findings\n\n- one\n- two\n- three\n",
+    }
+    return root, payload
+
+
+def test_the_stop_gate_holds_a_turn_that_reached_the_floor(tmp_path, monkeypatch):
+    hook = _claude_hook("gate-audit.py")
+    monkeypatch.setattr(hook.routing, "claim_diagnostic_marker", lambda *a, **k: True)
+    monkeypatch.setattr(hook.routing, "release_diagnostic_markers", lambda *a, **k: None)
+    root, payload = _gate_project(tmp_path)
+    result = hook.gate_audit_result(root, payload)
+    assert result is not None
+    assert (result.event_name, result.decision) == ("Stop", "block")
+    assert "3 findings" in result.reason
+    document = json.loads(claude_adapter.render_result(result))
+    assert document["decision"] == "block"
+    assert document["reason"] == result.reason
+    assert document["hookSpecificOutput"]["hookEventName"] == "Stop"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"stop_hook_active": True},
+        {"last_assistant_message": "## Findings\n\n- one\n- two\n"},
+        {"last_assistant_message": ""},
+        {"last_assistant_message": None},
+    ],
+    ids=["already-held", "below-floor", "empty-turn", "no-turn-text"],
+)
+def test_the_stop_gate_lets_these_turns_end(tmp_path, monkeypatch, mutation):
+    hook = _claude_hook("gate-audit.py")
+    monkeypatch.setattr(hook.routing, "claim_diagnostic_marker", lambda *a, **k: True)
+    monkeypatch.setattr(hook.routing, "release_diagnostic_markers", lambda *a, **k: None)
+    root, payload = _gate_project(tmp_path)
+    payload.update(mutation)
+    assert hook.gate_audit_result(root, payload) is None
+
+
+def test_the_stop_gate_is_silent_in_a_tree_without_model_routing(tmp_path, monkeypatch):
+    """A pin from before model routing carries no floors — and no diagnostic either."""
+    hook = _claude_hook("gate-audit.py")
+    root, payload = _gate_project(tmp_path)
+    monkeypatch.setattr(hook, "akmon_runtime_root", lambda _root: tmp_path / "tree-without-routing")
+    assert hook.gate_audit_result(root, payload) is None
+
+
+def test_the_same_gate_holds_the_turn_only_once(tmp_path, monkeypatch):
+    hook = _claude_hook("gate-audit.py")
+    markers = tmp_path / "markers"
+    markers.mkdir()
+    monkeypatch.setattr(hook.routing.tempfile, "gettempdir", lambda: str(markers))
+    root, payload = _gate_project(tmp_path)
+    assert hook.gate_audit_result(root, payload) is not None
+    assert hook.gate_audit_result(root, payload) is None
+
+
+def test_a_crash_in_the_stop_gate_never_wedges_the_turn(tmp_path, monkeypatch, capsys):
+    hook = _claude_hook("gate-audit.py")
+    monkeypatch.setattr(hook, "load_payload", _seeded_crash)
+    assert hook.main() == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"systemMessage": hook_core.hook_failure_notice("gate-audit", RuntimeError())}
+    assert "decision" not in captured.out

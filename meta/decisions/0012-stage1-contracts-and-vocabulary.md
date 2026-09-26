@@ -332,6 +332,27 @@ Each scope must satisfy both inclusive dimensions. Decimal bytes are normative: 
 | akmon-shipped | `≤210 lines` and `≤12,000 bytes` | `self_ci`: error |
 | consumer total | `≤460 lines` and `≤25,000 bytes` | `verify.py`: warn; exit 1 under `--strict` only |
 
+*(the two caps are superseded by the C56 amendment below; every other clause stands)*
+
+> **Amendment — C56, owner-approved: the ratchet is re-baselined onto the measured shape.** The
+> caps above were chosen to bless the ~197-line shape of the day. C53 and the counted language
+> profile moved past them: the first counter measures the shipped population at **311 lines /
+> 20,190 bytes** (the generated package-mode block, `guardrails/_common.md`, and the largest
+> language profile akmon ships) and the attached consumer at 485 lines / 28,152 bytes. Wiring the
+> shipped error at the old numbers would ship `self_ci` red, which this decision's own cost
+> paragraph rejects, so the numbers — and only the numbers — move:
+>
+> | scope | inclusive cap | checker and result |
+> |---|---|---|
+> | akmon-shipped | `≤320 lines` and `≤21,000 bytes` | `self_ci`: error |
+> | consumer total | `≤570 lines` and `≤34,000 bytes` | `verify.py`: warn; exit 1 under `--strict` only |
+>
+> The shipped pair is today's measured shape rounded up; the consumer pair is that pair plus the
+> hand-owned allowance the original numbers expressed (250 lines / 13,000 bytes), unchanged. The
+> scopes, decimal units, inclusivity, the single counter, the two severities and the exact code
+> all stand as written. Lowering the target remains C60's work, and it is the ratchet — not this
+> amendment — that holds the shape between now and then.
+
 Both checks emit the exact stable code `caps.always-loaded`. Their target distinguishes the scope,
 and the diagnostic reports that scope's measured line and byte counts beside both caps. Enforcement
 and rendering use the same counters; stale or hard-coded output is a contract failure.

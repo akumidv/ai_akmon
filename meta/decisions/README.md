@@ -58,7 +58,7 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   in V1. Grandfathers older ADRs.
 - [0009 — Packaging: the `akmon` package as carrier, four mount modes incl. `package`](0009-packaging-package-carrier-and-mount-modes.md)
   — one distribution (thin CLI + full tree as package data, hatchling, zero runtime deps, floor
-  Python 3.11 as amended by [ADR 0009 D04](0009-packaging-package-carrier-and-mount-modes.md#d04--python-floor-and-package-manifest),
+  Python 3.11 as amended by [ADR 0009 D04](0009-packaging-package-carrier-and-mount-modes.md#d04--python-floor-and-manifest-pin-semantics),
   PyPI name `akmon`); mount modes `submodule|vendored|subtree|package`; `package` = dev-group pin,
   no tree in the repo, no skew by construction; as amended by C77 it runs the hooks out of the
   installed package via `akmon hook` and materializes only the guardrails `AGENTS.md` imports;
@@ -104,3 +104,12 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   — one result-first selector description and compatible Claude/Codex delivery.
 - [0018 — Release alignment and update lifecycle](0018-release-alignment-and-update-lifecycle.md)
   — version consistency, hand-owned alignment boundaries, explicit update and rollback.
+- [0019 — Collaboration guidance changes from the A22 evaluation](0019-collaboration-guidance-from-a22.md)
+  — A22's accepted outcomes with the evidence in plain terms; D01: no new claim-calibration rule,
+  since neither the clause nor the worked examples improved on the standard in context on two vendors.
+- [0020 — Node.js consumers: a JavaScript implementation, an npm carrier, one behavioral spec](0020-node-consumers-js-implementation.md)
+  — two permanent implementations (Python, JavaScript) bound by a normative process-level
+  conformance corpus; Python-free only in Node `package` mode; JS + JSDoc, Node ≥22, vendored
+  smol-toml; npm carrier with one version line and file list; `node` hook wiring; all tools ported
+  behind `akmon tool` and exported for JS projects; Node checks per ADR 0014. Narrows ADR 0009
+  D01/D02 for executable code.

@@ -218,3 +218,25 @@ def test_explicit_provider_override_bypasses_ladder(tmp_path, capsys):
     assert exit_code == 0
     assert out.splitlines()[0].startswith("codex exec ")
     assert "provider=anthropic model=(default)" in out
+
+
+def test_a_pin_the_vendor_cannot_apply_stops_the_run_loudly(tmp_path, capsys, monkeypatch):
+    """C97: the same-vendor step needs a model pin; without a model_flag it must not run unpinned."""
+    config = {
+        "orchestrator": "large",
+        "binding": {"auditor": "large"},
+        "available": ["small", "large"],
+        "second_opinion_fallback_model": "small",
+    }
+    root = _write_project(tmp_path, _ONE_VENDOR_REGISTRY, config)
+    pack = _gate_pack(root)
+
+    def _fail_if_called(*_args, **_kwargs):
+        raise AssertionError("an unpinnable second opinion must not reach the harness")
+
+    monkeypatch.setattr(second_opinion.subprocess, "run", _fail_if_called)
+    argv = ["--project-root", str(root), "--orchestrator-vendor", "anthropic", "--gate", "code-verify"]
+    exit_code = second_opinion.main([*argv, "--gate-pack", str(pack)])
+
+    assert exit_code == 2
+    assert "declares no model_flag" in capsys.readouterr().err

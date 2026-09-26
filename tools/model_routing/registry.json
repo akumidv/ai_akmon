@@ -34,6 +34,7 @@
     "second_opinion": {
       "harness": "codex",
       "operation": "review",
+      "model_flag": "--model {model}",
       "report_dir": ".claude/second-opinion/"
     },
     "semantic_fallback": {

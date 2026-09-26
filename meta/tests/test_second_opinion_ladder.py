@@ -10,6 +10,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 _KEYSTONE = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
@@ -48,13 +50,18 @@ def test_second_opinion_command_with_model_inserts_flag_before_prompt():
     ]
 
 
-def test_second_opinion_command_with_model_but_no_model_flag_omits_it():
+def test_second_opinion_command_with_model_but_no_model_flag_fails_loudly():
+    """C97: a pin the vendor cannot apply is an error, not a silently unpinned run."""
     spec = {"harness": "codex", "operation": "review"}
-    assert routing.second_opinion_command(spec, "review this", model="o3") == [
-        "codex",
-        "exec",
-        "review this",
-    ]
+    with pytest.raises(routing.UnpinnableModelError, match="declares no model_flag"):
+        routing.second_opinion_command(spec, "review this", model="o3")
+
+
+def test_every_routed_vendor_declares_its_measured_model_flag():
+    registry = routing.load_registry(Path(__file__).resolve().parents[2])
+    for vendor in routing.vendors_with_routing_policy(registry):
+        spec = routing.second_opinion_spec(registry, vendor)
+        assert routing.second_opinion_command(spec, "p", model="m")[-3:] == ["--model", "m", "p"], vendor
 
 
 # --------------------------------------------------------------------------------------

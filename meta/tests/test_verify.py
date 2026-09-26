@@ -20,6 +20,7 @@ import pytest
 import sync
 import verify
 
+from common import always_loaded
 from common.codex_hooks import CodexProtocolError, expected_codex_hooks
 from common.findings import exit_code, render
 
@@ -92,16 +93,7 @@ def _make_project(tmp_path: Path) -> Path:
         "pipelines/tasks.md",
         "bin/sync.py",
         "bin/verify.py",
-        "hooks/hook_core.py",
-        "hooks/claude_adapter.py",
-        "hooks/codex_adapter.py",
-        "hooks/codex-hook.py",
-        "hooks/git-commit-guard.py",
-        "hooks/session-start-agent.py",
-        "hooks/role-on-code.py",
-        "hooks/analysis-guard.py",
-        "hooks/model-routing.py",
-        "hooks/delegation-log.py",
+        *(f"hooks/{name}" for name in verify.WIRED_HOOK_SCRIPTS),
         "tools/model_routing/routing.py",
         "tools/model_routing/init.py",
         "tools/model_routing/second_opinion.py",
@@ -1811,3 +1803,44 @@ def test_an_overlay_overriding_only_policy_stays_clean(tmp_path):
         json.dumps({"anthropic": {"second_opinion": {"report_dir": ".local/so/"}}}),
     )
     assert _overlay_second_opinion_errors(root) == []
+
+
+# --------------------------------------------------------------------------------------
+# C56 — consumer-total always-loaded cap (ADR 0012 F18): warn, strict exit, dynamic report
+# --------------------------------------------------------------------------------------
+
+
+def _always_loaded_findings(verifier):
+    return [f for f in verifier.findings if f.code == "caps.always-loaded"]
+
+
+_CONSUMER_CAP = always_loaded.CAPS[always_loaded.CONSUMER]
+
+
+def _pad_to_consumer_lines(root: Path, lines: int) -> None:
+    """Pad the hand-owned tail of AGENTS.md so the consumer-total population has ``lines`` lines."""
+    agents = root / "AGENTS.md"
+    current = always_loaded.populations(agents.read_text(encoding="utf-8"), root)[always_loaded.CONSUMER].lines
+    padding = "\n## Notes\n" + "n\n" * (lines - current - 2)
+    agents.write_text(agents.read_text(encoding="utf-8") + padding, encoding="utf-8")
+
+
+@pytest.mark.parametrize(("delta", "severity"), [(-1, "ok"), (0, "ok"), (1, "warn")])
+def test_consumer_always_loaded_cap_is_inclusive_and_warns_once(tmp_path, delta, severity):
+    """The boundary is read from the cap the check enforces, so a re-baseline moves both together."""
+    lines = _CONSUMER_CAP.lines + delta
+    root = _make_project(tmp_path)
+    _pad_to_consumer_lines(root, lines)
+    verifier = verify.Verifier(root)
+    verifier.run()
+    [finding] = _always_loaded_findings(verifier)
+    assert finding.severity == severity
+    assert finding.message.startswith(f"consumer-total: lines={lines}/{_CONSUMER_CAP.lines} bytes=")
+    assert finding.target == "AGENTS.md"
+
+
+def test_consumer_always_loaded_warning_fails_only_strict_runs(tmp_path):
+    root = _make_project(tmp_path)
+    _pad_to_consumer_lines(root, _CONSUMER_CAP.lines + 1)
+    assert verify.main(["--project-root", str(root)]) == 0
+    assert verify.main(["--project-root", str(root), "--strict"]) == 1

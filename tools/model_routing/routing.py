@@ -28,6 +28,7 @@ from typing import BinaryIO
 # without reading the mount record and stays clear of the tree-resolution fork (C69).
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from common.markers import claim_diagnostic_marker, release_diagnostic_markers
 from common.project_root import aitna_root_name
 from common.runtime import harness_command
 
@@ -292,13 +293,29 @@ def second_opinion_command(spec: dict, prompt: str, model: str | None = None) ->
     the registry contributes only *policy* — which harness, which operation, and the optional
     ``model_flag`` format string (e.g. ``"--model {model}"``) inserted before the prompt so the
     same-vendor branch of the diversity ladder can pin a *different* model.
+
+    A requested ``model`` with no ``model_flag`` raises ``UnpinnableModelError`` (C97): the run
+    would otherwise go out on the harness's default model and still be filed as a model-diverse
+    second opinion — the one guarantee the ladder exists to give, lost without a signal.
     """
     argv = harness_command(str(spec["harness"]), str(spec["operation"]))
     if model:
         model_flag = spec.get("model_flag")
-        if model_flag:
-            argv += shlex.split(str(model_flag).format(model=model))
+        if not model_flag:
+            raise UnpinnableModelError(str(spec["harness"]), model)
+        argv += shlex.split(str(model_flag).format(model=model))
     return [*argv, prompt]
+
+
+class UnpinnableModelError(ValueError):
+    """A second opinion asked for a model its vendor declares no ``model_flag`` to pin (C97)."""
+
+    def __init__(self, harness: str, model: str) -> None:
+        super().__init__(
+            f"second opinion needs model {model!r} on {harness}, but the registry declares no model_flag "
+            "for that vendor — an unpinned run would not be model-diverse. Declare the measured flag in "
+            "the vendor's second_opinion block, or route this gate another way."
+        )
 
 
 def second_opinion_unavailability(registry: dict, config: dict, orchestrator_vendor: str) -> str:
@@ -612,7 +629,9 @@ def _agent_model(spec: AgentSpec, binding: Binding) -> str | None:
 def agent_file_content(spec: AgentSpec, binding: Binding, brief_extra: str = "") -> str:
     """Render one generated ``.claude/agents/<name>.md`` file: frontmatter, banner, body, brief."""
     lines = ["---", f"name: {spec.name}", "description: >-"]
-    lines.extend(f"  {chunk}" for chunk in _wrap(spec.description, 88))
+    # The auditor reads a fan-out rather than being a zone of it, so it carries no zone convention.
+    description = spec.description if spec.name == "k_auditor" else f"{spec.description} {ZONE_CONVENTION}"
+    lines.extend(f"  {chunk}" for chunk in _wrap(description, 88))
     if spec.tools:
         lines.append(f"tools: {spec.tools}")
     model = _agent_model(spec, binding)
@@ -703,6 +722,9 @@ def brief_warning(registry: dict, aitna: str | None = None) -> str | None:
     return None
 
 
+_REBIND_MARKER = "suppressed-rebind"
+
+
 def suppressed_rebind_warning(
     warning: str | None,
     detected_model: str | None,
@@ -718,14 +740,12 @@ def suppressed_rebind_warning(
     current session already saw. A changed model or error produces a new digest and re-arms
     the notice; a cleared condition removes the marker so a later recurrence speaks again.
 
-    Delivery here is **best-effort, and this is the one place akmon accepts fail-quiet**
-    (ADR-0011/D02). A stale marker hides the switch-time notice only when three things coincide: a
-    session id that survived a crash or was reused, the same detected model, and the same
-    warning text. It is tolerable only because the same condition is reported loudly
-    elsewhere — SessionStart's ``BriefError`` and a direct ``init.py`` run — so this must not
-    be read as licence to go quiet in general. The acceptance ends with C36(a): once the
-    marker moves onto the atomic hook helper and gains an age-out, exactly-once per episode
-    becomes the contract.
+    Since C36(a) the marker is claimed through ``common.markers`` — atomic, hashed, ``0600``,
+    aged out after a day — so exactly-once per episode is the contract rather than the
+    best-effort residual ADR-0011/D02 once accepted here: a crashed or reused session id no
+    longer hides the notice for longer than the age-out. The condition is folded into the
+    marker's kind, and moving to another condition or clearing it releases the session's
+    other markers, which is what re-arms a later recurrence.
     """
     # Without a reliable session identity, never let one anonymous invocation silence
     # another session. Repeating the warning is safer than a process-global ``nosession``
@@ -734,21 +754,15 @@ def suppressed_rebind_warning(
         return [warning] if warning is not None and detected_model is not None else []
 
     session = str(session_id)
-    marker_name = hashlib.sha256(session.encode()).hexdigest()[:20]
-    marker = (marker_dir or Path(tempfile.gettempdir())) / f"akmon-suppressed-rebind-{marker_name}"
     if warning is None or detected_model is None:
-        with contextlib.suppress(OSError):
-            marker.unlink(missing_ok=True)
+        release_diagnostic_markers(_REBIND_MARKER, session, directory=marker_dir)
         return []
 
-    condition = hashlib.sha256(f"{detected_model}\0{warning}".encode()).hexdigest()
-    try:
-        if marker.read_text(encoding="utf-8") == condition:
-            return []
-    except OSError:
-        pass
-    with contextlib.suppress(OSError):
-        marker.write_text(condition, encoding="utf-8")
+    condition = hashlib.sha256(f"{detected_model}\0{warning}".encode()).hexdigest()[:16]
+    kind = f"{_REBIND_MARKER}-{condition}"
+    if not claim_diagnostic_marker(kind, session, directory=marker_dir):
+        return []
+    release_diagnostic_markers(_REBIND_MARKER, session, keep_kind=kind, directory=marker_dir)
     return [warning]
 
 
@@ -1325,6 +1339,86 @@ def _second_opinion_status(registry: dict, config: dict, orchestrator_vendor: st
     return f"second-opinion={harness}({state}{pin})", None
 
 
+@dataclass(frozen=True)
+class FloorGap:
+    """A task kind whose rung floor sits above the rung its routed agent is bound to (C32)."""
+
+    kind: str
+    agent: str
+    floor: str
+    bound: str
+
+
+def _rank(ladder: list, alias: object) -> int | None:
+    return ladder.index(alias) if isinstance(alias, str) and alias in ladder else None
+
+
+def floor_gaps(config: dict) -> list[FloorGap]:
+    """Kinds whose recorded ``task_kind_floors`` entry exceeds their agent's bound model.
+
+    The floors are resolved at init against the local ladder; the agent's model is the one
+    ``bound_model_for`` reports, so a semantic-fallback binding (no pin) yields no gap —
+    there is no rung to compare. The reasoner follows the orchestrator, so a kind with a
+    ``highest`` floor on ``k_reasoner`` opens a gap whenever the orchestrator is below the top.
+    """
+    floors = config.get("task_kind_floors") if isinstance(config, dict) else None
+    ladder = config.get("available") if isinstance(config, dict) else None
+    if not isinstance(floors, dict) or not isinstance(ladder, list):
+        return []
+    gaps: list[FloorGap] = []
+    for spec in AGENT_SPECS:
+        bound = bound_model_for(config, spec.name)
+        bound_rank = _rank(ladder, bound)
+        if bound is None or bound_rank is None:
+            continue
+        for kind in spec.kinds:
+            floor = floors.get(kind)
+            floor_rank = _rank(ladder, floor)
+            if floor_rank is not None and floor_rank > bound_rank:
+                gaps.append(FloorGap(kind=kind, agent=spec.name, floor=floor, bound=bound))
+    return gaps
+
+
+def floor_gap_lines(config: dict) -> list[str]:
+    """One context line per floor gap: which kind, which agent, and the override that meets it."""
+    return [
+        f"⚠ task kind {gap.kind} has a {gap.floor} floor, but {gap.agent} is bound to {gap.bound} — "
+        f"delegate {gap.kind} with model={gap.floor}."
+        for gap in floor_gaps(config)
+    ]
+
+
+def delegation_floor_warning(config: dict, subagent_type: str, call_model: object) -> str | None:
+    """Per-call form of the floor check for the delegation log (C32).
+
+    The call does not say which task kind it carries, so the warning is conditional on the
+    kind; an explicit ``model`` override at or above every gapped floor silences it.
+    """
+    ladder = config.get("available") if isinstance(config, dict) else None
+    gaps = [gap for gap in floor_gaps(config) if gap.agent == subagent_type]
+    if not gaps or not isinstance(ladder, list):
+        return None
+    call_rank = _rank(ladder, call_model)
+    open_gaps = [gap for gap in gaps if call_rank is None or call_rank < ladder.index(gap.floor)]
+    if not open_gaps:
+        return None
+    kinds = ", ".join(f"{gap.kind} (floor {gap.floor})" for gap in open_gaps)
+    return (
+        f"{subagent_type} runs on {open_gaps[0].bound}, below the floor of {kinds} — "
+        "if this delegation is one of those kinds, re-issue it with the floor model"
+    )
+
+
+def _escalation_hint(config: dict) -> str:
+    """The recorded escalation path, named only when the binding pins concrete aliases."""
+    binding = config.get("binding", {})
+    path = binding.get("escalation") if isinstance(binding, dict) else None
+    ladder = config.get("available")
+    if not isinstance(path, list) or not path or not isinstance(ladder, list) or not ladder:
+        return ""
+    return f" (escalation path: {' → '.join(str(rung) for rung in path)})"
+
+
 def status_lines(config: dict, registry: dict, runtime_root: str) -> list[str]:
     """The steady-state status injection: one binding line + self-check, plus any warning.
 
@@ -1346,7 +1440,8 @@ def status_lines(config: dict, registry: dict, runtime_root: str) -> list[str]:
         f"{second_display}",
         "Delegation is the default — route by task kind (MODEL.md § Capability tiers): "
         "k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · "
-        "k_auditor (audit at gates); escalate one rung only on failure signals.",
+        "k_auditor (audit at gates); escalate one rung only on failure signals"
+        f"{_escalation_hint(config)}. {ZONE_CONVENTION}",
         f"Self-check: if your actual model is not '{orchestrator}', re-run "
         f"`python3 {runtime_root}/tools/model_routing/init.py --orchestrator <alias>`.",
     ]
@@ -1355,6 +1450,7 @@ def status_lines(config: dict, registry: dict, runtime_root: str) -> list[str]:
         lines.append(f"⚠ {warning}")
     if second_warning:
         lines.append(f"⚠ {second_warning}")
+    lines.extend(floor_gap_lines(config))
     return lines
 
 
@@ -1377,6 +1473,7 @@ def rebind_notice(config: dict, registry: dict) -> list[str]:
     warning = compute_binding(registry, orchestrator, config.get("available"), vendor).warning
     if warning:
         lines.append(f"⚠ {warning}")
+    lines.extend(floor_gap_lines(config))
     return lines
 
 
@@ -1404,6 +1501,14 @@ _SUBAGENT_TOOLS = frozenset({"Task", "Agent"})
 
 
 ZONE_MARKER_PREFIX = "[zone:"
+_ZONE_BRACKETED = re.compile(r"\[\s*zone\s*:\s*([^\]]*)\]\s*(.*)", re.IGNORECASE | re.DOTALL)
+# Unbracketed only as one token (``zone:auth``): with a space after the colon, prose such as
+# "zone: the auth module" would otherwise yield the label "the".
+_ZONE_BARE = re.compile(r"zone:(\S+)\s*(.*)", re.IGNORECASE | re.DOTALL)
+
+#: The zone-label convention as the orchestrator reads it — on the generated fan-out agents and
+#: in the status line's delegation guidance (C33).
+ZONE_CONVENTION = "In a zoned fan-out, start each call's description with [zone:<label>]."
 
 #: Column counts for ``parse_delegation_entries``: the current schema (timestamp, session_id,
 #: subagent, model, zone, description) and the legacy one (timestamp, subagent, model,
@@ -1417,17 +1522,41 @@ def parse_zone(description: str) -> tuple[str | None, str]:
 
     The zone label rides in the description — the only free-form field a subagent call
     carries (§9.4/§10.3). A marker only counts at the very start:
-    ``[zone:auth] check tokens`` -> ``("auth", "check tokens")``. No marker ->
-    ``(None, <description stripped>)``.
+    ``[zone:auth] check tokens`` -> ``("auth", "check tokens")``; tolerated alike (C33):
+    any case, spaces inside the brackets, and the bare one-token ``zone:auth check tokens``.
+    No marker -> ``(None, <description stripped>)``.
     """
     text = description.strip()
-    if text.startswith(ZONE_MARKER_PREFIX):
-        end = text.find("]")
-        if end != -1:
-            label = text[len(ZONE_MARKER_PREFIX) : end].strip()
-            rest = text[end + 1 :].strip()
-            return (label or None, rest)
+    bracketed = _ZONE_BRACKETED.match(text)
+    if bracketed:
+        return (bracketed.group(1).strip() or None, bracketed.group(2).strip())
+    bare = _ZONE_BARE.match(text)
+    if bare:
+        # C33: the unbracketed ``zone:X …`` spelling was observed live and used to leave the
+        # whole fan-out unlabelled — an all-uncovered coverage map.
+        return (bare.group(1).rstrip(",;:") or None, bare.group(2).strip())
     return (None, text)
+
+
+def unlabelled_fanout_warning(
+    entries: Iterable[DelegationEntry], session_id: str | None, subagent: str, zone: str | None
+) -> str | None:
+    """Warn on an unlabelled fan-out delegation in a session that is running a zone plan (C33).
+
+    A zone plan lives in the conversation, not in a file (§10.3), so the observable sign that
+    one is active is that earlier delegations of this session carried zone labels. The
+    auditor is exempt: an audit reads the fan-out, it is not a zone of it.
+    """
+    if zone or not session_id or subagent not in _AGENT_BY_NAME or subagent == "k_auditor":
+        return None
+    labelled = sorted({e.zone for e in entries if e.session_id == session_id and e.zone})
+    if not labelled:
+        return None
+    return (
+        f"this {subagent} delegation carries no zone label while this session's fan-out is zoned "
+        f"({', '.join(labelled)}) — the coverage map will count it as unlabelled; "
+        f"start the description with {ZONE_MARKER_PREFIX}<label>]"
+    )
 
 
 def delegation_log_line(
@@ -1504,3 +1633,176 @@ def parse_delegation_entries(lines: Iterable[str]) -> list[DelegationEntry]:
             )
         )
     return entries
+
+
+# --------------------------------------------------------------------------------------
+# C25 — the missed-gate forcing function: count a role's findings/options at the gate
+# --------------------------------------------------------------------------------------
+
+
+def read_local_config(project_root: Path) -> dict:
+    """The project's recorded binding, or ``{}`` when it is absent or unreadable.
+
+    The hooks that need the live binding all read the same file the same way; the one
+    tolerated failure is a missing or malformed config, which means "not set up yet".
+    """
+    path = project_root / LOCAL_CONFIG_REL
+    if not path.is_file():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+@dataclass(frozen=True)
+class GateRule:
+    """One role's count floor: which registry trigger it reads and what it counts."""
+
+    role: str
+    trigger: str
+    noun: str
+    #: Section headings that open the counted material, lowercased prefixes.
+    headings: tuple[str, ...]
+    #: Where the flow puts this gate, for the reason the hook hands back.
+    anchor: str
+
+
+#: The two floors `gate_triggers` carries. A role outside this tuple has no count gate.
+GATE_RULES = (
+    GateRule("review", "review_min_findings", "findings", ("finding",), "review-flow step 4 (Calibrate)"),
+    GateRule(
+        "architect",
+        "architect_min_options",
+        "options",
+        ("option", "alternative"),
+        "design-flow step 7 (Consolidate)",
+    ),
+)
+
+#: A markdown heading (`## Findings`) or a whole line in bold (`**Findings**`) — both are how
+#: a role's output actually labels its sections; a bold line counts as the deepest level, so
+#: the next heading of any level closes it.
+_MD_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
+_BOLD_HEADING_RE = re.compile(r"^\*\*(.+?)\*\*:?\s*$")
+#: A heading's words, letters only: digits and punctuation never take one of the three
+#: leading slots, and a non-latin script yields its words like any other (C98 measured a
+#: latin-only split reading every Cyrillic heading as wordless, so no section ever opened).
+_HEADING_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+#: A structural item: a bullet or a numbered item, at whatever depth it sits.
+_LIST_ITEM_RE = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])\s+\S")
+#: A table row that carries content — not the header separator `|---|---|`.
+_TABLE_SEPARATOR_RE = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
+_GATE_MARKER_PREFIX = "gate-audit"
+
+
+def _heading(line: str) -> tuple[int, str] | None:
+    """``(level, text)`` when ``line`` opens a section, else None. A bold line is level 7."""
+    match = _MD_HEADING_RE.match(line)
+    if match:
+        return len(match.group(1)), match.group(2)
+    bold = _BOLD_HEADING_RE.match(line)
+    return (7, bold.group(1)) if bold else None
+
+
+def _opens_section(text: str, headings: tuple[str, ...]) -> bool:
+    """Whether a heading's text names the counted material (`Findings`, `3 findings`, `Options`)."""
+    words = _HEADING_WORD_RE.findall(text.lower())
+    return any(word.startswith(heading) for word in words[:3] for heading in headings)
+
+
+def count_gate_items(message: str, rule: GateRule) -> int:
+    """Structural items under every ``rule`` section of ``message`` (C25's counting rule).
+
+    Counted: the section's outermost bullets and numbered items, and table rows with content.
+    An item indented deeper than the section's first one belongs to that item and is detail, a
+    table's header and separator are not rows, and prose is not an item. Sections close at the
+    next heading of the same or a higher level, so the material following a role's summary is
+    not swept in. The base indent is per section: a section whose whole list sits inside a
+    numbered step counts its items, not zero.
+    """
+    total, level, in_table, base = 0, None, False, None
+    for line in message.splitlines():
+        heading = _heading(line)
+        if heading is not None:
+            opened, text = heading
+            if level is not None and opened <= level:
+                level, in_table, base = None, False, None
+            if level is None and _opens_section(text, rule.headings):
+                level, base = opened, None
+            continue
+        if level is None:
+            continue
+        if line.lstrip().startswith("|"):
+            if _TABLE_SEPARATOR_RE.match(line):
+                in_table = True  # the row above it was the header, not an item
+                continue
+            total += 1 if in_table else 0
+            continue
+        in_table = False
+        item = _LIST_ITEM_RE.match(line)
+        if item is None:
+            continue
+        indent = len(item.group(1))
+        base = indent if base is None else min(base, indent)
+        if indent <= base:
+            total += 1
+    return total
+
+
+def gate_threshold(registry: dict, rule: GateRule) -> int | None:
+    """``rule``'s count floor from the registry, or None when it is absent or not a count."""
+    triggers = registry.get("gate_triggers") if isinstance(registry, dict) else None
+    value = triggers.get(rule.trigger) if isinstance(triggers, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
+def gate_rule_for(role: str | None) -> GateRule | None:
+    """The count gate for a declared role, or None for a role that has none."""
+    return next((rule for rule in GATE_RULES if rule.role == role), None)
+
+
+def gate_audit_request(registry: dict, config: dict, role: str | None, message: str) -> str | None:
+    """The one thing the gate asks for when a role's count reached its floor, else None.
+
+    The floor is advisory in the flows — the orchestrator may skip it — so the request names
+    both live moves: run the audit, or say the skip out loud. What it does not allow is the
+    gate passing unmentioned, which is the whole of C25.
+    """
+    rule = gate_rule_for(role)
+    threshold = gate_threshold(registry, rule) if rule is not None else None
+    if rule is None or threshold is None:
+        return None
+    count = count_gate_items(message, rule)
+    if count < threshold:
+        return None
+    auditor = bound_model_for(config, "k_auditor")
+    model = f" (model={auditor})" if auditor else ""
+    return (
+        f"[akmon gate] This turn carries {count} {rule.noun} as the {rule.role} role, at or above the "
+        f"`{rule.trigger}` floor of {threshold} — {rule.anchor} routes an `audit` pass here. "
+        f"Before handing off: either delegate `k_auditor`{model} over the gate-pack "
+        "(`tools/model_routing/gate_pack.py`) and fold its verdict in, or state in one line that you "
+        "are skipping the audit and why. The floor is advisory; passing it in silence is not."
+    )
+
+
+def gate_audit_marker_kind(rule: GateRule, count: int) -> str:
+    """The marker kind for one gate episode: role and count, so a changed count asks again."""
+    return f"{_GATE_MARKER_PREFIX}-{rule.role}-{count}"
+
+
+def gate_audit_once(role: str | None, message: str, session_id: str | None, *, marker_dir: Path | None = None) -> bool:
+    """Claim this gate episode for ``session_id``; False when it was already asked for.
+
+    Keyed by role and count (C36 markers): the same material never blocks twice, while a later
+    turn that carries a different count is a new gate and is asked about again.
+    """
+    rule = gate_rule_for(role)
+    if rule is None:
+        return False
+    kind = gate_audit_marker_kind(rule, count_gate_items(message, rule))
+    claimed = claim_diagnostic_marker(kind, session_id, directory=marker_dir)
+    release_diagnostic_markers(_GATE_MARKER_PREFIX, session_id, keep_kind=kind, directory=marker_dir)
+    return claimed

@@ -111,10 +111,10 @@ When the user asks "attach akmon", the agent:
    performed (`verify` reads it as one).
 
    Then **generate/refresh the vendor pointers** (§C): for Claude Code write a `CLAUDE.md`
-   that **imports** AGENTS.md via `@AGENTS.md` — Claude Code auto-loads `CLAUDE.md` but
-   **not** `AGENTS.md`, so the import makes the canonical rules (including the always-on
-   owner acceptance, commit ownership and "read `_aitna/memory/` at session start") present
-   at session start instead of one hop behind a prose pointer.
+   that **imports** AGENTS.md via `@AGENTS.md` — Claude Code reads `CLAUDE.md`, and older
+   releases do not load `AGENTS.md` on their own, so the import makes the canonical rules
+   (including the always-on owner acceptance, commit ownership and "read `_aitna/memory/` at
+   session start") present at session start instead of one hop behind a prose pointer.
 7. **Update `.gitignore`** for secrets (see §D).
 8. **Wire the hooks** ([`hooks/README.md`](hooks/README.md)) into vendor config, pointing
    at the akmon paths. `sync.py` keeps the supported project-local wiring current:
@@ -245,8 +245,8 @@ This project uses the akmon dev layer. Model & notation:
 
 For **Codex/Gemini**, the direct text in this AGENTS.md block is the operative surface.
 Do not assume nested `@path` lines are expanded by either harness; load-bearing rules such as
-delegation must be stated directly and verified. **Claude Code does not** read `AGENTS.md`
-automatically; it only auto-loads `CLAUDE.md`. So
+delegation must be stated directly and verified. Claude Code's entry point is `CLAUDE.md`;
+newer releases also load `AGENTS.md` on their own, older ones do not. So
 `CLAUDE.md` must **import** AGENTS.md rather than just prose-point at it — otherwise the
 always-on owner-acceptance and commit-ownership rules sit one hop behind a pointer the
 agent may never follow in a session that jumps straight to a task:
@@ -257,9 +257,10 @@ agent may never follow in a session that jumps straight to a task:
 This project uses [AGENTS.md](AGENTS.md) as the single source of guidance for AI coding
 agents (including Claude Code).
 
-Claude Code auto-loads `CLAUDE.md` but **not** `AGENTS.md`, so AGENTS.md is imported below.
-This keeps the canonical rules — including owner acceptance and commit ownership — and
-"read `_aitna/memory/` at session start" — present in context from the start.
+Claude Code reads `CLAUDE.md`; AGENTS.md is imported below so the canonical rules — including
+owner acceptance and commit ownership — and "read `_aitna/memory/` at session start" are in
+context from the start on every Claude Code version, whether or not it also loads `AGENTS.md`
+on its own.
 
 @AGENTS.md
 ```

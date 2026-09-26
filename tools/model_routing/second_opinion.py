@@ -124,7 +124,11 @@ def main(argv: list[str] | None = None) -> int:
 
     spec = routing.second_opinion_spec(registry, provider)
     material = args.gate_pack.read_text(encoding="utf-8")
-    command = routing.second_opinion_command(spec, _prompt(args.gate, material), model=model)
+    try:
+        command = routing.second_opinion_command(spec, _prompt(args.gate, material), model=model)
+    except routing.UnpinnableModelError as exc:
+        print(f"second-opinion: {exc}", file=sys.stderr)
+        return 2
     report = _report_path(root, str(spec["report_dir"]), args.gate)
 
     if args.dry_run:

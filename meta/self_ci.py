@@ -27,6 +27,8 @@ sys.path.insert(0, str(_KEYSTONE_ROOT / "bin"))
 sys.path.insert(0, str(_KEYSTONE_ROOT))
 sys.path.insert(0, str(_KEYSTONE_ROOT / "meta"))
 
+import verify as verify_tool  # noqa: E402
+from checks import always_loaded as always_loaded_caps  # noqa: E402
 from checks import canary, capabilities, decision_records  # noqa: E402
 from checks import runtime as runtime_checks  # noqa: E402
 
@@ -107,8 +109,10 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "pipelines/release.md",
         "pipelines/tasks.md",
         "common/__init__.py",
+        "common/always_loaded.py",
         "common/codex_hooks.py",
         "common/findings.py",
+        "common/markers.py",
         "common/materialization.py",
         "common/check_runner.py",
         "common/project_root.py",
@@ -119,16 +123,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "bin/check.py",
         "bin/sync.py",
         "bin/verify.py",
-        "hooks/hook_core.py",
-        "hooks/claude_adapter.py",
-        "hooks/codex_adapter.py",
-        "hooks/codex-hook.py",
-        "hooks/git-commit-guard.py",
-        "hooks/session-start-agent.py",
-        "hooks/role-on-code.py",
-        "hooks/analysis-guard.py",
-        "hooks/model-routing.py",
-        "hooks/delegation-log.py",
+        *(f"hooks/{name}" for name in verify_tool.WIRED_HOOK_SCRIPTS),
         "tools/model_routing/registry.json",
         "tools/model_routing/routing.py",
         "tools/model_routing/init.py",
@@ -494,6 +489,7 @@ def _run(akmon_root: Path) -> list[Finding]:
             )
     # Akmon's own declarations, checked against akmon's own tree rather than the fixture: the
     # capability matrix is a property of what akmon ships, not of a synthetic consumer's use of it.
+    findings.extend(always_loaded_caps.check_always_loaded(akmon_root))
     findings.extend(capabilities.check_capabilities(akmon_root))
     findings.extend(canary.check_canary(akmon_root))
     findings.extend(decision_records.check_decision_records(akmon_root))

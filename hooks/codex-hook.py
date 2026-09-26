@@ -37,12 +37,13 @@ from hook_core import (
     SHELL_TOOL,
     HookResult,
     analysis_write_result,
-    claim_diagnostic_marker,
     find_project_root,
     report_unclassified_shell_route,
     role_on_code_result,
     session_start_result,
 )
+
+from common.markers import claim_diagnostic_marker  # hook_core put the tree root on sys.path
 
 
 def _payload_root(payload: dict) -> Path:
