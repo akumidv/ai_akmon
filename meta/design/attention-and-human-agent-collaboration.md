@@ -123,18 +123,31 @@ behavioral experiment, or automatic acceptance. A22 is active; C86 remains block
 The mission and decision-record carrier are accepted in ADR 0015 and ADR 0016;
 the broader interaction behavior remains under evaluation.
 
-**Next action: prepare the claim-calibration case packet (AP2 refinement).** Write
-the exact baseline, one candidate clause, paired case inputs and pass/fail rubric in
-the comparison document. Reconcile only external claims actually needed by those
-cases; unavailable external source checks remain explicit gaps. Hand off a bounded
-execution proposal with run budget and stopping conditions. No model comparison or
-owner-facing pilot has run. Do not restart AP0, the mission discussion, or the
-completed D2 carrier redesign.
+**Next action: packet P3 for decision-ground routing on T2's instrument. Claim calibration is disposed — no new rule, [ADR 0019 D01](../decisions/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule): neither the clause nor the examples beat the standard in context on Claude ([T2](attention-frame-comparison.md#result-of-t2)) or Codex ([T3](attention-frame-comparison.md#result-of-t3)). Whether code or an automated audit can catch the failures remaining under the standard is [A32](../TASKS.md).** The fresh-task pilot and a cold-resumption case follow ([A22](../TASKS.md)). T2 is closed: its result stands as measured on Claude ([M83–M85](../MEASUREMENTS.md)), and two independent audits reproduced it and bounded its readings ([audit synthesis](../reviews/t2-audit-synthesis-20260923.md)). The owner kept the clause open rather than take a disposition on one vendor's result. T3 has now supplied the second vendor, [measured on Codex](../reviews/t3-codex-p2-20260924.md) (M96–M97). With no benefit on either vendor, the positive controls, which test only what an addition costs, do not run. Cases about the consumer's own project, which separate the delivery confound, are [A30](../TASKS.md) and do not gate A22. T1's
+[B-vs-C block](attention-frame-comparison.md#result-of-the-b-vs-c-block) was non-informative by
+construction, so [trial T2](attention-frame-comparison.md#trial-t2--delivery-and-clause-comparison)
+rebuilt the packet with script-assembled arms and hardened cases.
+[Its result](attention-frame-comparison.md#result-of-t2): what a governed consumer session receives
+does as well as no guidance, the standard in context does much better, and no benefit of the
+candidate clause over the standard was detected — a one-run, reading-sensitive gap, not
+evidence of equivalence. The
+[claim-calibration packet P1](attention-frame-comparison.md#claim-calibration-packet-p1)
+holds the supplied baseline, one candidate clause, three paired cases with positive
+controls and a case-level rubric;
+[trial proposal T1](attention-frame-comparison.md#trial-proposal-t1--a-bounded-claim-calibration-comparison)
+holds the fixed conditions, the run grid and ceiling, the resource limit, the stopping
+conditions and the fresh variations. The owner settled its three open questions: the
+**Anthropic route only** — the model pin is declared data on that side alone, and the
+cross-vendor gap is carried as [C97](../TASKS.md) rather than repaired inside the trial;
+**P1-1's execution control in scope**, as one recorded run in the wired consumer project; and
+**the caps as proposed**. Unavailable external source checks remain explicit gaps. No model
+comparison or owner-facing pilot has run. Do not restart AP0, the mission discussion, or
+the completed D2 carrier redesign.
 
-The milestone is a reviewable case packet, not more general research. Re-read the
+The milestone is an executed bounded comparison, not more general research. Re-read the
 current files and relevant staged/unstaged diff before editing; historical session
-excerpts do not establish current implementation or acceptance. Numerical budgets
-remain proposals until the trial scope is agreed.
+excerpts do not establish current implementation or acceptance. The agreed caps bound the
+trial: a result needing more runs than they allow is reported as incomplete, not extended.
 
 The first applied A22 refinement is [decision work and the former D2 register](decision-workflow-and-d2-register.md).
 It records two recent Claude episodes and an adjacent Codex review, the actual SHA
@@ -1013,10 +1026,10 @@ changed, determine whether this is merely a context-restoration problem.
 AP0 has the owner's applied obstacle and a bounded follow-up sample. The
 [inspectable AP2 comparison](attention-frame-comparison.md) prepares the three case
 cards and historical candidate assessments. The external review motivates an AP2
-refinement, not a reset of discovery or a completed trial. A fresh owner-facing pilot
-and any behavioral model comparison remain to be
-done; any model-running experiment has its own explicit execution
-scope and budget. This plan launches neither Codex nor Claude and authorizes no new
+refinement, not a reset of discovery or a completed trial. The claim-calibration
+comparisons T1 and T2 ran under their own agreed scope and budget; decision-ground routing,
+a fresh owner-facing pilot and cold resumption remain to be done, and any further
+model-running experiment has its own explicit execution scope and budget. This plan launches neither Codex nor Claude and authorizes no new
 operative interaction rules. A conversational pilot does not require a new runtime
 framework; it also does not authorize tool use outside the underlying task.
 
@@ -1026,8 +1039,9 @@ These are ordered design outputs, not a second task-status board. Begin with ste
 continue to the next independent preparation step when its prerequisites are available.
 
 1. **Prepare the claim-calibration packet.** In the comparison document, capture the
-   exact current instructions, a single proposed clause and paired cases for indirect
-   evidence, incomplete checks and justified confidence. Name the checked subject,
+   baseline text supplied to the subject — quoted from the current operative files, with
+   no assertion that a given session loads it — a single proposed clause and paired cases
+   for indirect evidence, incomplete checks and justified confidence. Name the checked subject,
    permitted action, material failure and expected evidence boundary. Record which
    details are observed, reconstructed or constructed. Reconcile external scoring
    only where it affects selection; do not invent access to the other machine.

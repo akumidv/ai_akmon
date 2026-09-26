@@ -37,8 +37,10 @@ thing* goes to code-flow.
      (`k_auditor`, clean context) over the **gate-pack** (findings + the Frame yardstick +
      the coverage map). It looks for contradictions between independently-correct findings,
      **uncovered seams** between zones, re-ranking deltas, and a level verdict. Advisory; the
-     orchestrator may skip above the floor (silent-but-logged). One bounded **loop-back**
-     re-round on a material gap, then the owner decides.
+     orchestrator may skip above the floor — but **not silently**: on Claude the `gate-audit`
+     hook counts the turn's findings and holds the hand-off once at or above the floor, so the
+     skip is stated (C25). One bounded **loop-back** re-round on a material gap, then the owner
+     decides.
 5. **Hand off** *(gate)* — for each finding, state the **criteria a fix must satisfy**, and
    route it: a local fix → `engineer`; a structure/contract decision → `architect`; a wrong
    yardstick or a problem spanning several boundaries → escalate. **Stop at construction** —

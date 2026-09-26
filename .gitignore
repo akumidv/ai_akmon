@@ -26,9 +26,16 @@ TODO.txt
 node_modules/
 .next/
 *.svg
-
-
+.claude/worktrees
+.claude/*.log 
 
 # Local env / secrets (never committed; see README §8).
 *.env
 !*.env.example
+
+# akmon runs its own hooks on this repository (C99), so it ignores what it tells a
+# consumer to ignore: the per-user/per-session routing artifacts of `_init._gitignore_lines`.
+.claude/model-routing.local.json
+.claude/model-routing.log
+.claude/second-opinion/
+.claude/agents/k_*.md

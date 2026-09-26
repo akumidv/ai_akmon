@@ -66,6 +66,11 @@ def render_result(result: HookResult | None) -> str | None:
         output["permissionDecisionReason"] = result.permission_reason
 
     top_level: dict[str, Any] = {"hookSpecificOutput": output}
+    if result.decision is not None:
+        # Stop's own shape: `decision` and `reason` are read at the top level, not inside
+        # `hookSpecificOutput`, and Claude Code refuses a block without a non-empty reason.
+        top_level["decision"] = result.decision
+        top_level["reason"] = result.reason or ""
     if result.system_message is not None:
         top_level["systemMessage"] = result.system_message
 

@@ -213,9 +213,10 @@ def _claude_md() -> str:
 This project uses **[AGENTS.md](AGENTS.md)** as the single source of guidance for AI
 coding agents (including Claude Code).
 
-Claude Code auto-loads `CLAUDE.md` but **not** `AGENTS.md`, so AGENTS.md is imported below.
-This keeps the canonical rules, including the always-on prime directives and "read
-`{aitna_root_name()}/memory/` at session start", present in context from the start.
+Claude Code reads `CLAUDE.md`; AGENTS.md is imported below so the canonical rules, including
+the always-on prime directives and "read `{aitna_root_name()}/memory/` at session start", are in
+context from the start on every Claude Code version, whether or not it also loads `AGENTS.md`
+on its own.
 
 @AGENTS.md
 """
@@ -443,6 +444,16 @@ def _claude_hooks(root: Path) -> dict:
                 {
                     "hooks": [
                         {"type": "command", "command": cmd("model-routing")},
+                    ]
+                }
+            ],
+            # At hand-off: the gate's count floors (`gate_triggers`) are read from the turn's
+            # own text, and a turn at or above a floor is held once so the audit is run or the
+            # skip is stated (C25). Claude only - Codex 0.155.1 has no main-agent stop event.
+            "Stop": [
+                {
+                    "hooks": [
+                        {"type": "command", "command": cmd("gate-audit")},
                     ]
                 }
             ],

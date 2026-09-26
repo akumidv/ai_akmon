@@ -18,6 +18,9 @@ Two distinct surfaces, two **rules** (not a default and a permission):
   agent, so they stay in one canonical language.
 - **Chat replies → match the user's language.** Reply in the language the user wrote their
   message in. User writes Russian → reply in Russian; writes English → reply in English.
+- **A reply's section headings stay English** — `Findings`, `Options`, `Recommendation` name
+  the material the standard's own checks count, so they are structure, not prose. The prose
+  under them follows the user's language.
 
 These do **not** conflict, and one must not bleed into the other: you analyze and write files
 in English, then deliver the **chat answer** in the user's language. The English you used for
@@ -96,6 +99,9 @@ design→code reminder; the switch itself is not observable, so the restatement 
 - Accepted decision blocks own commitments and rationale; design/tasks own open questions,
   and tasks/evidence own implementation state. A new block never inherits acceptance from
   its containing ADR. Follow [design-flow](../pipelines/design-flow.md).
+- **Records live in the project.** Decisions, dispositions, plans and corrections go into the
+  project's own records; scratch or raw-material locations outside it hold inputs only, and no
+  record defers to them.
 - **No advisory / dev-history files in the live tree.** Point-in-time reviews are archived
   with a banner; decisions become ADRs; git history is the changelog.
 - **Keep the entry point single.** `AGENTS.md` is the source of truth; vendor files

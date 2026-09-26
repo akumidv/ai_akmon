@@ -7,7 +7,6 @@ payload and serialize ``HookResult`` into the shape their runtime expects.
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import os
 import re
 import subprocess
@@ -28,6 +27,7 @@ from pathlib import Path
 _TREE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_TREE_ROOT))
 
+from common.markers import claim_diagnostic_marker  # noqa: E402
 from common.materialization import stale_materialized  # noqa: E402
 from common.project_root import (  # noqa: E402
     aitna_root,
@@ -96,6 +96,10 @@ class HookResult:
     permission_decision: str | None = None
     permission_reason: str | None = None
     system_message: str | None = None
+    #: A turn-level decision (``Stop``): ``block`` holds the turn, with ``reason`` as the one
+    #: thing the model is asked to do before it may end the turn again.
+    decision: str | None = None
+    reason: str | None = None
 
 
 def hook_failure_diagnostic(hook_name: str, exc: BaseException) -> str:
@@ -194,43 +198,6 @@ _EDIT_TOOL_KINDS = frozenset({EDIT_TOOL})
 SHELL_TOOL = "shell"
 READ_TOOL = "read"
 SUBAGENT_TOOL = "subagent"
-
-
-def claim_diagnostic_marker(kind: str, identity: str | None) -> bool:
-    """Atomically claim one stderr diagnostic for ``identity``; True means "emit now".
-
-    Two throttle domains, deliberately different and stated here because the difference reads
-    as an inconsistency otherwise (ADR-0012/D02):
-
-    - **route-level** diagnostics describe what a *route* can do, so they throttle by session
-      id — one statement per session, even though a later call on the same route is silent;
-    - **event-level** diagnostics report a defect in one call, so they throttle by a
-      session/tool-use pair — a second malformed call stays visible.
-
-    An absent or unreliable identity repeats instead of claiming a shared ``nosession``
-    marker, which would let one early session hide every later gap. The name is hashed so a
-    session id containing ``/`` cannot escape the tempdir — not for secrecy: the three
-    advisory markers in this module still carry a literal session id, which is the convention
-    gap C36(a) owns (ADR-0012/D02). Marker lifecycle — stale files outliving their session, and
-    migrating those three onto this helper — is the rest of C36(a).
-    """
-    if not identity or identity == "nosession":
-        return True  # no identity to throttle by: repeat rather than hide the diagnostic
-    digest = hashlib.sha256(identity.encode()).hexdigest()[:20]
-    marker = Path(tempfile.gettempdir()) / f"akmon-{kind}-{digest}"
-    try:
-        descriptor = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        return False
-    except OSError:
-        return True  # marker failure must make the diagnostic noisier, never invisible
-    try:
-        os.close(descriptor)
-    except OSError:
-        with contextlib.suppress(OSError):
-            marker.unlink(missing_ok=True)
-        return True
-    return True
 
 
 UNCLASSIFIED_SHELL_ROUTE_NOTICE = (
@@ -626,11 +593,8 @@ def role_on_code_result(
     if not isinstance(file_path, str) or not is_code_path(file_path, project_root):
         return None
 
-    marker = Path(tempfile.gettempdir()) / f"akmon-role-on-code-{session_id or 'nosession'}.marker"
-    if marker.exists():
+    if not claim_diagnostic_marker("role-on-code", session_id):
         return None
-    with contextlib.suppress(OSError):
-        marker.write_text("seen", encoding="utf-8")
 
     return HookResult(event_name="PreToolUse", additional_context=role_on_code_message())
 
@@ -673,11 +637,8 @@ def analysis_write_result(
     if not isinstance(file_path, str) or not is_planning_doc(file_path, project_root):
         return None
 
-    marker = Path(tempfile.gettempdir()) / f"akmon-analysis-guard-{session_id or 'nosession'}.marker"
-    if marker.exists():
+    if not claim_diagnostic_marker("analysis-guard", session_id):
         return None
-    with contextlib.suppress(OSError):
-        marker.write_text("seen", encoding="utf-8")
 
     return HookResult(event_name="PreToolUse", additional_context=analysis_before_mutation_message())
 

@@ -8,12 +8,13 @@ routing selections are visible in the log, so the model never has to narrate the
 is emitted to the user interface (not model context) to make each delegation — and its
 declared model selection, when present — visible in the console. When the routed agent has
 no kind overlapping the active role's effective allowed set (§10.2, C20), an advisory line
-is appended.
+is appended; likewise when the agent is bound below the rung floor of one of its task kinds
+and the call does not override the model to meet it (C32); and when a fan-out delegation
+carries no zone label while earlier delegations of the session did (C33).
 """
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
@@ -28,14 +29,8 @@ import routing
 
 
 def _load_config(root: Path) -> dict:
-    path = root / routing.LOCAL_CONFIG_REL
-    if not path.is_file():
-        return {}
-    try:
-        config = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return config if isinstance(config, dict) else {}
+    """This project's recorded binding (one reader, ``routing.read_local_config``)."""
+    return routing.read_local_config(root)
 
 
 def _format_system_message(line: str) -> str:
@@ -79,6 +74,14 @@ def _decide() -> HookResult | None:
     if line is None:
         return None
     log_path = root / routing.DELEGATION_LOG_REL
+    # C33 — read this session's earlier delegations before the new line joins them.
+    earlier = (
+        routing.parse_delegation_entries(log_path.read_text(encoding="utf-8").splitlines())
+        if log_path.is_file()
+        else []
+    )
+    this_call = routing.parse_delegation_entries([line])[0]
+    zone_warning = routing.unlabelled_fanout_warning(earlier, this_call.session_id, subagent_type, this_call.zone)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(line + "\n")
@@ -90,6 +93,12 @@ def _decide() -> HookResult | None:
     warning = routing.role_matrix_warning(registry, subagent_type, role)
     if warning:
         messages.append(f"[akmon] ⚠ {warning}")
+    # C32 — the recorded task-kind floors are otherwise read by nothing at delegation time.
+    floor_warning = routing.delegation_floor_warning(config, subagent_type, tool_input.get("model"))
+    if floor_warning:
+        messages.append(f"[akmon] ⚠ {floor_warning}")
+    if zone_warning:
+        messages.append(f"[akmon] ⚠ {zone_warning}")
     return HookResult(event_name="PreToolUse", system_message="\n".join(messages))
 
 

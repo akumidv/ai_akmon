@@ -321,7 +321,8 @@ plan they were.*
   and the wiring is committed. Locked for now as a requirement of the mode, with `verify`'s
   `hooks.launcher` reporting it; the eventual answer is a small locator shim, not an absolute
   path in a shared file.
-- **Non-Python consumers** (e.g. a JS project like tvassistant): the manifest-pin flavor
+- **Non-Python consumers** — *decided in [ADR 0020](../../decisions/0020-node-consumers-js-implementation.md)
+  (design [A34](../node-consumers.md)); the text below is the original open point.* (e.g. a JS project like tvassistant): the manifest-pin flavor
   of `package` mode is Python-specific, but nothing else is — the CLI is stdlib-only and
   `uvx akmon init/sync/verify` runs ephemerally wherever uv exists, with the pin
   recorded in `.akmon.toml` instead of a manifest. C77 removes the materialized hook copy, so

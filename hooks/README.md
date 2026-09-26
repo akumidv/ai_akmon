@@ -73,6 +73,18 @@ project-local hook surface.
   `systemMessage`). Owner-addressed output — init instruction, corridor warning, rebind
   notice — also goes out as `systemMessage` so the owner sees it in the host UI (ADR 0006). Logic
   in [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).
+- [`gate-audit.py`](gate-audit.py) — Claude **Stop** wrapper for the **gate audit forcing
+  function** (C25). The registry's `gate_triggers` count floors (`review_min_findings`,
+  `architect_min_options`) were data nothing read: a role could hand off ten findings without the
+  gate ever being mentioned. This entry counts the structural items — top-level bullets, numbered
+  items and table rows — under the turn's Findings/Options sections (the turn's own text arrives
+  as `last_assistant_message`, M87), and at or above the floor holds the turn once with a
+  `decision: block`: run the `audit` pass (`k_auditor` over a gate-pack) or state the skip. The
+  floor stays advisory in substance — review-flow step 4 and design-flow step 7 allow the skip —
+  what it removes is the silent pass. It never holds a turn twice: `stop_hook_active` marks the
+  turn that runs *because* of the hold, and a C36 marker keyed by role and count keeps one hold
+  per gate. Claude-only: Codex 0.155.1 has no main-agent stop event (M88). Logic in
+  [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).
 - [`delegation-log.py`](delegation-log.py) — Claude PreToolUse wrapper that appends one TSV
   line (timestamp, session id, subagent, model, zone, description) to
   `.claude/model-routing.log` per subagent delegation. It emits a UI system message without
@@ -172,6 +184,11 @@ The hooks are the source of truth here; each assistant wires them in its own way
         { "hooks": [
             { "type": "command",
               "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/model-routing.py\"" }] }
+      ],
+      "Stop": [
+        { "hooks": [
+            { "type": "command",
+              "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/gate-audit.py\"" }] }
       ]
     }
   }

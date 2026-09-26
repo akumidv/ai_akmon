@@ -64,8 +64,10 @@ recording it before agreement.
      (`k_auditor`, clean context) over the **gate-pack** (the concept + the Frame
      yardstick + the coverage map) **before** folding into an ADR. It checks for
      contradictions between independently-correct options, uncovered seams between zones,
-     re-ranking deltas, and a level verdict. Advisory; skip above the floor is
-     silent-but-logged. One bounded **loop-back** re-round on a material gap, then the owner.
+     re-ranking deltas, and a level verdict. Advisory; the skip above the floor is allowed but
+     **stated** — on Claude the `gate-audit` hook counts the turn's options and holds the
+     hand-off once at or above the floor (C25). One bounded **loop-back** re-round on a material
+     gap, then the owner.
 8. **Align and record acceptance** *(gate)* — get **explicit owner agreement** on the
    coherent architecture / data-model / math-shaping scope before writing it as a
    requirement or accepted ADR block. Ordinary unambiguous acceptance is sufficient;

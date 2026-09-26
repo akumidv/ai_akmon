@@ -650,6 +650,19 @@ advisory does not warn against it.**
 
 - **Count floor** (registry data, code-computed): `review.min_findings` /
   `architect.min_options` — leaning 3 / 2, tuned from delegation-log evidence.
+  **Where it is computed (C25, owner-decided):** the observation point is a **`Stop` hook**
+  (`hooks/gate-audit.py`), the only place a role's finished output exists before the hand-off;
+  the counting rule is **structural** — the outermost bullets, numbered items and table rows
+  under the turn's Findings/Options headings, read from `last_assistant_message` (M87). At or
+  above the floor the hook holds the turn once, with `stop_hook_active` and a C36 marker keyed
+  by role and count keeping it to one hold per gate. Rejected: reading the previous turn at the
+  next `UserPromptSubmit` (fires after the hand-off the gate exists to precede) and a declared
+  count line in the flows (a new cross-cutting convention, and it relies on the role writing
+  the line — the very step that is missed). Codex has no main-agent stop event (M88), so the
+  gate is Claude-only until one appears; the logic itself is vendor-neutral.
+  **Measured afterwards (C98):** over this repository's own history the anchor opens no section at
+  all, so the floors are never reached — the counting rule stands, the heading vocabulary and the
+  role↔noun pairing do not. The open choice lives in C98.
 - **Structural trigger:** fan-out touched ≥2 independently-decomposed zones, each
   contributing ≥1 finding/option — fires at 1-per-zone where the count floor misses;
   exactly the io↔options shape.

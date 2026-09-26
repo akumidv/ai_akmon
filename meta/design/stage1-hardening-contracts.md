@@ -70,7 +70,7 @@ for coherence, and the decision set was accepted in ADRs 0012 and 0013.
 | F15 | what pins the F8 classification set (§3) | **at lock time, a contract test binding seven callable classifications — six callable↔policy-ID pairs plus one operational assignment — a regression pin, not a join mechanism; post-C94, under ADR-0012/D07, C53 targets the five surviving pairs, one operational assignment, and the explicit classification on each owner-visible callable outside the `*_result` scope** | decided |
 | F16 | what the runtime binary declaration is joined to (§7) | **two populations — generated wiring and akmon's own tooling — each compared against its own source, with modality declared and checked** | decided |
 | F17 | how one generator declaration represents files it fully owns, structured files that cannot carry comments, and fields inside hand-owned files (§5) | **A — typed `PlannedFile` ownership modes: `bannered-file`, `structured-file`, and `field-owned`; no parallel exception or ownership list** | decided |
-| F18 | how the always-loaded ratchet separates akmon-owned context from the whole consumer context (§6) | **A — two inclusive decimal line/byte caps: shipped ≤210 / 12,000 is a `self_ci` error; consumer total ≤460 / 25,000 is a `verify.py` warn whose strict-mode exit is non-zero** | decided |
+| F18 | how the always-loaded ratchet separates akmon-owned context from the whole consumer context (§6) | **A — two inclusive decimal line/byte caps: shipped ≤320 / 21,000 is a `self_ci` error; consumer total ≤570 / 34,000 is a `verify.py` warn whose strict-mode exit is non-zero** (C56 amendment: the numbers were re-baselined onto the measured 311 / 20,190 shape; the original pair was 210 / 12,000 and 460 / 25,000) | decided |
 | F19 | where the axis-complete vendor capability matrix lives (§7) | **A — shipped top-level `CAPABILITIES.md`; README keeps a claim-free delivery summary; A16 later replaces C57's prose cells with generated data** | decided |
 | F20 | how C46 makes neutral and vendor tool-name ownership exhaustive (§8) | **A — one exact neutral vocabulary and agent population; one version-stamped vendor tool/matcher inventory consumed by frontmatter, hook generation and adapters; exact findings and isolated two-direction carrier checks** | decided |
 | F21 | how C58 makes a dispatch ledger trustworthy within a bounded local-file contract (§9) | **A — observed Claude dispatch-request event; versioned seven-field records at one neutral path; one writer and two readers; serialized bounded append; explicit migration, failure and no-authenticity/no-rotation boundaries** | decided |
@@ -165,9 +165,9 @@ one-declaration rule are stable contracts; no N1 measurement can amend them.
 **F18 closes the §6 fork exposed by the same final pass.** One cap over the whole always-loaded
 surface either makes akmon dictate the size of a consumer-owned `AGENTS.md`, or reduces akmon's own
 fully controlled guardrail budget to an advisory. **Owner choice F18/A:** keep two populations and
-two strengths. The akmon-shipped population has an inclusive cap of 210 lines and 12,000 decimal
-bytes and is an error in `self_ci`; the whole consumer population has an inclusive cap of 460 lines
-and 25,000 decimal bytes and emits a warn in `verify.py`, with the existing strict policy turning
+two strengths. The akmon-shipped population has an inclusive cap of 320 lines and 21,000 decimal
+bytes and is an error in `self_ci`; the whole consumer population has an inclusive cap of 570 lines
+and 34,000 decimal bytes and emits a warn in `verify.py`, with the existing strict policy turning
 that warning into a non-zero exit without changing its severity. Both use the stable C51 code
 `caps.always-loaded`. *Rejected: one hard consumer-total cap*, which lets akmon fail a project over
 hand-owned prose. *Rejected: one warn-only cap*, which makes growth of akmon-owned context
@@ -1254,8 +1254,8 @@ C53 and C58 both write into the measured chain and C56 reports the post-change v
 
 | scope | inclusive cap | finding when over cap | checker |
 |---|---|---|---|
-| akmon-shipped always-loaded | **210 lines / 12,000 bytes** | `error`, code `caps.always-loaded` | `self_ci` |
-| consumer total always-loaded | **460 lines / 25,000 bytes** | `warn`, code `caps.always-loaded`; severity remains `warn` under strict mode | `verify.py` (`--strict` exits non-zero) |
+| akmon-shipped always-loaded | **320 lines / 21,000 bytes** | `error`, code `caps.always-loaded` | `self_ci` |
+| consumer total always-loaded | **570 lines / 34,000 bytes** | `warn`, code `caps.always-loaded`; severity remains `warn` under strict mode | `verify.py` (`--strict` exits non-zero) |
 
 The strengths differ because the largest consumer-total member is hand-owned: a normal verify run
 must not fail a project over its own `AGENTS.md`. Akmon's shipped population is wholly ours, so its
@@ -1282,7 +1282,7 @@ and lowers the caps. C60's relocation-versus-deletion fork remains in-task and o
   or 459/460/461 consumer-total lines while bytes remain below their cap. Cap−1 and cap pass; cap+1
   alone emits exactly one `caps.always-loaded` finding with the scope's declared severity;
 - **inclusive byte boundaries:** for each scope, fixtures measure exactly
-  11,999/12,000/12,001 shipped bytes or 24,999/25,000/25,001 consumer-total bytes while lines remain
+  20,999/21,000/21,001 shipped bytes or 33,999/34,000/34,001 consumer-total bytes while lines remain
   below their cap. Cap−1 and cap pass; cap+1 alone emits exactly one `caps.always-loaded` finding
   with the scope's declared severity;
 - **severity and strict matrix:** shipped cap+1 is one `error caps.always-loaded` and makes
