@@ -26,12 +26,33 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# The tree root, so the shared ``common`` package resolves: the data loader and the
+# delegation-log path it owns are reached the same way in mounted and package mode alike.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import routing
 
-USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-_CREDENTIALS_REL = Path(".claude") / ".credentials.json"
-_REPORT_DIR_REL = Path(".claude") / "stats"
+from common import jsondata
+
+
+def _stats_data() -> dict:
+    """The session-stats digest and report texts (``stats.json``), read on the call that needs it."""
+    return jsondata.read(Path(__file__).parent / "stats.json")
+
+
+def usage_url() -> str:
+    """The Claude API usage endpoint the budget summary fetches (opt out with ``--no-budget``)."""
+    return _stats_data()["usage_url"]
+
+
+def credentials_rel() -> str:
+    """The OAuth credentials file (home-relative) the budget summary reads the access token from."""
+    return _stats_data()["credentials_rel"]
+
+
+def report_dir_rel() -> str:
+    """The full-report output directory (project-root-relative)."""
+    return _stats_data()["report_dir_rel"]
 
 
 # --------------------------------------------------------------------------------------
@@ -228,7 +249,7 @@ class SubagentRecord:
 
 def agent_tier_map() -> dict[str, str]:
     """Map ``k_*`` agent name → tier, from the routing registry's generated-agent specs."""
-    return {spec.name: spec.tier for spec in routing.AGENT_SPECS}
+    return {spec.name: spec.tier for spec in routing.agent_specs()}
 
 
 def _read_json_dict(path: Path) -> dict:
@@ -325,15 +346,16 @@ def _remaining_pct(percent: object) -> float | None:
 def parse_usage_response(data: dict) -> BudgetSummary:
     """Pure parse of the ``/api/oauth/usage`` response shape into remaining-budget summaries."""
     try:
+        labels = _stats_data()["budget_labels"]
         five_hour = data.get("five_hour") or {}
         seven_day = data.get("seven_day") or {}
         session = LimitSummary(
-            label="session",
+            label=labels["session"],
             remaining_pct=_remaining_pct(five_hour.get("utilization")),
             resets_at=five_hour.get("resets_at"),
         )
         week = LimitSummary(
-            label="week (all models)",
+            label=labels["week_all_models"],
             remaining_pct=_remaining_pct(seven_day.get("utilization")),
             resets_at=seven_day.get("resets_at"),
         )
@@ -344,7 +366,7 @@ def parse_usage_response(data: dict) -> BudgetSummary:
             model_name = ((limit.get("scope") or {}).get("model") or {}).get("display_name", "?")
             scoped.append(
                 LimitSummary(
-                    label=f"week ({model_name})",
+                    label=jsondata.fill(labels["week_scoped"], {"model": model_name}),
                     remaining_pct=_remaining_pct(limit.get("percent")),
                     resets_at=limit.get("resets_at"),
                 )
@@ -377,12 +399,12 @@ def budget_summary(
     fetch: Callable[[str, str], dict] = fetch_usage,
 ) -> BudgetSummary:
     """Never raises: any failure (no creds, HTTP error, timeout, bad shape) → ``unavailable``."""
-    creds_path = credentials_path or (Path.home() / _CREDENTIALS_REL)
+    creds_path = credentials_path or (Path.home() / credentials_rel())
     try:
         token = read_access_token(creds_path)
         if not token:
             return BudgetSummary(unavailable="no credentials found")
-        data = fetch(USAGE_URL, token)
+        data = fetch(usage_url(), token)
         return parse_usage_response(data)
     except Exception as exc:  # noqa: BLE001 — never raises: every failure is `unavailable`
         return BudgetSummary(unavailable=f"{type(exc).__name__}: {exc}")
@@ -415,63 +437,108 @@ class SessionRef:
 
 def _render_delegations_section(delegation: DelegationStats | None) -> list[str]:
     """The '## Delegations' body: total plus the per-subagent/model breakdown table."""
+    data = _stats_data()["report"]
     if delegation is None:
-        return ["no delegations logged"]
+        return [data["delegations_none"]]
     if delegation.total == 0:
-        return ["no delegations recorded"]
-    lines = [f"Total: {delegation.total}", "", "| subagent | requested model | count |", "|---|---|---|"]
+        return [data["delegations_zero"]]
+    lines = [
+        jsondata.fill(data["delegations_total"], {"total": delegation.total}),
+        "",
+        *data["delegations_table_header"],
+    ]
     lines.extend(
-        f"| {subagent} | {model} | {count} |" for (subagent, model), count in sorted(delegation.per_pair.items())
+        jsondata.fill(
+            data["delegations_table_row"], {"subagent": subagent, "model": model, "count": count}
+        )
+        for (subagent, model), count in sorted(delegation.per_pair.items())
     )
     return lines
 
 
 def _render_tokens_section(transcript_stats: TranscriptStats | None, subagents: list[SubagentRecord]) -> list[str]:
     """The '## Tokens' body: per-role/tier token table plus the totals row."""
-    lines = ["| role/agent | tier | input | output | cache-read | cache-created |", "|---|---|---|---|---|---|"]
+    data = _stats_data()["report"]
+    lines = list(data["tokens_table_header"])
     total = TokenUsage()
     if transcript_stats is None:
-        lines.append("| orchestrator | orchestrator | - | - | - | - |")
+        lines.append(data["tokens_orchestrator_missing_row"])
     else:
         for model, usage in sorted(transcript_stats.per_model.items()):
             lines.append(
-                f"| orchestrator ({model}) | orchestrator | {usage.input_tokens} | {usage.output_tokens} | "
-                f"{usage.cache_read_tokens} | {usage.cache_creation_tokens} |"
+                jsondata.fill(
+                    data["tokens_orchestrator_row"],
+                    {
+                        "model": model,
+                        "input": usage.input_tokens,
+                        "output": usage.output_tokens,
+                        "cache_read": usage.cache_read_tokens,
+                        "cache_created": usage.cache_creation_tokens,
+                    },
+                )
             )
             total = total.add(usage)
     for record in subagents:
         lines.append(
-            f"| {record.label} | {record.tier} | {record.usage.input_tokens} | {record.usage.output_tokens} | "
-            f"{record.usage.cache_read_tokens} | {record.usage.cache_creation_tokens} |"
+            jsondata.fill(
+                data["tokens_subagent_row"],
+                {
+                    "label": record.label,
+                    "tier": record.tier,
+                    "input": record.usage.input_tokens,
+                    "output": record.usage.output_tokens,
+                    "cache_read": record.usage.cache_read_tokens,
+                    "cache_created": record.usage.cache_creation_tokens,
+                },
+            )
         )
         total = total.add(record.usage)
     lines.append(
-        f"| **total** | | {total.input_tokens} | {total.output_tokens} | "
-        f"{total.cache_read_tokens} | {total.cache_creation_tokens} |"
+        jsondata.fill(
+            data["tokens_total_row"],
+            {
+                "input": total.input_tokens,
+                "output": total.output_tokens,
+                "cache_read": total.cache_read_tokens,
+                "cache_created": total.cache_creation_tokens,
+            },
+        )
     )
     if not subagents:
         lines.append("")
-        lines.append("no subagent transcripts")
+        lines.append(data["tokens_no_subagents"])
     return lines
 
 
 def _render_budget_section(budget: BudgetSummary) -> list[str]:
     """The '## Budget' body: unavailable notice, or the session/week/scoped remaining lines."""
+    data = _stats_data()["report"]
     if budget.unavailable:
-        return [f"unavailable: {budget.unavailable}"]
+        return [jsondata.fill(data["budget_unavailable"], {"reason": budget.unavailable})]
     lines = []
     if budget.session:
         lines.append(
-            f"- session remaining: {_fmt_pct(budget.session.remaining_pct)} "
-            f"(resets {_fmt_resets(budget.session.resets_at)})"
+            jsondata.fill(
+                data["budget_session_line"],
+                {"remaining": _fmt_pct(budget.session.remaining_pct), "resets": _fmt_resets(budget.session.resets_at)},
+            )
         )
     if budget.week:
         lines.append(
-            f"- week (all models) remaining: {_fmt_pct(budget.week.remaining_pct)} "
-            f"(resets {_fmt_resets(budget.week.resets_at)})"
+            jsondata.fill(
+                data["budget_week_line"],
+                {"remaining": _fmt_pct(budget.week.remaining_pct), "resets": _fmt_resets(budget.week.resets_at)},
+            )
         )
     lines.extend(
-        f"- {scoped.label} remaining: {_fmt_pct(scoped.remaining_pct)} (resets {_fmt_resets(scoped.resets_at)})"
+        jsondata.fill(
+            data["budget_scoped_line"],
+            {
+                "label": scoped.label,
+                "remaining": _fmt_pct(scoped.remaining_pct),
+                "resets": _fmt_resets(scoped.resets_at),
+            },
+        )
         for scoped in budget.scoped
     )
     return lines
@@ -485,31 +552,35 @@ def render_report(
     budget: BudgetSummary,
 ) -> str:
     """Full markdown report (file) — delegations, per-role tokens, budget."""
+    data = _stats_data()["report"]
     transcript_path = session.transcript_path
-    lines = [f"# Session statistics — {session.stem}", ""]
-    lines.append(f"Transcript: `{transcript_path}`" if transcript_path else "Transcript: not found")
+    lines = [jsondata.fill(data["title"], {"stem": session.stem}), ""]
+    lines.append(
+        jsondata.fill(data["transcript_found"], {"path": transcript_path})
+        if transcript_path
+        else data["transcript_not_found"]
+    )
     lines.append("")
 
-    lines.append("## Delegations")
+    lines.append(data["delegations_heading"])
     lines.append("")
     lines.extend(_render_delegations_section(delegation))
     lines.append("")
 
-    lines.append("## Tokens")
+    lines.append(data["tokens_heading"])
     lines.append("")
     lines.extend(_render_tokens_section(transcript_stats, subagents))
     lines.append("")
 
-    lines.append("## Budget")
+    lines.append(data["budget_heading"])
     lines.append("")
     lines.extend(_render_budget_section(budget))
     lines.append("")
 
-    lines.append("---")
+    lines.append(data["separator"])
+    sources = data["sources_found"] if transcript_path else data["sources_not_found"]
     lines.append(
-        f"Sources: delegation log `.claude/model-routing.log`; session transcript `{transcript_path}`."
-        if transcript_path
-        else "Sources: delegation log `.claude/model-routing.log`; session transcript not found."
+        jsondata.fill(sources, {"path": transcript_path, "delegation_log": routing.delegation_log_rel()})
     )
     return "\n".join(lines) + "\n"
 
@@ -522,52 +593,79 @@ def render_digest(
     report_path: Path,
 ) -> str:
     """Compact stdout digest (~8-12 lines) — relayed to chat verbatim by the calling skill."""
+    data = _stats_data()["digest"]
     lines: list[str] = []
 
     if delegation is None:
-        lines.append("delegations: no delegations logged")
+        lines.append(data["no_delegations_logged"])
     elif delegation.total == 0:
-        lines.append("delegations: none recorded")
+        lines.append(data["no_delegations_recorded"])
     else:
         per_subagent = ", ".join(f"{name}={count}" for name, count in sorted(delegation.per_subagent.items()))
-        lines.append(f"delegations: {delegation.total} total ({per_subagent})")
+        lines.append(
+            jsondata.fill(data["delegations_total"], {"total": delegation.total, "per_subagent": per_subagent})
+        )
 
     if transcript_stats is None:
-        lines.append("orchestrator tokens: transcript unavailable")
+        lines.append(data["orchestrator_transcript_unavailable"])
     else:
         orch_total = _sum_usage(transcript_stats.per_model.values())
         lines.append(
-            f"orchestrator tokens: in={orch_total.input_tokens} out={orch_total.output_tokens} "
-            f"cache-read={orch_total.cache_read_tokens}"
+            jsondata.fill(
+                data["orchestrator_tokens"],
+                {
+                    "input": orch_total.input_tokens,
+                    "output": orch_total.output_tokens,
+                    "cache_read": orch_total.cache_read_tokens,
+                },
+            )
         )
 
     if subagents:
         sub_total = _sum_usage(record.usage for record in subagents)
         lines.append(
-            f"subagent tokens (n={len(subagents)}): in={sub_total.input_tokens} out={sub_total.output_tokens} "
-            f"cache-read={sub_total.cache_read_tokens}"
+            jsondata.fill(
+                data["subagent_tokens"],
+                {
+                    "n": len(subagents),
+                    "input": sub_total.input_tokens,
+                    "output": sub_total.output_tokens,
+                    "cache_read": sub_total.cache_read_tokens,
+                },
+            )
         )
     else:
-        lines.append("subagent tokens: no subagent transcripts")
+        lines.append(data["no_subagent_transcripts"])
 
     if budget.unavailable:
-        lines.append(f"budget: unavailable ({budget.unavailable})")
+        lines.append(jsondata.fill(data["budget_unavailable"], {"reason": budget.unavailable}))
     else:
         session = budget.session
         week = budget.week
         lines.append(
-            f"budget: session {_fmt_pct(session.remaining_pct) if session else '-'} remaining "
-            f"(resets {_fmt_resets(session.resets_at) if session else '-'}), "
-            f"week {_fmt_pct(week.remaining_pct) if week else '-'} remaining "
-            f"(resets {_fmt_resets(week.resets_at) if week else '-'})"
+            jsondata.fill(
+                data["budget_session_week"],
+                {
+                    "session_remaining": _fmt_pct(session.remaining_pct) if session else "-",
+                    "session_resets": _fmt_resets(session.resets_at) if session else "-",
+                    "week_remaining": _fmt_pct(week.remaining_pct) if week else "-",
+                    "week_resets": _fmt_resets(week.resets_at) if week else "-",
+                },
+            )
         )
         lines.extend(
-            f"budget: {scoped.label} {_fmt_pct(scoped.remaining_pct)} remaining "
-            f"(resets {_fmt_resets(scoped.resets_at)})"
+            jsondata.fill(
+                data["budget_scoped"],
+                {
+                    "label": scoped.label,
+                    "remaining": _fmt_pct(scoped.remaining_pct),
+                    "resets": _fmt_resets(scoped.resets_at),
+                },
+            )
             for scoped in budget.scoped
         )
 
-    lines.append(f"report: {report_path}")
+    lines.append(jsondata.fill(data["report"], {"path": report_path}))
     return "\n".join(lines)
 
 
@@ -587,7 +685,7 @@ def main(argv: list[str] | None = None) -> int:
 
     root = args.project_root.resolve()
 
-    delegation = parse_delegation_log(root / routing.DELEGATION_LOG_REL)
+    delegation = parse_delegation_log(root / routing.delegation_log_rel())
 
     transcript_path = args.transcript or newest_jsonl(transcripts_dir(root))
     transcript_stats = parse_main_transcript(transcript_path)
@@ -600,7 +698,7 @@ def main(argv: list[str] | None = None) -> int:
 
     budget = BudgetSummary(unavailable="skipped (--no-budget)") if args.no_budget else budget_summary()
 
-    report_dir = args.report_dir or (root / _REPORT_DIR_REL)
+    report_dir = args.report_dir or (root / report_dir_rel())
     report_dir.mkdir(parents=True, exist_ok=True)
     report_file = report_dir / f"stats-{time.strftime('%Y%m%d-%H%M%S')}.md"
     report_file.write_text(

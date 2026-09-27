@@ -1,4 +1,4 @@
-# Environment overrides (KEYSTONE_DELEGATION_GRACE / _NUDGE_THRESHOLD / _ASK_THRESHOLD):
+# Environment overrides (AKMON_DELEGATION_GRACE / _NUDGE_THRESHOLD / _ASK_THRESHOLD):
 # grace 0 and advisory threshold 1 make the very first edit call carry the advisory, and
 # the message names the overridden grace window.
 id = "hooks/delegation-nudge-env-thresholds"
@@ -7,9 +7,9 @@ kind = "hook"
 covers = ["hook:delegation-nudge"]
 
 [env]
-KEYSTONE_DELEGATION_GRACE = "0"
-KEYSTONE_DELEGATION_NUDGE_THRESHOLD = "1"
-KEYSTONE_DELEGATION_ASK_THRESHOLD = "2"
+AKMON_DELEGATION_GRACE = "0"
+AKMON_DELEGATION_NUDGE_THRESHOLD = "1"
+AKMON_DELEGATION_ASK_THRESHOLD = "2"
 
 [run]
 script = "delegation-nudge"

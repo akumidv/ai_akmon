@@ -1,0 +1,14 @@
+{
+  "done_status": "done",
+  "done_header": "## Done",
+  "archive_no_section": "archive has no '{{header}}' section",
+  "error_no_archive_file": "error: no archive file: {{path}}",
+  "error_generic": "error: {{exc}}",
+  "archived": "archived {{count}}: {{ids}}",
+  "warning_missing_status": "warning: task entry missing a status field: {{bullet}}",
+  "error_no_such_entry": "error: no such entry: {{ids}}",
+  "no_done_entries": "no done entries to archive",
+  "would_archive_entry": "would archive {{count}} done entry: {{ids}}",
+  "would_archive_entries": "would archive {{count}} done entries: {{ids}}",
+  "reapply_hint": "re-run with --apply to move them"
+}

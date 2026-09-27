@@ -19,7 +19,7 @@ problem (analysis) and building the solution (synthesis) are separate modes.
 
 **Acts on:**
 - Architecture: layering, module boundaries, data model, naming/dictionary, patterns.
-- Keystone model and process contracts: roles, pipelines, guardrails, bootstrap/sync
+- akmon model and process contracts: roles, pipelines, guardrails, bootstrap/sync
   behaviour, roadmap gaps, and the boundary between generated pointers and source
   instructions.
 - Documentation: design docs, specs, the project's requirement docs, READMEs that

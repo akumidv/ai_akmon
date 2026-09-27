@@ -62,7 +62,7 @@ Owner requirements:
 
 ## 2. Vocabulary — tiers, and the task-kind matrix that feeds them
 
-Keystone is LLM-agnostic, so the routing vocabulary is abstract **capability tiers**;
+akmon is LLM-agnostic, so the routing vocabulary is abstract **capability tiers**;
 concrete model names live only in local discovery/config, not in the committed standard.
 
 | Tier | Operation | Who runs it |
@@ -404,7 +404,7 @@ During work (orchestrator):
 └─ decompose / synthesize / owner dialogue → stays in main session
 ```
 
-## 6. Keystone doc integration (lands with the mechanism)
+## 6. akmon doc integration (lands with the mechanism)
 
 - **MODEL.md** — a capability-tier section: the tier vocabulary (adding `auditor` tier,
   renamed from `synthesizer` in V2) and the matrix's normative table (§2), binding to the
@@ -1063,13 +1063,13 @@ tool calls with no delegation between them**, keyed per session in the temp dir 
   work a `k_explorer` should absorb so the dump never enters orchestrator context. An
   edit-only counter would have missed the dominant failure mode. **Weighed since C88
   (D2-46):** an edit or shell call adds 1 to the drift score and a read ½, and the first 8
-  calls of a stretch add nothing (`KEYSTONE_DELEGATION_GRACE`). Replayed over recorded
+  calls of a stretch add nothing (`AKMON_DELEGATION_GRACE`). Replayed over recorded
   sessions, one point per call fired in nearly every session (M72, M75) — it measured session
   length. The weight is keyed on the tool kind only; the shell command's text is not
   classified (C28(c)).
 - **Graduation** — advisory `additionalContext` at the nudge threshold (default 30,
-  `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`); a hard PreToolUse **`ask`** on *sustained* drift
-  at the ask threshold (default 120, `KEYSTONE_DELEGATION_ASK_THRESHOLD`, clamped ≥ advisory),
+  `AKMON_DELEGATION_NUDGE_THRESHOLD`); a hard PreToolUse **`ask`** on *sustained* drift
+  at the ask threshold (default 120, `AKMON_DELEGATION_ASK_THRESHOLD`, clamped ≥ advisory),
   carried by the next edit or shell call — never by a read: outside the interactive default
   mode the ask is a deny (D2-10), and a denied read leaves the agent unable to look.
   Each fires **once per drift episode** via its own temp-dir marker.

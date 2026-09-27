@@ -1,0 +1,9 @@
+{
+  "severities": ["ok", "warn", "error"],
+  "retired_codes": ["hooks.package-mode"],
+  "render": {
+    "head": "{{severity}} {{code}}",
+    "head_with_target": "{{head}} {{target}}",
+    "line": "{{head}}: {{message}} → {{fix}}"
+  }
+}

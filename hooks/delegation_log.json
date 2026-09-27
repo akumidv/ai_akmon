@@ -1,0 +1,7 @@
+{
+  "subagent_prefix": "[akmon] → {{subagent}}",
+  "model_suffix": " ({{model}})",
+  "zone_suffix": " [{{zone}}]",
+  "description_suffix": ": {{description}}",
+  "warning_prefix": "[akmon] ⚠ {{warning}}"
+}

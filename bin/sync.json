@@ -1,0 +1,179 @@
+{
+  "cli_name": "akmon",
+  "default_launcher_rel": ".venv/bin/akmon",
+  "akmon_hook_markers": [
+    "{{aitna}}/akmon/hooks/",
+    "{{aitna}}/.akmon/hooks/",
+    "{{cli}}\" hook "
+  ],
+  "claude_hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "commands": [
+          "git-commit-guard"
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "commands": [
+          "role-on-code",
+          "analysis-guard"
+        ]
+      },
+      {
+        "matcher": "Task|Agent",
+        "commands": [
+          "delegation-log"
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob",
+        "commands": [
+          "delegation-nudge"
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": null,
+        "commands": [
+          "session-start-agent",
+          "model-routing"
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": null,
+        "commands": [
+          "model-routing"
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": null,
+        "commands": [
+          "gate-audit"
+        ]
+      }
+    ]
+  },
+  "codex_hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch",
+        "commands": [
+          [
+            "role-on-code",
+            "Checking akmon role switch"
+          ],
+          [
+            "analysis-guard",
+            "Checking analysis-before-mutation"
+          ]
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "commands": [
+          [
+            "session-start",
+            "Loading akmon session reminders"
+          ]
+        ]
+      }
+    ]
+  },
+  "vendor_pointers": {
+    "claude_md": "# CLAUDE.md\n\n<!-- {{banner}} -->\n\nThis project uses **[AGENTS.md](AGENTS.md)** as the single source of guidance for AI\ncoding agents (including Claude Code).\n\nClaude Code reads `CLAUDE.md`; AGENTS.md is imported below so the canonical rules, including\nthe always-on prime directives and \"read `{{aitna}}/memory/` at session start\", are in\ncontext from the start on every Claude Code version, whether or not it also loads `AGENTS.md`\non its own.\n\n@AGENTS.md\n",
+    "copilot_md": "# Copilot Instructions\n\n<!-- {{banner}} -->\n\nThis project uses **[AGENTS.md](../AGENTS.md)** as the single source of guidance for AI\ncoding agents, including GitHub Copilot.\n\nSee [AGENTS.md](../AGENTS.md) for the project overview, environment setup, architecture,\ncommands, testing, and conventions.\n",
+    "gemini_md": "# GEMINI.md\n\n<!-- {{banner}} -->\n\nThis project uses [AGENTS.md](AGENTS.md) as the single source of guidance for AI coding\nagents, including Gemini.\n\nRead AGENTS.md before doing project work.\n",
+    "codex_readme": "# Codex\n\n<!-- {{banner}} -->\n\nCodex uses the project root [AGENTS.md](../AGENTS.md) as the single source of guidance.\nThis directory contains generated hook wiring and pointers only; do not duplicate project\ninstructions here.\n"
+  },
+  "planned_files": [
+    [
+      "CLAUDE.md",
+      "claude_md"
+    ],
+    [
+      ".github/copilot-instructions.md",
+      "copilot_md"
+    ],
+    [
+      "GEMINI.md",
+      "gemini_md"
+    ],
+    [
+      ".codex/README.md",
+      "codex_readme"
+    ],
+    [
+      ".codex/hooks.json",
+      "codex_hooks_text"
+    ]
+  ],
+  "skill_stubs": {
+    "no_frontmatter": "# {{name}}\n\n<!-- {{banner}} -->\n\n{{body}}",
+    "with_frontmatter": "---\n# {{banner}}\n{{frontmatter}}\n---\n\n# {{name}}\n\n{{body}}"
+  },
+  "skill_stub_dirs": [
+    ".claude/skills",
+    ".agents/skills"
+  ],
+  "always_materialized": "guardrails/_common.md",
+  "moved_imports": {
+    "guardrails/python.md": "profiles/python.md"
+  },
+  "ruff_configs": [
+    [
+      "pyproject.toml",
+      [
+        "tool",
+        "ruff"
+      ]
+    ],
+    [
+      "ruff.toml",
+      []
+    ],
+    [
+      ".ruff.toml",
+      []
+    ]
+  ],
+  "check_findings": {
+    "stale": {
+      "message": "generated file is stale or missing: {{relative}}",
+      "fix": "Run akmon sync to regenerate this file."
+    },
+    "obsolete": {
+      "message": "generated file is no longer planned: {{relative}}",
+      "fix": "Run akmon sync to delete this file."
+    },
+    "up_to_date": {
+      "message": "generated file matches its source: {{relative}}",
+      "fix": "Re-run akmon sync after every change to this file's source."
+    },
+    "plan_error": {
+      "message": "{{error}}",
+      "fix": "Resolve the reported planning error, then re-run akmon sync."
+    }
+  },
+  "summary_verbs": {
+    "changed": {
+      "dry_run": "would update",
+      "write": "updated"
+    },
+    "deleted": {
+      "dry_run": "would delete",
+      "write": "deleted"
+    },
+    "ok": "ok",
+    "error": "error",
+    "no_changes": "akmon sync: no changes"
+  }
+}

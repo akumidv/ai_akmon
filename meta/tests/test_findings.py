@@ -23,25 +23,24 @@ import pytest
 from common import findings as findings_mod
 from common.findings import (
     CODE_RE,
-    RETIRED_CODES,
-    SEVERITIES,
     Finding,
     exit_code,
     line_safe,
     print_findings,
     render,
+    severities,
 )
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 
 #: Every adopter of the envelope, by the name used in test ids, and its source file.
 ADOPTER_SOURCES = {
-    "verify": _KEYSTONE / "bin" / "verify.py",
-    "sync": _KEYSTONE / "bin" / "sync.py",
-    "validate": _KEYSTONE / "meta" / "bin" / "validate.py",
-    "self_ci": _KEYSTONE / "meta" / "self_ci.py",
+    "verify": _AKMON / "bin" / "verify.py",
+    "sync": _AKMON / "bin" / "sync.py",
+    "validate": _AKMON / "meta" / "bin" / "validate.py",
+    "self_ci": _AKMON / "meta" / "self_ci.py",
 }
 
 
@@ -77,10 +76,10 @@ def _finding(**overrides) -> Finding:
 
 
 def test_severity_vocabulary_is_exactly_ok_warn_error():
-    assert SEVERITIES == ("ok", "warn", "error")
+    assert severities() == ("ok", "warn", "error")
 
 
-@pytest.mark.parametrize("severity", SEVERITIES)
+@pytest.mark.parametrize("severity", severities())
 def test_every_declared_severity_constructs(severity):
     assert _finding(severity=severity).severity == severity
 
@@ -145,20 +144,20 @@ def test_the_grammar_is_the_one_the_design_declares():
 
 def test_a_code_in_the_retired_record_is_rejected(monkeypatch):
     """Non-reuse is the half a consumer greps for: a spent slug never comes back."""
-    monkeypatch.setattr(findings_mod, "RETIRED_CODES", frozenset({"area.rule"}))
+    monkeypatch.setattr(findings_mod, "retired_codes", lambda data=None: frozenset({"area.rule"}))
     with pytest.raises(ValueError):
         _finding(code="area.rule")
     assert _finding(code="area.other").code == "area.other"
 
 
 def test_the_retired_record_holds_only_valid_slugs():
-    for code in RETIRED_CODES:
+    for code in findings_mod.retired_codes():
         assert CODE_RE.fullmatch(code), code
 
 
 def test_no_live_code_appears_in_the_retired_record():
     live = {code for codes in _adopter_codes().values() for code in codes}
-    assert live.isdisjoint(RETIRED_CODES)
+    assert live.isdisjoint(findings_mod.retired_codes())
 
 
 # --------------------------------------------------------------------------------------
@@ -315,7 +314,7 @@ def test_exactly_one_canonical_serializer_exists():
     """A second owner of the field mapping is the defect, not only a copy in an adopter."""
     tree = ast.parse(ADOPTER_SOURCES["verify"].read_text(encoding="utf-8"))  # sanity: parses
     assert tree is not None
-    module = ast.parse((_KEYSTONE / "common" / "findings.py").read_text(encoding="utf-8"))
+    module = ast.parse((_AKMON / "common" / "findings.py").read_text(encoding="utf-8"))
     serializers = [
         node.name
         for node in ast.walk(module)
@@ -357,7 +356,7 @@ def test_no_adopter_repeats_the_field_mapping(name):
 
 
 def test_findings_module_imports_only_the_standard_library():
-    module = ast.parse((_KEYSTONE / "common" / "findings.py").read_text(encoding="utf-8"))
+    module = ast.parse((_AKMON / "common" / "findings.py").read_text(encoding="utf-8"))
     imported = set()
     for node in ast.walk(module):
         if isinstance(node, ast.Import):
@@ -374,7 +373,10 @@ def test_findings_module_imports_only_the_standard_library():
         "argparse",
         "os",
     }
-    assert imported <= set(stdlib), imported - set(stdlib)
+    # ``common`` is the sibling package: every common module is stdlib-only by the same
+    # no-venv contract, and findings is always imported as ``common.findings`` (the package
+    # is on the path whenever findings is), so a sibling import adds no real dependency.
+    assert imported <= set(stdlib) | {"common"}, imported - set(stdlib) - {"common"}
 
 
 # --------------------------------------------------------------------------------------
@@ -691,7 +693,7 @@ def test_sync_write_mode_keeps_its_action_log(tmp_path, capsys):
 
 def test_self_ci_fixture_carries_and_runs_its_mounted_launchers(tmp_path):
     fixture = tmp_path / "consumer"
-    self_ci._make_fixture(fixture, _KEYSTONE)
+    self_ci._make_fixture(fixture, _AKMON)
     mounted_bin = fixture / "_aitna" / "akmon" / "bin"
     assert (fixture / "_aitna" / "akmon" / "common" / "findings.py").is_file()
     for script in ("sync.py", "verify.py", "check.py"):
@@ -726,3 +728,69 @@ def test_checked_suppresses_success_output(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
+
+
+# --------------------------------------------------------------------------------------
+# common/findings.json — the retired-code record and the render skeleton (C102)
+# --------------------------------------------------------------------------------------
+
+
+def test_findings_json_carries_the_record_and_the_envelope():
+    data = json.loads((Path(findings_mod.__file__).parent / "findings.json").read_text(encoding="utf-8"))
+    assert set(data) == {"severities", "retired_codes", "render"}
+    assert data["severities"] == ["ok", "warn", "error"]
+    assert data["retired_codes"] == ["hooks.package-mode"]
+    assert data["render"]["head"] == "{{severity}} {{code}}"
+    assert data["render"]["line"] == "{{head}}: {{message}} → {{fix}}"
+
+
+def test_the_loader_reads_exactly_findings_json(monkeypatch):
+    from common import jsondata
+
+    seen: list[Path] = []
+    real_read = jsondata.read
+
+    def capture(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(jsondata, "read", capture)
+    findings_mod.retired_codes()
+    render(_finding())
+    # one read per standalone public call: the record, the Finding's validation, the render
+    assert seen == [Path(findings_mod.__file__).with_name("findings.json")] * 3
+
+
+def test_a_report_reads_findings_json_once_not_once_per_line(monkeypatch, capsys):
+    """A carrier reads the envelope's data once and passes it to every finding it builds, and
+    ``print_findings`` reads it once for the whole report (C102)."""
+    from common import jsondata
+
+    seen: list[Path] = []
+    real_read = jsondata.read
+
+    def capture(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(jsondata, "read", capture)
+    data = findings_mod.read_findings_data()
+    report = [_finding(code=f"area.rule-{index}", data=data) for index in range(20)]
+    print_findings(report)
+    assert len(capsys.readouterr().out.splitlines()) == 20
+    assert seen == [Path(findings_mod.__file__).with_name("findings.json")] * 2
+
+
+def test_a_missing_data_file_fails_from_the_public_functions(monkeypatch):
+    from common import jsondata
+
+    def broken(path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        findings_mod.retired_codes()
+    with pytest.raises(jsondata.DataFileError):
+        render(_finding())
+    with pytest.raises(jsondata.DataFileError):
+        Finding("ok", "area.rule", "m", "t", "Fix it.")

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -90,6 +91,146 @@ class ResultTests(unittest.TestCase):
             needs_score=True,
         )
         self.assertEqual((assessed["status"], halt), ("halted_quota", "quota"))
+
+    def test_valid_model_prose_does_not_trip_quota_or_auth_circuit_breakers(self):
+        for phrase in ("block unauthorized mutation", "quotation-like wording"):
+            with self.subTest(phrase=phrase):
+                attempt = {
+                    "returncode": 0,
+                    "stderr": "",
+                    "reply": json.dumps(
+                        {
+                            "verdict": "FLAG",
+                            "findings": [{"claim": "c", "evidence": "e", "why": phrase}],
+                        }
+                    ),
+                    "actual_model": "gpt-reserve",
+                }
+                assessed, halt = runner.classify(attempt, "codex", "gpt-reserve", needs_score=False)
+                self.assertEqual((assessed["status"], halt), ("valid", None))
+
+    def test_exit_zero_provider_limits_without_model_provenance_still_halt(self):
+        for message, status, reason in (
+            ("Error: quota exceeded", "halted_quota", "quota"),
+            ("Error: unauthorized", "halted_auth", "auth"),
+            (
+                '{"type":"error","error":{"type":"rate_limit_error","message":"Too many requests"}}',
+                "halted_quota",
+                "quota",
+            ),
+        ):
+            with self.subTest(message=message):
+                assessed, halt = runner.classify(
+                    {"returncode": 0, "stderr": "", "reply": message, "actual_model": None},
+                    "codex",
+                    "gpt-reserve",
+                    needs_score=False,
+                )
+                self.assertEqual((assessed["status"], halt), (status, reason))
+
+    def test_unverified_prose_with_quota_or_auth_terms_is_not_provider_error(self):
+        for reply in (
+            "Malformed response discusses quotation-like wording.",
+            "Malformed response discusses unauthorized mutation.",
+        ):
+            with self.subTest(reply=reply):
+                assessed, halt = runner.classify(
+                    {"returncode": 0, "stderr": "", "reply": reply, "actual_model": "gpt-reserve"},
+                    "codex",
+                    "gpt-reserve",
+                    needs_score=False,
+                )
+                self.assertEqual((assessed["status"], halt), ("invalid_parse", None))
+
+    def _qwen_attempt(self, home, cwd, records):
+        usage_path = home / ".qwen/usage_record.jsonl"
+        usage_path.parent.mkdir(parents=True, exist_ok=True)
+
+        def append_usage(*args, **kwargs):
+            with usage_path.open("a", encoding="utf-8") as stream:
+                for row in records:
+                    stream.write(json.dumps(row) + "\n")
+            return subprocess.CompletedProcess(
+                args=args[0],
+                returncode=0,
+                stdout='{"verdict":"OK","findings":[]}',
+                stderr="",
+            )
+
+        with (
+            patch.object(runner.Path, "home", return_value=home),
+            patch.object(runner.subprocess, "run", side_effect=append_usage),
+        ):
+            return runner._call_qwen("qwen3.8-27b", "prompt", cwd)
+
+    @staticmethod
+    def _usage_record(session_id, project, tool_calls):
+        return {
+            "sessionId": session_id,
+            "project": project,
+            "models": {"qwen3.8-27b": {"requests": 1}},
+            "tools": {"totalCalls": tool_calls},
+        }
+
+    def test_qwen_usage_correlation_ignores_unrelated_tool_sessions(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cwd = root / "qwen-cell" / "g1" / "attempt-1"
+            project = str(cwd.resolve())
+            attempt = self._qwen_attempt(
+                root / "home",
+                cwd,
+                [
+                    self._usage_record("unrelated-session", str(root / "other-project"), 5),
+                    self._usage_record("own-session", project, 0),
+                ],
+            )
+            self.assertEqual(attempt["qwen_project_cwd"], project)
+            self.assertEqual([row["sessionId"] for row in attempt["usage_records"]], ["own-session"])
+            self.assertEqual(attempt["tool_calls"], 0)
+            assessed, halt = runner.classify(attempt, "qwen", "qwen3.8-27b", needs_score=False)
+            self.assertEqual((assessed["status"], halt), ("valid", None))
+
+    def test_qwen_correlated_tool_calls_invalidate_attempt(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cwd = root / "qwen-cell" / "g2" / "attempt-1"
+            attempt = self._qwen_attempt(
+                root / "home",
+                cwd,
+                [self._usage_record("own-session", str(cwd.resolve()), 2)],
+            )
+            assessed, halt = runner.classify(attempt, "qwen", "qwen3.8-27b", needs_score=False)
+            self.assertEqual((assessed["status"], halt), ("invalid_tool_use", None))
+
+    def test_qwen_missing_or_ambiguous_session_provenance_fails_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cwd = root / "qwen-cell" / "g3" / "attempt-1"
+            project = str(cwd.resolve())
+            cases = (
+                [],
+                [
+                    self._usage_record("session-a", project, 0),
+                    self._usage_record("session-b", project, 0),
+                ],
+            )
+            for rows in cases:
+                with self.subTest(session_count=len(rows)):
+                    attempt = self._qwen_attempt(root / f"home-{len(rows)}", cwd, rows)
+                    self.assertIsNone(attempt["actual_model"])
+                    self.assertIsNone(attempt["tool_calls"])
+                    assessed, halt = runner.classify(attempt, "qwen", "qwen3.8-27b", needs_score=False)
+                    self.assertEqual((assessed["status"], halt), ("invalid_model_provenance", None))
+
+    def test_qwen_working_directory_is_unique_per_attempt(self):
+        base = Path("/tmp/a32-qwen-test")
+        paths = {
+            runner._attempt_cwd(base, "qwen", "qwen-small", "g1", 1),
+            runner._attempt_cwd(base, "qwen", "qwen-small", "g1", 1),
+        }
+        self.assertEqual(len(paths), 2)
+        self.assertTrue(all(path.parent == base / "qwen-cwd/qwen-small/g1" for path in paths))
 
     def test_invalid_record_retries_and_preserves_prior_attempts(self):
         with tempfile.TemporaryDirectory() as td:

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from checks import canary
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 
@@ -242,11 +242,11 @@ def test_policy_id_outside_the_join_is_rejected(tmp_path):
 
 
 def _shipped() -> list[canary.CallableClassification]:
-    return canary._collect_callables(_KEYSTONE)
+    return canary._collect_callables(_AKMON)
 
 
 def test_shipped_tree_is_clean():
-    assert _codes(_KEYSTONE) == []
+    assert _codes(_AKMON) == []
 
 
 def test_shipped_policy_id_pairs_are_pinned():
@@ -275,6 +275,10 @@ def test_owner_visible_population_outside_the_join_is_pinned():
         "hook_failure_diagnostic",
         "hook_failure_notice",
         "model_routing_result",
+        # The neutral tool-kind tokens the adapters import (C102: hooks/vocabulary.json).
+        "edit_tool",
+        "shell_tool",
+        "read_tool",
     }
     for entry in _shipped():
         if entry.owner_visible:
@@ -283,7 +287,7 @@ def test_owner_visible_population_outside_the_join_is_pinned():
 
 
 def _tail(policy_id: str) -> str:
-    markers, _ = canary._read_prose(_KEYSTONE)
+    markers, _ = canary._read_prose(_AKMON)
     return next(marker.tail for marker in markers if marker.policy_id == policy_id)
 
 

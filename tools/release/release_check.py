@@ -35,17 +35,18 @@ import sys
 from pathlib import Path
 
 # tools/release/release_check.py → akmon root is two levels up.
-KEYSTONE_ROOT = Path(__file__).resolve().parents[2]
-BIN = KEYSTONE_ROOT / "bin"  # the two launchers; the shared library lives in ``common``.
+AKMON_ROOT = Path(__file__).resolve().parents[2]
+BIN = AKMON_ROOT / "bin"  # the two launchers; the shared library lives in ``common``.
 # akmon's own development layer (self-CI runner + tests) lives under meta/.
-META = KEYSTONE_ROOT / "meta"
+META = AKMON_ROOT / "meta"
 
 # The shared finding envelope, the root walk and the version-spelling rule all ship in the
 # standard's own ``common`` package (stdlib-only, no install), so this tool speaks the same
 # five fields every other check does and compares versions by the one rule that also governs the
 # CLI's skew notice.
-sys.path.insert(0, str(KEYSTONE_ROOT))
+sys.path.insert(0, str(AKMON_ROOT))
 
+from common import jsondata  # noqa: E402
 from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
 from common.project_root import aitna_root, aitna_root_name, resolve_project_root  # noqa: E402
 from common.record import read_akmon_toml  # noqa: E402
@@ -54,7 +55,15 @@ from common.versions import is_final, split_version  # noqa: E402
 _VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 _UNRELEASED_RE = re.compile(r"^##\s+Unreleased\b", re.MULTILINE | re.IGNORECASE)
 
-SUBJECTS = ("akmon", "package")
+
+def _release_data() -> dict:
+    """The release tool's texts and subject facts (``release.json``), read on the call that needs it."""
+    return jsondata.read(Path(__file__).parent / "release.json")
+
+
+def subjects() -> tuple[str, ...]:
+    """The release subjects: the akmon standard's own tag, or the consuming project's package."""
+    return tuple(_release_data()["subjects"])
 
 
 def _release_charter() -> str:
@@ -77,8 +86,9 @@ def _read(path: Path) -> str:
 
 
 def _git_status(root: Path) -> str:
+    texts = _release_data()["run_state"]
     if not shutil.which("git"):
-        return "(git not found)"
+        return texts["git_not_found"]
     try:
         proc = subprocess.run(
             ["git", "-C", str(root), "status", "--short"],
@@ -87,35 +97,41 @@ def _git_status(root: Path) -> str:
             check=False,
         )
     except OSError as exc:  # pragma: no cover - defensive
-        return f"(git status failed: {exc})"
+        return jsondata.fill(texts["git_status_failed"], {"exc": exc})
     out = proc.stdout.strip()
-    return out if out else "(clean)"
+    return out if out else texts["git_clean"]
 
 
 def _changelog_summary(akmon: Path) -> list[str]:
-    text = _read(akmon / "CHANGELOG.md")
+    texts = _release_data()["run_state"]
+    changelog = changelog_name()
+    text = _read(akmon / changelog)
     if not text:
-        return ["CHANGELOG.md: (missing)"]
-    lines = ["CHANGELOG.md sections:"]
-    lines.extend(f"  - {match.group(1).strip()}" for match in re.finditer(r"^##\s+(.+)$", text, re.MULTILINE))
+        return [jsondata.fill(texts["file_missing"], {"name": changelog})]
+    lines = [texts["changelog_sections"]]
+    lines.extend(
+        jsondata.fill(texts["changelog_section_item"], {"heading": match.group(1).strip()})
+        for match in re.finditer(r"^##\s+(.+)$", text, re.MULTILINE)
+    )
     if not _UNRELEASED_RE.search(text):
-        lines.append("  ! no `## Unreleased` section — add one for pending changes")
+        lines.append(texts["changelog_no_unreleased"])
     return lines
 
 
 def _tasks_summary(tasks_dir: Path) -> list[str]:
     out: list[str] = []
+    texts = _release_data()["run_state"]
     for name in ("TASKS.md", "TASKS_ARCHIVE.md"):
         text = _read(tasks_dir / name)
         if not text:
-            out.append(f"{name}: (missing)")
+            out.append(jsondata.fill(texts["file_missing"], {"name": name}))
             continue
         entries = [ln.strip() for ln in text.splitlines() if ln.lstrip().startswith("- ") and " · " in ln]
-        out.append(f"{name}: {len(entries)} entry(ies)")
+        out.append(jsondata.fill(texts["file_entry_count"], {"name": name, "count": len(entries)}))
         if name == "TASKS.md":
             done = [ln for ln in entries if re.search(r"\bdone\b", ln)]
             if done:
-                out.append(f"  ! {len(done)} 'done' entry(ies) in live TASKS.md — move to TASKS_ARCHIVE.md")
+                out.append(jsondata.fill(texts["done_move_note"], {"count": len(done)}))
     return out
 
 
@@ -135,8 +151,9 @@ def run_state(root: Path, subject: str) -> int:
         changelog_dir = root
         git_dir = root
 
-    print(f"== release state (subject: {subject}) ==")
-    print(f"project root: {root}")
+    texts = _release_data()["run_state"]
+    print(jsondata.fill(texts["state_header"], {"subject": subject}))
+    print(jsondata.fill(texts["project_root_line"], {"root": root}))
     print()
     for line in _tasks_summary(tasks_dir):
         print(line)
@@ -146,10 +163,10 @@ def run_state(root: Path, subject: str) -> int:
     print()
     if subject == "package":
         charter = root / _release_charter()
-        note = "found" if charter.is_file() else "MISSING — add it for project-specific release commands"
-        print(f"release charter: {_release_charter()} ({note})")
+        note = texts["charter_found"] if charter.is_file() else texts["charter_missing"]
+        print(jsondata.fill(texts["charter_line"], {"charter": _release_charter(), "note": note}))
         print()
-    print(f"git status (short) [{git_dir.name}]:")
+    print(jsondata.fill(texts["git_status_header"], {"name": git_dir.name}))
     for line in _git_status(git_dir).splitlines():
         print(f"  {line}")
     return 0
@@ -185,9 +202,19 @@ def run_state(root: Path, subject: str) -> int:
 # spelling, a ``git describe`` distance means the tree is *past* that tag rather than at it, and
 # a PEP 440 pre/post/dev segment is neither — it names a different version.
 
-_CHANGELOG = "CHANGELOG.md"
-_PYPROJECT = "pyproject.toml"
-_STATIC_VERSION_FILE = "src/akmon/__init__.py"
+def changelog_name() -> str:
+    """The changelog file whose topmost released window the version is checked against."""
+    return _release_data()["changelog_name"]
+
+
+def pyproject_name() -> str:
+    """The file holding the ``[project].version`` literal hatchling stamps into the wheel."""
+    return _release_data()["pyproject_name"]
+
+
+def static_version_file() -> str:
+    """The file holding the ``_STATIC_VERSION`` fallback literal for an uninstalled package."""
+    return _release_data()["static_version_file"]
 
 _STATIC_VERSION_RE = re.compile(r"^_STATIC_VERSION\s*=\s*[\"\']([^\"\']+)[\"\']", re.MULTILINE)
 _HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
@@ -303,22 +330,27 @@ def _skip(message: str, target: str, fix: str) -> Finding:
 def check_release_versions(root: Path) -> list[Finding]:
     """The F9 join over ``root``'s four version carriers, as shared-envelope findings."""
     findings: list[Finding] = []
-    changelog_path = root / _CHANGELOG
+    changelog, pyproject, static_file = changelog_name(), pyproject_name(), static_version_file()
+    findings_data = _release_data()["findings"]
+    changelog_path = root / changelog
     # Read once: two rules ask about the same headings, and a file re-read between them could
     # answer them from two different files.
     headings = _changelog_headings(changelog_path)
 
-    declared = _pyproject_version(root / _PYPROJECT)
-    fallback = _static_version(root / _STATIC_VERSION_FILE)
+    declared = _pyproject_version(root / pyproject)
+    fallback = _static_version(root / static_file)
     if declared is not None and fallback is not None:
         if declared == fallback:
             findings.append(
                 _finding(
                     "ok",
                     "release.version-literals",
-                    f"{_PYPROJECT} and {_STATIC_VERSION_FILE} both declare {declared}",
-                    _PYPROJECT,
-                    "Bump both literals together — one release bump is two edits.",
+                    jsondata.fill(
+                        findings_data["version-literals-match"]["message"],
+                        {"pyproject": pyproject, "static_version_file": static_file, "declared": declared},
+                    ),
+                    pyproject,
+                    findings_data["version-literals-match"]["fix"],
                 )
             )
         else:
@@ -326,9 +358,17 @@ def check_release_versions(root: Path) -> list[Finding]:
                 _finding(
                     "error",
                     "release.version-literals",
-                    f"{_PYPROJECT} declares {declared} while {_STATIC_VERSION_FILE} declares {fallback}",
-                    _PYPROJECT,
-                    "Set both literals to the same string — one release bump is two edits.",
+                    jsondata.fill(
+                        findings_data["version-literals-mismatch"]["message"],
+                        {
+                            "pyproject": pyproject,
+                            "static_version_file": static_file,
+                            "declared": declared,
+                            "fallback": fallback,
+                        },
+                    ),
+                    pyproject,
+                    findings_data["version-literals-mismatch"]["fix"],
                 )
             )
     # `pyproject` wins when both exist: it is the literal that names the built wheel, and the
@@ -338,18 +378,22 @@ def check_release_versions(root: Path) -> list[Finding]:
     if version is None:
         findings.append(
             _skip(
-                f"no version source: neither {_PYPROJECT} [project].version nor "
-                f"{_STATIC_VERSION_FILE} _STATIC_VERSION is present",
+                jsondata.fill(
+                    findings_data["no-version-source"]["message"],
+                    {"pyproject": pyproject, "static_version_file": static_file},
+                ),
                 "",
-                "Ignore this on a project that carries no Python version literal, and add one otherwise.",
+                findings_data["no-version-source"]["fix"],
             )
         )
     elif not changelog_path.is_file():
         findings.append(
             _skip(
-                f"{_CHANGELOG} is absent, so version {version} was compared against nothing",
-                _CHANGELOG,
-                f"Add {_CHANGELOG} so a consumer can read the window before accepting a pin.",
+                jsondata.fill(
+                    findings_data["changelog-absent"]["message"], {"changelog": changelog, "version": version}
+                ),
+                changelog,
+                jsondata.fill(findings_data["changelog-absent"]["fix"], {"changelog": changelog}),
             )
         )
     else:
@@ -379,6 +423,8 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
     Non-final wants ``## Unreleased``; final wants its own released heading above every
     other released one.
     """
+    changelog = changelog_name()
+    texts = _release_data()["findings"]
     base, _ = split_version(version)
     if not is_final(version):
         if headings and _UNRELEASED_HEADING_RE.match(headings[0]):
@@ -386,19 +432,23 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
                 _finding(
                     "ok",
                     "release.changelog-window",
-                    f"non-final version {version} sits above a topmost `## Unreleased` heading",
-                    _CHANGELOG,
-                    "Keep `## Unreleased` topmost while the version is non-final.",
+                    jsondata.fill(texts["window-nonfinal-ok"]["message"], {"version": version}),
+                    changelog,
+                    texts["window-nonfinal-ok"]["fix"],
                 )
             ]
-        observed = f"the topmost heading is `## {headings[0]}`" if headings else "it carries no heading"
+        observed = (
+            jsondata.fill(texts["window-nonfinal-heading"], {"heading": headings[0]})
+            if headings
+            else texts["window-nonfinal-none"]
+        )
         return [
             _finding(
                 "error",
                 "release.changelog-window",
-                f"non-final version {version} but {observed}",
-                _CHANGELOG,
-                "Add a topmost `## Unreleased` heading, or make the version final.",
+                jsondata.fill(texts["window-nonfinal-error"]["message"], {"version": version, "observed": observed}),
+                changelog,
+                texts["window-nonfinal-error"]["fix"],
             )
         ]
     released = _released_headings(headings)
@@ -407,9 +457,11 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
             _finding(
                 "error",
                 "release.changelog-window",
-                f"final version {version} but {_CHANGELOG} carries no released heading",
-                _CHANGELOG,
-                f"Cut the `## Unreleased` heading to `## v{base}` before tagging.",
+                jsondata.fill(
+                    texts["window-final-no-released"]["message"], {"version": version, "changelog": changelog}
+                ),
+                changelog,
+                jsondata.fill(texts["window-final-no-released"]["fix"], {"base": base}),
             )
         ]
     # The *topmost* released heading, not any of them: a matching heading further down names an
@@ -420,18 +472,20 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
             _finding(
                 "error",
                 "release.changelog-window",
-                f"final version {version} but the topmost released heading is `## {topmost}`",
-                _CHANGELOG,
-                f"Cut a `## v{base}` heading above `## {topmost}` before tagging.",
+                jsondata.fill(
+                    texts["window-final-topmost-mismatch"]["message"], {"version": version, "topmost": topmost}
+                ),
+                changelog,
+                jsondata.fill(texts["window-final-topmost-mismatch"]["fix"], {"base": base, "topmost": topmost}),
             )
         ]
     return [
         _finding(
             "ok",
             "release.changelog-window",
-            f"final version {version} matches the topmost released heading `## {topmost}`",
-            _CHANGELOG,
-            "Keep the topmost released heading equal to the version being built.",
+            jsondata.fill(texts["window-final-ok"]["message"], {"version": version, "topmost": topmost}),
+            changelog,
+            texts["window-final-ok"]["fix"],
         )
     ]
 
@@ -439,22 +493,24 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
 def _check_tags(root: Path, version: str | None, *, has_changelog: bool, headings: list[str]) -> list[Finding]:
     """The two git-dependent rules: the re-release warn and the tag-coverage warn."""
     findings: list[Finding] = []
+    changelog = changelog_name()
+    texts = _release_data()["findings"]
     tags = _git_tags(root)
     final = version is not None and is_final(version)
     if tags is None:
         if final:
             findings.append(
                 _skip(
-                    f"git is unavailable, so whether {version} is already tagged is unknown",
+                    jsondata.fill(texts["git-unavailable-final"]["message"], {"version": version}),
                     "",
-                    "Run this where git can read the repository to detect a re-release.",
+                    texts["git-unavailable-final"]["fix"],
                 )
             )
         findings.append(
             _skip(
-                f"git is unavailable, so no tag was checked for a {_CHANGELOG} heading",
-                _CHANGELOG,
-                "Run this where git can read the repository to check tag coverage.",
+                jsondata.fill(texts["git-unavailable-tags"]["message"], {"changelog": changelog}),
+                changelog,
+                texts["git-unavailable-tags"]["fix"],
             )
         )
         return findings
@@ -468,9 +524,9 @@ def _check_tags(root: Path, version: str | None, *, has_changelog: bool, heading
         _finding(
             "warn",
             "release.tag-spelling",
-            f"tag {tag} names a version but is not spelled v{tag}",
+            jsondata.fill(texts["tag-spelling"]["message"], {"tag": tag}),
             tag,
-            f"Cut release tags as v{tag} — that spelling is the release tag's only form.",
+            jsondata.fill(texts["tag-spelling"]["fix"], {"tag": tag}),
         )
         for tag in tags
         if not tag.startswith("v")
@@ -484,18 +540,18 @@ def _check_tags(root: Path, version: str | None, *, has_changelog: bool, heading
                 _finding(
                     "warn",
                     "release.retag",
-                    f"final version {version} is already tagged as {matching[0]}",
+                    jsondata.fill(texts["retag"]["message"], {"version": version, "tag": matching[0]}),
                     matching[0],
-                    "Confirm this is a deliberate re-release, or bump the version.",
+                    texts["retag"]["fix"],
                 )
             )
     if not has_changelog:
         # Unrunnable, not inapplicable: there are tags, and nothing to check them against.
         findings.append(
             _skip(
-                f"{_CHANGELOG} is absent, so no tag was checked for a heading",
-                _CHANGELOG,
-                f"Add {_CHANGELOG} so the tags already cut can be checked against it.",
+                jsondata.fill(texts["changelog-absent-tags"]["message"], {"changelog": changelog}),
+                changelog,
+                jsondata.fill(texts["changelog-absent-tags"]["fix"], {"changelog": changelog}),
             )
         )
         return findings
@@ -504,9 +560,9 @@ def _check_tags(root: Path, version: str | None, *, has_changelog: bool, heading
         _finding(
             "warn",
             "release.undocumented-tag",
-            f"tag {tag} has no `## {tag}` heading in {_CHANGELOG}",
+            jsondata.fill(texts["undocumented-tag"]["message"], {"tag": tag, "changelog": changelog}),
             tag,
-            f"Add the `## {tag}` section it released, or accept the historical gap.",
+            jsondata.fill(texts["undocumented-tag"]["fix"], {"tag": tag}),
         )
         for tag in release_tags
         if split_version(tag)[0] not in documented
@@ -563,17 +619,18 @@ def run_check(root: Path, subject: str) -> int:
     """``--check``: run the version/changelog cross-check plus the subject's release suite."""
     # The version join runs before the suites and against the tree the tag is cut from: for the
     # akmon subject that is the standard's own tree, for package the project root.
-    version_findings = check_release_versions(KEYSTONE_ROOT if subject == "akmon" else root)
-    print("== version ↔ changelog cross-check")
+    texts = _release_data()["run_check"]
+    version_findings = check_release_versions(AKMON_ROOT if subject == "akmon" else root)
+    print(texts["cross_check_header"])
     print_findings(version_findings)
     print()
 
     if subject == "akmon":
         commands = [
             [sys.executable, str(META / "self_ci.py")],
-            _pytest_command(KEYSTONE_ROOT, str(META / "tests")),
+            _pytest_command(AKMON_ROOT, str(META / "tests")),
         ]
-        failed = _run_commands(KEYSTONE_ROOT, commands)
+        failed = _run_commands(AKMON_ROOT, commands)
     else:  # package — the project's own suite. Keep verify (the akmon contract still
         # applies), then defer to the project's documented commands rather than guessing.
         commands = [
@@ -582,22 +639,22 @@ def run_check(root: Path, subject: str) -> int:
         failed = _run_commands(root, commands)
         charter = root / _release_charter()
         if charter.is_file():
-            print(f"\n# package release: run the project's own checks from {_release_charter()}")
-            print("# (tests / lint / build — this tool does not guess them).")
+            print("\n" + jsondata.fill(texts["charter_runs_note"], {"charter": _release_charter()}))
+            print(texts["charter_runs_note_suffix"])
         else:
-            print(f"\n! {_release_charter()} is missing — add it with the project's release commands.")
+            print("\n" + jsondata.fill(texts["charter_missing_note"], {"charter": _release_charter()}))
             failed.append(_release_charter())
 
     if exit_code(version_findings):
-        failed.append("version ↔ changelog cross-check")
+        failed.append(texts["version_check_failed_item"])
 
     print()
     if failed:
-        print("RELEASE CHECK FAILED:")
+        print(texts["failed_header"])
         for item in failed:
-            print(f"  - {item}")
+            print(jsondata.fill(texts["failed_item"], {"item": item}))
         return 1
-    print("release check: all green")
+    print(texts["all_green"])
     return 0
 
 
@@ -611,8 +668,8 @@ def _display(command: list[str]) -> str:
         script = Path(command[1])
         if script == BIN / "verify.py":
             return " ".join(["akmon", "verify", *command[2:]])
-        if script.is_relative_to(KEYSTONE_ROOT):
-            return " ".join(["python3", script.relative_to(KEYSTONE_ROOT).as_posix(), *command[2:]])
+        if script.is_relative_to(AKMON_ROOT):
+            return " ".join(["python3", script.relative_to(AKMON_ROOT).as_posix(), *command[2:]])
     return " ".join(command)
 
 
@@ -641,49 +698,37 @@ def run_plan(version: str, subject: str) -> int:
     checker reporting a defect its own procedure keeps re-creating is theatre. So the bump comes
     first, both literals are named, and both are staged explicitly.
     """
+    plan = _release_data()["run_plan"]
     if not _VERSION_RE.match(version):
-        print(f"error: version must look like vX.Y.Z, got {version!r}", file=sys.stderr)
+        print(jsondata.fill(plan["error_version"], {"version": repr(version)}), file=sys.stderr)
         return 2
     literal, _ = split_version(version)
-    print("# Owner-run release plan (D5 — prepared by the release role, executed by the owner).")
-    print("# Stage files EXPLICITLY — never `git add -A` — so untracked noise")
-    print("# (e.g. __pycache__/) is not swept into the release commit.")
-    print()
+    facts = plan["subjects"][subject]
+    lines = [*plan["header"], ""]
     if subject == "akmon":
-        print(f"cd {aitna_root_name()}/akmon            # tag is cut from the submodule's own tree")
-        commit_subject = "akmon"
-        staged = "CHANGELOG.md pyproject.toml src/akmon/__init__.py"
+        lines.append(jsondata.fill(facts["cd_line"], {"aitna_root": aitna_root_name()}))
+    lines.append("")
+    lines += [jsondata.fill(line, {"literal": literal}) for line in plan["bump_note"]]
+    if subject == "akmon":
+        lines += [jsondata.fill(line, {"literal": literal}) for line in facts["literal_lines"]]
     else:  # package — run from the project root.
-        commit_subject = "release"
-        staged = "CHANGELOG.md"
-    print()
-    print(f"# 1. Bump the version to {literal} in BOTH literals — one release bump is two edits,")
-    print("#    and the tag records the reviewed state rather than producing the number:")
-    if subject == "akmon":
-        print(f'#      pyproject.toml           version = "{literal}"')
-        print(f'#      src/akmon/__init__.py    _STATIC_VERSION = "{literal}"')
-    else:
-        print(f"#      the project's own version literal(s), per {_release_charter()}")
-    print(f"# 2. Cut CHANGELOG.md's `## Unreleased` section to `## {version}`.")
-    print("# 3. Re-run --check: the version <-> changelog cross-check must be green before the tag.")
-    print()
-    if subject == "akmon":
-        print(f"git add {staged}")
-    else:
-        print(f"git add {staged}            # + the project's version literal(s) and reviewed edits")
-    print("git status                      # confirm: no __pycache__/ or stray files staged")
-    print()
-    print(f'git commit -m "{commit_subject} {version}"')
-    print(f"git tag {version}              # the tag points at THIS commit, not a prior HEAD")
-    print("git push origin main --tags")
+        lines.append(jsondata.fill(facts["literal_line"], {"charter": _release_charter()}))
+    lines.append(jsondata.fill(plan["changelog_note"], {"version": version}))
+    lines.append(plan["recheck_note"])
+    lines.append("")
+    lines.append(jsondata.fill(facts["staged_line"], {"staged": facts["staged_files"]}))
+    lines.append(plan["git_status_line"])
+    lines.append("")
+    lines.append(jsondata.fill(plan["commit_line"], {"subject": facts["commit_subject"], "version": version}))
+    lines.append(jsondata.fill(plan["tag_line"], {"version": version}))
+    lines.append(plan["push_line"])
     if subject == "package":
-        print(f"\n# package also: build + publish per {_release_charter()} (owner-run).")
-    print()
-    print("# 4. After the push, reopen the cycle: set both literals to the next development")
-    print("#    version (`<next>.dev0`) and add a fresh `## Unreleased` heading. Until then the")
-    print(f"#    tree is a released {literal} whose tag exists, which --check reports as a re-release.")
-    print()
-    print("# This tool does not run any of the above. The owner executes them.")
+        lines.append("\n" + jsondata.fill(facts["publish_note"], {"charter": _release_charter()}))
+    lines.append("")
+    lines += [jsondata.fill(line, {"literal": literal}) for line in plan["cycle_note"]]
+    lines.append("")
+    lines.append(plan["closing"])
+    print("\n".join(lines))
     return 0
 
 
@@ -693,7 +738,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument(
         "--subject",
-        choices=SUBJECTS,
+        choices=subjects(),
         default="akmon",
         help="Release subject: akmon (the standard's tag, default) or package (the project's own version).",
     )

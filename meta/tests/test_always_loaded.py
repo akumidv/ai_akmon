@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,7 @@ from checks import always_loaded as shipped
 
 from common import always_loaded as al
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 
@@ -42,7 +43,7 @@ def test_shipped_counts_block_chain_and_selected_once_and_consumer_counts_the_wh
     agents = _project(tmp_path, files={"_aitna/.akmon/profiles/python.md": "py rule\n"})
     selected = [tmp_path / "_aitna/.akmon/profiles/python.md", tmp_path / "_aitna/.akmon/guardrails/_common.md"]
     found = al.populations(agents, tmp_path, selected)
-    shipped, consumer = found[al.SHIPPED], found[al.CONSUMER]
+    shipped, consumer = found[al.shipped()], found[al.consumer()]
     assert _names(shipped) == [
         "AGENTS.md (akmon block)",
         "_aitna/.akmon/guardrails/_common.md",
@@ -58,12 +59,12 @@ def test_shipped_counts_block_chain_and_selected_once_and_consumer_counts_the_wh
     [("_aitna/.akmon/guardrails/_common.md", "rule one\nrule two\nrule three\n"), ("AGENTS.md (akmon block)", None)],
 )
 def test_changing_one_member_moves_the_shipped_count_by_exactly_that_member(tmp_path, member, text):
-    before = al.populations(_project(tmp_path), tmp_path)[al.SHIPPED]
+    before = al.populations(_project(tmp_path), tmp_path)[al.shipped()]
     if text is None:
-        after = al.populations(_project(tmp_path, block=BLOCK + "one more line\n"), tmp_path)[al.SHIPPED]
+        after = al.populations(_project(tmp_path, block=BLOCK + "one more line\n"), tmp_path)[al.shipped()]
         assert (after.lines - before.lines, after.size - before.size) == (1, len(b"one more line\n"))
     else:
-        after = al.populations(_project(tmp_path, files={member: text}), tmp_path)[al.SHIPPED]
+        after = al.populations(_project(tmp_path, files={member: text}), tmp_path)[al.shipped()]
         assert (after.lines - before.lines, after.size - before.size) == (1, len(b"rule three\n"))
 
 
@@ -72,7 +73,7 @@ def test_transitive_imports_are_followed_once_relative_to_the_importing_file(tmp
         "_aitna/.akmon/guardrails/_common.md": "common\n@nested.md\n@nested.md\n",
         "_aitna/.akmon/guardrails/nested.md": "nested\n@_common.md\n",
     }
-    found = al.populations(_project(tmp_path, files=files), tmp_path)[al.SHIPPED]
+    found = al.populations(_project(tmp_path, files=files), tmp_path)[al.shipped()]
     assert _names(found) == [
         "AGENTS.md (akmon block)",
         "_aitna/.akmon/guardrails/_common.md",
@@ -92,7 +93,7 @@ def test_transitive_imports_are_followed_once_relative_to_the_importing_file(tmp
 )
 def test_links_and_example_imports_stay_outside_the_population(tmp_path, block):
     files = {"_aitna/.akmon/profiles/python.md": "py\n", "_aitna/.akmon/roles/README.md": "roles\n"}
-    found = al.populations(_project(tmp_path, block=block, files=files), tmp_path)[al.SHIPPED]
+    found = al.populations(_project(tmp_path, block=block, files=files), tmp_path)[al.shipped()]
     assert _names(found) == ["AGENTS.md (akmon block)", "_aitna/.akmon/guardrails/_common.md"]
 
 
@@ -100,30 +101,30 @@ def test_imports_outside_the_marked_block_count_only_as_consumer_prose(tmp_path)
     files = {"_aitna/.akmon/profiles/python.md": "py\n"}
     agents = _project(tmp_path, tail=TAIL + "@_aitna/.akmon/profiles/python.md\n", files=files)
     found = al.populations(agents, tmp_path)
-    assert "_aitna/.akmon/profiles/python.md" not in _names(found[al.SHIPPED])
-    assert "_aitna/.akmon/profiles/python.md" not in _names(found[al.CONSUMER])
+    assert "_aitna/.akmon/profiles/python.md" not in _names(found[al.shipped()])
+    assert "_aitna/.akmon/profiles/python.md" not in _names(found[al.consumer()])
 
 
 def test_an_import_leaving_the_project_is_not_counted(tmp_path):
     outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
     outside.write_text("elsewhere\n", encoding="utf-8")
-    found = al.populations(_project(tmp_path, block=BLOCK + f"@{outside}\n"), tmp_path)[al.SHIPPED]
+    found = al.populations(_project(tmp_path, block=BLOCK + f"@{outside}\n"), tmp_path)[al.shipped()]
     assert str(outside) not in " ".join(_names(found))
 
 
 @pytest.mark.parametrize(
     ("scope", "delta", "expected"),
     [
-        (al.SHIPPED, -1, False),
-        (al.SHIPPED, 0, False),
-        (al.SHIPPED, 1, True),
-        (al.CONSUMER, -1, False),
-        (al.CONSUMER, 0, False),
-        (al.CONSUMER, 1, True),
+        (al.shipped(), -1, False),
+        (al.shipped(), 0, False),
+        (al.shipped(), 1, True),
+        (al.consumer(), -1, False),
+        (al.consumer(), 0, False),
+        (al.consumer(), 1, True),
     ],
 )
 def test_inclusive_line_boundary(scope, delta, expected):
-    cap = al.CAPS[scope]
+    cap = al.caps()[scope]
     population = al.Population(scope, (al.Member("m", "x\n" * (cap.lines + delta)),))
     assert population.size < cap.bytes
     assert al.over(population, cap) is expected
@@ -132,16 +133,16 @@ def test_inclusive_line_boundary(scope, delta, expected):
 @pytest.mark.parametrize(
     ("scope", "delta", "expected"),
     [
-        (al.SHIPPED, -1, False),
-        (al.SHIPPED, 0, False),
-        (al.SHIPPED, 1, True),
-        (al.CONSUMER, -1, False),
-        (al.CONSUMER, 0, False),
-        (al.CONSUMER, 1, True),
+        (al.shipped(), -1, False),
+        (al.shipped(), 0, False),
+        (al.shipped(), 1, True),
+        (al.consumer(), -1, False),
+        (al.consumer(), 0, False),
+        (al.consumer(), 1, True),
     ],
 )
 def test_inclusive_byte_boundary(scope, delta, expected):
-    cap = al.CAPS[scope]
+    cap = al.caps()[scope]
     population = al.Population(scope, (al.Member("m", "y" * (cap.bytes + delta)),))
     assert population.lines < cap.lines
     assert al.over(population, cap) is expected
@@ -149,11 +150,11 @@ def test_inclusive_byte_boundary(scope, delta, expected):
 
 def test_the_report_is_dynamic_in_every_field():
     cap = al.Cap(lines=10, bytes=100)
-    base = al.Population(al.CONSUMER, (al.Member("m", "ab\ncd\n"),))
+    base = al.Population(al.consumer(), (al.Member("m", "ab\ncd\n"),))
     assert al.report(base, cap) == "consumer-total: lines=2/10 bytes=6/100"
-    line_only = al.Population(al.CONSUMER, (al.Member("m", "ab\n\nd\n"),))  # a byte became a newline
+    line_only = al.Population(al.consumer(), (al.Member("m", "ab\n\nd\n"),))  # a byte became a newline
     assert al.report(line_only, cap) == "consumer-total: lines=3/10 bytes=6/100"
-    byte_only = al.Population(al.CONSUMER, (al.Member("m", "abX\ncd\n"),))
+    byte_only = al.Population(al.consumer(), (al.Member("m", "abX\ncd\n"),))
     assert al.report(byte_only, cap) == "consumer-total: lines=2/10 bytes=7/100"
     assert al.report(base, al.Cap(lines=11, bytes=100)) == "consumer-total: lines=2/11 bytes=6/100"
     assert al.report(base, al.Cap(lines=10, bytes=101)) == "consumer-total: lines=2/10 bytes=6/101"
@@ -165,12 +166,12 @@ def test_the_report_is_dynamic_in_every_field():
 
 
 def test_the_shipped_population_is_the_generated_block_its_chain_and_the_largest_profile():
-    population = shipped.shipped_population(_KEYSTONE)
+    population = shipped.shipped_population(_AKMON)
     names = [member.name for member in population.members]
-    assert population.scope == al.SHIPPED
+    assert population.scope == al.shipped()
     assert names[0] == "AGENTS.md (akmon block)"
     assert names[1].endswith("guardrails/_common.md")
-    assert names[-1].endswith(shipped._largest_profile(_KEYSTONE).name)
+    assert names[-1].endswith(shipped._largest_profile(_AKMON).name)
 
 
 def test_the_counted_profile_is_the_largest_one_akmon_ships_and_ties_break_by_name(tmp_path):
@@ -184,7 +185,7 @@ def test_the_counted_profile_is_the_largest_one_akmon_ships_and_ties_break_by_na
 
 
 def test_what_akmon_ships_today_is_inside_its_own_cap():
-    [finding] = shipped.check_always_loaded(_KEYSTONE)
+    [finding] = shipped.check_always_loaded(_AKMON)
     assert (finding.severity, finding.code, finding.target) == ("ok", "caps.always-loaded", "AGENTS.md")
     assert finding.message.startswith("akmon-shipped: lines=")
 
@@ -196,8 +197,9 @@ def test_what_akmon_ships_today_is_inside_its_own_cap():
 )
 def test_the_shipped_leg_is_an_error_over_either_dimension(monkeypatch, cap, severity):
     if cap is not None:
-        monkeypatch.setitem(al.CAPS, al.SHIPPED, cap)
-    [finding] = shipped.check_always_loaded(_KEYSTONE)
+        real_caps = al.caps()
+        monkeypatch.setattr(al, "caps", lambda: {**real_caps, al.shipped(): cap})
+    [finding] = shipped.check_always_loaded(_AKMON)
     assert finding.severity == severity
     if severity == "error":
         assert "ADR 0012 F18" in finding.fix
@@ -205,9 +207,9 @@ def test_the_shipped_leg_is_an_error_over_either_dimension(monkeypatch, cap, sev
 
 def test_the_caps_in_code_are_the_numbers_the_adr_carries():
     """The ratchet is a decision; code and ADR cannot drift apart silently."""
-    adr = (_KEYSTONE / "meta/decisions/0012-stage1-contracts-and-vocabulary.md").read_text(encoding="utf-8")
-    for scope in (al.SHIPPED, al.CONSUMER):
-        cap = al.CAPS[scope]
+    adr = (_AKMON / "meta/decisions/0012-stage1-contracts-and-vocabulary.md").read_text(encoding="utf-8")
+    for scope in (al.shipped(), al.consumer()):
+        cap = al.caps()[scope]
         assert f"`\u2264{cap.lines} lines` and `\u2264{cap.bytes:,} bytes`" in adr
 
 
@@ -218,3 +220,48 @@ def test_self_ci_runs_the_shipped_leg_against_akmons_own_tree():
     import self_ci
 
     assert "always_loaded_caps.check_always_loaded(akmon_root)" in inspect.getsource(self_ci._run)
+
+
+# --------------------------------------------------------------------------------------
+# common/always_loaded.json — the shared owner of heading, scopes, caps, severities (C102)
+# --------------------------------------------------------------------------------------
+
+
+def test_always_loaded_json_carries_the_ratchet():
+    data = json.loads((Path(al.__file__).parent / "always_loaded.json").read_text(encoding="utf-8"))
+    assert set(data) == {"block_heading", "scopes", "caps", "severity"}
+    assert data["block_heading"] == "## Dev layer — akmon"
+    assert data["scopes"] == ["akmon-shipped", "consumer-total"]
+    assert data["caps"]["akmon-shipped"] == {"lines": 320, "bytes": 21000}
+    assert data["severity"] == {"akmon-shipped": "error", "consumer-total": "warn"}
+
+
+def test_the_loader_reads_exactly_always_loaded_json(monkeypatch):
+    from common import jsondata
+
+    seen: list[Path] = []
+    real_read = jsondata.read
+
+    def capture(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(jsondata, "read", capture)
+    for loader in (al.block_heading, al.shipped, al.consumer, al.caps, al.severity):
+        loader()
+    assert seen == [Path(al.__file__).with_name("always_loaded.json")] * 5
+
+
+def test_a_missing_data_file_fails_from_the_public_functions(monkeypatch):
+    from common import jsondata
+
+    def broken(path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        al.marked_block("## Dev layer — akmon\nx\n")
+    with pytest.raises(jsondata.DataFileError):
+        al.populations("# A\n\n## Dev layer — akmon\n", Path("/tmp"))
+    with pytest.raises(jsondata.DataFileError):
+        al.caps()

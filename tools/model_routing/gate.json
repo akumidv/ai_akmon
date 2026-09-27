@@ -1,0 +1,79 @@
+{
+  "gate_rules": [
+    {
+      "role": "review",
+      "trigger": "review_min_findings",
+      "noun": "findings",
+      "headings": [
+        "finding"
+      ],
+      "anchor": "review-flow step 4 (Calibrate)"
+    },
+    {
+      "role": "architect",
+      "trigger": "architect_min_options",
+      "noun": "options",
+      "headings": [
+        "option",
+        "alternative"
+      ],
+      "anchor": "design-flow step 7 (Consolidate)"
+    }
+  ],
+  "gate_pack": {
+    "role_question": {
+      "review": "What contradicts across these findings? Which zone or seam is uncovered by the fan-out?",
+      "architect": "Do the locked decisions cohere? Do the options assume mutually compatible things?"
+    },
+    "plan_check_question": "Does the plan cover the stated goal? Which zones or seams are obviously missing?",
+    "title": "# Gate-pack — {{gate}}",
+    "role_line": "role: {{role}}",
+    "kind_full": "kind: full",
+    "kind_plan_check": "kind: plan-check",
+    "question_line": "Question: {{question}}",
+    "yardstick_full_heading": "## Yardstick (acceptance condition)",
+    "yardstick_plan_heading": "## Yardstick (goal)",
+    "artifacts_heading": "## Artifacts",
+    "artifact_heading": "### {{name}}",
+    "artifacts_empty_sentinel": "_No artifacts supplied._",
+    "decisions_heading": "## Decisions register",
+    "coverage_heading": "## Coverage map",
+    "coverage_empty_sentinel": "_Coverage map not provided (assemble via coverage_map.py)._",
+    "dep_graph_heading": "## Dependency-graph excerpt",
+    "zone_plan_heading": "## Zone plan",
+    "what_to_return_heading": "## What to return",
+    "full_contract_bullets": [
+      "- Contradictions between independently-correct findings/options",
+      "- Uncovered seams — derived from the coverage map (zones no worker checked, boundaries between zones)",
+      "- Re-ranking / recommendation deltas",
+      "- Level verdict (§9.2): does the material suggest the task exceeded the session's level hypothesis? If so, name the specific piece to redo on a higher rung.",
+      "- An explicit \"could not verify\" list",
+      "- If this pack lacks what the audit needs (no coverage map, no yardstick), return the precise gap instead of a diluted verdict."
+    ],
+    "plan_contract_bullets": [
+      "- Does the plan cover the stated goal (the yardstick above)?",
+      "- Which zones or seams are obviously missing from the zone plan?",
+      "- Check the plan against the goal, not against its own coverage map."
+    ]
+  },
+  "coverage_map": {
+    "table_header": [
+      "| zone | workers | count |",
+      "|------|---------|-------|"
+    ],
+    "table_row": "| {{zone}} | {{workers}} | {{count}} |",
+    "empty_sentinel": "_No delegations in scope._",
+    "uncovered_heading": "### Uncovered zones (planned, no worker)",
+    "off_plan_heading": "### Off-plan zones (worked, not in the zone plan)",
+    "zone_item": "- {{zone}}",
+    "all_covered_sentinel": "_All planned zones have at least one worker._",
+    "unlabelled_marker": "(unlabelled)",
+    "unlabelled_note": "_{{count}} delegation(s) carried no `[zone:…]` marker — unattributable._",
+    "summary_entries": "coverage-map entries={{entries}} zones={{zones}}",
+    "scope_session": "session {{session}}",
+    "scope_all": "all sessions ({{count}}: {{sessions}})",
+    "scope_all_none": "all sessions (none in scope)"
+  },
+  "truncation_suffix_pack": "\n...[truncated; see full pack]",
+  "truncation_suffix_report": "\n...[truncated; see full report]"
+}

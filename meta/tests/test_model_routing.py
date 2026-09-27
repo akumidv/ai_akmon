@@ -14,14 +14,16 @@ from pathlib import Path
 
 import pytest
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
+_ROUTING_DIR = _AKMON / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
     sys.path.insert(0, str(_ROUTING_DIR))
 
 import routing  # noqa: E402
+
+from common import jsondata  # noqa: E402
 
 
 def _load_init():
@@ -245,7 +247,7 @@ def test_generated_agents_cover_all_specs_with_models():
     assert "model: large" in files[".claude/agents/k_auditor.md"]
     for content in files.values():
         assert content.startswith("---\n")
-        assert routing.GENERATED_BANNER in content
+        assert routing.generated_banner() in content
 
 
 def test_generated_k_auditor_is_read_only():
@@ -352,7 +354,7 @@ def test_agent_specs_cover_every_delegable_task_kind():
     delegable = {
         kind for kind, spec in REGISTRY["task_kinds"].items() if spec["tier"] in ("worker", "reasoner", "auditor")
     }
-    covered = {kind for spec in routing.AGENT_SPECS for kind in spec.kinds}
+    covered = {kind for spec in routing.agent_specs() for kind in spec.kinds}
     assert covered == delegable
 
 
@@ -573,7 +575,7 @@ def test_bound_model_for_skips_semantic_fallback_token():
     ``local_config`` can produce, so it passed while the reachable one reported ``worker``
     and ``strongest`` as if they were models.
     """
-    registry = routing.load_registry(_KEYSTONE)
+    registry = routing.load_registry(_AKMON)
     binding = routing.compute_binding(registry, "opus", None, "anthropic")
     assert binding.semantic_fallback is True
     config = routing.local_config(registry=registry, binding=binding, second_opinion=False, available=None)
@@ -582,7 +584,7 @@ def test_bound_model_for_skips_semantic_fallback_token():
     for agent in ("k_explorer", "k_mechanic", "k_implementer", "k_reasoner", "k_auditor"):
         assert routing.bound_model_for(config, agent) is None
     # The mirror it claims: the generated agent file carries no `model:` line in this mode.
-    content = routing.agent_file_content(routing._AGENT_BY_NAME["k_reasoner"], binding)
+    content = routing.agent_file_content(routing._agent_by_name()["k_reasoner"], binding)
     assert not any(line.startswith("model:") for line in content.splitlines())
     # A binding value outside a recorded ladder (hand-edited config) is still refused.
     stale = {"binding": {"worker": "retired"}, "available": ["haiku", "sonnet"]}
@@ -620,7 +622,7 @@ def test_subagent_kinds():
 
 
 def test_role_matrix_warning_d2_4_base_predicate_and_boundaries():
-    registry = routing.load_registry(_KEYSTONE)
+    registry = routing.load_registry(_AKMON)
     base_registry = {**registry, "cross_cutting_kinds": []}
     # Edit agents under the analysis-only review role -> warn (no kind intersects).
     assert routing.role_matrix_warning(base_registry, "k_mechanic", "review") is not None
@@ -639,7 +641,7 @@ def test_role_matrix_warning_d2_4_base_predicate_and_boundaries():
 
 
 def test_role_matrix_warning_renders_effective_allowed_in_registry_order():
-    registry = routing.load_registry(_KEYSTONE)
+    registry = routing.load_registry(_AKMON)
     base_registry = {**registry, "cross_cutting_kinds": []}
     assert routing.role_matrix_warning(base_registry, "k_mechanic", "review") == (
         "role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active "
@@ -649,7 +651,7 @@ def test_role_matrix_warning_renders_effective_allowed_in_registry_order():
 
 
 def test_role_matrix_warning_d2_6_cross_cutting_extension():
-    registry = routing.load_registry(_KEYSTONE)
+    registry = routing.load_registry(_AKMON)
     # Cross-cutting verification (A7 (b)): k_auditor's only kind is audit, a
     # cross_cutting_kind -> routable from ANY role, never warns (incl. roles whose row omits it).
     for role in ("review", "architect", "engineer", "learn", "release"):
@@ -812,16 +814,16 @@ def test_init_migrates_legacy_brief_key_and_prunes_old_generated_agent(tmp_path)
         json.dumps({"briefs": {"k-mechanic": "Run every project command with `uv run`."}}),
         encoding="utf-8",
     )
-    old = root / routing.AGENTS_DIR_REL / "k-mechanic.md"
+    old = root / routing.agents_dir_rel() / "k-mechanic.md"
     old.parent.mkdir(parents=True, exist_ok=True)
-    old.write_text(f"old brief\n{routing.GENERATED_BANNER}\n", encoding="utf-8")
+    old.write_text(f"old brief\n{routing.generated_banner()}\n", encoding="utf-8")
 
     assert (
         _load_init().main(["--project-root", str(root), "--orchestrator", "large", "--available", "small,medium,large"])
         == 0
     )
 
-    generated = root / routing.AGENTS_DIR_REL / "k_mechanic.md"
+    generated = root / routing.agents_dir_rel() / "k_mechanic.md"
     assert "Run every project command with `uv run`." in generated.read_text(encoding="utf-8")
     assert not old.exists()
 
@@ -922,14 +924,14 @@ def test_rebind_to_recomputes_binding_and_regenerates_artifacts(tmp_path):
     init = _load_init()
     assert init.main(["--project-root", str(root), "--orchestrator", "fable", "--available", ",".join(AVAILABLE)]) == 0
     registry = routing.load_registry(root / "_aitna" / "akmon", root)
-    config = json.loads((root / routing.LOCAL_CONFIG_REL).read_text(encoding="utf-8"))
+    config = json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
     assert config["binding"]["reasoner"] == "fable"
 
     binding, changed = routing.rebind_to(root, registry, config, "opus")
     assert binding.reasoner == "opus"  # dynamic reasoner follows the new orchestrator
     assert binding.auditor == "fable"  # pinned max, unchanged
     assert changed  # files were rewritten
-    new_config = json.loads((root / routing.LOCAL_CONFIG_REL).read_text(encoding="utf-8"))
+    new_config = json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
     assert new_config["orchestrator"] == "opus"
     assert "model: opus" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
 
@@ -942,17 +944,17 @@ def test_rebind_prunes_renamed_generated_agents_but_keeps_hand_written_ones(tmp_
     root = _make_project(tmp_path)
     init = _load_init()
     assert init.main(["--project-root", str(root), "--orchestrator", "opus", "--available", ",".join(AVAILABLE)]) == 0
-    agents = root / routing.AGENTS_DIR_REL
+    agents = root / routing.agents_dir_rel()
 
     # A definition left behind by a previous agent name (carries the generated banner) …
     stale = agents / "k-oldname.md"
-    stale.write_text(f"---\nname: k-oldname\n---\n\n{routing.GENERATED_BANNER}\n", encoding="utf-8")
+    stale.write_text(f"---\nname: k-oldname\n---\n\n{routing.generated_banner()}\n", encoding="utf-8")
     # … and one the project wrote by hand, which must survive untouched.
     handwritten = agents / "my-own-agent.md"
     handwritten.write_text("---\nname: my-own-agent\n---\n\nmine, not generated\n", encoding="utf-8")
 
     registry = routing.load_registry(root / "_aitna" / "akmon", root)
-    config = json.loads((root / routing.LOCAL_CONFIG_REL).read_text(encoding="utf-8"))
+    config = json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
     routing.rebind_to(root, registry, config, "fable")
 
     assert not stale.exists()
@@ -964,8 +966,8 @@ def test_obsolete_agent_files_reports_without_deleting_in_dry_run(tmp_path):
     root = _make_project(tmp_path)
     init = _load_init()
     assert init.main(["--project-root", str(root), "--orchestrator", "opus", "--available", ",".join(AVAILABLE)]) == 0
-    stale = root / routing.AGENTS_DIR_REL / "k-gone.md"
-    stale.write_text(f"{routing.GENERATED_BANNER}\n", encoding="utf-8")
+    stale = root / routing.agents_dir_rel() / "k-gone.md"
+    stale.write_text(f"{routing.generated_banner()}\n", encoding="utf-8")
 
     planned = [
         root / rel
@@ -1003,7 +1005,7 @@ def test_rebind_notice_names_binding_and_warns_when_weak():
 
 
 def _load_hook():
-    spec = importlib.util.spec_from_file_location("model_routing_hook", _KEYSTONE / "hooks" / "model-routing.py")
+    spec = importlib.util.spec_from_file_location("model_routing_hook", _AKMON / "hooks" / "model-routing.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -1035,7 +1037,7 @@ def test_hook_session_start_rebinds_to_detected_model(tmp_path):
         root, {"hook_event_name": "SessionStart", "transcript_path": str(transcript)}
     )
     assert "orchestrator=opus" in result.additional_context  # detected + rebound
-    config = json.loads((root / routing.LOCAL_CONFIG_REL).read_text(encoding="utf-8"))
+    config = json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
     assert config["orchestrator"] == "opus"
     assert "model: opus" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
 
@@ -1084,7 +1086,7 @@ def test_hook_refuses_the_rebind_while_the_overlay_briefs_are_unusable(tmp_path)
         assert "k_gone" in delivered
         assert "_aitna/model-routing.json" in delivered
     assert "model: fable" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
-    config = json.loads((root / routing.LOCAL_CONFIG_REL).read_text(encoding="utf-8"))
+    config = json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
     assert config["orchestrator"] == "fable"
 
 
@@ -1158,8 +1160,8 @@ def test_init_writes_nothing_when_an_overlay_brief_key_matches_no_agent(tmp_path
     root = _init_project(tmp_path, "fable")
     reasoner = root / ".claude" / "agents" / "k_reasoner.md"
     before = reasoner.read_text(encoding="utf-8")
-    stale = root / routing.AGENTS_DIR_REL / "k-oldname.md"
-    stale.write_text(f"{routing.GENERATED_BANNER}\n", encoding="utf-8")
+    stale = root / routing.agents_dir_rel() / "k-oldname.md"
+    stale.write_text(f"{routing.generated_banner()}\n", encoding="utf-8")
     _break_overlay(root)
 
     argv = ["--project-root", str(root), "--orchestrator", "opus", "--available", ",".join(AVAILABLE)]
@@ -1177,8 +1179,8 @@ def test_hook_rebind_migrates_legacy_brief_key_and_prunes_old_generated_agent(tm
         json.dumps({"briefs": {"k-reasoner": "Use the consumer's load-bearing abstractions."}}),
         encoding="utf-8",
     )
-    old = root / routing.AGENTS_DIR_REL / "k-reasoner.md"
-    old.write_text(f"old brief\n{routing.GENERATED_BANNER}\n", encoding="utf-8")
+    old = root / routing.agents_dir_rel() / "k-reasoner.md"
+    old.write_text(f"old brief\n{routing.generated_banner()}\n", encoding="utf-8")
     transcript = tmp_path / "legacy-rebind.jsonl"
     _write_transcript(transcript, [_assistant("claude-opus-4-8")])
 
@@ -1187,7 +1189,7 @@ def test_hook_rebind_migrates_legacy_brief_key_and_prunes_old_generated_agent(tm
     )
 
     assert "orchestrator model changed" in result.additional_context
-    generated = root / routing.AGENTS_DIR_REL / "k_reasoner.md"
+    generated = root / routing.agents_dir_rel() / "k_reasoner.md"
     text = generated.read_text(encoding="utf-8")
     assert "Use the consumer's load-bearing abstractions." in text
     assert "model: opus" in text
@@ -1514,19 +1516,19 @@ def test_standard_tree_root_is_the_mount_when_mounted(tmp_path):
 
 def test_standard_tree_root_falls_back_to_its_own_tree_in_package_mode(tmp_path):
     root = _make_package_project(tmp_path)
-    assert _load_init()._standard_tree_root(root) == _KEYSTONE
+    assert _load_init()._standard_tree_root(root) == _AKMON
 
 
 def test_standard_tree_root_reads_the_mount_field_through_an_inline_comment(tmp_path):
     root = _make_package_project(tmp_path, stale_mount=True)
     (root / "_aitna" / ".akmon.toml").write_text('mount = "package"  # ADR 0009 §4\n', encoding="utf-8")
-    assert _load_init()._standard_tree_root(root) == _KEYSTONE
+    assert _load_init()._standard_tree_root(root) == _AKMON
 
 
 def test_standard_tree_root_ignores_a_stale_mount_in_package_mode(tmp_path):
     """The recorded mode decides, not a leftover directory from a prior mount mode."""
     root = _make_package_project(tmp_path, stale_mount=True)
-    assert _load_init()._standard_tree_root(root) == _KEYSTONE
+    assert _load_init()._standard_tree_root(root) == _AKMON
 
 
 def test_init_runs_in_package_mode_against_the_shipped_registry(tmp_path):
@@ -1633,12 +1635,12 @@ def test_unlabelled_fanout_exempts_the_auditor_host_agents_and_missing_sessions(
 
 def test_zone_convention_reaches_fanout_agents_and_the_status_line_not_the_auditor():
     binding = routing.compute_binding(REGISTRY, "large", available=["small", "medium", "large"])
-    by_name = {spec.name: routing.agent_file_content(spec, binding) for spec in routing.AGENT_SPECS}
+    by_name = {spec.name: routing.agent_file_content(spec, binding) for spec in routing.agent_specs()}
     frontmatter = {name: text.split("---")[1] for name, text in by_name.items()}
     squashed = {name: " ".join(fm.split()) for name, fm in frontmatter.items()}
-    assert all(routing.ZONE_CONVENTION in text for name, text in squashed.items() if name != "k_auditor")
-    assert routing.ZONE_CONVENTION not in squashed["k_auditor"]
-    assert routing.ZONE_CONVENTION in "\n".join(routing.status_lines(_fresh_config(), REGISTRY, "x"))
+    assert all(routing.zone_convention() in text for name, text in squashed.items() if name != "k_auditor")
+    assert routing.zone_convention() not in squashed["k_auditor"]
+    assert routing.zone_convention() in "\n".join(routing.status_lines(_fresh_config(), REGISTRY, "x"))
 
 
 # --------------------------------------------------------------------------------------
@@ -1710,7 +1712,7 @@ def test_a_floor_is_a_positive_count_or_no_floor_at_all(triggers, expected):
 
 
 def test_the_shipped_registry_carries_both_floors():
-    registry = routing.load_registry(_KEYSTONE)
+    registry = routing.load_registry(_AKMON)
     assert routing.gate_threshold(registry, _REVIEW_RULE) == 3
     assert routing.gate_threshold(registry, _ARCHITECT_RULE) == 2
 
@@ -1758,7 +1760,7 @@ def test_one_hold_per_gate_and_a_changed_count_is_a_new_gate(tmp_path):
 
 def test_the_local_config_reader_tolerates_absence_and_damage(tmp_path):
     assert routing.read_local_config(tmp_path) == {}
-    config = tmp_path / routing.LOCAL_CONFIG_REL
+    config = tmp_path / routing.local_config_rel()
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text("{not json", encoding="utf-8")
     assert routing.read_local_config(tmp_path) == {}
@@ -1781,3 +1783,109 @@ def test_a_heading_is_split_into_words_in_any_script(tmp_path):
     # The three-word window counts real words, so a noun buried past them stays uncounted.
     assert routing._opens_section("разбор находок по зонам finding", _REVIEW_RULE.headings) is False
     assert routing.count_gate_items("## Находки — findings\n\n- a\n- b\n", _REVIEW_RULE) == 2
+
+
+# --------------------------------------------------------------------------------------
+# C102: agents.json — the shared routing texts and tables
+# --------------------------------------------------------------------------------------
+
+
+def test_agents_data_pins_the_structure_and_characteristic_texts():
+    data = json.loads((_ROUTING_DIR / "agents.json").read_text(encoding="utf-8"))
+    assert set(data) == {
+        "generated_banner",
+        "zone_convention",
+        "overlay_name",
+        "local_config_rel",
+        "delegation_log_rel",
+        "agents_dir_rel",
+        "settings_probe_names",
+        "retired_second_opinion_keys",
+        "agent_specs",
+        "status_lines",
+        "init_instruction",
+        "rebind_notice",
+        "unlabelled_fanout_warning",
+        "second_opinion_unavailability",
+        "unpinnable_model",
+        "compute_binding_warnings",
+        "role_matrix_warning",
+        "floor_gap_line",
+        "delegation_floor_warning",
+        "context_pressure",
+        "staleness",
+        "second_opinion_spec_errors",
+    }
+    assert data["generated_banner"] == (
+        "Generated by akmon tools/model_routing/init.py from registry.json — edit the registry "
+        "or the project overlay, not this file."
+    )
+    assert data["zone_convention"] == "In a zoned fan-out, start each call's description with [zone:<label>]."
+    assert data["overlay_name"] == "model-routing.json"
+    assert data["settings_probe_names"] == ["settings.local.json", "settings.json"]
+    assert data["retired_second_opinion_keys"] == ["cli", "invoke"]
+    specs = data["agent_specs"]
+    assert [s["name"] for s in specs] == [
+        "k_explorer",
+        "k_mechanic",
+        "k_validator",
+        "k_implementer",
+        "k_reasoner",
+        "k_auditor",
+    ]
+    assert all(set(s) == {"name", "tier", "description", "tools", "body", "kinds"} for s in specs)
+    assert specs[0]["body"].startswith("You are the **explorer** delegate")
+    assert specs[0]["tools"] == "Read, Grep, Glob, Bash"
+    assert specs[1]["tools"] is None
+    assert specs[5]["kinds"] == ["audit"]
+    assert data["staleness"]["no_config"] == "no local config — model routing is not initialized"
+
+
+def test_the_routing_loader_reads_exactly_agents_json(monkeypatch):
+    seen: list[Path] = []
+
+    def spy(path: Path):
+        seen.append(path)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    routing.generated_banner()
+    routing.agent_specs()
+    assert len(seen) == 2
+    assert all(path == _ROUTING_DIR / "agents.json" for path in seen)
+
+
+def test_a_missing_agents_json_raises_from_public_functions(monkeypatch):
+    def broken(path: Path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        routing.status_lines({"orchestrator": "o"}, REGISTRY, "rt")
+    with pytest.raises(jsondata.DataFileError):
+        routing.agent_specs()
+    with pytest.raises(jsondata.DataFileError):
+        routing.staleness({}, REGISTRY, None)
+
+
+def test_routing_gate_data_loader_reads_exactly_gate_json(monkeypatch):
+    seen: list[Path] = []
+
+    def spy(path: Path):
+        seen.append(path)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    routing.gate_rules()
+    assert seen == [_ROUTING_DIR / "gate.json"]
+
+
+def test_a_missing_gate_json_raises_from_gate_rules(monkeypatch):
+    def broken(path: Path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        routing.gate_rules()
+    with pytest.raises(jsondata.DataFileError):
+        routing.gate_rule_for("review")

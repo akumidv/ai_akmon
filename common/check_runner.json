@@ -1,0 +1,49 @@
+{
+  "config_target": ".akmon.toml [check]",
+  "files_placeholder": "{files}",
+  "default_files": ["*.py"],
+  "check_config": {
+    "repair_record": "Repair the record so it parses",
+    "repair_record_verify": "Repair the record so it parses as TOML",
+    "correct_entry": "Correct or remove the entry the message names",
+    "no_checks": "declares no checks, so nothing ran",
+    "no_checks_fix": "Name the project's checks under [check], or run akmon init to set them up",
+    "scope_fix": "Run it inside a git work tree",
+    "check_table_ok": "[check] declares {{count}} check(s), each a command that splits into arguments",
+    "check_table_ok_fix": "Keep every [check] entry a command the project can run"
+  },
+  "check_run": {
+    "nothing_to_do": {
+      "message": "no changed file it checks",
+      "fix": "Nothing to do until a matching file changes"
+    },
+    "not_installed": {
+      "message": "`{{command}}` is not installed or not on PATH, so the check did not run",
+      "fix": "Install `{{command}}` in the project's environment or change the command under {{target}}"
+    },
+    "passed": {
+      "message": "`{{command}}` passed",
+      "fix": "Keep it passing"
+    },
+    "failed": {
+      "message": "`{{command}}` exited {{returncode}}",
+      "fix": "Fix what the command reported above, or change its configuration in the project"
+    }
+  },
+  "scope_error": {
+    "git_unrunnable": "cannot list the files changed against HEAD: git cannot be run ({{reason}})",
+    "git_failed": "cannot list the files changed against HEAD: `{{command}}` exited with status {{returncode}}"
+  },
+  "git_commands": [
+    ["diff", "--name-only", "-z", "HEAD", "--"],
+    ["ls-files", "--others", "--exclude-standard", "-z"]
+  ],
+  "problems": {
+    "not_table": "[check] must be a table of named commands",
+    "bad_entry": "[check].{{name}} must be a command string or a table with `command`",
+    "unknown_key": "[check].{{name}} has an unknown key {{key}}",
+    "needs_command": "[check].{{name}} needs a non-empty `command`",
+    "bad_files": "[check].{{name}}.files must be a non-empty list of glob patterns",
+    "unsplit_command": "[check].{{name}} command does not split into arguments: {{error}}"
+  }
+}

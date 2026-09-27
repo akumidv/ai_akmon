@@ -1,0 +1,38 @@
+{
+  "plan_notes": {
+    "not_a_release": "moving to {{target}} — not a release version, so no direction is checked",
+    "record_no_version": "moving to {{target}} — the record names no comparable version ({{current}})",
+    "forward": "{{current}} → {{target}}",
+    "already": "already at {{target}} — realigning only",
+    "rollback": "rolling back {{current}} → {{target}}, as --ref asks",
+    "past_newest": "{{current}} is past the newest release {{target}} — the pin stays; pass --ref to move it"
+  },
+  "banner": "{{root}} · mount mode {{mode}} · {{note}}",
+  "missing_record": "{{root}} records no akmon attach (no mount mode in the integration record under {{aitna}}/) — attach it with `akmon init`",
+  "init_failed": "akmon update: init failed ({{code}}); see its output above",
+  "checks": [
+    [
+      "sync",
+      "--check"
+    ],
+    [
+      "verify",
+      "--strict"
+    ]
+  ],
+  "checks_running": "running {{script}} {{flag}}",
+  "checks_failed": "akmon update: `{{script}} {{flag}}` failed ({{code}}) — the update is not finished",
+  "subtree_refusal": "mode 'subtree' moves with one command update must not run for you — `git subtree pull` creates commits, and commits are the owner's (D5). Run it, then realign:",
+  "subtree_pull_command": "    git subtree pull --prefix {{aitna}}/akmon {{repo}} {{target}} --squash",
+  "subtree_realign_command": "    akmon init --ref {{target}}",
+  "package_uv_missing": "mode 'package' moves the pin with uv, and `uv` is not on PATH. With another manager, point the pin at {{target}} and install it, then run `akmon init`; with uv:\n    {{command}}",
+  "package_launcher_missing": "{{launcher}} does not exist — mode 'package' runs akmon from the project's own virtualenv; `uv sync` installs it",
+  "vendored_not_fetchable": "mode 'vendored' copies the tree of the akmon CLI that runs init, and the recorded {{recorded}} is not a release this can fetch — realign with that version's own CLI, or pass --ref to move",
+  "vendored_uvx_missing": "mode 'vendored' copies the tree of the akmon CLI that runs init, so {{tag}} needs its own CLI, and `uvx` (uv) is not on PATH to fetch it. Run that version's init, e.g.:\n    {{command}}",
+  "closing_left_to_you": "left to you:",
+  "closing_step": "  {{index}}. {{step}}",
+  "closing_changelog": "read CHANGELOG.md after {{last}} up to {{target}}: each Breaking or Migration line there is a checklist item for this project",
+  "closing_review": "review `git diff` and stage {{staged}} with the generated files that changed — the commit is the owner's (D5)",
+  "closing_bump": "record the bump in this project — a `{{aitna}}/TASKS_ARCHIVE.md` line or its own changelog",
+  "closing_codex": "Codex: if `.codex/hooks.json` changed, re-approve its hooks with /hooks — a changed entry runs nothing until then"
+}

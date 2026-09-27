@@ -14,6 +14,7 @@ for submodules since CVE-2022-39253 unless ``protocol.file.allow=always`` — se
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -22,10 +23,10 @@ from pathlib import Path
 
 import pytest
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_SRC = _KEYSTONE / "src"
+_SRC = _AKMON / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
@@ -59,7 +60,7 @@ def local_git_repo(monkeypatch):
 
 
 # --------------------------------------------------------------------------------------
-# TREE_MEMBERS must stay equal to the wheel's force-include list
+# The tree_members data must stay equal to the wheel's force-include list
 # --------------------------------------------------------------------------------------
 
 
@@ -68,13 +69,116 @@ def test_tree_members_match_the_wheel_force_include():
 
     Both lists are hand-maintained in different files, so the equality is asserted rather
     than trusted; a member added to the wheel and forgotten here would silently produce a
-    poorer vendored mount.
+    poorer vendored mount. The list lives in the shared data file (``src/akmon/init.json``)
+    since C102.
     """
-    text = (_KEYSTONE / "pyproject.toml").read_text(encoding="utf-8")
+    text = (_AKMON / "pyproject.toml").read_text(encoding="utf-8")
     section = text.split("[tool.hatch.build.targets.wheel.force-include]", 1)[1]
     section = section.split("\n[", 1)[0]
     included = tuple(re.findall(r'^"([^"]+)"\s*=', section, flags=re.MULTILINE))
-    assert included == _init.TREE_MEMBERS
+    assert included == tuple(_INIT_DATA["tree_members"])
+
+
+# --------------------------------------------------------------------------------------
+# src/akmon/init.json — the shared init text and tables (C102)
+# --------------------------------------------------------------------------------------
+
+_INIT_DATA = json.loads((_AKMON / "src" / "akmon" / "init.json").read_text(encoding="utf-8"))
+
+
+def test_init_data_pins_its_structure():
+    """The data file is the single owner of the init text: pin the key set and a few
+    characteristic exact values so a transcription drift is caught here, not in the corpus."""
+    assert set(_INIT_DATA) == {
+        "akmon_repo",
+        "tree_members",
+        "tree_markers",
+        "mount_gitignore",
+        "agents_header",
+        "agents_block",
+        "agents_roles_hint_package",
+        "agents_roles_hint_mounted",
+        "agents_shared_layer_package",
+        "agents_shared_layer_mounted",
+        "tasks_skeleton",
+        "memory_index",
+        "charters",
+        "charter",
+        "charter_locate_package",
+        "charter_locate_mounted",
+        "gitignore_lines",
+        "ci_workflow",
+        "ci_workflow_steps_package",
+        "ci_workflow_steps_mounted",
+        "record_fresh",
+        "record_version_line",
+        "old_mount_removal",
+        "mode_switch_step",
+        "mode_switch_link_resolution_package",
+        "mode_switch_link_resolution_mounted",
+        "mode_switch_remove_mount",
+        "pin_step",
+        "ruff_step",
+        "run_prefix",
+        "write_ci_commands",
+        "report",
+        "closing_steps",
+    }
+    assert _INIT_DATA["akmon_repo"] == "https://github.com/akumidv/ai_akmon"
+    assert list(_INIT_DATA["charters"]) == ["review", "architect", "engineer"]  # write order is load-bearing
+    assert _INIT_DATA["charters"]["engineer"] == "realize a decided structure in code, with tests"
+    assert _INIT_DATA["tree_markers"] == ["bin/sync.py", "bin/verify.py", "roles/README.md", "guardrails/_common.md"]
+    assert _INIT_DATA["mount_gitignore"] == "__pycache__/\n*.py[cod]\n"
+    assert _INIT_DATA["ruff_step"]["uv"] == (
+        "add ruff as a development dependency so `akmon check` can run it: `uv add --dev ruff`"
+    )
+    assert _INIT_DATA["run_prefix"] == {"uv.lock": "uv run ", "poetry.lock": "poetry run "}
+    assert _INIT_DATA["write_ci_commands"]["package"] == ["akmon sync --check", "akmon verify --strict"]
+    assert _INIT_DATA["report"]["complete"] == "attached, with steps left to a human/agent decision:"
+    assert _INIT_DATA["report"]["incomplete"] == "attached, but INCOMPLETE:"
+    assert _INIT_DATA["old_mount_removal"]["submodule"] == (
+        "    git submodule deinit -f -- {{relative}}\n    git rm -f -- {{relative}}\n"
+        "    rm -rf .git/modules/{{relative}}"
+    )
+    assert _INIT_DATA["memory_index"].startswith("# Project memory")
+    assert "{{aitna}}/.akmon.toml" in _INIT_DATA["tasks_skeleton"]
+    assert "{{version}}" in _INIT_DATA["record_version_line"]
+    assert set(_INIT_DATA["pin_step"]) == {"none", "runtime", "unreadable"}
+    assert set(_INIT_DATA["old_mount_removal"]) == {"submodule", "subtree", "vendored"}
+
+
+def test_init_loader_asks_for_exactly_the_init_json(monkeypatch):
+    """The loader reads ``init.json`` beside ``_init.py`` — the path the wheel and the corpus
+    snapshot both place the file at."""
+    from common import jsondata
+
+    seen: list[Path] = []
+    real_read = jsondata.read
+
+    def spy(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    assert _init.akmon_repo() == "https://github.com/akumidv/ai_akmon"
+    assert _init.tree_members()
+    assert seen, "the loader never asked for the data file"
+    for path in seen:
+        assert path == Path(_init.__file__).parent / "init.json"
+
+
+def test_init_data_file_error_propagates_uncaught(monkeypatch):
+    """A missing or broken ``init.json`` is a loud failure, not a swallowed one."""
+    from common import jsondata
+
+    def broken_read(path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken_read)
+    with pytest.raises(jsondata.DataFileError):
+        _init._agents_block("_aitna", "v0.1.0", "backend", "python", package_mode=True)
+    with pytest.raises(jsondata.DataFileError):
+        _init._tasks_skeleton("_aitna")
 
 
 # --------------------------------------------------------------------------------------
@@ -146,7 +250,7 @@ def test_package_default_ref_without_local_git_fails_when_remote_is_unavailable(
 
 
 def test_default_mode_is_vendored_outside_a_git_repository(tmp_path):
-    mode, reason = _init._default_mode(tmp_path, _init.AKMON_REPO)
+    mode, reason = _init._default_mode(tmp_path, _init.akmon_repo())
     assert mode == "vendored"
     assert "not a git repository" in reason
 
@@ -154,7 +258,7 @@ def test_default_mode_is_vendored_outside_a_git_repository(tmp_path):
 def test_default_mode_is_submodule_for_a_reachable_repo(tmp_path, monkeypatch, local_git_repo):
     _git(["init", "-q", "."], cwd=tmp_path)
     monkeypatch.setattr(_init, "_remote_reachable", lambda repo, root: True)
-    mode, reason = _init._default_mode(tmp_path, _init.AKMON_REPO)
+    mode, reason = _init._default_mode(tmp_path, _init.akmon_repo())
     assert mode == "submodule"
     assert "git repository" in reason
 
@@ -191,7 +295,7 @@ def _init_vendored(root: Path, *extra: str) -> int:
 def test_init_writes_agents_md_when_absent(tmp_path):
     assert _init_vendored(tmp_path) == 0
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-    assert _init.BLOCK_HEADING in text
+    assert _init.block_heading() in text
     assert "@_aitna/akmon/guardrails/_common.md" in text
     assert "delegation is the default" in text.lower()
 
@@ -201,11 +305,11 @@ def test_init_appends_the_block_and_preserves_existing_content(tmp_path):
     assert _init_vendored(tmp_path) == 0
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert "Project-specific rules nobody may lose." in text
-    assert _init.BLOCK_HEADING in text
+    assert _init.block_heading() in text
 
 
 def test_init_never_rewrites_an_existing_akmon_block(tmp_path):
-    hand_written = f"# AGENTS.md\n\n{_init.BLOCK_HEADING}\n\nHand-tuned block; do not touch.\n"
+    hand_written = f"# AGENTS.md\n\n{_init.block_heading()}\n\nHand-tuned block; do not touch.\n"
     _write(tmp_path / "AGENTS.md", hand_written)
     assert _init_vendored(tmp_path) == 0
     assert (tmp_path / "AGENTS.md").read_text(encoding="utf-8") == hand_written
@@ -487,7 +591,7 @@ def test_submodule_attach_verifies_strict_green(tmp_path, monkeypatch, local_git
             "--project-root",
             str(consumer),
             "--repo",
-            f"file://{_KEYSTONE}",
+            f"file://{_AKMON}",
             "--ref",
             "HEAD",
             "--yes",
@@ -508,7 +612,7 @@ def test_a_second_init_does_not_move_an_existing_pin(tmp_path, capsys, local_git
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     _git(["init", "-q", "."], cwd=consumer)
-    common = ["--mode", "submodule", "--project-root", str(consumer), "--repo", f"file://{_KEYSTONE}", "--yes"]
+    common = ["--mode", "submodule", "--project-root", str(consumer), "--repo", f"file://{_AKMON}", "--yes"]
     assert _init.main([*common, "--ref", "v0.3.0"]) == 0
     mount = consumer / "_aitna" / "akmon"
     pinned = subprocess.run(
@@ -592,7 +696,7 @@ def test_submodule_index_names_the_ref_that_was_checked_out(tmp_path, local_git_
             "--project-root",
             str(consumer),
             "--repo",
-            f"file://{_KEYSTONE}",
+            f"file://{_AKMON}",
             "--ref",
             "v0.3.0",
             "--yes",
@@ -627,7 +731,7 @@ def test_subtree_refuses_to_add_the_subtree_itself_and_creates_no_commit(tmp_pat
     _git(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "root"], cwd=consumer)
     before = _sha(["rev-parse", "HEAD"], cwd=consumer)
 
-    code = _init.main(["--mode", "subtree", "--project-root", str(consumer), "--repo", f"file://{_KEYSTONE}", "--yes"])
+    code = _init.main(["--mode", "subtree", "--project-root", str(consumer), "--repo", f"file://{_AKMON}", "--yes"])
     assert code == 2
     err = capsys.readouterr().err
     assert "git subtree add --prefix _aitna/akmon" in err
@@ -650,7 +754,7 @@ def test_subtree_attaches_onto_a_subtree_the_owner_added(tmp_path, monkeypatch, 
             "add",
             "--prefix",
             "_aitna/akmon",
-            f"file://{_KEYSTONE}",
+            f"file://{_AKMON}",
             "HEAD",
             "--squash",
         ],
@@ -676,7 +780,7 @@ def test_subtree_realign_requires_the_ref_it_cannot_read_from_disk(tmp_path, cap
             "add",
             "--prefix",
             "_aitna/akmon",
-            f"file://{_KEYSTONE}",
+            f"file://{_AKMON}",
             "HEAD",
             "--squash",
         ],
@@ -923,7 +1027,7 @@ def test_switching_between_mounted_modes_is_refused_while_the_old_mount_is_there
             "--project-root",
             str(consumer),
             "--repo",
-            f"file://{_KEYSTONE}",
+            f"file://{_AKMON}",
             "--yes",
         ]
     )
@@ -950,7 +1054,7 @@ def test_vendoring_over_a_submodule_is_refused(tmp_path, capsys, local_git_repo)
                 "--project-root",
                 str(consumer),
                 "--repo",
-                f"file://{_KEYSTONE}",
+                f"file://{_AKMON}",
                 "--ref",
                 "v0.3.0",
                 "--yes",
@@ -973,7 +1077,7 @@ def test_submodule_mode_refuses_a_tree_git_does_not_record(tmp_path, capsys, loc
     _write(consumer / "_aitna" / "akmon" / "bin" / "sync.py", "# a copy, not a submodule\n")
     _git(["init", "-q", "."], cwd=consumer)
     code = _init.main(
-        ["--mode", "submodule", "--project-root", str(consumer), "--repo", f"file://{_KEYSTONE}", "--yes"]
+        ["--mode", "submodule", "--project-root", str(consumer), "--repo", f"file://{_AKMON}", "--yes"]
     )
     assert code == 2
     assert "does not record it as a submodule" in capsys.readouterr().err
@@ -1004,7 +1108,7 @@ def test_moving_an_existing_pin_leaves_the_bump_unstaged(tmp_path, capsys, local
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     _git(["init", "-q", "."], cwd=consumer)
-    common = ["--mode", "submodule", "--project-root", str(consumer), "--repo", f"file://{_KEYSTONE}", "--yes"]
+    common = ["--mode", "submodule", "--project-root", str(consumer), "--repo", f"file://{_AKMON}", "--yes"]
     assert _init.main([*common, "--ref", "v0.3.0"]) == 0
     staged = _sha(["ls-files", "--stage", "--", "_aitna/akmon"], cwd=consumer).split()[1]
     capsys.readouterr()
@@ -1017,4 +1121,4 @@ def test_moving_an_existing_pin_leaves_the_bump_unstaged(tmp_path, capsys, local
     assert _sha(["ls-files", "--stage", "--", "_aitna/akmon"], cwd=consumer).split()[1] == staged
     moved = _sha(["rev-parse", "HEAD"], cwd=consumer / "_aitna" / "akmon")
     assert moved != staged
-    assert moved == _sha(["rev-parse", "main^{commit}"], cwd=_KEYSTONE)
+    assert moved == _sha(["rev-parse", "main^{commit}"], cwd=_AKMON)

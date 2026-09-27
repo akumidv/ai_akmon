@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -76,10 +77,19 @@ TOOL_TYPES = {
     "computer_call",
 }
 QUOTA_RE = re.compile(
-    r"rate.?limit|quota|resource.?exhausted|billing|payment required|too many requests|http\s*429", re.I
+    r"\brate[\s_-]?limit\b|\bquota\b|\bresource[\s_-]?exhausted\b|\bbilling\b|"
+    r"\bpayment required\b|\btoo many requests\b|\bhttp\s*429\b",
+    re.I,
 )
 AUTH_RE = re.compile(
-    r"unauthori[sz]ed|invalid api.?key|authentication failed|http\s*401|http\s*403|permission denied", re.I
+    r"\bunauthori[sz]ed\b|\binvalid api[\s_-]?key\b|\bauthentication failed\b|"
+    r"\bhttp\s*(?:401|403)\b|\bpermission denied\b",
+    re.I,
+)
+PROVIDER_ERROR_PREFIX_RE = re.compile(
+    r"^(?:error\b|api error\b|provider error\b|request failed\b|"
+    r"you(?:'|\u2019)ve hit your session limit\b)",
+    re.I,
 )
 
 
@@ -348,9 +358,10 @@ def model_matches(route: str, requested: str, actual: str | None) -> bool:
 
 
 def _call_qwen(model: str, prompt: str, cwd: Path) -> dict[str, Any]:
-    """Call Qwen and extract model/tool provenance from its usage record."""
+    """Call Qwen and correlate usage provenance with this attempt's project path."""
     usage_path = Path.home() / ".qwen/usage_record.jsonl"
-    before = usage_path.read_text(encoding="utf-8", errors="replace").splitlines() if usage_path.exists() else []
+    before = _read_usage_records(usage_path)
+    project = str(cwd.resolve())
     cmd = [
         "qwen",
         "--safe-mode",
@@ -361,34 +372,62 @@ def _call_qwen(model: str, prompt: str, cwd: Path) -> dict[str, Any]:
         "Follow the instructions at the top of the input on stdin.",
     ]
     proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, cwd=cwd, timeout=900, check=False)
-    after = usage_path.read_text(encoding="utf-8", errors="replace").splitlines() if usage_path.exists() else []
-    old = {json.loads(line).get("sessionId") for line in before if line.startswith("{")}
-    added = [json.loads(line) for line in after[len(before) :] if line.startswith("{")]
-    if not added and after:
-        latest = json.loads(after[-1])
-        if latest.get("sessionId") in old:
-            prior = next(
-                (
-                    json.loads(x)
-                    for x in reversed(before)
-                    if x.startswith("{") and json.loads(x).get("sessionId") == latest["sessionId"]
-                ),
-                {},
-            )
-            if latest.get("models") != prior.get("models") or latest.get("tools") != prior.get("tools"):
-                added = [latest]
-    model_keys = sorted({key for row in added for key in (row.get("models") or {})})
-    calls = sum((row.get("tools") or {}).get("totalCalls", 0) for row in added)
+    after = _read_usage_records(usage_path)
+    prior_sessions = {
+        row.get("sessionId")
+        for row in before
+        if row.get("project") == project and isinstance(row.get("sessionId"), str)
+    }
+    candidates = [row for row in after if row.get("project") == project and row.get("sessionId") not in prior_sessions]
+    session_ids = {row.get("sessionId") for row in candidates}
+    correlated = (
+        bool(candidates)
+        and all(isinstance(row.get("sessionId"), str) and row["sessionId"] for row in candidates)
+        and len(session_ids) == 1
+    )
+    usage_records = candidates
+    model_keys = sorted({key for row in candidates for key in (row.get("models") or {})})
+    tool_values = [
+        row.get("tools", {}).get("totalCalls")
+        for row in candidates
+        if isinstance(row.get("tools"), dict)
+        and isinstance(row["tools"].get("totalCalls"), int)
+        and not isinstance(row["tools"].get("totalCalls"), bool)
+        and row["tools"]["totalCalls"] >= 0
+    ]
+    tools_known = correlated and len(tool_values) == len(candidates)
+    calls = max(tool_values) if tools_known else None
     return {
         "command": cmd,
         "returncode": proc.returncode,
         "reply": proc.stdout,
         "stderr": proc.stderr,
-        "actual_model": ",".join(model_keys) if len(model_keys) == 1 else None,
-        "model_provenance": "Qwen usage_record.jsonl",
-        "usage_records": added,
+        "actual_model": ",".join(model_keys) if correlated and tools_known and len(model_keys) == 1 else None,
+        "model_provenance": (
+            "Qwen usage_record.jsonl exact project/session match"
+            if correlated and len(model_keys) == 1 and tools_known
+            else "Qwen usage_record.jsonl project/session unverified"
+        ),
+        "qwen_project_cwd": project,
+        "qwen_sessions": sorted(str(value) for value in session_ids if value is not None),
+        "usage_records": usage_records,
         "tool_calls": calls,
     }
+
+
+def _read_usage_records(path: Path) -> list[dict[str, Any]]:
+    """Read valid JSON object rows from Qwen's shared usage ledger."""
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            rows.append(record)
+    return rows
 
 
 def call_one(route: str, model: str, prompt: str, cwd: Path) -> dict[str, Any]:
@@ -456,27 +495,76 @@ def call_one(route: str, model: str, prompt: str, cwd: Path) -> dict[str, Any]:
     return _call_qwen(model, prompt, cwd)
 
 
+def _attempt_cwd(workers_dir: Path, route: str, config: str, rid: str, attempt_number: int) -> Path:
+    """Choose an isolated working directory for each Qwen cell attempt."""
+    if route != "qwen":
+        return workers_dir / config
+    unique_attempt = f"attempt-{attempt_number}-{uuid.uuid4().hex}"
+    return workers_dir / "qwen-cwd" / config / rid / unique_attempt
+
+
 def classify(
     attempt: dict[str, Any], route: str, model: str, *, needs_score: bool
 ) -> tuple[dict[str, Any], str | None]:
     """Validate one attempt and report a quota/auth halt if required."""
-    transcript = str(attempt.get("stderr", "")) + "\n" + str(attempt.get("reply", ""))
-    for matcher, status, reason in ((QUOTA_RE, "halted_quota", "quota"), (AUTH_RE, "halted_auth", "auth")):
-        if matcher.search(transcript):
-            return {"status": status, **attempt}, reason
-    invalid_status = None
+    stderr = str(attempt.get("stderr", ""))
+    reply = str(attempt.get("reply", ""))
+    stderr_halt = _provider_error_result(stderr, attempt)
+    if stderr_halt:
+        return stderr_halt
     if attempt.get("returncode") != 0:
-        invalid_status = "invalid_exit"
-    elif not model_matches(route, model, attempt.get("actual_model")):
-        invalid_status = "invalid_model_provenance"
-    elif attempt.get("tool_events") or attempt.get("tool_calls", 0):
-        invalid_status = "invalid_tool_use"
-    if invalid_status:
-        return {"status": invalid_status, **attempt}, None
-    verdict, score, parse_error = parse_reply(str(attempt.get("reply", "")), needs_score=needs_score)
+        return _provider_error_result(reply, attempt) or ({"status": "invalid_exit", **attempt}, None)
+    if attempt.get("tool_events") or attempt.get("tool_calls", 0):
+        return {"status": "invalid_tool_use", **attempt}, None
+    provenance_ok = model_matches(route, model, attempt.get("actual_model"))
+    verdict, score, parse_error = parse_reply(reply, needs_score=needs_score)
+    if provenance_ok and not parse_error:
+        return {"status": "valid", "verdict": verdict, "score": score, **attempt}, None
+    if not attempt.get("actual_model") or parse_error:
+        body_halt = _provider_error_result(reply, attempt, require_envelope=True)
+        if body_halt:
+            return body_halt
+    invalid = {"status": "invalid_model_provenance" if not provenance_ok else "invalid_parse", **attempt}
     if parse_error:
-        return {"status": "invalid_parse", "parse_error": parse_error, **attempt}, None
-    return {"status": "valid", "verdict": verdict, "score": score, **attempt}, None
+        invalid["parse_error"] = parse_error
+    return invalid, None
+
+
+def _provider_error_halt(text: str, *, require_envelope: bool = False) -> tuple[str, str] | None:
+    """Identify quota/auth markers in provider diagnostics or recognized error envelopes."""
+    candidate = text
+    if require_envelope:
+        candidate = _provider_error_payload(text)
+        if not candidate:
+            return None
+    if QUOTA_RE.search(candidate):
+        return "halted_quota", "quota"
+    if AUTH_RE.search(candidate):
+        return "halted_auth", "auth"
+    return None
+
+
+def _provider_error_payload(text: str) -> str | None:
+    """Return text from a known provider-error prefix or structured error member."""
+    candidate = text.strip()
+    if PROVIDER_ERROR_PREFIX_RE.search(candidate):
+        return candidate
+    try:
+        envelope = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(envelope, dict) or (envelope.get("type") != "error" and "error" not in envelope):
+        return None
+    error = envelope.get("error", envelope)
+    return json.dumps(error, ensure_ascii=False)
+
+
+def _provider_error_result(
+    text: str, attempt: dict[str, Any], *, require_envelope: bool = False
+) -> tuple[dict[str, Any], str] | None:
+    """Build a circuit-breaker result from provider error evidence."""
+    halt = _provider_error_halt(text, require_envelope=require_envelope)
+    return ({"status": halt[0], **attempt}, halt[1]) if halt else None
 
 
 def result_path(artifact: Path, config: str, rid: str) -> Path:
@@ -558,8 +646,9 @@ def run_cell(artifact: Path, item: dict[str, Any], workers_dir: Path, retries: i
         checked_cli = command_version(route)
         if checked_cli != expected_cli:
             return _persist_cli_mismatch(artifact, route, expected_cli, checked_cli, prior)
+        call_cwd = _attempt_cwd(workers_dir, route, config, rid, len(prior["attempts"]) + 1)
         try:
-            attempt = call_one(route, model, prompt, workers_dir / config)
+            attempt = call_one(route, model, prompt, call_cwd)
         except subprocess.TimeoutExpired as exc:
             attempt = {
                 "returncode": None,

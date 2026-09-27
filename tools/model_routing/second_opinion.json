@@ -1,0 +1,15 @@
+{
+  "prompt": "You are an independent second-opinion reviewer for a akmon verify gate.\n\nGate: {{gate}}\n\nRules:\n- Review only; do not edit files, run commands, commit, push, or approve on behalf of the owner.\n- Return: verdict, key disagreements or risks, missing verification, and concrete file/line references when available.\n- Treat the result as advisory input to owner verification, not a sign-off.\n\nMaterial to review:\n{{material}}\n",
+  "unavailable_notice": [
+    "second-opinion: skipped at gate '{{gate}}' — ladder exhausted, no model-diverse reviewer is reachable.",
+    "  why: {{reason}}.",
+    "  not downgraded: a reviewer on the author's own weights repeats the author's systematic errors and agrees confidently, which is indistinguishable from a review.",
+    "  what you can still run by hand: hand this gate pack to a subagent on this same model in a fresh context (no session history, no prior reasoning).",
+    "  its limits, to record with any result: it removes anchoring on the author's own output; it does not remove shared model priors. It is a self-check, not a second opinion, and must not be filed as one."
+  ],
+  "summary": {
+    "report_line": "report: {{path}}",
+    "provider_line": "provider={{provider}} model={{model}}",
+    "result_line": "second-opinion provider={{provider}} model={{model}} gate={{gate}} exit={{exit}}"
+  }
+}

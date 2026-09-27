@@ -13,11 +13,11 @@ import importlib.util
 import sys
 from pathlib import Path
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 _SPEC = importlib.util.spec_from_file_location(
-    "conformance_coverage", _KEYSTONE / "meta" / "conformance" / "coverage.py"
+    "conformance_coverage", _AKMON / "meta" / "conformance" / "coverage.py"
 )
 coverage = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = coverage
@@ -314,7 +314,7 @@ def test_codex_dispatcher_claim_counts(tmp_path: Path) -> None:
 
 
 def test_real_tree_derivation() -> None:
-    population = coverage.derive_population(_KEYSTONE)
+    population = coverage.derive_population(_AKMON)
     assert "code:layout.consumer-path:error" in population.items
     release = {item for item in population.items if item.startswith("code:release.")}
     assert {item.split(":")[1] for item in release} == {

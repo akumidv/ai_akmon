@@ -1,0 +1,11 @@
+{
+  "routes": [
+    "analysis-guard",
+    "role-on-code",
+    "session-start",
+    "git-commit-guard"
+  ],
+  "unreadable_target": "akmon codex-hook: '{{tool_name}}' matched but no file path could be read from the payload — the advisory hooks are inert for this call ({{payload_shape}})",
+  "unmeasured_path_source": "akmon codex-hook: '{{tool_name}}' named a file only through an unmeasured payload key — the advisories ran on a path no measured Codex version is known to send, so the classification may be wrong ({{payload_shape}})",
+  "payload_shape": "tool_input keys: {{inner}}; payload keys: {{top}}"
+}

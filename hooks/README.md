@@ -96,11 +96,11 @@ project-local hook surface.
   **delegation nudge**: scores orchestrator edit/shell/read calls (Read/Grep/Glob normalize to
   the same read kind) since session start or the last subagent delegation (`Task`/`Agent`
   resets the score) — an edit or shell call counts 1, a read ½, and the first 8 calls of a
-  stretch nothing (env `KEYSTONE_DELEGATION_GRACE`) — and, past a threshold (default 30; env
-  `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`), injects a **one-time, advisory** reminder that the
+  stretch nothing (env `AKMON_DELEGATION_GRACE`) — and, past a threshold (default 30; env
+  `AKMON_DELEGATION_NUDGE_THRESHOLD`), injects a **one-time, advisory** reminder that the
   work may belong to a `k_*` delegate (MODEL.md § Capability tiers). Task-kind classification
   is fuzzy, so the advisory never blocks; but on *sustained* drift past a second, higher
-  threshold (default 120; env `KEYSTONE_DELEGATION_ASK_THRESHOLD`, clamped to at least the
+  threshold (default 120; env `AKMON_DELEGATION_ASK_THRESHOLD`, clamped to at least the
   advisory threshold) the next edit or shell call — never a read — carries a hard `ask`
   permission decision, with its own once-per-episode marker, also cleared by a delegation.
   The weights and thresholds come from a replay of recorded sessions (C88, M72–M75). Runs as a **PreToolUse →

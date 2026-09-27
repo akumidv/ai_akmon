@@ -24,8 +24,19 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from common import jsondata
+
 CODE = "caps.always-loaded"
-BLOCK_HEADING = "## Dev layer — akmon"
+
+
+def _always_loaded_data() -> dict:
+    """The block heading, scopes, caps and severities, as the data file carries them."""
+    return jsondata.read(Path(__file__).parent / "always_loaded.json")
+
+
+def block_heading() -> str:
+    """The heading that marks the akmon block of a project's ``AGENTS.md``."""
+    return _always_loaded_data()["block_heading"]
 
 # An ``@``-import as the harness reads it: a token starting a line or following whitespace.
 # Code spans, fenced blocks and HTML comments are stripped first — the harness does not import
@@ -47,10 +58,28 @@ class Cap:
 #: ADR 0012 F18 as re-baselined by its C56 amendment — today's shipped shape (311 lines /
 #: 20,190 bytes) rounded up, plus the unchanged hand-owned allowance of 250 lines / 13,000
 #: bytes for the consumer scope. The numbers are the ratchet; lowering them is C60's work.
-SHIPPED = "akmon-shipped"
-CONSUMER = "consumer-total"
-CAPS: dict[str, Cap] = {SHIPPED: Cap(lines=320, bytes=21_000), CONSUMER: Cap(lines=570, bytes=34_000)}
-SEVERITY: dict[str, str] = {SHIPPED: "error", CONSUMER: "warn"}
+#: They live in ``common/always_loaded.json`` (the shared owner both implementations read).
+def shipped() -> str:
+    """The akmon-shipped scope name."""
+    return _always_loaded_data()["scopes"][0]
+
+
+def consumer() -> str:
+    """The consumer-total scope name."""
+    return _always_loaded_data()["scopes"][1]
+
+
+def caps() -> dict[str, Cap]:
+    """One scope's inclusive caps, for every scope."""
+    data = _always_loaded_data()
+    return {
+        scope: Cap(lines=data["caps"][scope]["lines"], bytes=data["caps"][scope]["bytes"]) for scope in data["scopes"]
+    }
+
+
+def severity() -> dict[str, str]:
+    """The severity an over-cap finding carries, per scope."""
+    return dict(_always_loaded_data()["severity"])
 
 
 @dataclass(frozen=True)
@@ -91,8 +120,9 @@ class Population:
 
 def marked_block(agents_text: str) -> str | None:
     """The akmon block of ``AGENTS.md``: its heading line up to the next peer ``##`` or EOF."""
+    heading = block_heading()
     lines = agents_text.splitlines(keepends=True)
-    start = next((i for i, line in enumerate(lines) if line.startswith(BLOCK_HEADING)), None)
+    start = next((i for i, line in enumerate(lines) if line.startswith(heading)), None)
     if start is None:
         return None
     end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
@@ -141,9 +171,14 @@ def populations(agents_text: str, root: Path, selected: Sequence[Path] = ()) -> 
     if block is None:
         return None
     chain = import_chain(block, root, root=root)
+    shipped_scope, consumer_scope = shipped(), consumer()
     return {
-        SHIPPED: Population(SHIPPED, _union(root, Member("AGENTS.md (akmon block)", block), chain, list(selected))),
-        CONSUMER: Population(CONSUMER, _union(root, Member("AGENTS.md", agents_text), chain, list(selected))),
+        shipped_scope: Population(
+            shipped_scope, _union(root, Member("AGENTS.md (akmon block)", block), chain, list(selected))
+        ),
+        consumer_scope: Population(
+            consumer_scope, _union(root, Member("AGENTS.md", agents_text), chain, list(selected))
+        ),
     }
 
 

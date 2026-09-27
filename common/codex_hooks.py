@@ -23,7 +23,8 @@ requires the response to echo before trusting it. The response shape is ``{"id":
 
 Every field this module reads off the wire is untrusted vendor input and is validated structurally
 before use; anything short of that measured shape raises :class:`CodexProtocolError`. Every
-diagnostic this module produces is one of the fixed texts in :data:`_PROTOCOL_FAILURES`:
+diagnostic this module produces is one of the fixed texts in the ``protocol_failures`` table of
+``common/codex_hooks.json``:
 :class:`CodexProtocolError` is built from a failure *kind*, not from a message, so whoever raises
 it — this module or an injected runner — can only select one of those texts, never supply one.
 Nothing taken from the response reaches it: not the body, not the echoed id, not a JSON-RPC error
@@ -43,6 +44,8 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from common import jsondata
+
 #: The bounded wait for a ``hooks/list`` answer. A pinned implementation constant (design §7:
 #: "the bounded timeout literal" is C70's own, not a reopened architecture fork) — local
 #: app-server startup plus one query answered in well under a second when measured live.
@@ -53,24 +56,45 @@ DEFAULT_TIMEOUT_SECONDS = 5.0
 #: than waited on without bound: the query's answer, or its failure, is already decided by then.
 _EXIT_GRACE_SECONDS = 2.0
 
+def _codex_data() -> dict:
+    """The closed diagnostic table and the status vocabularies, as the data file carries them."""
+    return jsondata.read(Path(__file__).parent / "codex_hooks.json")
+
+
+def _protocol_failures() -> dict[str, str]:
+    """Failure kind -> the only text a :class:`CodexProtocolError` can carry.
+
+    A closed table rather than messages written at each raise site: an injected runner that
+    raised ``CodexProtocolError(<vendor text>)`` had that text printed verbatim (fourth C70
+    review). ``test_codex_hooks.py`` pins that every raise site names a kind here and every
+    kind is raised.
+    """
+    return _codex_data()["protocol_failures"]
+
+
 #: PascalCase keys generated wiring uses (``sync._codex_hooks``) -> the app-server's camelCase
-#: ``HookEventName`` enum. Only the events akmon's own generator wires today; a key with no entry
-#: here is a :class:`CodexWiringError`, and ``test_codex_hooks.py`` pins that every event the
-#: generator emits has one, so the two cannot drift apart without a red test.
-_EVENT_NAMES = {
-    "PreToolUse": "preToolUse",
-    "SessionStart": "sessionStart",
-}
+#: ``HookEventName`` enum (the data file's ``event_names``). Only the events akmon's own
+#: generator wires today; a key with no entry is a :class:`CodexWiringError`, and
+#: ``test_codex_hooks.py`` pins that every event the generator emits has one, so the two
+#: cannot drift apart without a red test.
+def _event_names() -> dict[str, str]:
+    return _codex_data()["event_names"]
 
-#: Every ``trustStatus`` the vendor schema defines. A value outside it is not a new kind of
-#: problem to report by name — echoing it would put a vendor-chosen string into the diagnostic —
-#: but a protocol akmon has not measured, so :func:`query_hooks_list` rejects it.
-_TRUST_STATUSES = frozenset({"managed", "untrusted", "trusted", "modified"})
 
-#: `trustStatus` values that mean an entry actually runs. `managed` is the vendor's own
-#: system/MDM-delivered case, trusted the ordinary owner-approved one; everything else
-#: (`untrusted`, `modified`) is exactly what N7 measured as reported `enabled: true` and inert.
-_LIVE_TRUST_STATUSES = frozenset({"trusted", "managed"})
+#: Every ``trustStatus`` the vendor schema defines (the data file's ``trust_statuses``). A
+#: value outside it is not a new kind of problem to report by name — echoing it would put a
+#: vendor-chosen string into the diagnostic — but a protocol akmon has not measured, so
+#: :func:`query_hooks_list` rejects it.
+def _trust_statuses() -> frozenset[str]:
+    return frozenset(_codex_data()["trust_statuses"])
+
+
+#: ``trustStatus`` values that mean an entry actually runs (the data file's
+#: ``live_trust_statuses``). ``managed`` is the vendor's own system/MDM-delivered case, trusted
+#: the ordinary owner-approved one; everything else (``untrusted``, ``modified``) is exactly
+#: what N7 measured as reported ``enabled: true`` and inert.
+def _live_trust_statuses() -> frozenset[str]:
+    return frozenset(_codex_data()["live_trust_statuses"])
 
 #: Fixed JSON-RPC request ids this module sends: 1 for the handshake, 2 for the query it actually
 #: reads. Any response not echoing 2 is rejected rather than trusted, matching-notification
@@ -80,34 +104,8 @@ _INITIALIZE_ID = 1
 _HOOKS_LIST_ID = 2
 
 
-#: Failure kind -> the only text a :class:`CodexProtocolError` can carry. A closed table rather
-#: than messages written at each raise site: an injected runner that raised
-#: ``CodexProtocolError(<vendor text>)`` had that text printed verbatim (fourth C70 review).
-#: ``test_codex_hooks.py`` pins that every raise site names a kind here and every kind is raised.
+#: The fallback kind a :class:`CodexProtocolError` outside the closed table degrades to.
 _UNCLASSIFIED = "unclassified"
-_PROTOCOL_FAILURES = {
-    "unstartable": "codex app-server could not be started",
-    "stdin-closed": "codex app-server exited before accepting the hooks/list request",
-    "timeout": "no hooks/list response within the query timeout",
-    "stdout-closed": "codex app-server closed its output before answering hooks/list",
-    "runner-failed": "the hooks/list runner failed",
-    "not-json": "hooks/list response is not valid JSON",
-    "not-object": "hooks/list response is not a JSON object",
-    "id-mismatch": "hooks/list response does not answer this request (id mismatch)",
-    "jsonrpc-error": "hooks/list returned a JSON-RPC error",
-    "no-data": "hooks/list response has no result.data list",
-    "no-project": "hooks/list answered no entry for this project",
-    "duplicate-project": "hooks/list answered this project more than once",
-    "project-shape": "hooks/list entry for this project lacks a hooks, warnings or errors list",
-    "discovery-errors": "hooks/list reported discovery errors for this project",
-    "hook-not-object": "hooks/list returned a hook entry that is not an object",
-    "hook-handler": "hooks/list returned a hook entry without a string handlerType",
-    "hook-enabled": "hooks/list returned a hook entry whose enabled is not a boolean",
-    "hook-trust": "hooks/list returned a hook entry with an unrecognized trustStatus",
-    "hook-identity": "hooks/list returned a command hook without a string eventName/command",
-    "hook-matcher": "hooks/list returned a command hook with a non-string matcher",
-    _UNCLASSIFIED: "the hooks/list exchange failed for an unclassified reason",
-}
 
 
 class CodexProtocolError(Exception):
@@ -119,8 +117,9 @@ class CodexProtocolError(Exception):
     """
 
     def __init__(self, kind: object) -> None:
-        self.kind = kind if isinstance(kind, str) and kind in _PROTOCOL_FAILURES else _UNCLASSIFIED
-        super().__init__(_PROTOCOL_FAILURES[self.kind])
+        failures = _protocol_failures()
+        self.kind = kind if isinstance(kind, str) and kind in failures else _UNCLASSIFIED
+        super().__init__(failures[self.kind])
 
 
 class CodexWiringError(ValueError):
@@ -146,7 +145,7 @@ def _expected_hooks_from_group(event: str, group: object) -> list[tuple[str, str
         command = hook.get("command")
         if not isinstance(command, str):
             raise CodexWiringError(f"Codex wiring event {event!r} has a command hook without a command")
-        expected.append((_EVENT_NAMES[event], matcher, command))
+        expected.append((_event_names()[event], matcher, command))
     return expected
 
 
@@ -158,8 +157,8 @@ def expected_codex_hooks(wiring: object) -> list[tuple[str, str | None, str]]:
     group or hook list that is not a list, a command that is not a string — rather than let a
     ``KeyError``/``AttributeError`` escape. ``verify`` only calls this on text byte-identical to
     what the current generator writes (its freshness gate runs first), so there the error means
-    the generator and :data:`_EVENT_NAMES` disagree, which a test pins; the validation is for any
-    other caller.
+    the generator and the data file's ``event_names`` disagree, which a test pins; the
+    validation is for any other caller.
     """
     if not isinstance(wiring, dict):
         raise CodexWiringError("Codex wiring is not a JSON object")
@@ -168,7 +167,7 @@ def expected_codex_hooks(wiring: object) -> list[tuple[str, str | None, str]]:
         raise CodexWiringError("Codex wiring `hooks` is not an object")
     expected: list[tuple[str, str | None, str]] = []
     for event, groups in events.items():
-        if event not in _EVENT_NAMES:
+        if event not in _event_names():
             raise CodexWiringError(f"Codex wiring names event {event!r}, which has no hooks/list mapping")
         if not isinstance(groups, list):
             raise CodexWiringError(f"Codex wiring event {event!r} is not a list of groups")
@@ -187,9 +186,9 @@ def _delivery_state(hook: dict) -> str | None:
     if hook.get("enabled") is not True:
         return "disabled"
     trust = hook.get("trustStatus")
-    if not isinstance(trust, str) or trust not in _TRUST_STATUSES:
+    if not isinstance(trust, str) or trust not in _trust_statuses():
         return "unrecognized"
-    return None if trust in _LIVE_TRUST_STATUSES else trust
+    return None if trust in _live_trust_statuses() else trust
 
 
 def hook_trust_problems(
@@ -371,7 +370,7 @@ def _check_hook_metadata(hook: object) -> None:
     if not isinstance(hook.get("enabled"), bool):
         raise CodexProtocolError("hook-enabled")
     trust = hook.get("trustStatus")
-    if not isinstance(trust, str) or trust not in _TRUST_STATUSES:
+    if not isinstance(trust, str) or trust not in _trust_statuses():
         raise CodexProtocolError("hook-trust")
     if hook["handlerType"] != "command":
         return
@@ -459,8 +458,9 @@ def query_hooks_list(
     :func:`_check_hook_metadata`). A caller must not read a caught exception as "no hooks" — that
     is a distinct, positively reported state (an empty ``data[].hooks`` list, not an exception).
 
-    Every message is one of :data:`_PROTOCOL_FAILURES` (see the module docstring), a failure of
-    the ``runner`` included: this function is the one seam ``verify`` trusts to turn "codex
+    Every message is one of the data file's ``protocol_failures`` table (see the module
+    docstring), a failure of the ``runner`` included: this function is the one seam ``verify``
+    trusts to turn "codex
     resolved but is uninspectable" into a `Finding`, never a crash.
     """
     raw = _call_hooks_list_runner(runner, command, cwd, timeout)

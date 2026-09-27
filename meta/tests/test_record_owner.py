@@ -35,7 +35,6 @@ _RECORD_PATH_USERS = {
     "bin/sync.py": "stamps and upserts the record; reads it through the re-exported shared reader",
     "bin/check.py": "reads [check] through the shared reader's strict entry",
     "bin/verify.py": "validates the record, read through the shared reader",
-    "common/check_runner.py": "names the record in the target of a configuration finding",
     "common/project_root.py": "an existence check — the package-mode marker — and a notice",
     "common/record.py": "the shared reader",
     "src/akmon/_init.py": "writes the record; reads it through the shared reader",

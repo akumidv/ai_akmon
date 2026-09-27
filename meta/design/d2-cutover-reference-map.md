@@ -418,8 +418,8 @@ is machine-checkable — which is exactly why it needs a written owner.
 - **C52** — enumerates nine spawned entry points including `d2-ledger-reminder`, and concludes
   "changes five and adds four". The population is now **eight spawned files** — seven Claude
   wrappers plus `codex-hook.py` — behind **nine generated command entries**, because
-  `model-routing` is wired on both `SessionStart` and `UserPromptSubmit` (`bin/sync.py:436`,
-  `:445`). C87 has since landed the top-level guard on every one of them, so the five-and-four
+  `model-routing` is wired on both `SessionStart` and `UserPromptSubmit` (`bin/sync.json`
+  `claude_hooks`). C87 has since landed the top-level guard on every one of them, so the five-and-four
   split is historical as well as miscounted. The status token still reads "blocked (after D2-49 —
   D2-23 owner-approved)": the dependency is N6's open evidence behind the accepted ADR-0013/D02
   envelope, stated without the lifecycle spelling.

@@ -34,21 +34,21 @@ and the root and record *contracts*. Every executable piece is Python:
 | **total** | **36** | **12 128** |
 
 The 1 562 tests in `meta/tests` are Python unit tests and do not carry over. Stdlib surfaces with
-no identical Node counterpart: `tomllib` (`bin/sync.py:111`, `bin/sync.py:650`, and
-`common/record.py`), `shlex`, `fnmatch`, `json.dumps` formatting, Python `re` syntax, code-point
-sorting, `subprocess`, and `urllib` (`tools/model_routing/stats.py:366`).
+no identical Node counterpart: `tomllib` (`bin/sync.py::_read_manifest`, `bin/sync.py::ruff_extends`,
+and `common/record.py`), `shlex`, `fnmatch`, `json.dumps` formatting, Python `re` syntax, code-point
+sorting, `subprocess`, and `urllib` (`tools/model_routing/stats.py::fetch_usage`).
 
 Python coupling outside the code itself:
 
 | Surface | Where | Coupling |
 |---|---|---|
-| Pin inspection | `bin/sync.py:151` `package_pin_status` | `pyproject.toml` only |
-| Hook launcher | `bin/sync.py:269`, `bin/sync.py:277` | `.venv/bin/akmon` console script |
-| Update | `src/akmon/_update.py:126` | `uv add` only |
-| Check detection | `src/akmon/_init.py:882` `_TOOLS`, `src/akmon/_init.py:918` `_run_prefix` | ruff/flake8/pylint/mypy; `uv run`/`poetry run` |
-| Default check patterns | `common/check_runner.py::DEFAULT_FILES` | `*.py` |
-| Ruleset offer | `src/akmon/_init.py:927` | ruff `extend` only |
-| CI template | `src/akmon/_init.py:692` | `uv run akmon …` |
+| Pin inspection | `bin/sync.py::package_pin_status` | `pyproject.toml` only |
+| Hook launcher | `bin/sync.py::launcher_relative`, `bin/sync.json` `default_launcher_rel` | `.venv/bin/akmon` console script |
+| Update | `src/akmon/_update.py::_update_package` | `uv add` only |
+| Check detection | `src/akmon/_init.py::_TOOLS`, `src/akmon/_init.py::_run_prefix` (`src/akmon/init.json` `run_prefix`) | ruff/flake8/pylint/mypy; `uv run`/`poetry run` |
+| Default check patterns | `common/check_runner.json` `default_files` (read by `common/check_runner.py::default_files`) | `*.py` |
+| Ruleset offer | `src/akmon/_init.py::_extend_with_akmon_rules` | ruff `extend` only |
+| CI template | `src/akmon/_init.py::_ci_workflow` (`src/akmon/init.json` `ci_workflow`) | `uv run akmon …` |
 | Runtime contract | `common/runtime.py:6` | `python3` on PATH for every consumer |
 | Profiles | `profiles/` | `python`, `python-stdlib`, `quant`, `ruff.toml`; `ARCHETYPES.md:102` reserves `js` |
 | Messages | SessionStart and others | print `python3 $(akmon path)/tools/…` |
@@ -178,6 +178,14 @@ package.json                (root; no deps, no scripts except dev ones, engines 
 Both carriers ship one file list (D05). The wheel carries `js/` and the npm package carries the
 Python files, which are unused there. This keeps "same artifact, two entry points" provable by a
 single test.
+
+Shared data (C102) stays where it is: a JSON file beside its Python reader (`bin/sync.json`,
+`hooks/hook_core.json`, …), which the paired `.mjs` reads at that path with `JSON.parse`. Stored
+text marks a runtime value as `{{name}}` — filled by `common/jsondata.py::fill`, and by its JS
+twin — and the code formats every value before filling it. These `{{…}}` placeholders are
+unrelated to the corpus's normalization tokens (§5), which only share the spelling. A process
+reads a data file once at its entry point and passes it down. A crash handler reads none: its
+text stays in code, because a missing data file is one of the failures it reports.
 
 ### Consumer experience
 

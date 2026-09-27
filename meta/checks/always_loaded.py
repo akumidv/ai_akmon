@@ -41,7 +41,7 @@ def _generated_block(akmon_root: Path) -> str:
     from akmon import _init  # noqa: PLC0415 — the generator is the source of this text
 
     block = _init._agents_block(_AITNA, _REF, "<archetype>", "<language>", package_mode=True)
-    return _init._AGENTS_HEADER + block
+    return _init._agents_header() + block
 
 
 def _largest_profile(akmon_root: Path) -> Path:
@@ -64,13 +64,13 @@ def shipped_population(akmon_root: Path) -> always_loaded.Population:
         found = always_loaded.populations(agents, root, [selected])
         if found is None:  # unreachable while the generator writes the heading it declares
             raise RuntimeError("the generated AGENTS.md carries no marked akmon block")
-        return found[always_loaded.SHIPPED]
+        return found[always_loaded.shipped()]
 
 
 def check_always_loaded(akmon_root: Path) -> list[Finding]:
     """One Finding: error over the akmon-shipped cap, ok under it, the measurement either way."""
     population = shipped_population(akmon_root)
-    cap = always_loaded.CAPS[always_loaded.SHIPPED]
+    cap = always_loaded.caps()[always_loaded.shipped()]
     over = always_loaded.over(population, cap)
     return [
         Finding(

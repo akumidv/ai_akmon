@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
-_KEYSTONE = Path(__file__).resolve().parents[2]
+import pytest
+
+from common import jsondata
+
+_AKMON = Path(__file__).resolve().parents[2]
 
 
 def _load():
-    spec = importlib.util.spec_from_file_location("tasks_archive", _KEYSTONE / "tools" / "tasks" / "archive.py")
+    spec = importlib.util.spec_from_file_location("tasks_archive", _AKMON / "tools" / "tasks" / "archive.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -254,3 +259,54 @@ def test_main_warns_on_malformed_entry(tmp_path, capsys):
     (tmp_path / "TASKS_ARCHIVE.md").write_text(ARCHIVE, encoding="utf-8")
     archive.main(["--tasks", str(tasks), "--apply"])
     assert "missing a status field" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------------------
+# C102: archive.json — the tool's texts
+# --------------------------------------------------------------------------------------
+
+
+def test_archive_data_pins_the_structure_and_characteristic_texts():
+    data = json.loads((_AKMON / "tools" / "tasks" / "archive.json").read_text(encoding="utf-8"))
+    assert set(data) == {
+        "done_status",
+        "done_header",
+        "archive_no_section",
+        "error_no_archive_file",
+        "error_generic",
+        "archived",
+        "warning_missing_status",
+        "error_no_such_entry",
+        "no_done_entries",
+        "would_archive_entry",
+        "would_archive_entries",
+        "reapply_hint",
+    }
+    assert data["done_status"] == "done"
+    assert data["done_header"] == "## Done"
+    assert data["would_archive_entry"] == "would archive {{count}} done entry: {{ids}}"
+    assert data["would_archive_entries"] == "would archive {{count}} done entries: {{ids}}"
+    assert data["reapply_hint"] == "re-run with --apply to move them"
+
+
+def test_archive_loader_reads_exactly_archive_json(monkeypatch):
+    seen: list[Path] = []
+
+    def spy(path: Path):
+        seen.append(path)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    archive.done_status()
+    assert seen == [_AKMON / "tools" / "tasks" / "archive.json"]
+
+
+def test_a_missing_archive_json_raises_from_main(monkeypatch, tmp_path):
+    def broken(path: Path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    tasks = tmp_path / "TASKS.md"
+    tasks.write_text("- C1 · a · done · x\n", encoding="utf-8")
+    with pytest.raises(jsondata.DataFileError):
+        archive.main(["--tasks", str(tasks)])

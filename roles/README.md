@@ -71,7 +71,7 @@ existing thing to understand/measure it → `review` · **construct** a new stru
 |---|---|
 | Review state/quality/conformance (product / component / element); find problems, bottlenecks, mismatches vs goal/vision/requirements | `review` |
 | Produce a findings report / an as-is assessment | `review` |
-| Keystone model, role boundaries, guardrails, pipeline semantics, roadmap, bootstrap/sync contract | `architect` |
+| akmon model, role boundaries, guardrails, pipeline semantics, roadmap, bootstrap/sync contract | `architect` |
 | Project architecture, requirements, ADRs, design docs | `architect` |
 | Production code, tests, build config | `engineer` |
 | Executable dev tooling (`_aitna/akmon/{bin,tools,hooks}/`, `_aitna/tools/`, validators, sync scripts) | `engineer` |

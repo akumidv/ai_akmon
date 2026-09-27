@@ -10,16 +10,46 @@ from __future__ import annotations
 import json
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
-from hook_core import EDIT_TOOL, SHELL_TOOL, HookResult, hook_failure_diagnostic
+from hook_core import HookResult, edit_tool, hook_failure_diagnostic, shell_tool
 
-# Codex's file-editing tool name(s) → akmon's neutral edit-tool kind.
-EDIT_TOOLS = frozenset({"apply_patch"})
-# The shell route. `Bash` is the `tool_name` codex 0.146.0 puts in the payload for a shell
-# call — measured, not assumed: its model-facing names (`exec_command`, `shell`) appear
-# neither as payload tool names nor as working matchers (C49).
-SHELL_TOOLS = frozenset({"Bash"})
+from common import jsondata  # hook_core put the tree root on sys.path
+from common.markers import unidentified_identity
+
+
+def _vocabulary() -> dict[str, Any]:
+    """The hook vocabulary table beside this module (C102).
+
+    The vendor tool-name tables, the payload key spellings, and the hook document-shape keys.
+    """
+    return jsondata.read(Path(__file__).parent / "vocabulary.json")
+
+
+def _codex_hook_data() -> dict[str, Any]:
+    """The codex-hook data file beside this module (C102): the payload-shape template."""
+    return jsondata.read(Path(__file__).parent / "codex_hook.json")
+
+
+def _payload_key_spellings(stem: str) -> tuple[str, ...]:
+    """One measured field's key spellings in priority order (hooks/vocabulary.json, C102)."""
+    return tuple(_vocabulary()["codex"]["payload_key_spellings"][stem])
+
+
+def _edit_tools() -> frozenset[str]:
+    """Codex's file-editing tool name(s) (hooks/vocabulary.json, C102)."""
+    return frozenset(_vocabulary()["codex"]["edit_tools"])
+
+
+def _shell_tools() -> frozenset[str]:
+    """The shell route (hooks/vocabulary.json, C102).
+
+    `Bash` is the `tool_name` codex 0.146.0 puts in the payload for a shell
+    call — measured, not assumed: its model-facing names (`exec_command`, `shell`) appear
+    neither as payload tool names nor as working matchers (C49).
+    """
+    return frozenset(_vocabulary()["codex"]["shell_tools"])
 
 # All four measured patch forms, one owner. A rename is spelled `*** Update File: <source>`
 # followed by `*** Move to: <destination>`, so the destination has its own literal and is
@@ -108,9 +138,9 @@ def is_apply_patch_command(command_text: str) -> bool:
 
 def normalize_tool(name: str) -> str:
     """Map a Codex tool name to the neutral kind hook_core expects; pass others through."""
-    if name in EDIT_TOOLS:
-        return EDIT_TOOL
-    return SHELL_TOOL if name in SHELL_TOOLS else name
+    if name in _edit_tools():
+        return edit_tool()
+    return shell_tool() if name in _shell_tools() else name
 
 
 def tool_kind(payload: dict[str, Any]) -> str:
@@ -122,8 +152,8 @@ def tool_kind(payload: dict[str, Any]) -> str:
     effect be seen or unseen depending on its spelling, so the payload decides (C49).
     """
     name = normalize_tool(tool_name(payload) or "apply_patch")
-    if name == SHELL_TOOL and is_apply_patch_command(command(payload)):
-        return EDIT_TOOL
+    if name == shell_tool() and is_apply_patch_command(command(payload)):
+        return edit_tool()
     return name
 
 
@@ -141,7 +171,7 @@ def load_payload() -> dict[str, Any]:
 
 def tool_name(payload: dict[str, Any]) -> str:
     """The payload's tool name, tried across every measured field spelling; ``""`` if none match."""
-    for key in ("tool_name", "toolName", "tool", "name"):
+    for key in _payload_key_spellings("tool_name"):
         value = payload.get(key)
         if isinstance(value, str):
             return value
@@ -152,17 +182,16 @@ def tool_name(payload: dict[str, Any]) -> str:
 
 def session_id(payload: dict[str, Any]) -> str:
     """The payload's session identity, tried across every measured field spelling; ``"nosession"`` if none match."""
-    keys = ("session_id", "sessionId", "conversation_id", "conversationId", "thread_id", "threadId")
-    for key in keys:
+    for key in _payload_key_spellings("session_id"):
         value = payload.get(key)
         if isinstance(value, str) and value:
             return value
-    return "nosession"
+    return unidentified_identity()
 
 
 def tool_use_id(payload: dict[str, Any]) -> str:
     """Return the per-event identity Codex supplies, or an empty string if absent."""
-    for key in ("tool_use_id", "toolUseId", "call_id", "callId"):
+    for key in _payload_key_spellings("tool_use_id"):
         value = payload.get(key)
         if isinstance(value, str) and value:
             return value
@@ -170,7 +199,7 @@ def tool_use_id(payload: dict[str, Any]) -> str:
 
 
 def _tool_input(payload: dict[str, Any]) -> dict[str, Any]:
-    for key in ("tool_input", "toolInput", "input", "args", "arguments", "params"):
+    for key in _payload_key_spellings("tool_input"):
         value = payload.get(key)
         if isinstance(value, dict):
             return value
@@ -180,15 +209,11 @@ def _tool_input(payload: dict[str, Any]) -> dict[str, Any]:
 def command(payload: dict[str, Any]) -> str:
     """The shell command or patch body, tried across every measured field spelling; ``""`` if none match."""
     tool_input = _tool_input(payload)
-    for key in ("command", "cmd", "script"):
+    for key in _payload_key_spellings("command"):
         value = tool_input.get(key) or payload.get(key)
         if isinstance(value, str):
             return value
     return ""
-
-
-_UNMEASURED_STRING_KEYS = ("file_path", "filePath", "path", "target", "filename")
-_UNMEASURED_LIST_KEYS = ("file_paths", "filePaths", "paths", "files")
 
 
 def _paths_by_source(payload: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -203,11 +228,11 @@ def _paths_by_source(payload: dict[str, Any]) -> tuple[list[str], list[str]]:
     """
     unmeasured: list[str] = []
     for source in (_tool_input(payload), payload):
-        for key in _UNMEASURED_STRING_KEYS:
+        for key in _payload_key_spellings("unmeasured_string_keys"):
             value = source.get(key)
             if isinstance(value, str) and value:
                 unmeasured.append(value)
-        for key in _UNMEASURED_LIST_KEYS:
+        for key in _payload_key_spellings("unmeasured_list_keys"):
             value = source.get(key)
             if isinstance(value, list):
                 unmeasured.extend(item for item in value if isinstance(item, str) and item)
@@ -261,30 +286,36 @@ def payload_shape(payload: dict[str, Any]) -> str:
     """
     top = ", ".join(sorted(str(key) for key in payload)) or "<none>"
     inner = ", ".join(sorted(str(key) for key in _tool_input(payload))) or "<none>"
-    return f"tool_input keys: {inner}; payload keys: {top}"
+    return jsondata.fill(_codex_hook_data()["payload_shape"], {"inner": inner, "top": top})
 
 
 def cwd(payload: dict[str, Any]) -> str:
     """The payload's working directory, tried across every measured field spelling; ``""`` if none match."""
-    for key in ("cwd", "working_directory", "workingDirectory", "workdir"):
+    for key in _payload_key_spellings("cwd"):
         value = payload.get(key)
         if isinstance(value, str) and value:
             return value
     return ""
 
 
+def _document_keys() -> dict[str, str]:
+    """The hook document-shape key table (hooks/vocabulary.json, C102)."""
+    return _vocabulary()["document_keys"]
+
+
 def print_result(result: HookResult | None) -> None:
     """Print the rendered ``result`` document, or nothing when there is none."""
     if result is None:
         return
-    output: dict[str, str] = {"hookEventName": result.event_name}
+    keys = _document_keys()
+    output: dict[str, str] = {keys["event_name"]: result.event_name}
     if result.additional_context is not None:
-        output["additionalContext"] = result.additional_context
+        output[keys["additional_context"]] = result.additional_context
     if result.permission_decision is not None:
-        output["permissionDecision"] = result.permission_decision
+        output[keys["permission_decision"]] = result.permission_decision
     if result.permission_reason is not None:
-        output["permissionDecisionReason"] = result.permission_reason
-    top_level: dict[str, Any] = {"hookSpecificOutput": output}
+        output[keys["permission_reason"]] = result.permission_reason
+    top_level: dict[str, Any] = {keys["hook_specific_output"]: output}
     if result.system_message is not None:
         # Codex hooks have no documented user-facing channel; pass silently for now.
         pass

@@ -11,15 +11,19 @@ import sys
 import time
 from pathlib import Path
 
-_KEYSTONE = next(
+import pytest
+
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
+_ROUTING_DIR = _AKMON / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
     sys.path.insert(0, str(_ROUTING_DIR))
 
 import routing  # noqa: E402
 import stats  # noqa: E402
+
+from common import jsondata  # noqa: E402
 
 # --------------------------------------------------------------------------------------
 # munged project dir + newest-jsonl selection
@@ -283,7 +287,7 @@ def test_budget_summary_uses_injected_fetch(tmp_path):
     assert summary.unavailable is None
     assert summary.session.remaining_pct == 87.5
     assert captured["token"] == "secret-token"
-    assert captured["url"] == stats.USAGE_URL
+    assert captured["url"] == stats.usage_url()
 
 
 def test_budget_summary_fetch_failure_is_unavailable(tmp_path):
@@ -386,7 +390,7 @@ def test_main_end_to_end_writes_report_and_prints_digest(tmp_path, capsys, monke
     root = tmp_path / "project"
     root.mkdir()
     (root / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
-    log_path = root / routing.DELEGATION_LOG_REL
+    log_path = root / routing.delegation_log_rel()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_path.write_text("T0\tk_explorer\tsmall\tfind X\n", encoding="utf-8")
 
@@ -423,3 +427,51 @@ def test_main_end_to_end_writes_report_and_prints_digest(tmp_path, capsys, monke
     content = report_files[0].read_text(encoding="utf-8")
     assert "k_explorer" in content
     assert "42" in content
+
+
+# --------------------------------------------------------------------------------------
+# C102: stats.json — the digest and report texts
+# --------------------------------------------------------------------------------------
+
+
+def test_stats_data_pins_the_structure_and_characteristic_texts():
+    data = json.loads((_ROUTING_DIR / "stats.json").read_text(encoding="utf-8"))
+    assert set(data) == {"usage_url", "credentials_rel", "report_dir_rel", "budget_labels", "digest", "report"}
+    assert data["usage_url"] == "https://api.anthropic.com/api/oauth/usage"
+    assert data["credentials_rel"] == ".claude/.credentials.json"
+    assert data["report_dir_rel"] == ".claude/stats"
+    assert data["budget_labels"]["week_all_models"] == "week (all models)"
+    assert data["budget_labels"]["week_scoped"] == "week ({{model}})"
+    assert data["digest"]["budget_unavailable"] == "budget: unavailable ({{reason}})"
+    assert data["report"]["title"] == "# Session statistics — {{stem}}"
+    assert data["report"]["tokens_orchestrator_missing_row"] == "| orchestrator | orchestrator | - | - | - | - |"
+    assert data["report"]["tokens_table_header"][0] == (
+        "| role/agent | tier | input | output | cache-read | cache-created |"
+    )
+
+
+def test_stats_loader_reads_exactly_stats_json(monkeypatch):
+    seen: list[Path] = []
+
+    def spy(path: Path):
+        seen.append(path)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    stats.usage_url()
+    stats.render_digest(None, None, [], stats.BudgetSummary(), Path("r.md"))
+    assert len(seen) >= 2
+    assert all(path == _ROUTING_DIR / "stats.json" for path in seen)
+
+
+def test_a_missing_stats_json_raises_from_rendering(monkeypatch):
+    def broken(path: Path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        stats.render_digest(None, None, [], stats.BudgetSummary(), Path("r.md"))
+    with pytest.raises(jsondata.DataFileError):
+        stats.render_report(stats.SessionRef("s", None), None, None, [], stats.BudgetSummary())
+    with pytest.raises(jsondata.DataFileError):
+        stats.usage_url()

@@ -1,0 +1,93 @@
+{
+  "code_extensions": [
+    ".py",
+    ".pyi",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".go",
+    ".rs",
+    ".java",
+    ".rb",
+    ".c",
+    ".h",
+    ".cpp",
+    ".cc",
+    ".hpp",
+    ".cs",
+    ".swift",
+    ".kt",
+    ".scala",
+    ".php",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".sql",
+    ".r",
+    ".jl",
+    ".lua",
+    ".dart",
+    ".m",
+    ".mm"
+  ],
+  "non_code_segments": [
+    "/docs/",
+    "/{{aitna}}/design/",
+    "/{{aitna}}/memory/",
+    "/{{aitna}}/akmon/",
+    "/{{aitna}}/.akmon/",
+    "/.claude/"
+  ],
+  "planning_doc_segments": [
+    "/{{aitna}}/design/",
+    "/docs/dev/",
+    "/{{aitna}}/akmon/",
+    "/{{aitna}}/.akmon/"
+  ],
+  "planning_doc_files": [
+    "/{{aitna}}/tasks.md",
+    "/{{aitna}}/tasks_archive.md"
+  ],
+  "delegation": {
+    "nudge_threshold": 30,
+    "nudge_threshold_env": "AKMON_DELEGATION_NUDGE_THRESHOLD",
+    "ask_threshold": 120,
+    "ask_threshold_env": "AKMON_DELEGATION_ASK_THRESHOLD",
+    "grace": 8,
+    "grace_env": "AKMON_DELEGATION_GRACE",
+    "weights": {
+      "read": 0.5,
+      "edit": 1.0,
+      "shell": 1.0
+    }
+  },
+  "interactive_default_permission_mode": "default",
+  "unclassified_shell_route_notice": "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target",
+  "session_start": {
+    "title": "[akmon] Active-agent declaration",
+    "format_line": "Before doing project work, state which agent you are operating as, and restate it whenever you switch. Format: `🧭 agent: <name> — <focus>`.",
+    "develop_line": "- DEVELOP (build the project): {{agents}}",
+    "operate_line": "- OPERATE (run/use from outside): {{agents}}",
+    "no_agent_line": "No agent is active yet.",
+    "pick_by_operation": "Pick by operation: decompose an existing thing → review · construct a new structure/decision → architect · realize a decided structure in code → engineer. If unclear, ask.",
+    "pick_generic": "Pick the one the task calls for; if unclear, ask.",
+    "delegation_line": "Delegation is the default for non-atomic work: before the first repository sweep, edit, or test run, decompose the task and delegate every independent sub-step to available subagents. Keep only decomposition, routing, synthesis, and owner dialogue in the orchestrator. Skip delegation only when the task is atomic or the harness exposes no subagents; state the reason.",
+    "memory_line": "Also: read `{{root_name}}/memory/` at session start (project memory)."
+  },
+  "role_on_code_message": "[akmon] Role check — you are editing project code.\nEditing code is **realization** → the `engineer` role. Discriminator: decompose an existing thing → `review` · construct a new structure/decision → `architect` · realize a decided structure in code → `engineer`. If you were assessing (`review`) or designing (`architect`) — or no role is declared — this is a switch: declare `🧭 agent: engineer — <focus>` and follow its pipeline (code-flow + pre-commit: tests + lint mandatory before \"done\") before continuing. Restate the role on every switch (roles/README.md).\nDesign→code hand-off: before writing code, confirm the task is **landed in `{{tasks}}`** with a link to its design (design-flow step 8 Hand-off), and **re-read the backlog** to sequence it against other work (code-flow step 1 Take) — a cold engineer session must be able to pick this task from `{{tasks}}` alone.",
+  "analysis_before_mutation_message": "[akmon] Analysis-before-mutation check — you are editing a planning/design doc (backlog / design / ADR / requirements / akmon process).\nRole: **assessing what is** (problems, state, conformance) is `review`; **constructing the design** (options, contracts, the chosen structure) is `architect`. Declare the role (`🧭 agent: <name> — <focus>`) and restate it on a switch (roles/README.md).\nIf this turn is analysis-only — the owner asked you to analyze, explain, review, compare options, or identify what remains — STOP: report findings + a recommendation in chat and get explicit confirmation (\"write it\" / \"record it\" / \"make the change\") before editing. If the request was already an edit command, proceed. Rule: guardrails/_common.md § Analysis before mutation.",
+  "drift_score_text": "a drift score of {{score}} (an edit or shell call counts 1, a read ½, the first {{grace}} calls of a stretch nothing)",
+  "delegation_roster": "`k_explorer` · mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → `k_validator` · code under a decided contract → `k_implementer` · load-bearing analysis → `k_reasoner`",
+  "delegation_nudge_message": "[akmon] Delegation check — {{drift_score}} since the last subagent delegation.\nDelegation is the default: route by task kind (MODEL.md § Capability tiers; guardrails/_common.md § Route by task kind). Exploration/summaries → {{roster}}.\nIf this genuinely is orchestrator work (decompose / route / synthesize / owner dialogue), carry on — this reminder is advisory and fires once per drift episode (a subagent delegation re-arms it).",
+  "delegation_ask_message": "[akmon] Sustained delegation drift — {{drift_score}} with no subagent delegation. A read never carries this ask, so it lands on a call that changes something (guardrails/_common.md § Route by task kind).\nRoute the next steps to a `k_*` delegate — exploration/summaries → {{roster}} — or confirm this is genuinely one of the orchestrator's reserved four (decompose · route · synthesize · owner dialogue) to proceed.\nFires once per drift episode (a subagent delegation re-arms it).",
+  "privilege_escalation_reason": "Privilege-escalation guardrail: 'sudo' is never run by the agent. If elevated access is genuinely required, ask the owner to run the command themselves.",
+  "git_commit_no_ai_trailer_reason": "Commit guardrail: no AI 'Co-Authored-By' trailer — the committer is the human. Remove it and retry.",
+  "git_commit_push_tag_merge_reason": "Commit guardrail: the owner owns commits. push/tag/merge land history — confirm this is explicitly requested.",
+  "git_commit_landing_reason": "Commit guardrail: the owner owns commits. A commit on '{{branch}}' is a landing commit — confirm explicitly, or branch to backup/* first.",
+  "git_commit_detached_head": "detached HEAD",
+  "escalated_ask_suffix": "[escalated ask→deny: permission_mode={{permission_mode}} is not the interactive default, so 'ask' cannot be trusted to reach the owner (ADR-0006/D02, C31) — re-run from an attended default-mode session if this was genuinely intended.]",
+  "stale_guardrail_notice": "⚠ akmon: the rules in {{root_name}}/.akmon/ are not the ones this session's akmon ships ({{names}}). Run `akmon sync`, then start a new session — the rules are @-imported once at session start, so this session keeps the stale copy."
+}

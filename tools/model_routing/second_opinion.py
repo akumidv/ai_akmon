@@ -23,8 +23,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import routing
 
+from common import jsondata
 from common.project_root import resolve_project_root
 from common.record import records_package_mode
+
+
+def _so_data() -> dict:
+    """The second-opinion runner texts (``second_opinion.json``), read on the call that needs it."""
+    return jsondata.read(Path(__file__).parent / "second_opinion.json")
+
+
+def _gate_data() -> dict:
+    """The shared gate-pack texts (``gate.json``), read on the call that needs it."""
+    return jsondata.read(Path(__file__).parent / "gate.json")
 
 
 def _standard_tree_root(project_root: Path) -> Path:
@@ -51,18 +62,7 @@ def _read_json(path: Path) -> dict:
 
 
 def _prompt(gate: str, prompt_text: str) -> str:
-    return f"""You are an independent second-opinion reviewer for a akmon verify gate.
-
-Gate: {gate}
-
-Rules:
-- Review only; do not edit files, run commands, commit, push, or approve on behalf of the owner.
-- Return: verdict, key disagreements or risks, missing verification, and concrete file/line references when available.
-- Treat the result as advisory input to owner verification, not a sign-off.
-
-Material to review:
-{prompt_text}
-"""
+    return jsondata.fill(_so_data()["prompt"], {"gate": gate, "material": prompt_text})
 
 
 def _unavailable_notice(registry: dict, config: dict, orchestrator_vendor: str, gate: str) -> str:
@@ -75,17 +75,14 @@ def _unavailable_notice(registry: dict, config: dict, orchestrator_vendor: str, 
     boundary attached — instead of being taken automatically and labelled as diversity.
     """
     reason = routing.second_opinion_unavailability(registry, config, orchestrator_vendor)
+    lines = _so_data()["unavailable_notice"]
     return "\n".join(
         [
-            f"second-opinion: skipped at gate '{gate}' — ladder exhausted, no model-diverse reviewer is reachable.",
-            f"  why: {reason}.",
-            "  not downgraded: a reviewer on the author's own weights repeats the author's "
-            "systematic errors and agrees confidently, which is indistinguishable from a review.",
-            "  what you can still run by hand: hand this gate pack to a subagent on this same "
-            "model in a fresh context (no session history, no prior reasoning).",
-            "  its limits, to record with any result: it removes anchoring on the author's own "
-            "output; it does not remove shared model priors. It is a self-check, not a second "
-            "opinion, and must not be filed as one.",
+            jsondata.fill(lines[0], {"gate": gate}),
+            jsondata.fill(lines[1], {"reason": reason}),
+            lines[2],
+            lines[3],
+            lines[4],
         ]
     )
 
@@ -100,7 +97,7 @@ def _digest(text: str, limit: int = 1200) -> str:
     stripped = text.strip()
     if len(stripped) <= limit:
         return stripped
-    return stripped[:limit].rstrip() + "\n...[truncated; see full report]"
+    return stripped[:limit].rstrip() + _gate_data()["truncation_suffix_report"]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -124,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     if root_notice:
         print(root_notice, file=sys.stderr)
     registry = routing.load_registry(_standard_tree_root(root), root)
-    config = _read_json(root / routing.LOCAL_CONFIG_REL)
+    config = _read_json(root / routing.local_config_rel())
 
     if args.provider:
         provider, model = args.provider, None
@@ -144,10 +141,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     report = _report_path(root, str(spec["report_dir"]), args.gate)
 
+    summary = _so_data()["summary"]
     if args.dry_run:
         print(" ".join(command))
-        print(f"report: {report.relative_to(root)}")
-        print(f"provider={provider} model={model or '(default)'}")
+        print(jsondata.fill(summary["report_line"], {"path": report.relative_to(root)}))
+        print(jsondata.fill(summary["provider_line"], {"provider": provider, "model": model or "(default)"}))
         return 0
 
     completed = subprocess.run(command, cwd=root, text=True, capture_output=True, check=False)
@@ -157,9 +155,17 @@ def main(argv: list[str] | None = None) -> int:
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(output + "\n", encoding="utf-8")
     print(
-        f"second-opinion provider={provider} model={model or '(default)'} gate={args.gate} exit={completed.returncode}"
+        jsondata.fill(
+            _so_data()["summary"]["result_line"],
+            {
+                "provider": provider,
+                "model": model or "(default)",
+                "gate": args.gate,
+                "exit": completed.returncode,
+            },
+        )
     )
-    print(f"report: {report.relative_to(root)}")
+    print(jsondata.fill(_so_data()["summary"]["report_line"], {"path": report.relative_to(root)}))
     if output:
         print("")
         print(_digest(output))

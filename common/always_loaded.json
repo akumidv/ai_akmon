@@ -1,0 +1,18 @@
+{
+  "block_heading": "## Dev layer — akmon",
+  "scopes": ["akmon-shipped", "consumer-total"],
+  "caps": {
+    "akmon-shipped": {
+      "lines": 320,
+      "bytes": 21000
+    },
+    "consumer-total": {
+      "lines": 570,
+      "bytes": 34000
+    }
+  },
+  "severity": {
+    "akmon-shipped": "error",
+    "consumer-total": "warn"
+  }
+}

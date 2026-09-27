@@ -14,6 +14,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 # Where the dev layer is, what it is called, and how the project root is found are not this
 # module's facts — they belong to ``common.project_root``, which is stdlib-only and sits
@@ -27,7 +28,13 @@ from pathlib import Path
 _TREE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_TREE_ROOT))
 
-from common.markers import claim_diagnostic_marker  # noqa: E402
+from common import jsondata  # noqa: E402
+from common.markers import (  # noqa: E402
+    claim_diagnostic_marker,
+    delegation_state_name,
+    marker_kind,
+    unidentified_identity,
+)
 from common.materialization import stale_materialized  # noqa: E402
 from common.project_root import (  # noqa: E402
     aitna_root,
@@ -106,6 +113,8 @@ def hook_failure_diagnostic(hook_name: str, exc: BaseException) -> str:
     """The one stderr line a crashed entry point writes (ADR 0013 F3): the hook and the class.
 
     Never the exception's message — it routinely carries a path, a key or a payload fragment.
+    The text stays in code, not in ``hook_core.json`` (C102 review F1): the crash path must not
+    depend on a data file, since a missing or broken one is exactly what it reports.
 
     Runtime classification: operational
     Rationale: crash posture (ADR 0013 F3), not a guardrail policy — it reports that a hook failed
@@ -121,7 +130,8 @@ def hook_failure_notice(hook_name: str, exc: BaseException) -> str:
 
     The same two facts as :func:`hook_failure_diagnostic` and nothing from the exception's text.
     It is written inside a crash handler, so it reads nothing that can raise — the dev-layer
-    name is an environment lookup with a default, not a filesystem question.
+    name is an environment lookup with a default, not a filesystem question, and the text is
+    code, not data (see :func:`hook_failure_diagnostic`).
 
     Runtime classification: operational
     Rationale: the owner-facing half of the same crash report (ADR-0013/D01) — it states that a
@@ -136,42 +146,17 @@ def hook_failure_notice(hook_name: str, exc: BaseException) -> str:
     )
 
 
-_CODE_EXTENSIONS = frozenset(
-    {
-        ".py",
-        ".pyi",
-        ".ts",
-        ".tsx",
-        ".js",
-        ".jsx",
-        ".mjs",
-        ".cjs",
-        ".go",
-        ".rs",
-        ".java",
-        ".rb",
-        ".c",
-        ".h",
-        ".cpp",
-        ".cc",
-        ".hpp",
-        ".cs",
-        ".swift",
-        ".kt",
-        ".scala",
-        ".php",
-        ".sh",
-        ".bash",
-        ".zsh",
-        ".sql",
-        ".r",
-        ".jl",
-        ".lua",
-        ".dart",
-        ".m",
-        ".mm",
-    }
-)
+def _hook_core_data() -> dict[str, Any]:
+    """The hook_core data file beside this module (C102).
+
+    The path-classification tables, the delegation policy, and the owner-facing reminder texts.
+    """
+    return jsondata.read(Path(__file__).parent / "hook_core.json")
+
+
+def _code_extensions() -> frozenset[str]:
+    """The recognized source-file extensions (hooks/hook_core.json, C102)."""
+    return frozenset(_hook_core_data()["code_extensions"])
 
 
 # Path-classification segments are derived from the configured dev-layer root (default
@@ -179,32 +164,72 @@ _CODE_EXTENSIONS = frozenset(
 # These match lowercased path *substrings*, so the segment uses the lowercased root name.
 def _non_code_segments() -> tuple[str, ...]:
     aitna = aitna_root_name().lower()
-    return (
-        "/docs/",
-        f"/{aitna}/design/",
-        f"/{aitna}/memory/",
-        f"/{aitna}/akmon/",
-        f"/{aitna}/.akmon/",
-        "/.claude/",
-    )
+    return tuple(jsondata.fill(segment, {"aitna": aitna}) for segment in _hook_core_data()["non_code_segments"])
 
 
-# Neutral tool-kind: each vendor adapter normalizes its own file-editing tool name(s) to this
-# token before calling. The core stays vendor-clean — it never names a vendor's tools.
-EDIT_TOOL = "edit"
-_EDIT_TOOL_KINDS = frozenset({EDIT_TOOL})
-# Further neutral kinds for the delegation nudge: a shell/command tool, a read/sweep tool
-# (Read/Grep/Glob), and the vendor's subagent-delegation tool.
-SHELL_TOOL = "shell"
-READ_TOOL = "read"
-SUBAGENT_TOOL = "subagent"
+def _vocabulary() -> dict[str, Any]:
+    """The hook vocabulary table beside this module (C102).
+
+    The neutral tool-kind tokens, the vendor tool-name tables, the codex payload key spellings,
+    and the hook document-shape keys.
+    """
+    return jsondata.read(Path(__file__).parent / "vocabulary.json")
 
 
-UNCLASSIFIED_SHELL_ROUTE_NOTICE = (
-    "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot "
-    "classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard "
-    "and the path-keyed reminders receive no inferred target"
-)
+def neutral_kind(stem: str) -> str:
+    """One neutral tool-kind token by stem (the table is owned by hooks/vocabulary.json, C102)."""
+    return _vocabulary()["neutral_kinds"][stem]
+
+
+def edit_tool() -> str:
+    """The neutral edit-tool kind every vendor adapter normalizes to.
+
+    Runtime classification: operational
+    Rationale: a data lookup (hooks/vocabulary.json, C102) — it resolves the token the adapters
+    compare against and renders no text of its own; what is said is owned by the caller.
+    """
+    return neutral_kind("edit")
+
+
+def _edit_tool_kinds() -> frozenset[str]:
+    return frozenset({edit_tool()})
+
+
+# Further neutral kinds for the delegation nudge: a shell/command tool, a read/sweep tool,
+# and the vendor's subagent-delegation tool.
+def shell_tool() -> str:
+    """The neutral shell/command-tool kind.
+
+    Runtime classification: operational
+    Rationale: a data lookup (hooks/vocabulary.json, C102) — it resolves the token the adapters
+    compare against and renders no text of its own; what is said is owned by the caller.
+    """
+    return neutral_kind("shell")
+
+
+def read_tool() -> str:
+    """The neutral read/sweep-tool kind.
+
+    Runtime classification: operational
+    Rationale: a data lookup (hooks/vocabulary.json, C102) — it resolves the token the adapters
+    compare against and renders no text of its own; what is said is owned by the caller.
+    """
+    return neutral_kind("read")
+
+
+def subagent_tool() -> str:
+    """The neutral subagent-delegation kind.
+
+    Runtime classification: operational
+    Rationale: a data lookup (hooks/vocabulary.json, C102) — it resolves the token the core
+    compares against and renders no text of its own; what is said is owned by the caller.
+    """
+    return neutral_kind("subagent")
+
+
+def unclassified_shell_route_notice() -> str:
+    """The once-per-session stderr line for a shell call no advisory can classify (C102)."""
+    return _hook_core_data()["unclassified_shell_route_notice"]
 
 
 def report_unclassified_shell_route(session_id: str | None) -> None:
@@ -229,25 +254,20 @@ def report_unclassified_shell_route(session_id: str | None) -> None:
     describes is the one nothing classifies. It writes to stderr itself, so ADR-0012/D07 puts it
     among the owner-visible callables outside the join that must say what they are.
     """
-    if claim_diagnostic_marker("shell-route", session_id):
-        print(UNCLASSIFIED_SHELL_ROUTE_NOTICE, file=sys.stderr)
+    if claim_diagnostic_marker(marker_kind("shell_route"), session_id):
+        print(unclassified_shell_route_notice(), file=sys.stderr)
 
 
 # Planning / design docs — editing one may be an analysis-only turn that needs confirmation
 # first (see guardrails/_common.md § Analysis before mutation).
 def _planning_doc_segments() -> tuple[str, ...]:
     aitna = aitna_root_name().lower()
-    return (
-        f"/{aitna}/design/",
-        "/docs/dev/",
-        f"/{aitna}/akmon/",
-        f"/{aitna}/.akmon/",
-    )
+    return tuple(jsondata.fill(segment, {"aitna": aitna}) for segment in _hook_core_data()["planning_doc_segments"])
 
 
 def _planning_doc_files() -> tuple[str, ...]:
     aitna = aitna_root_name().lower()
-    return (f"/{aitna}/tasks.md", f"/{aitna}/tasks_archive.md")
+    return tuple(jsondata.fill(name, {"aitna": aitna}) for name in _hook_core_data()["planning_doc_files"])
 
 
 def current_git_branch() -> str:
@@ -272,22 +292,22 @@ def current_git_branch() -> str:
 # `ask`; everywhere else (or the field missing outright) the owner asked to be stricter
 # rather than silently pass through, so the decision is escalated to a hard `deny` — the one
 # decision every vendor is confirmed to enforce unconditionally.
-_INTERACTIVE_DEFAULT_PERMISSION_MODE = "default"
+def _interactive_default_permission_mode() -> str:
+    """The one permission mode known to gate on a hook-forced ``ask`` (C102)."""
+    return _hook_core_data()["interactive_default_permission_mode"]
 
 
 def _escalate_unattended_ask(result: HookResult, permission_mode: str | None) -> HookResult:
-    if result.permission_decision != "ask" or permission_mode == _INTERACTIVE_DEFAULT_PERMISSION_MODE:
+    if result.permission_decision != "ask" or permission_mode == _interactive_default_permission_mode():
         return result
+    suffix = jsondata.fill(
+        _hook_core_data()["escalated_ask_suffix"], {"permission_mode": repr(permission_mode)}
+    )
     return HookResult(
         event_name=result.event_name,
         additional_context=result.additional_context,
         permission_decision="deny",
-        permission_reason=(
-            f"{result.permission_reason} [escalated ask→deny: permission_mode="
-            f"{permission_mode!r} is not the interactive default, so 'ask' cannot be trusted "
-            "to reach the owner (ADR-0006/D02, C31) — re-run from an attended default-mode session if "
-            "this was genuinely intended.]"
-        ),
+        permission_reason=f"{result.permission_reason} {suffix}",
         system_message=result.system_message,
     )
 
@@ -311,8 +331,7 @@ def privilege_escalation_guard_result(command: str) -> HookResult | None:
     return HookResult(
         event_name="PreToolUse",
         permission_decision="deny",
-        permission_reason="Privilege-escalation guardrail: 'sudo' is never run by the agent. "
-        "If elevated access is genuinely required, ask the owner to run the command themselves.",
+        permission_reason=_hook_core_data()["privilege_escalation_reason"],
     )
 
 
@@ -330,8 +349,7 @@ def git_commit_guard_result(
         return HookResult(
             event_name="PreToolUse",
             permission_decision="deny",
-            permission_reason="Commit guardrail: no AI 'Co-Authored-By' trailer — the committer is "
-            "the human. Remove it and retry.",
+            permission_reason=_hook_core_data()["git_commit_no_ai_trailer_reason"],
         )
 
     def is_git(subcommand: str) -> bool:
@@ -342,8 +360,7 @@ def git_commit_guard_result(
             HookResult(
                 event_name="PreToolUse",
                 permission_decision="ask",
-                permission_reason="Commit guardrail: the owner owns commits. push/tag/merge land "
-                "history — confirm this is explicitly requested.",
+                permission_reason=_hook_core_data()["git_commit_push_tag_merge_reason"],
             ),
             permission_mode,
         )
@@ -351,13 +368,15 @@ def git_commit_guard_result(
     if is_git("commit"):
         resolved_branch = current_git_branch() if branch is None else branch
         if resolved_branch in ("main", "master") or not resolved_branch:
+            data = _hook_core_data()
             return _escalate_unattended_ask(
                 HookResult(
                     event_name="PreToolUse",
                     permission_decision="ask",
-                    permission_reason=f"Commit guardrail: the owner owns commits. A commit on "
-                    f"'{resolved_branch or 'detached HEAD'}' is a landing commit — confirm "
-                    "explicitly, or branch to backup/* first.",
+                    permission_reason=jsondata.fill(
+                        data["git_commit_landing_reason"],
+                        {"branch": resolved_branch or data["git_commit_detached_head"]},
+                    ),
                 ),
                 permission_mode,
             )
@@ -409,10 +428,9 @@ def stale_guardrail_notice(root: Path) -> str | None:
     names = stale_materialized(root, runtime_root)
     if not names:
         return None
-    return (
-        f"\u26a0 akmon: the rules in {aitna_root_name()}/.akmon/ are not the ones this session's "
-        f"akmon ships ({', '.join(names)}). Run `akmon sync`, then start a new session — the rules "
-        "are @-imported once at session start, so this session keeps the stale copy."
+    return jsondata.fill(
+        _hook_core_data()["stale_guardrail_notice"],
+        {"root_name": aitna_root_name(), "names": ", ".join(names)},
     )
 
 
@@ -436,34 +454,23 @@ def session_start_result(root: Path) -> HookResult | None:
             return None
         return HookResult(event_name="SessionStart", additional_context=stale, system_message=stale)
 
-    lines = [
-        "[akmon] Active-agent declaration",
-        "Before doing project work, state which agent you are operating as, and restate it "
-        "whenever you switch. Format: `\U0001f9ed agent: <name> — <focus>`.",
-    ]
+    # The line fragments are owned by hooks/hook_core.json (C102); the assembly — which lines
+    # appear and in what order — stays here.
+    start = _hook_core_data()["session_start"]
+    lines = [start["title"], start["format_line"]]
     if dev:
-        lines.append(f"- DEVELOP (build the project): {', '.join(dev)}")
+        lines.append(jsondata.fill(start["develop_line"], {"agents": ", ".join(dev)}))
     if desk:
-        lines.append(f"- OPERATE (run/use from outside): {', '.join(desk)}")
-    lines.append("No agent is active yet.")
+        lines.append(jsondata.fill(start["operate_line"], {"agents": ", ".join(desk)}))
+    lines.append(start["no_agent_line"])
     if dev:
         # The DEVELOP routing discriminator (ADR 0003 §4): give the picking rule up front, not
         # only after a code/planning edit already happened. Keyed by cognitive operation.
-        lines.append(
-            "Pick by operation: decompose an existing thing → review · construct a new "
-            "structure/decision → architect · realize a decided structure in code → engineer. "
-            "If unclear, ask."
-        )
+        lines.append(start["pick_by_operation"])
     else:
-        lines.append("Pick the one the task calls for; if unclear, ask.")
-    lines.append(
-        "Delegation is the default for non-atomic work: before the first repository sweep, edit, "
-        "or test run, decompose the task and delegate every independent sub-step to available "
-        "subagents. Keep only decomposition, routing, synthesis, and owner dialogue in the "
-        "orchestrator. Skip delegation only when the task is atomic or the harness exposes no "
-        "subagents; state the reason."
-    )
-    lines.append(f"Also: read `{aitna_root_name()}/memory/` at session start (project memory).")
+        lines.append(start["pick_generic"])
+    lines.append(start["delegation_line"])
+    lines.append(jsondata.fill(start["memory_line"], {"root_name": aitna_root_name()}))
     if stale is not None:
         lines.append(stale)
     # Dual channel for the stale-guardrail line only (requirement 11): it asks the *owner* for a
@@ -559,26 +566,12 @@ def is_code_path(file_path: str, root: Path | None = None) -> bool:
     target = classify_target(file_path, root)
     if any(segment in target for segment in _non_code_segments()):
         return False
-    return Path(target).suffix in _CODE_EXTENSIONS
+    return Path(target).suffix in _code_extensions()
 
 
 def role_on_code_message() -> str:
-    """Owner-facing text for the role-on-code reminder."""
-    tasks = f"{aitna_root_name()}/TASKS.md"
-    return (
-        "[akmon] Role check — you are editing project code.\n"
-        "Editing code is **realization** → the `engineer` role. Discriminator: decompose an "
-        "existing thing → `review` · construct a new structure/decision → `architect` · "
-        "realize a decided structure in code → `engineer`. If you were assessing (`review`) or "
-        "designing (`architect`) — or no role is declared — this is a switch: declare "
-        "`\U0001f9ed agent: engineer — <focus>` and follow its pipeline (code-flow + pre-commit: "
-        'tests + lint mandatory before "done") before continuing. '
-        "Restate the role on every switch (roles/README.md).\n"
-        "Design→code hand-off: before writing code, confirm the task is **landed in "
-        f"`{tasks}`** with a link to its design (design-flow step 8 Hand-off), and **re-read "
-        "the backlog** to sequence it against other work (code-flow step 1 Take) — a cold engineer "
-        f"session must be able to pick this task from `{tasks}` alone."
-    )
+    """Owner-facing text for the role-on-code reminder (hooks/hook_core.json, C102)."""
+    return jsondata.fill(_hook_core_data()["role_on_code_message"], {"tasks": f"{aitna_root_name()}/TASKS.md"})
 
 
 def role_on_code_result(
@@ -588,12 +581,12 @@ def role_on_code_result(
 
     Policy ID: role.declaration
     """
-    if tool_name not in _EDIT_TOOL_KINDS:
+    if tool_name not in _edit_tool_kinds():
         return None
     if not isinstance(file_path, str) or not is_code_path(file_path, project_root):
         return None
 
-    if not claim_diagnostic_marker("role-on-code", session_id):
+    if not claim_diagnostic_marker(marker_kind("role_on_code"), session_id):
         return None
 
     return HookResult(event_name="PreToolUse", additional_context=role_on_code_message())
@@ -610,19 +603,8 @@ def is_planning_doc(file_path: str, root: Path | None = None) -> bool:
 
 
 def analysis_before_mutation_message() -> str:
-    """Owner-facing text for the analysis-before-mutation reminder."""
-    return (
-        "[akmon] Analysis-before-mutation check — you are editing a planning/design doc "
-        "(backlog / design / ADR / requirements / akmon process).\n"
-        "Role: **assessing what is** (problems, state, conformance) is `review`; **constructing "
-        "the design** (options, contracts, the chosen structure) is `architect`. Declare the role "
-        "(`\U0001f9ed agent: <name> — <focus>`) and restate it on a switch (roles/README.md).\n"
-        "If this turn is analysis-only — the owner asked you to analyze, explain, review, "
-        "compare options, or identify what remains — STOP: report findings + a recommendation in "
-        'chat and get explicit confirmation ("write it" / "record it" / "make the change") '
-        "before editing. If the request was already an edit command, proceed. Rule: "
-        "guardrails/_common.md § Analysis before mutation."
-    )
+    """Owner-facing text for the analysis-before-mutation reminder (hooks/hook_core.json, C102)."""
+    return _hook_core_data()["analysis_before_mutation_message"]
 
 
 def analysis_write_result(
@@ -632,12 +614,12 @@ def analysis_write_result(
 
     Policy ID: analysis.before-mutation
     """
-    if tool_name not in _EDIT_TOOL_KINDS:
+    if tool_name not in _edit_tool_kinds():
         return None
     if not isinstance(file_path, str) or not is_planning_doc(file_path, project_root):
         return None
 
-    if not claim_diagnostic_marker("analysis-guard", session_id):
+    if not claim_diagnostic_marker(marker_kind("analysis_guard"), session_id):
         return None
 
     return HookResult(event_name="PreToolUse", additional_context=analysis_before_mutation_message())
@@ -667,10 +649,10 @@ def analysis_write_result(
 # another corpus found the same (M75). A signal that fires in every session measures session
 # length. Three corrections, all keyed on the tool kind — the command text is not read (C28(c)):
 #
-# - **A read weighs half** (:data:`_DELEGATION_WEIGHTS`): a sweep is drift too, but cheaper to
-#   undo than an edit.
-# - **The opening calls of a stretch are free** (:data:`_DELEGATION_GRACE_DEFAULT`): orientation
-#   before the first delegation is not yet a failure to delegate.
+# - **A read weighs half** (:func:`_delegation_weights`, from ``hooks/hook_core.json``): a sweep
+#   is drift too, but cheaper to undo than an edit.
+# - **The opening calls of a stretch are free** (:func:`delegation_grace`): orientation before
+#   the first delegation is not yet a failure to delegate.
 # - **A read never carries the ask.** Outside the interactive default mode the ask is a deny, and
 #   a denied look costs the agent the means to find out what it was about to do. The score stays
 #   over the threshold, so the ask lands on the next edit or shell call.
@@ -679,83 +661,79 @@ def analysis_write_result(
 # weights barely move that: from 50 to 120 every weighting tried reaches 7 of 11 (M73), because
 # those sessions did run hundreds of calls without a delegation — there the advisory is mostly
 # right. What changed is that a read is never denied and the ask comes six times later.
-_DELEGATION_NUDGE_THRESHOLD_DEFAULT = 30
-_DELEGATION_ASK_THRESHOLD_DEFAULT = 120
-_DELEGATION_GRACE_DEFAULT = 8
+def _delegation_policy() -> dict[str, Any]:
+    """The calibrated delegation-drift policy (hooks/hook_core.json, C102)."""
+    return _hook_core_data()["delegation"]
 
-#: What one orchestrator call adds to the drift score, by tool kind.
-_DELEGATION_WEIGHTS: dict[str, float] = {READ_TOOL: 0.5, EDIT_TOOL: 1.0, SHELL_TOOL: 1.0}
-_DELEGATION_NUDGE_TOOL_KINDS = frozenset(_DELEGATION_WEIGHTS)
+
+def _delegation_weights() -> dict[str, float]:
+    """What one orchestrator call adds to the drift score, by neutral tool kind."""
+    weights = _delegation_policy()["weights"]
+    return {neutral_kind(stem): value for stem, value in weights.items()}
+
+
+def _delegation_nudge_tool_kinds() -> frozenset[str]:
+    return frozenset(_delegation_weights())
 
 
 def delegation_grace() -> int:
-    """Calls at the start of a stretch that score nothing (env `KEYSTONE_DELEGATION_GRACE`)."""
+    """Calls at the start of a stretch that score nothing (env `AKMON_DELEGATION_GRACE`)."""
+    policy = _delegation_policy()
     try:
-        value = int(os.environ.get("KEYSTONE_DELEGATION_GRACE", ""))
+        value = int(os.environ.get(policy["grace_env"], ""))
     except ValueError:
-        return _DELEGATION_GRACE_DEFAULT
-    return value if value >= 0 else _DELEGATION_GRACE_DEFAULT
+        return policy["grace"]
+    return value if value >= 0 else policy["grace"]
 
 
 def delegation_nudge_threshold() -> int:
-    """Drift score that triggers the advisory nudge (env `KEYSTONE_DELEGATION_NUDGE_THRESHOLD`)."""
+    """Drift score that triggers the advisory nudge (env `AKMON_DELEGATION_NUDGE_THRESHOLD`)."""
+    policy = _delegation_policy()
     try:
-        value = int(os.environ.get("KEYSTONE_DELEGATION_NUDGE_THRESHOLD", ""))
+        value = int(os.environ.get(policy["nudge_threshold_env"], ""))
     except ValueError:
-        return _DELEGATION_NUDGE_THRESHOLD_DEFAULT
-    return value if value > 0 else _DELEGATION_NUDGE_THRESHOLD_DEFAULT
+        return policy["nudge_threshold"]
+    return value if value > 0 else policy["nudge_threshold"]
 
 
 def delegation_ask_threshold() -> int:
-    """Drift score that graduates the nudge to a hard `ask` (env `KEYSTONE_DELEGATION_ASK_THRESHOLD`).
+    """Drift score that graduates the nudge to a hard `ask` (env `AKMON_DELEGATION_ASK_THRESHOLD`).
 
     Clamped so it never falls below the advisory threshold — an ask below the advisory
     would be reachable before the advisory itself.
     """
+    policy = _delegation_policy()
     try:
-        value = int(os.environ.get("KEYSTONE_DELEGATION_ASK_THRESHOLD", ""))
+        value = int(os.environ.get(policy["ask_threshold_env"], ""))
     except ValueError:
-        value = _DELEGATION_ASK_THRESHOLD_DEFAULT
+        value = policy["ask_threshold"]
     if value <= 0:
-        value = _DELEGATION_ASK_THRESHOLD_DEFAULT
+        value = policy["ask_threshold"]
     return max(value, delegation_nudge_threshold())
 
 
 def _drift_score_text(score: float) -> str:
-    return (
-        f"a drift score of {score:g} (an edit or shell call counts 1, a read ½, the first "
-        f"{delegation_grace()} calls of a stretch nothing)"
+    """The drift-score clause; the `:g` numeric spelling stays code (hooks/hook_core.json, C102)."""
+    return jsondata.fill(
+        _hook_core_data()["drift_score_text"], {"score": f"{score:g}", "grace": str(delegation_grace())}
     )
 
 
 def delegation_nudge_message(score: float) -> str:
-    """Owner-facing text for the advisory delegation-drift nudge."""
-    return (
-        f"[akmon] Delegation check — {_drift_score_text(score)} since the last subagent "
-        "delegation.\n"
-        "Delegation is the default: route by task kind (MODEL.md § Capability tiers; "
-        "guardrails/_common.md § Route by task kind). Exploration/summaries → `k_explorer` · "
-        "mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → "
-        "`k_validator` · code under a decided contract → `k_implementer` · load-bearing "
-        "analysis → `k_reasoner`.\n"
-        "If this genuinely is orchestrator work (decompose / route / synthesize / owner "
-        "dialogue), carry on — this reminder is advisory and fires once per drift episode "
-        "(a subagent delegation re-arms it)."
+    """Owner-facing text for the advisory delegation-drift nudge (hooks/hook_core.json, C102)."""
+    data = _hook_core_data()
+    return jsondata.fill(
+        data["delegation_nudge_message"],
+        {"drift_score": _drift_score_text(score), "roster": data["delegation_roster"]},
     )
 
 
 def delegation_ask_message(score: float) -> str:
-    """Owner-facing text for the hard-ask escalation on sustained delegation drift."""
-    return (
-        f"[akmon] Sustained delegation drift — {_drift_score_text(score)} with no subagent "
-        "delegation. A read never carries this ask, so it lands on a call that changes "
-        "something (guardrails/_common.md § Route by task kind).\n"
-        "Route the next steps to a `k_*` delegate — exploration/summaries → `k_explorer` · "
-        "mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → "
-        "`k_validator` · code under a decided contract → `k_implementer` · load-bearing "
-        "analysis → `k_reasoner` — or confirm this is genuinely one of the orchestrator's "
-        "reserved four (decompose · route · synthesize · owner dialogue) to proceed.\n"
-        "Fires once per drift episode (a subagent delegation re-arms it)."
+    """Owner-facing text for the hard-ask escalation on sustained delegation drift (C102)."""
+    data = _hook_core_data()
+    return jsondata.fill(
+        data["delegation_ask_message"],
+        {"drift_score": _drift_score_text(score), "roster": data["delegation_roster"]},
     )
 
 
@@ -781,7 +759,7 @@ def _update_delegation_counter(counter: Path, tool_name: str) -> float:
         seen, score = 0, 0.0
     seen += 1
     if seen > delegation_grace():
-        score += _DELEGATION_WEIGHTS[tool_name]
+        score += _delegation_weights()[tool_name]
     with contextlib.suppress(OSError):
         counter.write_text(f"{seen} {score}", encoding="utf-8")
     return score
@@ -792,7 +770,7 @@ def _delegation_ask_result(
 ) -> HookResult | None:
     """The hard ask: fires once per stretch, never on a read."""
     # A read never carries the ask and does not spend it; the next edit or shell call does.
-    if ask_marker.exists() or tool_name == READ_TOOL:
+    if ask_marker.exists() or tool_name == read_tool():
         return None
     with contextlib.suppress(OSError):
         ask_marker.write_text("seen", encoding="utf-8")
@@ -833,15 +811,15 @@ def delegation_nudge_result(
     if is_subagent:
         return None
 
-    sid = session_id or "nosession"
-    counter = Path(tempfile.gettempdir()) / f"akmon-delegation-nudge-{sid}.count"
-    marker = Path(tempfile.gettempdir()) / f"akmon-delegation-nudge-{sid}.marker"
-    ask_marker = Path(tempfile.gettempdir()) / f"akmon-delegation-nudge-{sid}.ask-marker"
+    sid = session_id or unidentified_identity()
+    counter = Path(tempfile.gettempdir()) / delegation_state_name("counter", sid)
+    marker = Path(tempfile.gettempdir()) / delegation_state_name("marker", sid)
+    ask_marker = Path(tempfile.gettempdir()) / delegation_state_name("ask_marker", sid)
 
-    if tool_name == SUBAGENT_TOOL:
+    if tool_name == subagent_tool():
         _reset_delegation_counters(counter, marker, ask_marker)
         return None
-    if tool_name not in _DELEGATION_NUDGE_TOOL_KINDS:
+    if tool_name not in _delegation_nudge_tool_kinds():
         return None
 
     score = _update_delegation_counter(counter, tool_name)

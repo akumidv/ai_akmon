@@ -46,7 +46,7 @@ sys.path.insert(0, str(CORPUS_ROOT.parents[1]))
 from corpus import ECOSYSTEMS, REPO_ROOT, CorpusError, Scenario, load_scenarios  # noqa: E402
 from normalize import NORM_VERSION  # noqa: E402
 
-from common.findings import SEVERITIES, Finding, exit_code, print_findings  # noqa: E402
+from common.findings import Finding, exit_code, print_findings, severities  # noqa: E402
 
 #: A finding line as the shared envelope renders it; the runner keeps its own copy.
 FINDING_LINE = re.compile(r"^(OK|WARN|ERROR) ([a-z][a-z_]*\.[a-z0-9-]+)[ :]")
@@ -188,14 +188,14 @@ class _EmissionVisitor(ast.NodeVisitor):
             isinstance(func, ast.Attribute)
             and isinstance(func.value, ast.Name)
             and func.value.id == "self"
-            and func.attr in SEVERITIES
+            and func.attr in severities()
         ):
             # Shape (a): a severity method on the checker itself.
             if first is None:
                 self.dynamic.add(self._site())
             elif CODE_RE.match(first):
                 self.items.add(f"code:{first}:{func.attr}")
-        elif first in SEVERITIES and second is not None and CODE_RE.match(second):
+        elif first in severities() and second is not None and CODE_RE.match(second):
             # Shape (b): any call opening with a literal severity and a literal code.
             self.items.add(f"code:{second}:{first}")
         elif (name == "Finding" or name.endswith("finding")) and (first is None or second is None):

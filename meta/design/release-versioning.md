@@ -298,7 +298,7 @@ Common checks:
 - downstream propagation: each selected consuming project has a bump plan and local verification
   command list.
 
-Keystone-specific checks:
+akmon-specific checks:
 
 - `python3 _aitna/akmon/bin/sync.py --check`;
 - `python3 _aitna/akmon/bin/verify.py --strict`;

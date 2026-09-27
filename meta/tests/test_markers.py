@@ -15,7 +15,7 @@ import routing
 
 from common import markers
 
-_KEYSTONE = Path(__file__).resolve().parents[2]
+_AKMON = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
@@ -70,12 +70,12 @@ def test_release_removes_one_identitys_markers_and_spares_the_kept_one(tempdir):
 )
 def test_the_advisories_remind_once_per_session_and_repeat_without_one(tempdir, result, path):
     target = str(tempdir / path)
-    assert result(hook_core.EDIT_TOOL, target, "sess-1", tempdir) is not None
-    assert result(hook_core.EDIT_TOOL, target, "sess-1", tempdir) is None
-    assert result(hook_core.EDIT_TOOL, target, "sess-2", tempdir) is not None
+    assert result(hook_core.edit_tool(), target, "sess-1", tempdir) is not None
+    assert result(hook_core.edit_tool(), target, "sess-1", tempdir) is None
+    assert result(hook_core.edit_tool(), target, "sess-2", tempdir) is not None
     # The literal "nosession" used to share one marker across every id-less session.
-    assert result(hook_core.EDIT_TOOL, target, "nosession", tempdir) is not None
-    assert result(hook_core.EDIT_TOOL, target, "nosession", tempdir) is not None
+    assert result(hook_core.edit_tool(), target, "nosession", tempdir) is not None
+    assert result(hook_core.edit_tool(), target, "nosession", tempdir) is not None
     assert all(".marker" not in p.name for p in tempdir.iterdir())
 
 
@@ -97,12 +97,60 @@ def test_a_stale_suppressed_rebind_marker_no_longer_hides_the_notice(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
+# C102 — the marker facts live in common/markers.json beside the reader
+# --------------------------------------------------------------------------------------
+
+
+def test_markers_json_holds_the_name_shape_and_vocabulary():
+    data = markers._data()
+    assert set(data) == {"name_prefix", "name_sha256_tail", "unidentified", "kinds", "delegation_state_files"}
+    assert data["name_prefix"] == "akmon-"
+    assert data["name_sha256_tail"] == 20
+    assert data["unidentified"] == "nosession"
+    assert set(data["kinds"]) == {
+        "shell_route",
+        "role_on_code",
+        "analysis_guard",
+        "codex_unreadable_target",
+        "codex_unmeasured_path",
+    }
+    assert data["kinds"]["shell_route"] == "shell-route"
+    assert data["kinds"]["codex_unmeasured_path"] == "codex-unmeasured-path"
+    assert set(data["delegation_state_files"]) == {"counter", "marker", "ask_marker"}
+    assert data["delegation_state_files"]["ask_marker"] == "akmon-delegation-nudge-{{identity}}.ask-marker"
+    assert markers.delegation_state_name("counter", "s1") == "akmon-delegation-nudge-s1.count"
+
+
+def test_the_marker_loader_reads_the_data_file_beside_the_module(monkeypatch):
+    seen: list[Path] = []
+    monkeypatch.setattr(
+        markers.jsondata,
+        "read",
+        lambda path: seen.append(path) or {"kinds": {"shell_route": "shell-route"}, "unidentified": "nosession"},
+    )
+    assert markers.marker_kind("shell_route") == "shell-route"
+    assert markers.unidentified_identity() == "nosession"
+    assert seen and all(path == Path(markers.__file__).parent / "markers.json" for path in seen)
+
+
+def test_a_data_file_error_propagates_uncaught_from_the_accessors(monkeypatch):
+    from common.jsondata import DataFileError
+
+    def broken(path: Path) -> None:
+        raise DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(markers.jsondata, "read", broken)
+    with pytest.raises(DataFileError, match="missing"):
+        markers.marker_kind("shell_route")
+
+
+# --------------------------------------------------------------------------------------
 # C36(b) — the model-routing entry point's failure paths
 # --------------------------------------------------------------------------------------
 
 
 def _model_routing_hook():
-    spec = importlib.util.spec_from_file_location("model_routing_hook_c36", _KEYSTONE / "hooks" / "model-routing.py")
+    spec = importlib.util.spec_from_file_location("model_routing_hook_c36", _AKMON / "hooks" / "model-routing.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -124,7 +172,7 @@ def test_model_routing_main_reports_a_crash_and_never_blocks(monkeypatch, capsys
 
 def test_model_routing_survives_a_transcript_with_malformed_lines(tmp_path):
     hook = _model_routing_hook()
-    init_spec = importlib.util.spec_from_file_location("init_c36", _KEYSTONE / "tools" / "model_routing" / "init.py")
+    init_spec = importlib.util.spec_from_file_location("init_c36", _AKMON / "tools" / "model_routing" / "init.py")
     init = importlib.util.module_from_spec(init_spec)
     init_spec.loader.exec_module(init)
     root = tmp_path / "proj"

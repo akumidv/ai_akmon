@@ -1,0 +1,41 @@
+{
+  "neutral_kinds": {
+    "edit": "edit",
+    "shell": "shell",
+    "read": "read",
+    "subagent": "subagent"
+  },
+  "claude": {
+    "edit_tools": ["Edit", "Write", "MultiEdit"],
+    "read_tools": ["Read", "Grep", "Glob"],
+    "delegation_nudge_tool_kinds": {
+      "Bash": "shell",
+      "Task": "subagent",
+      "Agent": "subagent"
+    }
+  },
+  "codex": {
+    "edit_tools": ["apply_patch"],
+    "shell_tools": ["Bash"],
+    "payload_key_spellings": {
+      "tool_name": ["tool_name", "toolName", "tool", "name"],
+      "session_id": ["session_id", "sessionId", "conversation_id", "conversationId", "thread_id", "threadId"],
+      "tool_use_id": ["tool_use_id", "toolUseId", "call_id", "callId"],
+      "tool_input": ["tool_input", "toolInput", "input", "args", "arguments", "params"],
+      "command": ["command", "cmd", "script"],
+      "cwd": ["cwd", "working_directory", "workingDirectory", "workdir"],
+      "unmeasured_string_keys": ["file_path", "filePath", "path", "target", "filename"],
+      "unmeasured_list_keys": ["file_paths", "filePaths", "paths", "files"]
+    }
+  },
+  "document_keys": {
+    "event_name": "hookEventName",
+    "additional_context": "additionalContext",
+    "permission_decision": "permissionDecision",
+    "permission_reason": "permissionDecisionReason",
+    "hook_specific_output": "hookSpecificOutput",
+    "decision": "decision",
+    "reason": "reason",
+    "system_message": "systemMessage"
+  }
+}

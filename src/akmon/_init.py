@@ -39,59 +39,72 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 from akmon import __version__, _tree, cli
 
-AKMON_REPO = "https://github.com/akumidv/ai_akmon"
 MODES = ("submodule", "vendored", "subtree", "package")
+
+
+def _jsondata() -> ModuleType:
+    """The embedded tree's ``common.jsondata`` — the one reader of the shared init data."""
+    return cli._embedded_common_module(_tree.embedded_tree_root(), "jsondata")
+
+
+def _data() -> Any:
+    """The shared init text and tables (``init.json``, beside this module), read on the call.
+
+    Never at import time, with no module-level cache and no swallowed ``DataFileError``: a
+    data file the standard ships is a dependency, not an optional input (C102).
+    """
+    return _jsondata().read(Path(__file__).parent / "init.json")
+
+
+def akmon_repo() -> str:
+    """The standard's canonical repository URL (``init.json``)."""
+    return _data()["akmon_repo"]
+
 
 # ``git ls-remote`` prints one "<sha> <ref>" pair per line — a stray line with any other
 # field count is not a ref listing and is skipped rather than misparsed.
 _LS_REMOTE_FIELD_COUNT = 2
 
-# The top-level members that *are* the standard tree, mirroring
-# ``[tool.hatch.build.targets.wheel.force-include]`` in ``pyproject.toml``: mode ``vendored``
-# copies exactly what mode ``package`` would ship, so a vendored mount is not a poorer
-# flavor of the standard (ADR 0009 §1, "yes for parity"). The embedded tree resolves to the
-# akmon repo root in a source checkout, which carries development-only members
+# The top-level members that *are* the standard tree (``init.json``, ``tree_members``)
+# mirror ``[tool.hatch.build.targets.wheel.force-include]`` in ``pyproject.toml``: mode
+# ``vendored`` copies exactly what mode ``package`` would ship, so a vendored mount is not a
+# poorer flavor of the standard (ADR 0009 §1, "yes for parity"). The embedded tree resolves
+# to the akmon repo root in a source checkout, which carries development-only members
 # (``src/``, ``.git/``, ``tests/``, ``AGENTS.md``, …) that the wheel does not ship — an
 # allowlist keeps both carriers producing the same mount. ``meta/tests/test_init.py``
-# asserts this tuple and the pyproject force-include list stay equal.
-TREE_MEMBERS = (
-    "ARCHETYPES.md",
-    "BOOTSTRAP.md",
-    "CAPABILITIES.md",
-    "CHANGELOG.md",
-    "LICENSE",
-    "MODEL.md",
-    "README.md",
-    "common",
-    "bin",
-    "examples",
-    "guardrails",
-    "hooks",
-    "meta",
-    "pipelines",
-    "profiles",
-    "roles",
-    "skills",
-    "tools",
-)
+# asserts the data file and the pyproject force-include list stay equal.
+
+
+def tree_members() -> list[str]:
+    """The standard tree's top-level members (``init.json``); mode ``vendored`` copies exactly these."""
+    return _data()["tree_members"]
+
 
 _COPY_IGNORE = shutil.ignore_patterns("__pycache__", "*.py[cod]", ".pytest_cache", ".ruff_cache", ".git", ".DS_Store")
 
-_MOUNT_GITIGNORE = "__pycache__/\n*.py[cod]\n"
 
-# The markers a directory must carry before `init` will treat it as *this* standard's tree.
-# `bin/sync.py` alone is not an identity: a vendored realign deletes and re-copies whole
-# top-level members, so mistaking someone's directory for akmon destroys their work. Four
-# markers spread across three top-level members is a threshold no unrelated tree crosses by
-# accident, while every akmon version that has ever shipped a mount clears it.
-_TREE_MARKERS = ("bin/sync.py", "bin/verify.py", "roles/README.md", "guardrails/_common.md")
+def _mount_gitignore() -> str:
+    """The mounted tree's own ``.gitignore`` text (``init.json``)."""
+    return _data()["mount_gitignore"]
+
+
+def _tree_markers() -> tuple[str, ...]:
+    """The markers a directory must carry before `init` will treat it as *this* standard's tree.
+
+    `bin/sync.py` alone is not an identity: a vendored realign deletes and re-copies whole
+    top-level members, so mistaking someone's directory for akmon destroys their work. Four
+    markers spread across three top-level members is a threshold no unrelated tree crosses
+    by accident, while every akmon version that has ever shipped a mount clears it.
+    """
+    return tuple(_data()["tree_markers"])
 
 
 def _is_akmon_tree(path: Path) -> bool:
-    return all((path / marker).is_file() for marker in _TREE_MARKERS)
+    return all((path / marker).is_file() for marker in _tree_markers())
 
 
 # --------------------------------------------------------------------------------------
@@ -292,15 +305,8 @@ def _old_mount_removal(previous: str, relative: str) -> str:
     Every one of them deletes tracked files (and the submodule form rewrites git's own
     bookkeeping), so they are the owner's to run and to commit (D5).
     """
-    if previous == "submodule":
-        return (
-            f"    git submodule deinit -f -- {relative}\n"
-            f"    git rm -f -- {relative}\n"
-            f"    rm -rf .git/modules/{relative}"
-        )
-    if previous == "subtree":
-        return f"    git rm -r -- {relative}   # a subtree's files are ordinary tracked files\n    rm -rf {relative}"
-    return f"    git rm -r --cached -- {relative}   # if the vendored copy was committed\n    rm -rf {relative}"
+    removals = _data()["old_mount_removal"]
+    return _jsondata().fill(removals.get(previous, removals["vendored"]), {"relative": relative})
 
 
 def _mode_switch_steps(previous: str, mode: str, aitna: str) -> list[str]:
@@ -311,22 +317,22 @@ def _mode_switch_steps(previous: str, mode: str, aitna: str) -> list[str]:
     edits is the honest half of the deal; the other half is refusing to perform the switch
     silently (see `main`).
     """
+    jsondata = _jsondata()
+    data = _data()
     base = f"{aitna}/.akmon" if mode == "package" else f"{aitna}/akmon"
+    resolution = (
+        data["mode_switch_link_resolution_package"]
+        if mode == "package"
+        else jsondata.fill(data["mode_switch_link_resolution_mounted"], {"aitna": aitna})
+    )
     steps = [
-        f"re-point the AGENTS.md akmon block from the {previous} layout to {mode}: the imports become "
-        f"`@{base}/guardrails/_common.md` plus each imported profile (`@{base}/profiles/<name>.md`), "
-        "and every link to the standard's docs "
-        + (
-            "becomes a GitHub link at the pinned tag, with `akmon path` named as the way to read them locally"
-            if mode == "package"
-            else f"becomes a path under `{aitna}/akmon/`"
+        jsondata.fill(
+            data["mode_switch_step"],
+            {"previous": previous, "mode": mode, "base": base, "link_resolution": resolution},
         )
     ]
     if mode == "package":
-        steps.append(
-            f"remove the now-unused mount `{aitna}/akmon` (`git rm -r --cached` + `rm -rf`, or `git submodule "
-            "deinit` first if it was a submodule) — nothing reads it in package mode"
-        )
+        steps.append(jsondata.fill(data["mode_switch_remove_mount"], {"aitna": aitna}))
     return steps
 
 
@@ -546,7 +552,7 @@ def _mount_vendored(attach: _Attach, ref: str | None, log: Callable[[str], None]
         )
     mount.mkdir(parents=True, exist_ok=True)
     copied = 0
-    for name in TREE_MEMBERS:
+    for name in tree_members():
         origin = source / name
         target = mount / name
         if not origin.exists():
@@ -564,7 +570,7 @@ def _mount_vendored(attach: _Attach, ref: str | None, log: Callable[[str], None]
     # __pycache__ — the same finding verify.py::check_akmon_gitignore reports.
     gitignore = mount / ".gitignore"
     if not gitignore.is_file():
-        gitignore.write_text(_MOUNT_GITIGNORE, encoding="utf-8")
+        gitignore.write_text(_mount_gitignore(), encoding="utf-8")
     log(f"vendored {copied} standard-tree members into {relative} (pin: {__version__})")
     return __version__
 
@@ -599,72 +605,32 @@ def _tasks_skeleton(aitna: str) -> str:
     consumer copies from, so a malformed seed would teach the wrong format to every project.
     Legacy `T#` ids are grandfathered history and must not be minted here.
     """
-    return f"""# TASKS — project backlog
-
-The single backlog for this project. **Index, not a document:** one line per task, detail by
-reference; a finished entry moves to `TASKS_ARCHIVE.md`. No dates — git history is the
-timeline. Format (akmon `pipelines/tasks.md`):
-
-`- <id> · <title> · <status> · <goal, 12 words max> · [detail](link)`
-
-The id is typed — `A` architecture · `C` code · `N` analysis · `L` learning · `V` release —
-and the owning role follows from that letter, so it is not a separate field. Status is one of
-`active | blocked | deferred | done`.
-
-- A1 · classify archetype and language · active · pick archetype/language per ARCHETYPES.md; import its language profile
-- C1 · pin the test runner · active · record `[test].runner` in `{aitna}/.akmon.toml`, reusing this project's manager
-"""
+    return _jsondata().fill(_data()["tasks_skeleton"], {"aitna": aitna})
 
 
 def _memory_index() -> str:
-    return """# Project memory
-
-Distilled, durable facts about this project — read at session start. One file per fact,
-listed here; the learn loop (akmon `pipelines/memory-distill.md`) writes them.
-
-<!-- - [example-fact](example-fact.md) — one-line hook -->
-"""
+    """The dev layer's memory index seed (``init.json``)."""
+    return _data()["memory_index"]
 
 
-_CHARTERS = {
-    "review": "assess what *is* — architecture, risk, trade-offs, conformance; a findings report",
-    "architect": "design what *should be* — options, contracts, docs, decision records",
-    "engineer": "realize a decided structure in code, with tests",
-}
+def _charters() -> dict[str, str]:
+    """The default agent charters by role, in write order (``init.json``)."""
+    return _data()["charters"]
 
 
 def _charter(role: str, focus: str, aitna: str, *, package_mode: bool) -> str:
-    locate = (
-        f"`akmon path` prints the standard's root; a mounted consumer reads `{aitna}/akmon/roles/{role}.md`."
-        if package_mode
-        else f"Read it at [`{aitna}/akmon/roles/{role}.md`]({aitna}/akmon/roles/{role}.md)."
-    )
-    return f"""# Agent — {role}
-
-Project charter for the **{role}** role: {focus}.
-
-Role of record: `roles/{role}.md` in the akmon standard. {locate}
-
-Add project-specific scope, standing instructions, and known pitfalls below; the akmon role
-stays the single owner of the role's contract — do not restate it here.
-"""
+    """One agent charter (``init.json``), with the locate line picked by mount mode."""
+    jsondata = _jsondata()
+    data = _data()
+    locate_key = "charter_locate_package" if package_mode else "charter_locate_mounted"
+    locate = jsondata.fill(data[locate_key], {"aitna": aitna, "role": role})
+    return jsondata.fill(data["charter"], {"role": role, "focus": focus, "locate": locate})
 
 
 def _gitignore_lines(aitna: str) -> list[str]:
-    return [
-        "# secrets",
-        "*.env",
-        "!*.env.example",
-        "",
-        "# dev-layer venv (provisioned only when the project has no Python environment)",
-        f"{aitna}/.venv/",
-        "",
-        "# akmon model routing — per-user/per-session artifacts (never committed)",
-        ".claude/model-routing.local.json",
-        ".claude/model-routing.log",
-        ".claude/second-opinion/",
-        ".claude/agents/k_*.md",
-    ]
+    """The ``.gitignore`` entries a consumer gains (``init.json``), in append order."""
+    jsondata = _jsondata()
+    return [jsondata.fill(line, {"aitna": aitna}) for line in _data()["gitignore_lines"]]
 
 
 def _merge_gitignore(existing: str, wanted: list[str]) -> str:
@@ -690,34 +656,28 @@ def _merge_gitignore(existing: str, wanted: list[str]) -> str:
 
 
 def _ci_workflow(aitna: str, *, package_mode: bool) -> str:
-    if package_mode:
-        steps = """      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv run akmon sync --check
-      - run: uv run akmon verify --strict"""
-    else:
-        steps = f"""      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - run: python3 {aitna}/akmon/bin/sync.py --check
-      - run: python3 {aitna}/akmon/bin/verify.py --strict"""
-    return f"""name: akmon
-
-on: [push, pull_request]
-
-jobs:
-  akmon:
-    runs-on: ubuntu-latest
-    steps:
-{steps}
-"""
+    """The contract-check workflow (``init.json``), its steps picked by mount mode."""
+    jsondata = _jsondata()
+    data = _data()
+    steps_key = "ci_workflow_steps_package" if package_mode else "ci_workflow_steps_mounted"
+    steps = jsondata.fill(data[steps_key], {"aitna": aitna})
+    return jsondata.fill(data["ci_workflow"], {"steps": steps})
 
 
 # --------------------------------------------------------------------------------------
 # the AGENTS.md akmon block (hand-owned source text, written only when absent)
 # --------------------------------------------------------------------------------------
 
-BLOCK_HEADING = "## Dev layer — akmon"
+
+def block_heading() -> str:
+    """The block heading of a project's ``AGENTS.md`` akmon section.
+
+    The standard tree's ``common/always_loaded.json`` is the single owner of that text (C102):
+    resolved through the embedded tree so both carriers — the installed wheel's ``_tree`` and
+    a source checkout — read the same data file.
+    """
+    tree_root = _tree.embedded_tree_root()
+    return _jsondata().read(tree_root / "common" / "always_loaded.json")["block_heading"]
 
 
 def _doc_link(name: str, aitna: str, ref: str, *, package_mode: bool) -> str:
@@ -727,85 +687,58 @@ def _doc_link(name: str, aitna: str, ref: str, *, package_mode: bool) -> str:
     ADR 0009 §4).
     """
     if package_mode:
-        return f"{AKMON_REPO}/blob/{ref}/{name}"
+        return f"{akmon_repo()}/blob/{ref}/{name}"
     return f"{aitna}/akmon/{name}"
 
 
 def _agents_block(aitna: str, ref: str, archetype: str, language: str, *, package_mode: bool) -> str:
+    """The AGENTS.md akmon block (``init.json``); links and fragments computed here.
+
+    The mode-conditional fragments (``roles_hint``, ``shared_layer``) and every link value are
+    computed in code; the stored template carries only their placeholders.
+    """
+    jsondata = _jsondata()
+    data = _data()
+
     def link(name: str) -> str:
         return _doc_link(name, aitna, ref, package_mode=package_mode)
 
     guardrails_dir = f"{aitna}/.akmon/guardrails" if package_mode else f"{aitna}/akmon/guardrails"
     profiles_dir = f"{aitna}/.akmon/profiles" if package_mode else f"{aitna}/akmon/profiles"
-    roles_hint = (
-        f"roles: [`akmon/roles/`]({link('roles/README.md')}) — run `akmon path` to read them locally"
-        if package_mode
-        else f"roles: [`{aitna}/akmon/roles/`]({aitna}/akmon/roles/)"
+    fragment = "package" if package_mode else "mounted"
+    roles_hint = jsondata.fill(
+        data[f"agents_roles_hint_{fragment}"], {"roles_link": link("roles/README.md"), "aitna": aitna}
     )
-    shared_layer = (
-        "installed `akmon` package (hooks and tools run from it via `akmon hook`; only the "
-        f"imported guardrails are materialized, at `{aitna}/.akmon/guardrails/`; `akmon path` "
-        "locates the rest)"
-        if package_mode
-        else f"`{aitna}/akmon/`"
+    shared_layer = jsondata.fill(data[f"agents_shared_layer_{fragment}"], {"aitna": aitna})
+    return jsondata.fill(
+        data["agents_block"],
+        {
+            "heading": block_heading(),
+            "model": link("MODEL.md"),
+            "bootstrap": link("BOOTSTRAP.md"),
+            "readme": link("README.md"),
+            "archetypes": link("ARCHETYPES.md"),
+            "archetype": archetype,
+            "language": language,
+            "aitna": aitna,
+            "shared_layer": shared_layer,
+            "roles_hint": roles_hint,
+            "guardrails_dir": guardrails_dir,
+            "profiles_dir": profiles_dir,
+            "pre_commit": link("pipelines/pre-commit.md"),
+            "review_flow": link("pipelines/review-flow.md"),
+            "design_flow": link("pipelines/design-flow.md"),
+            "code_flow": link("pipelines/code-flow.md"),
+            "tasks_link": link("pipelines/tasks.md"),
+            "memory_distill": link("pipelines/memory-distill.md"),
+            "learning": link("pipelines/learning.md"),
+        },
     )
-    return f"""{BLOCK_HEADING} (developing the project)
-
-This project uses the akmon dev layer — one standard for how an assistant helps develop it.
-Model & notation: [`MODEL.md`]({link("MODEL.md")}); attach/realign guide:
-[`BOOTSTRAP.md`]({link("BOOTSTRAP.md")}); overview: [`README.md`]({link("README.md")}).
-
-- **Archetype / language:** `{archetype}` / `{language}` — classify per
-  [`ARCHETYPES.md`]({link("ARCHETYPES.md")}), then update this line, the guardrail imports
-  below, and `attached_archetype` in `{aitna}/.akmon.toml`.
-- **Layers:** SHARED = {shared_layer} · LOCAL = `{aitna}/{{agents,skills,tools,memory}}` +
-  [`{aitna}/TASKS.md`]({aitna}/TASKS.md) · USAGE = root `skills/` (absent until this project
-  exposes one).
-- **Agents (roles):** [review]({aitna}/agents/review/README.md),
-  [architect]({aitna}/agents/architect/README.md), [engineer]({aitna}/agents/engineer/README.md)
-  → {roles_hint}.
-  **Declare the active agent** before doing work and restate it on switch
-  (`🧭 agent: <name> — <focus>`).
-- **Delegation (always-on, direct):** **delegation is the default.** For every non-trivial
-  task, before the first repository sweep, edit, or test run, decompose the work and delegate
-  every independent mechanical sub-step to available subagents without waiting for an owner
-  prompt. The orchestrator retains decomposition, routing, synthesis, and owner dialogue. Skip
-  only when the task is atomic or the harness exposes no subagents; state the reason. This
-  clause is direct because Codex does not expand nested `@` imports in `AGENTS.md`.
-- **Owner authority (always-on — it overrides any task instruction):** the owner verifies
-  consequential architecture, data-shape and math decisions recorded in ADRs; an assistant
-  *drafts*, the owner *decides*. **D5** — the owner owns commits, tags, pushes, publishing and pin bumps; never
-  `git add`/`commit`/`push` on the owner's behalf.
-- **Guardrails and profiles (always-on):** the common guardrail and the project's language
-  profile are **imported** (not just linked) so their rules load at session start; akmon is the
-  single owner — do not restate them here. Import this project's language profile on its own
-  line (e.g. `@{profiles_dir}/python.md`), and an environment profile where some of its code
-  runs in one, per the ARCHETYPES map.
-
-@{guardrails_dir}/_common.md
-
-- **Domain profiles (opt-in by need):** none attached yet — link only those the project actually needs.
-- **Pipelines:** [pre-commit]({link("pipelines/pre-commit.md")}) (tests mandatory),
-  [review-flow]({link("pipelines/review-flow.md")}),
-  [design-flow]({link("pipelines/design-flow.md")}),
-  [code-flow]({link("pipelines/code-flow.md")}),
-  [tasks]({link("pipelines/tasks.md")}) (backlog format), and the learn loop
-  ([memory-distill]({link("pipelines/memory-distill.md")}) +
-  [learning]({link("pipelines/learning.md")})).
-- **Memory:** read `{aitna}/memory/` at session start — distilled project facts, indexed by
-  [`{aitna}/memory/README.md`]({aitna}/memory/README.md).
-- **Backlog:** [`{aitna}/TASKS.md`]({aitna}/TASKS.md) — one line per task, detail by reference;
-  finished entries move to `TASKS_ARCHIVE.md`.
-- **Secrets:** from `.env` (gitignored). Never in code, docs, tests, or commits.
-"""
 
 
-_AGENTS_HEADER = """# AGENTS.md
-
-Guidance for AI coding agents (Claude Code, Codex, Gemini, Copilot) working in this
-repository. Vendor pointer files import this document — it is the single source of truth.
-
-"""
+def _agents_header() -> str:
+    """The ``# AGENTS.md`` header a fresh AGENTS.md gains the block under (``init.json``)."""
+    return _data()["agents_header"]
 
 
 # --------------------------------------------------------------------------------------
@@ -846,19 +779,12 @@ def _write_akmon_toml(root: Path, aitna: str, *, mode: str, version: str | None,
     """
     path = root / aitna / ".akmon.toml"
     if not path.is_file():
-        recorded = f'akmon_version = "{version}"\n' if version else ""
+        jsondata = _jsondata()
+        data = _data()
+        recorded = jsondata.fill(data["record_version_line"], {"version": version}) if version else ""
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            "# akmon integration record — written by `akmon init`, refreshed on realign.\n"
-            "# The version this project sits on; a later bump diffs the CHANGELOG window against it.\n"
-            f'mount = "{mode}"\n'
-            f"{recorded}"
-            f'attached_archetype = "{archetype}"\n'
-            "\n"
-            "[test]\n"
-            "# The project's own pytest invocation, used verbatim by the release check\n"
-            "# (BOOTSTRAP §A5). Uncomment and set it to whatever this project already uses:\n"
-            '# runner = "uv run pytest"\n',
+            jsondata.fill(data["record_fresh"], {"mode": mode, "recorded": recorded, "archetype": archetype}),
             encoding="utf-8",
         )
         return path
@@ -916,11 +842,10 @@ def _detect_tools(root: Path, sync_mod: ModuleType) -> list[tuple[str, str]]:
 
 
 def _run_prefix(root: Path) -> str:
-    """How the project runs its tools: through its environment manager when it has one."""
-    if (root / "uv.lock").is_file():
-        return "uv run "
-    if (root / "poetry.lock").is_file():
-        return "poetry run "
+    """How the project runs its tools: through its environment manager when it has one (``init.json``)."""
+    for lockfile, prefix in _data()["run_prefix"].items():
+        if (root / lockfile).is_file():
+            return prefix
     return ""
 
 
@@ -968,16 +893,17 @@ def _extend_with_akmon_rules(
 
 
 def _ruff_step(root: Path) -> str | None:
-    """The next step that makes ruff runnable, when the project does not declare it yet."""
+    """The next step that makes ruff runnable, when the project does not declare it yet (``init.json``)."""
     pyproject = root / "pyproject.toml"
     text = pyproject.read_text(encoding="utf-8") if pyproject.is_file() else ""
     if re.search(r"[\"']ruff\b", text):
         return None
+    ruff_step = _data()["ruff_step"]
     if (root / "uv.lock").is_file():
-        return "add ruff as a development dependency so `akmon check` can run it: `uv add --dev ruff`"
+        return ruff_step["uv"]
     if (root / "poetry.lock").is_file():
-        return "add ruff as a development dependency so `akmon check` can run it: `poetry add --group dev ruff`"
-    return "add ruff to the project's development dependencies so `akmon check` can run it"
+        return ruff_step["poetry"]
+    return ruff_step["none"]
 
 
 def _setup_checks(attach: _Attach, record: Path, choice: str | None, *, ask: bool, log: Callable[[str], None]) -> None:
@@ -1053,7 +979,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", choices=MODES, help="Mount mode. Default: submodule when possible, else vendored.")
     parser.add_argument("--aitna-root", help="Dev-layer root, project-root-relative (default: _aitna).")
     parser.add_argument("--project-root", type=Path, help="Project to attach to. Defaults to the current directory.")
-    parser.add_argument("--repo", default=AKMON_REPO, help=f"akmon repository URL (default: {AKMON_REPO}).")
+    repo = akmon_repo()
+    parser.add_argument("--repo", default=repo, help=f"akmon repository URL (default: {repo}).")
     parser.add_argument("--ref", help="Ref to pin (default: the latest release tag).")
     parser.add_argument("--archetype", help="Archetype id per ARCHETYPES.md (default: left unclassified).")
     parser.add_argument("--language", help="Primary language per ARCHETYPES.md (default: left unclassified).")
@@ -1221,7 +1148,7 @@ def _write_local_layout(attach: _Attach) -> None:
         (root / aitna / name).mkdir(parents=True, exist_ok=True)
     _write_if_absent(root / aitna / "TASKS.md", _tasks_skeleton(aitna), _log, f"{aitna}/TASKS.md")
     _write_if_absent(root / aitna / "memory" / "README.md", _memory_index(), _log, f"{aitna}/memory/README.md")
-    for role, focus in _CHARTERS.items():
+    for role, focus in _charters().items():
         _write_if_absent(
             root / aitna / "agents" / role / "README.md",
             _charter(role, focus, aitna, package_mode=attach.package_mode),
@@ -1234,9 +1161,9 @@ def _write_agents_block(attach: _Attach, block: str) -> None:
     """Write AGENTS.md with the akmon block, or append the block; one already there stays untouched."""
     agents_md = attach.root / "AGENTS.md"
     if not agents_md.is_file():
-        agents_md.write_text(_AGENTS_HEADER + block, encoding="utf-8")
+        agents_md.write_text(_agents_header() + block, encoding="utf-8")
         _log("wrote AGENTS.md with the akmon block")
-    elif BLOCK_HEADING in agents_md.read_text(encoding="utf-8"):
+    elif block_heading() in agents_md.read_text(encoding="utf-8"):
         _log("AGENTS.md already carries an akmon block — left untouched")
         if not attach.switching:
             attach.next_steps.append("`akmon verify --strict` checks the existing AGENTS.md block against the contract")
@@ -1262,10 +1189,10 @@ def _write_ci(attach: _Attach, *, no_ci: bool) -> None:
     aitna = attach.aitna
     workflows = attach.root / ".github" / "workflows"
     existing_workflows = sorted(workflows.glob("*.yml")) + sorted(workflows.glob("*.yaml"))
-    check_cmds = (
-        ("akmon sync --check", "akmon verify --strict")
-        if attach.package_mode
-        else (f"python3 {aitna}/akmon/bin/sync.py --check", f"python3 {aitna}/akmon/bin/verify.py --strict")
+    data = _data()
+    variant = "package" if attach.package_mode else "mounted"
+    check_cmds = tuple(
+        _jsondata().fill(command, {"aitna": aitna}) for command in data["write_ci_commands"][variant]
     )
     if no_ci:
         attach.next_steps.append(f"add the contract checks to CI: `{check_cmds[0]}` and `{check_cmds[1]}`")
@@ -1300,41 +1227,30 @@ def _generate(root: Path) -> int:
 
 
 def _add_closing_steps(attach: _Attach, *, archetype: str, pin_status: str, ref: str) -> None:
-    """The judgment steps ``init`` deliberately did not take, a missing pin first."""
+    """The judgment steps ``init`` deliberately did not take, a missing pin first (``init.json``)."""
     aitna = attach.aitna
+    jsondata = _jsondata()
+    steps = _data()["closing_steps"]
     if archetype == "unclassified":
-        attach.next_steps.insert(
-            0,
-            "classify the project (archetype + language) against ARCHETYPES.md, import the language "
-            f"profile in AGENTS.md, and set `attached_archetype` in {aitna}/.akmon.toml",
-        )
-    attach.next_steps.append(
-        f"pin the test environment: record the project's own pytest invocation as `[test].runner` in "
-        f"{aitna}/.akmon.toml (BOOTSTRAP §A5 — do not build a venv when the project already has one)"
-    )
+        attach.next_steps.insert(0, jsondata.fill(steps["classify"], {"aitna": aitna}))
+    attach.next_steps.append(jsondata.fill(steps["pin_test"], {"aitna": aitna}))
     pin_step = _pin_step(pin_status, ref) if attach.package_mode else None
     if pin_step:
         attach.next_steps.insert(0, pin_step)
     if aitna != cli._project_root_lib().AITNA_ROOT_DEFAULT:
-        attach.next_steps.append(f"export AITNA_ROOT={aitna} in every shell and CI job that runs the akmon tooling")
-    attach.next_steps.append(
-        "run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)"
-    )
+        attach.next_steps.append(jsondata.fill(steps["export_aitna"], {"aitna": aitna}))
+    attach.next_steps.append(steps["verify"])
 
 
 def _pin_step(pin_status: str, ref: str) -> str | None:
-    """The step a package attach needs when its manifest pin is missing, misplaced or unreadable."""
-    return {
-        "none": "**pin akmon in the project's dependency manifest**, in a **dev** group (never a runtime "
-        f'dependency): "akmon @ git+{AKMON_REPO}@{ref}" — then install it into a virtualenv inside '
-        "the project root. Until both are done, `akmon` cannot resolve here: the CI checks cannot "
-        "run, and the generated hook commands fail silently because the console script they name "
-        "does not exist",
-        "runtime": "**move the akmon pin** out of the project's runtime dependencies (or extras) into a **dev** "
-        "group: akmon is dev tooling and must not reach this project's own users (ADR 0009 §4)",
-        "unreadable": "**fix pyproject.toml** — it is not valid TOML, so neither akmon nor uv can read an akmon "
-        "pin from it; once it parses, the pin belongs in a **dev** group",
-    }.get(pin_status)
+    """The step a package attach needs for its manifest pin status (``init.json``).
+
+    ``None`` when the status (``dev``) names no step.
+    """
+    template = _data()["pin_step"].get(pin_status)
+    if template is None:
+        return None
+    return _jsondata().fill(template, {"repo": akmon_repo(), "ref": ref})
 
 
 def _report(attach: _Attach, pin_status: str, record: Path, version: str | None) -> int:
@@ -1345,21 +1261,16 @@ def _report(attach: _Attach, pin_status: str, record: Path, version: str | None)
     # in the exit code rather than reporting success over an unusable project — the CI job this
     # very run wrote would be the next thing to discover it.
     incomplete = attach.package_mode and pin_status != "dev"
+    jsondata = _jsondata()
+    report = _data()["report"]
     print()
-    _log("attached, with steps left to a human/agent decision:" if not incomplete else "attached, but INCOMPLETE:")
+    _log(report["incomplete"] if incomplete else report["complete"])
     for index, step in enumerate(attach.next_steps, start=1):
-        print(f"  {index}. {step}", flush=True)
+        print(jsondata.fill(report["step"], {"index": index, "step": step}), flush=True)
     if incomplete:
-        missing, remedy = (
-            ("cannot read an akmon pin: pyproject.toml is not valid TOML (step 1)", "fixing it")
-            if pin_status == "unreadable"
-            else ("has no akmon pin in a dev group yet (step 1) — nothing else attaches it", "adding it")
-        )
+        key = "unreadable" if pin_status == "unreadable" else "absent"
         print()
-        _log(
-            f"exit 1: mode 'package' {missing}, so this attach is not finished. Re-run `akmon init` after "
-            f"{remedy} (it keeps the recorded mode), or `akmon verify --strict` to re-check."
-        )
+        _log(jsondata.fill(report["exit"], {"missing": report["missing"][key], "remedy": report["remedy"][key]}))
         return 1
     _mark_realign_complete(record, version)
     return 0

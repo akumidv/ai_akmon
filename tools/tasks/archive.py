@@ -39,8 +39,28 @@ import re
 import sys
 from pathlib import Path
 
-DONE_STATUS = "done"
-DONE_HEADER = "## Done"
+# The tree root, so the shared ``common`` package resolves: the data loader is reached the same
+# way from the mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from common import jsondata
+
+
+def _archive_data() -> dict:
+    """The archive tool's texts (``archive.json``), read on the call that needs it."""
+    return jsondata.read(Path(__file__).parent / "archive.json")
+
+
+def done_status() -> str:
+    """The status value that marks an entry for the sweep into the archive."""
+    return _archive_data()["done_status"]
+
+
+def done_header() -> str:
+    """The archive section header moved entries are inserted at the top of (newest first)."""
+    return _archive_data()["done_header"]
+
+
 _TASK_ID_RE = re.compile(r"^[ACLNTV]\d+$")  # typed id scheme (ADR 0002) + grandfathered T#
 #: Minimum ``·``-separated fields (id, title, status) for an entry to carry a status field.
 _STATUS_FIELD_COUNT = 3
@@ -91,7 +111,7 @@ def mark_done(tasks_text: str, ids: list[str]) -> tuple[str, list[str]]:
         entry_id = _entry_id(lines[start])
         if entry_id in wanted:
             found.add(entry_id)
-            lines[start] = _set_status(lines[start], DONE_STATUS)
+            lines[start] = _set_status(lines[start], done_status())
     missing = [i for i in wanted if i not in found]
     return "\n".join(lines).rstrip("\n") + "\n", missing
 
@@ -142,7 +162,7 @@ def split_done(tasks_text: str) -> tuple[str, list[list[str]], list[str]]:
     blocks: list[list[str]] = []
     ids: list[str] = []
     for start, end in parse_entries(lines):
-        if _status_of(lines[start]) == DONE_STATUS:
+        if _status_of(lines[start]) == done_status():
             blocks.append(lines[start:end])
             ids.append(_entry_id(lines[start]))
             done_indices.update(range(start, end))
@@ -155,32 +175,33 @@ def insert_into_archive(archive_text: str, blocks: list[list[str]]) -> str:
     """Insert entry ``blocks`` at the top of the archive's ``## Done`` section (newest-first)."""
     lines = archive_text.splitlines()
     for idx, line in enumerate(lines):
-        if line.strip() == DONE_HEADER:
+        if line.strip() == done_header():
             at = idx + 1
             while at < len(lines) and not lines[at].strip():  # step past the header's blank line
                 at += 1
             flat = [line for block in blocks for line in block]
             merged = lines[:at] + flat + lines[at:]
             return "\n".join(merged).rstrip("\n") + "\n"
-    raise ValueError(f"archive has no '{DONE_HEADER}' section")
+    raise ValueError(jsondata.fill(_archive_data()["archive_no_section"], {"header": done_header()}))
 
 
 def _apply_archive(
     tasks_path: Path, archive_path: Path, remaining: str, blocks: list[list[str]], ids: list[str]
 ) -> int:
     """Write the swept ``TASKS.md`` and updated archive; the ``--apply`` half of ``main``."""
+    texts = _archive_data()
     if not archive_path.is_file():
-        print(f"error: no archive file: {archive_path}", file=sys.stderr)
+        print(jsondata.fill(texts["error_no_archive_file"], {"path": archive_path}), file=sys.stderr)
         return 2
     try:
         new_archive = insert_into_archive(archive_path.read_text(encoding="utf-8"), blocks)
     except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print(jsondata.fill(texts["error_generic"], {"exc": exc}), file=sys.stderr)
         return 2
 
     tasks_path.write_text(remaining, encoding="utf-8")
     archive_path.write_text(new_archive, encoding="utf-8")
-    print(f"archived {len(ids)}: {', '.join(ids)}")
+    print(jsondata.fill(texts["archived"], {"count": len(ids), "ids": ", ".join(ids)}))
     return 0
 
 
@@ -197,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--apply", action="store_true", help="Perform the move (default: dry-run).")
     args = parser.parse_args(argv)
 
+    texts = _archive_data()
     tasks_path = Path(args.tasks)
     if not tasks_path.is_file():
         print(f"error: no such file: {tasks_path}", file=sys.stderr)
@@ -205,22 +227,23 @@ def main(argv: list[str] | None = None) -> int:
 
     text = tasks_path.read_text(encoding="utf-8")
     for bullet in malformed_entries(text.splitlines()):
-        print(f"warning: task entry missing a status field: {bullet.strip()}", file=sys.stderr)
+        print(jsondata.fill(texts["warning_missing_status"], {"bullet": bullet.strip()}), file=sys.stderr)
 
     if args.done:
         text, missing = mark_done(text, args.done)
         if missing:
-            print(f"error: no such entry: {', '.join(missing)}", file=sys.stderr)
+            print(jsondata.fill(texts["error_no_such_entry"], {"ids": ", ".join(missing)}), file=sys.stderr)
             return 2
 
     remaining, blocks, ids = split_done(text)
     if not blocks:
-        print("no done entries to archive")
+        print(texts["no_done_entries"])
         return 0
 
     if not args.apply:
-        print(f"would archive {len(ids)} done entr{'y' if len(ids) == 1 else 'ies'}: {', '.join(ids)}")
-        print("re-run with --apply to move them")
+        which = texts["would_archive_entry"] if len(ids) == 1 else texts["would_archive_entries"]
+        print(jsondata.fill(which, {"count": len(ids), "ids": ", ".join(ids)}))
+        print(texts["reapply_hint"])
         return 1
 
     return _apply_archive(tasks_path, archive_path, remaining, blocks, ids)

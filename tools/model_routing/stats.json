@@ -1,0 +1,55 @@
+{
+  "usage_url": "https://api.anthropic.com/api/oauth/usage",
+  "credentials_rel": ".claude/.credentials.json",
+  "report_dir_rel": ".claude/stats",
+  "budget_labels": {
+    "session": "session",
+    "week_all_models": "week (all models)",
+    "week_scoped": "week ({{model}})"
+  },
+  "digest": {
+    "no_delegations_logged": "delegations: no delegations logged",
+    "no_delegations_recorded": "delegations: none recorded",
+    "delegations_total": "delegations: {{total}} total ({{per_subagent}})",
+    "orchestrator_transcript_unavailable": "orchestrator tokens: transcript unavailable",
+    "orchestrator_tokens": "orchestrator tokens: in={{input}} out={{output}} cache-read={{cache_read}}",
+    "subagent_tokens": "subagent tokens (n={{n}}): in={{input}} out={{output}} cache-read={{cache_read}}",
+    "no_subagent_transcripts": "subagent tokens: no subagent transcripts",
+    "budget_unavailable": "budget: unavailable ({{reason}})",
+    "budget_session_week": "budget: session {{session_remaining}} remaining (resets {{session_resets}}), week {{week_remaining}} remaining (resets {{week_resets}})",
+    "budget_scoped": "budget: {{label}} {{remaining}} remaining (resets {{resets}})",
+    "report": "report: {{path}}"
+  },
+  "report": {
+    "title": "# Session statistics — {{stem}}",
+    "transcript_found": "Transcript: `{{path}}`",
+    "transcript_not_found": "Transcript: not found",
+    "delegations_heading": "## Delegations",
+    "tokens_heading": "## Tokens",
+    "budget_heading": "## Budget",
+    "separator": "---",
+    "delegations_none": "no delegations logged",
+    "delegations_zero": "no delegations recorded",
+    "delegations_total": "Total: {{total}}",
+    "delegations_table_header": [
+      "| subagent | requested model | count |",
+      "|---|---|---|"
+    ],
+    "delegations_table_row": "| {{subagent}} | {{model}} | {{count}} |",
+    "tokens_table_header": [
+      "| role/agent | tier | input | output | cache-read | cache-created |",
+      "|---|---|---|---|---|---|"
+    ],
+    "tokens_orchestrator_missing_row": "| orchestrator | orchestrator | - | - | - | - |",
+    "tokens_orchestrator_row": "| orchestrator ({{model}}) | orchestrator | {{input}} | {{output}} | {{cache_read}} | {{cache_created}} |",
+    "tokens_subagent_row": "| {{label}} | {{tier}} | {{input}} | {{output}} | {{cache_read}} | {{cache_created}} |",
+    "tokens_total_row": "| **total** | | {{input}} | {{output}} | {{cache_read}} | {{cache_created}} |",
+    "tokens_no_subagents": "no subagent transcripts",
+    "budget_unavailable": "unavailable: {{reason}}",
+    "budget_session_line": "- session remaining: {{remaining}} (resets {{resets}})",
+    "budget_week_line": "- week (all models) remaining: {{remaining}} (resets {{resets}})",
+    "budget_scoped_line": "- {{label}} remaining: {{remaining}} (resets {{resets}})",
+    "sources_found": "Sources: delegation log `{{delegation_log}}`; session transcript `{{path}}`.",
+    "sources_not_found": "Sources: delegation log `{{delegation_log}}`; session transcript not found."
+  }
+}

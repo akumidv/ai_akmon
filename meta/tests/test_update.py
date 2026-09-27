@@ -9,23 +9,110 @@ does not, and nothing is committed.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_SRC = _KEYSTONE / "src"
+_SRC = _AKMON / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from akmon import _init, _tree, _update, cli  # noqa: E402
 
-REPO = _init.AKMON_REPO
+REPO = _init.akmon_repo()
 PIN_LINE = "akmon @ git+https://github.com/akumidv/ai_akmon@v0.3.0"
+
+# --------------------------------------------------------------------------------------
+# src/akmon/update.json — the shared update text and tables (C102)
+# --------------------------------------------------------------------------------------
+
+_UPDATE_DATA = json.loads((_AKMON / "src" / "akmon" / "update.json").read_text(encoding="utf-8"))
+
+
+def test_update_data_pins_its_structure():
+    """The data file is the single owner of the update text: pin the key set and a few
+    characteristic exact values so a transcription drift is caught here, not in the corpus."""
+    assert set(_UPDATE_DATA) == {
+        "plan_notes",
+        "banner",
+        "missing_record",
+        "init_failed",
+        "checks",
+        "checks_running",
+        "checks_failed",
+        "subtree_refusal",
+        "subtree_pull_command",
+        "subtree_realign_command",
+        "package_uv_missing",
+        "package_launcher_missing",
+        "vendored_not_fetchable",
+        "vendored_uvx_missing",
+        "closing_left_to_you",
+        "closing_step",
+        "closing_changelog",
+        "closing_review",
+        "closing_bump",
+        "closing_codex",
+    }
+    assert set(_UPDATE_DATA["plan_notes"]) == {
+        "not_a_release",
+        "record_no_version",
+        "forward",
+        "already",
+        "rollback",
+        "past_newest",
+    }
+    assert _UPDATE_DATA["plan_notes"]["forward"] == "{{current}} → {{target}}"
+    assert _UPDATE_DATA["banner"] == "{{root}} · mount mode {{mode}} · {{note}}"
+    assert _UPDATE_DATA["checks"] == [["sync", "--check"], ["verify", "--strict"]]
+    assert _UPDATE_DATA["checks_running"] == "running {{script}} {{flag}}"
+    assert _UPDATE_DATA["closing_left_to_you"] == "left to you:"
+    assert _UPDATE_DATA["closing_step"] == "  {{index}}. {{step}}"
+    assert _UPDATE_DATA["subtree_realign_command"] == "    akmon init --ref {{target}}"
+    assert _UPDATE_DATA["init_failed"] == "akmon update: init failed ({{code}}); see its output above"
+    assert _UPDATE_DATA["package_launcher_missing"].startswith("{{launcher}} does not exist")
+    assert "{{recorded}}" in _UPDATE_DATA["vendored_not_fetchable"]
+
+
+def test_update_loader_asks_for_exactly_the_update_json(monkeypatch):
+    """The loader reads ``update.json`` beside ``_update.py`` — the path the wheel and the
+    corpus snapshot both place the file at."""
+    from common import jsondata
+
+    seen: list[Path] = []
+    real_read = jsondata.read
+
+    def spy(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    assert _update._plan("0.1.0", "0.2.0", explicit=False).note == "0.1.0 → 0.2.0"
+    assert seen, "the loader never asked for the data file"
+    for path in seen:
+        assert path == Path(_update.__file__).parent / "update.json"
+
+
+def test_update_data_file_error_propagates_uncaught(monkeypatch):
+    """A missing or broken ``update.json`` is a loud failure, not a swallowed one."""
+    from common import jsondata
+
+    def broken_read(path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken_read)
+    with pytest.raises(jsondata.DataFileError):
+        _update._plan("0.1.0", "0.2.0", explicit=False)
+    with pytest.raises(jsondata.DataFileError):
+        _update._closing(
+            Path("/tmp"), "_aitna", "package", _update._Plan(target="0.2.0", current="0.1.0", move=True, note="x"), None
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -207,12 +294,12 @@ def test_submodule_update_moves_the_mount_leaves_the_index_and_commits_nothing(t
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     _git(["init", "-q", "."], consumer)
-    repo = f"file://{_KEYSTONE}"
+    repo = f"file://{_AKMON}"
     attach = ["--mode", "submodule", "--project-root", str(consumer), "--repo", repo, "--ref", "v0.3.0", "--yes"]
     assert _init.main(attach) == 0
     mount = consumer / "_aitna" / "akmon"
     staged = _git(["ls-files", "--stage", "--", "_aitna/akmon"], consumer).split()[1]
-    head = _git(["rev-parse", "HEAD"], _KEYSTONE)
+    head = _git(["rev-parse", "HEAD"], _AKMON)
 
     assert _update.main(["--project-root", str(consumer), "--repo", repo, "--ref", head]) == 0
 
