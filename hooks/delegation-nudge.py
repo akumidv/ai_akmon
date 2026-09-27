@@ -17,17 +17,30 @@ in ``hook_core.py``; this entrypoint only adapts Claude Code's payload.
 
 from __future__ import annotations
 
-from claude_adapter import load_payload, normalize_tool, run_guarded
-from hook_core import SHELL_TOOL, SUBAGENT_TOOL, HookResult, delegation_nudge_result
+from pathlib import Path
+from typing import Any
 
-# Claude tool names → the neutral kinds hook_core expects (edit tools via normalize_tool).
-_TOOL_KINDS = {"Bash": SHELL_TOOL, "Task": SUBAGENT_TOOL, "Agent": SUBAGENT_TOOL}
+from claude_adapter import load_payload, normalize_tool, run_guarded
+from hook_core import HookResult, delegation_nudge_result, neutral_kind
+
+from common import jsondata  # hook_core put the tree root on sys.path
+
+
+def _vocabulary() -> dict[str, Any]:
+    """The hook vocabulary table beside this module (C102): the nudge's vendor tool-kind table."""
+    return jsondata.read(Path(__file__).parent / "vocabulary.json")
+
+
+def _tool_kinds() -> dict[str, str]:
+    """Claude tool names → the neutral kinds hook_core expects (edit tools via normalize_tool, C102)."""
+    table = _vocabulary()["claude"]["delegation_nudge_tool_kinds"]
+    return {name: neutral_kind(stem) for name, stem in table.items()}
 
 
 def _decide() -> HookResult | None:
     payload = load_payload()
     name = str(payload.get("tool_name") or "")
-    kind = _TOOL_KINDS.get(name) or normalize_tool(name)
+    kind = _tool_kinds().get(name) or normalize_tool(name)
     session_id = payload.get("session_id")
     is_subagent = bool(payload.get("agent_id"))
     sid = session_id if isinstance(session_id, str) else None

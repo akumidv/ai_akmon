@@ -156,7 +156,7 @@ def test_materialization_ships_only_the_guardrails_agents_md_imports(tmp_path):
         "_aitna/.akmon/profiles/python.md",
     }
     guardrail = next(f for f in files if f.path.name == "_common.md")
-    assert sync.GENERATED_MARKER in guardrail.content
+    assert sync.generated_marker() in guardrail.content
     assert guardrail.content.startswith("#")  # heading preserved as the first line
 
 
@@ -251,8 +251,9 @@ def test_every_moved_import_points_from_a_retired_path_to_a_shipped_one():
     """The move table is only as good as its two ends: a new path the standard does not ship
     sends the consumer to a second broken import, and an old path that still exists makes the
     entry dead."""
-    assert sync.MOVED_IMPORTS
-    for old, new in sync.MOVED_IMPORTS.items():
+    moved = sync.moved_imports()
+    assert moved
+    for old, new in moved.items():
         assert not (sync._TREE_ROOT / old).exists(), old
         assert (sync._TREE_ROOT / new).is_file(), new
 
@@ -285,7 +286,7 @@ def test_the_ruff_rules_a_project_extends_are_materialized_as_toml(tmp_path):
     assert errors == []
     rules = next(f for f in files if f.path.name == "ruff.toml")
     assert rules.path == root / "_aitna" / ".akmon" / "profiles" / "ruff.toml"
-    assert rules.content.startswith(f"# {sync.GENERATED_MARKER}")
+    assert rules.content.startswith(f"# {sync.generated_marker()}")
     assert tomllib.loads(rules.content)["lint"]["pydocstyle"]["convention"] == "google"
 
 

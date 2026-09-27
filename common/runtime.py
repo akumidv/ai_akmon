@@ -12,8 +12,8 @@ not a machine-checked rule, so its lack of a seeded violation reads as a propert
 gap.
 
 Each entry names its **population**, and the two populations are joined to different sources:
-generated wiring is derived from the command strings ``sync`` emits, own tooling from
-:data:`HARNESS_COMMANDS` below. Neither join scans the source tree for binaries, which is why a
+generated wiring is derived from the command strings ``sync`` emits, own tooling from the
+tables in ``common/runtime.json``. Neither join scans the source tree for binaries, which is why a
 tool akmon runs during development — ``uv``, ``pytest`` — is not silently promoted into a
 consumer-facing requirement. The declaration's coverage of binaries invoked outside both joins is
 an open question tracked separately (A20).
@@ -36,6 +36,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
+
+from common import jsondata
 
 #: The two populations. A runtime belongs to exactly one.
 GENERATED_WIRING = "generated-wiring"
@@ -60,13 +63,12 @@ class RuntimeDeclaration:
     modality: str
 
 
-DECLARED_RUNTIMES: tuple[RuntimeDeclaration, ...] = (
-    RuntimeDeclaration(POSIX_SHELL, GENERATED_WIRING, REQUIRED),
-    RuntimeDeclaration("python3", GENERATED_WIRING, REQUIRED),
-    RuntimeDeclaration("git", GENERATED_WIRING, REQUIRED_ON + "codex"),
-    RuntimeDeclaration("claude", OWN_TOOLING, OPTIONAL),
-    RuntimeDeclaration("codex", OWN_TOOLING, OPTIONAL),
-)
+def declared_runtimes() -> tuple[RuntimeDeclaration, ...]:
+    """The ordered runtime declarations, from the shared data file."""
+    return tuple(
+        RuntimeDeclaration(binary, population, modality)
+        for binary, population, modality in _runtime_data()["declared_runtimes"]
+    )
 
 
 @dataclass(frozen=True)
@@ -77,36 +79,31 @@ class HarnessCommands:
     operations: Mapping[str, tuple[str, ...]]
 
 
-#: The sole owner of every optional-harness executable name and operation prefix — not of the
-#: whole argv. Adding an operation here is how a new caller reaches a harness; spelling an
-#: executable or an operation anywhere else is a second owner and is rejected by the C57 checker.
-#: A caller appending its own policy tail is not: ``routing.second_opinion_command`` adds the
-#: registry's ``model_flag`` and the prompt after this prefix.
-HARNESS_COMMANDS: Mapping[str, HarnessCommands] = {
-    "claude": HarnessCommands(
-        binary="claude",
-        operations={
-            "version": ("--version",),
-            # Non-interactive review: prompt in, plain text out.
-            "review": ("-p", "--output-format", "text"),
-        },
-    ),
-    "codex": HarnessCommands(
-        binary="codex",
-        operations={
-            "version": ("--version",),
-            "review": ("exec",),
-            # C70: the app-server listens on stdio by default; the caller then speaks bounded
-            # JSON-RPC ``hooks/list`` over that pipe (common/codex_hooks.py), not a second argv.
-            "hooks-list": ("app-server",),
-        },
-    ),
-}
+def _runtime_data() -> dict:
+    """The declaration and harness-command tables, as ``common/runtime.json`` carries them."""
+    return jsondata.read(Path(__file__).parent / "runtime.json")
+
+
+#: The sole owner of every optional-harness executable name and operation prefix is the table
+#: in ``common/runtime.json`` — not of the whole argv. Adding an operation there is how a new
+#: caller reaches a harness; spelling an executable or an operation anywhere else is a second
+#: owner and is rejected by the C57 checker. A caller appending its own policy tail is not:
+#: ``routing.second_opinion_command`` adds the registry's ``model_flag`` and the prompt after
+#: this prefix.
+def harness_commands() -> Mapping[str, HarnessCommands]:
+    """The harness table: each executable name and its operation prefixes, from the data file."""
+    return {
+        name: HarnessCommands(
+            binary=spec["binary"],
+            operations={operation: tuple(argv) for operation, argv in spec["operations"].items()},
+        )
+        for name, spec in _runtime_data()["harness_commands"].items()
+    }
 
 
 def harness_binaries() -> tuple[str, ...]:
     """Every optional-harness executable name akmon knows how to invoke."""
-    return tuple(sorted(spec.binary for spec in HARNESS_COMMANDS.values()))
+    return tuple(sorted(spec.binary for spec in harness_commands().values()))
 
 
 def harness_command(harness: str, operation: str, *extra: str) -> list:
@@ -114,14 +111,15 @@ def harness_command(harness: str, operation: str, *extra: str) -> list:
 
     The single constructor of the *executable-plus-operation prefix*, not of the whole argv: a
     caller may pass a policy tail through ``extra``. A caller that needs a different operation
-    adds it to :data:`HARNESS_COMMANDS` rather than assembling a prefix of its own — that
-    indirection is the accepted cost of having one place to look when a harness changes its
+    adds it to the ``common/runtime.json`` table rather than assembling a prefix of its own —
+    that indirection is the accepted cost of having one place to look when a harness changes its
     interface.
     """
+    table = harness_commands()
     try:
-        spec = HARNESS_COMMANDS[harness]
+        spec = table[harness]
     except KeyError:
-        raise ValueError(f"unknown harness {harness!r}; known: {', '.join(sorted(HARNESS_COMMANDS))}") from None
+        raise ValueError(f"unknown harness {harness!r}; known: {', '.join(sorted(table))}") from None
     try:
         tail = spec.operations[operation]
     except KeyError:

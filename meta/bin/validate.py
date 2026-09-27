@@ -24,13 +24,13 @@ import sys
 from pathlib import Path
 
 # meta/bin/validate.py → akmon root is two parents up.
-_KEYSTONE_ROOT = Path(__file__).resolve().parents[2]
+_AKMON_ROOT = Path(__file__).resolve().parents[2]
 
 # The shared finding envelope ships in the standard's own ``bin/`` (stdlib-only, no install).
 # The tree root for the shared ``common`` package, and ``bin/`` for the two launchers,
 # which are imported by their bare script name (``import sync``) the way they are at runtime.
-sys.path.insert(0, str(_KEYSTONE_ROOT / "bin"))
-sys.path.insert(0, str(_KEYSTONE_ROOT))
+sys.path.insert(0, str(_AKMON_ROOT / "bin"))
+sys.path.insert(0, str(_AKMON_ROOT))
 
 from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
 
@@ -294,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-tests", action="store_true", help="Skip the pytest run.")
     args = parser.parse_args(argv)
 
-    validator = Validator(_KEYSTONE_ROOT, skip_tests=args.skip_tests)
+    validator = Validator(_AKMON_ROOT, skip_tests=args.skip_tests)
     validator.run()
     print_findings(validator.findings, quiet=args.quiet)
     return exit_code(validator.findings, strict=args.strict)

@@ -1,0 +1,118 @@
+{
+  "akmon_repo": "https://github.com/akumidv/ai_akmon",
+  "tree_members": [
+    "ARCHETYPES.md",
+    "BOOTSTRAP.md",
+    "CAPABILITIES.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "MODEL.md",
+    "README.md",
+    "common",
+    "bin",
+    "examples",
+    "guardrails",
+    "hooks",
+    "meta",
+    "pipelines",
+    "profiles",
+    "roles",
+    "skills",
+    "tools"
+  ],
+  "tree_markers": [
+    "bin/sync.py",
+    "bin/verify.py",
+    "roles/README.md",
+    "guardrails/_common.md"
+  ],
+  "mount_gitignore": "__pycache__/\n*.py[cod]\n",
+  "agents_header": "# AGENTS.md\n\nGuidance for AI coding agents (Claude Code, Codex, Gemini, Copilot) working in this\nrepository. Vendor pointer files import this document — it is the single source of truth.\n\n",
+  "agents_block": "{{heading}} (developing the project)\n\nThis project uses the akmon dev layer — one standard for how an assistant helps develop it.\nModel & notation: [`MODEL.md`]({{model}}); attach/realign guide:\n[`BOOTSTRAP.md`]({{bootstrap}}); overview: [`README.md`]({{readme}}).\n\n- **Archetype / language:** `{{archetype}}` / `{{language}}` — classify per\n  [`ARCHETYPES.md`]({{archetypes}}), then update this line, the guardrail imports\n  below, and `attached_archetype` in `{{aitna}}/.akmon.toml`.\n- **Layers:** SHARED = {{shared_layer}} · LOCAL = `{{aitna}}/{agents,skills,tools,memory}` +\n  [`{{aitna}}/TASKS.md`]({{aitna}}/TASKS.md) · USAGE = root `skills/` (absent until this project\n  exposes one).\n- **Agents (roles):** [review]({{aitna}}/agents/review/README.md),\n  [architect]({{aitna}}/agents/architect/README.md), [engineer]({{aitna}}/agents/engineer/README.md)\n  → {{roles_hint}}.\n  **Declare the active agent** before doing work and restate it on switch\n  (`🧭 agent: <name> — <focus>`).\n- **Delegation (always-on, direct):** **delegation is the default.** For every non-trivial\n  task, before the first repository sweep, edit, or test run, decompose the work and delegate\n  every independent mechanical sub-step to available subagents without waiting for an owner\n  prompt. The orchestrator retains decomposition, routing, synthesis, and owner dialogue. Skip\n  only when the task is atomic or the harness exposes no subagents; state the reason. This\n  clause is direct because Codex does not expand nested `@` imports in `AGENTS.md`.\n- **Owner authority (always-on — it overrides any task instruction):** the owner verifies\n  consequential architecture, data-shape and math decisions recorded in ADRs; an assistant\n  *drafts*, the owner *decides*. **D5** — the owner owns commits, tags, pushes, publishing and pin bumps; never\n  `git add`/`commit`/`push` on the owner's behalf.\n- **Guardrails and profiles (always-on):** the common guardrail and the project's language\n  profile are **imported** (not just linked) so their rules load at session start; akmon is the\n  single owner — do not restate them here. Import this project's language profile on its own\n  line (e.g. `@{{profiles_dir}}/python.md`), and an environment profile where some of its code\n  runs in one, per the ARCHETYPES map.\n\n@{{guardrails_dir}}/_common.md\n\n- **Domain profiles (opt-in by need):** none attached yet — link only those the project actually needs.\n- **Pipelines:** [pre-commit]({{pre_commit}}) (tests mandatory),\n  [review-flow]({{review_flow}}),\n  [design-flow]({{design_flow}}),\n  [code-flow]({{code_flow}}),\n  [tasks]({{tasks_link}}) (backlog format), and the learn loop\n  ([memory-distill]({{memory_distill}}) +\n  [learning]({{learning}})).\n- **Memory:** read `{{aitna}}/memory/` at session start — distilled project facts, indexed by\n  [`{{aitna}}/memory/README.md`]({{aitna}}/memory/README.md).\n- **Backlog:** [`{{aitna}}/TASKS.md`]({{aitna}}/TASKS.md) — one line per task, detail by reference;\n  finished entries move to `TASKS_ARCHIVE.md`.\n- **Secrets:** from `.env` (gitignored). Never in code, docs, tests, or commits.\n",
+  "agents_roles_hint_package": "roles: [`akmon/roles/`]({{roles_link}}) — run `akmon path` to read them locally",
+  "agents_roles_hint_mounted": "roles: [`{{aitna}}/akmon/roles/`]({{aitna}}/akmon/roles/)",
+  "agents_shared_layer_package": "installed `akmon` package (hooks and tools run from it via `akmon hook`; only the imported guardrails are materialized, at `{{aitna}}/.akmon/guardrails/`; `akmon path` locates the rest)",
+  "agents_shared_layer_mounted": "`{{aitna}}/akmon/`",
+  "tasks_skeleton": "# TASKS — project backlog\n\nThe single backlog for this project. **Index, not a document:** one line per task, detail by\nreference; a finished entry moves to `TASKS_ARCHIVE.md`. No dates — git history is the\ntimeline. Format (akmon `pipelines/tasks.md`):\n\n`- <id> · <title> · <status> · <goal, 12 words max> · [detail](link)`\n\nThe id is typed — `A` architecture · `C` code · `N` analysis · `L` learning · `V` release —\nand the owning role follows from that letter, so it is not a separate field. Status is one of\n`active | blocked | deferred | done`.\n\n- A1 · classify archetype and language · active · pick archetype/language per ARCHETYPES.md; import its language profile\n- C1 · pin the test runner · active · record `[test].runner` in `{{aitna}}/.akmon.toml`, reusing this project's manager\n",
+  "memory_index": "# Project memory\n\nDistilled, durable facts about this project — read at session start. One file per fact,\nlisted here; the learn loop (akmon `pipelines/memory-distill.md`) writes them.\n\n<!-- - [example-fact](example-fact.md) — one-line hook -->\n",
+  "charters": {
+    "review": "assess what *is* — architecture, risk, trade-offs, conformance; a findings report",
+    "architect": "design what *should be* — options, contracts, docs, decision records",
+    "engineer": "realize a decided structure in code, with tests"
+  },
+  "charter": "# Agent — {{role}}\n\nProject charter for the **{{role}}** role: {{focus}}.\n\nRole of record: `roles/{{role}}.md` in the akmon standard. {{locate}}\n\nAdd project-specific scope, standing instructions, and known pitfalls below; the akmon role\nstays the single owner of the role's contract — do not restate it here.\n",
+  "charter_locate_package": "`akmon path` prints the standard's root; a mounted consumer reads `{{aitna}}/akmon/roles/{{role}}.md`.",
+  "charter_locate_mounted": "Read it at [`{{aitna}}/akmon/roles/{{role}}.md`]({{aitna}}/akmon/roles/{{role}}.md).",
+  "gitignore_lines": [
+    "# secrets",
+    "*.env",
+    "!*.env.example",
+    "",
+    "# dev-layer venv (provisioned only when the project has no Python environment)",
+    "{{aitna}}/.venv/",
+    "",
+    "# akmon model routing — per-user/per-session artifacts (never committed)",
+    ".claude/model-routing.local.json",
+    ".claude/model-routing.log",
+    ".claude/second-opinion/",
+    ".claude/agents/k_*.md"
+  ],
+  "ci_workflow": "name: akmon\n\non: [push, pull_request]\n\njobs:\n  akmon:\n    runs-on: ubuntu-latest\n    steps:\n{{steps}}\n",
+  "ci_workflow_steps_package": "      - uses: actions/checkout@v4\n      - uses: astral-sh/setup-uv@v5\n      - run: uv run akmon sync --check\n      - run: uv run akmon verify --strict",
+  "ci_workflow_steps_mounted": "      - uses: actions/checkout@v4\n        with:\n          submodules: recursive\n      - run: python3 {{aitna}}/akmon/bin/sync.py --check\n      - run: python3 {{aitna}}/akmon/bin/verify.py --strict",
+  "record_fresh": "# akmon integration record — written by `akmon init`, refreshed on realign.\n# The version this project sits on; a later bump diffs the CHANGELOG window against it.\nmount = \"{{mode}}\"\n{{recorded}}attached_archetype = \"{{archetype}}\"\n\n[test]\n# The project's own pytest invocation, used verbatim by the release check\n# (BOOTSTRAP §A5). Uncomment and set it to whatever this project already uses:\n# runner = \"uv run pytest\"\n",
+  "record_version_line": "akmon_version = \"{{version}}\"\n",
+  "old_mount_removal": {
+    "submodule": "    git submodule deinit -f -- {{relative}}\n    git rm -f -- {{relative}}\n    rm -rf .git/modules/{{relative}}",
+    "subtree": "    git rm -r -- {{relative}}   # a subtree's files are ordinary tracked files\n    rm -rf {{relative}}",
+    "vendored": "    git rm -r --cached -- {{relative}}   # if the vendored copy was committed\n    rm -rf {{relative}}"
+  },
+  "mode_switch_step": "re-point the AGENTS.md akmon block from the {{previous}} layout to {{mode}}: the imports become `@{{base}}/guardrails/_common.md` plus each imported profile (`@{{base}}/profiles/<name>.md`), and every link to the standard's docs {{link_resolution}}",
+  "mode_switch_link_resolution_package": "becomes a GitHub link at the pinned tag, with `akmon path` named as the way to read them locally",
+  "mode_switch_link_resolution_mounted": "becomes a path under `{{aitna}}/akmon/`",
+  "mode_switch_remove_mount": "remove the now-unused mount `{{aitna}}/akmon` (`git rm -r --cached` + `rm -rf`, or `git submodule deinit` first if it was a submodule) — nothing reads it in package mode",
+  "pin_step": {
+    "none": "**pin akmon in the project's dependency manifest**, in a **dev** group (never a runtime dependency): \"akmon @ git+{{repo}}@{{ref}}\" — then install it into a virtualenv inside the project root. Until both are done, `akmon` cannot resolve here: the CI checks cannot run, and the generated hook commands fail silently because the console script they name does not exist",
+    "runtime": "**move the akmon pin** out of the project's runtime dependencies (or extras) into a **dev** group: akmon is dev tooling and must not reach this project's own users (ADR 0009 §4)",
+    "unreadable": "**fix pyproject.toml** — it is not valid TOML, so neither akmon nor uv can read an akmon pin from it; once it parses, the pin belongs in a **dev** group"
+  },
+  "ruff_step": {
+    "uv": "add ruff as a development dependency so `akmon check` can run it: `uv add --dev ruff`",
+    "poetry": "add ruff as a development dependency so `akmon check` can run it: `poetry add --group dev ruff`",
+    "none": "add ruff to the project's development dependencies so `akmon check` can run it"
+  },
+  "run_prefix": {
+    "uv.lock": "uv run ",
+    "poetry.lock": "poetry run "
+  },
+  "write_ci_commands": {
+    "package": [
+      "akmon sync --check",
+      "akmon verify --strict"
+    ],
+    "mounted": [
+      "python3 {{aitna}}/akmon/bin/sync.py --check",
+      "python3 {{aitna}}/akmon/bin/verify.py --strict"
+    ]
+  },
+  "report": {
+    "complete": "attached, with steps left to a human/agent decision:",
+    "step": "  {{index}}. {{step}}",
+    "incomplete": "attached, but INCOMPLETE:",
+    "missing": {
+      "unreadable": "cannot read an akmon pin: pyproject.toml is not valid TOML (step 1)",
+      "absent": "has no akmon pin in a dev group yet (step 1) — nothing else attaches it"
+    },
+    "remedy": {
+      "unreadable": "fixing it",
+      "absent": "adding it"
+    },
+    "exit": "exit 1: mode 'package' {{missing}}, so this attach is not finished. Re-run `akmon init` after {{remedy}} (it keeps the recorded mode), or `akmon verify --strict` to re-check."
+  },
+  "closing_steps": {
+    "classify": "classify the project (archetype + language) against ARCHETYPES.md, import the language profile in AGENTS.md, and set `attached_archetype` in {{aitna}}/.akmon.toml",
+    "pin_test": "pin the test environment: record the project's own pytest invocation as `[test].runner` in {{aitna}}/.akmon.toml (BOOTSTRAP §A5 — do not build a venv when the project already has one)",
+    "export_aitna": "export AITNA_ROOT={{aitna}} in every shell and CI job that runs the akmon tooling",
+    "verify": "run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)"
+  }
+}

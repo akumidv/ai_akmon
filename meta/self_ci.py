@@ -20,12 +20,12 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-_KEYSTONE_ROOT = Path(__file__).resolve().parents[1]
+_AKMON_ROOT = Path(__file__).resolve().parents[1]
 # The tree root for the shared ``common`` package, and ``bin/`` for the two launchers,
 # which are imported by their bare script name (``import sync``) the way they are at runtime.
-sys.path.insert(0, str(_KEYSTONE_ROOT / "bin"))
-sys.path.insert(0, str(_KEYSTONE_ROOT))
-sys.path.insert(0, str(_KEYSTONE_ROOT / "meta"))
+sys.path.insert(0, str(_AKMON_ROOT / "bin"))
+sys.path.insert(0, str(_AKMON_ROOT))
+sys.path.insert(0, str(_AKMON_ROOT / "meta"))
 
 import verify as verify_tool  # noqa: E402
 from checks import always_loaded as always_loaded_caps  # noqa: E402
@@ -109,25 +109,48 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "pipelines/release.md",
         "pipelines/tasks.md",
         "common/__init__.py",
+        "common/always_loaded.json",
         "common/always_loaded.py",
+        "common/codex_hooks.json",
         "common/codex_hooks.py",
+        "common/findings.json",
         "common/findings.py",
+        "common/jsondata.py",
+        "common/markers.json",
         "common/markers.py",
+        "common/materialization.json",
         "common/materialization.py",
+        "common/check_runner.json",
         "common/check_runner.py",
         "common/project_root.py",
         "common/record.py",
+        "common/runtime.json",
         "common/runtime.py",
         "common/versions.py",
         "profiles/ruff.toml",
         "bin/check.py",
         "bin/sync.py",
         "bin/verify.py",
-        *(f"hooks/{name}" for name in verify_tool.WIRED_HOOK_SCRIPTS),
+        "bin/verify.json",
+        "bin/sync.json",
+        "src/akmon/init.json",
+        "src/akmon/update.json",
+        "src/akmon/cli.json",
+        *(f"hooks/{name}" for name in verify_tool.wired_hook_scripts()),
+        "hooks/vocabulary.json",
+        "hooks/hook_core.json",
+        "hooks/delegation_log.json",
+        "hooks/codex_hook.json",
         "tools/model_routing/registry.json",
+        "tools/model_routing/agents.json",
+        "tools/model_routing/gate.json",
+        "tools/model_routing/second_opinion.json",
+        "tools/model_routing/stats.json",
         "tools/model_routing/routing.py",
         "tools/model_routing/init.py",
         "tools/model_routing/second_opinion.py",
+        "tools/release/release.json",
+        "tools/tasks/archive.json",
     ):
         source = akmon_root / relative
         text = source.read_text(encoding="utf-8") if source.is_file() else "fixture placeholder\n"
@@ -523,7 +546,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--quiet", action="store_true", help="Only print warnings and errors.")
     args = parser.parse_args(argv)
 
-    findings = _run(_KEYSTONE_ROOT)
+    findings = _run(_AKMON_ROOT)
     print_findings(findings, quiet=args.quiet)
     return exit_code(findings, strict=args.strict)
 

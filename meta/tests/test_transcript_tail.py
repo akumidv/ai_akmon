@@ -24,10 +24,10 @@ from pathlib import Path
 
 import pytest
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
+_ROUTING_DIR = _AKMON / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
     sys.path.insert(0, str(_ROUTING_DIR))
 
@@ -256,7 +256,7 @@ def test_a_role_declared_at_the_start_of_a_long_transcript_is_still_found(tmp_pa
 
 
 def _load_hook():
-    spec = importlib.util.spec_from_file_location("model_routing_hook", _KEYSTONE / "hooks" / "model-routing.py")
+    spec = importlib.util.spec_from_file_location("model_routing_hook", _AKMON / "hooks" / "model-routing.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

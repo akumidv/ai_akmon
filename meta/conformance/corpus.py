@@ -257,6 +257,9 @@ SNAPSHOT_FILES = (
     "src/akmon/_init.py",
     "src/akmon/_tree.py",
     "src/akmon/_update.py",
+    "src/akmon/init.json",
+    "src/akmon/update.json",
+    "src/akmon/cli.json",
     "README.md",
     "BOOTSTRAP.md",
     "ARCHETYPES.md",
@@ -279,28 +282,48 @@ SNAPSHOT_FILES = (
     "profiles/python.md",
     "profiles/ruff.toml",
     "common/__init__.py",
+    "common/always_loaded.json",
     "common/always_loaded.py",
+    "common/codex_hooks.json",
     "common/codex_hooks.py",
+    "common/findings.json",
     "common/findings.py",
+    "common/jsondata.py",
+    "common/markers.json",
     "common/markers.py",
+    "common/materialization.json",
     "common/materialization.py",
+    "common/check_runner.json",
     "common/check_runner.py",
     "common/project_root.py",
     "common/record.py",
+    "common/runtime.json",
     "common/runtime.py",
     "common/versions.py",
     "bin/check.py",
     "bin/sync.py",
     "bin/verify.py",
+    "bin/verify.json",
+    "bin/sync.json",
+    "hooks/vocabulary.json",
+    "hooks/hook_core.json",
+    "hooks/delegation_log.json",
+    "hooks/codex_hook.json",
     "tools/model_routing/registry.json",
+    "tools/model_routing/agents.json",
+    "tools/model_routing/gate.json",
+    "tools/model_routing/second_opinion.json",
+    "tools/model_routing/stats.json",
     "tools/model_routing/routing.py",
     "tools/model_routing/init.py",
     "tools/model_routing/second_opinion.py",
     "tools/model_routing/gate_pack.py",
     "tools/model_routing/coverage_map.py",
     "tools/model_routing/stats.py",
+    "tools/release/release.json",
     "tools/release/release_check.py",
     "tools/tasks/archive.py",
+    "tools/tasks/archive.json",
 )
 
 
@@ -310,7 +333,7 @@ def snapshot_hooks(repo: Path) -> list[str]:
     try:
         import verify as verify_tool  # noqa: PLC0415 — the wired list has one owner
 
-        return [f"hooks/{name}" for name in verify_tool.WIRED_HOOK_SCRIPTS]
+        return [f"hooks/{name}" for name in verify_tool.wired_hook_scripts()]
     finally:
         sys.path.pop(0)
 

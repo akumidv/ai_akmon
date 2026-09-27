@@ -56,7 +56,7 @@ def _standard_tree_root(project_root: Path) -> Path:
 
 def _settings_model(project_root: Path) -> str | None:
     """The harness default model, when the settings record one (local settings win)."""
-    for name in ("settings.local.json", "settings.json"):
+    for name in routing.settings_probe_names():
         path = project_root / ".claude" / name
         if not path.is_file():
             continue
@@ -71,7 +71,7 @@ def _settings_model(project_root: Path) -> str | None:
 
 
 def _existing_config(project_root: Path) -> dict:
-    path = project_root / routing.LOCAL_CONFIG_REL
+    path = project_root / routing.local_config_rel()
     if not path.is_file():
         return {}
     try:

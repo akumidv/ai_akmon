@@ -48,7 +48,7 @@ import routing
 
 
 def _settings_model(project_root: Path) -> str | None:
-    for name in ("settings.local.json", "settings.json"):
+    for name in routing.settings_probe_names():
         path = project_root / ".claude" / name
         if not path.is_file():
             continue

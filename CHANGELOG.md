@@ -24,6 +24,12 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   The old `meta/D2_LEDGER.md` path is a compatibility tombstone and the frozen table lives under
   `meta/archive/`. Consumer migration is deliberately outside C94; remove `[d2_ledger]`
   configuration and old commands when a consumer next realigns.
+- **The delegation-nudge environment overrides drop the old `KEYSTONE_` prefix (ADR 0008).**
+  `KEYSTONE_DELEGATION_GRACE`, `KEYSTONE_DELEGATION_NUDGE_THRESHOLD` and
+  `KEYSTONE_DELEGATION_ASK_THRESHOLD` are now `AKMON_DELEGATION_GRACE`,
+  `AKMON_DELEGATION_NUDGE_THRESHOLD` and `AKMON_DELEGATION_ASK_THRESHOLD`; the old names are no
+  longer read. A project or shell that sets one renames it, or the hook falls back to its
+  defaults (grace 8, advisory 30, ask 120).
 
 ### Added
 - **A guardrail rule that a hook checks at runtime now names that check, and akmon verifies the

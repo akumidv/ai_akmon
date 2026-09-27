@@ -16,7 +16,7 @@ import argparse
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from codex_adapter import (
     command,
@@ -33,17 +33,30 @@ from codex_adapter import (
     unmeasured_path_source,
 )
 from hook_core import (
-    EDIT_TOOL,
-    SHELL_TOOL,
     HookResult,
     analysis_write_result,
+    edit_tool,
     find_project_root,
     report_unclassified_shell_route,
     role_on_code_result,
     session_start_result,
+    shell_tool,
 )
 
-from common.markers import claim_diagnostic_marker  # hook_core put the tree root on sys.path
+from common import jsondata  # hook_core put the tree root on sys.path
+from common.markers import (
+    claim_diagnostic_marker,
+    marker_kind,
+    unidentified_identity,
+)
+
+
+def _codex_hook_data() -> dict[str, Any]:
+    """The codex-hook data file beside this module (C102).
+
+    The route list and the two payload-defect diagnostic templates.
+    """
+    return jsondata.read(Path(__file__).parent / "codex_hook.json")
 
 
 def _payload_root(payload: dict) -> Path:
@@ -64,7 +77,7 @@ def _report_unreadable_target(payload: dict, name: str) -> None:
     because a hook with a broken payload reader and a hook with nothing to report both
     print nothing. Stderr only: the model never sees this, and the call is never blocked.
     """
-    if name != EDIT_TOOL:
+    if name != edit_tool():
         return
     sid = session_id(payload)
     event_id = tool_use_id(payload)
@@ -72,11 +85,15 @@ def _report_unreadable_target(payload: dict, name: str) -> None:
     # session/tool-use pair as the event identity so one malformed edit produces one
     # diagnostic, while a later malformed edit remains visible. A missing component
     # repeats fail-visible instead of creating a global marker that can hide drift.
-    if sid != "nosession" and event_id and not claim_diagnostic_marker("codex-unreadable-target", f"{sid}\0{event_id}"):
+    if sid != unidentified_identity() and event_id and not claim_diagnostic_marker(
+        marker_kind("codex_unreadable_target"), f"{sid}\0{event_id}"
+    ):
         return
     print(
-        f"akmon codex-hook: '{tool_name(payload) or 'apply_patch'}' matched but no file path could "
-        f"be read from the payload — the advisory hooks are inert for this call ({payload_shape(payload)})",
+        jsondata.fill(
+            _codex_hook_data()["unreadable_target"],
+            {"tool_name": tool_name(payload) or "apply_patch", "payload_shape": payload_shape(payload)},
+        ),
         file=sys.stderr,
     )
 
@@ -92,12 +109,15 @@ def _report_unmeasured_path_source(payload: dict) -> None:
     """
     sid = session_id(payload)
     event_id = tool_use_id(payload)
-    if sid != "nosession" and event_id and not claim_diagnostic_marker("codex-unmeasured-path", f"{sid}\0{event_id}"):
+    if sid != unidentified_identity() and event_id and not claim_diagnostic_marker(
+        marker_kind("codex_unmeasured_path"), f"{sid}\0{event_id}"
+    ):
         return
     print(
-        f"akmon codex-hook: '{tool_name(payload) or 'apply_patch'}' named a file only through an "
-        f"unmeasured payload key — the advisories ran on a path no measured Codex version is "
-        f"known to send, so the classification may be wrong ({payload_shape(payload)})",
+        jsondata.fill(
+            _codex_hook_data()["unmeasured_path_source"],
+            {"tool_name": tool_name(payload) or "apply_patch", "payload_shape": payload_shape(payload)},
+        ),
         file=sys.stderr,
     )
 
@@ -113,14 +133,14 @@ def _advisory(payload: dict, decide: Advisory) -> None:
     """
     kind = tool_kind(payload)
     sid = session_id(payload)
-    if kind == SHELL_TOOL:
+    if kind == shell_tool():
         report_unclassified_shell_route(sid)
         return
     paths = file_paths(payload)
     if not paths:
         _report_unreadable_target(payload, kind)
         return
-    if kind == EDIT_TOOL and unmeasured_path_source(payload):
+    if kind == edit_tool() and unmeasured_path_source(payload):
         _report_unmeasured_path_source(payload)
     root = _payload_root(payload)
     for path in paths:
@@ -135,7 +155,9 @@ def _session_start(payload: dict) -> None:
     print_result(session_start_result(find_project_root(start)))
 
 
-_ROUTES = ("analysis-guard", "role-on-code", "session-start", "git-commit-guard")
+def _routes() -> tuple[str, ...]:
+    """The hook routes this wrapper dispatches (hooks/codex_hook.json, C102)."""
+    return tuple(_codex_hook_data()["routes"])
 
 
 class UsageError(Exception):
@@ -177,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     hook = "codex-hook"
     try:
         parser = _Parser(description=__doc__)
-        parser.add_argument("hook", choices=_ROUTES)
+        parser.add_argument("hook", choices=_routes())
         route = parser.parse_args(argv).hook
         hook = f"codex-hook {route}"
         _dispatch(route, load_payload())

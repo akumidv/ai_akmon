@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import builtins
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -18,10 +19,12 @@ from pathlib import Path
 
 import pytest
 
-_KEYSTONE = next(
+from common import jsondata
+
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_spec = importlib.util.spec_from_file_location("release_check", _KEYSTONE / "tools" / "release" / "release_check.py")
+_spec = importlib.util.spec_from_file_location("release_check", _AKMON / "tools" / "release" / "release_check.py")
 release_check = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(release_check)
 
@@ -36,7 +39,7 @@ def test_akmon_check_runs_only_upstream_gates(monkeypatch, tmp_path):
     captured = {}
 
     def fake_pytest_command(root, tests):
-        assert root == release_check.KEYSTONE_ROOT
+        assert root == release_check.AKMON_ROOT
         assert tests == str(release_check.META / "tests")
         return pytest_command
 
@@ -53,7 +56,7 @@ def test_akmon_check_runs_only_upstream_gates(monkeypatch, tmp_path):
 
     assert release_check.run_check(tmp_path, "akmon") == 0
     assert captured == {
-        "root": release_check.KEYSTONE_ROOT,
+        "root": release_check.AKMON_ROOT,
         "commands": [
             [sys.executable, str(release_check.META / "self_ci.py")],
             pytest_command,
@@ -356,7 +359,7 @@ def test_the_project_version_is_read_without_tomllib_too(tmp_path, monkeypatch):
 
 
 def test_the_live_tree_carries_a_consistent_version_pair():
-    findings = release_check.check_release_versions(_KEYSTONE)
+    findings = release_check.check_release_versions(_AKMON)
     assert [finding.code for finding in findings if finding.severity == "error"] == []
 
 
@@ -415,7 +418,7 @@ def test_the_package_does_not_claim_the_tag_produces_the_built_version():
     # Half of why the shipped defect reproduced: `__init__.py` asserted that the release
     # pipeline cuts the real version from the git tag, which a static hatchling version makes
     # false. It is a literal string in a source file, so it is pinned as one.
-    text = (_KEYSTONE / "src" / "akmon" / "__init__.py").read_text(encoding="utf-8")
+    text = (_AKMON / "src" / "akmon" / "__init__.py").read_text(encoding="utf-8")
     assert not _FALSE_TAG_CLAIM_RE.search(text)
     assert "pyproject.toml" in text  # it names what actually produces the number
     assert _FALSE_TAG_CLAIM_RE.search(
@@ -607,3 +610,52 @@ def test_the_dev_venv_is_discovered_under_the_configured_dev_layer(tmp_path, mon
 def test_the_release_charter_path_follows_the_configured_dev_layer(monkeypatch):
     monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     assert release_check._release_charter() == "tools/ai/agents/release/README.md"
+
+
+# --------------------------------------------------------------------------------------
+# C102: release.json — the tool's texts and subject facts
+# --------------------------------------------------------------------------------------
+
+
+def test_release_data_pins_the_structure_and_characteristic_texts():
+    data = json.loads((_AKMON / "tools" / "release" / "release.json").read_text(encoding="utf-8"))
+    assert set(data) == {
+        "changelog_name",
+        "pyproject_name",
+        "static_version_file",
+        "subjects",
+        "run_state",
+        "run_check",
+        "findings",
+        "run_plan",
+    }
+    assert data["subjects"] == ["akmon", "package"]
+    assert data["changelog_name"] == "CHANGELOG.md"
+    assert data["static_version_file"] == "src/akmon/__init__.py"
+    assert data["findings"]["retag"]["fix"] == "Confirm this is a deliberate re-release, or bump the version."
+    assert data["run_plan"]["push_line"] == "git push origin main --tags"
+    assert data["run_check"]["all_green"] == "release check: all green"
+
+
+def test_release_loader_reads_exactly_release_json(monkeypatch):
+    seen: list[Path] = []
+
+    def spy(path: Path):
+        seen.append(path)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    release_check.changelog_name()
+    release_check.subjects()
+    assert seen == [_AKMON / "tools" / "release" / "release.json", _AKMON / "tools" / "release" / "release.json"]
+
+
+def test_a_missing_release_json_raises_from_public_functions(monkeypatch):
+    def broken(path: Path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        release_check.run_plan("v1.0.0", "akmon")
+    with pytest.raises(jsondata.DataFileError):
+        release_check.changelog_name()

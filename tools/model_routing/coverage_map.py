@@ -46,9 +46,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import routing
 
+from common import jsondata
 from common.project_root import aitna_root, resolve_project_root
 
-_UNLABELLED = "(unlabelled)"
+
+def _gate_data() -> dict:
+    """The shared coverage-map texts (``gate.json``), read on the call that needs it."""
+    return jsondata.read(Path(__file__).parent / "gate.json")
+
+
+def unlabelled_marker() -> str:
+    """The zone label a delegation that carried no ``[zone:…]`` marker is grouped under."""
+    return _gate_data()["coverage_map"]["unlabelled_marker"]
 
 
 def parse_zone_plan(text: str) -> list[str]:
@@ -80,16 +89,17 @@ def build_coverage_map(entries: Iterable[routing.DelegationEntry], zone_plan: li
     ``zone_plan``, planned zones with no worker surface as *uncovered seams* and worked zones
     absent from the plan as *off-plan*.
     """
+    data = _gate_data()["coverage_map"]
     entries = list(entries)
     if not entries:
-        return "_No delegations in scope._"
+        return data["empty_sentinel"]
 
     # Group by zone, preserving first-seen order; distinct workers per zone, total count.
     order: list[str] = []
     workers: dict[str, list[str]] = {}
     counts: dict[str, int] = {}
     for entry in entries:
-        zone = entry.zone or _UNLABELLED
+        zone = entry.zone or unlabelled_marker()
         if zone not in workers:
             order.append(zone)
             workers[zone] = []
@@ -101,25 +111,29 @@ def build_coverage_map(entries: Iterable[routing.DelegationEntry], zone_plan: li
 
     # No "## Coverage map" heading: the gate-pack owns that section header and embeds this
     # body under it (standalone --stdout still reads fine, leading with the table).
-    lines = ["| zone | workers | count |", "|------|---------|-------|"]
-    lines.extend(f"| {zone} | {', '.join(workers[zone])} | {counts[zone]} |" for zone in order)
+    lines = list(data["table_header"])
+    lines.extend(
+        jsondata.fill(data["table_row"], {"zone": zone, "workers": ", ".join(workers[zone]), "count": counts[zone]})
+        for zone in order
+    )
 
     if zone_plan is not None:
-        labelled = {z for z in order if z != _UNLABELLED}
+        unlabelled = unlabelled_marker()
+        labelled = {z for z in order if z != unlabelled}
         uncovered = [z for z in zone_plan if z not in labelled]
-        off_plan = [z for z in order if z != _UNLABELLED and z not in zone_plan]
+        off_plan = [z for z in order if z != unlabelled and z not in zone_plan]
 
-        lines += ["", "### Uncovered zones (planned, no worker)"]
+        lines += ["", data["uncovered_heading"]]
         if uncovered:
-            lines += [f"- {z}" for z in uncovered]
+            lines += [jsondata.fill(data["zone_item"], {"zone": z}) for z in uncovered]
         else:
-            lines.append("_All planned zones have at least one worker._")
+            lines.append(data["all_covered_sentinel"])
 
         if off_plan:
-            lines += ["", "### Off-plan zones (worked, not in the zone plan)"]
-            lines += [f"- {z}" for z in off_plan]
-        if _UNLABELLED in workers:
-            lines += ["", f"_{counts[_UNLABELLED]} delegation(s) carried no `[zone:…]` marker — unattributable._"]
+            lines += ["", data["off_plan_heading"]]
+            lines += [jsondata.fill(data["zone_item"], {"zone": z}) for z in off_plan]
+        if unlabelled in workers:
+            lines += ["", jsondata.fill(data["unlabelled_note"], {"count": counts[unlabelled]})]
 
     return "\n".join(lines)
 
@@ -167,10 +181,13 @@ def _in_scope(
 
 def _describe_scope(session: str | None, entries: list[routing.DelegationEntry]) -> str:
     """The session set a run covered — named for the all-sessions run too, since it is a choice."""
+    data = _gate_data()["coverage_map"]
     if session is not None:
-        return f"session {session}"
+        return jsondata.fill(data["scope_session"], {"session": session})
     seen = sorted({entry.session_id or "-" for entry in entries})
-    return f"all sessions ({len(seen)}: {', '.join(seen)})" if seen else "all sessions (none in scope)"
+    if seen:
+        return jsondata.fill(data["scope_all"], {"count": len(seen), "sessions": ", ".join(seen)})
+    return data["scope_all_none"]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -208,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
         print(root_notice, file=sys.stderr)
-    log_path = args.log or (root / routing.DELEGATION_LOG_REL)
+    log_path = args.log or (root / routing.delegation_log_rel())
     if not log_path.is_file():
         parser.error(f"delegation log not found: {log_path}")
 
@@ -235,7 +252,8 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         rel = out
 
-    print(f"coverage-map entries={len(entries)} zones={len({e.zone or _UNLABELLED for e in entries})}")
+    zones = len({e.zone or unlabelled_marker() for e in entries})
+    print(jsondata.fill(_gate_data()["coverage_map"]["summary_entries"], {"entries": len(entries), "zones": zones}))
     print(f"scope: {_describe_scope(args.session, entries)}")
     print(f"map: {rel}")
     if args.stdout:

@@ -21,7 +21,17 @@ from pathlib import Path
 # package, so the tree root joins the path, as in the other launchers.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common.check_runner import CONFIG_TARGET, ScopeError, changed_files, read_checks, run_checks
+from common.check_runner import (
+    ScopeError,
+    changed_files,
+    config_target,
+    correct_entry_fix,
+    no_checks,
+    read_checks,
+    repair_record_fix,
+    run_checks,
+    scope_fix,
+)
 from common.findings import Finding, exit_code, print_findings
 from common.project_root import aitna_root, resolve_project_root
 from common.record import RecordError, read_akmon_toml_strict
@@ -40,27 +50,19 @@ def main(argv: list[str] | None = None) -> int:
     try:
         table = read_akmon_toml_strict(aitna_root(root) / ".akmon.toml").get("check")
     except RecordError as exc:
-        print_findings([Finding("error", "check.config", str(exc), CONFIG_TARGET, "Repair the record so it parses")])
+        print_findings([Finding("error", "check.config", str(exc), config_target(), repair_record_fix())])
         return 1
     checks, problems = read_checks(table)
     findings = [
-        Finding("error", "check.config", problem, CONFIG_TARGET, "Correct or remove the entry the message names")
-        for problem in problems
+        Finding("error", "check.config", problem, config_target(), correct_entry_fix()) for problem in problems
     ]
     if not checks and not problems:
-        findings.append(
-            Finding(
-                "warn",
-                "check.config",
-                "declares no checks, so nothing ran",
-                CONFIG_TARGET,
-                "Name the project's checks under [check], or run akmon init to set them up",
-            )
-        )
+        message, fix = no_checks()
+        findings.append(Finding("warn", "check.config", message, config_target(), fix))
     try:
         changed = changed_files(root) if args.changed else None
     except ScopeError as exc:
-        findings.append(Finding("error", "check.scope", str(exc), "", "Run it inside a git work tree"))
+        findings.append(Finding("error", "check.scope", str(exc), "", scope_fix()))
         print_findings(findings)
         return 1
     findings.extend(run_checks(root, checks, changed))

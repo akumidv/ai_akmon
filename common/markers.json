@@ -1,0 +1,17 @@
+{
+  "name_prefix": "akmon-",
+  "name_sha256_tail": 20,
+  "unidentified": "nosession",
+  "kinds": {
+    "shell_route": "shell-route",
+    "role_on_code": "role-on-code",
+    "analysis_guard": "analysis-guard",
+    "codex_unreadable_target": "codex-unreadable-target",
+    "codex_unmeasured_path": "codex-unmeasured-path"
+  },
+  "delegation_state_files": {
+    "counter": "akmon-delegation-nudge-{{identity}}.count",
+    "marker": "akmon-delegation-nudge-{{identity}}.marker",
+    "ask_marker": "akmon-delegation-nudge-{{identity}}.ask-marker"
+  }
+}

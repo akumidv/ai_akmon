@@ -207,7 +207,7 @@ def test_planned_files_include_all_vendor_pointers(tmp_path):
     assert errors == []
     for planned in files:
         if planned.path.name == "CLAUDE.md":
-            assert sync.GENERATED_MARKER in planned.content  # do-not-edit banner present
+            assert sync.generated_marker() in planned.content  # do-not-edit banner present
 
 
 def test_apply_check_mode_reports_without_writing(tmp_path):
@@ -232,7 +232,7 @@ def test_apply_check_reports_obsolete_generated_skill_stub(tmp_path):
     root = _make_root(tmp_path)
     stale = root / ".claude" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED_MARKER} -->\n", encoding="utf-8")
+    stale.write_text(f"# old-skill\n\n<!-- {sync.generated_marker()} -->\n", encoding="utf-8")
 
     files, _ = sync._planned_files(root)
     result = sync._apply(files, write=False, root=root)
@@ -245,7 +245,7 @@ def test_apply_write_deletes_obsolete_generated_skill_stub(tmp_path):
     root = _make_root(tmp_path)
     stale = root / ".claude" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED_MARKER} -->\n", encoding="utf-8")
+    stale.write_text(f"# old-skill\n\n<!-- {sync.generated_marker()} -->\n", encoding="utf-8")
 
     files, _ = sync._planned_files(root)
     result = sync._apply(files, write=True, root=root)
@@ -351,7 +351,7 @@ def test_apply_write_deletes_obsolete_generated_agents_skill_stub(tmp_path):
     root = _make_root(tmp_path)
     stale = root / ".agents" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"---\n# {sync.GENERATED_MARKER}\nname: old-skill\n---\n", encoding="utf-8")
+    stale.write_text(f"---\n# {sync.generated_marker()}\nname: old-skill\n---\n", encoding="utf-8")
 
     files, _ = sync._planned_files(root)
     result = sync._apply(files, write=True, root=root)
@@ -378,7 +378,7 @@ def test_main_check_returns_1_for_obsolete_generated_skill_stub(tmp_path):
     assert sync.main(["--project-root", str(root)]) == 0
     stale = root / ".claude" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED_MARKER} -->\n", encoding="utf-8")
+    stale.write_text(f"# old-skill\n\n<!-- {sync.generated_marker()} -->\n", encoding="utf-8")
 
     assert sync.main(["--project-root", str(root), "--check"]) == 1
     assert stale.exists()
@@ -620,3 +620,117 @@ def test_package_pin_status_reports_a_manifest_that_is_not_valid_toml(tmp_path):
     """uv cannot read such a file either, so "no pin" would name the wrong cause."""
     (tmp_path / "pyproject.toml").write_text('[dependency-groups]\ndev = [\n    "akmon==0.4.0",\n', encoding="utf-8")
     assert sync.package_pin_status(tmp_path) == "unreadable"
+
+
+# --------------------------------------------------------------------------------------
+# bin/sync.json — the shared sync text and tables (C102)
+# --------------------------------------------------------------------------------------
+
+_SYNC_DATA = json.loads((Path(sync.__file__).parent / "sync.json").read_text(encoding="utf-8"))
+
+
+def test_sync_data_pins_its_structure():
+    """The data file is the single owner of the sync text: pin the key set and a few
+    characteristic exact values so a transcription drift is caught here, not in the corpus."""
+    assert set(_SYNC_DATA) == {
+        "cli_name",
+        "default_launcher_rel",
+        "akmon_hook_markers",
+        "claude_hooks",
+        "codex_hooks",
+        "vendor_pointers",
+        "planned_files",
+        "skill_stubs",
+        "skill_stub_dirs",
+        "always_materialized",
+        "moved_imports",
+        "ruff_configs",
+        "check_findings",
+        "summary_verbs",
+    }
+    assert _SYNC_DATA["cli_name"] == "akmon"
+    assert _SYNC_DATA["default_launcher_rel"] == ".venv/bin/akmon"
+    # the third marker's quote sits before `hook` (the launcher is quoted in the wiring); the
+    # trailing space is what keeps it from matching a prose mention
+    assert _SYNC_DATA["akmon_hook_markers"] == ["{{aitna}}/akmon/hooks/", "{{aitna}}/.akmon/hooks/", '{{cli}}" hook ']
+    # the wiring tables: matcher entries and hook commands, order load-bearing
+    assert list(_SYNC_DATA["claude_hooks"]) == ["PreToolUse", "SessionStart", "UserPromptSubmit", "Stop"]
+    assert len(_SYNC_DATA["claude_hooks"]["PreToolUse"]) == 4
+    assert _SYNC_DATA["claude_hooks"]["PreToolUse"][0] == {"matcher": "Bash", "commands": ["git-commit-guard"]}
+    assert _SYNC_DATA["claude_hooks"]["Stop"][0]["commands"] == ["gate-audit"]
+    assert _SYNC_DATA["codex_hooks"]["PreToolUse"][0]["matcher"] == "Bash|apply_patch"
+    assert _SYNC_DATA["codex_hooks"]["SessionStart"][0]["commands"] == [
+        ["session-start", "Loading akmon session reminders"]
+    ]
+    assert list(_SYNC_DATA["planned_files"]) == [
+        ["CLAUDE.md", "claude_md"],
+        [".github/copilot-instructions.md", "copilot_md"],
+        ["GEMINI.md", "gemini_md"],
+        [".codex/README.md", "codex_readme"],
+        [".codex/hooks.json", "codex_hooks_text"],
+    ]
+    assert _SYNC_DATA["skill_stubs"]["no_frontmatter"] == "# {{name}}\n\n<!-- {{banner}} -->\n\n{{body}}"
+    assert _SYNC_DATA["skill_stubs"]["with_frontmatter"] == (
+        "---\n# {{banner}}\n{{frontmatter}}\n---\n\n# {{name}}\n\n{{body}}"
+    )
+    assert _SYNC_DATA["skill_stub_dirs"] == [".claude/skills", ".agents/skills"]
+    assert _SYNC_DATA["always_materialized"] == "guardrails/_common.md"
+    assert _SYNC_DATA["moved_imports"] == {"guardrails/python.md": "profiles/python.md"}
+    assert _SYNC_DATA["ruff_configs"][0] == ["pyproject.toml", ["tool", "ruff"]]
+    assert _SYNC_DATA["check_findings"]["stale"]["message"] == "generated file is stale or missing: {{relative}}"
+    assert _SYNC_DATA["summary_verbs"]["no_changes"] == "akmon sync: no changes"
+    assert _SYNC_DATA["summary_verbs"]["changed"] == {"dry_run": "would update", "write": "updated"}
+
+
+def test_sync_data_loader_reads_exactly_the_sync_json(monkeypatch):
+    """The loader reads ``sync.json`` beside ``sync.py`` — the path the wheel, the self-CI
+    fixture and the corpus snapshot all place the file at."""
+    seen: list[Path] = []
+    real_read = sync.jsondata.read
+
+    def spy(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(sync.jsondata, "read", spy)
+    data = sync.read_sync_data()
+    assert sync._cli_name(data) == "akmon"
+    assert sync._skill_stub_dirs(data) == (".claude/skills", ".agents/skills")
+    assert seen == [Path(sync.__file__).parent / "sync.json"]
+
+
+def test_one_sync_run_reads_sync_json_once(tmp_path, monkeypatch, capsys):
+    """``main`` reads ``sync.json`` once and passes it down (C102): the plan, every skill stub,
+    the hook merge and the check report all use that one read."""
+    root = _make_root(tmp_path)
+    _make_skill(root, "skills", "alpha")
+    _make_skill(root, "skills", "beta")
+    seen: list[str] = []
+    real_read = sync.jsondata.read
+
+    def spy(path):
+        seen.append(Path(path).name)
+        return real_read(path)
+
+    monkeypatch.setattr(sync.jsondata, "read", spy)
+    assert sync.main(["--project-root", str(root)]) == 0
+    assert sync.main(["--project-root", str(root), "--check"]) == 0
+    capsys.readouterr()
+    assert seen.count("sync.json") == 2  # once per run
+
+
+def test_sync_data_file_error_propagates_uncaught(monkeypatch, tmp_path):
+    """A missing or broken ``sync.json`` is a loud failure, not a swallowed one — from the
+    entry point and from a public function called on its own."""
+
+    def broken_read(path):
+        raise sync.jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(sync.jsondata, "read", broken_read)
+    root = _make_root(tmp_path)
+    with pytest.raises(sync.jsondata.DataFileError, match=r"sync\.json"):
+        sync.main(["--project-root", str(root)])
+    with pytest.raises(sync.jsondata.DataFileError, match=r"sync\.json"):
+        sync._planned_files(root)
+    with pytest.raises(sync.jsondata.DataFileError, match=r"sync\.json"):
+        sync._codex_hooks(root)

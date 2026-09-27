@@ -1,9 +1,9 @@
-# Decisions — keystone ADRs
+# Decisions — akmon ADRs
 
-Architecture Decision Records for the **keystone standard itself** (SHARED — they travel with
+Architecture Decision Records for the **akmon standard itself** (SHARED — they travel with
 the submodule into every consuming project). This is the standard's analogue of a project's
 `docs/dev/decisions/`: a consuming project records its *own* domain/architecture ADRs there, and
-inherits keystone's ADRs here.
+inherits akmon's ADRs here.
 
 Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipelines/tasks.md) §No dates):
 
@@ -27,7 +27,7 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   (A architecture/design · C code · L learning · V release) + number, role derived; optional
   `[#issue]` GitHub link; legacy `T#` grandfathered.
 - [0003 — Role triad and develop/use separation](0003-role-triad-and-develop-use-separation.md)
-  — review/architect/engineer as analysis/synthesis/implementation; keystone DEVELOP vs USE
+  — review/architect/engineer as analysis/synthesis/implementation; akmon DEVELOP vs USE
   separation; adds task letter N (analysis/review), amending 0002.
 - [0004 — Model routing: capability tiers, task-kind matrix, ladder binding](0004-model-routing-capability-tiers.md)
   — vendor-neutral tiers; task-kind→tier matrix as registry data (delegation by default,

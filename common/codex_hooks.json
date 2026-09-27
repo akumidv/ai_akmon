@@ -1,0 +1,31 @@
+{
+  "protocol_failures": {
+    "unstartable": "codex app-server could not be started",
+    "stdin-closed": "codex app-server exited before accepting the hooks/list request",
+    "timeout": "no hooks/list response within the query timeout",
+    "stdout-closed": "codex app-server closed its output before answering hooks/list",
+    "runner-failed": "the hooks/list runner failed",
+    "not-json": "hooks/list response is not valid JSON",
+    "not-object": "hooks/list response is not a JSON object",
+    "id-mismatch": "hooks/list response does not answer this request (id mismatch)",
+    "jsonrpc-error": "hooks/list returned a JSON-RPC error",
+    "no-data": "hooks/list response has no result.data list",
+    "no-project": "hooks/list answered no entry for this project",
+    "duplicate-project": "hooks/list answered this project more than once",
+    "project-shape": "hooks/list entry for this project lacks a hooks, warnings or errors list",
+    "discovery-errors": "hooks/list reported discovery errors for this project",
+    "hook-not-object": "hooks/list returned a hook entry that is not an object",
+    "hook-handler": "hooks/list returned a hook entry without a string handlerType",
+    "hook-enabled": "hooks/list returned a hook entry whose enabled is not a boolean",
+    "hook-trust": "hooks/list returned a hook entry with an unrecognized trustStatus",
+    "hook-identity": "hooks/list returned a command hook without a string eventName/command",
+    "hook-matcher": "hooks/list returned a command hook with a non-string matcher",
+    "unclassified": "the hooks/list exchange failed for an unclassified reason"
+  },
+  "event_names": {
+    "PreToolUse": "preToolUse",
+    "SessionStart": "sessionStart"
+  },
+  "trust_statuses": ["managed", "untrusted", "trusted", "modified"],
+  "live_trust_statuses": ["trusted", "managed"]
+}

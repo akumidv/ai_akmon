@@ -566,7 +566,7 @@ suppresses successful child output so `--quiet` remains quiet.
 3. **A top-level exception guard** in every **spawned entry point** — **eight of them after the C94 cutover (C95); nine at lock time**: the seven
    generated Claude wrappers (`git-commit-guard`, `role-on-code`, `analysis-guard`,
    `delegation-log`, `delegation-nudge`, `session-start-agent`,
-   `model-routing`; `bin/sync.py:277`–`:306`), wired as eight command entries because
+   `model-routing`; `bin/sync.json` `claude_hooks`), wired as eight command entries because
    `model-routing` runs on both `SessionStart` and `UserPromptSubmit`, and the single Codex entry `codex-hook.py`, which
    carries the route as an argument (emitted at `bin/sync.py:210` and `:222`–`:244` — the file
    is named explicitly because the bare form read as coordinates inside `codex-hook.py`, which
@@ -1701,7 +1701,7 @@ or measurement to these fixtures and block only C52.
 
 **F20/A decision — exact populations and one owner in both directions.** The neutral vocabulary is
 exactly `edit` / `shell` / `read` / `subagent`, owned by `hook_core`
-(`hooks/hook_core.py:112`–`:115`), where `read` already folds Read/Grep/Glob by that module's own
+(`hooks/hook_core.py::edit_tool`, `hooks/hook_core.py::shell_tool`, `hooks/hook_core.py::read_tool`, `hooks/hook_core.py::subagent_tool`), where `read` already folds Read/Grep/Glob by that module's own
 comment. The exact restricted-agent population is `k_explorer`, `k_reasoner` and `k_auditor`, each
 with `{read, shell}`; `k_mechanic`, `k_validator` and `k_implementer` carry one explicit
 unrestricted sentinel rather than a vendor-name list. A new capability is added to `hook_core`'s

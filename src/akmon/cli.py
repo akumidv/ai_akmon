@@ -26,7 +26,7 @@ import runpy
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import akmon
 from akmon import _tree
@@ -43,7 +43,23 @@ if TYPE_CHECKING:
 # lazy (PEP 562, see ``akmon/__init__.py``) precisely so that same path does not pay a
 # distribution-metadata scan, and a from-import would resolve it here.
 
-_DISPATCHED_COMMANDS = {"sync", "verify", "check"}
+
+def _jsondata() -> ModuleType:
+    """The embedded tree's ``common.jsondata`` — the one reader of the shared CLI data."""
+    return _embedded_common_module(_tree.embedded_tree_root(), "jsondata")
+
+
+def _data() -> Any:
+    """The shared CLI text and tables (``cli.json``, beside this module), read on the call.
+
+    Never at import time, with no module-level cache and no swallowed ``DataFileError`` (C102).
+    """
+    return _jsondata().read(Path(__file__).parent / "cli.json")
+
+
+def _dispatched_commands() -> tuple[str, ...]:
+    """The commands dispatched to the governing tree's launcher (``cli.json``)."""
+    return tuple(_data()["dispatched_commands"])
 
 
 def _load_module_from_path(path: Path, name: str) -> ModuleType:
@@ -196,12 +212,13 @@ def _skew_notice(mounted_root: Path) -> str | None:
     pinned_base, ahead = _split_version(pinned)
     cli_base, _ = _split_version(akmon.__version__)
     if pinned_base != cli_base:
-        return f"akmon: CLI is {akmon.__version__}, mounted/pinned standard is {pinned} — the mounted tree governs."
+        return _jsondata().fill(
+            _data()["skew_version"], {"cli_version": akmon.__version__, "pinned": pinned}
+        )
     if ahead is not None:
         commits = "commit" if ahead == "1" else "commits"
-        return (
-            f"akmon: mounted/pinned standard is {pinned}, {ahead} {commits} past the tag this CLI "
-            "matches — the mounted tree governs."
+        return _jsondata().fill(
+            _data()["skew_commits"], {"pinned": pinned, "ahead": ahead, "commits": commits}
         )
     return None
 
@@ -330,18 +347,21 @@ def _cmd_hook(argv: list[str], *, cwd: Path | None = None) -> int:
     its advisory argument (``akmon hook codex-hook role-on-code``).
     """
     if not argv:
-        print("akmon hook: missing hook name", file=sys.stderr)
+        print(_data()["hook_missing_name"], file=sys.stderr)
         return 2
     name, *rest = argv
     hooks_dir = controlling_tree_root(cwd) / "hooks"
     if "/" in name or "\\" in name or name.startswith("."):
-        print(f"akmon hook: {name!r} is a path; name the hook instead (e.g. 'role-on-code')", file=sys.stderr)
+        print(_jsondata().fill(_data()["hook_path_refused"], {"name": repr(name)}), file=sys.stderr)
         return 2
     stem = name[:-3] if name.endswith(".py") else name
     script = hooks_dir / f"{stem}.py"
     if not script.is_file():
         available = ", ".join(sorted(path.stem for path in hooks_dir.glob("*.py"))) or "(none)"
-        print(f"akmon hook: unknown hook {name!r}; available: {available}", file=sys.stderr)
+        print(
+            _jsondata().fill(_data()["hook_unknown"], {"name": repr(name), "available": available}),
+            file=sys.stderr,
+        )
         return 2
     return _run_hook_script(script, rest)
 
@@ -374,24 +394,13 @@ _COMMANDS = ("init", "update", "sync", "verify", "check", "path", "hook", "versi
 # `argparse.add_subparsers` + a REMAINDER positional mis-parses a remainder that starts
 # with "-" (e.g. `akmon sync --check`) — a known argparse limitation. A single top-level
 # `command` choice + one REMAINDER positional sidesteps it; per-command help text is
-# supplied via the epilog instead of per-subparser help.
-_EPILOG = """commands:
-  init      attach the standard to a project (mount + layout + sync + routing)
-  update    move the project to another akmon release, then realign it (init + checks)
-  sync      sync generated agent pointers (bin/sync.py)
-  verify    verify a consuming project's USE contract (bin/verify.py)
-  check     run the checks the project declares in .akmon.toml [check] (bin/check.py)
-  path      print the resolved standard-tree root
-  hook      run a hook from the resolved standard tree (called by generated wiring)
-  version   print the akmon package version
+# supplied via the epilog instead of per-subparser help. The epilog text itself lives in
+# ``cli.json`` (C102).
 
-sync/verify/init/update accept their own flags, passed through verbatim, e.g.:
-  akmon init --mode package
-  akmon update --ref v0.4.0
-  akmon sync --check
-  akmon verify --strict
-  akmon init --help
-"""
+
+def _epilog() -> str:
+    """The command list the top-level ``--help`` appends (``cli.json``)."""
+    return _data()["epilog"]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -400,7 +409,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="akmon",
         description="akmon — the akmon AI-agent development standard, as an installable package.",
-        epilog=_EPILOG,
+        epilog=_epilog(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("command", choices=_COMMANDS, help=argparse.SUPPRESS)
@@ -435,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = _build_parser()
     args = parser.parse_args(argv)
-    if args.command in _DISPATCHED_COMMANDS:
+    if args.command in _dispatched_commands():
         return _dispatch(args.command, args.args)
     return _dispatch_fixed_command(parser, args.command, args.args)
 

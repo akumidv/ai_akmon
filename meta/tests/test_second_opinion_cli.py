@@ -14,15 +14,19 @@ import json
 import sys
 from pathlib import Path
 
-_KEYSTONE = next(
+import pytest
+
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
+_ROUTING_DIR = _AKMON / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
     sys.path.insert(0, str(_ROUTING_DIR))
 
 import routing  # noqa: E402
 import second_opinion  # noqa: E402
+
+from common import jsondata  # noqa: E402
 
 _TWO_VENDOR_REGISTRY = {
     "anthropic": {
@@ -64,7 +68,7 @@ def _write_project(tmp_path: Path, registry: dict, config: dict) -> Path:
     registry_path = tmp_path / "_aitna" / "akmon" / "tools" / "model_routing" / "registry.json"
     registry_path.parent.mkdir(parents=True, exist_ok=True)
     registry_path.write_text(json.dumps(registry), encoding="utf-8")
-    local_config_path = tmp_path / routing.LOCAL_CONFIG_REL
+    local_config_path = tmp_path / routing.local_config_rel()
     local_config_path.parent.mkdir(parents=True, exist_ok=True)
     local_config_path.write_text(json.dumps(config), encoding="utf-8")
     return tmp_path
@@ -268,3 +272,50 @@ def test_package_mode_reads_the_registry_from_its_own_tree(tmp_path, capsys):
 
     assert exit_code == 0
     assert "provider=anthropic" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------------------
+# C102: second_opinion.json — the runner texts
+# --------------------------------------------------------------------------------------
+
+
+def test_second_opinion_data_pins_the_structure_and_characteristic_texts():
+    data = json.loads((_ROUTING_DIR / "second_opinion.json").read_text(encoding="utf-8"))
+    assert set(data) == {"prompt", "unavailable_notice", "summary"}
+    assert data["prompt"].startswith("You are an independent second-opinion reviewer for a akmon verify gate.")
+    assert data["prompt"].endswith("Material to review:\n{{material}}\n")
+    assert len(data["unavailable_notice"]) == 5
+    assert data["unavailable_notice"][0] == (
+        "second-opinion: skipped at gate '{{gate}}' — ladder exhausted, no model-diverse reviewer is reachable."
+    )
+    assert data["summary"]["result_line"] == (
+        "second-opinion provider={{provider}} model={{model}} gate={{gate}} exit={{exit}}"
+    )
+
+
+def test_second_opinion_loader_reads_exactly_its_two_data_files(monkeypatch):
+    seen: list[Path] = []
+
+    def spy(path: Path):
+        seen.append(path)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    second_opinion._prompt("g", "m")
+    assert seen == [_ROUTING_DIR / "second_opinion.json"]
+    second_opinion._digest("x" * 2000)
+    assert seen == [_ROUTING_DIR / "second_opinion.json", _ROUTING_DIR / "gate.json"]
+
+
+def test_a_missing_second_opinion_json_raises_from_main(monkeypatch, tmp_path):
+    root = _write_project(tmp_path, _TWO_VENDOR_REGISTRY, {"orchestrator": "large", "binding": {"auditor": "large"}})
+    pack = _gate_pack(root)
+
+    def broken(path: Path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        second_opinion.main(
+            ["--project-root", str(root), "--orchestrator-vendor", "anthropic", "--gate", "g", "--gate-pack", str(pack)]
+        )

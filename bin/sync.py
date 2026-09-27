@@ -15,8 +15,10 @@ import os
 import re
 import shutil
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 # The shared utilities live in the tree's ``common`` package, not beside this script:
 # ``bin/`` is the launcher directory. A launcher is run as ``python3 <tree>/bin/sync.py``, so
@@ -24,11 +26,12 @@ from pathlib import Path
 # here rather than left to the caller because both launchers are entry points in their own right.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common.findings import Finding, line_safe, print_findings
+from common import jsondata
+from common.findings import Finding, line_safe, print_findings, read_findings_data
 from common.materialization import (
-    GENERATED_MARKER,
-    IMPORTED_DIRS,
     generated_banner,
+    generated_marker,
+    imported_dirs,
     materialized_text,
 )
 from common.project_root import (
@@ -205,57 +208,26 @@ def standard_tree_root(project_root: Path) -> Path:
     return _TREE_ROOT
 
 
-def _claude_md() -> str:
-    return f"""# CLAUDE.md
-
-<!-- {generated_banner()} -->
-
-This project uses **[AGENTS.md](AGENTS.md)** as the single source of guidance for AI
-coding agents (including Claude Code).
-
-Claude Code reads `CLAUDE.md`; AGENTS.md is imported below so the canonical rules, including
-the always-on prime directives and "read `{aitna_root_name()}/memory/` at session start", are in
-context from the start on every Claude Code version, whether or not it also loads `AGENTS.md`
-on its own.
-
-@AGENTS.md
-"""
+def _claude_md(data: Mapping[str, Any]) -> str:
+    """The generated ``CLAUDE.md`` body (``sync.json``)."""
+    return jsondata.fill(
+        data["vendor_pointers"]["claude_md"], {"banner": generated_banner(), "aitna": aitna_root_name()}
+    )
 
 
-def _copilot_md() -> str:
-    return f"""# Copilot Instructions
-
-<!-- {generated_banner()} -->
-
-This project uses **[AGENTS.md](../AGENTS.md)** as the single source of guidance for AI
-coding agents, including GitHub Copilot.
-
-See [AGENTS.md](../AGENTS.md) for the project overview, environment setup, architecture,
-commands, testing, and conventions.
-"""
+def _copilot_md(data: Mapping[str, Any]) -> str:
+    """The generated Copilot instructions body (``sync.json``)."""
+    return jsondata.fill(data["vendor_pointers"]["copilot_md"], {"banner": generated_banner()})
 
 
-def _gemini_md() -> str:
-    return f"""# GEMINI.md
-
-<!-- {generated_banner()} -->
-
-This project uses [AGENTS.md](AGENTS.md) as the single source of guidance for AI coding
-agents, including Gemini.
-
-Read AGENTS.md before doing project work.
-"""
+def _gemini_md(data: Mapping[str, Any]) -> str:
+    """The generated ``GEMINI.md`` body (``sync.json``)."""
+    return jsondata.fill(data["vendor_pointers"]["gemini_md"], {"banner": generated_banner()})
 
 
-def _codex_readme() -> str:
-    return f"""# Codex
-
-<!-- {generated_banner()} -->
-
-Codex uses the project root [AGENTS.md](../AGENTS.md) as the single source of guidance.
-This directory contains generated hook wiring and pointers only; do not duplicate project
-instructions here.
-"""
+def _codex_readme(data: Mapping[str, Any]) -> str:
+    """The generated Codex ``README.md`` body (``sync.json``)."""
+    return jsondata.fill(data["vendor_pointers"]["codex_readme"], {"banner": generated_banner()})
 
 
 # The mounted hooks dir, as a POSIX suffix appended after a vendor's root anchor (Codex: git
@@ -265,9 +237,28 @@ def _mounted_hooks_dir() -> str:
     return f"{aitna_root_name()}/akmon/hooks"
 
 
-# The console script installed by the akmon dev pin, relative to the project root.
-_CLI_NAME = "akmon"
-_DEFAULT_LAUNCHER_REL = f".venv/bin/{_CLI_NAME}"
+def read_sync_data() -> dict[str, Any]:
+    """The shared sync text and tables (``sync.json``, beside this launcher).
+
+    Read once by the entry point (:func:`main`, or ``verify``'s ``Verifier``) and passed down:
+    never at import time, with no module-level cache and no swallowed ``DataFileError`` (C102,
+    ``common/jsondata.py``). A public function here called without ``data`` reads it itself.
+    """
+    return jsondata.read(Path(__file__).parent / "sync.json")
+
+
+def _or_read(data: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    return data if data is not None else read_sync_data()
+
+
+def _cli_name(data: Mapping[str, Any]) -> str:
+    """The akmon console script's name (``sync.json``)."""
+    return data["cli_name"]
+
+
+def _default_launcher_rel(data: Mapping[str, Any]) -> str:
+    """The conventional launcher path inside the project root (``sync.json``)."""
+    return data["default_launcher_rel"]
 
 
 def is_executable_file(path: Path) -> bool:
@@ -275,7 +266,7 @@ def is_executable_file(path: Path) -> bool:
     return path.is_file() and os.access(path, os.X_OK)
 
 
-def launcher_relative(root: Path) -> str:
+def launcher_relative(root: Path, data: Mapping[str, Any] | None = None) -> str:
     """Where the ``akmon`` console script sits **inside ``root``**, as a POSIX relative path.
 
     Mode ``package`` wires its hooks as ``"<anchor>/<this>" hook <name>`` (C77), and that
@@ -292,41 +283,40 @@ def launcher_relative(root: Path) -> str:
     would break the one flow that has to work out of the box. The diagnostic lives in
     ``verify`` (``hooks.launcher``), which runs in the consumer's CI.
     """
-    for candidate in (_DEFAULT_LAUNCHER_REL, f"venv/bin/{_CLI_NAME}"):
+    data = _or_read(data)
+    for candidate in (_default_launcher_rel(data), f"venv/bin/{_cli_name(data)}"):
         if is_executable_file(root / candidate):
             return candidate
     resolved_root = root.resolve()
-    found = shutil.which(_CLI_NAME)
+    found = shutil.which(_cli_name(data))
     # ``Path(sys.executable).parent``, deliberately unresolved: a venv's ``python3`` is usually a
     # symlink to the system interpreter, so resolving first would look for the console script
     # beside ``/usr/bin/python3`` instead of in the venv that is actually running.
-    for candidate in (Path(sys.executable).parent / _CLI_NAME, Path(found) if found else None):
+    for candidate in (Path(sys.executable).parent / _cli_name(data), Path(found) if found else None):
         if candidate is None or not is_executable_file(candidate):
             continue
         try:
             return candidate.resolve().relative_to(resolved_root).as_posix()
         except ValueError:
             continue
-    return _DEFAULT_LAUNCHER_REL
+    return _default_launcher_rel(data)
 
 
 # Every spelling the generator has ever emitted, independent of the project's *current* mode:
 # recognising an entry as akmon-managed must not depend on which mode (or which version) wrote
 # it, so switching modes replaces the other spelling's entries instead of leaving them
 # orphaned beside the new ones (ADR 0009 §4).
-def _akmon_hook_markers() -> tuple[str, ...]:
+def _akmon_hook_markers(data: Mapping[str, Any]) -> tuple[str, ...]:
+    # The stored shapes (``sync.json``): mounted modes, package mode before C77 (the hooks were
+    # materialized), and package mode today — the console script, no path into the repo. The
+    # closing quote is part of the marker: a bare `akmon hook ` would also match a project's own
+    # hook that merely mentions the word.
     aitna = aitna_root_name()
-    return (
-        f"{aitna}/akmon/hooks/",  # mounted modes
-        f"{aitna}/.akmon/hooks/",  # package mode before C77, when the hooks were materialized
-        # Package mode today: the console script, no path into the repo. The closing quote is
-        # part of the marker — a bare `akmon hook ` would also match a project's own hook that
-        # merely mentions the word.
-        f'{_CLI_NAME}" hook ',
-    )
+    shapes = data["akmon_hook_markers"]
+    return tuple(jsondata.fill(shape, {"aitna": aitna, "cli": _cli_name(data)}) for shape in shapes)
 
 
-def _codex_hook_command(root: Path) -> str:
+def _codex_hook_command(root: Path, data: Mapping[str, Any]) -> str:
     """The Codex wiring's command prefix; the advisory name is appended by the caller.
 
     Package mode calls the console script (``akmon hook codex-hook``) rather than a file: the
@@ -337,56 +327,37 @@ def _codex_hook_command(root: Path) -> str:
     """
     anchor = "$(git rev-parse --show-toplevel)"
     if is_package_mode(root):
-        return f'"{anchor}/{launcher_relative(root)}" hook codex-hook'
+        return f'"{anchor}/{launcher_relative(root, data)}" hook codex-hook'
     return f'python3 "{anchor}/{_mounted_hooks_dir()}/codex-hook.py"'
 
 
-def _codex_hooks(root: Path) -> dict:
-    base = _codex_hook_command(root)
-    return {
-        "hooks": {
-            "PreToolUse": [
-                {
-                    # Routes, not spellings. Measured on codex 0.146.0: `Edit`, `Write` and
-                    # `apply_patch` are three live aliases for the same patch call, while the
-                    # shell — the route its model took when a denied patch was refused —
-                    # matches as `Bash` and was named by nothing here (C49). Not widened to
-                    # `.*`: an unconditional hook on every shell call costs latency and noise
-                    # on the hottest tool and buys precision nowhere.
-                    "matcher": "Bash|apply_patch",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": f"{base} role-on-code",
-                            "statusMessage": "Checking akmon role switch",
-                        },
-                        {
-                            "type": "command",
-                            "command": f"{base} analysis-guard",
-                            "statusMessage": "Checking analysis-before-mutation",
-                        },
-                    ],
-                }
-            ],
-            "SessionStart": [
-                {
-                    "matcher": "startup|resume|clear|compact",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": f"{base} session-start",
-                            "statusMessage": "Loading akmon session reminders",
-                        }
-                    ],
-                }
-            ],
-        }
-    }
+def _codex_hooks(root: Path, data: Mapping[str, Any] | None = None) -> dict:
+    data = _or_read(data)
+    base = _codex_hook_command(root, data)
+    # The matcher/command table (``sync.json``): routes, not spellings — `Edit`, `Write` and
+    # `apply_patch` are three live aliases for the same patch call, while the shell (the route
+    # its model took when a denied patch was refused) matches as `Bash` (C49, measured on
+    # codex 0.146.0). Not widened to `.*`: an unconditional hook on every shell call costs
+    # latency and noise on the hottest tool and buys precision nowhere.
+    hooks = {}
+    for event, entries in data["codex_hooks"].items():
+        hooks[event] = [
+            {
+                "matcher": entry["matcher"],
+                "hooks": [
+                    {"type": "command", "command": f"{base} {script}", "statusMessage": status}
+                    for script, status in entry["commands"]
+                ],
+            }
+            for entry in entries
+        ]
+    return {"hooks": hooks}
 
 
-def _claude_hooks(root: Path) -> dict:
+def _claude_hooks(root: Path, data: Mapping[str, Any] | None = None) -> dict:
+    data = _or_read(data)
     package_mode = is_package_mode(root)
-    launcher = launcher_relative(root) if package_mode else ""
+    launcher = launcher_relative(root, data) if package_mode else ""
 
     def cmd(script: str) -> str:
         """One hook command.
@@ -398,67 +369,24 @@ def _claude_hooks(root: Path) -> dict:
             return f'"$CLAUDE_PROJECT_DIR/{launcher}" hook {script}'
         return f'python3 "$CLAUDE_PROJECT_DIR/{_mounted_hooks_dir()}/{script}.py"'
 
-    return {
-        "hooks": {
-            "PreToolUse": [
-                {
-                    # This one process also carries the unclassified-shell-route diagnostic
-                    # (C49, ADR-0012/D02): the advisories below sit on the edit tools, so a write
-                    # that arrives through Bash is invisible to them on Claude too. Reusing
-                    # the already-wired guard keeps that statement free — no second process
-                    # on the hottest tool.
-                    "matcher": "Bash",
-                    "hooks": [{"type": "command", "command": cmd("git-commit-guard")}],
-                },
-                {
-                    "matcher": "Edit|Write|MultiEdit",
-                    "hooks": [
-                        {"type": "command", "command": cmd("role-on-code")},
-                        {"type": "command", "command": cmd("analysis-guard")},
-                    ],
-                },
-                {
-                    "matcher": "Task|Agent",
-                    "hooks": [{"type": "command", "command": cmd("delegation-log")}],
-                },
-                {
-                    # One entry with a combined matcher: _merge_hook_entries dedups by
-                    # command, so the same script must not ride several matcher groups.
-                    # Read|Grep|Glob are included so the nudge/ask also see read/sweep drift,
-                    # not just edit/shell (guardrails/_common.md § Route by task kind).
-                    "matcher": "Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob",
-                    "hooks": [{"type": "command", "command": cmd("delegation-nudge")}],
-                },
-            ],
-            "SessionStart": [
-                {
-                    "hooks": [
-                        {"type": "command", "command": cmd("session-start-agent")},
-                        {"type": "command", "command": cmd("model-routing")},
-                    ]
-                }
-            ],
-            # Per-turn: model-routing re-detects the orchestrator from the transcript and
-            # rebinds subagents when a mid-session /model switch lands (silent otherwise).
-            "UserPromptSubmit": [
-                {
-                    "hooks": [
-                        {"type": "command", "command": cmd("model-routing")},
-                    ]
-                }
-            ],
-            # At hand-off: the gate's count floors (`gate_triggers`) are read from the turn's
-            # own text, and a turn at or above a floor is held once so the audit is run or the
-            # skip is stated (C25). Claude only - Codex 0.155.1 has no main-agent stop event.
-            "Stop": [
-                {
-                    "hooks": [
-                        {"type": "command", "command": cmd("gate-audit")},
-                    ]
-                }
-            ],
-        }
-    }
+    # The matcher/command table (``sync.json``). The Bash entry also carries the
+    # unclassified-shell-route diagnostic (C49, ADR-0012/D02): the edit-tool advisories would
+    # not see a write that arrives through Bash. The combined-matcher entry stays one entry
+    # because _merge_hook_entries dedups by command; it includes Read|Grep|Glob so the
+    # nudge/ask also see read/sweep drift. UserPromptSubmit is per-turn (a mid-session
+    # /model switch rebinds silently); Stop holds a turn at or above the gate's count floors
+    # (C25) — Claude only, Codex 0.155.1 has no main-agent stop event.
+    hooks = {}
+    for event, entries in data["claude_hooks"].items():
+        built = []
+        for entry in entries:
+            hooks_list = [{"type": "command", "command": cmd(script)} for script in entry["commands"]]
+            if entry["matcher"] is None:
+                built.append({"hooks": hooks_list})
+            else:
+                built.append({"matcher": entry["matcher"], "hooks": hooks_list})
+        hooks[event] = built
+    return {"hooks": hooks}
 
 
 @dataclass(frozen=True)
@@ -504,19 +432,20 @@ def _hook_commands(entry: object) -> set[str]:
     return commands
 
 
-def _is_akmon_entry(entry: object) -> bool:
+def _is_akmon_entry(entry: object, data: Mapping[str, Any] | None = None) -> bool:
     commands = _hook_commands(entry)
-    markers = _akmon_hook_markers()
+    markers = _akmon_hook_markers(_or_read(data))
     return bool(commands) and all(any(marker in command for marker in markers) for command in commands)
 
 
-def _merge_hook_entries(existing: object, wanted: list[dict]) -> list[object]:
+def _merge_hook_entries(existing: object, wanted: list[dict], data: Mapping[str, Any] | None = None) -> list[object]:
     if not isinstance(existing, list):
         return list(wanted)
     # Drop stale akmon-managed entries first, then re-append the wanted ones. This keeps
     # user-authored hooks untouched while letting sync rewrite its own (e.g. a renamed hook
     # path) instead of leaving a dangling duplicate.
-    merged = [entry for entry in existing if not _is_akmon_entry(entry)]
+    data = _or_read(data)
+    merged = [entry for entry in existing if not _is_akmon_entry(entry, data)]
     existing_commands = set().union(*(_hook_commands(entry) for entry in merged)) if merged else set()
     for entry in wanted:
         commands = _hook_commands(entry)
@@ -526,14 +455,15 @@ def _merge_hook_entries(existing: object, wanted: list[dict]) -> list[object]:
     return merged
 
 
-def _claude_settings(root: Path) -> PlannedFile:
+def _claude_settings(root: Path, data: Mapping[str, Any] | None = None) -> PlannedFile:
+    data = _or_read(data)
     path = root / ".claude" / "settings.json"
     settings = _read_json(path)
     hooks = settings.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise ValueError(f"{path}: expected hooks to be a JSON object")
-    for event_name, wanted_entries in _claude_hooks(root)["hooks"].items():
-        hooks[event_name] = _merge_hook_entries(hooks.get(event_name), wanted_entries)
+    for event_name, wanted_entries in _claude_hooks(root, data)["hooks"].items():
+        hooks[event_name] = _merge_hook_entries(hooks.get(event_name), wanted_entries, data)
     return PlannedFile(path, json.dumps(settings, indent=2) + "\n")
 
 
@@ -560,9 +490,13 @@ def _skill_sources(root: Path) -> tuple[list[Path], list[str]]:
     return sources, errors
 
 
-# Where a harness looks for project skills: Claude Code reads `.claude/skills`; Codex, and
-# Copilot, Gemini CLI and Cursor beside it, read `.agents/skills` (C79, ADR-0017/D01).
-_SKILL_STUB_DIRS = (".claude/skills", ".agents/skills")
+def _skill_stub_dirs(data: Mapping[str, Any]) -> tuple[str, ...]:
+    """Where a harness looks for project skills (``sync.json``).
+
+    Claude Code reads `.claude/skills`; Codex, and Copilot, Gemini CLI and Cursor beside it,
+    read `.agents/skills` (C79, ADR-0017/D01).
+    """
+    return tuple(data["skill_stub_dirs"])
 
 
 def _skill_frontmatter_block(text: str) -> str | None:
@@ -576,7 +510,7 @@ def _skill_frontmatter_block(text: str) -> str | None:
     return None
 
 
-def _skill_stubs(root: Path, source: Path) -> list[PlannedFile]:
+def _skill_stubs(root: Path, source: Path, data: Mapping[str, Any] | None = None) -> list[PlannedFile]:
     """One skill's stub in each harness's skills directory: its frontmatter, then a pointer.
 
     The frontmatter is the source's, copied verbatim, because it is what a harness selects a
@@ -601,19 +535,26 @@ def _skill_stubs(root: Path, source: Path) -> list[PlannedFile]:
         in_repo = True
     except ValueError:
         in_repo = False
+    data = _or_read(data)
     stubs = []
-    for skills_dir in _SKILL_STUB_DIRS:
+    shapes = data["skill_stubs"]
+    for skills_dir in _skill_stub_dirs(data):
         path = root / skills_dir / name / "SKILL.md"
         if in_repo:
             relative_source = os.path.relpath(source, path.parent).replace(os.sep, "/")
             pointer = f"Source skill: [{relative_source}]({relative_source})"
         else:
-            pointer = f"Source skill: `$({_CLI_NAME} path)/skills/{name}/SKILL.md`"
+            pointer = f"Source skill: `$({_cli_name(data)} path)/skills/{name}/SKILL.md`"
         body = f"{pointer}\n\nRead and follow the source SKILL.md. Do not duplicate its contents here.\n"
         if frontmatter is None:
-            content = f"# {name}\n\n<!-- {generated_banner()} -->\n\n{body}"
+            content = jsondata.fill(
+                shapes["no_frontmatter"], {"name": name, "banner": generated_banner(), "body": body}
+            )
         else:
-            content = f"---\n# {generated_banner()}\n{frontmatter}\n---\n\n# {name}\n\n{body}"
+            content = jsondata.fill(
+                shapes["with_frontmatter"],
+                {"name": name, "banner": generated_banner(), "body": body, "frontmatter": frontmatter},
+            )
         stubs.append(PlannedFile(path, content))
     return stubs
 
@@ -627,15 +568,25 @@ def _skill_stubs(root: Path, source: Path) -> list[PlannedFile]:
 _FENCED_BLOCK_RE = re.compile(r"^(?P<fence>```|~~~).*?(?:^(?P=fence)[^\n]*$|\Z)", re.MULTILINE | re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 
-# The common guardrail is materialized whether or not the scan finds its import: it is the
-# anchor ``verify`` requires of a package-mode AGENTS.md, so its absence is a finding about
-# AGENTS.md, not a licence to ship the consumer a broken import target.
-_ALWAYS_MATERIALIZED = "guardrails/_common.md"
 
-# Imports of a file the standard has moved, and where it went. A closed list rather than a guess
-# by file name: an unresolved ``@``-import produces no diagnostic anywhere, so the plan error is
-# the only place a consumer learns the new line, and it has to name that line exactly.
-MOVED_IMPORTS = {"guardrails/python.md": "profiles/python.md"}
+def _always_materialized(data: Mapping[str, Any]) -> str:
+    """The import materialized whether or not the scan finds it (``sync.json``).
+
+    The common guardrail is the anchor ``verify`` requires of a package-mode AGENTS.md, so its
+    absence is a finding about AGENTS.md, not a licence to ship the consumer a broken import
+    target.
+    """
+    return data["always_materialized"]
+
+
+def moved_imports(data: Mapping[str, Any] | None = None) -> dict[str, str]:
+    """Imports of a file the standard has moved, and where it went (``sync.json``).
+
+    A closed list rather than a guess by file name: an unresolved ``@``-import produces no
+    diagnostic anywhere, so the plan error is the only place a consumer learns the new line,
+    and it has to name that line exactly.
+    """
+    return dict(_or_read(data)["moved_imports"])
 
 
 def import_prefix(root: Path) -> str:
@@ -646,11 +597,15 @@ def import_prefix(root: Path) -> str:
     return f"@{aitna_root_name()}/.akmon/" if is_package_mode(root) else f"@{aitna_root_name()}/akmon/"
 
 
-# The project's own ruff configuration files, and the table in each that holds `extend`.
-_RUFF_CONFIGS = (("pyproject.toml", ("tool", "ruff")), ("ruff.toml", ()), (".ruff.toml", ()))
+def _ruff_configs(data: Mapping[str, Any]) -> list[tuple[str, tuple[str, ...]]]:
+    """The project's ruff configuration files, and the table in each that holds `extend`.
+
+    Loaded from ``sync.json``.
+    """
+    return [(name, tuple(keys)) for name, keys in data["ruff_configs"]]
 
 
-def ruff_extends(root: Path) -> list[tuple[str, str]]:
+def ruff_extends(root: Path, data: Mapping[str, Any] | None = None) -> list[tuple[str, str]]:
     """``(file, value)`` for every ruff configuration of the project that ``extend``s a file.
 
     This is how a project runs akmon's Python rules the standard way — ``extend`` pointing at
@@ -661,7 +616,7 @@ def ruff_extends(root: Path) -> list[tuple[str, str]]:
     import tomllib  # noqa: PLC0415 — the one-reader carrier (test_record_owner) keys on the importing function
 
     found = []
-    for name, keys in _RUFF_CONFIGS:
+    for name, keys in _ruff_configs(_or_read(data)):
         path = root / name
         if not path.is_file():
             continue
@@ -678,7 +633,7 @@ def ruff_extends(root: Path) -> list[tuple[str, str]]:
     return found
 
 
-def imported_standard_files(root: Path) -> tuple[list[str], list[str]]:
+def imported_standard_files(root: Path, data: Mapping[str, Any] | None = None) -> tuple[list[str], list[str]]:
     """The standard's files the project actually uses, and any plan errors.
 
     The files — as ``guardrails/<name>`` and ``profiles/<name>`` — are every file
@@ -695,25 +650,26 @@ def imported_standard_files(root: Path) -> tuple[list[str], list[str]]:
     or the mount. A mounted consumer loses a moved profile exactly as a packaged one would, and
     this error is the only thing that says so.
     """
+    data = _or_read(data)
     prefix = import_prefix(root)
     path_prefix = prefix.removeprefix("@")
-    origins = {_ALWAYS_MATERIALIZED: "AGENTS.md imports"} if is_package_mode(root) else {}
+    origins = {_always_materialized(data): "AGENTS.md imports"} if is_package_mode(root) else {}
     text_path = root / "AGENTS.md"
     if text_path.is_file():
         text = _INLINE_CODE_RE.sub(" ", _FENCED_BLOCK_RE.sub("\n", text_path.read_text(encoding="utf-8")))
-        directories = "|".join(IMPORTED_DIRS)
+        directories = "|".join(imported_dirs())
         for name in re.findall(re.escape(prefix) + rf"((?:{directories})/[A-Za-z0-9._-]+)", text):
             origins.setdefault(name, "AGENTS.md imports")
-    for config, value in ruff_extends(root):
+    for config, value in ruff_extends(root, data):
         name = value.removeprefix(path_prefix)
-        if value.startswith(path_prefix) and name.split("/", 1)[0] in IMPORTED_DIRS:
+        if value.startswith(path_prefix) and name.split("/", 1)[0] in imported_dirs():
             origins.setdefault(name, f"{config} extends")
     source = standard_tree_root(root)
     errors: list[str] = []
     for name, origin in sorted(origins.items()):
         if (source / name).is_file():
             continue
-        moved = MOVED_IMPORTS.get(name)
+        moved = moved_imports(data).get(name)
         line = prefix if origin == "AGENTS.md imports" else path_prefix
         if moved:
             errors.append(f"{origin} {name}, which the standard moved to {moved}: replace the line with {line}{moved}")
@@ -722,7 +678,7 @@ def imported_standard_files(root: Path) -> tuple[list[str], list[str]]:
     return sorted(origins), errors
 
 
-def _materialized_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
+def _materialized_files(root: Path, data: Mapping[str, Any] | None = None) -> tuple[list[PlannedFile], list[str]]:
     """Package-mode materialization (ADR 0009 §4, narrowed by C77, widened to profiles by ADR 0014).
 
     The guardrails and profiles the consumer's ``AGENTS.md`` imports, the ruff rules its
@@ -747,7 +703,7 @@ def _materialized_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
     Outside package mode nothing is written, but the import errors are still returned: the
     mount is imported directly, and a target it lacks is just as silent there.
     """
-    names, errors = imported_standard_files(root)
+    names, errors = imported_standard_files(root, data)
     if not is_package_mode(root):
         return [], errors
     source = standard_tree_root(root)
@@ -841,34 +797,37 @@ def _package_mode_akmon_toml(root: Path) -> PlannedFile | None:
     return PlannedFile(path, text)
 
 
-def _codex_hooks_text(root: Path) -> str:
+def _codex_hooks_text(root: Path, data: Mapping[str, Any] | None = None) -> str:
     """The exact text ``.codex/hooks.json`` is generated with.
 
     One spelling for both readers: the plan below writes it, and ``verify``'s C70 host-trust
     check compares the file against it before parsing anything, so "current wiring" there means
     byte-for-byte what ``sync --check`` means by it.
     """
-    return json.dumps(_codex_hooks(root), indent=2) + "\n"
+    return json.dumps(_codex_hooks(root, data), indent=2) + "\n"
 
 
-def _planned_files(root: Path) -> tuple[list[PlannedFile], list[str]]:
+def _planned_files(root: Path, data: Mapping[str, Any] | None = None) -> tuple[list[PlannedFile], list[str]]:
+    """The generated files, in plan order (``sync.json``, ``planned_files``)."""
+    data = _or_read(data)
     errors: list[str] = []
-    files = [
-        PlannedFile(root / "CLAUDE.md", _claude_md()),
-        PlannedFile(root / ".github" / "copilot-instructions.md", _copilot_md()),
-        PlannedFile(root / "GEMINI.md", _gemini_md()),
-        PlannedFile(root / ".codex" / "README.md", _codex_readme()),
-        PlannedFile(root / ".codex" / "hooks.json", _codex_hooks_text(root)),
-    ]
+    generators = {
+        "claude_md": _claude_md,
+        "copilot_md": _copilot_md,
+        "gemini_md": _gemini_md,
+        "codex_readme": _codex_readme,
+        "codex_hooks_text": lambda data: _codex_hooks_text(root, data),
+    }
+    files = [PlannedFile(root / relative, generators[name](data)) for relative, name in data["planned_files"]]
     try:
-        files.append(_claude_settings(root))
+        files.append(_claude_settings(root, data))
     except ValueError as exc:
         errors.append(str(exc))
     sources, skill_errors = _skill_sources(root)
     errors.extend(skill_errors)
     for source in sources:
-        files.extend(_skill_stubs(root, source))
-    materialized, materialization_errors = _materialized_files(root)
+        files.extend(_skill_stubs(root, source, data))
+    materialized, materialization_errors = _materialized_files(root, data)
     files.extend(materialized)
     errors.extend(materialization_errors)
     toml_plan = _package_mode_akmon_toml(root)
@@ -885,7 +844,7 @@ def materialization_root(root: Path) -> Path:
     return aitna_root(root) / ".akmon"
 
 
-def _obsolete_generated_files(root: Path, files: list[PlannedFile]) -> list[Path]:
+def _obsolete_generated_files(root: Path, files: list[PlannedFile], data: Mapping[str, Any]) -> list[Path]:
     """Generated files present on disk that the current plan no longer wants.
 
     Two kinds of directory, two recognition rules, and the difference is deliberate. Under
@@ -899,11 +858,11 @@ def _obsolete_generated_files(root: Path, files: list[PlannedFile]) -> list[Path
     planned_paths = {planned.path for planned in files}
     obsolete: list[Path] = []
 
-    for skills_dir in _SKILL_STUB_DIRS:
+    for skills_dir in _skill_stub_dirs(data):
         for path in sorted((root / skills_dir).glob("*/SKILL.md")):
             if path in planned_paths:
                 continue
-            if GENERATED_MARKER in path.read_text(encoding="utf-8"):
+            if generated_marker() in path.read_text(encoding="utf-8"):
                 obsolete.append(path)
 
     materialization = materialization_root(root)
@@ -942,7 +901,7 @@ def _sweep_materialization_bytecode(root: Path) -> None:
             cache.rmdir()
 
 
-def _prune_stop(root: Path, path: Path) -> Path:
+def _prune_stop(root: Path, path: Path, data: Mapping[str, Any]) -> Path:
     """How far up to prune emptied directories after deleting ``path``.
 
     ``<AITNA_ROOT>`` for the materialization, so ``.akmon`` itself disappears once its last
@@ -952,7 +911,7 @@ def _prune_stop(root: Path, path: Path) -> Path:
         path.relative_to(materialization_root(root))
     except ValueError:
         return next(
-            (root / skills_dir for skills_dir in _SKILL_STUB_DIRS if (root / skills_dir) in path.parents),
+            (root / skills_dir for skills_dir in _skill_stub_dirs(data) if (root / skills_dir) in path.parents),
             root / ".claude" / "skills",
         )
     return aitna_root(root)
@@ -968,7 +927,9 @@ def _remove_empty_parents(path: Path, stop: Path) -> None:
         current = current.parent
 
 
-def _apply(files: list[PlannedFile], *, write: bool, root: Path | None = None) -> Result:
+def _apply(
+    files: list[PlannedFile], *, write: bool, root: Path | None = None, data: Mapping[str, Any] | None = None
+) -> Result:
     result = Result(changed=[], deleted=[], ok=[], errors=[])
     for planned in files:
         current = planned.path.read_text(encoding="utf-8") if planned.path.exists() else None
@@ -980,17 +941,18 @@ def _apply(files: list[PlannedFile], *, write: bool, root: Path | None = None) -
             planned.path.parent.mkdir(parents=True, exist_ok=True)
             planned.path.write_text(planned.content, encoding="utf-8")
     if root is not None:
+        data = _or_read(data)
         if write:
             _sweep_materialization_bytecode(root)
-        for path in _obsolete_generated_files(root, files):
+        for path in _obsolete_generated_files(root, files, data):
             result.deleted.append(path)
             if write:
                 path.unlink()
-                _remove_empty_parents(path, _prune_stop(root, path))
+                _remove_empty_parents(path, _prune_stop(root, path, data))
     return result
 
 
-def _check_findings(result: Result, *, root: Path) -> list[Finding]:
+def _check_findings(result: Result, data: Mapping[str, Any], *, root: Path) -> list[Finding]:
     """``--check``'s observations as the shared envelope (C51).
 
     Only the non-writing ``--check`` mode speaks findings: ``--dry-run`` and a real write
@@ -998,71 +960,54 @@ def _check_findings(result: Result, *, root: Path) -> list[Finding]:
     diagnostic about the tree. This is the stream ``akmon status`` consumes (F22).
     """
     findings: list[Finding] = []
+    texts = data["check_findings"]
+    # One read of the envelope's vocabulary for the whole report, not one per finding.
+    record = read_findings_data()
+
+    def one(key: str, value: str) -> tuple[str, str]:
+        return jsondata.fill(texts[key]["message"], {"relative": value, "error": value}), texts[key]["fix"]
+
     for path in result.changed:
         relative = str(path.relative_to(root))
+        message, fix = one("stale", relative)
         findings.append(
-            Finding(
-                "error",
-                "sync.stale-generated",
-                line_safe(f"generated file is stale or missing: {relative}"),
-                line_safe(relative),
-                "Run akmon sync to regenerate this file.",
-            )
+            Finding("error", "sync.stale-generated", line_safe(message), line_safe(relative), fix, data=record)
         )
     for path in result.deleted:
         relative = str(path.relative_to(root))
+        message, fix = one("obsolete", relative)
         findings.append(
-            Finding(
-                "error",
-                "sync.obsolete-generated",
-                line_safe(f"generated file is no longer planned: {relative}"),
-                line_safe(relative),
-                "Run akmon sync to delete this file.",
-            )
+            Finding("error", "sync.obsolete-generated", line_safe(message), line_safe(relative), fix, data=record)
         )
     for path in result.ok:
         relative = str(path.relative_to(root))
+        message, fix = one("up_to_date", relative)
         findings.append(
-            Finding(
-                "ok",
-                "sync.up-to-date",
-                line_safe(f"generated file matches its source: {relative}"),
-                line_safe(relative),
-                "Re-run akmon sync after every change to this file's source.",
-            )
+            Finding("ok", "sync.up-to-date", line_safe(message), line_safe(relative), fix, data=record)
         )
-    findings.extend(
-        Finding(
-            "error",
-            "sync.plan-error",
-            line_safe(error),
-            "",
-            "Resolve the reported planning error, then re-run akmon sync.",
-        )
-        for error in result.errors
-    )
+    for error in result.errors:
+        message, fix = one("plan_error", error)
+        findings.append(Finding("error", "sync.plan-error", line_safe(message), "", fix, data=record))
     return findings
 
 
-def _print_summary(result: Result, *, root: Path, mode: str) -> None:
+def _print_summary(result: Result, data: Mapping[str, Any], *, root: Path, mode: str) -> None:
     """The action log for the writing modes: ``dry-run`` and a real write.
 
     ``--check`` speaks findings instead, see :func:`_check_findings`.
     """
+    verbs = data["summary_verbs"]
+    variant = "dry_run" if mode == "dry-run" else "write"
     for path in result.changed:
-        rel = path.relative_to(root)
-        action = "would update" if mode == "dry-run" else "updated"
-        print(f"{action}: {rel}")
+        print(f"{verbs['changed'][variant]}: {path.relative_to(root)}")
     for path in result.deleted:
-        rel = path.relative_to(root)
-        action = "would delete" if mode == "dry-run" else "deleted"
-        print(f"{action}: {rel}")
+        print(f"{verbs['deleted'][variant]}: {path.relative_to(root)}")
     for path in result.ok:
-        print(f"ok: {path.relative_to(root)}")
+        print(f"{verbs['ok']}: {path.relative_to(root)}")
     for error in result.errors:
-        print(f"error: {error}", file=sys.stderr)
+        print(f"{verbs['error']}: {error}", file=sys.stderr)
     if not result.changed and not result.deleted and not result.errors:
-        print("akmon sync: no changes")
+        print(verbs["no_changes"])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1079,15 +1024,16 @@ def main(argv: list[str] | None = None) -> int:
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
         print(root_notice, file=sys.stderr)
-    files, errors = _planned_files(root)
+    data = read_sync_data()
+    files, errors = _planned_files(root, data)
     write = not args.check and not args.dry_run
-    result = _apply(files, write=write, root=root)
+    result = _apply(files, write=write, root=root, data=data)
     result.errors.extend(errors)
 
     if args.check:
-        print_findings(_check_findings(result, root=root))
+        print_findings(_check_findings(result, data, root=root))
     else:
-        _print_summary(result, root=root, mode="dry-run" if args.dry_run else "write")
+        _print_summary(result, data, root=root, mode="dry-run" if args.dry_run else "write")
     # `sync` keeps its own exit vocabulary rather than the envelope's `exit_code`, by owner
     # decision at C51: 2 separates "could not even plan the files" from 1's "the plan and the
     # tree disagree", and no `--strict` exists here because nothing in this stream warns.

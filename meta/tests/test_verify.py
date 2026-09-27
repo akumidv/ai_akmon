@@ -93,7 +93,7 @@ def _make_project(tmp_path: Path) -> Path:
         "pipelines/tasks.md",
         "bin/sync.py",
         "bin/verify.py",
-        *(f"hooks/{name}" for name in verify.WIRED_HOOK_SCRIPTS),
+        *(f"hooks/{name}" for name in verify.wired_hook_scripts()),
         "tools/model_routing/routing.py",
         "tools/model_routing/init.py",
         "tools/model_routing/second_opinion.py",
@@ -376,7 +376,7 @@ def test_agents_md_missing_anchor_is_error(tmp_path):
 def test_agents_md_generated_marker_is_error(tmp_path):
     root = _make_project(tmp_path)
     (root / "AGENTS.md").write_text(
-        AGENTS_MD + f"\n<!-- {sync.GENERATED_MARKER} -->\n",
+        AGENTS_MD + f"\n<!-- {sync.generated_marker()} -->\n",
         encoding="utf-8",
     )
     verifier = verify.Verifier(root)
@@ -544,7 +544,7 @@ def test_obsolete_generated_agents_skill_stub_is_error(tmp_path):
     root = _make_project(tmp_path)
     stale = root / ".agents" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"---\n# {sync.GENERATED_MARKER}\nname: old-skill\n---\n", encoding="utf-8")
+    stale.write_text(f"---\n# {sync.generated_marker()}\nname: old-skill\n---\n", encoding="utf-8")
     verifier = verify.Verifier(root)
     verifier.run()
     assert any(".agents/skills/old-skill/SKILL.md" in message for message in _messages(verifier.findings, "error"))
@@ -587,7 +587,7 @@ def test_obsolete_generated_skill_stub_is_error(tmp_path):
     root = _make_project(tmp_path)
     stale = root / ".claude" / "skills" / "old-skill" / "SKILL.md"
     stale.parent.mkdir(parents=True)
-    stale.write_text(f"# old-skill\n\n<!-- {sync.GENERATED_MARKER} -->\n", encoding="utf-8")
+    stale.write_text(f"# old-skill\n\n<!-- {sync.generated_marker()} -->\n", encoding="utf-8")
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("old-skill/SKILL.md" in message for message in _messages(verifier.findings, "error"))
@@ -1244,7 +1244,7 @@ def test_run_reports_unusable_wiring_once_and_never_queries(tmp_path, monkeypatc
 
 def test_check_codex_host_trust_is_silent_when_the_generator_wires_nothing(tmp_path, monkeypatch):
     text = json.dumps({"hooks": {}}, indent=2) + "\n"
-    monkeypatch.setattr(verify.sync_tool, "_codex_hooks_text", lambda root: text)
+    monkeypatch.setattr(verify.sync_tool, "_codex_hooks_text", lambda root, data=None: text)
     _write_codex_wiring(tmp_path, text)
     calls = []
     verifier = _live_query_verifier(tmp_path, monkeypatch, _hooks_list_runner([], calls))
@@ -1814,13 +1814,13 @@ def _always_loaded_findings(verifier):
     return [f for f in verifier.findings if f.code == "caps.always-loaded"]
 
 
-_CONSUMER_CAP = always_loaded.CAPS[always_loaded.CONSUMER]
+_CONSUMER_CAP = always_loaded.caps()[always_loaded.consumer()]
 
 
 def _pad_to_consumer_lines(root: Path, lines: int) -> None:
     """Pad the hand-owned tail of AGENTS.md so the consumer-total population has ``lines`` lines."""
     agents = root / "AGENTS.md"
-    current = always_loaded.populations(agents.read_text(encoding="utf-8"), root)[always_loaded.CONSUMER].lines
+    current = always_loaded.populations(agents.read_text(encoding="utf-8"), root)[always_loaded.consumer()].lines
     padding = "\n## Notes\n" + "n\n" * (lines - current - 2)
     agents.write_text(agents.read_text(encoding="utf-8") + padding, encoding="utf-8")
 
@@ -1844,3 +1844,115 @@ def test_consumer_always_loaded_warning_fails_only_strict_runs(tmp_path):
     _pad_to_consumer_lines(root, _CONSUMER_CAP.lines + 1)
     assert verify.main(["--project-root", str(root)]) == 0
     assert verify.main(["--project-root", str(root), "--strict"]) == 1
+
+
+# --------------------------------------------------------------------------------------
+# bin/verify.json — the shared verify text and tables (C102)
+# --------------------------------------------------------------------------------------
+
+_VERIFY_DATA = json.loads((Path(verify.__file__).parent / "verify.json").read_text(encoding="utf-8"))
+
+
+def test_verify_data_pins_its_structure():
+    """The data file is the single owner of the verify text: pin the key set and a few
+    characteristic exact values so a transcription drift is caught here, not in the corpus."""
+    assert set(_VERIFY_DATA) == {
+        "wired_hook_scripts",
+        "basic_layout_consumer_paths",
+        "basic_layout_standard_paths",
+        "agents_anchors",
+        "vendor_pointers",
+        "use_operative_globs",
+        "use_operative_files",
+        "dev_path_tokens",
+        "skill_required_frontmatter",
+        "skill_name_max",
+        "skill_description_max",
+        "routing_shipped_paths",
+        "routing_vendors",
+        "routing_semantic_fallback_keys",
+        "routing_second_opinion_keys",
+        "routing_retired_second_opinion_keys",
+        "reasoner_policy_values",
+        "gitignore_patterns",
+        "ci_required_commands",
+        "record_required_keys",
+        "task_statuses",
+        "tasks_max_lines",
+        "hook_launcher_error",
+        "hook_launcher_error_fix",
+        "changelog_package_mode",
+        "changelog_package_mode_fix",
+    }
+    assert _VERIFY_DATA["wired_hook_scripts"][0] == "hook_core.py"
+    assert _VERIFY_DATA["wired_hook_scripts"][-1] == "gate-audit.py"
+    assert len(_VERIFY_DATA["wired_hook_scripts"]) == 12
+    assert _VERIFY_DATA["task_statuses"] == ["active", "blocked", "deferred", "done"]
+    assert _VERIFY_DATA["tasks_max_lines"] == 200
+    assert _VERIFY_DATA["skill_name_max"] == 64
+    assert _VERIFY_DATA["skill_description_max"] == 1024
+    assert _VERIFY_DATA["skill_required_frontmatter"] == ["name", "description", "metadata.owner"]
+    assert list(_VERIFY_DATA["agents_anchors"]) == ["package", "mounted"]
+    assert len(_VERIFY_DATA["agents_anchors"]["package"]) == 7
+    assert len(_VERIFY_DATA["agents_anchors"]["mounted"]) == 7
+    assert _VERIFY_DATA["agents_anchors"]["mounted"]["model link"] == "{{akmon}}/README.md"
+    # the block heading is filled from its single owner (common/always_loaded), never copied here
+    assert _VERIFY_DATA["agents_anchors"]["package"]["akmon block"] == "{{heading}}"
+    assert _VERIFY_DATA["agents_anchors"]["mounted"]["akmon block"] == "{{heading}}"
+    assert _VERIFY_DATA["vendor_pointers"]["CLAUDE.md"] == ["AGENTS.md", "@AGENTS.md"]
+    assert _VERIFY_DATA["gitignore_patterns"] == {
+        "env_secret": "*.env",
+        "env_example_keep": "!*.env.example",
+        "pycache": "__pycache__",
+    }
+    assert _VERIFY_DATA["ci_required_commands"]["package"] == ["akmon sync --check", "akmon verify --strict"]
+    assert _VERIFY_DATA["record_required_keys"] == ["akmon_version", "attached_archetype", "last_realign"]
+    assert _VERIFY_DATA["hook_launcher_error"].startswith("generated hook wiring calls {{relative}}")
+
+
+def test_verify_data_loader_reads_exactly_the_verify_json(monkeypatch):
+    """The loader reads ``verify.json`` beside ``verify.py`` — the path the wheel, the
+    self-CI fixture and the corpus snapshot all place the file at."""
+    seen: list[Path] = []
+    real_read = verify.jsondata.read
+
+    def spy(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(verify.jsondata, "read", spy)
+    assert verify.wired_hook_scripts()
+    assert seen == [Path(verify.__file__).parent / "verify.json"]
+
+
+def test_one_verify_run_reads_each_data_file_once(monkeypatch, capsys):
+    """The entry point reads ``verify.json`` and ``sync.json`` once and passes them down (C102):
+    no check, however many findings or skills it walks, reads a data file of its own accord."""
+    seen: list[str] = []
+    real_read = verify.jsondata.read
+
+    def spy(path):
+        seen.append(Path(path).name)
+        return real_read(path)
+
+    monkeypatch.setattr(verify.jsondata, "read", spy)
+    verify.main(["--project-root", str(_AKMON_ROOT)])
+    capsys.readouterr()
+    assert seen.count("verify.json") == 1
+    assert seen.count("sync.json") == 1
+    # one for the Verifier's recorded findings, one for the printed report
+    assert seen.count("findings.json") == 2
+
+
+def test_verify_data_file_error_propagates_uncaught(monkeypatch, tmp_path):
+    """A missing or broken ``verify.json`` is a loud failure, not a swallowed one — from the
+    standalone reader and from the entry point that reads it for a run."""
+
+    def broken_read(path):
+        raise verify.jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(verify.jsondata, "read", broken_read)
+    with pytest.raises(verify.jsondata.DataFileError, match=r"verify\.json"):
+        verify.wired_hook_scripts()
+    with pytest.raises(verify.jsondata.DataFileError, match=r"verify\.json"):
+        verify.Verifier(tmp_path)

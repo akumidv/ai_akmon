@@ -15,6 +15,7 @@ import pytest
 import routing
 from checks import runtime as runtime_checks
 
+from common import jsondata
 from common import runtime as runtime_declaration
 from common.findings import exit_code
 from common.runtime import (
@@ -28,7 +29,7 @@ from common.runtime import (
     RuntimeDeclaration,
 )
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
 
@@ -87,11 +88,11 @@ def test_the_clean_world_has_no_findings(tmp_path):
 
 def test_the_real_tree_satisfies_its_own_declaration():
     """The join is not a fiction over fixtures: akmon's declaration matches akmon's wiring."""
-    assert runtime_checks.check_declared_runtimes(_KEYSTONE) == []
+    assert runtime_checks.check_declared_runtimes(_AKMON) == []
 
 
 def test_the_derivation_reproduces_the_declared_populations():
-    per_vendor = runtime_checks.derive_generated_population(runtime_checks.generated_wiring(_KEYSTONE))
+    per_vendor = runtime_checks.derive_generated_population(runtime_checks.generated_wiring(_AKMON))
     assert per_vendor["claude"] == {POSIX_SHELL, "python3"}
     assert per_vendor["codex"] == {POSIX_SHELL, "python3", "git"}
 
@@ -241,7 +242,42 @@ def test_tests_and_data_are_not_scanned_for_literals(tmp_path):
 
 
 def test_the_real_tree_spells_no_harness_binary_outside_the_map():
-    assert runtime_checks.own_tool_literals(_KEYSTONE, runtime_declaration.harness_binaries()) == []
+    assert runtime_checks.own_tool_literals(_AKMON, runtime_declaration.harness_binaries()) == []
+
+
+def test_a_key_into_a_data_file_table_is_a_reference_not_an_owner(tmp_path):
+    # C102: `_vocabulary()["claude"]` names a row of the table vocabulary.json owns.
+    hook = tmp_path / "hooks" / "adapter.py"
+    hook.parent.mkdir(parents=True)
+    hook.write_text(
+        "def _vocabulary():\n"
+        "    return jsondata.read(HERE / 'vocabulary.json')\n"
+        "\n"
+        "def edit_tools():\n"
+        "    return _vocabulary()['claude']['edit_tools']\n",
+        encoding="utf-8",
+    )
+    assert runtime_checks.own_tool_literals(tmp_path, ["claude"]) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "overrides = {}\nbinary = overrides['claude']\n",
+        "def _table():\n    return {'x': 1}\n\nbinary = _table()['claude']\n",
+        "def _vocabulary():\n    return jsondata.read(P)\n\nrow = _vocabulary()[0]\nname = row['claude']\n",
+    ],
+    ids=["local-dict", "non-loader-call", "key-into-a-variable"],
+)
+def test_a_key_into_any_other_mapping_still_counts_as_a_second_owner(tmp_path, source):
+    # The C102 carve-out is limited to a loader's own table; any other subscript may be a
+    # second owner of the harness name (C102 review F3).
+    hook = tmp_path / "hooks" / "adapter.py"
+    hook.parent.mkdir(parents=True)
+    hook.write_text(source, encoding="utf-8")
+    assert [literal for _path, _line, literal in runtime_checks.own_tool_literals(tmp_path, ["claude"])] == [
+        "claude"
+    ]
 
 
 # --------------------------------------------------------------------------------------
@@ -257,7 +293,7 @@ def test_c57_lock_text_pins_prefix_ownership_without_the_old_overclaim():
     across them, so archiving a task cannot become a way to drop the sentence pinned here.
     """
     backlog = "\n".join(
-        (_KEYSTONE / "meta" / name).read_text(encoding="utf-8")
+        (_AKMON / "meta" / name).read_text(encoding="utf-8")
         for name in ("TASKS.md", "TASKS_ARCHIVE.md")
     )
     entries = [line for line in backlog.splitlines() if line.startswith("- C57 · ")]
@@ -762,3 +798,54 @@ def test_an_external_wrapper_is_itself_a_declared_requirement(tmp_path):
     wiring = dict(WIRING, claude=['nice python3 "$CLAUDE_PROJECT_DIR/hook.py"'])
     finding = _only(_check(tmp_path, wiring=wiring), "runtime.undeclared-binary")
     assert "nice" in finding.message
+
+
+# --------------------------------------------------------------------------------------
+# common/runtime.json — the shared owner of both tables (C102)
+# --------------------------------------------------------------------------------------
+
+
+def test_runtime_json_carries_the_tables_the_module_reads():
+    import json
+
+    data = json.loads((Path(runtime_declaration.__file__).parent / "runtime.json").read_text(encoding="utf-8"))
+    assert set(data) == {"harness_commands", "declared_runtimes"}
+    assert set(data["harness_commands"]) == {"claude", "codex"}
+    assert data["harness_commands"]["claude"]["operations"]["review"] == ["-p", "--output-format", "text"]
+    assert data["declared_runtimes"][0] == [POSIX_SHELL, GENERATED_WIRING, REQUIRED]
+    assert data["declared_runtimes"][2] == ["git", GENERATED_WIRING, REQUIRED_ON + "codex"]
+
+
+def test_the_loaders_reconstruct_the_module_shapes_from_the_data_file():
+    declarations = runtime_declaration.declared_runtimes()
+    assert len(declarations) == 5
+    assert declarations[0] == RuntimeDeclaration(POSIX_SHELL, GENERATED_WIRING, REQUIRED)
+    assert declarations[3] == RuntimeDeclaration("claude", OWN_TOOLING, OPTIONAL)
+    table = runtime_declaration.harness_commands()
+    assert table["codex"].operations["hooks-list"] == ("app-server",)
+    assert table["claude"].binary == "claude"
+
+
+def test_the_loader_reads_exactly_runtime_json(monkeypatch):
+    seen: list[Path] = []
+    real_read = jsondata.read
+
+    def capture(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(jsondata, "read", capture)
+    runtime_declaration.declared_runtimes()
+    runtime_declaration.harness_commands()
+    assert seen == [Path(runtime_declaration.__file__).with_name("runtime.json")] * 2
+
+
+def test_a_missing_data_file_fails_from_the_public_functions(monkeypatch):
+    def broken(path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        runtime_declaration.declared_runtimes()
+    with pytest.raises(jsondata.DataFileError):
+        runtime_declaration.harness_command("claude", "version")

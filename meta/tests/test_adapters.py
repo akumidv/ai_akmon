@@ -1,7 +1,7 @@
 """Tests for the vendor adapters' tool normalization and the shared project-root lookup.
 
 The neutral core (`hook_core`) never names a vendor's tools; each adapter maps its own
-edit-tool name(s) to `hook_core.EDIT_TOOL`. `find_project_root` lives in the core and is reused.
+edit-tool name(s) to `hook_core.edit_tool()`. `find_project_root` lives in the core and is reused.
 """
 
 from __future__ import annotations
@@ -10,6 +10,8 @@ import importlib.util
 import io
 import json
 import re
+import shutil
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -21,6 +23,7 @@ import pytest
 import routing
 import sync
 
+import common.jsondata as common_jsondata
 from common.materialization import materialized_markdown
 
 
@@ -42,18 +45,18 @@ def _claude_hook(filename: str):
 
 def test_claude_normalize_maps_edit_tools():
     for name in ("Edit", "Write", "MultiEdit"):
-        assert claude_adapter.normalize_tool(name) == hook_core.EDIT_TOOL
+        assert claude_adapter.normalize_tool(name) == hook_core.edit_tool()
     # Non-edit, non-read tools pass through unchanged (so the core ignores them).
     assert claude_adapter.normalize_tool("Bash") == "Bash"
 
 
 def test_claude_normalize_maps_read_tools():
     for name in ("Read", "Grep", "Glob"):
-        assert claude_adapter.normalize_tool(name) == hook_core.READ_TOOL
+        assert claude_adapter.normalize_tool(name) == hook_core.read_tool()
 
 
 def test_codex_normalize_maps_apply_patch():
-    assert codex_adapter.normalize_tool("apply_patch") == hook_core.EDIT_TOOL
+    assert codex_adapter.normalize_tool("apply_patch") == hook_core.edit_tool()
     assert codex_adapter.normalize_tool("shell") == "shell"
 
 
@@ -191,7 +194,7 @@ def test_a_rename_carried_by_the_shell_is_still_an_edit(monkeypatch, tmp_path):
     # rename is a patch like any other: the shell spelling must not lose the classification.
     command = f"apply_patch <<'PATCH'\n{_RENAME_BODY}\nPATCH"
     payload = {"tool_name": "Bash", "tool_input": {"command": command}}
-    assert codex_adapter.tool_kind(payload) == hook_core.EDIT_TOOL
+    assert codex_adapter.tool_kind(payload) == hook_core.edit_tool()
     assert codex_adapter.file_paths(payload) == ["notes/plan.md", "src/plan.md"]
 
 
@@ -323,7 +326,7 @@ def test_the_defect_signal_stays_off_the_shell_route(monkeypatch, tmp_path, caps
 def test_codex_normalize_maps_the_measured_shell_tool_name():
     # `Bash` is what codex 0.146.0 puts in the payload for a shell call. Its model-facing
     # names are not payload tool names and are not mapped on a guess.
-    assert codex_adapter.normalize_tool("Bash") == hook_core.SHELL_TOOL
+    assert codex_adapter.normalize_tool("Bash") == hook_core.shell_tool()
     assert codex_adapter.normalize_tool("exec_command") == "exec_command"
 
 
@@ -334,10 +337,10 @@ def test_a_patch_carried_by_the_shell_is_an_edit_not_a_shell_call():
     heredoc = "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: src/x.py\n+x\n*** End Patch\nPATCH"
     payload = {"tool_name": "Bash", "tool_input": {"command": heredoc}}
     assert codex_adapter.is_apply_patch_command(heredoc)
-    assert codex_adapter.tool_kind(payload) == hook_core.EDIT_TOOL
+    assert codex_adapter.tool_kind(payload) == hook_core.edit_tool()
     assert codex_adapter.file_paths(payload) == ["src/x.py"]
-    assert codex_adapter.tool_kind({"tool_name": "Bash", "tool_input": {"command": "ls"}}) == hook_core.SHELL_TOOL
-    assert codex_adapter.tool_kind(_CODEX_0_146_APPLY_PATCH) == hook_core.EDIT_TOOL
+    assert codex_adapter.tool_kind({"tool_name": "Bash", "tool_input": {"command": "ls"}}) == hook_core.shell_tool()
+    assert codex_adapter.tool_kind(_CODEX_0_146_APPLY_PATCH) == hook_core.edit_tool()
 
 
 _PATCH_BODY = "*** Begin Patch\n*** Add File: src/x.py\n+x\n*** End Patch"
@@ -367,14 +370,14 @@ def test_an_apply_patch_invocation_is_recognized_in_any_command_position(command
     command_text = command_template.format(call=call)
     payload = {"tool_name": "Bash", "tool_input": {"command": command_text}}
     assert codex_adapter.is_apply_patch_command(command_text)
-    assert codex_adapter.tool_kind(payload) == hook_core.EDIT_TOOL
+    assert codex_adapter.tool_kind(payload) == hook_core.edit_tool()
 
 
 def test_apply_patch_name_prefix_is_not_an_invocation():
     command_text = f"apply_patch_backup <<'PATCH'\n{_PATCH_BODY}\nPATCH"
     payload = {"tool_name": "Bash", "tool_input": {"command": command_text}}
     assert not codex_adapter.is_apply_patch_command(command_text)
-    assert codex_adapter.tool_kind(payload) == hook_core.SHELL_TOOL
+    assert codex_adapter.tool_kind(payload) == hook_core.shell_tool()
 
 
 def test_a_brace_without_a_separating_space_is_a_word_not_a_group():
@@ -384,7 +387,7 @@ def test_a_brace_without_a_separating_space_is_a_word_not_a_group():
     command_text = f"{{apply_patch <<'PATCH'\n{_PATCH_BODY}\nPATCH"
     payload = {"tool_name": "Bash", "tool_input": {"command": command_text}}
     assert not codex_adapter.is_apply_patch_command(command_text)
-    assert codex_adapter.tool_kind(payload) == hook_core.SHELL_TOOL
+    assert codex_adapter.tool_kind(payload) == hook_core.shell_tool()
 
 
 def _bash_patch_payload(root: Path, path: str, session_id: str, prefix: str = "") -> dict:
@@ -463,7 +466,7 @@ def test_analysis_advisory_fires_on_an_adjacent_heredoc(monkeypatch, tmp_path, c
 def test_patch_looking_text_without_apply_patch_invocation_stays_shell(command_text):
     payload = {"tool_name": "Bash", "tool_input": {"command": command_text}}
     assert not codex_adapter.is_apply_patch_command(command_text)
-    assert codex_adapter.tool_kind(payload) == hook_core.SHELL_TOOL
+    assert codex_adapter.tool_kind(payload) == hook_core.shell_tool()
 
 
 def test_every_nonpatch_shell_route_gets_one_generic_diagnostic_across_handlers(monkeypatch, tmp_path, capsys):
@@ -571,7 +574,7 @@ def test_both_vendors_emit_one_shell_route_wording(monkeypatch, tmp_path, capsys
     assert _claude_hook("git-commit-guard.py").main() == 0
 
     lines = [line for line in capsys.readouterr().err.splitlines() if "may mutate the filesystem" in line]
-    assert len(lines) == 2 and lines[0] == lines[1] == hook_core.UNCLASSIFIED_SHELL_ROUTE_NOTICE
+    assert len(lines) == 2 and lines[0] == lines[1] == hook_core.unclassified_shell_route_notice()
 
 
 def test_normalized_vendor_tools_drive_the_core(tmp_path, monkeypatch):
@@ -793,7 +796,7 @@ def _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, co
     if config is None:
         monkeypatch.setattr(deleg_log, "_load_config", lambda _root: {})
     else:
-        path = tmp_path / deleg_log.routing.LOCAL_CONFIG_REL
+        path = tmp_path / deleg_log.routing.local_config_rel()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(config), encoding="utf-8")
     monkeypatch.setattr(deleg_log.routing, "load_registry", lambda *_args: base_registry)
@@ -860,7 +863,7 @@ def test_delegation_log_names_the_bound_model(tmp_path, monkeypatch, capsys):
     emitted = json.loads(capsys.readouterr().out)
     worker = config["binding"]["worker"]
     assert emitted["systemMessage"] == f"[akmon] → k_explorer ({worker}): do the work"
-    log_line = (tmp_path / deleg_log.routing.DELEGATION_LOG_REL).read_text(encoding="utf-8").strip()
+    log_line = (tmp_path / deleg_log.routing.delegation_log_rel()).read_text(encoding="utf-8").strip()
     assert log_line.split("\t")[3] == worker
 
 
@@ -886,7 +889,7 @@ def test_delegation_log_reports_no_model_without_a_bound_ladder(tmp_path, monkey
     assert deleg_log.main() == 0
     emitted = json.loads(capsys.readouterr().out)
     assert emitted["systemMessage"] == "[akmon] → k_explorer: do the work"
-    log_line = (tmp_path / deleg_log.routing.DELEGATION_LOG_REL).read_text(encoding="utf-8").strip()
+    log_line = (tmp_path / deleg_log.routing.delegation_log_rel()).read_text(encoding="utf-8").strip()
     assert log_line.split("\t")[3] == "-"
 
 
@@ -906,7 +909,7 @@ def test_delegation_log_rejects_malformed_available_without_losing_record(availa
     assert deleg_log.main() == 0
     emitted = json.loads(capsys.readouterr().out)
     assert emitted["systemMessage"] == "[akmon] → k_explorer: do the work"
-    log_line = (tmp_path / deleg_log.routing.DELEGATION_LOG_REL).read_text(encoding="utf-8").strip()
+    log_line = (tmp_path / deleg_log.routing.delegation_log_rel()).read_text(encoding="utf-8").strip()
     assert log_line.split("\t")[3] == "-"
 
 
@@ -1009,6 +1012,49 @@ def test_claude_guard_writes_one_document_when_rendering_fails(capsys):
     captured = capsys.readouterr()
     assert json.loads(captured.out) == {"systemMessage": hook_core.hook_failure_notice("probe-hook", TypeError())}
     assert captured.err.splitlines() == ["akmon probe-hook hook: TypeError"]
+
+
+def _tree_without(tmp_path: Path, data_file: str) -> Path:
+    """A copy of the hook-side tree (hooks, common, tools) with one shipped data file removed."""
+    repo = Path(hook_core.__file__).resolve().parents[1]
+    tree = tmp_path / "tree"
+    for part in ("hooks", "common", "tools"):
+        shutil.copytree(repo / part, tree / part, ignore=shutil.ignore_patterns("__pycache__"))
+    (tree / data_file).unlink()
+    return tree
+
+
+@pytest.mark.parametrize("data_file", ["hooks/hook_core.json", "hooks/vocabulary.json"])
+def test_claude_guard_stays_crash_open_when_a_data_file_is_missing(tmp_path, data_file):
+    # C102 review F1: the crash path must not read the data file whose absence it reports.
+    tree = _tree_without(tmp_path, data_file)
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "Edit", "cwd": str(tmp_path)}
+    payload["tool_input"] = {"file_path": str(tmp_path / "src" / "app.py")}
+    run = subprocess.run(
+        [sys.executable, str(tree / "hooks" / "role-on-code.py")],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0
+    assert run.stderr.splitlines() == ["akmon role-on-code hook: DataFileError"]
+    notice = hook_core.hook_failure_notice("role-on-code", common_jsondata.DataFileError())
+    assert json.loads(run.stdout) == {"systemMessage": notice}
+
+
+def test_codex_guard_reports_a_missing_data_file_in_one_line(tmp_path):
+    tree = _tree_without(tmp_path, "hooks/codex_hook.json")
+    run = subprocess.run(
+        [sys.executable, str(tree / "hooks" / "codex-hook.py"), "session-start"],
+        input="{}",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 1
+    assert run.stderr.splitlines() == ["akmon codex-hook hook: DataFileError"]
+    assert run.stdout == ""
 
 
 def test_hook_failure_texts_name_the_hook_and_the_class_never_the_message():
@@ -1185,7 +1231,7 @@ def test_delegation_log_warns_on_an_unlabelled_call_in_a_zoned_session(tmp_path,
     assert "carries no zone label while this session's fan-out is zoned (auth)" in json.loads(
         capsys.readouterr().out
     )["systemMessage"]
-    zones = [ln.split("\t")[4] for ln in (tmp_path / deleg_log.routing.DELEGATION_LOG_REL).read_text().splitlines()]
+    zones = [ln.split("\t")[4] for ln in (tmp_path / deleg_log.routing.delegation_log_rel()).read_text().splitlines()]
     assert zones == ["auth", "-"]
 
 
@@ -1277,3 +1323,170 @@ def test_a_crash_in_the_stop_gate_never_wedges_the_turn(tmp_path, monkeypatch, c
     captured = capsys.readouterr()
     assert json.loads(captured.out) == {"systemMessage": hook_core.hook_failure_notice("gate-audit", RuntimeError())}
     assert "decision" not in captured.out
+
+
+# --------------------------------------------------------------------------------------
+# C102 — the hook vocabulary table lives in hooks/vocabulary.json beside the readers
+# --------------------------------------------------------------------------------------
+
+
+def test_vocabulary_json_holds_the_tool_tables_and_document_keys():
+    data = hook_core._vocabulary()
+    assert set(data) == {"neutral_kinds", "claude", "codex", "document_keys"}
+    assert data["neutral_kinds"] == {"edit": "edit", "shell": "shell", "read": "read", "subagent": "subagent"}
+    assert data["claude"]["edit_tools"] == ["Edit", "Write", "MultiEdit"]
+    assert data["claude"]["read_tools"] == ["Read", "Grep", "Glob"]
+    assert data["claude"]["delegation_nudge_tool_kinds"] == {"Bash": "shell", "Task": "subagent", "Agent": "subagent"}
+    assert data["codex"]["edit_tools"] == ["apply_patch"]
+    assert data["codex"]["shell_tools"] == ["Bash"]
+    assert data["codex"]["payload_key_spellings"]["tool_name"] == ["tool_name", "toolName", "tool", "name"]
+    assert data["codex"]["payload_key_spellings"]["cwd"] == ["cwd", "working_directory", "workingDirectory", "workdir"]
+    assert data["codex"]["payload_key_spellings"]["unmeasured_list_keys"] == [
+        "file_paths",
+        "filePaths",
+        "paths",
+        "files",
+    ]
+    assert data["document_keys"]["permission_reason"] == "permissionDecisionReason"
+    assert data["document_keys"]["system_message"] == "systemMessage"
+    assert set(data["codex"]["payload_key_spellings"]) == {
+        "tool_name",
+        "session_id",
+        "tool_use_id",
+        "tool_input",
+        "command",
+        "cwd",
+        "unmeasured_string_keys",
+        "unmeasured_list_keys",
+    }
+
+
+def _vocabulary_path(module) -> Path:
+    return Path(module.__file__).parent / "vocabulary.json"
+
+
+@pytest.mark.parametrize(
+    ("reader", "probe"),
+    (
+        (hook_core, hook_core.edit_tool),
+        (claude_adapter, lambda: claude_adapter.normalize_tool("Edit")),
+        (codex_adapter, lambda: codex_adapter.normalize_tool("apply_patch")),
+    ),
+)
+def test_each_reader_loads_the_vocabulary_file_beside_it(reader, probe, monkeypatch):
+    seen: list[Path] = []
+    real_read = common_jsondata.read
+
+    def capture(path: Path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(common_jsondata, "read", capture)
+    probe()
+    assert seen and all(path == _vocabulary_path(reader) for path in seen)
+
+
+def test_a_vocabulary_data_file_error_propagates_uncaught(monkeypatch):
+    def broken(path: Path):
+        raise common_jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(common_jsondata, "read", broken)
+    with pytest.raises(common_jsondata.DataFileError, match="missing"):
+        claude_adapter.normalize_tool("Edit")
+    with pytest.raises(common_jsondata.DataFileError, match="missing"):
+        codex_adapter.normalize_tool("apply_patch")
+    with pytest.raises(common_jsondata.DataFileError, match="missing"):
+        hook_core.edit_tool()
+
+
+def test_the_delegation_nudge_entry_point_loads_the_vocabulary_file(monkeypatch):
+    hook = _claude_hook("delegation-nudge.py")
+    real = hook._vocabulary()
+    seen: list[Path] = []
+    monkeypatch.setattr(hook.jsondata, "read", lambda path: seen.append(path) or real)
+    hook._tool_kinds()
+    assert seen and all(path == _vocabulary_path(hook) for path in seen)
+
+
+# --------------------------------------------------------------------------------------
+# C102 — the delegation-log message fragments live in hooks/delegation_log.json
+# --------------------------------------------------------------------------------------
+
+
+def test_delegation_log_json_holds_the_message_fragments():
+    hook = _claude_hook("delegation-log.py")
+    data = hook._log_data()
+    assert set(data) == {"subagent_prefix", "model_suffix", "zone_suffix", "description_suffix", "warning_prefix"}
+    assert data["subagent_prefix"] == "[akmon] → {{subagent}}"
+    assert data["model_suffix"] == " ({{model}})"
+    assert data["zone_suffix"] == " [{{zone}}]"
+    assert data["description_suffix"] == ": {{description}}"
+    assert data["warning_prefix"] == "[akmon] ⚠ {{warning}}"
+
+
+def test_delegation_log_loader_reads_the_data_file_beside_it(monkeypatch):
+    hook = _claude_hook("delegation-log.py")
+    seen: list[Path] = []
+    real_read = common_jsondata.read
+
+    def capture(path: Path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(common_jsondata, "read", capture)
+    assert hook._format_system_message("2026-07-04T10:00:00+0000\tsess-1\tk_mechanic\t-\t-\treformat") == (
+        "[akmon] → k_mechanic: reformat"
+    )
+    assert seen and all(path == Path(hook.__file__).parent / "delegation_log.json" for path in seen)
+
+
+def test_a_delegation_log_data_file_error_propagates_uncaught(monkeypatch):
+    hook = _claude_hook("delegation-log.py")
+
+    def broken(path: Path):
+        raise common_jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(common_jsondata, "read", broken)
+    with pytest.raises(common_jsondata.DataFileError, match="missing"):
+        hook._format_system_message("2026-07-04T10:00:00+0000\tsess-1\tk_mechanic\t-\t-\treformat")
+
+
+# --------------------------------------------------------------------------------------
+# C102 — the codex-hook routes and diagnostics live in hooks/codex_hook.json
+# --------------------------------------------------------------------------------------
+
+
+def test_codex_hook_json_holds_the_routes_and_diagnostic_templates():
+    hook = _codex_hook()
+    data = hook._codex_hook_data()
+    assert set(data) == {"routes", "unreadable_target", "unmeasured_path_source", "payload_shape"}
+    assert data["routes"] == ["analysis-guard", "role-on-code", "session-start", "git-commit-guard"]
+    assert data["payload_shape"] == "tool_input keys: {{inner}}; payload keys: {{top}}"
+
+
+def test_codex_hook_readers_load_the_data_file_beside_them(monkeypatch):
+    hook = _codex_hook()
+    seen: list[Path] = []
+    real_read = common_jsondata.read
+
+    def capture(path: Path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(common_jsondata, "read", capture)
+    hook._routes()
+    assert codex_adapter.payload_shape({"a": 1}) == "tool_input keys: <none>; payload keys: a"
+    # payload_shape also reads vocabulary.json through _tool_input; only the codex_hook reads count.
+    expected = Path(hook.__file__).parent / "codex_hook.json"
+    assert [path for path in seen if path.name == "codex_hook.json"] == [expected, expected]
+
+
+def test_a_codex_hook_data_file_error_propagates_uncaught(monkeypatch):
+    def broken(path: Path):
+        raise common_jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(common_jsondata, "read", broken)
+    with pytest.raises(common_jsondata.DataFileError, match="missing"):
+        codex_adapter.payload_shape({"a": 1})
+    with pytest.raises(common_jsondata.DataFileError, match="missing"):
+        _codex_hook()._routes()

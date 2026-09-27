@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 import sync
 
-from common import codex_hooks
+from common import codex_hooks, jsondata
 from common.codex_hooks import (
     CodexProtocolError,
     CodexWiringError,
@@ -442,7 +442,7 @@ def test_a_protocol_error_can_only_carry_a_fixed_text(kind):
     value — is `unclassified`, never echoed."""
     error = CodexProtocolError(kind)
     assert error.kind == "unclassified"
-    assert str(error) == codex_hooks._PROTOCOL_FAILURES["unclassified"]
+    assert str(error) == codex_hooks._protocol_failures()["unclassified"]
 
 
 class _VendorTextError(CodexProtocolError):
@@ -477,7 +477,7 @@ def test_query_hooks_list_rebuilds_a_runner_protocol_error_from_its_kind(raised,
         query_hooks_list(["codex", "app-server"], "/proj", runner=runner)
     assert type(excinfo.value) is CodexProtocolError
     assert excinfo.value.kind == kind
-    assert str(excinfo.value) == codex_hooks._PROTOCOL_FAILURES[kind]
+    assert str(excinfo.value) == codex_hooks._protocol_failures()[kind]
     assert excinfo.value.__cause__ is None
 
 
@@ -490,11 +490,13 @@ def _protocol_error_arguments():
 
 def test_every_raise_site_names_a_fixed_kind_and_every_kind_is_raised():
     """A misspelt kind would silently degrade to `unclassified`, and a kind nothing raises is dead
-    text. The one non-literal argument is `query_hooks_list`'s rebuild of a runner's own error."""
+    text. The one non-literal argument is `query_hooks_list`'s rebuild of a runner's own error.
+    The closed table is the data file's `protocol_failures` (C102): the fallback kind stays
+    a code choice, so the raise sites are checked against the table minus that one."""
     arguments = list(_protocol_error_arguments())
     literals = [arg.value for arg in arguments if isinstance(arg, ast.Constant)]
     assert all(isinstance(kind, str) for kind in literals)
-    assert set(literals) == set(codex_hooks._PROTOCOL_FAILURES) - {"unclassified"}
+    assert set(literals) == set(codex_hooks._protocol_failures()) - {codex_hooks._UNCLASSIFIED}
     assert len(arguments) - len(literals) == 1
 
 
@@ -611,6 +613,54 @@ def test_the_hooks_list_route_is_reached_only_through_verify():
 
 
 def test_the_app_server_argv_is_spelled_only_by_the_runtime_owner():
+    """The owner moved from ``runtime.py`` to its data file (C102): no shipped Python spells
+    the argv literal; the data file does."""
     root = Path(__file__).resolve().parents[2]
     spellers = {name for name, text in _shipped_python(root) if '"app-server"' in text or "'app-server'" in text}
-    assert spellers == {"common/runtime.py"}
+    assert spellers == set()
+    assert '"app-server"' in (root / "common" / "runtime.json").read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------------------
+# common/codex_hooks.json — the closed diagnostic table and status vocabularies (C102)
+# --------------------------------------------------------------------------------------
+
+
+def test_codex_hooks_json_carries_the_closed_tables():
+    data = json.loads((Path(codex_hooks.__file__).parent / "codex_hooks.json").read_text(encoding="utf-8"))
+    assert set(data) == {"protocol_failures", "event_names", "trust_statuses", "live_trust_statuses"}
+    assert data["protocol_failures"]["timeout"] == "no hooks/list response within the query timeout"
+    assert data["protocol_failures"]["unclassified"] == "the hooks/list exchange failed for an unclassified reason"
+    assert data["event_names"] == {"PreToolUse": "preToolUse", "SessionStart": "sessionStart"}
+    assert set(data["trust_statuses"]) == {"managed", "untrusted", "trusted", "modified"}
+    assert set(data["live_trust_statuses"]) == {"trusted", "managed"}
+
+
+def test_the_loader_reads_exactly_codex_hooks_json(monkeypatch):
+    seen: list[Path] = []
+    real_read = jsondata.read
+
+    def capture(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(jsondata, "read", capture)
+    for loader in (
+        codex_hooks._protocol_failures,
+        codex_hooks._event_names,
+        codex_hooks._trust_statuses,
+        codex_hooks._live_trust_statuses,
+    ):
+        loader()
+    assert seen == [Path(codex_hooks.__file__).with_name("codex_hooks.json")] * 4
+
+
+def test_a_missing_data_file_fails_from_the_public_seams(monkeypatch):
+    def broken(path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        CodexProtocolError("timeout")
+    with pytest.raises(jsondata.DataFileError):
+        query_hooks_list(["codex", "app-server"], "/proj", runner=lambda command, cwd, timeout: "{}")

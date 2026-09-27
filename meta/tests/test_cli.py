@@ -9,6 +9,7 @@ so the "embedded tree" resolves to this repo's own akmon root via the editable f
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -17,15 +18,100 @@ from pathlib import Path
 
 import pytest
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_SRC = _KEYSTONE / "src"
+_SRC = _AKMON / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import akmon  # noqa: E402
 from akmon import __version__, _tree, cli  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolate_common_modules():
+    """The hook bench runs hooks in-process, and a hook's ``import common`` re-registers the
+    fixture tree's ``common`` package into ``sys.modules``. Restore the repository's modules
+    after each test so later suites (the C102 loader spies) see the ``common.*`` they
+    imported at collection time."""
+    before = {key: module for key, module in sys.modules.items() if key == "common" or key.startswith("common.")}
+    yield
+    for key, module in before.items():
+        sys.modules[key] = module
+    for key in [key for key in sys.modules if key == "common" or key.startswith("common.")]:
+        if key not in before:
+            del sys.modules[key]
+
+
+# --------------------------------------------------------------------------------------
+# src/akmon/cli.json — the shared CLI text and tables (C102)
+# --------------------------------------------------------------------------------------
+
+_CLI_DATA = json.loads((_AKMON / "src" / "akmon" / "cli.json").read_text(encoding="utf-8"))
+
+
+def test_cli_data_pins_its_structure():
+    """The data file is the single owner of the CLI text: pin the key set and a few
+    characteristic exact values so a transcription drift is caught here, not in the corpus."""
+    assert set(_CLI_DATA) == {
+        "epilog",
+        "dispatched_commands",
+        "hook_missing_name",
+        "hook_path_refused",
+        "hook_unknown",
+        "skew_version",
+        "skew_commits",
+    }
+    assert _CLI_DATA["dispatched_commands"] == ["check", "sync", "verify"]
+    assert _CLI_DATA["hook_missing_name"] == "akmon hook: missing hook name"
+    assert _CLI_DATA["hook_path_refused"] == (
+        "akmon hook: {{name}} is a path; name the hook instead (e.g. 'role-on-code')"
+    )
+    assert _CLI_DATA["hook_unknown"] == "akmon hook: unknown hook {{name}}; available: {{available}}"
+    assert _CLI_DATA["skew_version"] == (
+        "akmon: CLI is {{cli_version}}, mounted/pinned standard is {{pinned}} — the mounted tree governs."
+    )
+    assert _CLI_DATA["skew_commits"] == (
+        "akmon: mounted/pinned standard is {{pinned}}, {{ahead}} {{commits}} past the tag this CLI "
+        "matches — the mounted tree governs."
+    )
+    assert _CLI_DATA["epilog"].startswith("commands:\n  init      attach the standard")
+    assert _CLI_DATA["epilog"].endswith("  akmon init --help\n")
+
+
+def test_cli_loader_asks_for_exactly_the_cli_json(monkeypatch):
+    """The loader reads ``cli.json`` beside ``cli.py`` — the path the wheel and the corpus
+    snapshot both place the file at."""
+    from common import jsondata
+
+    seen: list[Path] = []
+    real_read = jsondata.read
+
+    def spy(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    assert cli._epilog().startswith("commands:")
+    assert cli._dispatched_commands() == ("check", "sync", "verify")
+    assert seen, "the loader never asked for the data file"
+    for path in seen:
+        assert path == Path(cli.__file__).parent / "cli.json"
+
+
+def test_cli_data_file_error_propagates_uncaught(monkeypatch):
+    """A missing or broken ``cli.json`` is a loud failure, not a swallowed one."""
+    from common import jsondata
+
+    def broken_read(path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken_read)
+    with pytest.raises(jsondata.DataFileError):
+        cli._cmd_hook([])
+    with pytest.raises(jsondata.DataFileError):
+        cli.main(["version"])
 
 SYNC_PY = """
 def main(argv=None):
@@ -100,7 +186,7 @@ def _embedded_tree(tmp_path: Path, sync_body: str = SYNC_PY) -> Path:
     fixture_tree = tmp_path / "embedded"
     _write(fixture_tree / "bin" / "sync.py", sync_body)
     shutil.copytree(
-        _KEYSTONE / "common",
+        _AKMON / "common",
         fixture_tree / "common",
         ignore=shutil.ignore_patterns("__pycache__"),
     )
@@ -359,7 +445,7 @@ def _hook_project(tmp_path: Path) -> Path:
     root = _mounted_project(tmp_path)
     mounted = _hooks(root / "_aitna" / "akmon", "mounted")
     shutil.copytree(
-        _KEYSTONE / "common",
+        _AKMON / "common",
         mounted / "common",
         ignore=shutil.ignore_patterns("__pycache__"),
     )

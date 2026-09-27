@@ -16,8 +16,9 @@ import json
 import re
 import shutil
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 # The shared utilities live in the tree's ``common`` package, not beside this script:
 # ``bin/`` is the launcher directory. A launcher is run as ``python3 <tree>/bin/sync.py``, so
@@ -27,8 +28,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import sync as sync_tool
 
-from common import always_loaded
-from common.check_runner import CONFIG_TARGET, read_checks
+from common import always_loaded, jsondata
+from common.check_runner import (
+    check_table_ok,
+    config_target,
+    correct_entry_fix,
+    read_checks,
+    repair_record_verify_fix,
+)
 from common.codex_hooks import (
     CodexProtocolError,
     expected_codex_hooks,
@@ -38,23 +45,46 @@ from common.codex_hooks import (
 from common.codex_hooks import (
     default_runner as _default_codex_hooks_runner,
 )
-from common.findings import Finding, exit_code, line_safe, print_findings
+from common.findings import Finding, exit_code, line_safe, print_findings, read_findings_data
 from common.project_root import resolve_project_root
 from common.record import RecordError, read_akmon_toml_strict
 from common.runtime import codex_hooks_list_command
 from common.versions import split_version
 
-_TASKS_MAX_LINES = 200
-_TASK_STATUSES = ("active", "blocked", "deferred", "done")
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 # A backlog entry's ``·``-separated fields (pipelines/tasks.md): id, title, status, goal,
 # detail. Reading the status field needs at least the first three.
 _MIN_STATUS_FIELDS = 3
-# "orchestrator" is the ADR 0005/0006 dynamic default (reasoner rides the orchestrator's own
-# model, tools/model_routing/routing.py::compute_binding); "highest" is the pre-ADR-0005
-# static default, still a valid fallback for any non-"orchestrator" value there. Keep this
-# set in sync with routing.py, not with whichever one the registry happened to say last (C26).
-_REASONER_POLICY_VALUES = ("orchestrator", "highest")
+
+
+def read_verify_data() -> dict[str, Any]:
+    """The shared verify text and tables (``verify.json``, beside this launcher).
+
+    Read once by the :class:`Verifier` and passed down: never at import time, with no
+    module-level cache and no swallowed ``DataFileError`` (C102, ``common/jsondata.py``).
+    """
+    return jsondata.read(Path(__file__).parent / "verify.json")
+
+
+def _tasks_max_lines(data: Mapping[str, Any]) -> int:
+    """The length a TASKS.md index must stay under (``verify.json``)."""
+    return data["tasks_max_lines"]
+
+
+def _task_statuses(data: Mapping[str, Any]) -> tuple[str, ...]:
+    """The valid backlog entry statuses (``verify.json``)."""
+    return tuple(data["task_statuses"])
+
+
+def _reasoner_policy_values(data: Mapping[str, Any]) -> tuple[str, ...]:
+    """The registry values a vendor's reasoner selection may name (``verify.json``).
+
+    "orchestrator" is the ADR 0005/0006 dynamic default (reasoner rides the orchestrator's own
+    model, tools/model_routing/routing.py::compute_binding); "highest" is the pre-ADR-0005
+    static default, still a valid fallback for any non-"orchestrator" value there. The routing
+    side keeps its own copy of the fact in its own data file — no cross-read (C102).
+    """
+    return tuple(data["reasoner_policy_values"])
 
 
 def _sample(ids: list[str], limit: int = 4) -> str:
@@ -64,15 +94,29 @@ def _sample(ids: list[str], limit: int = 4) -> str:
 
 
 _DELEGATION_DEFAULT_RE = re.compile(r"\bdelegation\s+is\s+the\s+default\b", re.IGNORECASE)
-_GENERATED_MARKER = sync_tool.GENERATED_MARKER
-# The Agent Skills standard's two required keys, plus akmon's owner, which the standard only
-# admits under `metadata` (C79, ADR-0017/D01). A nested key is spelled `parent.child`.
-_SKILL_REQUIRED_FRONTMATTER = ("name", "description", "metadata.owner")
-# The standard's limits (agentskills.io/specification), which Anthropic, Copilot and Codex's
-# own validator state as well: a name of lowercase letters, digits and single inner hyphens.
-_SKILL_NAME_MAX = 64
 _SKILL_NAME_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
-_SKILL_DESCRIPTION_MAX = 1024
+
+
+def _skill_required_frontmatter(data: Mapping[str, Any]) -> tuple[str, ...]:
+    """The Agent Skills standard's two required keys, plus akmon's owner.
+
+    The standard admits the owner under `metadata` only (C79, ADR-0017/D01); a nested key is
+    spelled `parent.child`.
+    """
+    return tuple(data["skill_required_frontmatter"])
+
+
+def _skill_name_max(data: Mapping[str, Any]) -> int:
+    """The standard's skill-name limit (agentskills.io/specification).
+
+    A name of lowercase letters, digits and single inner hyphens (``verify.json``).
+    """
+    return data["skill_name_max"]
+
+
+def _skill_description_max(data: Mapping[str, Any]) -> int:
+    """The standard's skill-description limit (agentskills.io/specification) (``verify.json``)."""
+    return data["skill_description_max"]
 
 # USE-surface isolation: the documentary surface a consumer reads as guidance must be
 # self-contained and must not even *name* akmon's own development artifacts. A deployed
@@ -91,16 +135,18 @@ _SKILL_DESCRIPTION_MAX = 1024
 # mechanism (worked examples with provenance citations into meta/reviews/, meta/design/, etc.), read
 # by a maintainer studying how akmon works — not operative guidance a deployed consumer agent
 # executes. Same class as README/CHANGELOG citing dev history; a consumer never attaches examples/.
-# (C35: decided explicitly rather than left as an accidental gap in _USE_OPERATIVE_GLOBS below.)
-_USE_OPERATIVE_GLOBS = (
-    "roles/*.md",
-    "pipelines/*.md",
-    "guardrails/*.md",
-    "profiles/*.md",
-    "skills/**/*.md",
-    "tools/**/*.md",
-)
-_USE_OPERATIVE_FILES = ("ARCHETYPES.md", "BOOTSTRAP.md", "MODEL.md")
+# (C35: decided explicitly rather than left as an accidental gap in ``verify.json``'s
+# ``use_operative_globs`` below.)
+
+
+def _use_operative_globs(data: Mapping[str, Any]) -> tuple[str, ...]:
+    """The documentary USE globs the isolation check scans (``verify.json``)."""
+    return tuple(data["use_operative_globs"])
+
+
+def _use_operative_files(data: Mapping[str, Any]) -> tuple[str, ...]:
+    """The top-level USE files the isolation check scans (``verify.json``)."""
+    return tuple(data["use_operative_files"])
 
 # Citations that pin a specific akmon development artifact, even in plain prose:
 #  - a numbered decision record ("ADR 0001", "ADR-12") — the bare word "ADR" as a concept is fine;
@@ -117,33 +163,26 @@ _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 # Path fragments that only ever point into akmon's own development tree / artifacts. A path
 # (link target or inline code) containing any of these is a leak; the same word in free prose
 # (e.g. "detail in decisions/ ADRs") is not, because it is not written as a path here.
-_DEV_PATH_TOKENS = ("meta/", "decisions/", "reviews/", "ROADMAP", "CONCEPT", "self_ci")
-
-_VENDOR_POINTERS = {
-    "CLAUDE.md": ("AGENTS.md", "@AGENTS.md"),
-    ".github/copilot-instructions.md": ("AGENTS.md", None),
-    "GEMINI.md": ("AGENTS.md", None),
-    ".codex/README.md": ("AGENTS.md", None),
-}
 
 
-#: Every hook script the generated wiring names, in every mode. A wired hook whose file is
-#: missing fails silently, so `check_hooks` asserts each one — and the test and self-CI
-#: fixtures build their trees from this same tuple, so the list has one owner.
-WIRED_HOOK_SCRIPTS: tuple[str, ...] = (
-    "hook_core.py",
-    "claude_adapter.py",
-    "codex_adapter.py",
-    "codex-hook.py",
-    "git-commit-guard.py",
-    "session-start-agent.py",
-    "role-on-code.py",
-    "analysis-guard.py",
-    "model-routing.py",
-    "delegation-log.py",
-    "delegation-nudge.py",
-    "gate-audit.py",
-)
+def _dev_path_tokens(data: Mapping[str, Any]) -> tuple[str, ...]:
+    """Path fragments that only ever point into akmon's own development tree (``verify.json``)."""
+    return tuple(data["dev_path_tokens"])
+
+
+def _vendor_pointers(data: Mapping[str, Any]) -> dict[str, list]:
+    """The generated vendor pointer files and the anchor/import each must carry (``verify.json``)."""
+    return data["vendor_pointers"]
+
+
+def wired_hook_scripts(data: Mapping[str, Any] | None = None) -> tuple[str, ...]:
+    """Every hook script the generated wiring names, in every mode (``verify.json``).
+
+    A wired hook whose file is missing fails silently, so `check_hooks` asserts each one — and
+    the corpus snapshot, the self-CI and the test fixtures build their trees from this same
+    list, so it has one owner. Called on its own, it reads ``verify.json`` itself.
+    """
+    return tuple((data if data is not None else read_verify_data())["wired_hook_scripts"])
 
 class Verifier:
     """Runs every USE-contract check against one consuming project and collects findings."""
@@ -169,18 +208,30 @@ class Verifier:
         # `codex app-server` subprocess (common/codex_hooks.py's own docstring explains the
         # protocol the default one speaks).
         self._codex_hooks_runner = codex_hooks_runner or _default_codex_hooks_runner
+        # The shared data files, read once per run and passed down (C102): this launcher's
+        # tables, the sync plan's (``_planned_files`` and friends run here too), and the
+        # finding envelope's vocabulary every recorded finding is validated against.
+        self.data = read_verify_data()
+        self.sync_data = sync_tool.read_sync_data()
+        self.findings_data = read_findings_data()
 
     def ok(self, code: str, message: str, *, target: str = "", fix: str) -> None:
         """Record a passing finding."""
-        self.findings.append(Finding("ok", code, line_safe(message), line_safe(target), line_safe(fix)))
+        self.findings.append(
+            Finding("ok", code, line_safe(message), line_safe(target), line_safe(fix), data=self.findings_data)
+        )
 
     def warn(self, code: str, message: str, *, target: str = "", fix: str) -> None:
         """Record a warning finding."""
-        self.findings.append(Finding("warn", code, line_safe(message), line_safe(target), line_safe(fix)))
+        self.findings.append(
+            Finding("warn", code, line_safe(message), line_safe(target), line_safe(fix), data=self.findings_data)
+        )
 
     def error(self, code: str, message: str, *, target: str = "", fix: str) -> None:
         """Record a failing finding."""
-        self.findings.append(Finding("error", code, line_safe(message), line_safe(target), line_safe(fix)))
+        self.findings.append(
+            Finding("error", code, line_safe(message), line_safe(target), line_safe(fix), data=self.findings_data)
+        )
 
     def check_path(self, relative: str, *, kind: str = "file") -> bool:
         """Check that a path in the consumer's own tree exists; record and return the result."""
@@ -242,37 +293,17 @@ class Verifier:
         return False
 
     def check_basic_layout(self) -> None:
-        """Check that the consumer's and the standard's required files and directories exist."""
-        aitna = self.aitna
-        for relative in (
-            "AGENTS.md",
-            f"{aitna}/TASKS.md",
-        ):
-            self.check_path(relative)
-        for relative in (
-            "README.md",
-            "BOOTSTRAP.md",
-            "ARCHETYPES.md",
-            "CHANGELOG.md",
-            "MODEL.md",
-            "CAPABILITIES.md",
-            "roles/README.md",
-            "roles/review.md",
-            "roles/architect.md",
-            "roles/engineer.md",
-            "roles/learn.md",
-            "roles/release.md",
-            "guardrails/_common.md",
-            "pipelines/pre-commit.md",
-            "pipelines/code-flow.md",
-            "pipelines/design-flow.md",
-            "pipelines/release.md",
-            "pipelines/tasks.md",
-            "bin/sync.py",
-            "bin/verify.py",
-        ):
+        """Check that the consumer's and the standard's required files and directories exist.
+
+        The required paths are the shared ``verify.json`` tables; the consumer-side ones
+        carry the run's dev-layer name.
+        """
+        data = self.data
+        for item in data["basic_layout_consumer_paths"]:
+            self.check_path(jsondata.fill(item, {"aitna": self.aitna}))
+        for relative in data["basic_layout_standard_paths"]:
             self.check_standard_path(relative)
-        for relative in (f"{aitna}/agents", f"{aitna}/memory"):
+        for relative in (f"{self.aitna}/agents", f"{self.aitna}/memory"):
             self.check_path(relative, kind="dir")
 
     def check_use_surface_isolation(self) -> None:
@@ -289,9 +320,9 @@ class Verifier:
         if not akmon.is_dir():
             return
         sources: list[Path] = []
-        for pattern in _USE_OPERATIVE_GLOBS:
+        for pattern in _use_operative_globs(self.data):
             sources.extend(sorted(akmon.glob(pattern)))
-        for name in _USE_OPERATIVE_FILES:
+        for name in _use_operative_files(self.data):
             candidate = akmon / name
             if candidate.is_file():
                 sources.append(candidate)
@@ -322,7 +353,7 @@ class Verifier:
         found.extend(f"{relative} → names {name}" for name in _DEV_NAME_RE.findall(text))
         for span in (*_LINK_RE.findall(text), *_INLINE_CODE_RE.findall(text)):
             path = span.split()[0].split("#", 1)[0] if span.strip() else ""
-            if any(token in path for token in _DEV_PATH_TOKENS):
+            if any(token in path for token in _dev_path_tokens(self.data)):
                 found.append(f"{relative} → path {span}")
         return found
 
@@ -332,40 +363,31 @@ class Verifier:
         if not path.is_file():
             return
         text = path.read_text(encoding="utf-8")
-        if _GENERATED_MARKER in text:
+        if sync_tool.generated_marker() in text:
             self.error(
                 "agents.generated-source",
                 "AGENTS.md must be a hand-reviewed source document, not generated by sync.py",
                 target="AGENTS.md",
                 fix="Remove the generated banner and hand-own AGENTS.md.",
             )
-        if sync_tool.is_package_mode(self.root):
-            # Provisional package-mode contract (ADR 0009 §4-5, pinned by the owner ahead of
-            # C37 slice B's verify.py adaptation): no mounted tree to link, so the
-            # load-bearing anchor is the materialized guardrails import (the always-on
-            # surface `akmon sync` writes to `.akmon/`); `akmon path` is how an agent reaches
-            # the rest of the standard (roles, MODEL.md) locally. Revisit this exact wording
-            # once the alphavar pilot's findings fold back, before the first PyPI publish
-            # (meta/design/packaging/README.md §Open points).
-            required = {
-                "akmon block": "## Dev layer — akmon",
-                "guardrails import": f"@{self.aitna}/.akmon/guardrails/_common.md",
-                "akmon path pointer": "akmon path",
-                "archetype link": "ARCHETYPES.md",
-                "memory rule": f"{self.aitna}/memory",
-                "owner owns commits directive": "D5",
-                "secrets rule": ".env",
-            }
-        else:
-            required = {
-                "akmon block": "## Dev layer — akmon",
-                "model link": f"{self.akmon}/README.md",
-                "archetype link": "ARCHETYPES.md",
-                "role link": f"{self.akmon}/roles/",
-                "memory rule": f"{self.aitna}/memory",
-                "owner owns commits directive": "D5",
-                "secrets rule": ".env",
-            }
+        # Provisional package-mode contract (ADR 0009 §4-5, pinned by the owner ahead of
+        # C37 slice B's verify.py adaptation): no mounted tree to link, so the
+        # load-bearing anchor is the materialized guardrails import (the always-on
+        # surface `akmon sync` writes to `.akmon/`); `akmon path` is how an agent reaches
+        # the rest of the standard (roles, MODEL.md) locally. Revisit this exact wording
+        # once the alphavar pilot's findings fold back, before the first PyPI publish
+        # (meta/design/packaging/README.md §Open points).
+        variant = "package" if sync_tool.is_package_mode(self.root) else "mounted"
+        # The per-mode anchor tables are the shared ``verify.json`` data; ``missing`` keeps
+        # their stored key order. The block heading is filled from its single owner
+        # (``common/always_loaded``), not from a copy in this table.
+        required = {
+            name: jsondata.fill(
+                snippet,
+                {"aitna": self.aitna, "akmon": self.akmon, "heading": always_loaded.block_heading()},
+            )
+            for name, snippet in self.data["agents_anchors"][variant].items()
+        }
         missing = [name for name, snippet in required.items() if snippet not in text]
         # C94 migrates the source contract, but consumer AGENTS.md blocks are hand-owned and
         # explicitly outside that cutover. Accept the former exact anchor until consumer
@@ -420,7 +442,7 @@ class Verifier:
         found = always_loaded.populations(agents_text, self.root)
         if found is None:
             return  # no marked akmon block: check_agents_md already reports the missing anchor
-        population, cap = found[always_loaded.CONSUMER], always_loaded.CAPS[always_loaded.CONSUMER]
+        population, cap = found[always_loaded.consumer()], always_loaded.caps()[always_loaded.consumer()]
         message = always_loaded.report(population, cap)
         if always_loaded.over(population, cap):
             self.warn(
@@ -439,9 +461,10 @@ class Verifier:
 
     def _check_vendor_pointers(self) -> None:
         """Every vendor pointer file must import its guardrail and link back to AGENTS.md."""
+        vendor_pointers = _vendor_pointers(self.data)
         missing_agents_links = []
         present_pointers = 0
-        for relative, (agents_anchor, required_import) in _VENDOR_POINTERS.items():
+        for relative, (agents_anchor, required_import) in vendor_pointers.items():
             path = self.root / relative
             if not path.is_file():
                 continue  # check_generated_pointers reports stale/missing generated files.
@@ -462,7 +485,7 @@ class Verifier:
                 f"vendor pointer(s) do not point at AGENTS.md: {', '.join(missing_agents_links)}",
                 fix="Re-run akmon sync so every vendor pointer points at AGENTS.md.",
             )
-        elif present_pointers == len(_VENDOR_POINTERS):
+        elif present_pointers == len(vendor_pointers):
             self.ok(
                 "pointers.vendor-agents-link",
                 "vendor pointers point at AGENTS.md",
@@ -641,8 +664,8 @@ class Verifier:
 
     def _check_skill_required_fields(self, relative: str, fields: dict[str, str]) -> None:
         """Every required frontmatter key must be present and non-empty."""
-        missing = [field for field in _SKILL_REQUIRED_FRONTMATTER if field not in fields]
-        empty = [field for field in _SKILL_REQUIRED_FRONTMATTER if field in fields and not fields[field]]
+        missing = [field for field in _skill_required_frontmatter(self.data) if field not in fields]
+        empty = [field for field in _skill_required_frontmatter(self.data) if field in fields and not fields[field]]
         if missing:
             self.error(
                 "skills.required-fields",
@@ -668,10 +691,10 @@ class Verifier:
                 fix=f"Set the frontmatter name to {source.parent.name}.",
             )
         name = fields.get("name", "")
-        if name and (len(name) > _SKILL_NAME_MAX or not _SKILL_NAME_RE.fullmatch(name)):
+        if name and (len(name) > _skill_name_max(self.data) or not _SKILL_NAME_RE.fullmatch(name)):
             self.error(
                 "skills.name-format",
-                f"{relative} frontmatter name {name!r} is not 1-{_SKILL_NAME_MAX} lowercase letters, "
+                f"{relative} frontmatter name {name!r} is not 1-{_skill_name_max(self.data)} lowercase letters, "
                 "digits and single inner hyphens",
                 target=relative,
                 fix="Rename the skill and its directory to lowercase letters, digits and hyphens.",
@@ -680,10 +703,11 @@ class Verifier:
     def _check_skill_description_length(self, relative: str, fields: dict[str, str]) -> None:
         """The description must fit in the trigger budget the Agent Skills standard allows."""
         description = fields.get("description", "")
-        if len(description) > _SKILL_DESCRIPTION_MAX:
+        limit = _skill_description_max(self.data)
+        if len(description) > limit:
             self.error(
                 "skills.description-length",
-                f"{relative} description is {len(description)} characters; the limit is {_SKILL_DESCRIPTION_MAX}",
+                f"{relative} description is {len(description)} characters; the limit is {limit}",
                 target=relative,
                 fix="Shorten the description to the result and the trigger; move detail into the body.",
             )
@@ -734,14 +758,14 @@ class Verifier:
 
     def check_generated_pointers(self) -> None:
         """Check that every generated pointer file matches what sync.py's current plan would write."""
-        files, errors = sync_tool._planned_files(self.root)
+        files, errors = sync_tool._planned_files(self.root, self.sync_data)
         for error in errors:
             self.error(
                 "pointers.generated-plan",
                 error,
                 fix="Resolve the reported planning error, then re-run akmon sync.",
             )
-        result = sync_tool._apply(files, write=False, root=self.root)
+        result = sync_tool._apply(files, write=False, root=self.root, data=self.sync_data)
         if result.changed or result.deleted:
             stale_paths = [*result.changed, *result.deleted]
             stale = ", ".join(str(path.relative_to(self.root)) for path in stale_paths)
@@ -790,7 +814,7 @@ class Verifier:
         if not path.is_file():
             return  # basic layout already reports a missing TASKS.md
         lines = path.read_text(encoding="utf-8").splitlines()
-        if len(lines) > _TASKS_MAX_LINES:
+        if len(lines) > _tasks_max_lines(self.data):
             self.warn(
                 "tasks.index-length",
                 f"{self.aitna}/TASKS.md is {len(lines)} lines; keep it an index "
@@ -801,17 +825,18 @@ class Verifier:
         # Entries are top-level list items. An indented bullet is a note *under* an entry
         # (pipelines/tasks.md), and holding one to the entry grammar reports a defect that is not
         # there — which `lstrip()` here used to do.
+        status_join = " | ".join(_task_statuses(self.data))
         entries = [line for line in lines if line.startswith("- ") and " · " in line]
         if entries:
             statuses = [(self._entry_id(line), self._entry_status(line)) for line in entries]
-            bad = [entry_id for entry_id, status in statuses if status not in _TASK_STATUSES]
+            bad = [entry_id for entry_id, status in statuses if status not in _task_statuses(self.data)]
             if bad:
                 self.warn(
                     "tasks.entry-status",
                     f"{len(bad)} TASKS.md entry(ies) carry a status outside "
-                    f"{' | '.join(_TASK_STATUSES)}: {_sample(bad)}",
+                    f"{status_join}: {_sample(bad)}",
                     target=f"{self.aitna}/TASKS.md",
-                    fix=f"Set each listed entry's status field to one of {' | '.join(_TASK_STATUSES)}.",
+                    fix=f"Set each listed entry's status field to one of {status_join}.",
                 )
             finished = [entry_id for entry_id, status in statuses if status == "done"]
             if finished:
@@ -826,7 +851,7 @@ class Verifier:
                     "tasks.entry-status",
                     "TASKS.md uses well-formed index entries",
                     target=f"{self.aitna}/TASKS.md",
-                    fix=f"Keep every entry's status field within {' | '.join(_TASK_STATUSES)}.",
+                    fix=f"Keep every entry's status field within {status_join}.",
                 )
         if _DATE_RE.search("\n".join(lines)):
             self.warn(
@@ -845,7 +870,7 @@ class Verifier:
         out of the wheel, so their existence in the tree *is* what the wiring rests on. Nothing
         else covers it, and a missing one fails the way every hook failure fails — silently.
         """
-        for script in WIRED_HOOK_SCRIPTS:
+        for script in wired_hook_scripts(self.data):
             self.check_standard_path(f"hooks/{script}")
 
     def check_hook_launcher(self) -> None:
@@ -864,7 +889,7 @@ class Verifier:
         """
         if not sync_tool.is_package_mode(self.root):
             return
-        relative = sync_tool.launcher_relative(self.root)
+        relative = sync_tool.launcher_relative(self.root, self.sync_data)
         if sync_tool.is_executable_file(self.root / relative):
             self.ok(
                 "hooks.launcher",
@@ -873,13 +898,12 @@ class Verifier:
                 fix=f"Keep the akmon dev pin installed into a project-local venv ({relative}).",
             )
             return
+        data = self.data
         self.error(
             "hooks.launcher",
-            f"generated hook wiring calls {relative}, which is missing or not executable — every akmon hook "
-            "command fails silently (an unavailable executable produces no session-visible error), "
-            "so the guardrails are off",
+            jsondata.fill(data["hook_launcher_error"], {"relative": relative}),
             target=relative,
-            fix=("Install the akmon dev pin into a project-local virtualenv, then re-run akmon sync."),
+            fix=data["hook_launcher_error_fix"],
         )
 
     def check_codex_host_trust(self) -> None:
@@ -914,7 +938,7 @@ class Verifier:
             text = (self.root / ".codex" / "hooks.json").read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             return
-        if text != sync_tool._codex_hooks_text(self.root):
+        if text != sync_tool._codex_hooks_text(self.root, self.sync_data):
             return
         expected = expected_codex_hooks(json.loads(text))
         if not expected:
@@ -961,12 +985,7 @@ class Verifier:
         Freshness of the per-user local config is the SessionStart hook's job (it injects
         the re-init instruction); verify only guards the committed contract surface.
         """
-        for relative in (
-            "tools/model_routing/registry.json",
-            "tools/model_routing/routing.py",
-            "tools/model_routing/init.py",
-            "tools/model_routing/second_opinion.py",
-        ):
+        for relative in self.data["routing_shipped_paths"]:
             self.check_standard_path(relative)
         registry_path = self.standard_root / "tools" / "model_routing" / "registry.json"
         if registry_path.is_file():
@@ -1018,14 +1037,14 @@ class Verifier:
         """
         if not isinstance(overlay, dict):
             return
-        for vendor in ("anthropic", "openai"):
+        for vendor in self.data["routing_vendors"]:
             spec = overlay.get(vendor)
             if not isinstance(spec, dict):
                 continue
             second = spec.get("second_opinion")
             if not isinstance(second, dict):
                 continue
-            retired = [key for key in ("cli", "invoke") if key in second]
+            retired = [key for key in self.data["routing_retired_second_opinion_keys"] if key in second]
             if retired:
                 self.error(
                     "routing.second-opinion",
@@ -1036,7 +1055,7 @@ class Verifier:
                 )
 
     def _check_model_routing_registry(self, registry: dict) -> None:
-        for vendor in ("anthropic", "openai"):
+        for vendor in self.data["routing_vendors"]:
             spec = registry.get(vendor)
             if not isinstance(spec, dict):
                 self.error(
@@ -1049,7 +1068,7 @@ class Verifier:
             policy = spec.get("selection_policy")
             if (
                 isinstance(policy, dict)
-                and policy.get("reasoner") in _REASONER_POLICY_VALUES
+                and policy.get("reasoner") in _reasoner_policy_values(self.data)
                 and policy.get("worker") == "lowest"
             ):
                 self.ok(
@@ -1062,15 +1081,15 @@ class Verifier:
                 self.error(
                     "routing.selection-policy",
                     f"model-routing {vendor} needs semantic selection_policy with "
-                    f"worker=lowest and reasoner {' or '.join(_REASONER_POLICY_VALUES)}",
+                    f"worker=lowest and reasoner {' or '.join(_reasoner_policy_values(self.data))}",
                     target=f"tools/model_routing/registry.json#{vendor}",
                     fix=(
                         "Set this vendor's selection_policy to worker=lowest and reasoner "
-                        f"{' or '.join(_REASONER_POLICY_VALUES)}."
+                        f"{' or '.join(_reasoner_policy_values(self.data))}."
                     ),
                 )
             fallback = spec.get("semantic_fallback")
-            fallback_keys = ("worker", "mid", "reasoner", "orchestrator")
+            fallback_keys = self.data["routing_semantic_fallback_keys"]
             if isinstance(fallback, dict) and all(fallback.get(key) for key in fallback_keys):
                 self.ok(
                     "routing.semantic-fallback",
@@ -1094,7 +1113,7 @@ class Verifier:
                     fix="Add a second_opinion object with harness, operation and report_dir to this vendor.",
                 )
                 continue
-            missing = [key for key in ("harness", "operation", "report_dir") if not second.get(key)]
+            missing = [key for key in self.data["routing_second_opinion_keys"] if not second.get(key)]
             if missing:
                 self.error(
                     "routing.second-opinion",
@@ -1122,7 +1141,8 @@ class Verifier:
             )
             return
         text = path.read_text(encoding="utf-8")
-        if "*.env" in text and "!*.env.example" in text:
+        patterns = self.data["gitignore_patterns"]
+        if patterns["env_secret"] in text and patterns["env_example_keep"] in text:
             self.ok(
                 "gitignore.env-secrets",
                 ".gitignore has the akmon env secret pattern",
@@ -1157,7 +1177,7 @@ class Verifier:
                 fix=f"Add {self.akmon}/.gitignore ignoring __pycache__/.",
             )
             return
-        if "__pycache__" in path.read_text(encoding="utf-8"):
+        if self.data["gitignore_patterns"]["pycache"] in path.read_text(encoding="utf-8"):
             self.ok(
                 "gitignore.akmon-pycache",
                 "akmon .gitignore ignores __pycache__",
@@ -1185,15 +1205,13 @@ class Verifier:
             )
             return
         workflow_text = "\n".join(path.read_text(encoding="utf-8") for path in workflows)
-        if sync_tool.is_package_mode(self.root):
-            # Pinned package-mode contract: the CLI, not a path into a mount that doesn't
-            # exist (ADR 0009 §4). Substring match so `uv run akmon sync --check` etc. pass.
-            required = ("akmon sync --check", "akmon verify --strict")
-        else:
-            required = (
-                f"python3 {self.akmon}/bin/sync.py --check",
-                f"python3 {self.akmon}/bin/verify.py --strict",
-            )
+        # Pinned package-mode contract: the CLI, not a path into a mount that doesn't
+        # exist (ADR 0009 §4). Substring match so `uv run akmon sync --check` etc. pass.
+        variant = "package" if sync_tool.is_package_mode(self.root) else "mounted"
+        required = tuple(
+            jsondata.fill(command, {"akmon": self.akmon})
+            for command in self.data["ci_required_commands"][variant]
+        )
         missing = [command for command in required if command not in workflow_text]
         if missing:
             self.warn(
@@ -1222,8 +1240,8 @@ class Verifier:
             # consumer's integration surface) — not meaningful to re-check per consumer.
             self.ok(
                 "changelog.package-mode",
-                "package mode: changelog discipline is owned by the akmon repository",
-                fix="Track the standard's changelog discipline in the akmon repository itself.",
+                self.data["changelog_package_mode"],
+                fix=self.data["changelog_package_mode_fix"],
             )
             return
         path = self.root / self.akmon / "CHANGELOG.md"
@@ -1326,7 +1344,7 @@ class Verifier:
             )
             return
         fields = sync_tool.read_akmon_toml(path)
-        required = ("akmon_version", "attached_archetype", "last_realign")
+        required = self.data["record_required_keys"]
         missing = [key for key in required if not fields.get(key)]
         if missing:
             self.error(
@@ -1430,21 +1448,20 @@ class Verifier:
         try:
             table = read_akmon_toml_strict(sync_tool.aitna_root(self.root) / ".akmon.toml").get("check")
         except RecordError as exc:
-            self.error("check.config", str(exc), target=CONFIG_TARGET, fix="Repair the record so it parses as TOML")
+            self.error("check.config", str(exc), target=config_target(), fix=repair_record_verify_fix())
             return
         if table is None:
             return
         checks, problems = read_checks(table)
         for problem in problems:
-            self.error(
-                "check.config", problem, target=CONFIG_TARGET, fix="Correct or remove the entry the message names"
-            )
+            self.error("check.config", problem, target=config_target(), fix=correct_entry_fix())
         if not problems:
+            message, fix = check_table_ok()
             self.ok(
                 "check.config",
-                f"[check] declares {len(checks)} check(s), each a command that splits into arguments",
-                target=CONFIG_TARGET,
-                fix="Keep every [check] entry a command the project can run",
+                jsondata.fill(message, {"count": len(checks)}),
+                target=config_target(),
+                fix=fix,
             )
 
 

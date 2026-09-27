@@ -9,26 +9,38 @@ from pathlib import Path
 from typing import Any
 
 from hook_core import (
-    EDIT_TOOL,
-    READ_TOOL,
     HookResult,
+    edit_tool,
     find_project_root,
     hook_failure_diagnostic,
     hook_failure_notice,
+    read_tool,
 )
 
-# Claude Code's file-editing tool names → akmon's neutral edit-tool kind.
-EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit"})
-# Claude Code's read/sweep tool names → akmon's neutral read-tool kind.
-READ_TOOLS = frozenset({"Read", "Grep", "Glob"})
+from common import jsondata  # hook_core put the tree root on sys.path
+
+
+def _vocabulary() -> dict[str, Any]:
+    """The hook vocabulary table beside this module (C102): vendor tool names and document keys."""
+    return jsondata.read(Path(__file__).parent / "vocabulary.json")
+
+
+def _edit_tools() -> frozenset[str]:
+    """Claude Code's file-editing tool names (hooks/vocabulary.json, C102)."""
+    return frozenset(_vocabulary()["claude"]["edit_tools"])
+
+
+def _read_tools() -> frozenset[str]:
+    """Claude Code's read/sweep tool names (hooks/vocabulary.json, C102)."""
+    return frozenset(_vocabulary()["claude"]["read_tools"])
 
 
 def normalize_tool(name: str) -> str:
     """Map a Claude tool name to the neutral kind hook_core expects; pass others through."""
-    if name in EDIT_TOOLS:
-        return EDIT_TOOL
-    if name in READ_TOOLS:
-        return READ_TOOL
+    if name in _edit_tools():
+        return edit_tool()
+    if name in _read_tools():
+        return read_tool()
     return name
 
 
@@ -52,27 +64,33 @@ def project_root(payload: dict[str, Any]) -> Path:
     return find_project_root(Path(cwd) if isinstance(cwd, str) and cwd else None)
 
 
+def _document_keys() -> dict[str, str]:
+    """The hook document-shape key table (hooks/vocabulary.json, C102)."""
+    return _vocabulary()["document_keys"]
+
+
 def render_result(result: HookResult | None) -> str | None:
     """The one JSON document Claude Code reads for ``result``, or ``None`` when there is none."""
     if result is None:
         return None
 
-    output: dict[str, Any] = {"hookEventName": result.event_name}
+    keys = _document_keys()
+    output: dict[str, Any] = {keys["event_name"]: result.event_name}
     if result.additional_context is not None:
-        output["additionalContext"] = result.additional_context
+        output[keys["additional_context"]] = result.additional_context
     if result.permission_decision is not None:
-        output["permissionDecision"] = result.permission_decision
+        output[keys["permission_decision"]] = result.permission_decision
     if result.permission_reason is not None:
-        output["permissionDecisionReason"] = result.permission_reason
+        output[keys["permission_reason"]] = result.permission_reason
 
-    top_level: dict[str, Any] = {"hookSpecificOutput": output}
+    top_level: dict[str, Any] = {keys["hook_specific_output"]: output}
     if result.decision is not None:
         # Stop's own shape: `decision` and `reason` are read at the top level, not inside
         # `hookSpecificOutput`, and Claude Code refuses a block without a non-empty reason.
-        top_level["decision"] = result.decision
-        top_level["reason"] = result.reason or ""
+        top_level[keys["decision"]] = result.decision
+        top_level[keys["reason"]] = result.reason or ""
     if result.system_message is not None:
-        top_level["systemMessage"] = result.system_message
+        top_level[keys["system_message"]] = result.system_message
 
     return json.dumps(top_level)
 
@@ -104,6 +122,8 @@ def run_guarded(hook_name: str, decide: Callable[[], HookResult | None]) -> int:
         document = render_result(decide())
     except Exception as exc:  # noqa: BLE001 — crash-open: every failure is reported, none blocks
         print(hook_failure_diagnostic(hook_name, exc), file=sys.stderr)
+        # A literal key, not the vocabulary.json table: the crash path reads no data file, since a
+        # missing or broken one may be the very failure it reports (C102 review F1).
         document = json.dumps({"systemMessage": hook_failure_notice(hook_name, exc)})
     if document is not None:
         print(document)

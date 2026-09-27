@@ -572,8 +572,42 @@ def _expected_generated_modality(binary: str, per_vendor: dict) -> str:
     return REQUIRED
 
 
+def _data_loaders(tree: ast.Module) -> set[str]:
+    """Module-level functions whose body returns ``jsondata.read(...)``: the data-file loaders."""
+    loaders = set()
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for statement in node.body:
+            value = statement.value if isinstance(statement, ast.Return) else None
+            if (
+                isinstance(value, ast.Call)
+                and isinstance(value.func, ast.Attribute)
+                and value.func.attr == "read"
+                and isinstance(value.func.value, ast.Name)
+                and value.func.value.id == "jsondata"
+            ):
+                loaders.add(node.name)
+    return loaders
+
+
+def _is_data_table_key(node: ast.Constant, parent: dict, loaders: set[str]) -> bool:
+    """Whether ``node`` keys the table a data-file loader returned: ``_loader()["claude"]``."""
+    subscript = parent.get(node)
+    if not isinstance(subscript, ast.Subscript) or subscript.slice is not node:
+        return False
+    call = subscript.value
+    return isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id in loaders
+
+
 def own_tool_literals(root: Path, binaries: Iterable[str]) -> list:
-    """Sources outside the map that spell a harness binary as a bare string constant."""
+    """Sources outside the map that spell a harness binary as a bare string constant.
+
+    One spelling does not count (C102): the key into the table a module's own data-file loader
+    returns — ``_vocabulary()["claude"]`` — because that table's data file is the owner of the
+    fact and the literal only names which row to read. A key into any other mapping (a local
+    dict, a variable, a parameter) still counts: it may be a second owner.
+    """
     wanted = set(binaries)
     owner = (root / "bin" / "runtime.py").resolve()
     offenders = []
@@ -588,10 +622,14 @@ def own_tool_literals(root: Path, binaries: Iterable[str]) -> list:
                 tree = ast.parse(path.read_text(encoding="utf-8"))
             except (OSError, SyntaxError):
                 continue
+            parent = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+            loaders = _data_loaders(tree)
             offenders.extend(
                 (path.relative_to(root).as_posix(), node.lineno, node.value)
                 for node in ast.walk(tree)
-                if isinstance(node, ast.Constant) and node.value in wanted
+                if isinstance(node, ast.Constant)
+                and node.value in wanted
+                and not _is_data_table_key(node, parent, loaders)
             )
     return offenders
 
@@ -617,8 +655,8 @@ def generated_wiring(root: Path) -> dict:
 def check_declared_runtimes(root: Path) -> list:
     """The join over akmon's own declaration, map and wiring — what ``self_ci`` calls."""
     return check_runtime(
-        declarations=runtime_declaration.DECLARED_RUNTIMES,
-        harness_commands=runtime_declaration.HARNESS_COMMANDS,
+        declarations=runtime_declaration.declared_runtimes(),
+        harness_commands=runtime_declaration.harness_commands(),
         wiring=generated_wiring(root),
         root=root,
     )

@@ -30,17 +30,43 @@ import os
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
+
+from common import jsondata
 
 #: A day: longer than a working session, short enough that a crashed or reused session id does
 #: not suppress a diagnostic for long.
 MARKER_MAX_AGE_SECONDS = 24 * 60 * 60
 
-_UNIDENTIFIED = ("", "nosession")
+
+def _data() -> dict[str, Any]:
+    """The marker data file beside this module (C102): name shape, kinds, unidentified, state-file templates."""
+    return jsondata.read(Path(__file__).parent / "markers.json")
+
+
+def _unidentified() -> tuple[str, ...]:
+    return ("", _data()["unidentified"])
 
 
 def _marker_path(kind: str, identity: str, directory: Path | None) -> Path:
-    digest = hashlib.sha256(identity.encode()).hexdigest()[:20]
-    return (directory or Path(tempfile.gettempdir())) / f"akmon-{kind}-{digest}"
+    data = _data()
+    digest = hashlib.sha256(identity.encode()).hexdigest()[: data["name_sha256_tail"]]
+    return (directory or Path(tempfile.gettempdir())) / f"{data['name_prefix']}{kind}-{digest}"
+
+
+def marker_kind(stem: str) -> str:
+    """The tempdir kind spelling for one vocabulary stem (the table is owned by markers.json, C102)."""
+    return _data()["kinds"][stem]
+
+
+def unidentified_identity() -> str:
+    """The literal identity payload readers substitute when a session is unknown (C102)."""
+    return _data()["unidentified"]
+
+
+def delegation_state_name(which: str, identity: str) -> str:
+    """One of the delegation drift state-file names for ``identity``: counter, marker, ask_marker (C102)."""
+    return jsondata.fill(_data()["delegation_state_files"][which], {"identity": identity})
 
 
 def _is_stale(marker: Path, now: float) -> bool:
@@ -61,7 +87,7 @@ def claim_diagnostic_marker(kind: str, identity: str | None, *, directory: Path 
     - **event-level** diagnostics report a defect in one call, so they throttle by a
       session/tool-use pair — a second malformed call stays visible.
     """
-    if not identity or identity in _UNIDENTIFIED:
+    if not identity or identity in _unidentified():
         return True  # no identity to throttle by: repeat rather than hide the diagnostic
     marker = _marker_path(kind, identity, directory)
     for _attempt in range(2):
@@ -93,12 +119,12 @@ def release_diagnostic_markers(
     clearing it, or moving to a new condition, re-arms the notice for a later recurrence.
     ``keep_kind`` spares the marker just claimed.
     """
-    if not identity or identity in _UNIDENTIFIED:
+    if not identity or identity in _unidentified():
         return
     keep = _marker_path(keep_kind, identity, directory).name if keep_kind else None
     suffix = _marker_path(kind_prefix, identity, directory).name.rsplit("-", 1)[1]
     folder = directory or Path(tempfile.gettempdir())
-    for marker in folder.glob(f"akmon-{kind_prefix}*-{suffix}"):
+    for marker in folder.glob(f"{_data()['name_prefix']}{kind_prefix}*-{suffix}"):
         if marker.name != keep:
             with contextlib.suppress(OSError):
                 marker.unlink()

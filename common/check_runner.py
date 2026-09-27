@@ -25,13 +25,66 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from common.findings import Finding
+from common import jsondata
+from common.findings import Finding, read_findings_data
 from common.project_root import aitna_root_name
 
-CONFIG_TARGET = ".akmon.toml [check]"
-FILES_PLACEHOLDER = "{files}"
-DEFAULT_FILES = ("*.py",)
 _SPEC_KEYS = {"command", "files"}
+
+
+def _check_data() -> dict:
+    """The ``[check]`` texts, the git argv and the problem templates, as the data file carries them."""
+    return jsondata.read(Path(__file__).parent / "check_runner.json")
+
+
+def config_target() -> str:
+    """The target a ``check.config`` finding names."""
+    return _check_data()["config_target"]
+
+
+def files_placeholder() -> str:
+    """The placeholder a command replaces with the files a run covers."""
+    return _check_data()["files_placeholder"]
+
+
+def default_files() -> tuple[str, ...]:
+    """The file patterns a check covers when it names none."""
+    return tuple(_check_data()["default_files"])
+
+
+def repair_record_fix() -> str:
+    """The ``check.config`` fix ``akmon check`` gives for an unparseable record."""
+    return _check_data()["check_config"]["repair_record"]
+
+
+def repair_record_verify_fix() -> str:
+    """The ``check.config`` fix ``verify`` gives for an unparseable record."""
+    return _check_data()["check_config"]["repair_record_verify"]
+
+
+def correct_entry_fix() -> str:
+    """The ``check.config`` fix both ``akmon check`` and ``verify`` give for a malformed entry."""
+    return _check_data()["check_config"]["correct_entry"]
+
+
+def no_checks() -> tuple[str, str]:
+    """The ``(message, fix)`` ``akmon check`` gives when the record names no checks at all."""
+    data = _check_data()["check_config"]
+    return data["no_checks"], data["no_checks_fix"]
+
+
+def scope_fix() -> str:
+    """The ``check.scope`` fix ``akmon check`` gives when the changed files cannot be listed."""
+    return _check_data()["check_config"]["scope_fix"]
+
+
+def check_table_ok() -> tuple[str, str]:
+    """The ``(message, fix)`` ``verify``'s ``[check]`` table check gives when every entry is sound.
+
+    The message carries the ``{{count}}`` placeholder ``verify`` fills with the table's size.
+    """
+    data = _check_data()["check_config"]
+    return data["check_table_ok"], data["check_table_ok_fix"]
 
 
 @dataclass(frozen=True)
@@ -40,7 +93,11 @@ class Check:
 
     name: str
     argv: tuple[str, ...]
-    files: tuple[str, ...] = DEFAULT_FILES
+    files: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.files:
+            object.__setattr__(self, "files", default_files())
 
 
 class ScopeError(RuntimeError):
@@ -59,29 +116,30 @@ def read_checks(table: object) -> tuple[list[Check], list[str]]:
     """
     if table is None:
         return [], []
+    problems_data = _check_data()["problems"]
     if not isinstance(table, Mapping):
-        return [], ["[check] must be a table of named commands"]
+        return [], [problems_data["not_table"]]
     checks, problems = [], []
     for name, value in table.items():
         spec = {"command": value} if isinstance(value, str) else value
         if not isinstance(spec, Mapping):
-            problems.append(f"[check].{name} must be a command string or a table with `command`")
+            problems.append(jsondata.fill(problems_data["bad_entry"], {"name": str(name)}))
             continue
         unknown = sorted(set(spec) - _SPEC_KEYS)
         if unknown:
-            problems.append(f"[check].{name} has an unknown key {unknown[0]!r}")
+            problems.append(jsondata.fill(problems_data["unknown_key"], {"name": str(name), "key": repr(unknown[0])}))
             continue
-        command, files = spec.get("command"), spec.get("files", list(DEFAULT_FILES))
+        command, files = spec.get("command"), spec.get("files", list(default_files()))
         if not isinstance(command, str) or not command.strip():
-            problems.append(f"[check].{name} needs a non-empty `command`")
+            problems.append(jsondata.fill(problems_data["needs_command"], {"name": str(name)}))
             continue
         if not _string_list(files):
-            problems.append(f"[check].{name}.files must be a non-empty list of glob patterns")
+            problems.append(jsondata.fill(problems_data["bad_files"], {"name": str(name)}))
             continue
         try:
             argv = tuple(shlex.split(command))
         except ValueError as exc:
-            problems.append(f"[check].{name} command does not split into arguments: {exc}")
+            problems.append(jsondata.fill(problems_data["unsplit_command"], {"name": str(name), "error": str(exc)}))
             continue
         checks.append(Check(str(name), argv, tuple(files)))
     return checks, problems
@@ -89,19 +147,24 @@ def read_checks(table: object) -> tuple[list[Check], list[str]]:
 
 def changed_files(root: Path) -> list[str]:
     """Files that differ from ``HEAD`` or are new and not ignored — never the dev layer."""
+    data = _check_data()
     names = []
-    for args in (("diff", "--name-only", "-z", "HEAD", "--"), ("ls-files", "--others", "--exclude-standard", "-z")):
+    for args in data["git_commands"]:
         # The message names the git command and its outcome, never the interpreter's exception
-        # text: it is spec shared with the JavaScript implementation (ADR 0020 D03).
+        # text: it is spec shared with the JavaScript implementation (ADR 0020 D03). The argv
+        # carries -z (NUL separators); the display line strips it.
         command = "git " + " ".join(arg for arg in args if arg != "-z")
         try:
             result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False)
         except OSError as exc:
             reason = errno.errorcode.get(exc.errno or 0, "not runnable")
-            raise ScopeError(f"cannot list the files changed against HEAD: git cannot be run ({reason})") from exc
+            raise ScopeError(jsondata.fill(data["scope_error"]["git_unrunnable"], {"reason": reason})) from exc
         if result.returncode != 0:
             raise ScopeError(
-                f"cannot list the files changed against HEAD: `{command}` exited with status {result.returncode}"
+                jsondata.fill(
+                    data["scope_error"]["git_failed"],
+                    {"command": command, "returncode": str(result.returncode)},
+                )
             )
         names += [name for name in result.stdout.decode("utf-8", "replace").split("\0") if name]
     dev_layer = f"{aitna_root_name()}/"
@@ -110,7 +173,8 @@ def changed_files(root: Path) -> list[str]:
 
 def argv_for(check: Check, changed: list[str] | None) -> list[str] | None:
     """The argv one run executes, or ``None`` when ``--changed`` left it nothing to check."""
-    if FILES_PLACEHOLDER not in check.argv:
+    placeholder = files_placeholder()
+    if placeholder not in check.argv:
         return list(check.argv)
     if changed is None:
         files = ["."]
@@ -120,7 +184,7 @@ def argv_for(check: Check, changed: list[str] | None) -> list[str] | None:
             return None
     argv: list[str] = []
     for part in check.argv:
-        argv.extend(files if part == FILES_PLACEHOLDER else [part])
+        argv.extend(files if part == placeholder else [part])
     return argv
 
 
@@ -132,43 +196,54 @@ def run_checks(
 ) -> list[Finding]:
     """Run every check in declaration order; the command's own output goes straight through."""
     findings = []
+    runs = _check_data()["check_run"]
+    record = read_findings_data()  # one read of the envelope's vocabulary per run, not per finding
     for check in checks:
         target = f"[check].{check.name}"
         argv = argv_for(check, changed)
         if argv is None:
-            findings.append(
-                Finding(
-                    "ok",
-                    "check.run",
-                    "no changed file it checks",
-                    target,
-                    "Nothing to do until a matching file changes",
-                )
-            )
+            nothing = runs["nothing_to_do"]
+            findings.append(Finding("ok", "check.run", nothing["message"], target, nothing["fix"], data=record))
             continue
         try:
             result = runner(argv, cwd=root, check=False)
         except FileNotFoundError:
+            not_installed = runs["not_installed"]
             findings.append(
                 Finding(
                     "error",
                     "check.run",
-                    f"`{argv[0]}` is not installed or not on PATH, so the check did not run",
+                    jsondata.fill(not_installed["message"], {"command": argv[0]}),
                     target,
-                    f"Install `{argv[0]}` in the project's environment or change the command under {target}",
+                    jsondata.fill(not_installed["fix"], {"command": argv[0], "target": target}),
+                    data=record,
                 )
             )
             continue
         if result.returncode == 0:
-            findings.append(Finding("ok", "check.run", f"`{shlex.join(argv)}` passed", target, "Keep it passing"))
+            passed = runs["passed"]
+            findings.append(
+                Finding(
+                    "ok",
+                    "check.run",
+                    jsondata.fill(passed["message"], {"command": shlex.join(argv)}),
+                    target,
+                    passed["fix"],
+                    data=record,
+                )
+            )
         else:
+            failed = runs["failed"]
             findings.append(
                 Finding(
                     "error",
                     "check.run",
-                    f"`{shlex.join(argv)}` exited {result.returncode}",
+                    jsondata.fill(
+                        failed["message"], {"command": shlex.join(argv), "returncode": str(result.returncode)}
+                    ),
                     target,
-                    "Fix what the command reported above, or change its configuration in the project",
+                    failed["fix"],
+                    data=record,
                 )
             )
     return findings

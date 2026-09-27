@@ -11,6 +11,8 @@ from __future__ import annotations
 from claude_adapter import load_payload, normalize_tool, project_root, run_guarded
 from hook_core import HookResult, role_on_code_result
 
+from common.markers import unidentified_identity  # hook_core puts the tree root on sys.path
+
 
 def _decide() -> HookResult | None:
     payload = load_payload()
@@ -18,7 +20,7 @@ def _decide() -> HookResult | None:
     return role_on_code_result(
         tool_name=normalize_tool(str(payload.get("tool_name") or "")),
         file_path=tool_input.get("file_path"),
-        session_id=str(payload.get("session_id") or "nosession"),
+        session_id=str(payload.get("session_id") or unidentified_identity()),
         project_root=project_root(payload),
     )
 

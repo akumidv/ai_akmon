@@ -6,21 +6,24 @@ map assembled from the delegation log by code) plus a CLI smoke test with scopin
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
 
 import pytest
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
+_ROUTING_DIR = _AKMON / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
     sys.path.insert(0, str(_ROUTING_DIR))
 
 import coverage_map  # noqa: E402
 import routing  # noqa: E402
+
+from common import jsondata  # noqa: E402
 
 #: Fixed across every test entry — no test varies these, only zone/subagent/model.
 _TS = "T0"
@@ -102,7 +105,7 @@ def test_cli_scopes_by_session_and_writes(tmp_path, capsys):
     root = tmp_path
     (root / "AGENTS.md").write_text("x", encoding="utf-8")
     (root / "_aitna" / "akmon").mkdir(parents=True)
-    log = root / routing.DELEGATION_LOG_REL
+    log = root / routing.delegation_log_rel()
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(
         "T0\tsess-1\tk_explorer\tsmall\tauth\tcheck tokens\nT1\tsess-2\tk_explorer\tsmall\tpricing\tother session\n",
@@ -130,7 +133,7 @@ def test_the_default_map_path_follows_the_configured_dev_layer_root(tmp_path, mo
     root = tmp_path
     (root / "AGENTS.md").write_text("x", encoding="utf-8")
     (root / "tools" / "ai" / "akmon").mkdir(parents=True)
-    log = root / routing.DELEGATION_LOG_REL
+    log = root / routing.delegation_log_rel()
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text("T0\tsess-1\tk_explorer\tsmall\tauth\tcheck tokens\n", encoding="utf-8")
 
@@ -151,7 +154,7 @@ def _log_project(tmp_path, rows):
     root = tmp_path
     (root / "AGENTS.md").write_text("x", encoding="utf-8")
     (root / "_aitna" / "akmon").mkdir(parents=True)
-    log = root / routing.DELEGATION_LOG_REL
+    log = root / routing.delegation_log_rel()
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text("".join(f"{row}\n" for row in rows), encoding="utf-8")
     return root
@@ -290,3 +293,32 @@ def test_a_naive_bound_is_read_in_local_time_not_utc(tmp_path, capsys, utc_plus_
     args = ["--project-root", str(root), "--session", "sess-1", "--out", str(root / "m.md")]
     assert coverage_map.main([*args, "--until", "2026-09-01"]) == 0
     assert "entries=1" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------------------
+# C102: gate.json — the coverage-map half (shared with gate_pack)
+# --------------------------------------------------------------------------------------
+
+
+def test_coverage_map_loader_reads_exactly_gate_json(monkeypatch):
+    seen: list[Path] = []
+
+    def spy(path: Path):
+        seen.append(path)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    coverage_map.unlabelled_marker()
+    assert len(seen) == 1
+    assert seen[0] == _ROUTING_DIR / "gate.json"
+
+
+def test_a_missing_gate_json_raises_from_build_coverage_map(monkeypatch):
+    def broken(path: Path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        coverage_map.build_coverage_map([_entry("auth")], None)
+    with pytest.raises(jsondata.DataFileError):
+        coverage_map._describe_scope("s1", [])

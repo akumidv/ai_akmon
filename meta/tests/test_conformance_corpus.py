@@ -22,10 +22,10 @@ from pathlib import Path
 
 import pytest
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_CONFORMANCE = _KEYSTONE / "meta" / "conformance"
+_CONFORMANCE = _AKMON / "meta" / "conformance"
 
 
 def _load(name: str, path: Path):
@@ -52,7 +52,7 @@ finally:
     if _foreign_coverage is not None:
         sys.modules["coverage"] = _foreign_coverage
 
-release_check = _load("conformance_release_check", _KEYSTONE / "tools" / "release" / "release_check.py")
+release_check = _load("conformance_release_check", _AKMON / "tools" / "release" / "release_check.py")
 
 DAY = "2026-09-27"
 ROOT = "/w/proj-x"
@@ -316,6 +316,74 @@ def test_tree_remove_of_an_absent_path_is_refused(tmp_path):
         corpus._tree_with_overrides(tmp_path / "tree", tmp_path, "cli/demo", "1.0", fixture)
 
 
+# --- 3b. shipped JSON registration (C102) ------------------------------------------
+
+self_ci = _load("conformance_self_ci", _AKMON / "meta" / "self_ci.py")
+
+#: Directories where a reader's shipped JSON sibling lives (C102). Every ``*.json`` found here
+#: must reach a consumer through both the corpus snapshot and self-CI's synthetic fixture tree,
+#: or a newly added data file silently drops out of one of them: nothing else fails. None of
+#: these directories carries a JSON test fixture today (checked: only readers' own data files
+#: turn up) — if one ever does, exclude it here by name with the reason, the way the corpus
+#: snapshot excludes its prose stand-ins.
+_DATA_JSON_DIRS = ("bin", "common", "hooks", "tools", "src/akmon")
+
+
+def _shipped_json_files() -> list[str]:
+    """Every ``*.json`` under the shipped directories, repo-relative posix paths."""
+    found = []
+    for base in _DATA_JSON_DIRS:
+        found.extend(
+            path.relative_to(_AKMON).as_posix()
+            for path in sorted((_AKMON / base).rglob("*.json"))
+            if "__pycache__" not in path.parts
+        )
+    return found
+
+
+def test_every_shipped_json_file_is_in_the_corpus_snapshot():
+    """An unregistered JSON file is invisible to the corpus forever: it never reaches the
+    snapshot a scenario's fixture is built from, so its reader is exercised against nothing."""
+    listed = set(corpus.SNAPSHOT_FILES) | {f"hooks/{name}" for name in corpus.snapshot_hooks(_AKMON)}
+    missing = [path for path in _shipped_json_files() if path not in listed]
+    assert not missing, f"missing from corpus.SNAPSHOT_FILES: {missing}"
+
+
+def test_every_snapshot_json_entry_exists_on_disk():
+    """The reverse: a renamed or deleted data file must not linger in SNAPSHOT_FILES."""
+    dangling = [path for path in corpus.SNAPSHOT_FILES if path.endswith(".json") and not (_AKMON / path).is_file()]
+    assert not dangling, f"corpus.SNAPSHOT_FILES names a JSON absent from disk: {dangling}"
+
+
+def test_every_shipped_json_file_is_in_the_self_ci_fixture(tmp_path):
+    """Same silent-drop risk on the other consumer of a file list: self-CI's synthetic tree.
+
+    Calls the real ``self_ci._make_fixture`` into a scratch root rather than re-deriving its
+    file list by parsing source or duplicating a local copy of it — the production function
+    stays the single owner of the list, and this only checks its observable effect (the files it
+    materializes), the least brittle option for a list local to a function body.
+    """
+    self_ci._make_fixture(tmp_path, _AKMON)
+    mounted = tmp_path / "_aitna" / "akmon"
+    missing = [path for path in _shipped_json_files() if not (mounted / path).is_file()]
+    assert not missing, f"missing from self_ci._make_fixture's file list: {missing}"
+
+
+def test_every_self_ci_fixture_json_entry_exists_on_disk(tmp_path):
+    """The reverse for self-CI: ``_write`` falls back to a literal placeholder body for a listed
+    relative path whose source is not a real file, so a materialized JSON holding that
+    placeholder marks a stale entry in ``_make_fixture``'s file list rather than a real data file.
+    """
+    self_ci._make_fixture(tmp_path, _AKMON)
+    mounted = tmp_path / "_aitna" / "akmon"
+    placeholders = [
+        path.relative_to(mounted).as_posix()
+        for path in sorted(mounted.rglob("*.json"))
+        if path.read_text(encoding="utf-8") == "fixture placeholder\n"
+    ]
+    assert not placeholders, f"self_ci._make_fixture wrote a placeholder for a missing source: {placeholders}"
+
+
 # --- 4. runner comparison ---------------------------------------------------------
 
 _OWNED = frozenset({"hooks.launcher"})
@@ -452,8 +520,8 @@ def test_display_verify_is_the_akmon_command():
     assert release_check._display(command) == "akmon verify --strict"
 
 
-def test_display_keystone_script_is_relative():
-    script = release_check.KEYSTONE_ROOT / "tools" / "tasks" / "archive.py"
+def test_display_akmon_script_is_relative():
+    script = release_check.AKMON_ROOT / "tools" / "tasks" / "archive.py"
     assert release_check._display([sys.executable, str(script), "--check"]) == "python3 tools/tasks/archive.py --check"
 
 

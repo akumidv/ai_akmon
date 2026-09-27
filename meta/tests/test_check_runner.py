@@ -16,7 +16,7 @@ from pathlib import Path
 import check as check_cli
 import pytest
 
-from common import check_runner
+from common import check_runner, jsondata
 from common.check_runner import Check
 
 
@@ -139,3 +139,55 @@ def test_verify_validates_the_check_table_and_runs_nothing(tmp_path):
     verifier = verify.Verifier(root)
     verifier.check_check_config()
     assert [(f.severity, f.code) for f in verifier.findings] == [("ok", "check.config")]
+
+
+# --------------------------------------------------------------------------------------
+# common/check_runner.json — the shared owner of the [check] texts (C102)
+# --------------------------------------------------------------------------------------
+
+
+def test_check_runner_json_carries_the_shared_texts():
+    data = json.loads((Path(check_runner.__file__).parent / "check_runner.json").read_text(encoding="utf-8"))
+    assert set(data) == {
+        "config_target",
+        "files_placeholder",
+        "default_files",
+        "check_config",
+        "check_run",
+        "scope_error",
+        "git_commands",
+        "problems",
+    }
+    assert data["config_target"] == ".akmon.toml [check]"
+    assert data["files_placeholder"] == "{files}"
+    assert data["default_files"] == ["*.py"]
+    assert data["git_commands"][0] == ["diff", "--name-only", "-z", "HEAD", "--"]
+    assert data["check_run"]["failed"]["message"] == "`{{command}}` exited {{returncode}}"
+    assert data["problems"]["bad_files"] == "[check].{{name}}.files must be a non-empty list of glob patterns"
+
+
+def test_the_loader_reads_exactly_check_runner_json(monkeypatch):
+    seen: list[Path] = []
+    real_read = jsondata.read
+
+    def capture(path):
+        seen.append(path)
+        return real_read(path)
+
+    monkeypatch.setattr(jsondata, "read", capture)
+    for loader in (check_runner.config_target, check_runner.files_placeholder, check_runner.default_files):
+        loader()
+    assert seen == [Path(check_runner.__file__).with_name("check_runner.json")] * 3
+
+
+def test_a_missing_data_file_fails_from_the_public_functions(monkeypatch):
+    def broken(path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        check_runner.config_target()
+    with pytest.raises(jsondata.DataFileError):
+        check_runner.read_checks("not a table")
+    with pytest.raises(jsondata.DataFileError):
+        Check("name", ("command",))

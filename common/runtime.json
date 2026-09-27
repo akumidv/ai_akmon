@@ -1,0 +1,26 @@
+{
+  "harness_commands": {
+    "claude": {
+      "binary": "claude",
+      "operations": {
+        "version": ["--version"],
+        "review": ["-p", "--output-format", "text"]
+      }
+    },
+    "codex": {
+      "binary": "codex",
+      "operations": {
+        "version": ["--version"],
+        "review": ["exec"],
+        "hooks-list": ["app-server"]
+      }
+    }
+  },
+  "declared_runtimes": [
+    ["POSIX shell", "generated-wiring", "required"],
+    ["python3", "generated-wiring", "required"],
+    ["git", "generated-wiring", "required-on:codex"],
+    ["claude", "akmon-own-tooling", "optional"],
+    ["codex", "akmon-own-tooling", "optional"]
+  ]
+}

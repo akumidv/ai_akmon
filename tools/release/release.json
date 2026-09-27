@@ -1,0 +1,143 @@
+{
+  "changelog_name": "CHANGELOG.md",
+  "pyproject_name": "pyproject.toml",
+  "static_version_file": "src/akmon/__init__.py",
+  "subjects": [
+    "akmon",
+    "package"
+  ],
+  "run_state": {
+    "git_not_found": "(git not found)",
+    "git_status_failed": "(git status failed: {{exc}})",
+    "git_clean": "(clean)",
+    "file_missing": "{{name}}: (missing)",
+    "file_entry_count": "{{name}}: {{count}} entry(ies)",
+    "done_move_note": "  ! {{count}} 'done' entry(ies) in live TASKS.md — move to TASKS_ARCHIVE.md",
+    "changelog_sections": "CHANGELOG.md sections:",
+    "changelog_section_item": "  - {{heading}}",
+    "changelog_no_unreleased": "  ! no `## Unreleased` section — add one for pending changes",
+    "state_header": "== release state (subject: {{subject}}) ==",
+    "project_root_line": "project root: {{root}}",
+    "charter_found": "found",
+    "charter_missing": "MISSING — add it for project-specific release commands",
+    "charter_line": "release charter: {{charter}} ({{note}})",
+    "git_status_header": "git status (short) [{{name}}]:"
+  },
+  "run_check": {
+    "cross_check_header": "== version ↔ changelog cross-check",
+    "charter_runs_note": "# package release: run the project's own checks from {{charter}}",
+    "charter_runs_note_suffix": "# (tests / lint / build — this tool does not guess them).",
+    "charter_missing_note": "! {{charter}} is missing — add it with the project's release commands.",
+    "failed_header": "RELEASE CHECK FAILED:",
+    "failed_item": "  - {{item}}",
+    "all_green": "release check: all green",
+    "version_check_failed_item": "version ↔ changelog cross-check"
+  },
+  "findings": {
+    "version-literals-match": {
+      "message": "{{pyproject}} and {{static_version_file}} both declare {{declared}}",
+      "fix": "Bump both literals together — one release bump is two edits."
+    },
+    "version-literals-mismatch": {
+      "message": "{{pyproject}} declares {{declared}} while {{static_version_file}} declares {{fallback}}",
+      "fix": "Set both literals to the same string — one release bump is two edits."
+    },
+    "no-version-source": {
+      "message": "no version source: neither {{pyproject}} [project].version nor {{static_version_file}} _STATIC_VERSION is present",
+      "fix": "Ignore this on a project that carries no Python version literal, and add one otherwise."
+    },
+    "changelog-absent": {
+      "message": "{{changelog}} is absent, so version {{version}} was compared against nothing",
+      "fix": "Add {{changelog}} so a consumer can read the window before accepting a pin."
+    },
+    "window-nonfinal-ok": {
+      "message": "non-final version {{version}} sits above a topmost `## Unreleased` heading",
+      "fix": "Keep `## Unreleased` topmost while the version is non-final."
+    },
+    "window-nonfinal-heading": "the topmost heading is `## {{heading}}`",
+    "window-nonfinal-none": "it carries no heading",
+    "window-nonfinal-error": {
+      "message": "non-final version {{version}} but {{observed}}",
+      "fix": "Add a topmost `## Unreleased` heading, or make the version final."
+    },
+    "window-final-no-released": {
+      "message": "final version {{version}} but {{changelog}} carries no released heading",
+      "fix": "Cut the `## Unreleased` heading to `## v{{base}}` before tagging."
+    },
+    "window-final-topmost-mismatch": {
+      "message": "final version {{version}} but the topmost released heading is `## {{topmost}}`",
+      "fix": "Cut a `## v{{base}}` heading above `## {{topmost}}` before tagging."
+    },
+    "window-final-ok": {
+      "message": "final version {{version}} matches the topmost released heading `## {{topmost}}`",
+      "fix": "Keep the topmost released heading equal to the version being built."
+    },
+    "git-unavailable-final": {
+      "message": "git is unavailable, so whether {{version}} is already tagged is unknown",
+      "fix": "Run this where git can read the repository to detect a re-release."
+    },
+    "git-unavailable-tags": {
+      "message": "git is unavailable, so no tag was checked for a {{changelog}} heading",
+      "fix": "Run this where git can read the repository to check tag coverage."
+    },
+    "tag-spelling": {
+      "message": "tag {{tag}} names a version but is not spelled v{{tag}}",
+      "fix": "Cut release tags as v{{tag}} — that spelling is the release tag's only form."
+    },
+    "retag": {
+      "message": "final version {{version}} is already tagged as {{tag}}",
+      "fix": "Confirm this is a deliberate re-release, or bump the version."
+    },
+    "changelog-absent-tags": {
+      "message": "{{changelog}} is absent, so no tag was checked for a heading",
+      "fix": "Add {{changelog}} so the tags already cut can be checked against it."
+    },
+    "undocumented-tag": {
+      "message": "tag {{tag}} has no `## {{tag}}` heading in {{changelog}}",
+      "fix": "Add the `## {{tag}}` section it released, or accept the historical gap."
+    }
+  },
+  "run_plan": {
+    "error_version": "error: version must look like vX.Y.Z, got {{version}}",
+    "header": [
+      "# Owner-run release plan (D5 — prepared by the release role, executed by the owner).",
+      "# Stage files EXPLICITLY — never `git add -A` — so untracked noise",
+      "# (e.g. __pycache__/) is not swept into the release commit."
+    ],
+    "bump_note": [
+      "# 1. Bump the version to {{literal}} in BOTH literals — one release bump is two edits,",
+      "#    and the tag records the reviewed state rather than producing the number:"
+    ],
+    "changelog_note": "# 2. Cut CHANGELOG.md's `## Unreleased` section to `## {{version}}`.",
+    "recheck_note": "# 3. Re-run --check: the version <-> changelog cross-check must be green before the tag.",
+    "git_status_line": "git status                      # confirm: no __pycache__/ or stray files staged",
+    "commit_line": "git commit -m \"{{subject}} {{version}}\"",
+    "tag_line": "git tag {{version}}              # the tag points at THIS commit, not a prior HEAD",
+    "push_line": "git push origin main --tags",
+    "cycle_note": [
+      "# 4. After the push, reopen the cycle: set both literals to the next development",
+      "#    version (`<next>.dev0`) and add a fresh `## Unreleased` heading. Until then the",
+      "#    tree is a released {{literal}} whose tag exists, which --check reports as a re-release."
+    ],
+    "closing": "# This tool does not run any of the above. The owner executes them.",
+    "subjects": {
+      "akmon": {
+        "commit_subject": "akmon",
+        "staged_files": "CHANGELOG.md pyproject.toml src/akmon/__init__.py",
+        "cd_line": "cd {{aitna_root}}/akmon            # tag is cut from the submodule's own tree",
+        "literal_lines": [
+          "#      pyproject.toml           version = \"{{literal}}\"",
+          "#      src/akmon/__init__.py    _STATIC_VERSION = \"{{literal}}\""
+        ],
+        "staged_line": "git add {{staged}}"
+      },
+      "package": {
+        "commit_subject": "release",
+        "staged_files": "CHANGELOG.md",
+        "literal_line": "#      the project's own version literal(s), per {{charter}}",
+        "staged_line": "git add {{staged}}            # + the project's version literal(s) and reviewed edits",
+        "publish_note": "# package also: build + publish per {{charter}} (owner-run)."
+      }
+    }
+  }
+}

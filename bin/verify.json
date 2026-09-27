@@ -1,0 +1,168 @@
+{
+  "wired_hook_scripts": [
+    "hook_core.py",
+    "claude_adapter.py",
+    "codex_adapter.py",
+    "codex-hook.py",
+    "git-commit-guard.py",
+    "session-start-agent.py",
+    "role-on-code.py",
+    "analysis-guard.py",
+    "model-routing.py",
+    "delegation-log.py",
+    "delegation-nudge.py",
+    "gate-audit.py"
+  ],
+  "basic_layout_consumer_paths": [
+    "AGENTS.md",
+    "{{aitna}}/TASKS.md"
+  ],
+  "basic_layout_standard_paths": [
+    "README.md",
+    "BOOTSTRAP.md",
+    "ARCHETYPES.md",
+    "CHANGELOG.md",
+    "MODEL.md",
+    "CAPABILITIES.md",
+    "roles/README.md",
+    "roles/review.md",
+    "roles/architect.md",
+    "roles/engineer.md",
+    "roles/learn.md",
+    "roles/release.md",
+    "guardrails/_common.md",
+    "pipelines/pre-commit.md",
+    "pipelines/code-flow.md",
+    "pipelines/design-flow.md",
+    "pipelines/release.md",
+    "pipelines/tasks.md",
+    "bin/sync.py",
+    "bin/verify.py"
+  ],
+  "agents_anchors": {
+    "package": {
+      "akmon block": "{{heading}}",
+      "guardrails import": "{{aitna}}/.akmon/guardrails/_common.md",
+      "akmon path pointer": "akmon path",
+      "archetype link": "ARCHETYPES.md",
+      "memory rule": "{{aitna}}/memory",
+      "owner owns commits directive": "D5",
+      "secrets rule": ".env"
+    },
+    "mounted": {
+      "akmon block": "{{heading}}",
+      "model link": "{{akmon}}/README.md",
+      "archetype link": "ARCHETYPES.md",
+      "role link": "{{akmon}}/roles/",
+      "memory rule": "{{aitna}}/memory",
+      "owner owns commits directive": "D5",
+      "secrets rule": ".env"
+    }
+  },
+  "vendor_pointers": {
+    "CLAUDE.md": [
+      "AGENTS.md",
+      "@AGENTS.md"
+    ],
+    ".github/copilot-instructions.md": [
+      "AGENTS.md",
+      null
+    ],
+    "GEMINI.md": [
+      "AGENTS.md",
+      null
+    ],
+    ".codex/README.md": [
+      "AGENTS.md",
+      null
+    ]
+  },
+  "use_operative_globs": [
+    "roles/*.md",
+    "pipelines/*.md",
+    "guardrails/*.md",
+    "profiles/*.md",
+    "skills/**/*.md",
+    "tools/**/*.md"
+  ],
+  "use_operative_files": [
+    "ARCHETYPES.md",
+    "BOOTSTRAP.md",
+    "MODEL.md"
+  ],
+  "dev_path_tokens": [
+    "meta/",
+    "decisions/",
+    "reviews/",
+    "ROADMAP",
+    "CONCEPT",
+    "self_ci"
+  ],
+  "skill_required_frontmatter": [
+    "name",
+    "description",
+    "metadata.owner"
+  ],
+  "skill_name_max": 64,
+  "skill_description_max": 1024,
+  "routing_shipped_paths": [
+    "tools/model_routing/registry.json",
+    "tools/model_routing/routing.py",
+    "tools/model_routing/init.py",
+    "tools/model_routing/second_opinion.py"
+  ],
+  "routing_vendors": [
+    "anthropic",
+    "openai"
+  ],
+  "routing_semantic_fallback_keys": [
+    "worker",
+    "mid",
+    "reasoner",
+    "orchestrator"
+  ],
+  "routing_second_opinion_keys": [
+    "harness",
+    "operation",
+    "report_dir"
+  ],
+  "routing_retired_second_opinion_keys": [
+    "cli",
+    "invoke"
+  ],
+  "reasoner_policy_values": [
+    "orchestrator",
+    "highest"
+  ],
+  "gitignore_patterns": {
+    "env_secret": "*.env",
+    "env_example_keep": "!*.env.example",
+    "pycache": "__pycache__"
+  },
+  "ci_required_commands": {
+    "package": [
+      "akmon sync --check",
+      "akmon verify --strict"
+    ],
+    "mounted": [
+      "python3 {{akmon}}/bin/sync.py --check",
+      "python3 {{akmon}}/bin/verify.py --strict"
+    ]
+  },
+  "record_required_keys": [
+    "akmon_version",
+    "attached_archetype",
+    "last_realign"
+  ],
+  "task_statuses": [
+    "active",
+    "blocked",
+    "deferred",
+    "done"
+  ],
+  "tasks_max_lines": 200,
+  "hook_launcher_error": "generated hook wiring calls {{relative}}, which is missing or not executable — every akmon hook command fails silently (an unavailable executable produces no session-visible error), so the guardrails are off",
+  "hook_launcher_error_fix": "Install the akmon dev pin into a project-local virtualenv, then re-run akmon sync.",
+  "changelog_package_mode": "package mode: changelog discipline is owned by the akmon repository",
+  "changelog_package_mode_fix": "Track the standard's changelog discipline in the akmon repository itself."
+}

@@ -7,19 +7,22 @@ of the filesystem, except for the CLI test which needs files to read.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_ROUTING_DIR = _KEYSTONE / "tools" / "model_routing"
+_ROUTING_DIR = _AKMON / "tools" / "model_routing"
 if str(_ROUTING_DIR) not in sys.path:
     sys.path.insert(0, str(_ROUTING_DIR))
 
 import gate_pack  # noqa: E402
+
+from common import jsondata  # noqa: E402
 
 # --------------------------------------------------------------------------------------
 # build_full_pack
@@ -38,7 +41,7 @@ def test_full_pack_review_header_and_sections():
     assert "# Gate-pack — code-verify" in pack
     assert "role: review" in pack
     assert "kind: full" in pack
-    assert f"Question: {gate_pack.ROLE_QUESTION['review']}" in pack
+    assert f"Question: {gate_pack.role_question()['review']}" in pack
     assert "## Yardstick (acceptance condition)" in pack
     assert "Acceptance: the endpoint returns 200 for valid input." in pack
     assert "## Artifacts" in pack
@@ -78,7 +81,7 @@ def test_full_pack_architect_optional_sections_present_and_absent():
             dep_graph="a.py -> b.py -> c.py",
         ),
     )
-    assert f"Question: {gate_pack.ROLE_QUESTION['architect']}" in with_extras
+    assert f"Question: {gate_pack.role_question()['architect']}" in with_extras
     assert "## Decisions register" in with_extras
     assert "Decision: use option 1 for storage." in with_extras
     assert "## Dependency-graph excerpt" in with_extras
@@ -204,3 +207,61 @@ def test_the_default_report_path_follows_the_configured_dev_layer_root(monkeypat
     written = sorted((tmp_path / "tools" / "ai" / "artifacts" / "gates").glob("*.md"))
     assert len(written) == 1
     assert not (tmp_path / "_aitna").exists()
+
+
+# --------------------------------------------------------------------------------------
+# C102: gate.json — the shared gate-pack and coverage-map texts
+# --------------------------------------------------------------------------------------
+
+
+def test_gate_data_pins_the_structure_and_characteristic_texts():
+    data = json.loads((_ROUTING_DIR / "gate.json").read_text(encoding="utf-8"))
+    assert set(data) == {
+        "gate_rules",
+        "gate_pack",
+        "coverage_map",
+        "truncation_suffix_pack",
+        "truncation_suffix_report",
+    }
+    assert [rule["trigger"] for rule in data["gate_rules"]] == ["review_min_findings", "architect_min_options"]
+    assert data["gate_rules"][0]["headings"] == ["finding"]
+    assert data["gate_rules"][1]["headings"] == ["option", "alternative"]
+    pack = data["gate_pack"]
+    assert pack["role_question"]["review"] == (
+        "What contradicts across these findings? Which zone or seam is uncovered by the fan-out?"
+    )
+    assert pack["kind_full"] == "kind: full"
+    assert pack["kind_plan_check"] == "kind: plan-check"
+    assert pack["artifacts_empty_sentinel"] == "_No artifacts supplied._"
+    assert pack["coverage_empty_sentinel"] == "_Coverage map not provided (assemble via coverage_map.py)._"
+    assert data["truncation_suffix_pack"] == "\n...[truncated; see full pack]"
+    assert data["truncation_suffix_report"] == "\n...[truncated; see full report]"
+    cmap = data["coverage_map"]
+    assert cmap["table_header"] == ["| zone | workers | count |", "|------|---------|-------|"]
+    assert cmap["unlabelled_marker"] == "(unlabelled)"
+    assert cmap["empty_sentinel"] == "_No delegations in scope._"
+
+
+def test_gate_pack_loader_reads_exactly_gate_json(monkeypatch):
+    seen: list[Path] = []
+
+    def spy(path: Path):
+        seen.append(path)
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(jsondata, "read", spy)
+    gate_pack.role_question()
+    gate_pack.plan_check_question()
+    assert len(seen) == 2
+    assert all(path == _ROUTING_DIR / "gate.json" for path in seen)
+
+
+def test_a_missing_gate_json_raises_from_the_builders(monkeypatch):
+    def broken(path: Path):
+        raise jsondata.DataFileError(f"akmon data file missing: {path}")
+
+    monkeypatch.setattr(jsondata, "read", broken)
+    with pytest.raises(jsondata.DataFileError):
+        gate_pack.build_full_pack("g", "review", "y", [])
+    with pytest.raises(jsondata.DataFileError):
+        gate_pack._digest("x" * 2000)

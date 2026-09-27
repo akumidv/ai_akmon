@@ -14,10 +14,10 @@ import importlib.util
 import sys
 from pathlib import Path
 
-_KEYSTONE = next(
+_AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_spec = importlib.util.spec_from_file_location("akmon_validate", _KEYSTONE / "meta" / "bin" / "validate.py")
+_spec = importlib.util.spec_from_file_location("akmon_validate", _AKMON / "meta" / "bin" / "validate.py")
 validate = importlib.util.module_from_spec(_spec)
 # Registered before ``exec_module``: the module uses ``from __future__ import annotations`` with a
 # dataclass, whose string-annotation resolution looks itself up in ``sys.modules`` while the class

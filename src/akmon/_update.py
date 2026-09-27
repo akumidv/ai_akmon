@@ -34,12 +34,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 from akmon import __version__, _init, _tree, cli
 
 # `git fetch` of the release tags is the one step that waits on the network without a bound of
 # its own; `uv add` and `uvx` carry their own.
 _FETCH_TIMEOUT_SECONDS = 300
+
+
+def _jsondata() -> ModuleType:
+    """The embedded tree's ``common.jsondata`` — the one reader of the shared update data."""
+    return cli._embedded_common_module(_tree.embedded_tree_root(), "jsondata")
+
+
+def _data() -> Any:
+    """The shared update text and tables (``update.json``, beside this module), read on the call.
+
+    Never at import time, with no module-level cache and no swallowed ``DataFileError`` (C102).
+    """
+    return _jsondata().read(Path(__file__).parent / "update.json")
 
 
 class _UpdateError(Exception):
@@ -61,22 +75,29 @@ def _versions() -> ModuleType:
 
 
 def _plan(current: str | None, target: str, *, explicit: bool) -> _Plan:
-    """Compare the recorded version with the target; the pin moves back only when ``--ref`` says so."""
+    """Compare the recorded version with the target; the pin moves back only when ``--ref`` says so.
+
+    The six note texts live in ``update.json`` (``plan_notes``), keyed by the branch taken.
+    """
     versions = _versions()
+    jsondata = _jsondata()
+    notes = _data()["plan_notes"]
     then = versions.order_key(target)
     now = versions.order_key(current) if current else None
     if then is None:
-        move, note = True, f"moving to {target} — not a release version, so no direction is checked"
+        move, note = True, jsondata.fill(notes["not_a_release"], {"target": target})
     elif now is None:
-        move, note = True, f"moving to {target} — the record names no comparable version ({current or 'none'})"
+        move, note = True, jsondata.fill(
+            notes["record_no_version"], {"target": target, "current": current or "none"}
+        )
     elif then > now:
-        move, note = True, f"{current} → {target}"
+        move, note = True, jsondata.fill(notes["forward"], {"current": current, "target": target})
     elif then == now:
-        move, note = False, f"already at {target} — realigning only"
+        move, note = False, jsondata.fill(notes["already"], {"target": target})
     elif explicit:
-        move, note = True, f"rolling back {current} → {target}, as --ref asks"
+        move, note = True, jsondata.fill(notes["rollback"], {"current": current, "target": target})
     else:
-        move, note = False, f"{current} is past the newest release {target} — the pin stays; pass --ref to move it"
+        move, note = False, jsondata.fill(notes["past_newest"], {"current": current, "target": target})
     return _Plan(target=target, current=current, move=move, note=note)
 
 
@@ -134,8 +155,10 @@ def _update_package(root: Path, aitna: str, plan: _Plan, repo: str) -> _Moved:
         command = ["uv", "add", *raw, "--group", _pin_group(root), f"akmon @ git+{repo}@{plan.target}"]
         if shutil.which("uv") is None:
             raise _UpdateError(
-                "mode 'package' moves the pin with uv, and `uv` is not on PATH. With another manager, point the pin "
-                f"at {plan.target} and install it, then run `akmon init`; with uv:\n    {shlex.join(command)}"
+                _jsondata().fill(
+                    _data()["package_uv_missing"],
+                    {"target": plan.target, "command": shlex.join(command)},
+                )
             )
         _log(f"moving the pin: {shlex.join(command)}")
         code = _run(command, root)
@@ -143,8 +166,9 @@ def _update_package(root: Path, aitna: str, plan: _Plan, repo: str) -> _Moved:
             raise _UpdateError(f"`uv add` failed ({code}) — see its output above")
     if not launcher.is_file():
         raise _UpdateError(
-            f"{launcher.relative_to(root)} does not exist — mode 'package' runs akmon from the project's own "
-            "virtualenv; `uv sync` installs it"
+            _jsondata().fill(
+                _data()["package_launcher_missing"], {"launcher": str(launcher.relative_to(root))}
+            )
         )
     return _run([str(launcher), "init", "--project-root", str(root), "--yes"], root), launcher
 
@@ -183,15 +207,15 @@ def _update_vendored(root: Path, aitna: str, plan: _Plan, repo: str) -> _Moved:
         return _init.main(["--project-root", str(root), "--yes"]), None
     if not plan.move and not (ref and versions.is_final(ref)):
         raise _UpdateError(
-            f"mode 'vendored' copies the tree of the akmon CLI that runs init, and the recorded {ref or 'version'} is "
-            "not a release this can fetch — realign with that version's own CLI, or pass --ref to move"
+            _jsondata().fill(_data()["vendored_not_fetchable"], {"recorded": ref or "version"})
         )
     tag = ref if plan.move else f"v{versions.split_version(ref)[0]}"
     command = ["uvx", "--from", f"git+{repo}@{tag}", "akmon", "init", "--project-root", str(root), "--yes"]
     if shutil.which("uvx") is None:
         raise _UpdateError(
-            f"mode 'vendored' copies the tree of the akmon CLI that runs init, so {tag} needs its own CLI, and `uvx` "
-            f"(uv) is not on PATH to fetch it. Run that version's init, e.g.:\n    {shlex.join(command)}"
+            _jsondata().fill(
+                _data()["vendored_uvx_missing"], {"tag": tag, "command": shlex.join(command)}
+            )
         )
     _log(f"running init from akmon {tag}: {shlex.join(command)}")
     return _run(command, root), None
@@ -201,12 +225,13 @@ def _update_subtree(root: Path, aitna: str, plan: _Plan, repo: str) -> _Moved:
     """Realign in place; a move is ``git subtree pull``, which commits, so it is printed instead."""
     if not plan.move:
         return _init.main(["--project-root", str(root), "--yes", "--ref", str(plan.current)]), None
-    raise _UpdateError(
-        "mode 'subtree' moves with one command update must not run for you — `git subtree pull` creates commits, "
-        "and commits are the owner's (D5). Run it, then realign:\n"
-        f"    git subtree pull --prefix {aitna}/akmon {repo} {plan.target} --squash\n"
-        f"    akmon init --ref {plan.target}"
-    )
+    jsondata = _jsondata()
+    data = _data()
+    commands = [
+        jsondata.fill(data["subtree_pull_command"], {"aitna": aitna, "repo": repo, "target": plan.target}),
+        jsondata.fill(data["subtree_realign_command"], {"target": plan.target}),
+    ]
+    raise _UpdateError(data["subtree_refusal"] + "\n" + "\n".join(commands))
 
 
 _UPDATERS: dict[str, Callable[[Path, str, _Plan, str], _Moved]] = {
@@ -224,38 +249,43 @@ _UPDATERS: dict[str, Callable[[Path, str, _Plan, str], _Moved]] = {
 
 def _checks(root: Path, launcher: Path | None) -> int:
     """``sync --check``, then ``verify --strict``, run by the tree that now governs; the first failure."""
-    for script, flag in (("sync", "--check"), ("verify", "--strict")):
+    jsondata = _jsondata()
+    data = _data()
+    for script, flag in data["checks"]:
         argv = [flag, "--project-root", str(root)]
-        _log(f"running {script} {flag}")
+        _log(jsondata.fill(data["checks_running"], {"script": script, "flag": flag}))
         code = _run([str(launcher), script, *argv], root) if launcher else cli._dispatch(script, argv, cwd=root)
         if code != 0:
-            print(f"akmon update: `{script} {flag}` failed ({code}) — the update is not finished", file=sys.stderr)
+            print(
+                jsondata.fill(data["checks_failed"], {"script": script, "flag": flag, "code": code}),
+                file=sys.stderr,
+            )
             return code
     return 0
 
 
 def _closing(root: Path, aitna: str, mode: str, plan: _Plan, last_realign: str | None) -> None:
+    """What the update leaves to the owner (``update.json``, ``closing_*``), one numbered line each."""
+    jsondata = _jsondata()
+    data = _data()
     steps = []
     if plan.move:
         steps.append(
-            f"read CHANGELOG.md after {last_realign or plan.current or 'the previous version'} up to {plan.target}: "
-            "each Breaking or Migration line there is a checklist item for this project"
+            jsondata.fill(
+                data["closing_changelog"],
+                {"last": last_realign or plan.current or "the previous version", "target": plan.target},
+            )
         )
     staged = "`pyproject.toml` and `uv.lock`" if mode == "package" else f"`{aitna}/akmon`"
-    steps.append(
-        f"review `git diff` and stage {staged} with the generated files that changed — the commit is the owner's (D5)"
-    )
+    steps.append(jsondata.fill(data["closing_review"], {"staged": staged}))
     if plan.move:
-        steps.append(f"record the bump in this project — a `{aitna}/TASKS_ARCHIVE.md` line or its own changelog")
+        steps.append(jsondata.fill(data["closing_bump"], {"aitna": aitna}))
     if (root / ".codex" / "hooks.json").is_file():
-        steps.append(
-            "Codex: if `.codex/hooks.json` changed, re-approve its hooks with /hooks — a changed entry runs nothing "
-            "until then"
-        )
+        steps.append(data["closing_codex"])
     print()
-    _log("left to you:")
+    _log(data["closing_left_to_you"])
     for index, step in enumerate(steps, start=1):
-        print(f"  {index}. {step}", flush=True)
+        print(jsondata.fill(data["closing_step"], {"index": index, "step": step}), flush=True)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -269,7 +299,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ref", help="Release to move to (default: the newest release tag; an older one rolls back).")
     parser.add_argument("--project-root", type=Path, help="Project to update. Defaults to the current directory.")
     parser.add_argument("--aitna-root", help="Dev-layer root, project-root-relative (default: AITNA_ROOT or _aitna).")
-    parser.add_argument("--repo", default=_init.AKMON_REPO, help=f"akmon repository URL (default: {_init.AKMON_REPO}).")
+    repo = _init.akmon_repo()
+    parser.add_argument("--repo", default=repo, help=f"akmon repository URL (default: {repo}).")
     return parser
 
 
@@ -283,19 +314,20 @@ def main(argv: list[str] | None = None) -> int:
         mode = _init._recorded_mount(root, aitna)
         if mode not in _UPDATERS:
             raise _UpdateError(
-                f"{root} records no akmon attach (no mount mode in the integration record under {aitna}/) — "
-                "attach it with `akmon init`"
+                _jsondata().fill(_data()["missing_record"], {"root": str(root), "aitna": aitna})
             )
         current, last_realign = _recorded_versions(root, aitna)
         target = args.ref or _init._package_default_ref(args.repo, root)
         plan = _plan(current, target, explicit=args.ref is not None)
-        _log(f"{root} · mount mode {mode} · {plan.note}")
+        _log(
+            _jsondata().fill(_data()["banner"], {"root": str(root), "mode": mode, "note": plan.note})
+        )
         code, launcher = _UPDATERS[mode](root, aitna, plan, args.repo)
     except (_UpdateError, _init._InitError) as exc:
         print(f"akmon update: {exc}", file=sys.stderr)
         return 2
     if code != 0:
-        print(f"akmon update: init failed ({code}); see its output above", file=sys.stderr)
+        print(_jsondata().fill(_data()["init_failed"], {"code": code}), file=sys.stderr)
         return code
     code = _checks(root, launcher)
     _closing(root, aitna, mode, plan, last_realign)

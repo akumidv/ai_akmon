@@ -19,6 +19,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from claude_adapter import load_payload, run_guarded
 from hook_core import HookResult, akmon_runtime_root, find_project_root
@@ -27,10 +28,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools" / "model
 
 import routing
 
+from common import jsondata  # hook_core put the tree root on sys.path
+
 
 def _load_config(root: Path) -> dict:
     """This project's recorded binding (one reader, ``routing.read_local_config``)."""
     return routing.read_local_config(root)
+
+
+def _log_data() -> dict[str, Any]:
+    """The delegation-log data file beside this module (C102).
+
+    The system-message fragments and the advisory warning prefix.
+    """
+    return jsondata.read(Path(__file__).parent / "delegation_log.json")
 
 
 def _format_system_message(line: str) -> str:
@@ -39,13 +50,16 @@ def _format_system_message(line: str) -> str:
     padded = (parts + [None] * 6)[:6]
     _timestamp, _session_id, subagent, model, zone, description = padded
 
-    msg = f"[akmon] → {subagent}"
+    # The fragment texts are owned by hooks/delegation_log.json (C102); the assembly order and
+    # the empty-part rules stay here.
+    data = _log_data()
+    msg = jsondata.fill(data["subagent_prefix"], {"subagent": subagent})
     if model:
-        msg += f" ({model})"
+        msg += jsondata.fill(data["model_suffix"], {"model": model})
     if zone:
-        msg += f" [{zone}]"
+        msg += jsondata.fill(data["zone_suffix"], {"zone": zone})
     if description:
-        msg += f": {description}"
+        msg += jsondata.fill(data["description_suffix"], {"description": description})
     return msg
 
 
@@ -73,7 +87,7 @@ def _decide() -> HookResult | None:
     )
     if line is None:
         return None
-    log_path = root / routing.DELEGATION_LOG_REL
+    log_path = root / routing.delegation_log_rel()
     # C33 — read this session's earlier delegations before the new line joins them.
     earlier = (
         routing.parse_delegation_entries(log_path.read_text(encoding="utf-8").splitlines())
@@ -91,14 +105,15 @@ def _decide() -> HookResult | None:
     registry = routing.load_registry(akmon_runtime_root(root), root)
     role = routing.active_role(payload.get("transcript_path"))
     warning = routing.role_matrix_warning(registry, subagent_type, role)
+    warn_prefix = _log_data()["warning_prefix"]
     if warning:
-        messages.append(f"[akmon] ⚠ {warning}")
+        messages.append(jsondata.fill(warn_prefix, {"warning": warning}))
     # C32 — the recorded task-kind floors are otherwise read by nothing at delegation time.
     floor_warning = routing.delegation_floor_warning(config, subagent_type, tool_input.get("model"))
     if floor_warning:
-        messages.append(f"[akmon] ⚠ {floor_warning}")
+        messages.append(jsondata.fill(warn_prefix, {"warning": floor_warning}))
     if zone_warning:
-        messages.append(f"[akmon] ⚠ {zone_warning}")
+        messages.append(jsondata.fill(warn_prefix, {"warning": zone_warning}))
     return HookResult(event_name="PreToolUse", system_message="\n".join(messages))
 
 

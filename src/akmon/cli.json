@@ -1,0 +1,13 @@
+{
+  "epilog": "commands:\n  init      attach the standard to a project (mount + layout + sync + routing)\n  update    move the project to another akmon release, then realign it (init + checks)\n  sync      sync generated agent pointers (bin/sync.py)\n  verify    verify a consuming project's USE contract (bin/verify.py)\n  check     run the checks the project declares in .akmon.toml [check] (bin/check.py)\n  path      print the resolved standard-tree root\n  hook      run a hook from the resolved standard tree (called by generated wiring)\n  version   print the akmon package version\n\nsync/verify/init/update accept their own flags, passed through verbatim, e.g.:\n  akmon init --mode package\n  akmon update --ref v0.4.0\n  akmon sync --check\n  akmon verify --strict\n  akmon init --help\n",
+  "dispatched_commands": [
+    "check",
+    "sync",
+    "verify"
+  ],
+  "hook_missing_name": "akmon hook: missing hook name",
+  "hook_path_refused": "akmon hook: {{name}} is a path; name the hook instead (e.g. 'role-on-code')",
+  "hook_unknown": "akmon hook: unknown hook {{name}}; available: {{available}}",
+  "skew_version": "akmon: CLI is {{cli_version}}, mounted/pinned standard is {{pinned}} — the mounted tree governs.",
+  "skew_commits": "akmon: mounted/pinned standard is {{pinned}}, {{ahead}} {{commits}} past the tag this CLI matches — the mounted tree governs."
+}
