@@ -1,0 +1,28 @@
+id = "tools/second-opinion-dry-run"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# --dry-run with no recorded config: the ladder's other-vendor step resolves the opposite
+# vendor (model None, its CLI default), and the tool prints the full command, the target
+# report path (stamp in the name — normalized to {{ts}}) and the provider instead of running
+# it. The non-dry-run success path shells out to the external CLI and is out of the hermetic
+# corpus.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--gate",
+  "design-align",
+  "--gate-pack",
+  "docs/gate-pack.md",
+  "--dry-run",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "claude -p --output-format text You are an independent second-opinion reviewer for a akmon verify gate.\n\nGate: design-align\n\nRules:\n- Review only; do not edit files, run commands, commit, push, or approve on behalf of the owner.\n- Return: verdict, key disagreements or risks, missing verification, and concrete file/line references when available.\n- Treat the result as advisory input to owner verification, not a sign-off.\n\nMaterial to review:\nGate material: findings A and B, against yardstick Y.\n\n\nreport: .codex/second-opinion/design-align-{{ts}}.md\nprovider=anthropic model=(default)\n"

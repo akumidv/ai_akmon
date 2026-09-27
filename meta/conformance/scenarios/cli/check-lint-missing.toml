@@ -1,0 +1,17 @@
+id = "cli/check-lint-missing"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:check", "code:check.run"]
+
+[fixture]
+attach = "native"
+name = "base"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nlast_realign = \"{{version}}\"\nattached_archetype = \"demo\"\n\n[check]\nlint = \"nosuchcheck-never-installed {files}\"\n" }
+
+[run]
+argv = ["check"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "ERROR check.run [check].lint: `nosuchcheck-never-installed` is not installed or not on PATH, so the check did not run → Install `nosuchcheck-never-installed` in the project's environment or change the command under [check].lint\n"

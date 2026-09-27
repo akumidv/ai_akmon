@@ -1,0 +1,12 @@
+id = "cli/path-mounted"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:path"]
+
+[run]
+argv = ["path"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{{tree}}\n"

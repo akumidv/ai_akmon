@@ -1,0 +1,23 @@
+id = "tools/init-overlay-error"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/init"]
+
+# A project overlay whose briefs key matches no agent (BriefError, C50): two stderr error
+# lines, exit 2, and nothing is written — regenerating without the brief would drop
+# hand-authored project instructions, so the whole run is refused.
+
+[fixture.files]
+"_aitna/model-routing.json" = """
+{"briefs": {"k_nobody": "Project-specific brief."}}
+"""
+
+[run]
+tool = "model_routing/init"
+argv = []
+
+[expected]
+exit = 2
+stderr = "error: overlay brief key 'k_nobody' matches no agent (known: k_auditor, k_explorer, k_implementer, k_mechanic, k_reasoner, k_validator)\nerror: fix _aitna/model-routing.json; no files were written\n"
+stdout = ""
+file_absent = [".claude/model-routing.local.json"]

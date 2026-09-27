@@ -1,0 +1,8 @@
+name: CI
+on: [push]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - run: python3 _aitna/akmon/bin/sync.py --check
+      - run: python3 _aitna/akmon/bin/verify.py --strict

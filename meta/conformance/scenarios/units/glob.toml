@@ -1,0 +1,8 @@
+id = "units/glob"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:glob"]
+
+[run]
+probe = "glob"
+table = "glob.toml"

@@ -1,0 +1,15 @@
+id = "cli/hook-unknown"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:hook"]
+
+[fixture]
+attach = "none"
+
+[run]
+argv = ["hook", "no-such-hook"]
+
+[expected]
+exit = 2
+stderr = "akmon hook: unknown hook 'no-such-hook'; available: analysis-guard, claude_adapter, codex-hook, codex_adapter, delegation-log, delegation-nudge, gate-audit, git-commit-guard, hook_core, model-routing, role-on-code, session-start-agent\n"
+stdout = ""

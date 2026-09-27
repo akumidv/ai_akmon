@@ -1,0 +1,29 @@
+# A Task delegation appends one TSV line (timestamp · session · subagent · model · zone ·
+# description) to .claude/model-routing.log — the zone is parsed off the leading
+# [zone:auth] marker — and the owner sees a systemMessage naming the call. No context
+# injection (no additionalContext), no decision.
+id = "hooks/delegation-log-append"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:delegation-log"]
+
+[run]
+script = "delegation-log"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Task"
+session_id = "sess-dl-1"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { subagent_type = "k_mechanic", description = "[zone:auth] check tokens" }
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+systemMessage = "[akmon] → k_mechanic [auth]: check tokens"
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+[expected.files]
+".claude/model-routing.log" = "{{ts}}\tsess-dl-1\tk_mechanic\t-\tauth\tcheck tokens\n"

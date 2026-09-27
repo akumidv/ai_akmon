@@ -1,0 +1,33 @@
+id = "tools/second-opinion-skip"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# Ladder exhausted: the recorded provider pins the orchestrating vendor (the other-vendor step
+# is skipped by design) and the project overlay has removed same-vendor-other-model from the
+# diversity ladder, so no step resolves and the tool prints the skip notice and exits 0
+# without running any external CLI. The gate is refused, never downgraded to a same-model
+# reviewer.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+"_aitna/model-routing.json" = """
+{"second_opinion_policy": {"diversity_ladder": ["other-vendor"]}}
+"""
+".claude/model-routing.local.json" = """
+{"orchestrator": "strongest", "binding": {"auditor": "strongest"}, "second_opinion": true, "second_opinion_provider": "openai"}
+"""
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--gate",
+  "design-align",
+  "--gate-pack",
+  "docs/gate-pack.md",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "second-opinion: skipped at gate 'design-align' — ladder exhausted, no model-diverse reviewer is reachable.\n  why: other-vendor: skipped because second_opinion_provider pins 'openai', the orchestrating vendor, though anthropic is configured; same-vendor-other-model: not attempted, it is absent from the configured ladder.\n  not downgraded: a reviewer on the author's own weights repeats the author's systematic errors and agrees confidently, which is indistinguishable from a review.\n  what you can still run by hand: hand this gate pack to a subagent on this same model in a fresh context (no session history, no prior reasoning).\n  its limits, to record with any result: it removes anchoring on the author's own output; it does not remove shared model priors. It is a self-check, not a second opinion, and must not be filed as one.\n"

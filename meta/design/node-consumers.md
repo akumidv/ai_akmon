@@ -46,7 +46,7 @@ Python coupling outside the code itself:
 | Hook launcher | `bin/sync.py:269`, `bin/sync.py:277` | `.venv/bin/akmon` console script |
 | Update | `src/akmon/_update.py:126` | `uv add` only |
 | Check detection | `src/akmon/_init.py:882` `_TOOLS`, `src/akmon/_init.py:918` `_run_prefix` | ruff/flake8/pylint/mypy; `uv run`/`poetry run` |
-| Default check patterns | `common/check_runner.py:32` | `*.py` |
+| Default check patterns | `common/check_runner.py::DEFAULT_FILES` | `*.py` |
 | Ruleset offer | `src/akmon/_init.py:927` | ruff `extend` only |
 | CI template | `src/akmon/_init.py:692` | `uv run akmon …` |
 | Runtime contract | `common/runtime.py:6` | `python3` on PATH for every consumer |
@@ -124,6 +124,15 @@ through the project's package manager:
   materialized. **Tool and rules: A35**, after a baseline on a real Node repository. Until then a
   Node project chooses between `own` and `none`.
 
+**Landscape probe, 2026-09-26** ([MEASUREMENTS.md M100–M101](../MEASUREMENTS.md)): on npm
+`eslint` is at 10.11.0 (v10 latest), `@biomejs/biome` at 2.5.14 (the unscoped `biome` name is an
+unrelated package), `oxlint` 1.85.0, `prettier` 3.9.9, `typescript` 7.0.2 — the native line is
+`latest`, and its `tsc --checkJs --noEmit --allowJs` caught a planted JSDoc argument-type error,
+so ADR 0020 D04's checkJs verification holds on `latest` without a pin. The A35 baseline
+candidate tvassistant runs ESLint 9 flat config + `@eslint/js` + `eslint-plugin-vue` and nothing
+else of this table — the `akmon/eslint` form is the one with a measured home. The tool and rules
+decision stays with A35.
+
 ### F6 — Owner-decided and agent-proposed points in ADR 0020 (all confirmed)
 
 **Decided by the owner (2026-09-26):**
@@ -195,6 +204,11 @@ Generated Claude wiring:
   interpreter spelling in wiring (`python3 "<…>.py"` ↔ `node "<…>.mjs"`). Anything not normalized
   must match exactly.
 - **Ecosystem tag.** A scenario is `shared`, `python` or `node`. Shared scenarios run on both.
+  Because the mounted modes stay Python-only (D02), a shared scenario attaches its consumer in
+  the implementation's **native package mode**, and a mounted scenario is `python`-tagged. A
+  finding code whose lines name one ecosystem's carrier (tree layout, manifest pin, launcher) is
+  owned by that ecosystem; a shared scenario pins every other finding line (owner decision on
+  the C101 review, 2026-09-27; mechanics in `meta/conformance/README.md`).
 - **Gates** (self-CI):
   1. both implementations pass every scenario of their scope;
   2. the coverage gate: every command, hook, tool and finding code appears in a scenario;
@@ -263,5 +277,6 @@ node:test, npm pack --dry-run). Do not commit — the owner commits.
 ```
 
 Known before this work: `meta/tests/test_adapters.py::test_the_claude_shell_diagnostic_leaves_the_guard_decision_intact`
-fails on the pre-A34 tree (1 failed, 1562 passed on 2026-09-26). It is not part of this plan;
-report it, do not fix it in passing.
+failed on the pre-A34 tree (1 failed, 1562 passed). **Stale as of the A22 tree:** the A22
+commit updated that test, and the full suite is green including it (1669 passed on 2026-09-26,
+C101 evidence resolution 3). The corpus pins the current first-Bash-call diagnostic behavior.

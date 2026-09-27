@@ -1,0 +1,18 @@
+id = "cli/update-subtree-move-refused"
+ecosystem = "python"
+kind = "cli"
+covers = ["command:update"]
+
+[fixture]
+attach = "mount"
+name = "base"
+repo = true
+files = { "_aitna/.akmon.toml" = "mount = \"subtree\"\nakmon_version = \"0.1.0\"\nlast_realign = \"0.1.0\"\nattached_archetype = \"demo\"\n" }
+
+[run]
+argv = ["update", "--ref", "v{{version}}", "--repo", "{{repo}}", "--project-root", "{{root}}"]
+
+[expected]
+exit = 2
+stderr = "akmon update: mode 'subtree' moves with one command update must not run for you — `git subtree pull` creates commits, and commits are the owner's (D5). Run it, then realign:\n    git subtree pull --prefix _aitna/akmon {{repo}} v{{version}} --squash\n    akmon init --ref v{{version}}\n"
+stdout = "akmon update: {{root}} · mount mode subtree · 0.1.0 → v{{version}}\n"

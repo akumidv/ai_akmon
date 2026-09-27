@@ -1,0 +1,26 @@
+# The Codex role-on-code route: an apply_patch call whose patch body adds a code file gets
+# the same advisory document as the Claude edit (role-on-code message, additionalContext) —
+# the shared decision over the Codex payload contract. First call of a fresh session, so
+# the marker claim emits.
+id = "hooks/codex-hook-role-on-code-patch"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook", "hook:role-on-code"]
+
+[run]
+script = "codex-hook"
+args = ["role-on-code"]
+
+[run.payload]
+tool_name = "apply_patch"
+session_id = "sess-ch-roc"
+cwd = "{{root}}"
+tool_input = { command = "*** Begin Patch\n*** Add File: src/mod.py\n+x = 1\n*** End Patch\n" }
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+additionalContext = "[akmon] Role check — you are editing project code.\nEditing code is **realization** → the `engineer` role. Discriminator: decompose an existing thing → `review` · construct a new structure/decision → `architect` · realize a decided structure in code → `engineer`. If you were assessing (`review`) or designing (`architect`) — or no role is declared — this is a switch: declare `🧭 agent: engineer — <focus>` and follow its pipeline (code-flow + pre-commit: tests + lint mandatory before \"done\") before continuing. Restate the role on every switch (roles/README.md).\nDesign→code hand-off: before writing code, confirm the task is **landed in `_aitna/TASKS.md`** with a link to its design (design-flow step 8 Hand-off), and **re-read the backlog** to sequence it against other work (code-flow step 1 Take) — a cold engineer session must be able to pick this task from `_aitna/TASKS.md` alone."

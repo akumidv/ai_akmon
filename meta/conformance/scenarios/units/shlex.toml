@@ -1,0 +1,8 @@
+id = "units/shlex"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:shlex"]
+
+[run]
+probe = "shlex"
+table = "shlex.toml"

@@ -747,13 +747,13 @@ class Verifier:
             stale = ", ".join(str(path.relative_to(self.root)) for path in stale_paths)
             self.error(
                 "pointers.generated-freshness",
-                f"generated pointers are stale or missing: {stale}; run sync.py",
+                f"generated pointers are stale or missing: {stale}; run `akmon sync`",
                 fix="Run akmon sync to regenerate the listed files.",
             )
         else:
             self.ok(
                 "pointers.generated-freshness",
-                "generated pointers match sync.py",
+                "generated pointers match `akmon sync`",
                 fix="Re-run akmon sync after every change to a generated file's source.",
             )
 
@@ -1043,7 +1043,7 @@ class Verifier:
                     "routing.vendor-present",
                     f"model-routing registry is missing vendor {vendor!r}",
                     target=f"tools/model_routing/registry.json#{vendor}",
-                    fix=f"Add a {vendor} object to the model-routing registry.",
+                    fix=f"Add the {vendor} object to the model-routing registry.",
                 )
                 continue
             policy = spec.get("selection_policy")
@@ -1062,11 +1062,11 @@ class Verifier:
                 self.error(
                     "routing.selection-policy",
                     f"model-routing {vendor} needs semantic selection_policy with "
-                    f"worker=lowest and reasoner in {_REASONER_POLICY_VALUES}",
+                    f"worker=lowest and reasoner {' or '.join(_REASONER_POLICY_VALUES)}",
                     target=f"tools/model_routing/registry.json#{vendor}",
                     fix=(
-                        "Set this vendor's selection_policy to worker=lowest and reasoner in "
-                        f"{_REASONER_POLICY_VALUES}."
+                        "Set this vendor's selection_policy to worker=lowest and reasoner "
+                        f"{' or '.join(_REASONER_POLICY_VALUES)}."
                     ),
                 )
             fallback = spec.get("semantic_fallback")

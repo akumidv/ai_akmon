@@ -1,0 +1,122 @@
+# Unit table: version spelling and ordering (common/versions.py; JS mirror in C103).
+# Call sites: src/akmon/cli.py:196 (the CLI skew notice, C61), src/akmon/_update.py:66-67
+# (the pin move's order comparison, C54/A23), src/akmon/_init.py:174,356 (release-tag
+# selection), bin/verify.py:1383 and tools/release/release_check.py (release checks).
+#
+# Expected values: split_base/split_ahead are split_version's two answers (ahead null when
+# the string names a version exactly), is_final is is_final's answer, order is order_key's
+# answer as [X, Y, Z, position] or null. Pairs assert the ordering the order keys imply:
+# expected -1 (a before b), 0, or 1.
+
+[[case]]
+input = "v0.4.0"
+expected = { split_base = "0.4.0", is_final = true, order = [0, 4, 0, 0] }
+
+[[case]]
+input = "0.4.0"
+expected = { split_base = "0.4.0", is_final = true, order = [0, 4, 0, 0] }
+
+[[case]]
+input = "0.4.0.dev0"
+expected = { split_base = "0.4.0.dev0", is_final = false, order = [0, 4, 0, -1] }
+
+[[case]]
+input = "0.5.0rc1"
+expected = { split_base = "0.5.0rc1", is_final = false, order = [0, 5, 0, -1] }
+
+[[case]]
+input = "0.4.0.post1"
+expected = { split_base = "0.4.0.post1", is_final = false, order = [0, 4, 0, 1] }
+
+[[case]]
+input = "v0.4.0-3-g1234abcd"
+expected = { split_base = "0.4.0", split_ahead = "3", is_final = false, order = [0, 4, 0, 1] }
+
+[[case]]
+input = "v0.4.0-1-g1234abcd-dirty"
+expected = { split_base = "0.4.0", split_ahead = "1", is_final = false, order = [0, 4, 0, 1] }
+
+[[case]]
+input = "10.2.0"
+expected = { split_base = "10.2.0", is_final = true, order = [10, 2, 0, 0] }
+
+[[case]]
+input = "0.5.0.dev0"
+expected = { split_base = "0.5.0.dev0", is_final = false, order = [0, 5, 0, -1] }
+
+[[case]]
+input = "0.4.1"
+expected = { split_base = "0.4.1", is_final = true, order = [0, 4, 1, 0] }
+
+[[case]]
+input = "0.99.99"
+expected = { split_base = "0.99.99", is_final = true, order = [0, 99, 99, 0] }
+
+[[case]]
+# Malformed: no recognizable X.Y.Z anywhere, so order_key answers null (left out of the
+# table below, since TOML has no null — see the probe's own convention). Not final (is_final
+# requires a full-string X.Y.Z match, which "latest" never has). split_version still returns
+# the trimmed string unchanged — it never fails, it just fails to place the version.
+input = "latest"
+expected = { split_base = "latest", is_final = false }
+
+[[case]]
+# Malformed: empty string. Same shape as "latest" — order_key has nothing to anchor on.
+input = ""
+expected = { split_base = "", is_final = false }
+
+[[case]]
+# Malformed: a leading "v" is still stripped as spelling even though what remains ("1") is
+# not a full X.Y.Z, so split_base is "1", not "v1" — but is_final and order_key both still
+# refuse it (FINAL_RE and the release-prefix match both require three dot-separated numbers).
+input = "v1"
+expected = { split_base = "1", is_final = false }
+
+[[pair]]
+a = "0.4.0.dev0"
+b = "0.4.0"
+expected = -1
+
+[[pair]]
+a = "0.4.0"
+b = "0.4.0-3-g1234abcd"
+expected = -1
+
+[[pair]]
+a = "0.4.0-3-g1234abcd"
+b = "0.4.0-9-gabcd1234"
+expected = 0
+
+[[pair]]
+a = "0.9.0"
+b = "10.0.0"
+expected = -1
+
+[[pair]]
+a = "v0.4.0"
+b = "0.4.0"
+expected = 0
+
+[[pair]]
+# Both a pre-release (.dev0) and a release-candidate (rc1) of the same X.Y.Z land at position
+# -1 today, so order_key treats them as equal even though they are different kinds of
+# not-yet-released spellings — order_key's answer is "before the release", not "which
+# pre-release kind", and this pins that coarseness rather than assuming finer ordering exists.
+a = "0.5.0.dev0"
+b = "0.5.0rc1"
+expected = 0
+
+[[pair]]
+a = "0.5.0rc1"
+b = "0.5.0"
+expected = -1
+
+[[pair]]
+a = "0.4.0.post1"
+b = "0.4.1"
+expected = -1
+
+[[pair]]
+a = "1.0.0"
+b = "0.99.99"
+expected = 1

@@ -1,0 +1,16 @@
+id = "cli/init-bad-mode"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:init"]
+
+[fixture]
+attach = "none"
+name = "base"
+
+[run]
+argv = ["init", "--mode", "bogus", "--project-root", "{{root}}", "--yes"]
+
+[expected]
+exit = 2
+stderr_contains = ["akmon init: error: argument --mode: invalid choice: 'bogus'"]
+stdout = ""

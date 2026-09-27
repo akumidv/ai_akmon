@@ -282,3 +282,12 @@ All 573 calls returned a parseable verdict. One exchange per model needed a seco
 
 Material: the set, scripts, replies and rulings are with the owner's raw A22 material, in
 `a32-e1/`. The per-run verdicts without text are in the ai-bias material (A33).
+
+## A32-E2 follow-up
+
+The owner authorized a bounded offline follow-up after E1. Its frozen cohort, prompt variants,
+thresholds, model/context mapping, quota handling, and completion rules are specified in the
+[A32-E2 protocol](../reviews/a32-e2-codex-protocol-20260926.md). E2 can support only a proposal
+for a supervised O3 pilot; it does not authorize deployment. If no complete configuration meets
+the gates, O1 remains the provisional recommendation for the owner's decision. E1 remains the
+recorded result for the exact prompt and original cohort.

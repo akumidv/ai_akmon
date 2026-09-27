@@ -1,0 +1,15 @@
+id = "cli/hook-path-refused"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:hook"]
+
+[fixture]
+attach = "none"
+
+[run]
+argv = ["hook", "./hooks/role-on-code.py"]
+
+[expected]
+exit = 2
+stderr = "akmon hook: './hooks/role-on-code.py' is a path; name the hook instead (e.g. 'role-on-code')\n"
+stdout = ""

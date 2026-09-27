@@ -1,0 +1,21 @@
+# A fresh session's first orchestrator call sits inside the grace window: the drift score
+# stays below the advisory threshold and the hook says nothing.
+id = "hooks/delegation-nudge-below-threshold-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:delegation-nudge"]
+
+[run]
+script = "delegation-nudge"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Read"
+session_id = "sess-dn-quiet"
+permission_mode = "default"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

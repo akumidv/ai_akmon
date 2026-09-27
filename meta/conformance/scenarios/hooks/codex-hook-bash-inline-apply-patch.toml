@@ -1,0 +1,26 @@
+# The N2 deny-probe route: an apply_patch re-issued through Bash with the patch body inline
+# is classified as an edit (command-position invocation + complete heredoc envelope + patch
+# paths), so the advisory fires on the path — the effect cannot become invisible by its
+# spelling (C49).
+id = "hooks/codex-hook-bash-inline-apply-patch"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook", "hook:role-on-code"]
+
+[run]
+script = "codex-hook"
+args = ["role-on-code"]
+
+[run.payload]
+tool_name = "Bash"
+session_id = "sess-ch-inline"
+cwd = "{{root}}"
+tool_input = { command = """apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: src/inline.py\n+y = 2\n*** End Patch\nPATCH\n""" }
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+additionalContext = "[akmon] Role check — you are editing project code.\nEditing code is **realization** → the `engineer` role. Discriminator: decompose an existing thing → `review` · construct a new structure/decision → `architect` · realize a decided structure in code → `engineer`. If you were assessing (`review`) or designing (`architect`) — or no role is declared — this is a switch: declare `🧭 agent: engineer — <focus>` and follow its pipeline (code-flow + pre-commit: tests + lint mandatory before \"done\") before continuing. Restate the role on every switch (roles/README.md).\nDesign→code hand-off: before writing code, confirm the task is **landed in `_aitna/TASKS.md`** with a link to its design (design-flow step 8 Hand-off), and **re-read the backlog** to sequence it against other work (code-flow step 1 Take) — a cold engineer session must be able to pick this task from `_aitna/TASKS.md` alone."

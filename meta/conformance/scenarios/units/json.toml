@@ -1,0 +1,8 @@
+id = "units/json"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:json"]
+
+[run]
+probe = "json"
+table = "json.toml"

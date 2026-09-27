@@ -1,0 +1,117 @@
+# Unit table: fnmatch.fnmatchcase (case-sensitive) — the {files} matcher for [check] patterns
+# (common/check_runner.py:118, matching `changed` filenames against `check.files`).
+# The stdlib semantics the JS mirror must reproduce: `*` crosses `/` (it is `.*`, not a
+# path-segment wildcard); matching is always case-sensitive, on every platform, because the
+# call site uses `fnmatchcase` specifically — not the OS-dependent `fnmatch.fnmatch`, which
+# normalizes case on case-insensitive filesystems; and `*`/`?` match a leading dot in the
+# name (fnmatch has no shell-glob "dotfiles are hidden" rule — a JS minimatch-style matcher
+# would need `dot: true` to agree).
+
+[[case]]
+pattern = "*.py"
+name = "a.py"
+expected = true
+
+[[case]]
+pattern = "*.py"
+name = "A.PY"
+expected = false
+
+[[case]]
+pattern = "*.py"
+name = "src/a.py"
+expected = true
+
+[[case]]
+pattern = "src/*.py"
+name = "src/a.py"
+expected = true
+
+[[case]]
+pattern = "src/*.py"
+name = "src/deep/a.py"
+expected = true
+
+[[case]]
+pattern = "a?c"
+name = "abc"
+expected = true
+
+[[case]]
+pattern = "a?c"
+name = "abbc"
+expected = false
+
+[[case]]
+pattern = "[abc].md"
+name = "b.md"
+expected = true
+
+[[case]]
+pattern = "[abc].md"
+name = "d.md"
+expected = false
+
+[[case]]
+pattern = "*.mjs"
+name = "a.mjs"
+expected = true
+
+[[case]]
+pattern = "*.json"
+name = "a.jsonc"
+expected = false
+
+[[case]]
+# [!a] negates a character class.
+pattern = "[!a]"
+name = "b"
+expected = true
+
+[[case]]
+pattern = "[!a]"
+name = "a"
+expected = false
+
+[[case]]
+# [a-c] is a character range.
+pattern = "[a-c]"
+name = "b"
+expected = true
+
+[[case]]
+pattern = "[a-c]"
+name = "d"
+expected = false
+
+[[case]]
+# An unterminated "[" (no closing "]") is not a class at all: fnmatch's translation falls
+# back to matching it as a literal "[" character rather than raising or treating the rest of
+# the pattern as part of an open-ended class.
+pattern = "["
+name = "["
+expected = true
+
+[[case]]
+pattern = "[a"
+name = "[a"
+expected = true
+
+[[case]]
+# fnmatch has no shell "dotfiles are hidden" rule: "*" matches a leading dot like any other
+# character. A JS matcher built on minimatch/glob semantics would need `dot: true` to agree.
+pattern = "*"
+name = ".hidden"
+expected = true
+
+[[case]]
+pattern = "*.py"
+name = ".hidden.py"
+expected = true
+
+[[case]]
+# fnmatchcase is case-sensitive in the other direction too: an exact-case match still passes
+# (paired with the existing "*.py"/"A.PY" negative case above).
+pattern = "*.PY"
+name = "A.PY"
+expected = true

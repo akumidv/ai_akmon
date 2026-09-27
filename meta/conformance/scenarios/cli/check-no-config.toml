@@ -1,0 +1,17 @@
+id = "cli/check-no-config"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:check", "code:check.config"]
+
+[fixture]
+attach = "native"
+name = "base"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nlast_realign = \"{{version}}\"\nattached_archetype = \"demo\"\n" }
+
+[run]
+argv = ["check"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "WARN check.config .akmon.toml [check]: declares no checks, so nothing ran → Name the project's checks under [check], or run akmon init to set them up\n"

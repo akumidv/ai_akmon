@@ -1,0 +1,17 @@
+id = "tools/init-check-drift"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/init"]
+
+# --check on a project with no generated routing artifacts yet: every file is stale (missing),
+# the run names what would change and exits 1 without writing anything.
+
+[run]
+tool = "model_routing/init"
+argv = ["--check"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "would update: .claude/agents/k_explorer.md\nwould update: .claude/agents/k_mechanic.md\nwould update: .claude/agents/k_validator.md\nwould update: .claude/agents/k_implementer.md\nwould update: .claude/agents/k_reasoner.md\nwould update: .claude/agents/k_auditor.md\nwould update: .claude/model-routing.local.json\nmodel routing: vendor=anthropic · orchestrator=strongest · reasoner=strongest · auditor=strongest · worker=worker · mid=mid · second-opinion=codex(off)\n⚠ using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally\n"
+file_absent = [".claude/agents/k_explorer.md", ".claude/agents/k_mechanic.md", ".claude/agents/k_validator.md", ".claude/agents/k_implementer.md", ".claude/agents/k_reasoner.md", ".claude/agents/k_auditor.md", ".claude/model-routing.local.json"]

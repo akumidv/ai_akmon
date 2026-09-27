@@ -85,7 +85,9 @@ def read_akmon_toml(path: Path) -> dict:
             return {}
     data: dict = {}
     section = data
-    for line in path.read_text(encoding="utf-8").splitlines():
+    # utf-8-sig: a byte-order mark an editor left in front of the first key must not become part
+    # of that key's name — the record would silently declare nothing (a `﻿mount` key).
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue

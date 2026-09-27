@@ -1,0 +1,43 @@
+id = "tools/gate-pack-full"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/gate_pack"]
+
+# Full review pack with every optional section (artifacts, decisions register, coverage map,
+# dependency-graph excerpt), default output path (a stamp in the name, so the pack line on
+# stdout is the assertion). The pack runs past the 1200-char digest limit, so the stdout digest
+# is the truncated form ending in the truncation marker — that boundary behavior is pinned too.
+
+[fixture.files]
+"docs/yardstick.md" = "All public callables read subject-first; every behaviour change ships with a test.\n"
+"docs/finding-auth.md" = "Tokens are expired before the refresh window.\nEvidence: src/auth.py:42\n"
+"docs/finding-api.md" = "The API layer retries without backoff.\nEvidence: src/api.py:17\n"
+"docs/decisions.md" = "D1: auth owns expiry checks (ADR-0002).\n"
+"docs/coverage.md" = "| zone | workers |\n|------|---------|\n| auth | k_explorer |\n"
+"docs/dep.md" = "auth → api → store\n"
+
+[run]
+tool = "model_routing/gate_pack"
+argv = [
+  "--gate",
+  "design-align",
+  "--role",
+  "review",
+  "--yardstick",
+  "docs/yardstick.md",
+  "--artifact",
+  "docs/finding-auth.md",
+  "--artifact",
+  "docs/finding-api.md",
+  "--decisions",
+  "docs/decisions.md",
+  "--coverage-map",
+  "docs/coverage.md",
+  "--dep-graph",
+  "docs/dep.md",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "gate-pack kind=full role=review\npack: _aitna/artifacts/gates/design-align-full-{{ts}}.md\n\n# Gate-pack — design-align\n\nrole: review\nkind: full\nQuestion: What contradicts across these findings? Which zone or seam is uncovered by the fan-out?\n\n## Yardstick (acceptance condition)\n\nAll public callables read subject-first; every behaviour change ships with a test.\n\n\n## Artifacts\n\n### finding-auth.md\n\nTokens are expired before the refresh window.\nEvidence: src/auth.py:42\n\n\n### finding-api.md\n\nThe API layer retries without backoff.\nEvidence: src/api.py:17\n\n\n## Decisions register\n\nD1: auth owns expiry checks (ADR-0002).\n\n\n## Coverage map\n\n| zone | workers |\n|------|---------|\n| auth | k_explorer |\n\n\n## Dependency-graph excerpt\n\nauth → api → store\n\n\n## What to return\n\n- Contradictions between independently-correct findings/options\n- Uncovered seams — derived from the coverage map (zones no worker checked, boundaries between zones)\n- Re-ranking / recommendation deltas\n- Level verdict (§9.2): does the material suggest the task exceeded the session's level hypothesis? If so, name the specific piece to redo on a higher rung.\n- An explicit \"could not verify\" list\n- If this pack lacks what the audit needs (no coverage map, no yardstick), return the precise gap instead of a diluted verd\n...[truncated; see full pack]\n"

@@ -1,0 +1,8 @@
+name: CI
+on: [push]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - run: uv run akmon sync --check
+      - run: uv run akmon verify --strict

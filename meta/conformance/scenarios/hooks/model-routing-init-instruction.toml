@@ -1,0 +1,23 @@
+# SessionStart with no recorded binding (.claude/model-routing.local.json absent): the
+# one-time init instruction, dual-channel (the instruction line is also the systemMessage).
+id = "hooks/model-routing-init-instruction"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:model-routing"]
+
+[run]
+script = "model-routing"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-mr-init"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+systemMessage = "[akmon] Model routing needs initialization — no local config — model routing is not initialized."
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "SessionStart"
+additionalContext = "[akmon] Model routing needs initialization — no local config — model routing is not initialized.\nState the model you are running on and the models available in this harness, then run: `{{tool model_routing/init}} --orchestrator <your-alias> [--available <alias,...>] [--second-opinion on|off]`.\nThen ask the owner to (a) confirm the proposed tier→model binding and (b) enable or decline second-opinion review, and re-run the tool with their answers."

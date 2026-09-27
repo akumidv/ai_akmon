@@ -1,0 +1,17 @@
+id = "cli/update-missing-record"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:update"]
+
+[fixture]
+attach = "native"
+remove = ["_aitna/.akmon.toml"]
+name = "base"
+
+[run]
+argv = ["update", "--project-root", "{{root}}"]
+
+[expected]
+exit = 2
+stderr = "akmon update: {{root}} records no akmon attach (no mount mode in the integration record under _aitna/) — attach it with `akmon init`\n"
+stdout = ""

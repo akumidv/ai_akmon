@@ -1,0 +1,17 @@
+id = "cli/sync-stale"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:sync", "code:sync.stale-generated"]
+
+[fixture]
+attach = "native"
+warmup = "none"
+name = "base"
+
+[run]
+argv = ["sync", "--check"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "ERROR sync.stale-generated CLAUDE.md: generated file is stale or missing: CLAUDE.md → Run akmon sync to regenerate this file.\nERROR sync.stale-generated .github/copilot-instructions.md: generated file is stale or missing: .github/copilot-instructions.md → Run akmon sync to regenerate this file.\nERROR sync.stale-generated GEMINI.md: generated file is stale or missing: GEMINI.md → Run akmon sync to regenerate this file.\nERROR sync.stale-generated .codex/README.md: generated file is stale or missing: .codex/README.md → Run akmon sync to regenerate this file.\nERROR sync.stale-generated .codex/hooks.json: generated file is stale or missing: .codex/hooks.json → Run akmon sync to regenerate this file.\nERROR sync.stale-generated .claude/settings.json: generated file is stale or missing: .claude/settings.json → Run akmon sync to regenerate this file.\nERROR sync.stale-generated .claude/skills/demo/SKILL.md: generated file is stale or missing: .claude/skills/demo/SKILL.md → Run akmon sync to regenerate this file.\nERROR sync.stale-generated .agents/skills/demo/SKILL.md: generated file is stale or missing: .agents/skills/demo/SKILL.md → Run akmon sync to regenerate this file.\nERROR sync.stale-generated _aitna/.akmon/guardrails/_common.md: generated file is stale or missing: _aitna/.akmon/guardrails/_common.md → Run akmon sync to regenerate this file.\n"

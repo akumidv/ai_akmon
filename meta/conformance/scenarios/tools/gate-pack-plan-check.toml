@@ -1,0 +1,36 @@
+id = "tools/gate-pack-plan-check"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/gate_pack"]
+
+# plan-check pack (yardstick + zone plan only, no artifacts and no coverage map — the plan is
+# checked against the goal, not against its own coverage), with a deterministic --out so the
+# written file is asserted.
+
+[fixture.files]
+"docs/yardstick.md" = "All public callables read subject-first; every behaviour change ships with a test.\n"
+"docs/zone-plan.md" = "- auth\n- api\n- billing\n"
+
+[run]
+tool = "model_routing/gate_pack"
+argv = [
+  "--gate",
+  "code-verify",
+  "--role",
+  "architect",
+  "--kind",
+  "plan-check",
+  "--yardstick",
+  "docs/yardstick.md",
+  "--zone-plan",
+  "docs/zone-plan.md",
+  "--out",
+  "_aitna/artifacts/gates/plan-check.md",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "gate-pack kind=plan-check role=architect\npack: _aitna/artifacts/gates/plan-check.md\n\n# Gate-pack — code-verify\n\nrole: architect\nkind: plan-check\nQuestion: Does the plan cover the stated goal? Which zones or seams are obviously missing?\n\n## Yardstick (goal)\n\nAll public callables read subject-first; every behaviour change ships with a test.\n\n\n## Zone plan\n\n- auth\n- api\n- billing\n\n\n## What to return\n\n- Does the plan cover the stated goal (the yardstick above)?\n- Which zones or seams are obviously missing from the zone plan?\n- Check the plan against the goal, not against its own coverage map.\n"
+[expected.files]
+"_aitna/artifacts/gates/plan-check.md" = "# Gate-pack — code-verify\n\nrole: architect\nkind: plan-check\nQuestion: Does the plan cover the stated goal? Which zones or seams are obviously missing?\n\n## Yardstick (goal)\n\nAll public callables read subject-first; every behaviour change ships with a test.\n\n\n## Zone plan\n\n- auth\n- api\n- billing\n\n\n## What to return\n\n- Does the plan cover the stated goal (the yardstick above)?\n- Which zones or seams are obviously missing from the zone plan?\n- Check the plan against the goal, not against its own coverage map.\n"

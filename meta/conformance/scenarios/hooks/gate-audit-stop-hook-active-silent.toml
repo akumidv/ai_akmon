@@ -1,0 +1,27 @@
+# M87: a Stop turn that runs because a Stop hook already held it (stop_hook_active) is the
+# audit itself — the hook never holds it a second time, even at the floor.
+id = "hooks/gate-audit-stop-hook-active-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:gate-audit"]
+
+[fixture]
+attach = "native"
+files = { "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 agent: review — conformance"}]}}
+"""}
+
+[run]
+script = "gate-audit"
+
+[run.payload]
+hook_event_name = "Stop"
+stop_hook_active = true
+session_id = "sess-ga-active"
+cwd = "{{root}}"
+transcript_path = "{{root}}/transcript.jsonl"
+last_assistant_message = "## Findings\n\n- The sync path drops the marker on a stale tree.\n- The verify gate passes on a mounted fixture.\n- The record mode reseeds expectations silently."
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

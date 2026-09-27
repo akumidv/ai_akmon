@@ -1,0 +1,8 @@
+id = "units/record"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:record"]
+
+[run]
+probe = "record"
+table = "record.toml"

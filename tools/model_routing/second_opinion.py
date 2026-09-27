@@ -24,6 +24,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import routing
 
 from common.project_root import resolve_project_root
+from common.record import records_package_mode
+
+
+def _standard_tree_root(project_root: Path) -> Path:
+    """The tree ``registry.json`` is read from: the mount for mounted modes, this script's own tree otherwise.
+
+    The rule of ``bin/sync.py::standard_tree_root`` and ``init.py::_standard_tree_root``: in package
+    mode there is no ``<AITNA_ROOT>/akmon`` to read, and the recorded ``mount`` field decides, so
+    a stale mount directory from a prior mode does not shadow the installed tree.
+    """
+    mounted = project_root / routing.aitna_root_name() / "akmon"
+    if not records_package_mode(project_root) and mounted.is_dir():
+        return mounted
+    return Path(__file__).resolve().parents[2]
 
 
 def _read_json(path: Path) -> dict:
@@ -109,8 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
         print(root_notice, file=sys.stderr)
-    akmon_dir = root / routing.aitna_root_name() / "akmon"
-    registry = routing.load_registry(akmon_dir, root)
+    registry = routing.load_registry(_standard_tree_root(root), root)
     config = _read_json(root / routing.LOCAL_CONFIG_REL)
 
     if args.provider:

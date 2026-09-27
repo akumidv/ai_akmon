@@ -1,0 +1,18 @@
+id = "cli/sync-plan-error"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:sync", "code:sync.plan-error"]
+
+[fixture]
+attach = "native"
+warmup = "before"
+name = "base"
+files = { ".claude/settings.json" = "{ not json\n" }
+
+[run]
+argv = ["sync", "--check"]
+
+[expected]
+exit = 2
+stderr = ""
+stdout = "OK sync.up-to-date CLAUDE.md: generated file matches its source: CLAUDE.md → Re-run akmon sync after every change to this file's source.\nOK sync.up-to-date .github/copilot-instructions.md: generated file matches its source: .github/copilot-instructions.md → Re-run akmon sync after every change to this file's source.\nOK sync.up-to-date GEMINI.md: generated file matches its source: GEMINI.md → Re-run akmon sync after every change to this file's source.\nOK sync.up-to-date .codex/README.md: generated file matches its source: .codex/README.md → Re-run akmon sync after every change to this file's source.\nOK sync.up-to-date .codex/hooks.json: generated file matches its source: .codex/hooks.json → Re-run akmon sync after every change to this file's source.\nOK sync.up-to-date .claude/skills/demo/SKILL.md: generated file matches its source: .claude/skills/demo/SKILL.md → Re-run akmon sync after every change to this file's source.\nOK sync.up-to-date .agents/skills/demo/SKILL.md: generated file matches its source: .agents/skills/demo/SKILL.md → Re-run akmon sync after every change to this file's source.\nOK sync.up-to-date _aitna/.akmon/guardrails/_common.md: generated file matches its source: _aitna/.akmon/guardrails/_common.md → Re-run akmon sync after every change to this file's source.\nERROR sync.plan-error: {{root}}/.claude/settings.json: invalid JSON: {{parse-error}} → Resolve the reported planning error, then re-run akmon sync.\n"

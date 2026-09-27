@@ -1,0 +1,18 @@
+id = "cli/dispatch-skew-notice"
+ecosystem = "python"
+kind = "cli"
+covers = ["command:verify"]
+
+[fixture]
+attach = "mount"
+name = "base"
+warmup = true
+files = { "_aitna/.akmon.toml" = "mount = \"submodule\"\nakmon_version = \"0.9.9\"\nlast_realign = \"0.9.9\"\nattached_archetype = \"demo\"\n" }
+
+[run]
+argv = ["verify", "--quiet"]
+
+[expected]
+exit = 0
+stderr = "akmon: CLI is {{version}}, mounted/pinned standard is 0.9.9 — the mounted tree governs.\n"
+stdout = ""

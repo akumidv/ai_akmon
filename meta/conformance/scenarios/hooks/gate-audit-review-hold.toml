@@ -1,0 +1,35 @@
+# C25: a review-role Stop whose last message carries three findings — at the
+# review_min_findings floor — is held once (decision "block") with the audit request as the
+# reason. The role is read from the transcript's 🧭 declaration; the hold is
+# once-per-gate-episode via the common/markers throttle.
+id = "hooks/gate-audit-review-hold"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:gate-audit"]
+
+[fixture]
+attach = "native"
+files = { "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 agent: review — conformance"}]}}
+"""}
+
+[run]
+script = "gate-audit"
+
+[run.payload]
+hook_event_name = "Stop"
+stop_hook_active = false
+session_id = "sess-ga-hold"
+cwd = "{{root}}"
+# The transcript is a file the hook actually opens; {{root}} materializes to the project
+# root the fixture was built at.
+transcript_path = "{{root}}/transcript.jsonl"
+last_assistant_message = "## Findings\n\n- The sync path drops the marker on a stale tree.\n- The verify gate passes on a mounted fixture.\n- The record mode reseeds expectations silently.\n\n**Recommendation**: fix the sync path first."
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+decision = "block"
+reason = "[akmon gate] This turn carries 3 findings as the review role, at or above the `review_min_findings` floor of 3 — review-flow step 4 (Calibrate) routes an `audit` pass here. Before handing off: either delegate `k_auditor` over the gate-pack (`tools/model_routing/gate_pack.py`) and fold its verdict in, or state in one line that you are skipping the audit and why. The floor is advisory; passing it in silence is not."
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "Stop"

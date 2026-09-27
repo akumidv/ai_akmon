@@ -1,0 +1,23 @@
+# The Codex session-start route: the same shared SessionStart document the Claude entry
+# emits (active-agent reminder + roster + delegation-default + memory line). The Codex
+# output shape carries no systemMessage channel, so the document is hookSpecificOutput only.
+id = "hooks/codex-hook-session-start"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook", "hook:session-start-agent"]
+
+[run]
+script = "codex-hook"
+args = ["session-start"]
+
+[run.payload]
+session_id = "sess-ch-ss"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "SessionStart"
+additionalContext = "[akmon] Active-agent declaration\nBefore doing project work, state which agent you are operating as, and restate it whenever you switch. Format: `🧭 agent: <name> — <focus>`.\n- DEVELOP (build the project): engineer\nNo agent is active yet.\nPick by operation: decompose an existing thing → review · construct a new structure/decision → architect · realize a decided structure in code → engineer. If unclear, ask.\nDelegation is the default for non-atomic work: before the first repository sweep, edit, or test run, decompose the task and delegate every independent sub-step to available subagents. Keep only decomposition, routing, synthesis, and owner dialogue in the orchestrator. Skip delegation only when the task is atomic or the harness exposes no subagents; state the reason.\nAlso: read `_aitna/memory/` at session start (project memory)."

@@ -1,0 +1,38 @@
+# The coverage gate's exceptions (design §5, gate 2). The population itself is DERIVED by
+# coverage.py from the source of the tree under test — commands from cli.py `_COMMANDS`, hooks
+# and tools from their `__main__` blocks, unit tables from units/, and `code:<code>:<severity>`
+# from every literal emission site — so nothing here lists what akmon ships. This file holds
+# only the facts the source cannot say. An entry that names nothing derived is stale and fails
+# the gate (`conformance.coverage-stale`).
+#
+# Item names: command:<name>, hook:<name>, tool:<path under tools/>, unit:<name>,
+# code:<code>:<ok|warn|error>.
+
+# [ecosystem] — items one ecosystem owns (ADR 0020 D02). Such an item is covered by `shared`
+# scenarios or that ecosystem's own; every item NOT listed here is shared and only a `shared`
+# scenario covers it (a python-tagged scenario is invisible to the Node port).
+#   "code:<code>:<severity>" = { ecosystem = "python" | "node", reason = "…" }
+# A whole-code key, "code:<code>", owns every severity of the code: its finding lines name the
+# ecosystem's own carrier, so a shared scenario's `findings` leave them out and only that
+# ecosystem's scenarios pin them. When the Node carrier lands (C105) a code both ecosystems
+# emit with their own lines gets a node-side entry of its own.
+[ecosystem]
+"code:layout.standard-path" = { ecosystem = "python", reason = "lists the Python tree's files (bin/*.py, hooks/*.py); the JS tree is laid out under js/" }
+"code:package.dev-pin" = { ecosystem = "python", reason = "reads the pin from pyproject.toml; Node reads package.json devDependencies (ADR 0020 D05)" }
+"code:hooks.launcher" = { ecosystem = "python", reason = "names the .venv/bin/akmon launcher; Node wiring calls node on node_modules/akmon/js directly (ADR 0020 D05)" }
+"code:gitignore.akmon-pycache" = { ecosystem = "python", reason = "the Python bytecode cache the mounted tree writes; nothing in a Node consumer produces it" }
+"code:changelog.unreleased" = { ecosystem = "python", reason = "a mounted mode's check of the mount's CHANGELOG.md; package mode reports changelog.package-mode instead, and mounted modes are Python-only (ADR 0020 D02)" }
+
+# [exempt] — items no hermetic scenario can reach; each reason says why and where the item is
+# covered instead. An exempt item needs no scenario.
+[exempt]
+"code:codex.host-trust:warn" = "needs a live Codex install; the corpus hides codex from PATH, N10 probes it"
+
+# [dynamic] — emission sites that pass a non-literal severity or code (`<path>::<qualname>`).
+# Their codes cannot be derived at the site, so each is listed with the reason it hides none;
+# an unlisted dynamic site fails the gate (`conformance.population-dynamic`).
+[dynamic]
+"bin/verify.py::Verifier.ok" = "the ok severity wrapper; every caller passes a literal code to self.ok and is derived there"
+"bin/verify.py::Verifier.warn" = "the warn severity wrapper; every caller passes a literal code to self.warn and is derived there"
+"bin/verify.py::Verifier.error" = "the error severity wrapper; every caller passes a literal code to self.error and is derived there"
+"tools/release/release_check.py::_finding" = "the line-safe Finding factory; every caller passes a literal severity and code and is derived there"

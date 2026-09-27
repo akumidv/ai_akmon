@@ -1,0 +1,30 @@
+id = "tools/coverage-map-since-until"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/coverage_map"]
+
+# All-sessions run narrowed by --since/--until: the legacy 09:00 row falls before the lower
+# bound and is dropped; instants are compared (offset-less bounds are local time), so a row
+# that cannot be placed would fail the run rather than be silently kept or dropped.
+
+[fixture.files]
+".claude/model-routing.log" = "2026-05-01T09:00:00\tk_validator\t-\trun the gates\n2026-05-01T10:00:00\tsess-1\tk_explorer\thaiku\tauth\tcheck token expiry\n2026-05-01T10:05:00\tsess-1\tk_mechanic\t-\tapi\trename sweep\n2026-05-01T11:00:00\tsess-2\tk_reasoner\topus\tauth\tdebug the failure\n"
+
+[run]
+tool = "model_routing/coverage_map"
+argv = [
+  "--all-sessions",
+  "--since",
+  "2026-05-01T09:30:00",
+  "--until",
+  "2026-05-01T11:30:00",
+  "--out",
+  "_aitna/artifacts/gates/coverage-scope.md",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "coverage-map entries=3 zones=2\nscope: all sessions (2: sess-1, sess-2)\nmap: _aitna/artifacts/gates/coverage-scope.md\n"
+[expected.files]
+"_aitna/artifacts/gates/coverage-scope.md" = "| zone | workers | count |\n|------|---------|-------|\n| auth | k_explorer/haiku, k_reasoner/opus | 2 |\n| api | k_mechanic | 1 |\n"

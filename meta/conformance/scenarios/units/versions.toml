@@ -1,0 +1,13 @@
+id = "units/versions"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:versions"]
+
+[run]
+probe = "versions"
+table = "versions.toml"
+
+[expected]
+exit = 0
+stdout = "{\n  \"ok\": true,\n  \"failed\": []\n}\n"
+stderr = ""

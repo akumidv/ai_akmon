@@ -1,0 +1,22 @@
+# A markdown edit outside the planning-doc segments (docs/ is not a planning segment; only
+# docs/dev/ and the dev-layer design/tasks paths are) is silent and claims no marker.
+id = "hooks/analysis-guard-doc-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:analysis-guard"]
+
+[run]
+script = "analysis-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-ag-docs"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { file_path = "{{root}}/docs/README.md" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

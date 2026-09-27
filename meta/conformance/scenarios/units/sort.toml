@@ -1,0 +1,8 @@
+id = "units/sort"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:sort"]
+
+[run]
+probe = "sort"
+table = "sort.toml"

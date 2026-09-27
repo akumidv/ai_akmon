@@ -1,0 +1,17 @@
+id = "tools/release-state-package"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:release/release_check"]
+
+# --state over the package subject in the corpus fixture: a fresh git repo with one commit and
+# no tags, no TASKS/CHANGELOG at the project root, and no release charter — that state's
+# summary is the scenario (deterministic).
+
+[run]
+tool = "release/release_check"
+argv = ["--state", "--subject", "package"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "== release state (subject: package) ==\nproject root: {{root}}\n\nTASKS.md: (missing)\nTASKS_ARCHIVE.md: (missing)\n\nCHANGELOG.md: (missing)\n\nrelease charter: _aitna/agents/release/README.md (MISSING — add it for project-specific release commands)\n\ngit status (short) [proj-tools-release-state-package]:\n  (clean)\n"

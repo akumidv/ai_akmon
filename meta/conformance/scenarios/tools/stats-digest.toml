@@ -1,0 +1,32 @@
+id = "tools/stats-digest"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/stats"]
+
+# The digest over a delegation log, a main-session transcript and one subagent transcript.
+# --no-budget keeps the run hermetic: the default budget fetches api.anthropic.com (reported
+# as unavailable when skipped). The report file name carries a stamp, so the stdout digest is
+# the assertion (its `report:` line normalizes to {{ts}}).
+
+[fixture.files]
+".claude/model-routing.log" = "2026-05-01T10:00:00\tsess-9\tk_explorer\thaiku\tauth\tcheck token expiry\n2026-05-01T10:05:00\tsess-9\tk_mechanic\t-\tapi\trename sweep\n"
+".claude/transcripts/main.jsonl" = "{\"type\": \"user\", \"message\": {\"content\": \"kick off\"}}\n{\"type\": \"assistant\", \"message\": {\"model\": \"claude-opus-4-8\", \"usage\": {\"input_tokens\": 1000, \"output_tokens\": 200, \"cache_read_input_tokens\": 50, \"cache_creation_input_tokens\": 10}}}\n{\"type\": \"assistant\", \"message\": {\"model\": \"claude-opus-4-8\", \"usage\": {\"input_tokens\": 300, \"output_tokens\": 100, \"cache_read_input_tokens\": 5, \"cache_creation_input_tokens\": 1}}}\n"
+".claude/transcripts/main/subagents/agent-a1.jsonl" = "{\"type\": \"assistant\", \"attributionAgent\": \"k_explorer\", \"message\": {\"model\": \"claude-haiku-4-5\", \"usage\": {\"input_tokens\": 400, \"output_tokens\": 80, \"cache_read_input_tokens\": 0, \"cache_creation_input_tokens\": 0}}}\n"
+".claude/transcripts/main/subagents/agent-a1.meta.json" = """
+{"agentType": "k_explorer"}
+"""
+
+[run]
+tool = "model_routing/stats"
+argv = [
+  "--transcript",
+  ".claude/transcripts/main.jsonl",
+  "--no-budget",
+  "--report-dir",
+  ".claude/stats",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "delegations: 2 total (k_explorer=1, k_mechanic=1)\norchestrator tokens: in=1300 out=300 cache-read=55\nsubagent tokens (n=1): in=400 out=80 cache-read=0\nbudget: unavailable (skipped (--no-budget))\nreport: .claude/stats/stats-{{ts}}.md\n"

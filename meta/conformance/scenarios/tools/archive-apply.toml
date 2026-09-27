@@ -1,0 +1,23 @@
+id = "tools/archive-apply"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:tasks/archive"]
+
+# --apply performs the move: the done entry is swept verbatim to the top of the archive's
+# `## Done` section (newest first) and removed from TASKS.md; exit 0.
+
+[fixture.files]
+"_aitna/TASKS.md" = "# Tasks\n\n- C101 · seed the corpus scenarios · done · engineer · evidence in meta/conformance/\n- C102 · wire the coverage gate · active · architect\n"
+"_aitna/TASKS_ARCHIVE.md" = "# Archive\n\n## Done\n\n- T1 · older demo · done · engineer · moved 2026-08-01\n"
+
+[run]
+tool = "tasks/archive"
+argv = ["--tasks", "_aitna/TASKS.md", "--apply"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "archived 1: C101\n"
+[expected.files]
+"_aitna/TASKS.md" = "# Tasks\n\n- C102 · wire the coverage gate · active · architect\n"
+"_aitna/TASKS_ARCHIVE.md" = "# Archive\n\n## Done\n\n- C101 · seed the corpus scenarios · done · engineer · evidence in meta/conformance/\n- T1 · older demo · done · engineer · moved 2026-08-01\n"

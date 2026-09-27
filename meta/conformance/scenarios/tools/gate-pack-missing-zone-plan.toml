@@ -1,0 +1,32 @@
+id = "tools/gate-pack-missing-zone-plan"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/gate_pack"]
+
+# --kind plan-check without --zone-plan is a usage refusal: exit 2, nothing on stdout, and the
+# error sentence on stderr. The usage banner around it (prog name, wrapping) is the argument
+# parser's own text, so the shared contract is the sentence, asserted with stderr_contains.
+
+[fixture]
+attach = "native"
+
+[fixture.files]
+"docs/yardstick.md" = "All public callables read subject-first; every behaviour change ships with a test.\n"
+
+[run]
+tool = "model_routing/gate_pack"
+argv = [
+  "--gate",
+  "code-verify",
+  "--role",
+  "architect",
+  "--kind",
+  "plan-check",
+  "--yardstick",
+  "docs/yardstick.md",
+]
+
+[expected]
+exit = 2
+stderr_contains = ["error: --zone-plan is required for --kind plan-check"]
+stdout = ""
