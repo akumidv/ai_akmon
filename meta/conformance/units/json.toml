@@ -1,0 +1,152 @@
+# Unit table: the JSON writer. Three canonical forms the implementations emit (the corpus's
+# pinned spec — Python's json.dumps answers below are the reference):
+#   hook      — a hook's stdout document: one line, default separators
+#             — hooks/claude_adapter.py:77 (render_result), hooks/claude_adapter.py:107
+#               (crash-open systemMessage), hooks/codex_adapter.py:291 (print_result)
+#   wiring    — generated wiring files (.claude/settings.json, .codex/hooks.json): indent=2 + trailing newline
+#             — bin/sync.py:537 (_claude_settings), bin/sync.py:851 (_codex_hooks_text),
+#               tools/model_routing/routing.py:1202 (binding_artifacts local config)
+#   canonical — the registry content hash: sort_keys, compact separators
+#             — tools/model_routing/routing.py:83 (registry_hash)
+#
+# The cases below past the first block pin the JSON *writer's* stdlib semantics generically
+# (ensure_ascii escaping, key order, number spelling) rather than one call site's payload
+# shape, because a JS mirror using `JSON.stringify` diverges from every one of these by
+# default: it never escapes non-ASCII (Python's ensure_ascii=True does, including astral
+# chars as escaped UTF-16 surrogate pairs and, surprisingly, DEL — see below), a plain JS
+# object with all-integer-like keys reorders them ahead of string keys during construction
+# (a Python dict/`json.dumps` never reorders), and it spells `null` only for `undefined`-free
+# values, which the `null_keys` field below exists to test since TOML itself has no null.
+#
+# No call site currently dumps a float (payloads above are ints/strings/bools/lists/dicts
+# only); the one float case below just pins that `1.0` keeps its `.0` if that ever changes.
+
+[[case]]
+form = "hook"
+value = { hookSpecificOutput = { hookEventName = "PreToolUse", additionalContext = "note" }, systemMessage = "x" }
+expected = '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "note"}, "systemMessage": "x"}'
+
+[[case]]
+form = "hook"
+value = { warning = "⚠ owner-only" }
+expected = '{"warning": "\u26a0 owner-only"}'
+
+[[case]]
+form = "hook"
+value = {}
+expected = '{}'
+
+[[case]]
+form = "hook"
+value = { quote = 'a "b" \ c' }
+expected = '{"quote": "a \"b\" \\ c"}'
+
+[[case]]
+form = "wiring"
+value = { a = 1, b = [1, 2] }
+expected = '''
+{
+  "a": 1,
+  "b": [
+    1,
+    2
+  ]
+}
+'''
+
+[[case]]
+form = "wiring"
+value = { hooks = [] }
+expected = '''
+{
+  "hooks": []
+}
+'''
+
+[[case]]
+form = "canonical"
+value = { b = 1, a = { z = true, y = "" } }
+expected = '{"a":{"y":"","z":true},"b":1}'
+
+[[case]]
+form = "canonical"
+value = { name = "é" }
+expected = "{\"name\":\"\\u00e9\"}"
+
+[[case]]
+# Astral char: Python's ensure_ascii=True escapes it as a lowercase UTF-16 surrogate pair.
+# `JSON.stringify` in JS never escapes non-ASCII by default, so it would emit the raw 4-byte
+# UTF-8 character instead — a real divergence the JS mirror must reproduce deliberately.
+form = "hook"
+value = { note = "𝄞" }
+expected = '{"note": "\ud834\udd1e"}'
+
+[[case]]
+# Control chars \n \t \u0001 \u001f \u007f. DEL (0x7f) is NOT one of JSON's own named escapes
+# (\b \f \n \r \t) or its <0x20 control-char rule — it is escaped anyway, because Python's
+# ensure_ascii treats anything outside the printable ASCII range 0x20-0x7e as needing a \u
+# escape, not just non-ASCII bytes. `JSON.stringify` has no such rule and leaves DEL as a raw
+# byte, so this is a real divergence (surprising: the DEL exception assumed going in was
+# backwards — Python escapes it, JS does not).
+form = "hook"
+value = { s = "\n\t\u0001\u001f\u007f" }
+expected = '{"s": "\n\t\u0001\u001f\u007f"}'
+
+[[case]]
+# U+2028/U+2029 (line/paragraph separator): Python's ensure_ascii escapes both. Bare
+# `JSON.stringify` in JS does not — historically a real interop hazard (a U+2028 inside a
+# `<script>`-embedded JSON literal used to break JS parsers before engines special-cased it).
+form = "hook"
+value = { s = "\u2028\u2029" }
+expected = '{"s": "\u2028\u2029"}'
+
+[[case]]
+# "/" is never escaped by json.dumps (unlike some JSON encoders' default). JS's
+# JSON.stringify agrees, but this pins the shared expectation explicitly.
+form = "hook"
+value = { s = "a/b" }
+expected = '{"s": "a/b"}'
+
+[[case]]
+# Integer-like keys keep Python dict insertion order under plain json.dumps. A JS mirror that
+# builds a plain object literal to hold these key/value pairs would NOT reproduce this: a JS
+# engine enumerates all-integer-like own keys in ascending numeric order ahead of any string
+# keys, regardless of assignment order, so {b:1, "10":2, "2":3} would iterate/stringify as
+# "10", "2", "b" — a real divergence the JS mirror must avoid (e.g. by using a Map).
+form = "hook"
+value = { b = 1, 10 = 2, 2 = 3 }
+expected = '{"b": 1, "10": 2, "2": 3}'
+
+[[case]]
+# Same value, canonical form: sort_keys sorts keys as strings, so "10" < "2" < "b" (character
+# by character, not numeric) — the JS mirror must sort as strings too, not as numbers.
+form = "canonical"
+value = { b = 1, 10 = 2, 2 = 3 }
+expected = '{"10":2,"2":3,"b":1}'
+
+[[case]]
+# No call site dumps a float today; this pins that a float keeps its ".0" rather than
+# collapsing to an integer spelling, if one is ever added to a dumped value.
+form = "hook"
+value = { x = 1.0 }
+expected = '{"x": 1.0}'
+
+[[case]]
+# true/false/null. TOML has no null, so `null_keys` names top-level keys of `value` the probe
+# replaces with Python `None` before dumping (probe.py's only way to pin json.dumps's "null").
+form = "hook"
+value = { a = true, b = false, c = false }
+null_keys = ["c"]
+expected = '{"a": true, "b": false, "c": null}'
+
+[[case]]
+# Nested empty containers under the wiring form's indent=2: an empty dict/list stays inline
+# ("{}" / "[]") rather than expanding onto its own indented lines.
+form = "wiring"
+value = { a = {}, b = [] }
+expected = '''
+{
+  "a": {},
+  "b": []
+}
+'''

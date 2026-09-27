@@ -1,0 +1,26 @@
+# A second planning-doc edit in the same session is silent: the once-per-session marker was
+# claimed by the first one (seeded here via tmp_files with the session digest).
+id = "hooks/analysis-guard-second-edit-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:analysis-guard"]
+
+[fixture]
+attach = "native"
+tmp_files = { "akmon-analysis-guard-a5336d1a27b74ed88d72" = "1" }
+
+[run]
+script = "analysis-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-ag-2nd"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { file_path = "{{root}}/_aitna/TASKS.md" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

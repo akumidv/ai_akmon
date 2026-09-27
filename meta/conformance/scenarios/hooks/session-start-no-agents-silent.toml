@@ -1,0 +1,23 @@
+# No agent charters anywhere and no stale materialization: SessionStart is silent (the
+# roster is removed, so neither DEVELOP nor OPERATE has anything to name).
+id = "hooks/session-start-no-agents-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:session-start-agent"]
+
+[fixture]
+attach = "native"
+remove = ["_aitna/agents"]
+
+[run]
+script = "session-start-agent"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-ss-empty"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

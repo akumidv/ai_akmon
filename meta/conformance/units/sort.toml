@@ -1,0 +1,49 @@
+# Unit table: code-point sorting (Python `sorted` on strings is the reference).
+# The JS mirror must sort by Unicode code point, not by locale or UTF-16 code unit order.
+
+[[case]]
+input = ["b", "A", "a", "Z"]
+expected = ["A", "Z", "a", "b"]
+
+[[case]]
+input = ["é", "z", "a", "É"]
+expected = ["a", "z", "É", "é"]
+
+[[case]]
+input = ["10", "2", "1"]
+expected = ["1", "10", "2"]
+
+[[case]]
+input = ["", "b", "a"]
+expected = ["", "a", "b"]
+
+[[case]]
+input = ["x", "a", "x"]
+expected = ["a", "x", "x"]
+
+[[case]]
+input = ["𝄞", "z", "A"]
+expected = ["A", "z", "𝄞"]
+
+[[case]]
+input = []
+expected = []
+
+[[case]]
+# Astral char vs BMP chars above U+D800: code-point order and UTF-16 code-unit order
+# disagree. A naive JS `.sort()` compares UTF-16 code units, so it sees the astral char's
+# lead surrogate (U+D834 for '𝄞') as smaller than any of these BMP code points
+# (U+E000 private-use, U+FF5A fullwidth 'z', U+FFFD replacement char), putting the astral
+# char FIRST. Code-point order (Python's `sorted`, and the JS mirror's required behavior)
+# puts it LAST, since its scalar value (0x1D11E) is the largest of the four.
+input = ["𝄞", "", "ｚ", "�"]
+expected = ["", "ｚ", "�", "𝄞"]
+
+[[case]]
+# Combining sequence vs precomposed form: no normalization. "e"+U+0301 (two code points,
+# first one 'e' = 0x65) and the precomposed "\u00e9" (one code point, 0xe9) are never merged
+# or reordered onto each other; each sorts strictly by its own code-point sequence, so the
+# combining form lands next to "d"/"f" while the precomposed form lands after both (0xe9 is
+# larger than 'f' = 0x66 as a lone code point).
+input = ["é", "é", "f", "d"]
+expected = ["d", "é", "f", "é"]

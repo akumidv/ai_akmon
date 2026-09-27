@@ -1,0 +1,29 @@
+# Drift past the advisory threshold (30): the per-session counter is seeded to one call
+# short, so this edit call crosses it and carries the once-per-episode advisory
+# (additionalContext). The message names the score and the grace window.
+id = "hooks/delegation-nudge-advisory"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:delegation-nudge"]
+
+[fixture]
+attach = "native"
+tmp_files = { "akmon-delegation-nudge-sess-dn-adv.count" = "33 30.0" }
+
+[run]
+script = "delegation-nudge"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-dn-adv"
+permission_mode = "default"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+additionalContext = "[akmon] Delegation check — a drift score of 31 (an edit or shell call counts 1, a read ½, the first 8 calls of a stretch nothing) since the last subagent delegation.\nDelegation is the default: route by task kind (MODEL.md § Capability tiers; guardrails/_common.md § Route by task kind). Exploration/summaries → `k_explorer` · mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → `k_validator` · code under a decided contract → `k_implementer` · load-bearing analysis → `k_reasoner`.\nIf this genuinely is orchestrator work (decompose / route / synthesize / owner dialogue), carry on — this reminder is advisory and fires once per drift episode (a subagent delegation re-arms it)."

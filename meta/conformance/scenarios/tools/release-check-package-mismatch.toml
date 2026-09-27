@@ -1,0 +1,27 @@
+# --check over the package subject when the version carriers disagree: pyproject.toml declares
+# the final 1.2.0 while src/akmon/__init__.py still says 1.1.0 (version-literals error), and
+# CHANGELOG.md was never cut — a final version with only `## Unreleased` has no released heading
+# (changelog-window error). The release charter is present, so the version cross-check alone
+# fails the check.
+id = "tools/release-check-package-mismatch"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:release/release_check", "code:release.version-literals", "code:release.changelog-window"]
+
+[fixture]
+attach = "native"
+
+[fixture.files]
+"pyproject.toml" = "[project]\nname = \"consumer\"\nversion = \"1.2.0\"\n\n[dependency-groups]\ndev = [\"akmon=={{version}}\"]\n"
+"src/akmon/__init__.py" = "_STATIC_VERSION = \"1.1.0\"\n"
+"CHANGELOG.md" = "# Changelog\n\n## Unreleased\n\n- next change\n"
+"_aitna/agents/release/README.md" = "See `_aitna/akmon/roles/release.md`.\n"
+
+[run]
+tool = "release/release_check"
+argv = ["--check", "--subject", "package"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "== version ↔ changelog cross-check\nERROR release.version-literals pyproject.toml: pyproject.toml declares 1.2.0 while src/akmon/__init__.py declares 1.1.0 → Set both literals to the same string — one release bump is two edits.\nERROR release.changelog-window CHANGELOG.md: final version 1.2.0 but CHANGELOG.md carries no released heading → Cut the `## Unreleased` heading to `## v1.2.0` before tagging.\n\n== akmon verify --project-root {{root}} --strict --quiet\n\n# package release: run the project's own checks from _aitna/agents/release/README.md\n# (tests / lint / build — this tool does not guess them).\n\nRELEASE CHECK FAILED:\n  - version ↔ changelog cross-check\n"

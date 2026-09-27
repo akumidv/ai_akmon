@@ -1,0 +1,31 @@
+id = "tools/coverage-map-session"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/coverage_map"]
+
+# One fan-out round scoped by --session, with a zone plan so the map carries the uncovered-seam
+# list (the output the gate leans on). Log fixture: one legacy 4-column row plus two 6-column
+# rows of the round and one row of another session.
+
+[fixture.files]
+".claude/model-routing.log" = "2026-05-01T09:00:00\tk_validator\t-\trun the gates\n2026-05-01T10:00:00\tsess-1\tk_explorer\thaiku\tauth\tcheck token expiry\n2026-05-01T10:05:00\tsess-1\tk_mechanic\t-\tapi\trename sweep\n2026-05-01T11:00:00\tsess-2\tk_reasoner\topus\tauth\tdebug the failure\n"
+"docs/zone-plan.md" = "- auth\n- api\n- billing\n# infra is out of this round\n"
+
+[run]
+tool = "model_routing/coverage_map"
+argv = [
+  "--session",
+  "sess-1",
+  "--zone-plan",
+  "docs/zone-plan.md",
+  "--out",
+  "_aitna/artifacts/gates/coverage-sess.md",
+  "--stdout",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "coverage-map entries=2 zones=2\nscope: session sess-1\nmap: _aitna/artifacts/gates/coverage-sess.md\n\n| zone | workers | count |\n|------|---------|-------|\n| auth | k_explorer/haiku | 1 |\n| api | k_mechanic | 1 |\n\n### Uncovered zones (planned, no worker)\n- billing\n"
+[expected.files]
+"_aitna/artifacts/gates/coverage-sess.md" = "| zone | workers | count |\n|------|---------|-------|\n| auth | k_explorer/haiku | 1 |\n| api | k_mechanic | 1 |\n\n### Uncovered zones (planned, no worker)\n- billing\n"

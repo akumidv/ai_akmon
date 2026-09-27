@@ -1,0 +1,27 @@
+# C28d: a call that came from inside a subagent (agent_id present) is exempt entirely —
+# no counter charge, no advisory, no ask — even with the counter seeded past the ask
+# threshold.
+id = "hooks/delegation-nudge-subagent-exempt"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:delegation-nudge"]
+
+[fixture]
+attach = "native"
+tmp_files = { "akmon-delegation-nudge-sess-dn-sub.count" = "123 121.0" }
+
+[run]
+script = "delegation-nudge"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Read"
+session_id = "sess-dn-sub"
+agent_id = "agent-1"
+permission_mode = "default"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

@@ -494,6 +494,25 @@ def _run(akmon_root: Path) -> list[Finding]:
     findings.extend(canary.check_canary(akmon_root))
     findings.extend(decision_records.check_decision_records(akmon_root))
     findings.extend(runtime_checks.check_declared_runtimes(akmon_root))
+    # The conformance corpus (C101): the language-neutral spec both implementations pass,
+    # run against the Python implementation plus its coverage gate. The leg is independent of
+    # the fixture chain on purpose: a corpus failure must not hide the fixture findings, and
+    # the fixture's health says nothing about the corpus.
+    _leg(
+        findings,
+        "conformance corpus",
+        LegInvocation(
+            [sys.executable, str(akmon_root / "meta" / "conformance" / "runner.py"), "--tree", str(akmon_root)]
+        ),
+        code="selfci.conformance",
+        fixes=LegFixes(
+            ok_fix="Keep the corpus green on the Python implementation and its coverage gate.",
+            error_fix=(
+                "Run python3 meta/conformance/runner.py --tree <repo> and fix the failing "
+                "scenario or the coverage gap it names."
+            ),
+        ),
+    )
     return findings
 
 

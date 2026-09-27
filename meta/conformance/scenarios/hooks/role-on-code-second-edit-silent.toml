@@ -1,0 +1,27 @@
+# The first code edit of a session already claimed the marker: a later code edit must stay
+# silent (exit 0, nothing on stdout or stderr). The marker is seeded via tmp_files with the
+# per-session digest (common/markers.py: akmon-<kind>-sha256(session_id)[:20]).
+id = "hooks/role-on-code-second-edit-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:role-on-code"]
+
+[fixture]
+attach = "native"
+tmp_files = { "akmon-role-on-code-976b94e2e35b545ce8fc" = "1" }
+
+[run]
+script = "role-on-code"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-roc-2nd"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { file_path = "{{root}}/src/app.py" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

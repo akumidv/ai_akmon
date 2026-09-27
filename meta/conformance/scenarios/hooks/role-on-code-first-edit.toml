@@ -1,0 +1,23 @@
+id = "hooks/role-on-code-first-edit"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:role-on-code"]
+
+[run]
+script = "role-on-code"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-ro"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { file_path = "{{root}}/src/app.py" }
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+additionalContext = "[akmon] Role check — you are editing project code.\nEditing code is **realization** → the `engineer` role. Discriminator: decompose an existing thing → `review` · construct a new structure/decision → `architect` · realize a decided structure in code → `engineer`. If you were assessing (`review`) or designing (`architect`) — or no role is declared — this is a switch: declare `🧭 agent: engineer — <focus>` and follow its pipeline (code-flow + pre-commit: tests + lint mandatory before \"done\") before continuing. Restate the role on every switch (roles/README.md).\nDesign→code hand-off: before writing code, confirm the task is **landed in `_aitna/TASKS.md`** with a link to its design (design-flow step 8 Hand-off), and **re-read the backlog** to sequence it against other work (code-flow step 1 Take) — a cold engineer session must be able to pick this task from `_aitna/TASKS.md` alone."

@@ -1,0 +1,26 @@
+# commits.owner-owned: a git commit carrying an AI co-author trailer is denied. The route
+# diagnostic (once per fresh session) rides along on stderr.
+id = "hooks/git-commit-guard-coauthor-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-gcm-coauthor"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { command = """git commit -m "add feature" --trailer "Co-Authored-By: bot@example.com" """ }
+
+[expected]
+exit = 0
+stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target\n"
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+permissionDecision = "deny"
+permissionDecisionReason = "Commit guardrail: no AI 'Co-Authored-By' trailer — the committer is the human. Remove it and retry."

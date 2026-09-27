@@ -1,0 +1,19 @@
+id = "tools/archive-none"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:tasks/archive"]
+
+# No done entries: the sweep names nothing and exits 0 — the CI-green shape.
+
+[fixture.files]
+"_aitna/TASKS.md" = "# Tasks\n\n- C102 · wire the coverage gate · active · architect\n"
+"_aitna/TASKS_ARCHIVE.md" = "# Archive\n\n## Done\n"
+
+[run]
+tool = "tasks/archive"
+argv = ["--tasks", "_aitna/TASKS.md"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "no done entries to archive\n"

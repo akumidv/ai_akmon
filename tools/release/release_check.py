@@ -601,11 +601,26 @@ def run_check(root: Path, subject: str) -> int:
     return 0
 
 
+def _display(command: list[str]) -> str:
+    """How a suite command is shown: the akmon command it stands for, never the host interpreter path.
+
+    The printed line is shared spec with the JavaScript implementation (ADR 0020 D03), so the
+    interpreter this process happens to run under stays out of it.
+    """
+    if len(command) > 1 and command[0] == sys.executable:
+        script = Path(command[1])
+        if script == BIN / "verify.py":
+            return " ".join(["akmon", "verify", *command[2:]])
+        if script.is_relative_to(KEYSTONE_ROOT):
+            return " ".join(["python3", script.relative_to(KEYSTONE_ROOT).as_posix(), *command[2:]])
+    return " ".join(command)
+
+
 def _run_commands(root: Path, commands: list[list[str]]) -> list[str]:
     failed: list[str] = []
     for command in commands:
-        printable = " ".join(command)
-        print(f"== {printable}")
+        printable = _display(command)
+        print(f"== {printable}", flush=True)
         proc = subprocess.run(command, cwd=str(root), check=False)
         if proc.returncode != 0:
             failed.append(printable)

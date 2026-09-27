@@ -1,0 +1,26 @@
+# Two findings is below the review_min_findings floor of three: the turn ends unheld.
+id = "hooks/gate-audit-below-floor-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:gate-audit"]
+
+[fixture]
+attach = "native"
+files = { "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 agent: review — conformance"}]}}
+"""}
+
+[run]
+script = "gate-audit"
+
+[run.payload]
+hook_event_name = "Stop"
+stop_hook_active = false
+session_id = "sess-ga-low"
+cwd = "{{root}}"
+transcript_path = "{{root}}/transcript.jsonl"
+last_assistant_message = "## Findings\n\n- The first finding.\n- The second finding."
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

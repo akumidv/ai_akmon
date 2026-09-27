@@ -1,0 +1,30 @@
+# Environment overrides (KEYSTONE_DELEGATION_GRACE / _NUDGE_THRESHOLD / _ASK_THRESHOLD):
+# grace 0 and advisory threshold 1 make the very first edit call carry the advisory, and
+# the message names the overridden grace window.
+id = "hooks/delegation-nudge-env-thresholds"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:delegation-nudge"]
+
+[env]
+KEYSTONE_DELEGATION_GRACE = "0"
+KEYSTONE_DELEGATION_NUDGE_THRESHOLD = "1"
+KEYSTONE_DELEGATION_ASK_THRESHOLD = "2"
+
+[run]
+script = "delegation-nudge"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-dn-env"
+permission_mode = "default"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+additionalContext = "[akmon] Delegation check — a drift score of 1 (an edit or shell call counts 1, a read ½, the first 0 calls of a stretch nothing) since the last subagent delegation.\nDelegation is the default: route by task kind (MODEL.md § Capability tiers; guardrails/_common.md § Route by task kind). Exploration/summaries → `k_explorer` · mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → `k_validator` · code under a decided contract → `k_implementer` · load-bearing analysis → `k_reasoner`.\nIf this genuinely is orchestrator work (decompose / route / synthesize / owner dialogue), carry on — this reminder is advisory and fires once per drift episode (a subagent delegation re-arms it)."

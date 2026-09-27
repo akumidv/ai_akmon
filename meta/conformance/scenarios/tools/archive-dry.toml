@@ -1,0 +1,23 @@
+id = "tools/archive-dry"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:tasks/archive"]
+
+# Dry-run sweep: one done entry in TASKS.md. The tool names it and exits 1 (so CI can flag a
+# backlog that still holds landed work) without writing anything — both files stay put.
+
+[fixture.files]
+"_aitna/TASKS.md" = "# Tasks\n\n- C101 · seed the corpus scenarios · done · engineer · evidence in meta/conformance/\n- C102 · wire the coverage gate · active · architect\n"
+"_aitna/TASKS_ARCHIVE.md" = "# Archive\n\n## Done\n\n- T1 · older demo · done · engineer · moved 2026-08-01\n"
+
+[run]
+tool = "tasks/archive"
+argv = ["--tasks", "_aitna/TASKS.md"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "would archive 1 done entry: C101\nre-run with --apply to move them\n"
+[expected.files]
+"_aitna/TASKS.md" = "# Tasks\n\n- C101 · seed the corpus scenarios · done · engineer · evidence in meta/conformance/\n- C102 · wire the coverage gate · active · architect\n"
+"_aitna/TASKS_ARCHIVE.md" = "# Archive\n\n## Done\n\n- T1 · older demo · done · engineer · moved 2026-08-01\n"

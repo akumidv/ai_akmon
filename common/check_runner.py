@@ -17,6 +17,7 @@ none). A command without the placeholder runs unchanged either way. Stdlib-only.
 
 from __future__ import annotations
 
+import errno
 import fnmatch
 import shlex
 import subprocess
@@ -88,13 +89,21 @@ def read_checks(table: object) -> tuple[list[Check], list[str]]:
 
 def changed_files(root: Path) -> list[str]:
     """Files that differ from ``HEAD`` or are new and not ignored — never the dev layer."""
-    try:
-        names = []
-        for args in (("diff", "--name-only", "-z", "HEAD", "--"), ("ls-files", "--others", "--exclude-standard", "-z")):
-            result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=True)
-            names += [name for name in result.stdout.decode("utf-8", "replace").split("\0") if name]
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise ScopeError(f"cannot list the files changed against HEAD: {exc}") from exc
+    names = []
+    for args in (("diff", "--name-only", "-z", "HEAD", "--"), ("ls-files", "--others", "--exclude-standard", "-z")):
+        # The message names the git command and its outcome, never the interpreter's exception
+        # text: it is spec shared with the JavaScript implementation (ADR 0020 D03).
+        command = "git " + " ".join(arg for arg in args if arg != "-z")
+        try:
+            result = subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False)
+        except OSError as exc:
+            reason = errno.errorcode.get(exc.errno or 0, "not runnable")
+            raise ScopeError(f"cannot list the files changed against HEAD: git cannot be run ({reason})") from exc
+        if result.returncode != 0:
+            raise ScopeError(
+                f"cannot list the files changed against HEAD: `{command}` exited with status {result.returncode}"
+            )
+        names += [name for name in result.stdout.decode("utf-8", "replace").split("\0") if name]
     dev_layer = f"{aitna_root_name()}/"
     return sorted({name for name in names if not name.startswith(dev_layer) and (root / name).is_file()})
 

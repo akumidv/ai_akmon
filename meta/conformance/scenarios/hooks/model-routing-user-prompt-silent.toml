@@ -1,0 +1,19 @@
+# UserPromptSubmit in steady state: silent unless the orchestrator switched or a new
+# context-pressure level landed (no transcript here, so neither is true). Zero token cost.
+id = "hooks/model-routing-user-prompt-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:model-routing"]
+
+[run]
+script = "model-routing"
+
+[run.payload]
+hook_event_name = "UserPromptSubmit"
+session_id = "sess-mr-prompt"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

@@ -1,0 +1,95 @@
+# Unit table: shlex.split and shlex.join (posix mode) — the JS mirror must reproduce both.
+# `case` entries with `input` are split cases (expected.argv is the word list; expected.error
+# marks a ValueError, whatever its text). `case` entries with `join` are join cases
+# (`join` is the argv list fed to shlex.join; `expected` is the plain output string).
+#
+# Call sites: split — common/check_runner.py:82 (the recorded [check] command), and
+# tools/model_routing/routing.py:306 (a model-flag template's extra argv). join —
+# common/check_runner.py:163,169 (the passed/failed finding's displayed command) and
+# src/akmon/_update.py:138,140,194,196 (the pin-move command shown to the owner).
+
+[[case]]
+input = 'a b "c d"'
+expected = { argv = ["a", "b", "c d"] }
+
+[[case]]
+input = "a'b c'd"
+expected = { argv = ["ab cd"] }
+
+[[case]]
+input = 'a\ b'
+expected = { argv = ["a b"] }
+
+[[case]]
+# shlex.split takes no commenters: '#' is an ordinary word character, not a comment.
+input = "a # the rest is a comment"
+expected = { argv = ["a", "#", "the", "rest", "is", "a", "comment"] }
+
+[[case]]
+input = '"git log" | grep x'
+expected = { argv = ["git log", "|", "grep", "x"] }
+
+[[case]]
+input = ''
+expected = { argv = [] }
+
+[[case]]
+input = 'a "b'
+expected = { error = true }
+
+[[case]]
+# A newline outside quotes is a word separator.
+input = "a b c\nd"
+expected = { argv = ["a", "b", "c", "d"] }
+
+[[case]]
+# Inside double quotes, shlex's escape set is narrow (only `\"` and `\\`): a backslash before
+# any other character, including 't', stays a literal backslash — it does NOT become a tab.
+input = '"a\tb"'
+expected = { argv = ['a\tb'] }
+
+[[case]]
+# Inside double quotes, `\"` is the one quote-escape recognized: it unwraps to a literal `"`
+# without ending the quoted word.
+input = '"a\"b"'
+expected = { argv = ['a"b'] }
+
+[[case]]
+# An unterminated single quote is a ValueError too (the existing case above pins the
+# double-quote form; this pins the same failure for the other quote character).
+input = "a 'b"
+expected = { error = true }
+
+[[case]]
+# join: an empty argument round-trips through a pair of single quotes — the shortest input
+# that is not the empty argv list.
+join = [""]
+expected = "''"
+
+[[case]]
+# join: an argument containing a space is wrapped in single quotes.
+join = ["a b"]
+expected = "'a b'"
+
+[[case]]
+# join: an argument containing a single quote uses shlex.quote's escape pattern — close the
+# quoted string, emit a double-quoted literal single quote, reopen: 'it'"'"'s'.
+join = ["it's"]
+expected = "'it'\"'\"'s'"
+
+[[case]]
+# join: shlex.quote's safe-character set (word chars plus `@%+=:,./-`) is left bare, unquoted.
+join = ["a@b%c+d=e:f,g.h/i-j_k"]
+expected = "a@b%c+d=e:f,g.h/i-j_k"
+
+[[case]]
+# join: a non-ASCII argument is quoted — shlex.quote's safe-char regex is ASCII-only (`\w`
+# under `re.ASCII`), so "é" is treated as unsafe exactly like a space would be.
+join = ["café"]
+expected = "'café'"
+
+[[case]]
+# join: a full argv, mixing a safe token, a token needing quotes, and another safe token —
+# the shape common/check_runner.py's finding text actually displays.
+join = ["a", "b c", "d"]
+expected = "a 'b c' d"

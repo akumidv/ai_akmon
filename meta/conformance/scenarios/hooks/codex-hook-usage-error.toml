@@ -1,0 +1,20 @@
+# A dispatcher invocation with no route argument is a UsageError: the crash contract — one
+# stderr line naming the route and the exception class (never its message), exit 1 so Codex
+# shows the hook Failed — and nothing on stdout. `UsageError` is akmon's own error class (the
+# dispatcher's refusal), not an interpreter one, so both implementations name it alike.
+id = "hooks/codex-hook-usage-error"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook"]
+
+[fixture]
+attach = "native"
+
+[run]
+script = "codex-hook"
+args = []
+
+[expected]
+exit = 1
+stderr = "akmon codex-hook hook: UsageError\n"
+stdout = ""

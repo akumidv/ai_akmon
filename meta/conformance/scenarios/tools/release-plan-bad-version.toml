@@ -1,0 +1,15 @@
+id = "tools/release-plan-bad-version"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:release/release_check"]
+
+# --plan refuses a version that is not vX.Y.Z (exit 2, the error line on stderr).
+
+[run]
+tool = "release/release_check"
+argv = ["--subject", "package", "--plan", "1.2.3"]
+
+[expected]
+exit = 2
+stderr = "error: version must look like vX.Y.Z, got '1.2.3'\n"
+stdout = ""

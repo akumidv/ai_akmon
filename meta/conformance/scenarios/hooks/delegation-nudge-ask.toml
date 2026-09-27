@@ -1,0 +1,30 @@
+# Sustained drift past the ask threshold (120) on an edit/shell call (never on a read):
+# the hard ask, in the interactive default permission mode.
+id = "hooks/delegation-nudge-ask"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:delegation-nudge"]
+
+[fixture]
+attach = "native"
+tmp_files = { "akmon-delegation-nudge-sess-dn-ask.count" = "123 121.0" }
+
+[run]
+script = "delegation-nudge"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-dn-ask"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { command = "make test" }
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+permissionDecision = "ask"
+permissionDecisionReason = "[akmon] Sustained delegation drift — a drift score of 122 (an edit or shell call counts 1, a read ½, the first 8 calls of a stretch nothing) with no subagent delegation. A read never carries this ask, so it lands on a call that changes something (guardrails/_common.md § Route by task kind).\nRoute the next steps to a `k_*` delegate — exploration/summaries → `k_explorer` · mechanical edits / doc-sync / test scaffolds → `k_mechanic` · gate loops → `k_validator` · code under a decided contract → `k_implementer` · load-bearing analysis → `k_reasoner` — or confirm this is genuinely one of the orchestrator's reserved four (decompose · route · synthesize · owner dialogue) to proceed.\nFires once per drift episode (a subagent delegation re-arms it)."

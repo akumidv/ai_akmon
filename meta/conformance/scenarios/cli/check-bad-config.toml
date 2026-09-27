@@ -1,0 +1,17 @@
+id = "cli/check-bad-config"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:check", "code:check.config"]
+
+[fixture]
+attach = "native"
+name = "base"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nlast_realign = \"{{version}}\"\n\n[check]\nlint = { command = \"\" }\n" }
+
+[run]
+argv = ["check"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "ERROR check.config .akmon.toml [check]: [check].lint needs a non-empty `command` → Correct or remove the entry the message names\n"

@@ -1,0 +1,28 @@
+# --check over the package subject on a release-ready tree: both version literals the tool
+# reads (pyproject.toml [project].version and src/akmon/__init__.py _STATIC_VERSION) declare the
+# same non-final 1.2.0.dev0, and CHANGELOG.md keeps `## Unreleased` topmost — the version
+# cross-check is ok on both rules. The fixture carries a release charter so the package suite
+# is green too; pyproject.toml keeps the akmon dev pin so the spawned verify stays clean. No
+# tags exist (the fixture repo has one commit), so the git rules report nothing.
+id = "tools/release-check-package-green"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:release/release_check", "code:release.version-literals", "code:release.changelog-window"]
+
+[fixture]
+attach = "native"
+
+[fixture.files]
+"pyproject.toml" = "[project]\nname = \"consumer\"\nversion = \"1.2.0.dev0\"\n\n[dependency-groups]\ndev = [\"akmon=={{version}}\"]\n"
+"src/akmon/__init__.py" = "_STATIC_VERSION = \"1.2.0.dev0\"\n"
+"CHANGELOG.md" = "# Changelog\n\n## Unreleased\n\n- next change\n\n## v1.1.0\n\n- an earlier release\n"
+"_aitna/agents/release/README.md" = "See `_aitna/akmon/roles/release.md`.\n"
+
+[run]
+tool = "release/release_check"
+argv = ["--check", "--subject", "package"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "== version ↔ changelog cross-check\nOK release.version-literals pyproject.toml: pyproject.toml and src/akmon/__init__.py both declare 1.2.0.dev0 → Bump both literals together — one release bump is two edits.\nOK release.changelog-window CHANGELOG.md: non-final version 1.2.0.dev0 sits above a topmost `## Unreleased` heading → Keep `## Unreleased` topmost while the version is non-final.\n\n== akmon verify --project-root {{root}} --strict --quiet\n\n# package release: run the project's own checks from _aitna/agents/release/README.md\n# (tests / lint / build — this tool does not guess them).\n\nrelease check: all green\n"

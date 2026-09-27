@@ -1,0 +1,25 @@
+# The unwired Codex git-commit-guard route: the sudo deny decision document, with no route
+# diagnostic on stderr (the shell-route report is not part of this dispatch branch).
+id = "hooks/codex-hook-git-commit-guard-sudo"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook", "hook:git-commit-guard"]
+
+[run]
+script = "codex-hook"
+args = ["git-commit-guard"]
+
+[run.payload]
+tool_name = "Bash"
+session_id = "sess-ch-git"
+cwd = "{{root}}"
+tool_input = { command = "sudo systemctl restart foo" }
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+permissionDecision = "deny"
+permissionDecisionReason = "Privilege-escalation guardrail: 'sudo' is never run by the agent. If elevated access is genuinely required, ask the owner to run the command themselves."

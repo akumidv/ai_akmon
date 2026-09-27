@@ -1,0 +1,17 @@
+id = "cli/init-vendored-bad-ref"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:init"]
+
+[fixture]
+attach = "none"
+name = "base"
+remove = ["_aitna", "AGENTS.md"]
+
+[run]
+argv = ["init", "--mode", "vendored", "--ref", "v9.9.9", "--project-root", "{{root}}", "--yes"]
+
+[expected]
+exit = 2
+stderr = "akmon init: mode 'vendored' copies the embedded tree of the installed akmon package, so its pin is that package's version ({{version}}) and `--ref v9.9.9` cannot change it. Pin a ref with `--mode submodule`/`--mode subtree`, or install the akmon version you want to vendor.\n"
+stdout = "akmon init: attaching to {{root}}\nakmon init: mount mode: vendored (requested) · dev layer: _aitna/\n"

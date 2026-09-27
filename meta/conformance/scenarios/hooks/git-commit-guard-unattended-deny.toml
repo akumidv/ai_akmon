@@ -1,0 +1,26 @@
+# C31 (ADR-0006/D02): an ask cannot be trusted to reach the owner in a non-interactive
+# permission mode, so it escalates to a hard deny with the escalation stated in the reason.
+id = "hooks/git-commit-guard-unattended-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-gcm-unattended"
+permission_mode = "acceptEdits"
+cwd = "{{root}}"
+tool_input = { command = "git push origin feature" }
+
+[expected]
+exit = 0
+stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target\n"
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+permissionDecision = "deny"
+permissionDecisionReason = "Commit guardrail: the owner owns commits. push/tag/merge land history — confirm this is explicitly requested. [escalated ask→deny: permission_mode='acceptEdits' is not the interactive default, so 'ask' cannot be trusted to reach the owner (ADR-0006/D02, C31) — re-run from an attended default-mode session if this was genuinely intended.]"

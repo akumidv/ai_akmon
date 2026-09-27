@@ -1,0 +1,109 @@
+# Unit table: integration-record parsing (common/record.py: read_akmon_toml,
+# read_akmon_toml_strict, _strip_inline_comment; JS mirror in C103). The one reader of
+# `<AITNA_ROOT>/.akmon.toml`, consulted by bin/sync.py, model_routing/init.py, the CLI, and
+# hooks/hook_core.py's D2 reminder (per the module's own docstring, C75).
+#
+# Each case feeds `text` to both readers (or marks the file absent); expected names the
+# lenient dict, the strict dict, and strict_ok (false = a RecordError, whatever its text;
+# an expected field left out is the null answer, since TOML has no null). `strip` cases pin
+# _strip_inline_comment — the quote-aware comment rule the lenient fallback and tomllib
+# must agree on.
+#
+# The cases below pin the lenient fallback's tolerance, which is the behavior a JS mirror
+# using a strict TOML library (rather than a hand-rolled fallback) would need to reproduce
+# deliberately rather than get for free: a malformed file never raises out of the lenient
+# reader, it degrades.
+
+[[case]]
+text = '''
+mount = "submodule"
+akmon_version = "v0.4.0"
+[check]
+lint = "uv run ruff check {files}"
+'''
+expected = { lenient = { mount = "submodule", akmon_version = "v0.4.0", check = { lint = "uv run ruff check {files}" } }, strict = { mount = "submodule", akmon_version = "v0.4.0", check = { lint = "uv run ruff check {files}" } }, strict_ok = true }
+
+[[case]]
+text = "runner = \"poetry run pytest\"  # optional\n"
+expected = { lenient = { runner = "poetry run pytest" }, strict = { runner = "poetry run pytest" }, strict_ok = true }
+
+[[case]]
+text = "path = \"a # b\"\n"
+expected = { lenient = { path = "a # b" }, strict = { path = "a # b" }, strict_ok = true }
+
+[[case]]
+text = "name = 'c # d'\n"
+expected = { lenient = { name = "c # d" }, strict = { name = "c # d" }, strict_ok = true }
+
+[[case]]
+# A malformed header line is not a section for the lenient fallback: it is read as a
+# key=value line, and its key keeps the '['. The lenient reader is the documented
+# tolerant shape; the strict reader still refuses the file.
+text = '''
+mount = "package"
+[broke =
+'''
+expected = { lenient = { mount = "package", "[broke" = "" }, strict_ok = false }
+
+[[case]]
+absent = true
+expected = { lenient = {}, strict = {}, strict_ok = true }
+
+[[case]]
+# Duplicate keys: TOML forbids them outright (strict refuses), but the lenient fallback's
+# line parser has no such rule — it just assigns each line in order, so the last one wins.
+text = '''
+mount = "a"
+mount = "b"
+'''
+expected = { lenient = { mount = "b" }, strict_ok = false }
+
+[[case]]
+# A key with no value at all is invalid TOML (strict refuses); the lenient fallback's
+# `key, sep, value = line.partition("=")` still matches (sep is truthy), so the key is kept
+# with an empty string rather than being dropped or erroring.
+text = "mount =\n"
+expected = { lenient = { mount = "" }, strict_ok = false }
+
+[[case]]
+# An inline comment after a value survives the lenient fallback's own line-based parsing
+# (not just tomllib's native comment handling, which the earlier cases exercise): this file
+# is malformed elsewhere (the same broken-header shape as the case above it), forcing the
+# fallback path, and the comment on the *valid* line is still stripped correctly there.
+text = "mount = \"package\"  # note\n[broke =\n"
+expected = { lenient = { mount = "package", "[broke" = "" }, strict_ok = false }
+
+[[case]]
+# CRLF line endings: not a divergence. tomllib accepts "\r\n" as an ordinary line ending, so
+# strict and lenient agree — this pins the *absence* of a bug, since a hand-rolled JS line
+# splitter that only recognizes "\n" would leave a trailing "\r" on every value.
+text = "mount = \"package\"\r\nakmon_version = \"v1\"\r\n"
+expected = { lenient = { mount = "package", akmon_version = "v1" }, strict = { mount = "package", akmon_version = "v1" }, strict_ok = true }
+
+[[case]]
+# A leading BOM (U+FEFF), as some editors write it: tomllib refuses it (TOML is BOM-free UTF-8),
+# so the strict reader fails loudly; the lenient fallback reads utf-8-sig and drops it, so the
+# first key stays `mount`. Found while seeding this table: the fallback used to fold the BOM
+# into the key ("﻿mount") and the record silently declared no mount at all.
+text = "﻿mount = \"package\"\n"
+expected = { lenient = { mount = "package" }, strict_ok = false }
+
+[[strip]]
+input = 'plain value  # cut here'
+expected = 'plain value'
+
+[[strip]]
+input = '"quoted # stays"  # cut'
+expected = '"quoted # stays"'
+
+[[strip]]
+input = "'literal # stays' # cut"
+expected = "'literal # stays'"
+
+[[strip]]
+input = '"back \\\\ quote # data" # cut'
+expected = '"back \\\\ quote # data"'
+
+[[strip]]
+input = '  spaced  '
+expected = 'spaced'

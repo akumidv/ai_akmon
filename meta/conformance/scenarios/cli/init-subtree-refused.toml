@@ -1,0 +1,18 @@
+id = "cli/init-subtree-refused"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:init"]
+
+[fixture]
+attach = "none"
+name = "base"
+repo = true
+remove = ["_aitna", "AGENTS.md"]
+
+[run]
+argv = ["init", "--mode", "subtree", "--repo", "{{repo}}", "--project-root", "{{root}}", "--yes"]
+
+[expected]
+exit = 2
+stderr = "akmon init: mode 'subtree' needs one command `init` must not run for you — `git subtree add` creates commits, and commits are the owner's (D5). Run it, then re-run init:\n    git subtree add --prefix _aitna/akmon {{repo}} main --squash\n    akmon init --mode subtree --ref main\n"
+stdout = "akmon init: attaching to {{root}}\nakmon init: mount mode: subtree (requested) · dev layer: _aitna/\n"

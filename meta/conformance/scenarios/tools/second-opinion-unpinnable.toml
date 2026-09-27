@@ -1,0 +1,31 @@
+id = "tools/second-opinion-unpinnable"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# The same-vendor step resolves to a pinned model, but the project overlay blanked the
+# vendor's model_flag (C97): an unpinned run would not be model-diverse, so the tool fails
+# closed with the error line on stderr and exit 2 before shelling out.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+"_aitna/model-routing.json" = """
+{"openai": {"second_opinion": {"model_flag": null}}}
+"""
+".claude/model-routing.local.json" = """
+{"orchestrator": "strongest", "binding": {"auditor": "strongest"}, "second_opinion": true, "second_opinion_provider": "openai", "second_opinion_fallback_model": "reasoner"}
+"""
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--gate",
+  "design-align",
+  "--gate-pack",
+  "docs/gate-pack.md",
+]
+
+[expected]
+exit = 2
+stderr = "second-opinion: second opinion needs model 'reasoner' on codex, but the registry declares no model_flag for that vendor — an unpinned run would not be model-diverse. Declare the measured flag in the vendor's second_opinion block, or route this gate another way.\n"
+stdout = ""

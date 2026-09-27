@@ -1,0 +1,33 @@
+# --check over the package subject with tags already cut on the baseline commit. The version is
+# the final 1.2.0 and CHANGELOG.md's topmost released heading is `## v1.2.0` (window ok), but:
+# `v1.2.0` already exists (release.retag — a re-release), `1.1.0` names a version without the
+# `v` (release.tag-spelling, then excluded from the other rules), and `v0.9.0` has no
+# `## v0.9.0` section (release.undocumented-tag). All three are warnings, so the check passes.
+# One version literal only (pyproject.toml), so version-literals stays silent.
+id = "tools/release-check-package-tags"
+ecosystem = "shared"
+kind = "tool"
+covers = [
+  "tool:release/release_check",
+  "code:release.retag",
+  "code:release.tag-spelling",
+  "code:release.undocumented-tag",
+]
+
+[fixture]
+attach = "native"
+tags = ["v1.2.0", "1.1.0", "v0.9.0"]
+
+[fixture.files]
+"pyproject.toml" = "[project]\nname = \"consumer\"\nversion = \"1.2.0\"\n\n[dependency-groups]\ndev = [\"akmon=={{version}}\"]\n"
+"CHANGELOG.md" = "# Changelog\n\n## v1.2.0\n\n- this release\n\n## v1.1.0\n\n- an earlier release\n"
+"_aitna/agents/release/README.md" = "See `_aitna/akmon/roles/release.md`.\n"
+
+[run]
+tool = "release/release_check"
+argv = ["--check", "--subject", "package"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "== version ↔ changelog cross-check\nOK release.changelog-window CHANGELOG.md: final version 1.2.0 matches the topmost released heading `## v1.2.0` → Keep the topmost released heading equal to the version being built.\nWARN release.tag-spelling 1.1.0: tag 1.1.0 names a version but is not spelled v1.1.0 → Cut release tags as v1.1.0 — that spelling is the release tag's only form.\nWARN release.retag v1.2.0: final version 1.2.0 is already tagged as v1.2.0 → Confirm this is a deliberate re-release, or bump the version.\nWARN release.undocumented-tag v0.9.0: tag v0.9.0 has no `## v0.9.0` heading in CHANGELOG.md → Add the `## v0.9.0` section it released, or accept the historical gap.\n\n== akmon verify --project-root {{root}} --strict --quiet\n\n# package release: run the project's own checks from _aitna/agents/release/README.md\n# (tests / lint / build — this tool does not guess them).\n\nrelease check: all green\n"

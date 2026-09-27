@@ -1,0 +1,23 @@
+id = "tools/stats-degraded"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/stats"]
+
+# Every data source absent (no delegation log, the named transcript missing): each section
+# degrades to its explanatory line and the tool still exits 0 (its stated contract — it never
+# raises for an unavailable source).
+
+[run]
+tool = "model_routing/stats"
+argv = [
+  "--transcript",
+  ".claude/transcripts/absent.jsonl",
+  "--no-budget",
+  "--report-dir",
+  ".claude/stats",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "delegations: no delegations logged\norchestrator tokens: transcript unavailable\nsubagent tokens: no subagent transcripts\nbudget: unavailable (skipped (--no-budget))\nreport: .claude/stats/stats-{{ts}}.md\n"

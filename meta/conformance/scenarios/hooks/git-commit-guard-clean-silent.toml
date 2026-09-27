@@ -1,0 +1,26 @@
+# A non-landing, non-privileged shell route is silent — and the once-per-session route
+# diagnostic is suppressed by seeding its marker, isolating the "no decision" contract.
+id = "hooks/git-commit-guard-clean-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[fixture]
+attach = "native"
+tmp_files = { "akmon-shell-route-10b3a713a0de4fb09057" = "1" }
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-gcm-clean"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { command = "git status" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

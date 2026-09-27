@@ -1,0 +1,24 @@
+# --check over the package subject with a version but no CHANGELOG.md: the window rule and the
+# tag-coverage rule cannot run, and each says so as a release.check-skipped warning rather than
+# an error (a skip never fails the check). One version literal only (pyproject.toml), so the
+# version-literals join has nothing to compare and stays silent.
+id = "tools/release-check-package-no-changelog"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:release/release_check", "code:release.check-skipped"]
+
+[fixture]
+attach = "native"
+
+[fixture.files]
+"pyproject.toml" = "[project]\nname = \"consumer\"\nversion = \"1.2.0.dev0\"\n\n[dependency-groups]\ndev = [\"akmon=={{version}}\"]\n"
+"_aitna/agents/release/README.md" = "See `_aitna/akmon/roles/release.md`.\n"
+
+[run]
+tool = "release/release_check"
+argv = ["--check", "--subject", "package"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "== version ↔ changelog cross-check\nWARN release.check-skipped CHANGELOG.md: CHANGELOG.md is absent, so version 1.2.0.dev0 was compared against nothing → Add CHANGELOG.md so a consumer can read the window before accepting a pin.\nWARN release.check-skipped CHANGELOG.md: CHANGELOG.md is absent, so no tag was checked for a heading → Add CHANGELOG.md so the tags already cut can be checked against it.\n\n== akmon verify --project-root {{root}} --strict --quiet\n\n# package release: run the project's own checks from _aitna/agents/release/README.md\n# (tests / lint / build — this tool does not guess them).\n\nrelease check: all green\n"

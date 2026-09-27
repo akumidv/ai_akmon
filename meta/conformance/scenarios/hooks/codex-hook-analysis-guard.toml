@@ -1,0 +1,24 @@
+# The Codex analysis-guard route: an apply_patch updating a planning document (_aitna/design/)
+# gets the shared analysis-before-mutation advisory.
+id = "hooks/codex-hook-analysis-guard"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook", "hook:analysis-guard"]
+
+[run]
+script = "codex-hook"
+args = ["analysis-guard"]
+
+[run.payload]
+tool_name = "apply_patch"
+session_id = "sess-ch-ag"
+cwd = "{{root}}"
+tool_input = { command = "*** Begin Patch\n*** Update File: _aitna/design/node-consumers.md\n@@\n+new section\n*** End Patch\n" }
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+additionalContext = "[akmon] Analysis-before-mutation check — you are editing a planning/design doc (backlog / design / ADR / requirements / akmon process).\nRole: **assessing what is** (problems, state, conformance) is `review`; **constructing the design** (options, contracts, the chosen structure) is `architect`. Declare the role (`🧭 agent: <name> — <focus>`) and restate it on a switch (roles/README.md).\nIf this turn is analysis-only — the owner asked you to analyze, explain, review, compare options, or identify what remains — STOP: report findings + a recommendation in chat and get explicit confirmation (\"write it\" / \"record it\" / \"make the change\") before editing. If the request was already an edit command, proceed. Rule: guardrails/_common.md § Analysis before mutation."

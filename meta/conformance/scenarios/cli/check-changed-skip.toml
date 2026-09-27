@@ -1,0 +1,17 @@
+id = "cli/check-changed-skip"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:check", "code:check.run"]
+
+[fixture]
+attach = "native"
+name = "base"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nlast_realign = \"{{version}}\"\nattached_archetype = \"demo\"\n\n[check]\nlint = { command = \"nosuchcheck-never-installed {files}\", files = [\"*.md\"] }\n" }
+
+[run]
+argv = ["check", "--changed"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "OK check.run [check].lint: no changed file it checks → Nothing to do until a matching file changes\n"

@@ -1,0 +1,27 @@
+# Package mode: the materialized guardrails copy under <aitna>/.akmon/ differs from the
+# executing tree — SessionStart speaks the stale notice on the owner-only systemMessage
+# channel while the roster still reaches the model.
+id = "hooks/session-start-stale-materialization"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:session-start-agent"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\n", "_aitna/.akmon/guardrails/_common.md" = "stale guardrail copy\n" }
+
+[run]
+script = "session-start-agent"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-stale"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "SessionStart"
+additionalContext = "[akmon] Active-agent declaration\nBefore doing project work, state which agent you are operating as, and restate it whenever you switch. Format: `🧭 agent: <name> — <focus>`.\n- DEVELOP (build the project): engineer\nNo agent is active yet.\nPick by operation: decompose an existing thing → review · construct a new structure/decision → architect · realize a decided structure in code → engineer. If unclear, ask.\nDelegation is the default for non-atomic work: before the first repository sweep, edit, or test run, decompose the task and delegate every independent sub-step to available subagents. Keep only decomposition, routing, synthesis, and owner dialogue in the orchestrator. Skip delegation only when the task is atomic or the harness exposes no subagents; state the reason.\nAlso: read `_aitna/memory/` at session start (project memory)."

@@ -1,0 +1,15 @@
+id = "cli/version"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:version"]
+
+[fixture]
+attach = "none"
+
+[run]
+argv = ["version"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{{version}}\n"

@@ -1,0 +1,20 @@
+id = "tools/archive-unknown-id"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:tasks/archive"]
+
+# --done names an id that is not a top-level entry: a typo fails closed (exit 2, the error line
+# on stderr) and nothing is written.
+
+[fixture.files]
+"_aitna/TASKS.md" = "# Tasks\n\n- C102 · wire the coverage gate · active · architect\n"
+"_aitna/TASKS_ARCHIVE.md" = "# Archive\n\n## Done\n\n- T1 · older demo · done · engineer · moved 2026-08-01\n"
+
+[run]
+tool = "tasks/archive"
+argv = ["--tasks", "_aitna/TASKS.md", "--done", "C999"]
+
+[expected]
+exit = 2
+stderr = "error: no such entry: C999\n"
+stdout = ""

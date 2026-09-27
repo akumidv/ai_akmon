@@ -240,3 +240,31 @@ def test_a_pin_the_vendor_cannot_apply_stops_the_run_loudly(tmp_path, capsys, mo
 
     assert exit_code == 2
     assert "declares no model_flag" in capsys.readouterr().err
+
+
+def test_package_mode_reads_the_registry_from_its_own_tree(tmp_path, capsys):
+    """A package-mode project has no ``<AITNA_ROOT>/akmon`` mount: the registry comes from the tree
+    the tool runs from (the conformance corpus's native attach found the mount path hardcoded)."""
+    root = tmp_path / "proj"
+    (root / "_aitna").mkdir(parents=True)
+    (root / "_aitna" / ".akmon.toml").write_text('mount = "package"\n', encoding="utf-8")
+    pack = _gate_pack(root)
+
+    exit_code = second_opinion.main(
+        [
+            "--project-root",
+            str(root),
+            "--provider",
+            "anthropic",
+            "--orchestrator-vendor",
+            "openai",
+            "--gate",
+            "code-verify",
+            "--gate-pack",
+            str(pack),
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 0
+    assert "provider=anthropic" in capsys.readouterr().out

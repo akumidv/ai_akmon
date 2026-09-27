@@ -1,0 +1,47 @@
+id = "cli/verify-record-realign-stale"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:verify", "code:attach.record", "code:attach.realign"]
+
+[fixture]
+attach = "native"
+name = "base"
+warmup = true
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nlast_realign = \"0.1.0\"\nattached_archetype = \"demo\"\n" }
+
+[run]
+argv = ["verify"]
+
+[expected]
+exit = 1
+stderr = ""
+findings = [
+  "OK layout.consumer-path AGENTS.md: AGENTS.md exists → Keep AGENTS.md in place.",
+  "OK layout.consumer-path _aitna/TASKS.md: _aitna/TASKS.md exists → Keep _aitna/TASKS.md in place.",
+  "OK layout.consumer-path _aitna/agents: _aitna/agents exists → Keep _aitna/agents in place.",
+  "OK layout.consumer-path _aitna/memory: _aitna/memory exists → Keep _aitna/memory in place.",
+  "OK isolation.use-surface: USE surface names no akmon development artifacts → Keep decision-record citations and dev-tree paths out of the USE surface.",
+  "OK agents.block-anchors AGENTS.md: AGENTS.md akmon block contains required anchors → Keep every required anchor in the AGENTS.md akmon block.",
+  "OK pointers.vendor-agents-link: vendor pointers point at AGENTS.md → Keep every vendor pointer aimed at AGENTS.md.",
+  "OK agents.skill-roots AGENTS.md: AGENTS.md references source skill roots → Keep the source skill roots named in AGENTS.md.",
+  "OK caps.always-loaded AGENTS.md: consumer-total: lines=21/570 bytes=917/34000 → Keep AGENTS.md and the guardrails it imports within the always-loaded cap",
+  "OK charters.role-link _aitna/agents/engineer/README.md: _aitna/agents/engineer/README.md links a akmon role → Keep the akmon role link in this charter.",
+  "OK memory.index _aitna/memory/README.md: _aitna/memory/README.md exists → Keep README.md as the memory index.",
+  "OK memory.index-coverage _aitna/memory: memory index mentions all memory markdown files → Keep every memory file listed in the index.",
+  "OK tasks.entry-status _aitna/TASKS.md: TASKS.md uses well-formed index entries → Keep every entry's status field within active | blocked | deferred | done.",
+  "OK skills.present: found 1 skill(s) → Keep at least one SKILL.md in a skill root.",
+  "OK pointers.generated-freshness: generated pointers match `akmon sync` → Re-run akmon sync after every change to a generated file's source.",
+  "OK codex.host-trust .codex/hooks.json: codex is not installed; Codex host-trust delivery is not verified → Install codex to verify hook delivery, or ignore if this project does not run it.",
+  "OK routing.registry-parse standard tree:tools/model_routing/registry.json: model-routing registry parses → Keep the model-routing registry valid JSON.",
+  "OK routing.selection-policy tools/model_routing/registry.json#anthropic: model-routing anthropic semantic selection policy exists → Keep the semantic selection policy on this vendor.",
+  "OK routing.semantic-fallback tools/model_routing/registry.json#anthropic: model-routing anthropic semantic fallback exists → Keep a model named for every tier in this vendor's semantic_fallback.",
+  "OK routing.second-opinion tools/model_routing/registry.json#anthropic: model-routing anthropic second_opinion is configured → Keep harness, operation and report_dir set for this vendor's second_opinion.",
+  "OK routing.selection-policy tools/model_routing/registry.json#openai: model-routing openai semantic selection policy exists → Keep the semantic selection policy on this vendor.",
+  "OK routing.semantic-fallback tools/model_routing/registry.json#openai: model-routing openai semantic fallback exists → Keep a model named for every tier in this vendor's semantic_fallback.",
+  "OK routing.second-opinion tools/model_routing/registry.json#openai: model-routing openai second_opinion is configured → Keep harness, operation and report_dir set for this vendor's second_opinion.",
+  "OK gitignore.env-secrets .gitignore: .gitignore has the akmon env secret pattern → Keep the '*.env' and '!*.env.example' patterns in .gitignore.",
+  "OK ci.akmon-checks .github/workflows: CI checks akmon generated pointers and verify → Keep the akmon sync and verify commands in CI.",
+  "OK changelog.package-mode: package mode: changelog discipline is owned by the akmon repository → Track the standard's changelog discipline in the akmon repository itself.",
+  "OK attach.record _aitna/.akmon.toml: _aitna/.akmon.toml records akmon version {{version}} → Refresh _aitna/.akmon.toml on every akmon bump.",
+  "ERROR attach.realign _aitna/.akmon.toml: _aitna/.akmon.toml records akmon {{version}} but was last realigned at 0.1.0 — the pin moved and the project was never realigned to it → Run `akmon init` to realign, then `akmon sync` and `akmon verify --strict`.",
+]
