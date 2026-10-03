@@ -5,7 +5,9 @@ own, each justified in place; C69 gave the record one home and C75 folded them i
 Nothing stopped another from appearing — these static carriers do. A function that parses TOML, or
 a module whose code names the record's path, outside the ones listed here goes red: read the
 record through ``common.record.read_akmon_toml``, or add the entry with the reason it needs one.
-Docstrings do not count; code, messages included, does.
+Docstrings do not count; code, messages included, does. The file also carries the readers' own
+contract on bytes no decoder can read — the one input the corpus cannot pin, since a units table
+is itself a text file.
 """
 
 from __future__ import annotations
@@ -13,6 +15,10 @@ from __future__ import annotations
 import ast
 from collections.abc import Iterator
 from pathlib import Path
+
+import pytest
+
+from common.record import RecordError, read_akmon_toml, read_akmon_toml_strict
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -98,3 +104,37 @@ def test_the_record_path_is_named_only_by_the_listed_modules():
         ):
             users.add(name)
     assert users == set(_RECORD_PATH_USERS)
+
+
+# --------------------------------------------------------------------------------------
+# the one reader's answer to bytes no decoder can read (the JS twin carries the same two cases)
+# --------------------------------------------------------------------------------------
+
+
+def _undecodable_record(tmp_path):
+    """A record whose bytes are not valid UTF-8: ``[akmon]`` then a name with a 0xff 0xfe pair.
+
+    Written with ``write_bytes`` because the input *is* those two bytes — a source-encoded
+    ``\\ufffd`` is valid UTF-8, so writing that would test the substitution, not the refusal.
+    """
+    record = tmp_path / ".akmon.toml"
+    record.write_bytes(b'[akmon]\nname = "\xff\xfe bad"\n')
+    return record
+
+
+def test_an_undecodable_record_degrades_to_nothing_leniently(tmp_path):
+    """``tomllib.load`` decodes before it parses, so the invalid byte used to escape as a
+    ``UnicodeDecodeError`` — aborting a session over a file a hook only consults (C69,
+    ADR-0009/D02). It is an unreadable record, so it takes the documented ``{}`` answer; the JS
+    twin used to answer the same file with the U+FFFD-substituted value no disk holds.
+    """
+    assert read_akmon_toml(_undecodable_record(tmp_path)) == {}
+
+
+def test_an_undecodable_record_is_refused_by_name_strictly(tmp_path):
+    """The strict entry, for the caller that *applies* the record, raises the named error and
+    says which file. The detail after the colon is the codec's own sentence on this side and the
+    decoder's on the JS one; the twins share the refusal, not the prose.
+    """
+    with pytest.raises(RecordError, match=r"^\.akmon\.toml cannot be read as TOML: "):
+        read_akmon_toml_strict(_undecodable_record(tmp_path))

@@ -1,13 +1,13 @@
 # Unit table: the JSON writer. Three canonical forms the implementations emit (the corpus's
 # pinned spec — Python's json.dumps answers below are the reference):
 #   hook      — a hook's stdout document: one line, default separators
-#             — hooks/claude_adapter.py:77 (render_result), hooks/claude_adapter.py:107
-#               (crash-open systemMessage), hooks/codex_adapter.py:291 (print_result)
+#             — hooks/claude_adapter.py::render_result, hooks/claude_adapter.py::run_guarded
+#               (the crash-open systemMessage), hooks/codex_adapter.py::print_result
 #   wiring    — generated wiring files (.claude/settings.json, .codex/hooks.json): indent=2 + trailing newline
-#             — bin/sync.py:537 (_claude_settings), bin/sync.py:851 (_codex_hooks_text),
-#               tools/model_routing/routing.py:1202 (binding_artifacts local config)
+#             — bin/sync.py::_claude_settings, bin/sync.py::_codex_hooks_text,
+#               tools/model_routing/routing.py::binding_artifacts (local config)
 #   canonical — the registry content hash: sort_keys, compact separators
-#             — tools/model_routing/routing.py:83 (registry_hash)
+#             — tools/model_routing/routing.py::registry_hash
 #
 # The cases below past the first block pin the JSON *writer's* stdlib semantics generically
 # (ensure_ascii escaping, key order, number spelling) rather than one call site's payload
@@ -19,7 +19,9 @@
 # values, which the `null_keys` field below exists to test since TOML itself has no null.
 #
 # No call site currently dumps a float (payloads above are ints/strings/bools/lists/dicts
-# only); the one float case below just pins that `1.0` keeps its `.0` if that ever changes.
+# only); the float cases below pin the spelling rule itself, so that the day one is added the
+# mirror already agrees — `json.dumps` prints `repr(float)`, and both whole and fractional
+# forms are carried.
 
 [[case]]
 form = "hook"
@@ -130,6 +132,50 @@ expected = '{"10":2,"2":3,"b":1}'
 form = "hook"
 value = { x = 1.0 }
 expected = '{"x": 1.0}'
+
+# Number spelling, which is where a JS writer and `json.dumps` part company if the writer is
+# built on `JSON.stringify` (it drops the `.0`) or on `toFixed` (it spells the *binary* value:
+# `0.1` through 20 places is `0.10000000000000000555`). Python prints `repr(float)` — the
+# shortest digits that read back exactly — and chooses fixed or exponential by where the
+# decimal point sits: exponential below `1e-4` and above `1e16`, with the exponent padded to
+# two digits. `1.5e16` is the case that catches a writer taking the digits from `String()`
+# instead, which pads them out to `15000000000000000`.
+
+[[case]]
+form = "hook"
+value = { a = 0.1, b = 123.456, c = 3.0 }
+expected = '{"a": 0.1, "b": 123.456, "c": 3.0}'
+
+[[case]]
+form = "hook"
+value = { a = 1e16, b = 1.5e16, c = 1e21 }
+expected = '{"a": 1e+16, "b": 1.5e+16, "c": 1e+21}'
+
+[[case]]
+# `5e15` sits one step under the exponential cut and keeps the long fixed form with its `.0`.
+form = "hook"
+value = { a = 5e15, b = 1e-4, c = 1e-5 }
+expected = '{"a": 5000000000000000.0, "b": 0.0001, "c": 1e-05}'
+
+[[case]]
+form = "hook"
+value = { a = -0.0, b = 0.0, c = 1e-7 }
+expected = '{"a": -0.0, "b": 0.0, "c": 1e-07}'
+
+[[case]]
+# TOML spells integers in forms a JS number cannot tell from a float by value alone: the hex
+# `0xE` carries an `e` that belongs to the digits, and `1_000` carries an underscore. Both are
+# integers, and both must come out as integers — a floatness test that only looks for `.`/`e`
+# marks the first one a float and writes `14.0`.
+form = "hook"
+value = { a = 0xE, b = 1_000, c = 0o17, d = 0b1011 }
+expected = '{"a": 14, "b": 1000, "c": 15, "d": 11}'
+
+[[case]]
+# A whole float in the canonical form: sort_keys and the compact separators, still `3.0`.
+form = "canonical"
+value = { b = 1.0, a = 2.5 }
+expected = '{"a":2.5,"b":1.0}'
 
 [[case]]
 # true/false/null. TOML has no null, so `null_keys` names top-level keys of `value` the probe

@@ -1,0 +1,189 @@
+# Unit table: what akmon needs on a host, and the one owner of every optional-harness command
+# (common/runtime.py; JS mirror js/common/runtime.mjs, ADR 0020 D01). Data file:
+# common/runtime.json, read from the tree under test on both sides — the Python module opens the
+# file beside itself, the JS mouth hands the same document to the module at its entry point. So
+# every row answers about the *shipped* declaration: neither module takes the table as an
+# argument, and a synthetic harness map is not something this table can ask either mouth.
+#
+# Call sites: harness_command — tools/model_routing/routing.py::second_opinion_command (the
+# non-interactive review argv: the map's prefix, then the registry's model_flag and prompt).
+# codex_hooks_list_command — bin/verify.py::check_codex_host_trust, the route it speaks JSON-RPC
+# over, and meta/self_ci.py::_codex_free_env, which hides that executable *by name*, so the
+# binary's spelling is load-bearing twice. declared_runtimes / harness_commands —
+# meta/checks/runtime.py::check_declared_runtimes, the C57 checker that joins them to the
+# generated wiring. harness_binaries — the list meta/checks/runtime.py::own_tool_literals scans
+# the tree for. version_command has no shipped caller in this tree — the only calls are in
+# meta/tests/test_runtime_contract.py, though the module's docstring says `sync` reads it to pick
+# a generated inventory (C46). The row stays: the twin must answer the same argv whenever that call
+# lands.
+#
+# Families, each with the index base both mouths share: `label` 0 — the population and source
+# labels, the shell's name, and the modality markers, as the module exports them; `declared` 1000
+# — declaration number `index` of the ordered list, as {binary, population, modality}; `command`
+# 2000 — harness_command's argv, where `extra` is the caller's policy tail; `named` 3000 —
+# version_command and codex_hooks_list_command; `binaries` 4000 — the executable list; `error`
+# 5000 — the refusal text for a harness or operation nobody declared.
+#
+# Why each family: the labels are the vocabulary a consumer's report prints, and a rename on one
+# side would split the implementations' findings apart while each still read as correct;
+# `declared` pins that a three-element row of the data file lands in binary/population/modality
+# *in that order* — a port that destructured it differently answers every later question wrongly;
+# `command` and `named` pin the join this module exists to own (executable, then the operation's
+# prefix, then the caller's tail appended and never substituted); `binaries` pins the projection
+# over the map; `error` pins what an owner is actually shown.
+
+[[label]]
+name = "GENERATED_WIRING"
+expected = "generated-wiring"
+
+[[label]]
+name = "OWN_TOOLING"
+expected = "akmon-own-tooling"
+
+[[label]]
+# The carrier of every generated command line has no executable of its own: the wiring *is* a
+# command line, so the shell is named by shape, not by a binary on PATH.
+name = "POSIX_SHELL"
+expected = "POSIX shell"
+
+[[label]]
+name = "REQUIRED"
+expected = "required"
+
+[[label]]
+name = "OPTIONAL"
+expected = "optional"
+
+[[label]]
+# A prefix, not a whole modality: the route rides on it ("required-on:codex"), which is why
+# `git` is required for one vendor's wiring and not for the other's.
+name = "REQUIRED_ON"
+expected = "required-on:"
+
+# --- the declaration list, by position (base 1000): the order the data file writes is the order
+# the checker joins to the wiring, and the field mapping is the port's easiest mistake. ---------
+
+[[declared]]
+index = 0
+expected = { binary = "POSIX shell", population = "generated-wiring", modality = "required" }
+
+[[declared]]
+index = 1
+expected = { binary = "python3", population = "generated-wiring", modality = "required" }
+
+[[declared]]
+# The one modality that names a route: the Codex wiring resolves the project root through
+# `git rev-parse`, where the Claude wiring is given `$CLAUDE_PROJECT_DIR`.
+index = 2
+expected = { binary = "git", population = "generated-wiring", modality = "required-on:codex" }
+
+[[declared]]
+index = 3
+expected = { binary = "claude", population = "akmon-own-tooling", modality = "optional" }
+
+[[declared]]
+# akmon never requires a harness to be installed: both vendor binaries are optional, and they
+# sit in the *own tooling* population so a missing one is not a broken consumer project.
+index = 4
+expected = { binary = "codex", population = "akmon-own-tooling", modality = "optional" }
+
+# --- harness_command: executable, then the operation's prefix, then the caller's tail (base
+# 2000). Every operation the shipped map declares appears here, which is how the whole map is
+# pinned through the join instead of being copied as a structure. -----------------------------
+
+[[command]]
+harness = "claude"
+operation = "version"
+expected = ["claude", "--version"]
+
+[[command]]
+harness = "codex"
+operation = "version"
+expected = ["codex", "--version"]
+
+[[command]]
+harness = "claude"
+operation = "review"
+expected = ["claude", "-p", "--output-format", "text"]
+
+[[command]]
+harness = "codex"
+operation = "review"
+expected = ["codex", "exec"]
+
+[[command]]
+# The persistent-process route: the argv only opens `codex app-server`, and the protocol runs
+# over its stdio (C70) — the one operation whose answer is not a whole command.
+harness = "codex"
+operation = "hooks-list"
+expected = ["codex", "app-server"]
+
+[[command]]
+# routing.second_opinion_command's real tail: the registry's model_flag, then the prompt last.
+harness = "codex"
+operation = "review"
+extra = ["--model", "gpt-5", "review this"]
+expected = ["codex", "exec", "--model", "gpt-5", "review this"]
+
+[[command]]
+# A tail is appended, never merged: this repeats a flag the prefix already carries, and the map
+# does not know that — the caller owns what it passes.
+harness = "claude"
+operation = "review"
+extra = ["--output-format", "json"]
+expected = ["claude", "-p", "--output-format", "text", "--output-format", "json"]
+
+[[command]]
+# An empty argv element survives the spread on both sides; neither builder drops it.
+harness = "codex"
+operation = "version"
+extra = [""]
+expected = ["codex", "--version", ""]
+
+# --- the named constructors (base 3000): what the callers above actually reach ----------------
+
+[[named]]
+named = "version_command"
+harness = "claude"
+expected = ["claude", "--version"]
+
+[[named]]
+named = "version_command"
+harness = "codex"
+expected = ["codex", "--version"]
+
+[[named]]
+# The sole spelling of the Codex binary for the hooks-list route: a caller reaches it here rather
+# than writing "codex" itself, so the name has one owner even for a one-shot argv nobody else
+# assembles.
+named = "codex_hooks_list_command"
+expected = ["codex", "app-server"]
+
+# --- the executables akmon knows how to invoke (base 4000) -----------------------------------
+
+[[binaries]]
+expected = ["claude", "codex"]
+
+# --- the refusals (base 5000): the whole text is spec, including the quote style and the order
+# of the known list. harness_command raises these; its shipped caller is the second-opinion
+# command builder named at the top of this file, so a registry that asks for more than the map
+# declares is stopped by this sentence and nothing else. -------------------------------------
+
+[[error]]
+harness = "gemini"
+operation = "version"
+expected = "unknown harness 'gemini'; known: claude, codex"
+
+[[error]]
+# The hooks-list route belongs to codex alone, and the answer says which operations the named
+# harness does declare.
+harness = "claude"
+operation = "hooks-list"
+expected = "harness 'claude' declares no operation 'hooks-list'; known: review, version"
+
+[[error]]
+# A non-ASCII name is quoted the same way on both sides (Python `repr`, JS a template) and
+# written as itself, not \\u-escaped, in the document both mouths print.
+harness = "коdex"
+operation = "version"
+expected = "unknown harness 'коdex'; known: claude, codex"

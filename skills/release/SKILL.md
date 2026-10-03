@@ -50,14 +50,17 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
    breaking-change handling, migration notes, deferrals, and which consumers to update.
 8. **Prepare release artifacts.** Move `CHANGELOG.md` `Unreleased` → the new version
    heading; keep an empty `Unreleased` so the verify warn stays satisfied. Then bump the
-   **version literals** the same heading now names — for akmon that is `pyproject.toml`'s
-   `version` **and** `src/akmon/__init__.py::_STATIC_VERSION`, which must stay literally equal:
-   one release bump is two edits, and the git tag does not produce the number. These are the
-   only files the release role edits — route everything else to its owning role.
+   **version literals** the subject carries: `pyproject.toml`'s `version` **and**
+   `src/akmon/__init__.py::_STATIC_VERSION`, which must stay literally equal, and for akmon the
+   npm carrier too — its value is *derived*, the SemVer spelling `common/versions.py` reads off
+   the PEP 440 literal, never a hand-computed number. `--plan` names the set and the staging
+   line for the subject, so one bump lands on every carrier in one commit and the git tag does
+   not produce the version. These are the only files the release role edits — route everything
+   else to its owning role.
 9. **Verify.** Run `python3 _aitna/akmon/tools/release/release_check.py --check`. It first joins
-   the four version carriers — both literals, the topmost `CHANGELOG.md` heading and the tag set
-   — and then runs the subject's release suite (pointer sync, contract verify, and the subject's
-   own checks + tests), resilient to the test runner (`uv` → project `.venv` → system `pytest`).
+   the version carriers — each literal the subject carries, the topmost `CHANGELOG.md` heading
+   and the tag set — then runs the subject's release suite (pointer sync, contract verify, its
+   own checks and tests), resilient to the test runner (`uv` → project `.venv` → system `pytest`).
    All green before handoff; a version finding fails the mode outright, and a skip finding names
    a rule whose input was absent rather than one that passed.
 10. **Owner handoff** *(gate, D5)*. Run

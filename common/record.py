@@ -59,10 +59,11 @@ def read_akmon_toml(path: Path) -> dict:
     Uses Python 3.11+ ``tomllib`` when available; a minimal stdlib line parser is the fallback,
     used both when ``tomllib`` is absent and when it raises ``TOMLDecodeError`` on a malformed
     file — lenient parsing, not a pre-3.11 support promise. Quotes are stripped; values are
-    treated as strings. Returns ``{}`` only when the file is absent or unreadable (``OSError``);
-    a malformed file is read leniently by the fallback parser instead and can come back
-    non-empty, so a caller that needs to *report* a broken record must check the file itself
-    rather than infer it from the result.
+    treated as strings. Returns ``{}`` only when the file is absent or unreadable — an
+    ``OSError``, or bytes that are not UTF-8 at all, never a value guessed at them; a malformed
+    file is read leniently by the fallback parser instead and can come back non-empty, so a
+    caller that needs to *report* a broken record must check the file itself rather than infer
+    it from the result.
     """
     if not path.is_file():
         return {}
@@ -81,7 +82,13 @@ def read_akmon_toml(path: Path) -> dict:
             # it only reads (C69, ADR-0009/D02). It also keeps strict and lenient parsing aligned on
             # inline comments instead of making malformed-input behavior parser-dependent.
             pass
-        except OSError:
+        except (OSError, UnicodeDecodeError):
+            # Bytes that are not UTF-8 are an unreadable record and take the same ``{}`` answer as
+            # an absent one: reading them anyway would hand back the U+FFFD substitutions a
+            # lenient decoder invents — a record value no disk holds — while raising would abort
+            # a session over a file a hook only consults (C69, ADR-0009/D02). ``tomllib.load``
+            # decodes the whole file before it parses, so an invalid byte reaches here and never
+            # the fallback below, which is only ever handed bytes this decode accepted.
             return {}
     data: dict = {}
     section = data

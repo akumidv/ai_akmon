@@ -84,7 +84,18 @@ def tree_members() -> list[str]:
     return _data()["tree_members"]
 
 
-_COPY_IGNORE = shutil.ignore_patterns("__pycache__", "*.py[cod]", ".pytest_cache", ".ruff_cache", ".git", ".DS_Store")
+# What never enters the mount. The caches are noise; ``*.test.mjs`` is the one entry here that is
+# not about noise: a mounted file sits *inside the consumer's own project root*, and both JS
+# tools scan that root by default — measured, a consumer running ``node --test`` over a vendored
+# mount discovered 49 tests and failed 4 of them (akmon's own suites, resolving paths against a
+# tree they do not live in), and ``eslint`` reported 58 problems for files the project did not
+# write. The same content under ``node_modules/akmon/js`` — mode ``package`` — reports 1 test and
+# 0 problems, because both tools skip that directory (M116). Tests are dev-only material, which is
+# the rule the member allowlist already applies to ``src/`` and ``tests/``; the JS tree simply
+# carried its tests past it.
+_COPY_IGNORE = shutil.ignore_patterns(
+    "__pycache__", "*.py[cod]", ".pytest_cache", ".ruff_cache", ".git", ".DS_Store", "*.test.mjs"
+)
 
 
 def _mount_gitignore() -> str:

@@ -1,0 +1,592 @@
+{
+    "package": "smol-toml",
+    "version": "1.9.0",
+    "source": "https://registry.npmjs.org/smol-toml/-/smol-toml-1.9.0.tgz",
+    "tarball_sha256": "4909da857f775ea729461e552fdc85966e7825c1020605066b3a9ad29642dbdc",
+    "pinned": "2026-09-27",
+    "files": {
+        "LICENSE": "fa5659948374d4f555594f47f6da073b40dc503e921aeeece30df4362b3051a5",
+        "dist/date.d.ts": "c7ad3531c131f2b5b246b2d208b75c5403475ad155b7661fa2d673104b806791",
+        "dist/date.js": "ef924a2a42c7f16761e7098c3ed8e04195ecbcb02d5c369db0aee76f251a409c",
+        "dist/error.d.ts": "02e33cdc5ca75f517f44b31070640be0fe6d0169dd91c266d02a1e2a71e064ac",
+        "dist/error.js": "76f8e47f5fc57273748242d59570656d7c921a80bceb2291ca5a4d7a723e9f29",
+        "dist/extract.js": "b964c8f39c737172295b31b9ee61b49e513ff12788e119ddfdbb68c448054c12",
+        "dist/index.cjs": "09ce310a8bcc1bb5c7dc2813c88b4bfbbeb685e4c186a9631ff54da7e85c880f",
+        "dist/index.d.ts": "b4556819c2ed0cd4016d05a6bfd7d4773c0b5ffb39c8ed547796ce4a1093d9b8",
+        "dist/index.js": "dc8e0afc74477e514f5cb8492b587560c1d7d68cec03a994cc8bc4af99c8da2a",
+        "dist/parse.d.ts": "2b230dc984b6e51b545bfe222f9965cc2ff434164ed9428bec415c5e508a9854",
+        "dist/parse.js": "195e33ea068bf6f3acb5b3342792ac4aa954bba7e751519ba869c00da395ecdb",
+        "dist/primitive.js": "be47fe90bf9a410af0b9204b6b34617f4b38e57f08198b10cb024a0272eb5936",
+        "dist/stringify.d.ts": "628a6a55714fcf4a4eb0e59866ab1e5cc67c1b9e0cfc8524ccc8d6b5ee24ad7c",
+        "dist/stringify.js": "c717d95456426dc8a0b07c9d03a4e434d5dea8254fca24e5fd93a22de3bcd44c",
+        "dist/struct.js": "736742cfa645bbd08bc5396c5f7ddbea5c3b7ac5d61fe86031846f5769131deb",
+        "dist/util.d.ts": "e6b1d3eecb240dc71d0dc28d1beee69cefd6ee014507c822909be0a7117517e0",
+        "dist/util.js": "6327e40efd957128da15867c3a32293950a925570b457b1b78c735452cebc08e",
+        "package.json": "0e35bde6992fef675058596ea0e94c2d3ca65e5f9b73a326d94208be6210f192"
+    },
+    "akmon_files": [
+        "README.md",
+        "pins.json",
+        "pins.test.mjs"
+    ],
+    "toml_test": {
+        "version": "v2.2.0",
+        "binary": "https://github.com/toml-lang/toml-test/releases/download/v2.2.0/toml-test-v2.2.0-linux-amd64.gz",
+        "binary_note": "binary_sha256 is of the extracted binary (release asset is gzipped)",
+        "binary_sha256": "78b74b9d4136f9561a2c57778920d3c6646ead41079d1b36fc1629641187df30",
+        "decoder": "meta/conformance/tomltest/decoder.mjs",
+        "subset": "files-toml-1.0.0",
+        "run": {
+            "node_22": {
+                "version": "v22.23.3",
+                "passed": 679,
+                "failed": 0,
+                "skipped": [
+                    {
+                        "name": "invalid/control/multi-cr",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/control/rawmulti-cr",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-16-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-19-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-2",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-46-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-46-1",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-49-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-50-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-5",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/datetime/no-seconds",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/inline-table/newline-comment",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/inline-table/newline",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-10",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-11",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-12",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-13",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-14",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-15",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-16",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-17",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-18",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-19",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-1",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-20",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-21",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-22",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-23",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-24",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-25",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-26",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-27",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-28",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-29",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-30",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-31",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-32",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-33",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-34",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-35",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-36",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-37",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-38",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-39",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-3",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-40",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-41",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-42",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-43",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-44",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-45",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-46",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-47",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-48",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-49",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-4",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-50",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-51",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-52",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-53",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-6",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-7",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-8",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-9",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/string/escape-esc",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/string/hex-escape",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    }
+                ]
+            },
+            "node_24": {
+                "version": "v24.21.0",
+                "passed": 679,
+                "failed": 0,
+                "skipped": [
+                    {
+                        "name": "invalid/control/multi-cr",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/control/rawmulti-cr",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-16-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-19-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-2",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-46-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-46-1",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-49-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-50-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "invalid/spec-1.1.0/common-5",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/datetime/no-seconds",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/inline-table/newline-comment",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/inline-table/newline",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-0",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-10",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-11",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-12",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-13",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-14",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-15",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-16",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-17",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-18",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-19",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-1",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-20",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-21",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-22",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-23",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-24",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-25",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-26",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-27",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-28",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-29",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-30",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-31",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-32",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-33",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-34",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-35",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-36",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-37",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-38",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-39",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-3",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-40",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-41",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-42",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-43",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-44",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-45",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-46",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-47",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-48",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-49",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-4",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-50",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-51",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-52",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-53",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-6",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-7",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-8",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/spec-1.1.0/common-9",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/string/escape-esc",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    },
+                    {
+                        "name": "valid/string/hex-escape",
+                        "reason": "TOML 1.1.0-only; the Python floor (tomllib) reads 1.0.0"
+                    }
+                ]
+            }
+        }
+    }
+}

@@ -28,6 +28,7 @@ The skill that drives this tool: ``<AITNA_ROOT>/akmon/skills/release/SKILL.md``.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 import subprocess
@@ -50,7 +51,7 @@ from common import jsondata  # noqa: E402
 from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
 from common.project_root import aitna_root, aitna_root_name, resolve_project_root  # noqa: E402
 from common.record import read_akmon_toml  # noqa: E402
-from common.versions import is_final, split_version  # noqa: E402
+from common.versions import is_final, semver_spelling, split_version  # noqa: E402
 
 _VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 _UNRELEASED_RE = re.compile(r"^##\s+Unreleased\b", re.MULTILINE | re.IGNORECASE)
@@ -176,18 +177,21 @@ def run_state(root: Path, subject: str) -> int:
 # version <-> changelog cross-check (C54, design §4 — owner choice F9)
 # --------------------------------------------------------------------------------------
 #
-# The tree carries four independent version carriers — ``pyproject.toml``'s ``version`` (the
-# literal hatchling stamps into the wheel), ``src/akmon/__init__.py::_STATIC_VERSION`` (the
-# fallback when the package is not installed), the topmost ``CHANGELOG.md`` heading, and the git
-# tag — and until C54 nothing related any two of them. The defect that motivated the join had
-# already shipped: the tree at tag ``v0.3.0`` carried ``0.3.0.dev0``, so a wheel built from the
-# reviewed state was misnamed and the string ``0.3.0`` never existed in the tree at all.
+# The version carriers the join relates: ``pyproject.toml``'s ``version`` (the literal hatchling
+# stamps into the wheel), ``src/akmon/__init__.py::_STATIC_VERSION`` (the fallback when the
+# package is not installed), the topmost ``CHANGELOG.md`` heading, and the git tag. For the
+# ``akmon`` subject ``package.json``'s version joins them — not a further number to keep, but
+# the SemVer spelling ``common.versions.semver_spelling`` derives from the first (C103, ADR 0020
+# D05), so it is checked against the derivation rather than against a literal. Until C54 nothing
+# related any two of these. The defect that motivated the join had already shipped: the tree at
+# tag ``v0.3.0`` carried ``0.3.0.dev0``, so a wheel built from the reviewed state was misnamed
+# and the string ``0.3.0`` never existed in the tree at all.
 #
 # Severities follow the forks the owner closed in F9, and each one is a claim about what a
 # consumer can act on rather than a preference:
 #
-# * the two literals disagreeing is an **error** — one release bump is two edits, and this is the
-#   check that says so (F9/2);
+# * the two Python literals disagreeing is an **error** — they are one bump's pair, and this is
+#   the check that says so (F9/2);
 # * a version that does not match the changelog window is an **error** — that is the join;
 # * a final version that already has its tag is a **warn**, not an error: a retag is legitimate
 #   owner work and the check must not fight it;
@@ -282,6 +286,22 @@ def _static_version(path: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def _package_json_version(path: Path) -> str | None:
+    """The ``version`` literal of the npm carrier (``package.json``), or ``None`` when absent.
+
+    The carrier is a manifest, not a record: a missing or broken file is an *absent answer* the
+    caller reports, never a parse error here.
+    """
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    version = data.get("version") if isinstance(data, dict) else None
+    return version if isinstance(version, str) and version.strip() else None
+
+
 def _changelog_headings(path: Path) -> list[str]:
     """Every ``## `` heading, in file order — the changelog window as a reader meets it."""
     if not path.is_file():
@@ -327,8 +347,13 @@ def _skip(message: str, target: str, fix: str) -> Finding:
     return _finding("warn", "release.check-skipped", message, target, fix)
 
 
-def check_release_versions(root: Path) -> list[Finding]:
-    """The F9 join over ``root``'s four version carriers, as shared-envelope findings."""
+def check_release_versions(root: Path, subject: str = "package") -> list[Finding]:
+    """The F9 join over ``root``'s version carriers, as shared-envelope findings.
+
+    The ``package.json`` carrier (the npm side of the same version line, ADR 0020 D05) is
+    checked for the ``akmon`` subject only: for a ``package`` subject the project's own
+    ``package.json``, when it has one, is the project's carrier, not this standard's.
+    """
     findings: list[Finding] = []
     changelog, pyproject, static_file = changelog_name(), pyproject_name(), static_version_file()
     findings_data = _release_data()["findings"]
@@ -374,6 +399,73 @@ def check_release_versions(root: Path) -> list[Finding]:
     # `pyproject` wins when both exist: it is the literal that names the built wheel, and the
     # disagreement itself has already been reported above.
     version = declared if declared is not None else fallback
+
+    if subject == "akmon" and version is not None:
+        # The npm carrier is the *derived* side of the version line: its spelling is what the
+        # shared version logic derives from the PEP 440 literal, never what a hand typed. A
+        # spelling the logic cannot derive makes the rule unrunnable — a skip, the F9/4 stance,
+        # not an error the owner cannot act on. That is every non-final shape except the
+        # release's own development version: a `.postN`, a `+local`, a describe distance, and
+        # each pre-release step (`aN`, `bN`, `rcN`), which the shared rule refuses because the
+        # SemVer spelling it could form would order them against their PEP 440 order.
+        try:
+            expected = semver_spelling(version)
+        except ValueError as exc:
+            findings.append(
+                _skip(
+                    jsondata.fill(
+                        findings_data["npm-carrier-unrepresentable"]["message"],
+                        {"declared": version, "detail": str(exc)},
+                    ),
+                    "package.json",
+                    findings_data["npm-carrier-unrepresentable"]["fix"],
+                )
+            )
+        else:
+            actual = _package_json_version(root / "package.json")
+            if actual is None:
+                findings.append(
+                    _finding(
+                        "error",
+                        "release.version-literals",
+                        jsondata.fill(
+                            findings_data["npm-carrier-missing"]["message"], {"declared": version}
+                        ),
+                        "package.json",
+                        findings_data["npm-carrier-missing"]["fix"],
+                    )
+                )
+            elif actual == expected:
+                findings.append(
+                    _finding(
+                        "ok",
+                        "release.version-literals",
+                        jsondata.fill(
+                            findings_data["npm-carrier-match"]["message"],
+                            {"expected": expected, "pyproject": pyproject, "declared": version},
+                        ),
+                        "package.json",
+                        findings_data["npm-carrier-match"]["fix"],
+                    )
+                )
+            else:
+                findings.append(
+                    _finding(
+                        "error",
+                        "release.version-literals",
+                        jsondata.fill(
+                            findings_data["npm-carrier-mismatch"]["message"],
+                            {
+                                "actual": actual,
+                                "pyproject": pyproject,
+                                "declared": version,
+                                "expected": expected,
+                            },
+                        ),
+                        "package.json",
+                        findings_data["npm-carrier-mismatch"]["fix"],
+                    )
+                )
 
     if version is None:
         findings.append(
@@ -620,7 +712,7 @@ def run_check(root: Path, subject: str) -> int:
     # The version join runs before the suites and against the tree the tag is cut from: for the
     # akmon subject that is the standard's own tree, for package the project root.
     texts = _release_data()["run_check"]
-    version_findings = check_release_versions(AKMON_ROOT if subject == "akmon" else root)
+    version_findings = check_release_versions(AKMON_ROOT if subject == "akmon" else root, subject)
     print(texts["cross_check_header"])
     print_findings(version_findings)
     print()
@@ -696,7 +788,7 @@ def run_plan(version: str, subject: str) -> int:
     never mentioned a version literal, which is why the tree at tag ``v0.3.0`` still carried
     ``0.3.0.dev0``: the procedure produced the exact mismatch a checker would then report, and a
     checker reporting a defect its own procedure keeps re-creating is theatre. So the bump comes
-    first, both literals are named, and both are staged explicitly.
+    first, every version literal is named, and every one of them is staged explicitly.
     """
     plan = _release_data()["run_plan"]
     if not _VERSION_RE.match(version):
@@ -707,6 +799,10 @@ def run_plan(version: str, subject: str) -> int:
     lines = [*plan["header"], ""]
     if subject == "akmon":
         lines.append(jsondata.fill(facts["cd_line"], {"aitna_root": aitna_root_name()}))
+        lines.append("")
+        # The plan's version is validated above as vX.Y.Z, so the literal is final and its
+        # SemVer spelling is derived by the shared logic, never spelled by hand.
+        lines.append(jsondata.fill(facts["semver_note"], {"semver": semver_spelling(literal)}))
     lines.append("")
     lines += [jsondata.fill(line, {"literal": literal}) for line in plan["bump_note"]]
     if subject == "akmon":
@@ -725,7 +821,14 @@ def run_plan(version: str, subject: str) -> int:
     if subject == "package":
         lines.append("\n" + jsondata.fill(facts["publish_note"], {"charter": _release_charter()}))
     lines.append("")
-    lines += [jsondata.fill(line, {"literal": literal}) for line in plan["cycle_note"]]
+    # The akmon subject reopens a third carrier whose spelling is derived, so it carries its own
+    # note, filled with what the shared logic derives for the development form of this literal;
+    # the shared note takes no `semver` and the extra fill value is simply unused there.
+    cycle_note = facts.get("cycle_note", plan["cycle_note"])
+    lines += [
+        jsondata.fill(line, {"literal": literal, "semver": semver_spelling(f"{literal}.dev0")})
+        for line in cycle_note
+    ]
     lines.append("")
     lines.append(plan["closing"])
     print("\n".join(lines))

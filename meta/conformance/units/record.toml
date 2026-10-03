@@ -88,6 +88,12 @@ expected = { lenient = { mount = "package", akmon_version = "v1" }, strict = { m
 text = "﻿mount = \"package\"\n"
 expected = { lenient = { mount = "package" }, strict_ok = false }
 
+# A TOML date, time or datetime cannot be a case here: `strict` is compared by deep equality on
+# the parsed value, and one date has no spelling both readers share (`tomllib` answers
+# `datetime.date`, smol-toml a `TomlDate` — M104). What the readers do agree on is that a date is
+# not a table, and that answer belongs to the checker: it is pinned end-to-end by the scenario
+# cli/check-date-config, the family measured over 40 records in M115.
+
 [[strip]]
 input = 'plain value  # cut here'
 expected = 'plain value'

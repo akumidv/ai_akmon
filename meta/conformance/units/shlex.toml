@@ -3,10 +3,10 @@
 # marks a ValueError, whatever its text). `case` entries with `join` are join cases
 # (`join` is the argv list fed to shlex.join; `expected` is the plain output string).
 #
-# Call sites: split — common/check_runner.py:82 (the recorded [check] command), and
-# tools/model_routing/routing.py:306 (a model-flag template's extra argv). join —
-# common/check_runner.py:163,169 (the passed/failed finding's displayed command) and
-# src/akmon/_update.py:138,140,194,196 (the pin-move command shown to the owner).
+# Call sites: split — common/check_runner.py::read_checks (the recorded [check] command), and
+# tools/model_routing/routing.py::second_opinion_command (a model-flag template's extra argv).
+# join — common/check_runner.py::run_checks (the passed/failed finding's displayed command) and
+# src/akmon/_update.py::_update_package / ::_update_vendored (the command shown to the owner).
 
 [[case]]
 input = 'a b "c d"'
@@ -59,6 +59,65 @@ expected = { argv = ['a"b'] }
 # double-quote form; this pins the same failure for the other quote character).
 input = "a 'b"
 expected = { error = true }
+
+# The escape states. `shlex.split` is a state machine, and these are the shapes a
+# branch-on-the-quote-character shortcut gets wrong: the states it forgets are the ones that
+# decide what a backslash and a closing quote mean.
+
+[[case]]
+# Inside single quotes nothing escapes — not even a backslash. The first `'` after `a\` therefore
+# CLOSES the word and the last `'` opens a new quoted word, which the stdlib still emits as part
+# of the same token instead of raising. A JS port that consumes `\` + the next character here
+# swallows the closing quote and reports "No closing quotation" for a line that parses.
+input = "'a\\'"
+expected = { argv = ["a\\"] }
+
+[[case]]
+# A single-quoted backslash before a space keeps both: the space is inside the word.
+input = "'a\\ b'"
+expected = { argv = ["a\\ b"] }
+
+[[case]]
+# Three single quotes: the pair closes, the third opens a word that never closes.
+input = "'''"
+expected = { error = true }
+
+[[case]]
+# A quoted-but-empty word is a token: `''` splits to one empty argument, and `a "" b` to three
+# (the check runner's `{files}` expansion depends on an empty argument surviving).
+input = "''"
+expected = { argv = [""] }
+
+[[case]]
+input = 'a "" b'
+expected = { argv = ["a", "", "b"] }
+
+[[case]]
+# Inside double quotes, `\"` is consumed by the escape state, so it does not end the word.
+input = '"a b\" c"'
+expected = { argv = ['a b" c'] }
+
+[[case]]
+# A backslash that ends the line inside double quotes is the escape state's own failure, raised
+# before the unclosed quote is ever noticed: the two error texts are not interchangeable.
+input = '"a\'
+expected = { error = true }
+
+[[case]]
+# The same failure outside quotes — and `No closing quotation` for `"a\"`, where the escape eats
+# the only closing quote the line had.
+input = 'a\'
+expected = { error = true }
+
+[[case]]
+input = '"a\"'
+expected = { error = true }
+
+[[case]]
+# An escaped pipe keeps the word together: `|` is not a word character, so without the backslash
+# it would start its own token.
+input = 'a\|b'
+expected = { argv = ["a|b"] }
 
 [[case]]
 # join: an empty argument round-trips through a pair of single quotes — the shortest input

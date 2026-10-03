@@ -338,6 +338,19 @@ def snapshot_hooks(repo: Path) -> list[str]:
         sys.path.pop(0)
 
 
+def snapshot_js(repo: Path) -> list[str]:
+    """The JavaScript tree the snapshot carries: every file under ``js/`` (ADR 0020 D04).
+
+    Derived from the tree rather than listed, like ``snapshot_hooks``: the carriers ship the
+    whole directory (the wheel's force-include, the npm file list), so the snapshot ships it
+    whole, and a hand-kept list would go stale with every ported module (C104+).
+    """
+    js_root = repo / "js"
+    if not js_root.is_dir():
+        return []
+    return sorted(f"js/{path.relative_to(js_root).as_posix()}" for path in js_root.rglob("*") if path.is_file())
+
+
 #: Corpus-owned stand-ins for the standard tree's prose documents. The corpus pins behavior,
 #: not prose: the always-loaded cap measures the imported guardrail's size, and the healthy
 #: changelog check reads an ``## Unreleased`` heading a release removes — so with the real
@@ -356,7 +369,7 @@ def build_snapshot(repo: Path, work: Path) -> Path:
     snapshot = work / "tree"
     shutil.rmtree(snapshot, ignore_errors=True)
     snapshot.mkdir(parents=True)
-    listed = (*SNAPSHOT_FILES, *snapshot_hooks(repo))
+    listed = (*SNAPSHOT_FILES, *snapshot_hooks(repo), *snapshot_js(repo))
     orphans = sorted(set(standins()) - set(listed))
     if orphans:
         raise CorpusError(f"stand-ins for paths the snapshot does not carry: {orphans}")

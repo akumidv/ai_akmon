@@ -29,6 +29,11 @@ node_modules/
 .claude/worktrees
 .claude/*.log 
 
+# Qwen Code's per-session scratch for this repository (transcripts, subagent logs, temp
+# probes). Nothing here is project material; the C103 review found a scratch probe staged
+# into the release set because the directory was untracked-but-not-ignored.
+.qwen/
+
 # Local env / secrets (never committed; see README §8).
 *.env
 !*.env.example

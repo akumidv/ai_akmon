@@ -1,0 +1,325 @@
+# Unit table: `akmon check` — reading the `[check]` table a project declares, and building the
+# argv one run executes (common/check_runner.py; JS mirror js/common/check_runner.mjs, ADR 0020
+# D01). Data file: common/check_runner.json, read from the tree under test on both sides — the
+# Python module opens the file beside itself, the JS mouth hands the same document to the module
+# at its entry point.
+#
+# Call sites: read_checks — bin/check.py::main (every `check.config` error it prints) and
+# bin/verify.py::check_check_config (the same table seen from `verify`, where the ok side is the
+# `check_table_ok` text). argv_for — common/check_runner.py::run_checks, through bin/check.py::main
+# again: `--changed` narrows a command to the changed files its `files` patterns match, and no
+# `--changed` runs it over `.`. The `changed` list itself comes from changed_files, which asks git
+# and the filesystem and is therefore not tableable — these rows hand it over by hand.
+#
+# Families, each with the index base both mouths share: `case` 0 — read_checks over one whole
+# `[check]` table, answering {checks, problems}; `argv` 1000 — argv_for over one check and one
+# changed list; `make` 2000 — the Check type's three fields and its empty-patterns rule; `text`
+# 3000 — the accessors that hand out the data file's own texts.
+#
+# Why each family: `case` is the strictness rule a gate exists to keep — a malformed entry is
+# reported and skipped, never guessed at — so each row breaks the record in exactly one way, and
+# *genuinely* broken: `files` given as a string, not as a list that happens to be empty of
+# meaning; a command whose quotes are unbalanced, not one that merely looks odd. It also pins the
+# order the problems come out in, which is the record's key order and not a sorted one. `argv` is
+# the placeholder rule the project reads its own commands by, including the two answers that are
+# not an argv at all. `make` pins the shape the other two families' answers are built from.
+# `text` pins which key of the data file each accessor reads, and in what order a two-part answer
+# comes back — without holding a second copy of prose the data file owns, which is why its rows
+# name a path (`keys`) instead of writing an expected string.
+#
+# In `case`, both `checks` and `problems` must be spelled: a field left out is the null answer,
+# and TOML has no null, so an omitted field never matches an empty list. In `argv`, the check is
+# made from `argv` plus `files` (absent `files` means the data file's `default_files`), and
+# `expected = {}` is the null argv — `--changed` found nothing this check covers.
+
+# --- read_checks: one break per row (base 0) --------------------------------------------------
+
+[[case]]
+# The plain spelling: a bare string is the command, and its patterns are the default.
+table = { lint = "uv run ruff check {files}" }
+expected = { checks = [{ name = "lint", argv = ["uv", "run", "ruff", "check", "{files}"], files = ["*.py"] }], problems = [] }
+
+[[case]]
+# The table spelling: `command` plus the patterns this check covers.
+table = { types = { command = "uv run mypy {files}", files = ["*.py", "*.pyi"] } }
+expected = { checks = [{ name = "types", argv = ["uv", "run", "mypy", "{files}"], files = ["*.py", "*.pyi"] }], problems = [] }
+
+[[case]]
+# A table entry that names no patterns still gets the data file's `default_files` — the join the
+# JS twin performs through `makeCheck`, and the reason `*.py` appears nowhere in a project record.
+table = { lint = { command = "ruff check {files}" } }
+expected = { checks = [{ name = "lint", argv = ["ruff", "check", "{files}"], files = ["*.py"] }], problems = [] }
+
+[[case]]
+# Two sound entries keep the record's order: `run_checks` runs them in declaration order, so the
+# owner sees `lint` before `fmt` because that is how the file reads.
+table = { lint = "ruff check {files}", fmt = { command = "black --check {files}", files = ["*.py"] } }
+expected = { checks = [{ name = "lint", argv = ["ruff", "check", "{files}"], files = ["*.py"] }, { name = "fmt", argv = ["black", "--check", "{files}"], files = ["*.py"] }], problems = [] }
+
+[[case]]
+# A near-miss key (the plural a writer reaches for) is refused, not read as `files`.
+table = { lint = { command = "ruff", fiels = ["*.py"] } }
+expected = { checks = [], problems = ["[check].lint has an unknown key 'fiels'"] }
+
+[[case]]
+# The message names the first unknown key *sorted*, not the first written: a record with `zebra`
+# before `alpha` still reports `alpha`, and both sides sort by code point.
+table = { lint = { command = "ruff", zebra = "1", alpha = "2" } }
+expected = { checks = [], problems = ["[check].lint has an unknown key 'alpha'"] }
+
+[[case]]
+# The unknown key is reported before the missing command is: one problem per entry, the outermost
+# one first, so a fixed key exposes the next complaint on the next run.
+table = { lint = { fiels = ["*.py"] } }
+expected = { checks = [], problems = ["[check].lint has an unknown key 'fiels'"] }
+
+[[case]]
+# A non-ASCII key is quoted the same way on both sides — Python `repr`, JS a template — and
+# written as itself in the document both mouths print. It is a quoted key because TOML bare keys
+# are ASCII-only, which is also how a project's record would have to spell it.
+table = { lint = { command = "ruff", "fïles" = ["*.py"] } }
+expected = { checks = [], problems = ["[check].lint has an unknown key 'fïles'"] }
+
+[[case]]
+# `files` alone is not a check: a command is the one thing an entry must carry.
+table = { lint = { files = ["*.py"] } }
+expected = { checks = [], problems = ["[check].lint needs a non-empty `command`"] }
+
+[[case]]
+# An empty command string is the same failure; so is whitespace, which would otherwise split into
+# an empty argv and quietly run nothing.
+table = { lint = "" }
+expected = { checks = [], problems = ["[check].lint needs a non-empty `command`"] }
+
+[[case]]
+table = { lint = { command = "   " } }
+expected = { checks = [], problems = ["[check].lint needs a non-empty `command`"] }
+
+[[case]]
+# A command that is not text at all: the record meant a list of arguments, and a gate must not
+# guess an argv out of a shape it was never promised.
+table = { lint = { command = 5 } }
+expected = { checks = [], problems = ["[check].lint needs a non-empty `command`"] }
+
+[[case]]
+table = { lint = { command = ["ruff", "check"] } }
+expected = { checks = [], problems = ["[check].lint needs a non-empty `command`"] }
+
+[[case]]
+# Genuinely malformed `files`: a single pattern written as a string. It is not a list, so it is
+# refused rather than wrapped — a checker that ran `*.py` against one string would match every
+# Python file and say it had covered the project.
+table = { lint = { command = "ruff check {files}", files = "src/**/*.py" } }
+expected = { checks = [], problems = ["[check].lint.files must be a non-empty list of glob patterns"] }
+
+[[case]]
+# An empty list is the other half of the same rule: it says "no files", which for a check means it
+# can never run — so the entry is wrong, not the scope.
+table = { lint = { command = "ruff", files = [] } }
+expected = { checks = [], problems = ["[check].lint.files must be a non-empty list of glob patterns"] }
+
+[[case]]
+# A list that is not all strings.
+table = { lint = { command = "ruff", files = ["*.py", 3] } }
+expected = { checks = [], problems = ["[check].lint.files must be a non-empty list of glob patterns"] }
+
+[[case]]
+# A list given as a table: `files = { pattern = "*.py" }` is a shape a writer reaches for, and it
+# enumerates as non-empty keys in both readers, so only the type test catches it.
+table = { lint = { command = "ruff", files = { pattern = "*.py" } } }
+expected = { checks = [], problems = ["[check].lint.files must be a non-empty list of glob patterns"] }
+
+[[case]]
+# A command that cannot be split: the open quote reaches end of input. `unsplit_command` carries
+# the interpreter's message, and the two sides share it exactly — the stdlib's `ValueError` text
+# is `No closing quotation`, with no position on either side (js/common/shlex.mjs ports that text,
+# and units/shlex.toml pins the split itself).
+table = { lint = 'ruff "unclosed' }
+expected = { checks = [], problems = ["[check].lint command does not split into arguments: No closing quotation"] }
+
+[[case]]
+# The other split failure: a trailing escape with nothing to escape.
+table = { lint = "ruff a\\" }
+expected = { checks = [], problems = ["[check].lint command does not split into arguments: No escaped character"] }
+
+[[case]]
+# An entry that is neither a string nor a table. Three shapes, because the readers part here:
+# `_isTable` has to name the object tag to tell a table from a date, and a number, and a list.
+table = { lint = 3 }
+expected = { checks = [], problems = ["[check].lint must be a command string or a table with `command`"] }
+
+[[case]]
+table = { lint = ["ruff", "check"] }
+expected = { checks = [], problems = ["[check].lint must be a command string or a table with `command`"] }
+
+[[case]]
+table = { lint = true }
+expected = { checks = [], problems = ["[check].lint must be a command string or a table with `command`"] }
+
+[[case]]
+# The whole `[check]` table is not a table: `check.config` says so once and reports no checks.
+table = "ruff check {files}"
+expected = { checks = [], problems = ["[check] must be a table of named commands"] }
+
+[[case]]
+table = ["ruff"]
+expected = { checks = [], problems = ["[check] must be a table of named commands"] }
+
+[[case]]
+# No `[check]` table at all — the record's absent section, which is `no_checks`'s warn, not a
+# problem. The row is here because a port that read "absent" as "empty table" answers the same,
+# and one that read it as a malformed table does not.
+expected = { checks = [], problems = [] }
+
+[[case]]
+# Problems come out in the record's key order — `z-bad` before `m-bad`, though both sort the
+# other way — and a sound entry between two broken ones is still collected.
+table = { z-bad = { command = "ruff", files = "no" }, a-good = "ruff check {files}", m-bad = { nothere = "1" } }
+expected = { checks = [{ name = "a-good", argv = ["ruff", "check", "{files}"], files = ["*.py"] }], problems = ["[check].z-bad.files must be a non-empty list of glob patterns", "[check].m-bad has an unknown key 'nothere'"] }
+
+# --- argv_for: the placeholder rule (base 1000) -----------------------------------------------
+
+[[argv]]
+# No `--changed`: the placeholder is the whole project.
+argv = ["ruff", "check", "{files}"]
+expected = { argv = ["ruff", "check", "."] }
+
+[[argv]]
+# A command without the placeholder runs unchanged either way, and never asks for a scope.
+argv = ["mypy", "src"]
+expected = { argv = ["mypy", "src"] }
+
+[[argv]]
+argv = ["mypy", "src"]
+changed = ["a.py"]
+expected = { argv = ["mypy", "src"] }
+
+[[argv]]
+# The matched names are passed through in the order and multiplicity the caller gave them: this
+# row is *not* sorted and holds `src/a.py` twice. Neither `changed_files` nor its git call is in
+# this function — the sort and the set are the caller's answer, and a port that tidied here would
+# change what the command sees while every test about changed_files still passed.
+argv = ["ruff", "check", "{files}"]
+files = ["*.py"]
+changed = ["README.md", "src/a.py", "b.py", "src/a.py"]
+expected = { argv = ["ruff", "check", "src/a.py", "b.py", "src/a.py"] }
+
+[[argv]]
+# `--changed` with nothing this check covers is the "nothing to do" answer, not a command that
+# runs over everything.
+argv = ["ruff", "check", "{files}"]
+files = ["*.py"]
+changed = ["README.md", "docs/x.md"]
+expected = {}
+
+[[argv]]
+# A changed list that is empty is the same refusal: the placeholder is never left in an argv, and
+# a linter handed a literal `{files}` would read it as a filename.
+argv = ["ruff", "check", "{files}"]
+changed = []
+expected = {}
+
+[[argv]]
+# Only a whole argv element is the placeholder: `--out={files}` is a word that contains it, and it
+# survives untouched.
+argv = ["lint", "--out={files}"]
+files = ["*.py"]
+changed = ["a.py"]
+expected = { argv = ["lint", "--out={files}"] }
+
+[[argv]]
+# Two placeholders, both expanded with the same files.
+argv = ["a", "{files}", "b", "{files}"]
+files = ["*.py"]
+changed = ["a.py"]
+expected = { argv = ["a", "a.py", "b", "a.py"] }
+
+[[argv]]
+# A check that names no patterns is matched against the data file's `default_files`, not against
+# nothing: `src/x.py` is covered, `README.md` is not.
+argv = ["ruff", "{files}"]
+changed = ["src/x.py", "README.md"]
+expected = { argv = ["ruff", "src/x.py"] }
+
+[[argv]]
+# The `*` in a pattern crosses `/` (units/glob.toml is the rule this leans on), so `src/*.py`
+# covers a nested file as well as its immediate one.
+argv = ["ruff", "{files}"]
+files = ["src/*.py"]
+changed = ["src/a.py", "src/nested/deep.py", "a.py"]
+expected = { argv = ["ruff", "src/a.py", "src/nested/deep.py"] }
+
+[[argv]]
+# An empty command is an empty argv — not the nothing-to-do answer above.
+argv = []
+changed = ["a.py"]
+expected = { argv = [] }
+
+# --- the Check type (base 2000): what both families' answers are built from --------------------
+
+[[make]]
+# `files` left out is the default.
+name = "c"
+argv = ["ruff", "{files}"]
+expected = { name = "c", argv = ["ruff", "{files}"], files = ["*.py"] }
+
+[[make]]
+# An explicit empty list is the same default — the rule the Python dataclass applies in
+# `__post_init__` and the JS twin applies in `makeCheck`.
+name = "c"
+argv = ["ruff", "{files}"]
+files = []
+expected = { name = "c", argv = ["ruff", "{files}"], files = ["*.py"] }
+
+[[make]]
+name = "wide"
+argv = ["tool", "{files}"]
+files = ["*.py", "*.pyi", "docs/*.md"]
+expected = { name = "wide", argv = ["tool", "{files}"], files = ["*.py", "*.pyi", "docs/*.md"] }
+
+# --- the data-file texts (base 3000): each row names where the answer must live -----------------
+# `keys` are dotted paths into common/check_runner.json, flattened one level; the row's expected
+# value *is* that lookup, so the data file stays the only owner of the prose while the pairing —
+# and the order of a two-part answer — is still pinned here.
+
+[[text]]
+getter = "config_target"
+keys = ["config_target"]
+
+[[text]]
+getter = "files_placeholder"
+keys = ["files_placeholder"]
+
+[[text]]
+getter = "default_files"
+keys = ["default_files"]
+
+[[text]]
+# The two repair fixes are one character apart in the data file and reach two different commands;
+# reading the wrong one is silent, so the pairing is asserted, not the text.
+getter = "repair_record_fix"
+keys = ["check_config.repair_record"]
+
+[[text]]
+getter = "repair_record_verify_fix"
+keys = ["check_config.repair_record_verify"]
+
+[[text]]
+getter = "correct_entry_fix"
+keys = ["check_config.correct_entry"]
+
+[[text]]
+# A (message, fix) pair: the order is the finding's, and a swapped answer prints the fix where the
+# owner expected to read what went wrong.
+getter = "no_checks"
+keys = ["check_config.no_checks", "check_config.no_checks_fix"]
+
+[[text]]
+getter = "scope_fix"
+keys = ["check_config.scope_fix"]
+
+[[text]]
+# Carried with its `{{count}}` placeholder unfiled — filling it is `verify`'s job, not this
+# module's.
+getter = "check_table_ok"
+keys = ["check_config.check_table_ok", "check_config.check_table_ok_fix"]

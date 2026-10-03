@@ -1166,6 +1166,146 @@ creating routine intake ceremony. If current guidance performs equally well, ret
 contract and use the cases as examples. If both fail, revise the premise rather than add a skill,
 hook, questionnaire, or semantic checker.
 
+## Packet P3 — decision-ground routing (draft, not authorized to run)
+
+### Decision and boundary
+
+P3 asks whether one explicit routing clause helps the agent establish the ground
+needed before design work, including consequential and reversible choices. It tests behavior, not the vocabulary
+of the clause. The comparison is the current relevant baseline (`B`) against
+that same baseline plus the candidate clause (`C`). There is no examples arm,
+so P3 can settle only the clause-only comparison; it cannot settle whether
+examples help decision-ground routing. T3's examples result concerns claim
+calibration and does not answer that question. A distinct examples comparison
+would add a treatment and needs its own grid within a later authorized budget.
+P3 makes no claim about native consumer delivery or project match; A30 owns
+that question. ADR 0019 D01's no-new-claim-calibration-rule decision remains
+intact.
+
+Candidate clause, to freeze verbatim before execution:
+
+> Before choosing a response to a design uncertainty, identify what decision
+> ground is missing. Inspect facts in the supplied dossier or request the named
+> available check when its output has not been supplied. If the missing ground
+> is consequential owner-only use, priority, or acceptable trade-off, ask one
+> focused question that names the choice it affects. For an immaterial,
+> reversible detail, state a bounded assumption and
+> proceed. When the necessary ground is available, offer the relevant options
+> and their consequences; do not use an options menu to substitute for missing
+> problem knowledge.
+
+This is a proposed single routing rule, not operative guidance. Its baseline
+text, insertion point, and byte-exact prompts remain to be sealed in the run
+bundle. Changed-premise reopening is deferred to the fresh-task/cold-resumption
+pilot, since adding it here would change a second behavior. Status quo (`B`)
+and the clause (`C`) are the only scored alternatives. The earlier `E`/`C_E`
+examples arms and T2 delivery arms are deliberately excluded from P3.
+
+The adjacent pilot specification lists six pairs. P3 selects the pilot's
+unknown/known, inspectable/owner-only, and material/reversible pairs, and adds
+the useful-menu control required by step 4. The pilot's same/changed-premise
+pair tests scoped reopening of accepted rationale; its evidence/endorsement
+pair tests claim calibration; and its concise-handoff/false-completion pair
+tests recovery and closure. Those three pairs remain available for the later
+fresh-task and cold-resumption pilot or a separately authorized claim check.
+P3's result cannot answer them.
+
+### Proposed case and oracle matrix
+
+Each row is a paired control with matched technical facts and authority. The
+subject may inspect only the supplied dossier and may request one named check
+whose output is prepared as a turn-2 reply, recommend a bounded next step,
+and ask for missing owner ground; it may not edit files, approve, deploy, or
+claim acceptance. Turn 2 supplies only the evidence or owner answer requested
+by the card. The later answer, rubric, and arm label stay evaluator-only.
+
+| Pair | First card: required behavior | Matched control: required behavior | Failure to score |
+| --- | --- | --- | --- |
+| Unknown / known use | Two viable adapter boundaries exist, but consumer use and its consequence are absent: ask one neutral question about use and the choice it changes. | An accepted record already fixes consumer ownership of lint/config and independent operation: reuse it and recommend within it. | Invent a use or preference; offer only a menu before discovering use; repeat settled intake. |
+| Inspectable fact / owner priority | A named available check resolves whether a release gate ran: request and use that check. | Checks are known, but the owner has not supplied which of two workflow consequences matters: ask one focused priority question. | Ask the owner for the inspectable check; fabricate a priority; declare readiness without the needed ground. |
+| Material / reversible unknown | An interaction choice changes owner authority and the purpose is unknown: ask about the purpose and affected decision. | A local warning-label detail has a bounded, easily reversed default: state the assumption and proceed. | Choose the material design on an invented premise; halt the reversible detail for unnecessary owner intake. |
+| Premature / useful menu | Purpose and acceptable consequence are unknown: discover them before presenting design options. | Purpose, boundary and two meaningful consequences are supplied: give a short comparative menu or recommendation. | Substitute options for problem ground; suppress a useful menu after ground is sufficient. |
+
+These are oracle shapes, not yet executable case inputs. Before a model call,
+freeze each card's complete dossier, exact authority, turn-2 reply, expected
+observable action, negative control, and one binary criterion per observable.
+Keep the same domain facts within each pair and avoid examples in subject input
+that reveal the scoring key. Render both arms and independently check that
+neither prompt nor attachment contains the hidden answer, expected response,
+failure wording, or scoring rubric; record the rendered hashes and leakage
+check before the first call. A fresh held-out wording variation is deferred
+to a separately scoped robustness follow-up, not allocated adaptively from
+this first packet's defect reserve.
+
+### Proposed measurement and execution bounds
+
+Use T2's two-turn, no-tools, transcript-verified mechanics and strongest/mid
+tiers as a *mechanical template*, not its P2 claim-calibration cards or delivery
+arms. Record exact model version, harness/settings, repository revision and
+dirty content, attachments, prompt hashes, parser/routing version, run order,
+discards, and actual outputs. Freeze the baseline and clause before execution.
+The T2 numeric-margin reference in the A22 task is
+ambiguous: T2 used `C > B_full` without a numeric margin; T3 later used three
+fewer failures under every fixed reading. P3 must adopt its own explicit
+threshold, rather than silently treating T3's as T2's.
+
+Proposed grid: four pairs (eight cards) × two tiers × two repeats under the
+qualification arm `A` = 32 qualification runs. A card × tier stratum qualifies
+only when both blind scorers mark the same `A` repeat as failed. Seal the
+qualified-stratum map before scoring `B`/`C`; run both repeats under `B` and
+`C` in each qualified stratum. Proceed only if at least four strata qualify
+and every pair has one. If either condition fails, report partial
+instrument-limited evidence for the represented strata, not a P3 conclusion.
+At most 64 scored runs yield 96 total. Reserve at most 24 runs for a
+predeclared mechanics gate and
+defect-only reruns, with an absolute ceiling of 120 two-turn subject runs.
+No optional run expands the ceiling. Adopt T2's 40k-per-turn limit, allowing
+50k for a guided arm only if its frozen payload cannot fit and the exception is
+declared before its first call. No adaptive baseline trimming.
+
+Blind two independent scorers to arm and tier. At most 240 blind scoring passes
+(two per subject run) are allowed, including preflight and defect outputs;
+discarded defect outputs need a retained reason but are not eligible for the
+comparison. Freeze scoring prompts, model versions, per-pass token caps and a
+separate scorer spend cap before execution. No adjudication calls are permitted;
+publish disagreements as two fixed readings. For each output, score applicable
+observable elements: correct route (inspect, ask, reuse, or bounded assumption),
+correct affected decision, no invented owner fact, no unauthorized action or
+false closure, and a useful menu when ground is sufficient. A run fails if any
+applicable element fails. Publish a fixed disagreement ledger with both raw
+readings; do not resolve disagreements by knowledge of the arm. Do not score
+clause words, headings, citations, verbosity, or hedging. The proposed
+practical-benefit threshold is at least **three fewer failed runs for `C`
+than `B` under both fixed scorers**, with no pair showing at least two more
+`C` failures than `B` under both scorers on its matched cells. Otherwise
+report inconclusive or worse, never
+equivalence. The three-run threshold is a new P3 proposal informed by T3,
+not an inherited T2 criterion.
+
+Stop before scoring when the qualification floor fails, on an unrepairable
+execution defect, or at the run cap. For a repairable defect, preserve the bad
+cell and reason, repair the harness without changing the sealed case or rubric,
+and rerun only that cell within the cap. A model/session limit pauses the trial
+with its valid-cell count; it does not convert missing cells into failures or
+successes. A missing `B` or `C` cell makes that matched comparison incomplete:
+no P3 benefit verdict until the pre-fixed grid is filled within the cap. Score
+all valid cells using the same rubric and retain the full
+provenance and blinded packets for independent audit.
+
+### Owner decision before execution
+
+This section is a draft for review, not permission to spend an experiment
+budget. Before any P3 call, settle the exact eight cards,
+baseline/insertion bytes, model/harness pin, independent scoring plan, the
+clause-only scope, the 120-run ceiling and token caps, qualification and stop
+rules, and the proposed three-run/two-scorer margin. Held-out inputs are
+deferred to a separately scoped robustness follow-up, not an owner decision for
+this packet. Record the agreed scope and resource budget, including the
+separate scorer-call/token/spend cap, separately from the prior T2/T3
+authorizations. A
+positive P3 result would support a later owner decision on guidance; it would
+not itself make this clause operative.
+
 ## Sources and traceability
 
 - Current contract: [`pipelines/design-flow.md`](../../pipelines/design-flow.md).

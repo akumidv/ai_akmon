@@ -49,7 +49,7 @@ def _version_order_key(value: object) -> list | None:
 
 
 def probe_versions(repo: Path, table: dict) -> list[dict]:
-    """Version parsing and ordering against the tree-under-test's common/versions."""
+    """Version parsing, ordering and the npm carrier spelling, against the tree's common/versions."""
     module = _load_module(repo, "common/versions.py", "conform_versions")
     results = []
     for index, case in enumerate(table.get("case", [])):
@@ -75,10 +75,17 @@ def probe_versions(repo: Path, table: dict) -> list[dict]:
             }
         )
     for index, case in enumerate(table.get("pair", [])):
-        order_a = module.order_key(case["a"])
-        order_b = module.order_key(case["b"])
-        actual = 0 if order_a == order_b else (-1 if order_a < order_b else 1)
+        # The table asks the comparator, not the key: an order key compared with `<` is a
+        # Python-only answer, and the JS twin must give the same one (units/versions.toml).
+        try:
+            actual = module.compare_versions(case["a"], case["b"])
+        except ValueError:
+            actual = "error"
         results.append({"index": 1000 + index, "expected": case["expected"], "actual": actual})
+    for index, case in enumerate(table.get("semver", [])):
+        results.append(
+            {"index": 2000 + index, "expected": case["expected"], "actual": module.semver_spelling(case["input"])}
+        )
     return results
 
 
@@ -203,6 +210,220 @@ def probe_sort(_repo: Path, table: dict) -> list[dict]:
     return results
 
 
+# ---------------------------------------------------------------------------------------
+# The two mouths below are the first to answer from a *shared data file*. `common/runtime.py`
+# and `common/check_runner.py` read their tables out of `common/*.json` on every call, so the
+# Python side reaches them through the module — which resolves the file beside itself, i.e.
+# inside the snapshot — while the JS side is fed the same file by its mouth, exactly the way
+# the module's twin is handed its data at the entry point.
+# ---------------------------------------------------------------------------------------
+
+
+def _data_document(repo: Path, relative: str) -> object:
+    """One data file of the tree under test, as the module beside it reads it."""
+    return json.loads((repo / relative).read_text(encoding="utf-8"))
+
+
+def _data_parts(document: object, paths: list[str]) -> list:
+    """The text a table names by data-file path, flattened one level.
+
+    A `text` row states *where* its answer lives (`check_config.no_checks`) instead of
+    repeating it: the data file is the one owner of that prose, and what the table has to pin
+    is the accessor's pairing with its key and the order of a multi-part answer.
+    """
+    parts = []
+    for path in paths:
+        node = document
+        for step in path.split("."):
+            node = node.get(step) if isinstance(node, dict) else None
+        if isinstance(node, list):
+            parts.extend(node)
+        else:
+            parts.append(node)
+    return parts
+
+
+def _text_parts(answer: object) -> list:
+    """One accessor's answer as the flat list of text parts the table compares against."""
+    return list(answer) if isinstance(answer, (list, tuple)) else [answer]
+
+
+def _render_check(check: object) -> dict:
+    """One declared check in the only form a table can carry it: three fields, lists not tuples.
+
+    Python answers with a frozen dataclass whose argv and files are tuples; a tuple is *not*
+    equal to the list the table spells, so the conversion is the mouth's job, not the table's.
+    """
+    return {"name": check.name, "argv": list(check.argv), "files": list(check.files)}
+
+
+def _runtime_labels(module: types.ModuleType, table: dict) -> list[dict]:
+    """The population, carrier and modality labels the module declares (index base 0)."""
+    labels = {
+        "GENERATED_WIRING": module.GENERATED_WIRING,
+        "OWN_TOOLING": module.OWN_TOOLING,
+        "POSIX_SHELL": module.POSIX_SHELL,
+        "REQUIRED": module.REQUIRED,
+        "OPTIONAL": module.OPTIONAL,
+        "REQUIRED_ON": module.REQUIRED_ON,
+    }
+    results = []
+    for index, case in enumerate(table.get("label", [])):
+        results.append({"index": index, "expected": case.get("expected"), "actual": labels.get(case.get("name"))})
+    return results
+
+
+def _render_declaration(declaration: object) -> dict | None:
+    """One runtime declaration as {binary, population, modality}; an absent one stays null."""
+    if declaration is None:
+        return None
+    return {"binary": declaration.binary, "population": declaration.population, "modality": declaration.modality}
+
+
+def _runtime_declared(module: types.ModuleType, table: dict) -> list[dict]:
+    """The ordered declaration list, answered by the position the row names (index base 1000)."""
+    declarations = module.declared_runtimes()
+    results = []
+    for index, case in enumerate(table.get("declared", [])):
+        position = case.get("index")
+        in_range = isinstance(position, int) and 0 <= position < len(declarations)
+        found = declarations[position] if in_range else None
+        actual = _render_declaration(found)
+        results.append({"index": 1000 + index, "expected": case.get("expected"), "actual": actual})
+    return results
+
+
+def _runtime_named_argv(module: types.ModuleType, case: dict) -> list | None:
+    """The argv a named constructor answers; a row naming no known builder answers null."""
+    named = case.get("named")
+    if named == "version_command":
+        return list(module.version_command(case.get("harness")))
+    if named == "codex_hooks_list_command":
+        return list(module.codex_hooks_list_command())
+    return None
+
+
+def _runtime_argv(module: types.ModuleType, table: dict) -> list[dict]:
+    """The command builders: the table's prefix plus a caller's tail (bases 2000 and 3000)."""
+    results = []
+    for index, case in enumerate(table.get("command", [])):
+        argv = module.harness_command(case.get("harness"), case.get("operation"), *case.get("extra", []))
+        results.append({"index": 2000 + index, "expected": case.get("expected"), "actual": list(argv)})
+    for index, case in enumerate(table.get("named", [])):
+        actual = _runtime_named_argv(module, case)
+        results.append({"index": 3000 + index, "expected": case.get("expected"), "actual": actual})
+    return results
+
+
+def _runtime_errors(module: types.ModuleType, table: dict) -> list[dict]:
+    """The refusal for an undeclared harness or operation, by its whole text (index base 5000).
+
+    The message is spec, not decoration: both sides quote the unknown name the same way and list
+    what is known in the same order, and it is all an owner gets when a caller asks a harness for
+    an operation nobody declared.
+    """
+    results = []
+    for index, case in enumerate(table.get("error", [])):
+        try:
+            module.harness_command(case.get("harness"), case.get("operation"))
+            actual = None
+        except ValueError as exc:
+            actual = str(exc)
+        results.append({"index": 5000 + index, "expected": case.get("expected"), "actual": actual})
+    return results
+
+
+def probe_runtime(repo: Path, table: dict) -> list[dict]:
+    """The harness-command map and the runtime declaration, against the tree's common/runtime."""
+    module = _load_module(repo, "common/runtime.py", "conform_runtime")
+    results = _runtime_labels(module, table)
+    results += _runtime_declared(module, table)
+    results += _runtime_argv(module, table)
+    for index, case in enumerate(table.get("binaries", [])):
+        results.append(
+            {
+                "index": 4000 + index,
+                "expected": case.get("expected"),
+                "actual": list(module.harness_binaries()),
+            }
+        )
+    results += _runtime_errors(module, table)
+    return results
+
+
+def _check_entries(module: types.ModuleType, table: dict) -> list[dict]:
+    """``read_checks`` over a whole ``[check]`` table: the checks and every problem (base 0)."""
+    results = []
+    for index, case in enumerate(table.get("case", [])):
+        checks, problems = module.read_checks(case.get("table"))
+        expected = case.get("expected") or {}
+        want = {"checks": expected.get("checks"), "problems": expected.get("problems")}
+        got = {"checks": [_render_check(check) for check in checks], "problems": list(problems)}
+        results.append({"index": index, "expected": want, "actual": got})
+    return results
+
+
+def _check_argv(module: types.ModuleType, table: dict) -> list[dict]:
+    """``argv_for``: the ``{files}`` expansion and the nothing-to-do refusal (index base 1000)."""
+    results = []
+    for index, case in enumerate(table.get("argv", [])):
+        check = module.Check("case", tuple(case.get("argv", [])), tuple(case.get("files", ())))
+        answer = module.argv_for(check, case.get("changed"))
+        expected = case.get("expected") or {}
+        actual = None if answer is None else list(answer)
+        results.append({"index": 1000 + index, "expected": {"argv": expected.get("argv")}, "actual": {"argv": actual}})
+    return results
+
+
+def _check_made(module: types.ModuleType, table: dict) -> list[dict]:
+    """The ``Check`` type itself: its three fields and its empty-patterns rule (index base 2000)."""
+    results = []
+    for index, case in enumerate(table.get("make", [])):
+        argv = tuple(case.get("argv", []))
+        check = module.Check(case.get("name", ""), argv, tuple(case.get("files", ())))
+        results.append({"index": 2000 + index, "expected": case.get("expected"), "actual": _render_check(check)})
+    return results
+
+
+def _check_texts(module: types.ModuleType, data: object, table: dict) -> list[dict]:
+    """The text accessors against the data-file path each row names (index base 3000).
+
+    A row's ``keys`` are where the answer must live, so the table pins the accessor-to-key
+    pairing — and the order of a two-part answer — without holding a second copy of prose the
+    data file already owns.
+    """
+    getters = {
+        "config_target": module.config_target,
+        "files_placeholder": module.files_placeholder,
+        "default_files": module.default_files,
+        "repair_record_fix": module.repair_record_fix,
+        "repair_record_verify_fix": module.repair_record_verify_fix,
+        "correct_entry_fix": module.correct_entry_fix,
+        "no_checks": module.no_checks,
+        "scope_fix": module.scope_fix,
+        "check_table_ok": module.check_table_ok,
+    }
+    results = []
+    for index, case in enumerate(table.get("text", [])):
+        getter = getters.get(case.get("getter"))
+        unknown = getter is None
+        expected = None if unknown else _data_parts(data, case.get("keys", []))
+        actual = None if unknown else _text_parts(getter())
+        results.append({"index": 3000 + index, "expected": expected, "actual": actual})
+    return results
+
+
+def probe_check_runner(repo: Path, table: dict) -> list[dict]:
+    """``[check]`` reading and argv building, against the tree's common/check_runner."""
+    module = _load_module(repo, "common/check_runner.py", "conform_check_runner")
+    data = _data_document(repo, "common/check_runner.json")
+    results = _check_entries(module, table)
+    results += _check_argv(module, table)
+    results += _check_made(module, table)
+    results += _check_texts(module, data, table)
+    return results
+
+
 PROBES = {
     "versions": probe_versions,
     "record": probe_record,
@@ -210,6 +431,8 @@ PROBES = {
     "glob": probe_glob,
     "json": probe_json,
     "sort": probe_sort,
+    "runtime": probe_runtime,
+    "check_runner": probe_check_runner,
 }
 
 
