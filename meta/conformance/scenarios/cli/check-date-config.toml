@@ -1,0 +1,23 @@
+id = "cli/check-date-config"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:check", "code:check.config"]
+
+# The TOML date family reaching the checker through the strict reader: a value tomllib hands
+# over as `datetime.date`/`time`/`datetime` (and the JS reader as `TomlDate`) is not a command
+# and not a table. It must be reported at the site it breaks, never enumerate as an empty
+# table and contribute nothing — C103 review finding 9. One entry per rejection site in
+# `read_checks`: the table's own entry, an unknown key inside a spec table, a files list.
+
+[fixture]
+attach = "native"
+name = "base"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nlast_realign = \"{{version}}\"\n\n[check]\nwhen = 1979-05-27\nlint = { command = \"ruff check {files}\", when = 1979-05-27 }\ntypes = { command = \"mypy {files}\", files = [1979-05-27] }\n" }
+
+[run]
+argv = ["check"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "ERROR check.config .akmon.toml [check]: [check].when must be a command string or a table with `command` → Correct or remove the entry the message names\nERROR check.config .akmon.toml [check]: [check].lint has an unknown key 'when' → Correct or remove the entry the message names\nERROR check.config .akmon.toml [check]: [check].types.files must be a non-empty list of glob patterns → Correct or remove the entry the message names\n"

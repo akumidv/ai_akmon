@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from common import jsondata
+from common.versions import semver_spelling
 
 _AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
@@ -52,7 +53,7 @@ def test_akmon_check_runs_only_upstream_gates(monkeypatch, tmp_path):
     monkeypatch.setattr(release_check, "_run_commands", fake_run_commands)
     # The version join has its own tests below; here it is silenced so this stays a test of
     # which commands the akmon subject runs.
-    monkeypatch.setattr(release_check, "check_release_versions", lambda _root: [])
+    monkeypatch.setattr(release_check, "check_release_versions", lambda _root, _subject: [])
 
     assert release_check.run_check(tmp_path, "akmon") == 0
     assert captured == {
@@ -366,7 +367,7 @@ def test_the_live_tree_carries_a_consistent_version_pair():
 # --- the repairs outside the checker -----------------------------------------------------
 #
 # A checker that reports a mismatch the release procedure keeps re-creating is theatre, so the
-# procedure carries its own carriers: the plan must stage both version literals, and it must
+# procedure carries its own carriers: the plan must stage every version literal, and it must
 # name the bump before it reaches `git add`.
 
 
@@ -375,16 +376,16 @@ def _plan_lines(capsys, subject: str = "akmon") -> list[str]:
     return capsys.readouterr().out.splitlines()
 
 
-def _assert_plan_bumps_both_literals_before_staging(lines: list[str]) -> None:
+def _assert_plan_bumps_every_literal_before_staging(lines: list[str]) -> None:
     staged = next(index for index, line in enumerate(lines) if line.startswith("git add "))
-    for carrier in ("CHANGELOG.md", "pyproject.toml", "src/akmon/__init__.py"):
+    for carrier in ("CHANGELOG.md", "package-lock.json", "package.json", "pyproject.toml", "src/akmon/__init__.py"):
         assert carrier in lines[staged], f"{carrier} is not staged"
     bumped = next(index for index, line in enumerate(lines) if "_STATIC_VERSION" in line)
     assert bumped < staged, "the version bump is described after `git add`"
 
 
-def test_the_plan_stages_both_version_literals_before_committing(capsys):
-    _assert_plan_bumps_both_literals_before_staging(_plan_lines(capsys))
+def test_the_plan_stages_every_version_literal_before_committing(capsys):
+    _assert_plan_bumps_every_literal_before_staging(_plan_lines(capsys))
 
 
 @pytest.mark.parametrize(
@@ -394,6 +395,7 @@ def test_the_plan_stages_both_version_literals_before_committing(capsys):
         pytest.param(
             lambda lines: [line.replace(" src/akmon/__init__.py", "") for line in lines], id="omits-static-version"
         ),
+        pytest.param(lambda lines: [line.replace(" package-lock.json", "") for line in lines], id="omits-the-lock"),
         pytest.param(
             lambda lines: (
                 [line for line in lines if "_STATIC_VERSION" not in line]
@@ -405,7 +407,28 @@ def test_the_plan_stages_both_version_literals_before_committing(capsys):
 )
 def test_the_plan_contract_fails_on_a_mutated_plan(mutate, capsys):
     with pytest.raises(AssertionError):
-        _assert_plan_bumps_both_literals_before_staging(mutate(_plan_lines(capsys)))
+        _assert_plan_bumps_every_literal_before_staging(mutate(_plan_lines(capsys)))
+
+
+_COUNTED_CARRIER_RE = re.compile(r"\b(?:both|two)\b", re.IGNORECASE)
+
+
+def test_the_plan_names_the_carriers_instead_of_counting_them(capsys):
+    # C103 added the npm carrier to akmon's set, which made a counted "both literals, two edits"
+    # false of this subject while a consuming project may genuinely have two — so the plan names
+    # the carriers and says nothing about how many there are.
+    assert [line for line in _plan_lines(capsys) if _COUNTED_CARRIER_RE.search(line)] == []
+    assert _COUNTED_CARRIER_RE.search("# Bump the version in BOTH literals — one bump is two edits")
+
+
+def test_the_cycle_note_reopens_every_carrier_and_derives_the_npm_one(capsys):
+    # The reopen step is where a derived carrier is easiest to forget: the Python side takes the
+    # development spelling, the npm side takes what the shared logic derives from that literal.
+    lines = _plan_lines(capsys)
+    note = "\n".join(lines[next(index for index, line in enumerate(lines) if "reopen the cycle" in line) :])
+    for carrier in ("pyproject.toml", "src/akmon/__init__.py", "package.json"):
+        assert carrier in note, f"{carrier} is not part of the reopen step"
+    assert "9.9.9-dev.0" in note  # derived from the plan's own version, never spelled by hand
 
 
 _FALSE_TAG_CLAIM_RE = re.compile(
@@ -430,11 +453,11 @@ def test_the_check_mode_fails_on_a_version_error_even_when_the_suites_are_green(
     # The join is wired into the gate, not merely importable: a red version pair fails --check.
     monkeypatch.setattr(release_check, "_pytest_command", lambda root, tests: ["true"])
     monkeypatch.setattr(release_check, "_run_commands", lambda root, commands: [])
-    monkeypatch.setattr(
-        release_check,
-        "check_release_versions",
-        lambda _root: [release_check.Finding("error", "release.changelog-window", "seeded", "", "Repair it.")],
-    )
+
+    def _versions(_root, _subject):
+        return [release_check.Finding("error", "release.changelog-window", "seeded", "", "Repair it.")]
+
+    monkeypatch.setattr(release_check, "check_release_versions", _versions)
     assert release_check.run_check(tmp_path, "akmon") == 1
 
 
@@ -444,7 +467,7 @@ def test_the_check_mode_does_not_fail_on_a_version_warning(monkeypatch, tmp_path
     monkeypatch.setattr(
         release_check,
         "check_release_versions",
-        lambda _root: [release_check.Finding("warn", "release.retag", "seeded", "", "Confirm it.")],
+        lambda _root, _subject: [release_check.Finding("warn", "release.retag", "seeded", "", "Confirm it.")],
     )
     assert release_check.run_check(tmp_path, "akmon") == 0
 
@@ -494,7 +517,8 @@ def test_a_version_mentioned_mid_heading_does_not_name_a_release(tmp_path, monke
 
 def test_the_two_literals_must_be_equal_literally_not_after_normalization(tmp_path, monkeypatch):
     # F9/2 says *literally* equal. `v0.4.0` and `0.4.0` are the same version and still two
-    # different strings: one release bump is two edits, and both edits write the same text.
+    # different strings: the bump writes one text into every carrier, so a spelling that differs
+    # is a carrier the bump missed, not a harmless variant.
     _tree(tmp_path, version="v0.4.0", static="0.4.0", changelog="## v0.4.0\n")
     assert "release.version-literals" in _codes(_check(tmp_path, monkeypatch, tags=()), "error")
 
@@ -659,3 +683,98 @@ def test_a_missing_release_json_raises_from_public_functions(monkeypatch):
         release_check.run_plan("v1.0.0", "akmon")
     with pytest.raises(jsondata.DataFileError):
         release_check.changelog_name()
+
+
+# --------------------------------------------------------------------------------------
+# C103: the npm carrier (package.json) — the derived side of the version line (ADR 0020 D05)
+# --------------------------------------------------------------------------------------
+#
+# The rule fires for the akmon subject only: for a package subject the project's own
+# package.json is the project's carrier. The findings reuse the existing
+# release.version-literals code, so the coverage population does not grow.
+
+
+def test_the_npm_carrier_match_is_reported_for_the_akmon_subject(tmp_path):
+    _tree(tmp_path, version="0.4.0.dev0", static="0.4.0.dev0")
+    (tmp_path / "package.json").write_text('{"name": "demo", "version": "0.4.0-dev.0"}\n', encoding="utf-8")
+    findings = release_check.check_release_versions(tmp_path, "akmon")
+    carrier = [f for f in findings if f.target == "package.json"]
+    assert [f.severity for f in carrier] == ["ok"]
+    assert "0.4.0-dev.0" in carrier[0].message
+
+
+def test_a_final_version_carries_its_own_spelling_in_the_npm_carrier(tmp_path):
+    _tree(tmp_path, version="0.4.1", static="0.4.1", changelog="## v0.4.1\n")
+    (tmp_path / "package.json").write_text('{"version": "0.4.1"}\n', encoding="utf-8")
+    findings = release_check.check_release_versions(tmp_path, "akmon")
+    assert _codes(findings, "error") == []
+
+
+def test_a_hand_written_npm_carrier_mismatch_fails(tmp_path):
+    _tree(tmp_path, version="0.4.0.dev0", static="0.4.0.dev0")
+    (tmp_path / "package.json").write_text('{"version": "0.4.0"}\n', encoding="utf-8")
+    findings = release_check.check_release_versions(tmp_path, "akmon")
+    errors = [f for f in findings if f.severity == "error" and f.code == "release.version-literals"]
+    assert len(errors) == 1
+    assert "0.4.0-dev.0" in errors[0].message  # the derived spelling is named, not just the rule
+
+
+def test_an_absent_npm_carrier_fails_for_the_akmon_subject(tmp_path):
+    _tree(tmp_path, version="0.4.0.dev0", static="0.4.0.dev0")
+    findings = release_check.check_release_versions(tmp_path, "akmon")
+    errors = [f for f in findings if f.severity == "error" and f.code == "release.version-literals"]
+    assert len(errors) == 1
+    assert errors[0].target == "package.json"
+
+
+def test_the_package_subject_ignores_the_projects_own_package_json(tmp_path):
+    _tree(tmp_path, version="0.4.0", static="0.4.0", changelog="## v0.4.0\n")
+    (tmp_path / "package.json").write_text('{"version": "9.9.9"}\n', encoding="utf-8")
+    findings = release_check.check_release_versions(tmp_path, "package")
+    assert not any(f.target == "package.json" for f in findings)
+
+
+# Every spelling the npm carrier cannot carry (owner decision 2026-10-03). The units table's
+# ``[[semver]]`` block pins what *does* spell; a raise has no answer there because both probes
+# call the function bare, so the ban is carried here and in ``js/common/versions.test.mjs``.
+_UNCARRIABLE = (
+    "1.2.3.post1",
+    "1.2.3+local.1",
+    "1.2.3a1",
+    "1.2.3b2",
+    "1.2.3rc1",
+    "1.2.3a1.dev0",
+    "1.2.3rc1.dev4",
+    "v1.2.3-3-g1234abcd",
+)
+
+
+@pytest.mark.parametrize("version", _UNCARRIABLE)
+def test_an_unrepresentable_version_skips_the_npm_carrier_rule(version, tmp_path):
+    # A version the shared rule refuses makes the carrier rule unrunnable, and F9/4 says that is
+    # said out loud as a skip — not guessed into a spelling, not made an error the owner cannot
+    # act on. The skip names the version it could not carry.
+    _tree(tmp_path, version=version, static=version, changelog="## Unreleased\n")
+    findings = release_check.check_release_versions(tmp_path, "akmon")
+    skips = [f for f in findings if f.code == "release.check-skipped" and f.target == "package.json"]
+    assert len(skips) == 1
+    assert "no SemVer carrier spelling" in skips[0].message
+    assert version in skips[0].message
+    assert [f for f in findings if f.target == "package.json" and f.severity == "error"] == []
+
+
+@pytest.mark.parametrize("version", _UNCARRIABLE)
+def test_semver_spelling_refuses_every_shape_the_carrier_cannot_carry(version):
+    # The ban at the rule's own boundary: it raises, it does not return a near miss. The
+    # pre-release steps (aN, bN, rcN, with or without a .devN of their own) are in here because
+    # SemVer §11 orders the derived spellings against PEP 440 — alpha < beta < dev < rc where
+    # PEP 440 reads dev < a < b < rc — which is the inversion this decision closes at its root.
+    with pytest.raises(ValueError, match="npm-carriable|distance past its tag"):
+        semver_spelling(version)
+
+
+def test_semver_spelling_carries_a_final_version_and_its_development_spelling():
+    # The two carriable shapes, named beside the ban so the pair of them reads as one contract.
+    assert semver_spelling("1.2.3") == "1.2.3"
+    assert semver_spelling("v1.2.3") == "1.2.3"
+    assert semver_spelling("1.2.3.dev0") == "1.2.3-dev.0"

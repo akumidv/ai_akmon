@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -155,6 +156,13 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         source = akmon_root / relative
         text = source.read_text(encoding="utf-8") if source.is_file() else "fixture placeholder\n"
         _write(root / "_aitna" / "akmon" / relative, text)
+    # The js tree is carried whole, the way the corpus snapshot carries it (corpus.py::snapshot_js):
+    # a derived list over the directory, not a hardcoded one, so a new module joins the fixture
+    # without touching this file.
+    js_root = akmon_root / "js"
+    for path in sorted(js_root.rglob("*")):
+        if path.is_file():
+            _write(root / "_aitna" / "akmon" / "js" / path.relative_to(js_root), path.read_text(encoding="utf-8"))
 
 
 def path_without(binary: str, path: str, scratch: Path) -> str:
@@ -208,10 +216,11 @@ def _checked(command: list[str], *, cwd: Path | None = None, env: dict | None = 
 
 @dataclass(frozen=True)
 class LegInvocation:
-    """How to run one self-CI leg's subprocess — its argv and (optionally) its environment."""
+    """How to run one self-CI leg's subprocess — its argv, (optionally) its environment and cwd."""
 
     command: list[str]
     env: dict | None = None
+    cwd: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -231,7 +240,9 @@ def _leg(
     fixes: LegFixes,
 ) -> bool:
     """Run one leg as a subprocess and record it as a finding; ``True`` when it passed."""
-    result = subprocess.run(invocation.command, capture_output=True, text=True, env=invocation.env, check=False)
+    result = subprocess.run(
+        invocation.command, capture_output=True, text=True, env=invocation.env, cwd=invocation.cwd, check=False
+    )
     if result.returncode == 0:
         findings.append(Finding("ok", code, f"{label} passes", "", fixes.ok_fix))
         return True
@@ -439,6 +450,66 @@ def _wheel_smoke_report(detail: str) -> tuple[str, str]:
     )
 
 
+def _registry_unreachable(output: str) -> bool:
+    """Whether a failed npm invocation names registry reach — a prerequisite, not a shipped defect."""
+    if any(marker in output for marker in ("ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "ECONNREFUSED")):
+        return True
+    return "registry.npmjs.org" in output and ("404" in output or "403" in output)
+
+
+def _js_leg(
+    findings: list[Finding],
+    label: str,
+    invocation: LegInvocation,
+    *,
+    code: str,
+    fixes: LegFixes,
+) -> None:
+    """One node-toolchain leg (C103): run one command and record it, naming a failed prerequisite first.
+
+    The ``_wheel_smoke_report`` stance, applied to the JS legs: a failure that is a missing binary
+    or the npm registry's reach is a prerequisite of the leg, not a defect of what akmon ships, so
+    the finding says so rather than reporting a bare exit status. Each leg is independent — a red
+    one records its finding and the rest still run. A leg whose command is not a node binary
+    (the corpus-node leg runs the corpus's own runner) relies on the runner naming the missing
+    node prerequisite itself.
+    """
+    command = invocation.command
+    binary = command[0] if command[0] != sys.executable else "node"
+    if shutil.which(binary) is None:
+        findings.append(
+            Finding(
+                "error",
+                code,
+                f"{label} could not run: the `{binary}` binary is not on PATH :: prerequisite of this leg, not a "
+                "defect — the node toolchain legs need node >= 22 and npm",
+                "",
+                "Install node (npm ships with it) and re-run python3 meta/self_ci.py.",
+            )
+        )
+        return
+    result = subprocess.run(command, capture_output=True, text=True, cwd=invocation.cwd, check=False)
+    if result.returncode == 0:
+        findings.append(Finding("ok", code, f"{label} passes", "", fixes.ok_fix))
+        return
+    output = (result.stdout or "") + (result.stderr or "")
+    sys.stderr.write(output)
+    detail = output.strip().splitlines()
+    tail = detail[-1] if detail else f"exit {result.returncode}"
+    if command[0] == "npm" and _registry_unreachable(output):
+        findings.append(
+            Finding(
+                "error",
+                code,
+                f"{label} could not run: prerequisite of this leg, not a defect — npm needs registry reach ({tail})",
+                "",
+                "Check network access to the npm registry and re-run python3 meta/self_ci.py.",
+            )
+        )
+        return
+    findings.append(Finding("error", code, f"{label} failed: {tail}", "", fixes.error_fix))
+
+
 def _run(akmon_root: Path) -> list[Finding]:
     findings: list[Finding] = []
     with (
@@ -533,6 +604,74 @@ def _run(akmon_root: Path) -> list[Finding]:
             error_fix=(
                 "Run python3 meta/conformance/runner.py --tree <repo> and fix the failing "
                 "scenario or the coverage gap it names."
+            ),
+        ),
+    )
+    # The node toolchain (C103, ADR 0020 D03): the JS implementation's own checks, appended
+    # after the conformance leg and independent of each other the same way — a red leg records
+    # its finding (naming the prerequisite when that is what failed) and the rest still run.
+    _js_leg(
+        findings,
+        "js deps (npm ci)",
+        LegInvocation(["npm", "ci", "--ignore-scripts"], cwd=akmon_root),
+        code="selfci.js-deps",
+        fixes=LegFixes(
+            ok_fix="Keep the committed dev lockfile in sync with package.json's exact-pinned devDependencies.",
+            error_fix="Run npm ci --ignore-scripts at the repository root and fix the install failure it reports.",
+        ),
+    )
+    _js_leg(
+        findings,
+        "js typecheck (tsc --checkJs)",
+        LegInvocation(["npx", "--no-install", "tsc", "--checkJs", "--noEmit", "-p", "."], cwd=akmon_root),
+        code="selfci.js-typecheck",
+        fixes=LegFixes(
+            ok_fix="Keep the JSDoc-annotated js/ implementation type-clean.",
+            error_fix="Run npx --no-install tsc --checkJs --noEmit -p . and fix the type errors it reports.",
+        ),
+    )
+    _js_leg(
+        findings,
+        "js unit tests (node --test js/**/*.test.mjs)",
+        LegInvocation(["node", "--test", "js/**/*.test.mjs"], cwd=akmon_root),
+        code="selfci.js-unit",
+        fixes=LegFixes(
+            ok_fix="Keep the js/ tests green.",
+            error_fix="Run node --test 'js/**/*.test.mjs' and fix the failing test it names.",
+        ),
+    )
+    _js_leg(
+        findings,
+        "js lint (eslint)",
+        LegInvocation(["npx", "--no-install", "eslint", "."], cwd=akmon_root),
+        code="selfci.js-lint",
+        fixes=LegFixes(
+            ok_fix="Keep the repository eslint-clean under akmon's own dev ruleset.",
+            error_fix="Run npx --no-install eslint . and fix the lint errors it reports.",
+        ),
+    )
+    _js_leg(
+        findings,
+        "conformance corpus (node units)",
+        LegInvocation(
+            [
+                sys.executable,
+                str(akmon_root / "meta" / "conformance" / "runner.py"),
+                "--tree",
+                str(akmon_root),
+                "--impl",
+                "node",
+                "--area",
+                "units",
+            ],
+            cwd=akmon_root,
+        ),
+        code="selfci.corpus-node",
+        fixes=LegFixes(
+            ok_fix="Keep the unit tables green on the node implementation through probe.mjs.",
+            error_fix=(
+                "Run python3 meta/conformance/runner.py --tree <repo> --impl node --area units and fix the "
+                "prerequisite or the failing unit table it names."
             ),
         ),
     )

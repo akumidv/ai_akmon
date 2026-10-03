@@ -17,11 +17,14 @@ is silent, the Python implementation is the reference, and the resolution become
 | `fixtures/tree/` | corpus-owned stand-ins for the standard tree's prose documents (see the snapshot) |
 | `units/<name>.toml` | shared unit tables (inputs + expected answers) for the stdlib-gap functions |
 | `coverage.toml` | the coverage gate's **exceptions**: ecosystem ownership, exemptions, reviewed dynamic sites |
+| `pairing.toml` | the pairing gate's two lists: `[[exempt]]` — a `.py` whose port is outstanding, with reason and owning task — and `[[stub]]` — a `js/` counterpart that only announces it |
 | `normalize.py` | normalization v2 — the other half of the spec (tokens and rules) |
 | `corpus.py` | scenario loading, the snapshot, fixture materialization |
 | `runner.py` | executes scenarios against one implementation; `--record` reseeds expectations |
 | `coverage.py` | the coverage gate: derives the population from the source and checks it |
+| `pairing.py` | the pairing gate: every consumer-executable `.py` paired under `js/` or exempted, with no exemption outliving its port or crediting a stub |
 | `probe.py` | the Python implementation's mouth for unit tables |
+| `probe.mjs` | the JS implementation's mouth for unit tables (same contract: the `{"ok","failed"}` document, exit 1 on a miss) |
 
 ## Ecosystems and attaches
 
@@ -130,10 +133,11 @@ are new; rule 5 is limited to the run day.
 
 ## Fixture model
 
-- The **snapshot** (`corpus.SNAPSHOT_FILES` + the wired hooks) is the corpus-controlled standard
-  tree: code, data and configuration are copied from the repository under test (including
-  `src/akmon`, so a native consumer runs the snapshot's own CLI and it resolves the snapshot as
-  its embedded tree); the **prose documents** come from `fixtures/tree/` stand-ins. The corpus
+- The **snapshot** (`corpus.SNAPSHOT_FILES` + the wired hooks + the `js/` tree carried whole via
+  its derived list, `corpus.py::snapshot_js`) is the corpus-controlled standard tree: code, data
+  and configuration are copied from the repository under test (including `src/akmon`, so a
+  native consumer runs the snapshot's own CLI and it resolves the snapshot as its embedded
+  tree); the **prose documents** come from `fixtures/tree/` stand-ins. The corpus
   pins behavior, not prose: with the real documents every guardrail edit (the always-loaded cap
   measures the imported guardrail) and every release (the healthy changelog check reads
   `## Unreleased`) would move the spec. A stand-in the snapshot does not list, or a listed path
@@ -158,8 +162,18 @@ are new; rule 5 is limited to the run day.
    gives it to one ecosystem. `[exempt]` lists what no hermetic scenario can reach, `[dynamic]`
    the reviewed non-literal emission sites; an unlisted dynamic site, or an entry naming nothing
    derived, fails the gate. The runner runs it last.
-3. **Pairing gate** — every consumer-executable `.py` has its `.mjs` counterpart under `js/` or
-   an exemption with a reason (C103 adds the gate; the exemption list lives here).
+3. **Pairing gate** (`pairing.py`) — every consumer-executable `.py` has its `.mjs` counterpart
+   under `js/` at the mirrored path (design §4: `X/Y.py` → `js/X/Y.mjs`, the package mapping to
+   the package — `src/akmon/cli.py` is `js/akmon/cli.mjs`), or an exemption in
+   `meta/conformance/pairing.toml` with a reason and the owning task. The population is the five
+   `CODE_ROOTS` (`coverage.py` owns the roots). The gate runs on a full corpus run, after the
+   coverage gate, and fails like it does: a gap (`pairing.gap`) is an error, and so is an
+   exemption that no longer says anything true (`pairing.stale`) — one covering no file, or one
+   covering only files whose port has landed. A counterpart that is a placeholder rather than a
+   port is named by a `[[stub]]` entry (its exact `js/` path, plus the task that replaces it) and
+   is **not** credited as a port: the `.py` behind it stays exempt and still needs its own
+   exemption, so an outstanding task cannot read as done. The exemption list shrinks as the port
+   lands (C104 hooks, C105 CLI, C107 update, C108 tools), and the `[[stub]]` entry goes with it.
 4. **Differential fuzzing** — recorded payloads plus mutations through both implementations
    (C111 wires the release-depth run).
 
@@ -183,3 +197,11 @@ scenario that covers.
 The `selfci.conformance` leg of `meta/self_ci.py` runs `runner.py --tree <repo>` (Python
 implementation + coverage gate). The corpus is green when the leg is green. The machinery is
 pinned by `meta/tests/test_conformance_coverage.py` and `meta/tests/test_conformance_corpus.py`.
+
+From C103 the corpus also runs on the node implementation: `selfci.corpus-node` runs
+`runner.py --tree <repo> --impl node --area units` — the same unit tables through
+`probe.mjs`, fixture-free, with the gates off (they run on a full run only). The node
+toolchain's own checks are independent self-CI legs on the same prerequisite-naming stance as
+the wheel smoke: `selfci.js-deps` (`npm ci --ignore-scripts`), `selfci.js-typecheck`
+(`npx --no-install tsc --checkJs --noEmit -p .`), `selfci.js-unit` (`node --test js/`) and
+`selfci.js-lint` (`npx --no-install eslint .`).

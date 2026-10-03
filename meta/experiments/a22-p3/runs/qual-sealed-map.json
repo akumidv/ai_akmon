@@ -1,0 +1,194 @@
+{
+  "q1461": {
+    "case": "P3-01",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 1
+  },
+  "q1080": {
+    "case": "P3-01",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 2
+  },
+  "q6551": {
+    "case": "P3-01",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 1
+  },
+  "q3349": {
+    "case": "P3-01",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 2
+  },
+  "q9155": {
+    "case": "P3-02",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 1
+  },
+  "q5725": {
+    "case": "P3-02",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 2
+  },
+  "q9594": {
+    "case": "P3-02",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 1
+  },
+  "q2750": {
+    "case": "P3-02",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 2
+  },
+  "q7344": {
+    "case": "P3-03",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 1
+  },
+  "q9455": {
+    "case": "P3-03",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 2
+  },
+  "q5885": {
+    "case": "P3-03",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 1
+  },
+  "q1833": {
+    "case": "P3-03",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 2
+  },
+  "q1299": {
+    "case": "P3-04",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 1
+  },
+  "q8800": {
+    "case": "P3-04",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 2
+  },
+  "q7172": {
+    "case": "P3-04",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 1
+  },
+  "q3034": {
+    "case": "P3-04",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 2
+  },
+  "q3082": {
+    "case": "P3-05",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 1
+  },
+  "q9382": {
+    "case": "P3-05",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 2
+  },
+  "q1929": {
+    "case": "P3-05",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 1
+  },
+  "q4689": {
+    "case": "P3-05",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 2
+  },
+  "q9044": {
+    "case": "P3-06",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 1
+  },
+  "q3356": {
+    "case": "P3-06",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 2
+  },
+  "q4786": {
+    "case": "P3-06",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 1
+  },
+  "q5979": {
+    "case": "P3-06",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 2
+  },
+  "q6581": {
+    "case": "P3-07",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 1
+  },
+  "q6453": {
+    "case": "P3-07",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 2
+  },
+  "q1586": {
+    "case": "P3-07",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 1
+  },
+  "q5129": {
+    "case": "P3-07",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 2
+  },
+  "q4011": {
+    "case": "P3-08",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 1
+  },
+  "q9338": {
+    "case": "P3-08",
+    "arm": "A",
+    "tier": "strongest",
+    "repeat": 2
+  },
+  "q1635": {
+    "case": "P3-08",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 1
+  },
+  "q6243": {
+    "case": "P3-08",
+    "arm": "A",
+    "tier": "mid",
+    "repeat": 2
+  }
+}

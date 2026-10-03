@@ -1,0 +1,102 @@
+# The pairing gate's exemptions (ADR 0020 D03, design node-consumers.md §5 gate 3): a
+# consumer-executable .py without its js/ .mjs counterpart is allowed ONLY with an entry
+# here — the reason and the owning task that ports it. The list shrinks as the port lands
+# (C104 hooks, C105 CLI, C107 update, C108 tools), and it must not lie in either direction:
+# a pattern that matches nothing fails the gate (pairing.stale), and so does one that has
+# become unnecessary because every file it covers has been ported — an exemption still
+# covering a landed port hides what is outstanding.
+#
+# A pattern is a glob over the repo-relative .py path; a directory glob covers every file
+# under it. The counterpart path the gate checks is the mirrored one (design §4): X/Y.py →
+# js/X/Y.mjs, with the package mapping to the package — src/akmon/cli.py → js/akmon/cli.mjs.
+#
+# [[stub]] is the other half of that honesty. The gate compares names, so a .mjs that exists
+# only as a placeholder — it runs, says the port has not landed, exits non-zero — would be
+# credited as a port and make the task owning that port look done. An entry names the file by
+# its exact path relative to js/ (not a glob), with the reason and the task that replaces it.
+# The .py behind a stub counts as exempt, never paired, so it still needs its own [[exempt]]
+# entry: the stub keeps the pair out of the paired count, the exemption keeps the gap green.
+# Once the real port lands the two names look identical to the gate — drop both by hand.
+
+# The JS hooks, core and adapters land in C104 (port order: hooks first).
+[[exempt]]
+path = "hooks/*"
+reason = "the JS hooks, core and adapters land in C104"
+task = "C104"
+
+# common/: owned by the task that ports the first consumer in port order.
+[[exempt]]
+path = "common/__init__.py"
+reason = "structural — ES modules have no package init; js/common is a flat module directory the C104 hooks import first"
+task = "C104"
+
+[[exempt]]
+path = "common/findings.py"
+reason = "first consumer in port order is hooks/hook_core.py; the JS hooks land in C104"
+task = "C104"
+
+[[exempt]]
+path = "common/markers.py"
+reason = "first consumer in port order is hooks/hook_core.py; the JS hooks land in C104"
+task = "C104"
+
+[[exempt]]
+path = "common/materialization.py"
+reason = "first consumer in port order is hooks/hook_core.py (stale_materialized); the JS hooks land in C104"
+task = "C104"
+
+[[exempt]]
+path = "common/always_loaded.py"
+reason = "first consumer in port order is bin/verify.py; the JS CLI lands in C105"
+task = "C105"
+
+[[exempt]]
+path = "common/codex_hooks.py"
+reason = "first consumer in port order is bin/verify.py; the JS CLI lands in C105"
+task = "C105"
+
+# bin/: the JS CLI (the launchers themselves) lands in C105.
+[[exempt]]
+path = "bin/*"
+reason = "the JS CLI for Node package mode lands in C105"
+task = "C105"
+
+# src/akmon/: the CLI port is C105; update is C107's plan row.
+[[exempt]]
+path = "src/akmon/cli.py"
+reason = "js/akmon/cli.mjs is only the placeholder stub of the JS CLI, which lands in C105 (see [[stub]])"
+task = "C105"
+
+[[exempt]]
+path = "src/akmon/__init__.py"
+reason = "structural — ES modules have no package init; the node-side version carrier is package.json"
+task = "C105"
+
+[[exempt]]
+path = "src/akmon/_init.py"
+reason = "the JS CLI for Node package mode lands in C105 (init is its first command)"
+task = "C105"
+
+[[exempt]]
+path = "src/akmon/_tree.py"
+reason = "the JS CLI lands in C105; embedded-tree resolution is part of that port"
+task = "C105"
+
+[[exempt]]
+path = "src/akmon/_update.py"
+reason = "the JS update for npm/pnpm/yarn/bun lands in C107, the plan row that owns update"
+task = "C107"
+
+# tools/: the tools port and `akmon tool` land in C108.
+[[exempt]]
+path = "tools/*"
+reason = "the tools port lands in C108"
+task = "C108"
+
+# The one placeholder that exists today: the npm bin entry ships so the manifest is real, while
+# the CLI behind it is C105's. Remove this entry and the src/akmon/cli.py exemption together,
+# when the CLI port lands.
+[[stub]]
+path = "akmon/cli.mjs"
+reason = "the placeholder of the JS CLI: it names the missing C105 port and exits non-zero"
+task = "C105"

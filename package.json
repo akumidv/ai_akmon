@@ -1,0 +1,44 @@
+{
+  "name": "akmon",
+  "version": "0.4.0-dev.0",
+  "description": "Akmon is AI-agent development standard, as an installable package.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "akmon": "js/akmon/cli.mjs"
+  },
+  "files": [
+    "ARCHETYPES.md",
+    "BOOTSTRAP.md",
+    "CAPABILITIES.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "MODEL.md",
+    "README.md",
+    "common",
+    "bin",
+    "examples",
+    "guardrails",
+    "hooks",
+    "meta",
+    "pipelines",
+    "profiles",
+    "roles",
+    "skills",
+    "tools",
+    "src/akmon",
+    "js",
+    "!**/__pycache__/**",
+    "!**/*.py[cod]",
+    "!**/.pytest_cache/**",
+    "!**/.git/**"
+  ],
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.4",
+    "eslint": "10.11.0",
+    "typescript": "7.0.2"
+  }
+}

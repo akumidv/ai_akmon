@@ -1,5 +1,5 @@
 # Unit table: fnmatch.fnmatchcase (case-sensitive) — the {files} matcher for [check] patterns
-# (common/check_runner.py:118, matching `changed` filenames against `check.files`).
+# (common/check_runner.py::argv_for, matching `changed` filenames against `check.files`).
 # The stdlib semantics the JS mirror must reproduce: `*` crosses `/` (it is `.*`, not a
 # path-segment wildcard); matching is always case-sensitive, on every platform, because the
 # call site uses `fnmatchcase` specifically — not the OS-dependent `fnmatch.fnmatch`, which
@@ -114,4 +114,162 @@ expected = true
 # (paired with the existing "*.py"/"A.PY" negative case above).
 pattern = "*.PY"
 name = "A.PY"
+expected = true
+
+# What is a literal and what is syntax. `fnmatch.translate` escapes every character that is not
+# `* ? [`, which includes the ones a hand-written translation forgets — and a forgotten one is
+# not a wrong answer, it is a different pattern: `{2}` is a regex quantifier, `+` is repetition.
+
+[[case]]
+pattern = "a{2}"
+name = "aa"
+expected = false
+
+[[case]]
+pattern = "a{2}"
+name = "a{2}"
+expected = true
+
+[[case]]
+pattern = "{a,b}"
+name = "ab"
+expected = false
+
+[[case]]
+pattern = "{a,b}"
+name = "{a,b}"
+expected = true
+
+[[case]]
+pattern = "a+b"
+name = "ab"
+expected = false
+
+[[case]]
+pattern = "a+b"
+name = "a+b"
+expected = true
+
+[[case]]
+# `?` is one character, and a space is one character.
+pattern = "a?b"
+name = "a b"
+expected = true
+
+# Classes: the stdlib's rules, each of which a copy-paste of the body into a JS regex breaks.
+
+[[case]]
+# `^` negates only in a shell; fnmatch's negation is `!`, so `^` is a member here and `x` is not.
+pattern = "[^a]"
+name = "^"
+expected = true
+
+[[case]]
+pattern = "[^a]"
+name = "x"
+expected = false
+
+[[case]]
+# A `]` first in the class (after the optional `!`) is a member, not the terminator.
+pattern = "[]a]"
+name = "]"
+expected = true
+
+[[case]]
+pattern = "[]a]"
+name = "a"
+expected = true
+
+[[case]]
+pattern = "[]a]"
+name = "b"
+expected = false
+
+[[case]]
+pattern = "[!]]"
+name = "a"
+expected = true
+
+[[case]]
+pattern = "[!]]"
+name = "]"
+expected = false
+
+[[case]]
+# A backslash inside a class is doubled by the translation, so `[\d]` is backslash-or-`d` — not
+# the digit class the JS engine would read.
+pattern = "[\\d]"
+name = "d"
+expected = true
+
+[[case]]
+pattern = "[\\d]"
+name = "\\"
+expected = true
+
+[[case]]
+pattern = "[\\d]"
+name = "7"
+expected = false
+
+[[case]]
+# A range written the wrong way round is dropped by the translation rather than raising, which
+# leaves an empty class: nothing matches, not even the ends.
+pattern = "[z-a]"
+name = "z"
+expected = false
+
+[[case]]
+pattern = "[z-a]"
+name = "x"
+expected = false
+
+[[case]]
+# A trailing `-` is a member; so is a leading one in the `-]` position.
+pattern = "[a-]"
+name = "-"
+expected = true
+
+[[case]]
+pattern = "a[-]b"
+name = "a-b"
+expected = true
+
+[[case]]
+# An unterminated `[` is a literal bracket, so the name that matches is one holding it.
+pattern = "[abc"
+name = "["
+expected = false
+
+[[case]]
+pattern = "[abc"
+name = "[abc"
+expected = true
+
+# Code points, not code units: fnmatch counts characters, and a JS regex without the `u` flag
+# counts UTF-16 halves — which turns `?` into half an emoji and a class into a wrong answer.
+
+[[case]]
+pattern = "?"
+name = "\U0001F600"
+expected = true
+
+[[case]]
+pattern = "??"
+name = "\U0001F600"
+expected = false
+
+[[case]]
+pattern = "*"
+name = "\U0001F600.py"
+expected = true
+
+[[case]]
+pattern = "[!a]"
+name = "\U0001F600"
+expected = true
+
+[[case]]
+pattern = "[\U0001F600]"
+name = "\U0001F600"
 expected = true

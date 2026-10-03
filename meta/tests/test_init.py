@@ -453,6 +453,24 @@ def test_vendored_mount_carries_the_standard_but_not_the_development_carrier(tmp
     assert "__pycache__" in (mount / ".gitignore").read_text(encoding="utf-8")
 
 
+def test_the_mount_carries_the_js_runtime_but_not_its_tests(tmp_path):
+    # A mounted file sits inside the consumer's project root, which `node --test` and `eslint`
+    # both scan by default: with the tests mounted, a consumer's own `node --test` ran akmon's
+    # suites and reported 4 failures it could not fix (M116). The carriers keep them — a wheel or
+    # an npm package is not in anyone's scan path — the mount is the one place they are hostile.
+    assert _init_vendored(tmp_path) == 0
+    mounted = list((tmp_path / "_aitna" / "akmon" / "js").rglob("*.mjs"))
+    assert mounted, "the mount carries no JavaScript at all"
+    assert (tmp_path / "_aitna" / "akmon" / "js" / "common" / "record.mjs").is_file()
+    assert not [path for path in mounted if path.name.endswith(".test.mjs")]
+
+    checkout = _AKMON / "js"
+    expected = {path.relative_to(checkout).as_posix() for path in checkout.rglob("*.mjs")} - {
+        path.relative_to(checkout).as_posix() for path in checkout.rglob("*.test.mjs")
+    }
+    assert {path.relative_to(tmp_path / "_aitna" / "akmon" / "js").as_posix() for path in mounted} == expected
+
+
 def test_init_writes_a_ci_workflow_only_when_the_project_has_none(tmp_path, capsys):
     _write(tmp_path / ".github" / "workflows" / "own.yml", "name: own\n")
     assert _init_vendored(tmp_path) == 0

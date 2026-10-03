@@ -36,11 +36,27 @@
   "findings": {
     "version-literals-match": {
       "message": "{{pyproject}} and {{static_version_file}} both declare {{declared}}",
-      "fix": "Bump both literals together — one release bump is two edits."
+      "fix": "Bump the version literals together — one release bump is every carrier at once."
     },
     "version-literals-mismatch": {
       "message": "{{pyproject}} declares {{declared}} while {{static_version_file}} declares {{fallback}}",
-      "fix": "Set both literals to the same string — one release bump is two edits."
+      "fix": "Set the version literals to the same string — one release bump is every carrier at once."
+    },
+    "npm-carrier-match": {
+      "message": "package.json carries {{expected}}, the SemVer spelling of {{pyproject}}'s {{declared}}",
+      "fix": "Re-derive the npm carrier version from the PEP 440 literal with the shared version logic — never hand-write it."
+    },
+    "npm-carrier-mismatch": {
+      "message": "package.json declares {{actual}} while the SemVer spelling of {{pyproject}}'s {{declared}} is {{expected}}",
+      "fix": "Re-derive the npm carrier version from the PEP 440 literal with the shared version logic — never hand-write it."
+    },
+    "npm-carrier-missing": {
+      "message": "package.json is absent or carries no version, so the npm carrier of {{declared}} is missing",
+      "fix": "Restore the npm carrier with the SemVer spelling the shared version logic derives from the PEP 440 literal."
+    },
+    "npm-carrier-unrepresentable": {
+      "message": "{{declared}} has no SemVer carrier spelling ({{detail}}), so the npm carrier could not be checked",
+      "fix": "Release a final version or its development spelling, which the shared version logic can derive as the npm carrier."
     },
     "no-version-source": {
       "message": "no version source: neither {{pyproject}} [project].version nor {{static_version_file}} _STATIC_VERSION is present",
@@ -105,8 +121,8 @@
       "# (e.g. __pycache__/) is not swept into the release commit."
     ],
     "bump_note": [
-      "# 1. Bump the version to {{literal}} in BOTH literals — one release bump is two edits,",
-      "#    and the tag records the reviewed state rather than producing the number:"
+      "# 1. Bump the version to {{literal}} in the version literals — one release bump is every",
+      "#    carrier at once, and the tag records the reviewed state rather than producing the number:"
     ],
     "changelog_note": "# 2. Cut CHANGELOG.md's `## Unreleased` section to `## {{version}}`.",
     "recheck_note": "# 3. Re-run --check: the version <-> changelog cross-check must be green before the tag.",
@@ -123,11 +139,20 @@
     "subjects": {
       "akmon": {
         "commit_subject": "akmon",
-        "staged_files": "CHANGELOG.md pyproject.toml src/akmon/__init__.py",
+        "staged_files": "CHANGELOG.md package-lock.json package.json pyproject.toml src/akmon/__init__.py",
         "cd_line": "cd {{aitna_root}}/akmon            # tag is cut from the submodule's own tree",
+        "semver_note": "#    The npm carrier takes the SemVer spelling the shared version logic derives from that literal — {{semver}} — never a hand-computed number.",
+        "cycle_note": [
+          "# 4. After the push, reopen the cycle: set pyproject.toml and src/akmon/__init__.py to",
+          "#    the next development version (`<next>.dev0`) under a fresh `## Unreleased` heading,",
+          "#    and package.json to what the shared version logic derives from that literal — this",
+          "#    release reopened would read {{semver}}. Until that is done the tree is a released",
+          "#    {{literal}} whose tag exists, which --check reports as a re-release."
+        ],
         "literal_lines": [
           "#      pyproject.toml           version = \"{{literal}}\"",
-          "#      src/akmon/__init__.py    _STATIC_VERSION = \"{{literal}}\""
+          "#      src/akmon/__init__.py    _STATIC_VERSION = \"{{literal}}\"",
+          "#      package.json             version = \"{{literal}}\"   (equal for a final version — the spelling is derived, see above)"
         ],
         "staged_line": "git add {{staged}}"
       },

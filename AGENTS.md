@@ -65,7 +65,15 @@ uv run pytest
 uv run ruff check .
 python3 meta/self_ci.py
 uv build
+npm ci --ignore-scripts
+npx --no-install tsc --checkJs --noEmit -p .
+node --test "js/**/*.test.mjs"
+npx --no-install eslint .
 ```
+
+The node toolchain's legs (from C103) need `node` (>= 22) and `npm` on PATH, and `npm ci`
+needs registry reach; the JS self-CI legs follow the wheel-smoke stance — a leg that fails on
+a prerequisite says so in its finding rather than reporting a bare exit status.
 
 `meta/self_ci.py`'s installed-wheel leg runs `akmon init --mode package`, which resolves the pin
 from the akmon repository's **release tags over the network**. It therefore needs network reach

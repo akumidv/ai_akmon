@@ -172,8 +172,12 @@ hooks/role-on-code.py       → js/hooks/role-on-code.mjs
 tools/model_routing/init.py → js/tools/model_routing/init.mjs   (+ "exports")
 js/vendor/smol-toml/        (pinned, LICENSE kept, updated only by a task)
 meta/conformance/           (the corpus: scenarios, fixtures, normalization rules, runner)
-package.json                (root; no deps, no scripts except dev ones, engines node >=22)
+package.json                (root; no dependencies, no `scripts` key, exact-pinned
+                             devDependencies, engines node >=22)
 ```
+
+Akmon's own dev linter is ESLint 10 (`@eslint/js` recommended) — owner decision 2026-09-27. It
+is akmon-internal: it lints this repository's `js/` and does not pre-decide A35's consumer ruleset.
 
 Both carriers ship one file list (D05). The wheel carries `js/` and the npm package carries the
 Python files, which are unused there. This keeps "same artifact, two entry points" provable by a
@@ -200,6 +204,21 @@ npx akmon tool model_routing/init --orchestrator …    # tools, same command in
 Generated Claude wiring:
 `node "$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs"`.
 
+The dev layer is **not** the project's source, and JS tooling does not know that on its own:
+`node --test` and `eslint` skip `node_modules/` by default and scan every other directory, so a
+mounted tree inside the project root is scanned as if it were the project's code (measured —
+M116: a vendored consumer's own `node --test` ran akmon's suites and reported 4 failures). Two
+rules follow, and each has a single owner:
+
+- the mount carries no development-only files: `_init._COPY_IGNORE` filters `*.test.mjs` (the
+  same rule the member allowlist already applies to `src/` and `tests/`), so the mount holds
+  runnable material and a consumer's test command stays its own — while both carriers keep the
+  tests, since a wheel's `site-packages` and a package inside `node_modules` are outside any
+  scan path;
+- the consumer's own configuration excludes `_aitna/**` from lint and typecheck, exactly as
+  `_aitna/.venv/` is already a git ignore. `init` detects `eslint`/`tsc` today and can check the
+  exclusion; making it *write* one is C105's (§7).
+
 ## 5. Conformance corpus (D03) — the spec
 
 - **Scenario kinds.** Each one gives an input and its expected output:
@@ -221,7 +240,9 @@ Generated Claude wiring:
   1. both implementations pass every scenario of their scope;
   2. the coverage gate: every command, hook, tool and finding code appears in a scenario;
   3. the pairing gate: every consumer-executable `.py` has its `.mjs` counterpart, or an exemption
-     with a reason;
+     with a reason; the list must not lie in either direction — an exemption covering only files
+     whose port has landed is stale, and a counterpart listed as a `[[stub]]` placeholder is not
+     credited as a port, so an outstanding task cannot read as done;
   4. differential fuzzing: recorded real payloads plus mutations, compared on both
      implementations (bounded run in CI, longer run before a release).
 - **Seeding.** C101 builds the corpus against Python alone, from today's behavior, before any JS
@@ -237,7 +258,7 @@ order. Stages: **0** spec · **1** data-first · **2** minimum Python-free slice
 |---|---|---|---|---|
 | C101 | 0 | Conformance corpus + runner, seeded against Python | — | scenario kinds and normalization of §5 in `meta/conformance/`; the coverage gate lists every command, hook, tool and finding code covered; `self_ci` leg `selfci.conformance` green on Python |
 | C102 | 1 | Data-first reduction | C101 | inventory of logic that can be data (policy tables, message templates, matcher and tool-name tables) and its move into shared data files; corpus unchanged and green |
-| C103 | 2 | JS foundation | C101 | root `package.json` (no deps, `engines` node ≥22, `bin`, one file list with the wheel, tested); `tsc --checkJs` + `node:test` + JS lint in the verification set (`AGENTS.md`); vendored smol-toml passing `toml-test`; `js/common/` for record, versions (incl. PEP 440 → SemVer), project root, runtime, check runner, shlex, glob, JSON writer, each on the shared unit tables; pairing gate live with the exemption list; orphan `package-lock.json` removed; `release_check` checks the `package.json` version carrier |
+| C103 | 2 | JS foundation | C101 | root `package.json` (no deps, `engines` node ≥22, `bin`, one file list with the wheel, tested); `tsc --checkJs` + `node:test` + JS lint in the verification set (`AGENTS.md`); vendored smol-toml passing `toml-test`; `js/common/` for record, versions (incl. PEP 440 → SemVer), project root, runtime, check runner, shlex, glob, JSON writer, each on the shared unit tables; pairing gate live with the exemption list; the orphan `package-lock.json` replaced by the committed dev lock (exact-pinned devDependencies; `npm ci --ignore-scripts`, `npx --no-install`); `release_check` checks the `package.json` version carrier |
 | C104 | 2 | JS hooks + Node wiring | C103 | all hook entry points, core and adapters in `js/hooks/` pass the hook corpus; Node wiring spelling and marker in both implementations' `sync`; latency budget met and recorded in `MEASUREMENTS.md` (JS vs Python p50, same host) |
 | C105 | 2 | JS CLI for Node package mode | C103, C104 | `init` (package/node), `sync`, `verify`, `check`, `path`, `hook`, `version` pass the corpus; `package.json` pin reader; `ecosystem` in the record; PnP, runtime-class pin and missing `node_modules/akmon` each a named finding; per-ecosystem runtime declaration (`meta/checks/runtime.py` extended); Node CI template without Python |
 | C106 | 2 | npm smoke leg without Python | C105 | `selfci.npm-smoke`: `npm pack` → install into a fixture Node project → init/sync/verify/hook with `python3` hidden from PATH; the npm/network prerequisite named in its failure |
@@ -264,6 +285,12 @@ implementations and, from C103 on, `npm pack --dry-run` against the wheel's file
   and becomes a scenario. The resolutions are listed in the C101 evidence, not decided here.
 - **Scoped fallback name** (`@akmon/cli`) if `akmon` on npm is taken before V5 (free on
   2026-09-26).
+- **`init` writing the dev-layer exclusion.** The consumer's eslint/tsconfig must ignore
+  `_aitna/**` (§4, M116); today `init` detects those tools but leaves the exclusion to the
+  project. Whether it should *edit* a project's config, only report the gap as a finding, or
+  ship a shareable config the project spreads from is C105's call — the mount is already clean of
+  development-only files, so the residue is lint and typecheck noise over runnable sources, not a
+  broken test command.
 
 ## 8. Starting the implementation
 

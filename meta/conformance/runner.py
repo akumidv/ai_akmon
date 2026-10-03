@@ -3,8 +3,9 @@
 
 The corpus is the normative behavioral spec both permanent implementations must pass
 (ADR 0020 D01/D03). This runner executes the scenarios at the process boundary — the same
-surface a harness invokes — against the Python implementation for now; the Node
-implementation joins here as ``--impl node`` once it exists (C104+).
+surface a harness invokes — against the Python implementation by default; the Node
+implementation joins here as ``--impl node`` and runs the unit tables through
+``probe.mjs`` at C103 (C104 hooks, C105 CLI and C108 tools land the rest).
 
 Usage:
     python3 meta/conformance/runner.py [--tree REPO] [--impl python] [--area hooks]
@@ -51,6 +52,7 @@ from corpus import (  # noqa: E402
 )
 from coverage import check_coverage, load_exceptions  # noqa: E402
 from normalize import NORM_VERSION, Ctx, normalize  # noqa: E402
+from pairing import check_pairing  # noqa: E402
 
 IMPL_SCOPE = {"python": ("shared", "python"), "node": ("shared", "node")}
 #: One finding line as ``common.findings.render`` prints it: ``SEVERITY code[ target]: …``.
@@ -93,15 +95,34 @@ def _today() -> str:
     return datetime.datetime.now().astimezone().date().isoformat()
 
 
-def _impl_version(repo: Path) -> str:
-    result = subprocess.run(
-        [sys.executable, str(repo / "src" / "akmon" / "cli.py"), "version"],
-        capture_output=True,
-        text=True,
-        env={**os.environ, "PYTHONPATH": str(repo / "src"), "PYTHONDONTWRITEBYTECODE": "1"},
-        check=True,
-    )
-    return result.stdout.strip()
+def _impl_version(repo: Path, impl: str) -> str:
+    """The version the run's ``{{version}}`` token normalizes to: the CLI's for python, package.json's for node.
+
+    The Python side keeps its CLI probe (the corpus exercises the real entry point); the node
+    side reads the repo's ``package.json`` directly — the version carrier at C103, before the
+    CLI exists to probe it.
+    """
+    if impl == "python":
+        result = subprocess.run(
+            [sys.executable, str(repo / "src" / "akmon" / "cli.py"), "version"],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONPATH": str(repo / "src"), "PYTHONDONTWRITEBYTECODE": "1"},
+            check=True,
+        )
+        return result.stdout.strip()
+    manifest = repo / "package.json"
+    if not manifest.is_file():
+        raise CorpusError(
+            f"prerequisite of --impl node: {manifest} (the node implementation's version carrier) is absent"
+        )
+    try:
+        version = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+    except (ValueError, KeyError) as exc:
+        raise CorpusError(
+            f"prerequisite of --impl node: {manifest} carries no version field ({type(exc).__name__})"
+        ) from exc
+    return str(version)
 
 
 def _materialize_tokens(text: str, ctx: Ctx) -> str:
@@ -199,8 +220,84 @@ def _build_local_repo(snapshot: Path, work: Path, version: str) -> Path:
     return local
 
 
-def _run(scenario: Scenario, repo: Path, snapshot: Path, version: str, work: Path) -> tuple[int, str, str, Ctx]:
+@dataclass
+class RunCtx:
+    """The run's inputs: the tree, the work dir and the implementation under test."""
+
+    repo: Path
+    snapshot: Path
+    work: Path
+    version: str
+    impl: str = "python"
+
+
+def _run_node_unit(scenario: Scenario, ctx: RunCtx) -> tuple[int, str, str, Ctx]:
+    """The node implementation's unit run: the same table through ``probe.mjs``, no consumer project.
+
+    Units test the stdlib-gap functions of the tree against its recorded answer, not process
+    behavior, so no fixture is materialized: the snapshot (the corpus-controlled copy of the
+    tree under test) is the tree, the work dir is the cwd, and the document the probe prints
+    is compared with the scenario's pinned stdout byte for byte, as on the Python side.
+    """
+    run_spec = scenario.run
+    node = shutil.which("node")
+    if node is None:
+        raise CorpusError(
+            "prerequisite of --impl node units: the node binary is not on PATH (node >= 22 is the floor)"
+        )
+    probe = CORPUS / "probe.mjs"
+    if not probe.is_file():
+        raise CorpusError(
+            "prerequisite of --impl node units: probe.mjs (the JS mouth for unit tables, at probe.py's "
+            "contract) has not landed yet"
+        )
+    first_day = _today()
+    result = subprocess.run(
+        [node, str(probe), "--tree", str(ctx.snapshot), run_spec.probe, str(CORPUS / "units" / run_spec.table)],
+        cwd=ctx.work,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode, result.stdout, result.stderr, Ctx(
+        root="", mount="", tree=str(ctx.snapshot), tmp="", version=ctx.version, repo="", days=(first_day,)
+    )
+
+
+def _command_for(scenario: Scenario, tree: Path, proj_dir: Path, ctx: Ctx) -> tuple[list[str], str, dict]:
+    """The process-boundary command for one scenario: argv, the stdin payload, and the env additions."""
+    run_spec = scenario.run
+    fixture = scenario.fixture
+    argv = tuple(_materialize_tokens(a, ctx) for a in run_spec.argv)
+    args = tuple(_materialize_tokens(a, ctx) for a in run_spec.args)
+    if scenario.kind == "hook":
+        # The harness's own entry: package wiring calls the launcher, mounted wiring the script.
+        if fixture.attach == "native":
+            command = [str(proj_dir / ".venv" / "bin" / "akmon"), "hook", run_spec.script, *args]
+        else:
+            command = [sys.executable, str(tree / "hooks" / f"{run_spec.script}.py"), *args]
+        payload = _materialize_tokens(json.dumps(run_spec.payload), ctx) if run_spec.payload else ""
+        return command, payload, {}
+    if scenario.kind == "cli":
+        return [sys.executable, str(tree / "src" / "akmon" / "cli.py"), *argv], "", {"PYTHONPATH": str(tree / "src")}
+    if scenario.kind == "tool":
+        return [sys.executable, str(tree / "tools" / f"{run_spec.tool}.py"), *argv], "", {}
+    # unit: the table is the expectation; the probe is only the implementation's mouth.
+    return [
+        sys.executable,
+        str(CORPUS / "probe.py"),
+        "--tree",
+        str(tree),
+        run_spec.probe,
+        str(CORPUS / "units" / run_spec.table),
+    ], "", {}
+
+
+def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
     """Execute one scenario; returns (exit, stdout, stderr, the run's normalization ctx)."""
+    if run.impl == "node" and scenario.kind == "unit":
+        return _run_node_unit(scenario, run)
+    repo, snapshot, work, version = run.repo, run.snapshot, run.work, run.version
     tag = scenario.id.replace("/", "-")
     run_tmp = work / f"tmp-{tag}"
     run_tmp.mkdir(parents=True)
@@ -244,37 +341,12 @@ def _run(scenario: Scenario, repo: Path, snapshot: Path, version: str, work: Pat
         repo=str(local_repo) if local_repo else "",
         days=(first_day,),
     )
-    cli = [sys.executable, str(tree / "src" / "akmon" / "cli.py")]
-    cli_env = {"PYTHONPATH": str(tree / "src")}
     for relative, content in fixture.tmp_files.items():
         target = run_tmp / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(_materialize_tokens(content, ctx), encoding="utf-8")
-    run_spec = scenario.run
-    argv = tuple(_materialize_tokens(a, ctx) for a in run_spec.argv)
-    args = tuple(_materialize_tokens(a, ctx) for a in run_spec.args)
-    payload = ""
-    if scenario.kind == "hook":
-        # The harness's own entry: package wiring calls the launcher, mounted wiring the script.
-        if fixture.attach == "native":
-            command = [str(proj_dir / ".venv" / "bin" / "akmon"), "hook", run_spec.script, *args]
-        else:
-            command = [sys.executable, str(tree / "hooks" / f"{run_spec.script}.py"), *args]
-        payload = _materialize_tokens(json.dumps(run_spec.payload), ctx) if run_spec.payload else ""
-    elif scenario.kind == "cli":
-        command = [*cli, *argv]
-        env.update(cli_env)
-    elif scenario.kind == "tool":
-        command = [sys.executable, str(tree / "tools" / f"{run_spec.tool}.py"), *argv]
-    else:  # unit
-        command = [
-            sys.executable,
-            str(CORPUS / "probe.py"),
-            "--tree",
-            str(tree),
-            run_spec.probe,
-            str(CORPUS / "units" / run_spec.table),
-        ]
+    command, payload, extra_env = _command_for(scenario, tree, proj_dir, ctx)
+    env.update(extra_env)
     result = subprocess.run(command, cwd=proj_dir, env=env, input=payload, capture_output=True, text=True, check=False)
     last_day = _today()
     if last_day != first_day:  # a run across midnight: both days are the run's own
@@ -452,25 +524,25 @@ def _skip(scenario: Scenario, impl: str) -> Outcome:
     return Outcome(scenario.id, "skip", f"ecosystem {scenario.ecosystem} not in scope of impl {impl}")
 
 
-def _record_outcome(scenario: Scenario, repo: Path, snapshot: Path, version: str, work: Path) -> Outcome:
+def _record_outcome(scenario: Scenario, ctx: RunCtx) -> Outcome:
     """Run a scenario and write its observed behavior back into the scenario file."""
-    exit_code, stdout, stderr, ctx = _run(scenario, repo, snapshot, version, work)
+    exit_code, stdout, stderr, norm = _run(scenario, ctx)
     path = CORPUS / "scenarios" / f"{scenario.id}.toml"
-    _apply_record(path, _record_block(scenario, exit_code, stdout, stderr, ctx))
+    _apply_record(path, _record_block(scenario, exit_code, stdout, stderr, norm))
     return Outcome(scenario.id, "recorded", f"exit={exit_code}")
 
 
-def _judge_outcome(scenario: Scenario, repo: Path, snapshot: Path, version: str, work: Path) -> Outcome:
+def _judge_outcome(scenario: Scenario, ctx: RunCtx) -> Outcome:
     """Run a scenario and compare it with its recorded expectations."""
-    exit_code, stdout, stderr, ctx = _run(scenario, repo, snapshot, version, work)
-    problems = _compare(scenario, exit_code, stdout, stderr, ctx)
+    exit_code, stdout, stderr, norm = _run(scenario, ctx)
+    problems = _compare(scenario, exit_code, stdout, stderr, norm)
     if problems:
         return Outcome(scenario.id, "fail", problems)
     return Outcome(scenario.id, "pass")
 
 
-def _print_report(impl: str, version: str, outcomes: list[Outcome], repo: Path) -> int:
-    """The runner's final report: every outcome, the coverage gate, and the process exit code."""
+def _print_report(impl: str, version: str, outcomes: list[Outcome], repo: Path, *, run_gates: bool = True) -> int:
+    """The runner's final report: every outcome, the gates on a full run, and the process exit code."""
     print(f"conformance corpus v{NORM_VERSION} · impl {impl} · version {version}")
     for outcome in outcomes:
         print(f"  {outcome.status:<8} {outcome.scenario}")
@@ -478,27 +550,48 @@ def _print_report(impl: str, version: str, outcomes: list[Outcome], repo: Path) 
             for line in outcome.detail.splitlines():
                 print(f"           {line}")
     failed = [o for o in outcomes if o.status == "fail"]
-    gaps = 0
+    if not run_gates:
+        if failed:
+            print(f"{len(failed)} of {len(outcomes)} scenarios failed")
+            return 1
+        print(
+            f"{len(outcomes)} scenarios: "
+            f"{sum(o.status == 'pass' for o in outcomes)} pass, "
+            f"{sum(o.status == 'skip' for o in outcomes)} skip"
+        )
+        return 0
+    coverage_gaps = 0
     for finding in check_coverage(repo):
         severity = finding.severity.upper()
         print(f"  {severity:<8} {finding.code} {finding.message}")
-        gaps += finding.severity != "ok"
-    if failed or gaps:
-        print(f"{len(failed)} of {len(outcomes)} scenarios failed; coverage gate: {gaps} finding(s)")
+        coverage_gaps += finding.severity != "ok"
+    pairing_gaps = 0
+    for finding in check_pairing(repo):
+        severity = finding.severity.upper()
+        print(f"  {severity:<8} {finding.code} {finding.message}")
+        pairing_gaps += finding.severity != "ok"
+    if failed or coverage_gaps or pairing_gaps:
+        print(
+            f"{len(failed)} of {len(outcomes)} scenarios failed; "
+            f"coverage gate: {coverage_gaps} finding(s), pairing gate: {pairing_gaps} finding(s)"
+        )
         return 1
     print(
         f"{len(outcomes)} scenarios: "
         f"{sum(o.status == 'pass' for o in outcomes)} pass, "
-        f"{sum(o.status == 'skip' for o in outcomes)} skip; coverage gate ok"
+        f"{sum(o.status == 'skip' for o in outcomes)} skip; coverage gate ok, pairing gate ok"
     )
     return 0
 
 
 def run_scenarios(repo: Path, impl: str, area: str | None, scenario_ids: list[str], *, record: bool) -> int:
-    """Run the corpus against one implementation, print the report, and return the exit code."""
-    version = _impl_version(repo)
-    if impl == "node":
-        raise CorpusError("the node implementation is not ported yet (C104+); the corpus runs it once it exists")
+    """Run the corpus against one implementation, print the report, and return the exit code.
+
+    The gates (coverage, pairing) run on a full run only: with ``--area`` the run is a slice
+    of the corpus and its gate verdicts would be about the rest as much as the slice.
+    """
+    version = _impl_version(repo, impl)
+    run_gates = area is None
     with tempfile.TemporaryDirectory(prefix="akmon-conformance-") as raw:
         work = Path(raw)
         snapshot = build_snapshot(repo, work)
@@ -506,21 +599,27 @@ def run_scenarios(repo: Path, impl: str, area: str | None, scenario_ids: list[st
         if scenario_ids:
             scenarios = _wanted_scenarios(scenarios, scenario_ids)
         scope = IMPL_SCOPE[impl]
+        run_ctx = RunCtx(repo=repo, snapshot=snapshot, work=work, version=version, impl=impl)
         outcomes: list[Outcome] = []
         for scenario in scenarios:
             if scenario.ecosystem not in scope:
                 outcomes.append(_skip(scenario, impl))
                 continue
             try:
+                if impl == "node" and scenario.kind != "unit":
+                    raise CorpusError(
+                        f"{scenario.id}: the node implementation joins the corpus with C104 (hooks), "
+                        f"C105 (cli) and C108 (tools); only the unit tables run at C103"
+                    )
                 if record and scenario.kind == "unit":  # a unit table is its own expectation
-                    outcomes.append(_judge_outcome(scenario, repo, snapshot, version, work))
+                    outcomes.append(_judge_outcome(scenario, run_ctx))
                 elif record:
-                    outcomes.append(_record_outcome(scenario, repo, snapshot, version, work))
+                    outcomes.append(_record_outcome(scenario, run_ctx))
                 else:
-                    outcomes.append(_judge_outcome(scenario, repo, snapshot, version, work))
+                    outcomes.append(_judge_outcome(scenario, run_ctx))
             except CorpusError as exc:
                 outcomes.append(Outcome(scenario.id, "fail", str(exc)))
-    return _print_report(impl, version, outcomes, repo)
+    return _print_report(impl, version, outcomes, repo, run_gates=run_gates)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -18,7 +18,8 @@
     "profiles",
     "roles",
     "skills",
-    "tools"
+    "tools",
+    "js"
   ],
   "tree_markers": [
     "bin/sync.py",

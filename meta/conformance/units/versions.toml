@@ -1,12 +1,37 @@
 # Unit table: version spelling and ordering (common/versions.py; JS mirror in C103).
-# Call sites: src/akmon/cli.py:196 (the CLI skew notice, C61), src/akmon/_update.py:66-67
-# (the pin move's order comparison, C54/A23), src/akmon/_init.py:174,356 (release-tag
-# selection), bin/verify.py:1383 and tools/release/release_check.py (release checks).
+# Call sites: src/akmon/cli.py::_skew_notice (the CLI skew notice, C61),
+# src/akmon/_update.py::_plan (the pin move's order comparison, C54/A23),
+# src/akmon/_init.py::_newest_release and ::_tag_for_version (release-tag selection),
+# bin/verify.py::check_attach_record and tools/release/release_check.py (release checks).
+# semver cases: common/versions.py::semver_spelling and its JS twin — the npm carrier's
+# spelling of a PEP 440 version (ADR 0020 D05). A final release and its own development
+# version are all this carrier can spell; every other input raises (owner decision 2026-10-03:
+# SemVer §11 sorts the derived identifiers alpha < beta < dev < rc while PEP 440 sorts
+# dev < a < b < rc, so aN/bN/rcN would put the npm side in an order its PEP 440 side denies —
+# the ban is on the shapes, not on the effort). A raise has no TOML answer for *this* mouth:
+# both probes call semver_spelling bare, unlike the pair block below, which spells a raise
+# "error". So the refusals (.postN, +local, a describe distance, and every pre-release step —
+# aN, bN, rcN, each alone or with a .devN of its own) are pinned by the implementations' own
+# tests, meta/tests/test_release_check.py and js/common/versions.test.mjs, not by this table.
 #
 # Expected values: split_base/split_ahead are split_version's two answers (ahead null when
 # the string names a version exactly), is_final is is_final's answer, order is order_key's
-# answer as [X, Y, Z, position] or null. Pairs assert the ordering the order keys imply:
-# expected -1 (a before b), 0, or 1.
+# answer as [X, Y, Z, position] or null. Pairs assert compare_versions' answer: -1 (a before
+# b), 0, or 1, or the string "error" when either side has no order key and the comparison
+# raises (TOML has no null, so an unplaceable pair spells its expected value as "error").
+#
+# Where the position numbers come from — the reason to trust them: they are PEP 440's order as
+# the installed oracle computes it, not a ranking reasoned out by hand. packaging 26.2's sort key
+# (its own version.py::_cmpkey) ranks a version below the release as pre_rank
+# "dev-only(-1) < a(0) < b(1) < rc(2) < stable(3)" and gives a version carrying a .devN the lower
+# dev_rank, so it sorts before the same version without one. akmon gives each of those ranks its
+# own place: -7 a development version of the release, -6/-5 an alpha and its own .devN, -4/-3 the
+# same pair of betas, -2/-1 the same pair of release candidates, 0 the release, 1 past it (a
+# describe distance, a -dirty tree, .postN, +local). Spacing the steps two apart is what leaves a
+# place for a step's own development version beneath it. Every row here is checkable against that
+# oracle through packaging.version.Version, present in this repository's dev group as pytest's own
+# dependency (uv.lock pins 26.2); packaging is never imported by common/versions.py, whose runtime
+# stays stdlib-only.
 
 [[case]]
 input = "v0.4.0"
@@ -18,11 +43,56 @@ expected = { split_base = "0.4.0", is_final = true, order = [0, 4, 0, 0] }
 
 [[case]]
 input = "0.4.0.dev0"
-expected = { split_base = "0.4.0.dev0", is_final = false, order = [0, 4, 0, -1] }
+expected = { split_base = "0.4.0.dev0", is_final = false, order = [0, 4, 0, -7] }
 
 [[case]]
 input = "0.5.0rc1"
 expected = { split_base = "0.5.0rc1", is_final = false, order = [0, 5, 0, -1] }
+
+[[case]]
+# The chain of one release, ascending: -7 .dev0, -6 a1.dev0, -5 a1, -4 b2.dev1, -3 b2,
+# -2 rc1.dev0, -1 rc1 (that one is the 0.5.0rc1 row above), 0 the release, 1 past it (the
+# rows below). The pairs further down pin the comparisons this ordering decides.
+input = "1.0.0.dev0"
+expected = { split_base = "1.0.0.dev0", is_final = false, order = [1, 0, 0, -7] }
+
+[[case]]
+input = "1.0.0a1.dev0"
+expected = { split_base = "1.0.0a1.dev0", is_final = false, order = [1, 0, 0, -6] }
+
+[[case]]
+input = "1.0.0a1"
+expected = { split_base = "1.0.0a1", is_final = false, order = [1, 0, 0, -5] }
+
+[[case]]
+input = "1.0.0b2.dev1"
+expected = { split_base = "1.0.0b2.dev1", is_final = false, order = [1, 0, 0, -4] }
+
+[[case]]
+input = "1.0.0b2"
+expected = { split_base = "1.0.0b2", is_final = false, order = [1, 0, 0, -3] }
+
+[[case]]
+input = "1.0.0rc1.dev0"
+expected = { split_base = "1.0.0rc1.dev0", is_final = false, order = [1, 0, 0, -2] }
+
+[[case]]
+input = "1.0.0"
+expected = { split_base = "1.0.0", is_final = true, order = [1, 0, 0, 0] }
+
+[[case]]
+# A tail this rule cannot name keeps the single coarse place below the release (-1, the last of
+# them). "1.0.0foo" is not a PEP 440 version at all — the oracle refuses it.
+input = "1.0.0foo"
+expected = { split_base = "1.0.0foo", is_final = false, order = [1, 0, 0, -1] }
+
+[[case]]
+# The same coarse answer for a spelling akmon simply does not read: PEP 440 accepts the long
+# aliases and normalizes "alpha1" to a1 (the oracle would rank it at -5), while akmon reads only
+# the short stamp hatchling and setuptools write. This row is where that limit is pinned, so it
+# cannot go unnoticed if the aliases are ever adopted.
+input = "1.0.0alpha1"
+expected = { split_base = "1.0.0alpha1", is_final = false, order = [1, 0, 0, -1] }
 
 [[case]]
 input = "0.4.0.post1"
@@ -42,7 +112,7 @@ expected = { split_base = "10.2.0", is_final = true, order = [10, 2, 0, 0] }
 
 [[case]]
 input = "0.5.0.dev0"
-expected = { split_base = "0.5.0.dev0", is_final = false, order = [0, 5, 0, -1] }
+expected = { split_base = "0.5.0.dev0", is_final = false, order = [0, 5, 0, -7] }
 
 [[case]]
 input = "0.4.1"
@@ -72,6 +142,13 @@ expected = { split_base = "", is_final = false }
 input = "v1"
 expected = { split_base = "1", is_final = false }
 
+[[case]]
+# The describe suffix is anchored: it ends the spelling. Text after the sha is not a distance,
+# so nothing is stripped and no ahead is reported — an unanchored JS match split this string at
+# the first `-N-g<sha>` it saw and answered as if the tree sat three commits past 0.4.0.
+input = "0.4.0-3-g1234abcd-x"
+expected = { split_base = "0.4.0-3-g1234abcd-x", is_final = false, order = [0, 4, 0, 1] }
+
 [[pair]]
 a = "0.4.0.dev0"
 b = "0.4.0"
@@ -98,13 +175,75 @@ b = "0.4.0"
 expected = 0
 
 [[pair]]
-# Both a pre-release (.dev0) and a release-candidate (rc1) of the same X.Y.Z land at position
-# -1 today, so order_key treats them as equal even though they are different kinds of
-# not-yet-released spellings — order_key's answer is "before the release", not "which
-# pre-release kind", and this pins that coarseness rather than assuming finer ordering exists.
+# A development version and a release candidate of the same X.Y.Z are different steps of the
+# PEP 440 chain, and this is the pair the coarse -1 used to answer 0 for — the tie that made
+# `akmon update` call one as good as the other. .dev0 sits at -7 and rc1 at -1, so the answer
+# is now -1 in both directions.
 a = "0.5.0.dev0"
 b = "0.5.0rc1"
-expected = 0
+expected = -1
+
+[[pair]]
+# The inversion the carrier ban is about, seen from the ordering side: PEP 440 puts .dev0
+# before a1, while the SemVer spelling the carrier used to derive ("-alpha.1" against
+# "-dev.0") would put them the other way round. Order is decided here, on the PEP 440 side.
+a = "1.0.0.dev0"
+b = "1.0.0a1"
+expected = -1
+
+[[pair]]
+a = "1.0.0.dev0"
+b = "1.0.0b2"
+expected = -1
+
+[[pair]]
+a = "1.0.0a1"
+b = "1.0.0b2"
+expected = -1
+
+[[pair]]
+a = "1.0.0b2"
+b = "1.0.0rc1"
+expected = -1
+
+[[pair]]
+# A pre-release that carries its own development segment sorts before that pre-release.
+a = "1.0.0a1.dev0"
+b = "1.0.0a1"
+expected = -1
+
+[[pair]]
+# A development version of the release is below every step, and below a step's own .devN:
+# PEP 440 ranks a version that carries .devN and no pre-release below every pre-release.
+a = "1.0.0.dev0"
+b = "1.0.0a1.dev0"
+expected = -1
+
+[[pair]]
+# A step's own development version belongs to its step, not to the one below it: rc1.dev0 (-2)
+# still sorts above a plain b2 (-3), the way PEP 440 ranks the pre-release identifier ahead of
+# the development number.
+a = "1.0.0rc1.dev0"
+b = "1.0.0b2"
+expected = 1
+
+[[pair]]
+# The last place before the release: the chain ends at rc1.dev0, one step under 1.0.0.
+a = "1.0.0rc1.dev0"
+b = "1.0.0"
+expected = -1
+
+[[pair]]
+# Anything past the release stays past it, in either spelling of "past" — a .postN ...
+a = "1.0.0"
+b = "1.0.0.post1"
+expected = -1
+
+[[pair]]
+# ... or a git describe distance, which sits above the whole pre-release chain of that release.
+a = "1.0.0rc1"
+b = "1.0.0-3-g1234abcd"
+expected = -1
 
 [[pair]]
 a = "0.5.0rc1"
@@ -120,3 +259,80 @@ expected = -1
 a = "1.0.0"
 b = "0.99.99"
 expected = 1
+
+# Multi-digit components: the pairs above happen to survive a JS array `<` (which compares the
+# keys' string forms), these do not. "0,10,0,0" < "0,9,0,0" as strings — 1 is below 9 — and
+# "2,0,0,0" > "10,0,0,0" — 2 is above 1. A comparator that reads the tuple as text puts 0.10.0
+# *below* 0.9.0 and 2.0.0 *above* 10.0.0, so an update would call a lower release newer, and
+# the table must be able to say so.
+
+[[pair]]
+a = "0.10.0"
+b = "0.9.0"
+expected = 1
+
+[[pair]]
+a = "2.0.0"
+b = "10.0.0"
+expected = -1
+
+[[pair]]
+a = "0.4.0"
+b = "0.4.0.dev100"
+expected = 1
+
+[[pair]]
+# Position ties past the same release stay equal however many digits the components carry.
+a = "10.20.30-12-gabcdef01"
+b = "10.20.30-3-gabcdef02"
+expected = 0
+
+[[pair]]
+# "latest" has no order key, so the comparison raises rather than ranking it somewhere: the
+# table's spelling of a raise (see the header).
+a = "latest"
+b = "0.4.0"
+expected = "error"
+
+[[pair]]
+a = "0.4.0"
+b = ""
+expected = "error"
+
+# --- the npm carrier's spelling (semver_spelling; a final release and its .devN, nothing else)
+#
+# This block can only hold inputs that spell successfully: both probes call semver_spelling
+# bare, so a row for a refused shape would crash the mouth instead of failing it (the pair block
+# above has its "error" spelling; this one has none). The refusals are therefore asserted where
+# a raise can be caught — meta/tests/test_release_check.py on the Python side and
+# js/common/versions.test.mjs on the JS side, both of which name .postN, +local, a describe
+# distance and every pre-release step (aN, bN, rcN, alone or with its own .devN; owner decision
+# 2026-10-03, because SemVer §11 would order the derived spellings against PEP 440).
+
+[[semver]]
+input = "0.4.0"
+expected = "0.4.0"
+
+[[semver]]
+input = "v0.4.0"
+expected = "0.4.0"
+
+[[semver]]
+input = "10.2.0"
+expected = "10.2.0"
+
+[[semver]]
+input = "0.4.0.dev0"
+expected = "0.4.0-dev.0"
+
+[[semver]]
+input = "0.5.0.dev0"
+expected = "0.5.0-dev.0"
+
+[[semver]]
+input = "0.1.0.dev42"
+expected = "0.1.0-dev.42"
+
+[[semver]]
+input = "v1.0.0.dev7"
+expected = "1.0.0-dev.7"

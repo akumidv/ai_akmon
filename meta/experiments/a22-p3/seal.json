@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "files": {
+    "README.md": "e5dd1160031fae21079c27f60f60c21014d7c5218f5562974d30bd78019aef2a",
+    "RUN_PLAN.md": "de0917c9fb75053a245b914ea888fc258d2d9a5ede438fb4bf759b49a78f130c",
+    "arms/A.architect.system.txt": "af405183eb0c0df6f8b5f0bec0098bd3819b2bc00d3f951c6cd61c50320b2ff3",
+    "arms/B.architect.system.txt": "e8bc7f1433973a49a60ca9e3beba4b215984a6fe2ff5436d22b144221de9ff3f",
+    "arms/C.architect.system.txt": "d8dfbf68e8425f42872a53b5e7c9c4d96f4e02eaaa84fef5b69132fe5b4f17e7",
+    "arms/manifest.json": "ea5c9960c8d355de9e6edc8de07a448c97b8e6db2697376d35809a62416db64c",
+    "build_arms.py": "511b4905bafb8149c12f70618d72c83bd27ca0fea45aff9d5abc48321c47b977",
+    "build_cases.py": "9777cd369b4bd090ffabe95ab28a7e13adde4a428cc58aa0e32e76046fc8527c",
+    "cases/P3-01.json": "3ec981fb954cdeba5493289080dd6759bc7a48b6d5bc8630e2c72296618e7b12",
+    "cases/P3-02.json": "71246cfa16c075829a0ab20ba422cb363633ac4967d9f200ebab46a24d62799a",
+    "cases/P3-03.json": "783a2fa7cf12e908b9de09c32905b8541a68cebbe3c283f6aa090dce13e48f1b",
+    "cases/P3-04.json": "ac37cff019b2df9657b9cbdb7eafd91d210472c128295a3e203cf103c4892085",
+    "cases/P3-05.json": "a280a1be037abe2ad4bd56e91954c95f94de45085977f01ca13c752357f813a7",
+    "cases/P3-06.json": "2816e7d70b2dcf65d81f8cbb1e33471a1cf182b2b77538afb97bd82cd019296a",
+    "cases/P3-07.json": "27453e01a1e73053c7d2327865f362aff5555e6259a39bde7c04b868a5cc4107",
+    "cases/P3-08.json": "a0418a5ed19a03b8a2be890f547adf206c671cc39316d455057c80b8da8df14d",
+    "check_bundle.py": "b7d8369e1d66a73763215e4294be22a5995fb6d2a5062d045da46c4f4ae0f9f0",
+    "driver.py": "5a681062ce0602568111d93c129277808dcdd94a54638dfb03bc381f968f1e54",
+    "grid.py": "2d79209ead0dbcf718a6284699ef73720ade887f2f495aadbb5b108fea5fd39a",
+    "qualify.py": "2c0d9227e1399e4b3c528b5679e425540a3491e1bccd81e93b7053f4b6d3b48f",
+    "runs/qual-sealed-map.json": "e8872290641809397276ff4b664723469f2f86e0d039d9a88f4d762e2559fd86",
+    "score_packets.py": "447a8732c8033e4ca06ea6abba423ef1b5b0b52a5d8d212b83b230c7f29b73b1",
+    "scoring/scorer-prompt.txt": "7d875d7eb91f2f06d2c0b869f6f6f21b23d5240d4de00bb96aa3dba89c583ce5"
+  },
+  "git_head": "b84d19a72894bd4ff296ce7d9414cdf3b49cb414"
+}

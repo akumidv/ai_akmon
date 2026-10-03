@@ -56,7 +56,13 @@ packages = ["src/akmon"]
 "roles" = "akmon/_tree/roles"
 "skills" = "akmon/_tree/skills"
 "tools" = "akmon/_tree/tools"
+"js" = "akmon/_tree/js"
 
+# The custom patterns apply to the `packages` scan only: force-include entries are filtered by
+# hatchling's hardcoded constants (EXCLUDED_DIRECTORIES incl. `__pycache__` and `.ruff_cache`),
+# which is why the cache dirs never ship there either. A force-included `.gitignore` file
+# (the corpus fixture's) is NOT excludable — npm hard-drops it instead (M103); the one-file
+# divergence is encoded in meta/tests/test_carriers_match.py.
 [tool.hatch.build]
 exclude = [
     "**/__pycache__",
