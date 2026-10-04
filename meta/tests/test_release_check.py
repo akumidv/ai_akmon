@@ -769,7 +769,7 @@ def test_semver_spelling_refuses_every_shape_the_carrier_cannot_carry(version):
     # pre-release steps (aN, bN, rcN, with or without a .devN of their own) are in here because
     # SemVer §11 orders the derived spellings against PEP 440 — alpha < beta < dev < rc where
     # PEP 440 reads dev < a < b < rc — which is the inversion this decision closes at its root.
-    with pytest.raises(ValueError, match="npm-carriable|distance past its tag"):
+    with pytest.raises(ValueError, match=r"npm-carriable|distance past its tag"):
         semver_spelling(version)
 
 

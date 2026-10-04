@@ -2,9 +2,11 @@
 /**
  * Unit-table probe for the JavaScript implementation (C103) — the exact twin of `probe.py`.
  *
- * The corpus's stdlib-gap tables test the *functions* the two implementations share; this
- * probe feeds every case to the tree-under-test's own function (loaded from `--tree`, the
- * corpus snapshot) and compares with the table's expected value. The table is the spec — the
+ * The corpus's unit tables test the *functions* the two implementations share and JS cannot
+ * inherit — the stdlib gaps and the shared data-driven answers alike, the list being owned by
+ * `probe.py`'s docstring. This probe feeds every case to the tree-under-test's own function
+ * (loaded from `--tree`, the corpus snapshot) and compares with the table's expected value. The
+ * table is the spec — the
  * probe is only the mouth the JavaScript implementation answers through, the way `probe.py`
  * is the Python one. Output: the same `{"ok", "failed"}` document, byte for byte.
  *

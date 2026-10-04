@@ -84,15 +84,26 @@ def is_final(recorded: str) -> bool:
 #: The release a version names or is on the way to: its leading ``X.Y.Z``.
 _RELEASE_PREFIX_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
-#: A development version of the release itself: the ``.dev0`` of ``0.4.0.dev0``, with nothing
-#: between the release and it. Its number is not read — the place is the same for every ``.devN``.
-_DEV_OF_RELEASE_RE = re.compile(r"\.dev\d+")
+#: A development version of the release itself: the ``.dev0`` of ``0.4.0.dev0`` — attached to the
+#: release, not to a step. Its number is not read — the place is the same for every ``.devN``.
+#:
+#: The divider is a character class, not a dot, because PEP 440 reads ``.``, ``-`` and ``_`` as
+#: one separator before a labelled component: ``1.0.0-dev1`` *is* ``1.0.0.dev1``. Reading only the
+#: dot would not merely be narrower — a hyphen-led tail fell to the "past the release" answer, so
+#: ``1.0.0-rc2`` ranked *above* ``1.0.0``, which is the inversion this rule exists to prevent.
+_DEV_OF_RELEASE_RE = re.compile(r"[-_.]?dev\d+")
 
 #: A pre-release step of the release, and the development version of that step: ``0.5.0a1``,
 #: ``0.5.0a1.dev0``. PEP 440's spelled-out aliases (``alpha``, ``beta``, ``pre``, ``preview``,
 #: ``c``) are deliberately absent — the tail this rule cannot name is not quietly read as a
 #: step of the chain.
-_PRE_RELEASE_RE = re.compile(r"\.?(a|b|rc)\d+(?:\.dev(\d+))?")
+_PRE_RELEASE_RE = re.compile(r"[-_.]?(a|b|rc)\d+(?:[-_.]?dev(\d+))?")
+
+#: A tail that means the tree sits past the release rather than below it: ``1.0.0.post1``,
+#: ``1.0.0-post1``, and the ``-dirty`` akmon reads off a dirty work tree. Every other ``-`` tail is
+#: a divider, not a position — which is why this list is by name and the test below cannot simply
+#: look for a leading hyphen.
+_PAST_TAIL_RE = re.compile(r"[-_.]?post\d+(?:[-_.]?dev\d+)?|[-_.]?dirty")
 
 #: ``order_key``'s fourth element for a version at the release itself, and for anything past it
 #: (a ``git describe`` distance, a ``-dirty`` tree, a ``.postN`` or a ``+local`` build).
@@ -150,7 +161,7 @@ def order_key(recorded: str) -> tuple[int, int, int, int] | None:
     if match is None:
         return None
     rest = base[match.end() :]
-    if ahead is not None or rest.startswith(("-", ".post", "+")):
+    if ahead is not None or rest.startswith("+") or _PAST_TAIL_RE.fullmatch(rest) is not None:
         position = _PAST_RELEASE_POSITION
     elif not rest:
         position = _AT_RELEASE_POSITION
@@ -183,11 +194,12 @@ def semver_spelling(recorded: str) -> str:
     """The SemVer carrier spelling of a PEP 440 version (the npm side of the version line).
 
     A final release spells itself (``0.4.1``) and a development version of it carries its
-    segment across as a SemVer pre-release (``0.4.0.dev0`` → ``0.4.0-dev.0``). A leading ``v``
-    is a spelling and is dropped. Nothing else is carriable. SemVer §11 compares pre-release
-    identifiers left to right and sorts an alphanumeric one by ASCII, so the chain a derived
-    spelling would form reads ``alpha < beta < dev < rc`` while PEP 440 reads
-    ``dev < a < b < rc``: ``aN``/``bN``/``rcN`` (each alone or with its own ``.devN``) are refused
+    segment across as a SemVer pre-release (``0.4.0.dev0`` → ``0.4.0-dev.0``, and PEP 440 reads
+    ``0.4.0-dev0`` as the same version). A leading ``v`` is a spelling and is dropped. Nothing
+    else is carriable. SemVer §11 compares pre-release identifiers left to right and sorts an
+    alphanumeric one by ASCII, so the chain a derived spelling would form reads
+    ``alpha < beta < dev < rc`` while PEP 440 reads ``dev < a < b < rc``: ``aN``/``bN``/``rcN``
+    (each alone or with its own ``.devN``) are refused
     because spelling them would put the npm side in an order its PEP 440 side denies. The same
     reason refuses a ``.postN`` (which sorts *after* the release), a ``+local`` build and a
     ``git describe`` distance. Each raises :class:`ValueError` naming the input, because a
@@ -200,7 +212,7 @@ def semver_spelling(recorded: str) -> str:
         )
     if FINAL_RE.fullmatch(base) is not None:
         return base
-    match = re.fullmatch(r"(\d+\.\d+\.\d+)\.dev(\d+)", base)
+    match = re.fullmatch(r"(\d+\.\d+\.\d+)[-_.]?dev(\d+)", base)
     if match is not None:
         return f"{match[1]}-dev.{match[2]}"
     raise ValueError(

@@ -145,9 +145,62 @@ expected = { split_base = "1", is_final = false }
 [[case]]
 # The describe suffix is anchored: it ends the spelling. Text after the sha is not a distance,
 # so nothing is stripped and no ahead is reported — an unanchored JS match split this string at
-# the first `-N-g<sha>` it saw and answered as if the tree sat three commits past 0.4.0.
+# the first `-N-g<sha>` it saw and answered as if the tree sat three commits past 0.4.0. What is
+# left is a tail the rule cannot name, and an unnamed tail sits one place *below* the release
+# whatever divider it used: reading a leading `-` as "past" was the mistake this row now pins
+# against, because it put `0.4.0-rc2` above `0.4.0`.
 input = "0.4.0-3-g1234abcd-x"
-expected = { split_base = "0.4.0-3-g1234abcd-x", is_final = false, order = [0, 4, 0, 1] }
+expected = { split_base = "0.4.0-3-g1234abcd-x", is_final = false, order = [0, 4, 0, -1] }
+
+# PEP 440 reads `.`, `-` and `_` as one divider before a labelled component, so these are the
+# same versions spelled three ways — and the divider is where the ordering rule was wrong rather
+# than merely narrow: a hyphen-led tail went to the past-the-release bucket, ranking a
+# hyphen-spelled step above its own release. Only the tails *named* below stay past it.
+
+[[case]]
+input = "0.4.0-dev0"
+expected = { split_base = "0.4.0-dev0", is_final = false, order = [0, 4, 0, -7] }
+
+[[case]]
+input = "0.4.0-rc2"
+expected = { split_base = "0.4.0-rc2", is_final = false, order = [0, 4, 0, -1] }
+
+[[case]]
+input = "0.4.0-post1"
+expected = { split_base = "0.4.0-post1", is_final = false, order = [0, 4, 0, 1] }
+
+[[case]]
+# `-dirty` names the tree, not a step: akmon reads a dirty work tree as past its release, and
+# `packaging` has no opinion to check it against (it refuses the spelling).
+input = "0.4.0-dirty"
+expected = { split_base = "0.4.0-dirty", is_final = false, order = [0, 4, 0, 1] }
+
+[[case]]
+# The other side of reading only the short stamps: PEP 440 also accepts `rN` as a legacy alias
+# for a post-release revision, so the oracle ranks `1.0.0-r1` *above* the release where akmon
+# leaves it one place below, unnamed — the same limit the `1.0.0alpha1` row above pins for the
+# spelled-out steps, and reachable only if a tag were spelled this way (`is_final` refuses it, so
+# the automatic pin move never selects it). Pinned rather than fixed: adopting `r`/`c`/`pre`
+# would widen the grammar the rest of this rule deliberately keeps narrow.
+input = "1.0.0-r1"
+expected = { split_base = "1.0.0-r1", is_final = false, order = [1, 0, 0, -1] }
+
+[[pair]]
+# The consequence the divider rule was hiding: a step written with a hyphen is still a step, so
+# it stays below the release it precedes.
+a = "1.0.0-rc2"
+b = "1.0.0"
+expected = -1
+
+[[pair]]
+a = "1.0.0-dev1"
+b = "1.0.0.dev1"
+expected = 0
+
+[[pair]]
+a = "1.0.0-post1"
+b = "1.0.0"
+expected = 1
 
 [[pair]]
 a = "0.4.0.dev0"
@@ -336,3 +389,10 @@ expected = "0.1.0-dev.42"
 [[semver]]
 input = "v1.0.0.dev7"
 expected = "1.0.0-dev.7"
+
+[[semver]]
+# The divider is a spelling, not a different version: PEP 440 reads `0.4.0-dev0` as
+# `0.4.0.dev0`, so the carrier spells the same version the same way whichever separator it was
+# given. This is the carrier's side of the ordering rule's `[-_.]` class above.
+input = "0.4.0-dev0"
+expected = "0.4.0-dev.0"

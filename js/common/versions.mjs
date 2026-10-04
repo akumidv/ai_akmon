@@ -19,15 +19,25 @@ const FINAL_RE = /^\d+\.\d+\.\d+$/;
 /** The release a version names or is on the way to: its leading `X.Y.Z`. */
 const RELEASE_PREFIX_RE = /^(\d+)\.(\d+)\.(\d+)/;
 
-/** A development version of the release itself: the `.dev0` of `0.4.0.dev0`, with nothing
- * between the release and it. Its number is not read — the place is the same for every `.devN`. */
-const DEV_OF_RELEASE_RE = /^\.dev\d+$/;
+/** A development version of the release itself: the `.dev0` of `0.4.0.dev0` — attached to the
+ * release, not to a step. Its number is not read — the place is the same for every `.devN`.
+ *
+ * The divider is a class, not a dot: PEP 440 reads `.`, `-` and `_` as one separator before a
+ * labelled component, so `1.0.0-dev1` *is* `1.0.0.dev1`. Reading only the dot was not merely
+ * narrower — a hyphen-led tail went to the past-the-release answer below, which ranked
+ * `1.0.0-rc2` *above* `1.0.0`. */
+const DEV_OF_RELEASE_RE = /^[-_.]?dev\d+$/;
 
 /** A pre-release step of the release, and the development version of that step: `0.5.0a1`,
  * `0.5.0a1.dev0`. PEP 440's spelled-out aliases (`alpha`, `beta`, `pre`, `preview`, `c`) are
  * deliberately absent — the tail this rule cannot name is not quietly read as a step of the
  * chain. */
-const PRE_RELEASE_RE = /^\.?(a|b|rc)\d+(?:\.dev(\d+))?$/;
+const PRE_RELEASE_RE = /^[-_.]?(a|b|rc)\d+(?:[-_.]?dev(\d+))?$/;
+
+/** A tail that means the tree sits past the release rather than below it: `1.0.0.post1`,
+ * `1.0.0-post1`, and the `-dirty` akmon reads off a dirty work tree. Every other `-` tail is a
+ * divider, not a position, so the test below names these instead of looking for a hyphen. */
+const PAST_TAIL_RE = /^(?:[-_.]?post\d+(?:[-_.]?dev\d+)?|[-_.]?dirty)$/;
 
 /** `orderKey`'s fourth element for a version at the release itself, and for anything past it
  * (a `git describe` distance, a `-dirty` tree, a `.postN` or a `+local` build). */
@@ -125,7 +135,7 @@ export function orderKey(recorded) {
   }
   const rest = base.slice(match[0].length);
   let position;
-  if (ahead !== null || rest.startsWith("-") || rest.startsWith(".post") || rest.startsWith("+")) {
+  if (ahead !== null || rest.startsWith("+") || PAST_TAIL_RE.test(rest)) {
     position = PAST_RELEASE_POSITION;
   } else if (rest.length === 0) {
     position = AT_RELEASE_POSITION;
@@ -190,7 +200,7 @@ export function semverSpelling(recorded) {
   if (FINAL_RE.test(base)) {
     return base;
   }
-  const dev = base.match(/^(\d+\.\d+\.\d+)\.dev(\d+)$/);
+  const dev = base.match(/^(\d+\.\d+\.\d+)[-_.]?dev(\d+)$/);
   if (dev !== null) {
     return `${dev[1]}-dev.${dev[2]}`;
   }

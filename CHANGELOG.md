@@ -195,6 +195,20 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   `release.tag-spelling` and excluded from both git-dependent rules, rather than dropped in
   silence by a filter that would hide it from them and say nothing.
 
+- **The standard now ships a JavaScript side, and it is not usable yet (C103; ADR 0020 D01/D05).**
+  `js/` joins the standard tree both carriers ship: the wheel force-includes it as
+  `akmon/_tree/js/`, the new root `package.json` names it in `files`, and mode `vendored` mounts it
+  like any other member — so a project that bumps to this release sees a larger `_aitna/akmon/` and
+  an extra top-level `js/` in `akmon verify`'s tree walk, with **nothing to configure and no command
+  changed**. What is in it is the shared foundation (the ported `common/` readers, checks and the
+  pinned TOML parser) plus the conformance corpus's second mouth; `bin.akmon` is a **stub** that
+  prints `NOT_PORTED` and exits 2, because the CLI lands in C105 — a Node consumer has no reason to
+  run it and no reason to expect it to work. Hooks keep running from Python until C104.
+  The mount deliberately carries no `*.test.mjs`: a mounted file sits inside the project's own root,
+  which `node --test` and `eslint` scan by default, so a vendored project's test command would
+  otherwise run akmon's suites and report failures it cannot act on (measured,
+  [M116](meta/MEASUREMENTS.md)); both carriers keep the test files, being outside any scan path.
+
 ### Changed
 - **The model-routing hook no longer re-reads the whole session transcript on every prompt
   (A19/C93/D2-50).** Both transcript scans read from the end and stop at the last main-chain turn
@@ -347,10 +361,17 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   also names the step *after* the push: return both literals to the next `.dev0` and reopen
   `## Unreleased`, without which the tree sits at a released version whose tag exists and every
   later `--check` reports a re-release.
-- **One owner decides how akmon spells a version (C54, carried forward from C61).** The new
-  stdlib-only `common/versions.py` answers two questions — what part of a recorded string names the
-  version, and whether that version is a release — and the CLI skew notice, the release-time
-  join and `akmon init` all ask it instead of deciding separately.
+- **One owner decides how akmon spells a version (C54, carried forward from C61; C103).** The
+  stdlib-only `common/versions.py` answers five questions — what part of a recorded string names
+  the version, whether that version is a release, where it sits among releases, which of two comes
+  first, and the npm carrier's spelling of it — and the CLI skew notice, the release-time join,
+  `akmon init` and the npm manifest all ask it instead of deciding separately. Two of the five are
+  limits a consumer can rely on: the ordering separates every step of the PEP 440 chain
+  (`dev < a < b < rc < release`, where an earlier bucket called them all equal), and
+  `semver_spelling` carries **only a final version or its `.devN`** — a pre-release step, `.postN`,
+  `+local` or a `git describe` distance raises rather than spells, because SemVer §11 sorts the
+  derived chain `alpha < beta < dev < rc` and would invert `dev` against the steps. No pre-release
+  spelling was ever released, so no consumer has a call site to move.
 - **One finding shape across every akmon check (C51).** `akmon verify`, `akmon sync --check`
   and akmon's own dev-layer checks now report through a single envelope —
   `severity · code · message · target · fix` — and print one canonical stdout line per finding in the form

@@ -225,8 +225,11 @@ rules follow, and each has a single owner:
   - hook: payload + env + project fixture → stdout/stderr/exit;
   - CLI: fixture + argv → written files (byte-exact), stdout/stderr/exit, findings;
   - tool: argv + fixture → output;
-  - unit tables for the stdlib-gap functions: version ordering, record parsing, `shlex`-split,
-    glob matching, JSON writer, sorting.
+  - unit tables for the functions a JS port cannot inherit: the stdlib gaps (`shlex`-split, glob
+    matching, JSON writer and its number spelling, code-point sorting, record parsing) and the
+    shared data-driven answers (version ordering, the runtime's commands, the `[check]` table and
+    the argv it builds). What a table cannot carry — an answer that needs a filesystem, a git
+    repository or a child process — stays a scenario or a `node:test` instead.
 - **Normalization rules** (versioned with the corpus): the project-root path, temp paths, and the
   interpreter spelling in wiring (`python3 "<…>.py"` ↔ `node "<…>.mjs"`). Anything not normalized
   must match exactly.
