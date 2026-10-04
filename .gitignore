@@ -38,6 +38,10 @@ node_modules/
 *.env
 !*.env.example
 
+# Local backlog / review scratch
+TASKS-local.md
+
+
 # akmon runs its own hooks on this repository (C99), so it ignores what it tells a
 # consumer to ignore: the per-user/per-session routing artifacts of `_init._gitignore_lines`.
 .claude/model-routing.local.json

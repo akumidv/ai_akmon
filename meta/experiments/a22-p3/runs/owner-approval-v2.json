@@ -1,0 +1,24 @@
+{
+  "schema": 2,
+  "record_type": "p3_v2_owner_approval",
+  "proposal_sha256": "913e334366304beb1a644fa8a3ceaa08f42402980fb30e83ea9641907d2f4c77",
+  "accepted_v2_seal_sha256": null,
+  "owner_accepted": false,
+  "owner_acceptance_provenance": "UNIMPLEMENTED",
+  "selected_resource_option": null,
+  "options": {
+    "usd25": {
+      "route_rates_usd_per_million": null,
+      "estimated_total_usd": null,
+      "named_operator": null,
+      "exploratory_calls_counted": null
+    },
+    "token_only": {
+      "accepted_pass_envelope_tokens": null,
+      "named_operator": null,
+      "exploratory_calls_counted": null
+    }
+  },
+  "preflight_status": "NOT_RUN",
+  "dispatch_allowed": false
+}
