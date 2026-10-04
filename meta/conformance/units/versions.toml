@@ -34,6 +34,16 @@
 # stays stdlib-only.
 
 [[case]]
+# Digits of another script are not version digits: Python's `\d` matches them unless told
+# ASCII, JavaScript's never does, and the two placed this string differently.
+input = "١.٢.٣"
+expected = { split_base = "١.٢.٣", is_final = false }
+
+[[case]]
+input = "1.0.0.dev٣"
+expected = { split_base = "1.0.0.dev٣", is_final = false, order = [1, 0, 0, -1] }
+
+[[case]]
 input = "v0.4.0"
 expected = { split_base = "0.4.0", is_final = true, order = [0, 4, 0, 0] }
 
@@ -396,3 +406,32 @@ expected = "1.0.0-dev.7"
 # given. This is the carrier's side of the ordering rule's `[-_.]` class above.
 input = "0.4.0-dev0"
 expected = "0.4.0-dev.0"
+
+[[semver]]
+# PEP 440 reads a numeric segment as its integer, so `0.4.0.dev01` *is* `0.4.0.dev1`; SemVer
+# §2/§9 forbids a leading zero in a numeric identifier, so the carrier spells the integer.
+# The Python side is `int()` per part, the JS side strips the zeros as a string (no precision loss).
+input = "0.4.0.dev01"
+expected = "0.4.0-dev.1"
+
+[[semver]]
+input = "0.4.0.dev000"
+expected = "0.4.0-dev.0"
+
+[[semver]]
+input = "01.02.003"
+expected = "1.2.3"
+
+[[semver]]
+input = "v1.02.0.dev007"
+expected = "1.2.0-dev.7"
+
+[[semver]]
+# Past 2**53 a JavaScript Number would round it; the spelling is an edit of the digits, not a parse.
+input = "0.4.0.dev009007199254740993"
+expected = "0.4.0-dev.9007199254740993"
+
+[[semver]]
+# A zero that is the whole number stays: `0.0.0` is not the empty string.
+input = "0.0.0"
+expected = "0.0.0"

@@ -191,6 +191,12 @@ export function compareVersions(a, b) {
  * @throws {Error} when the version has no SemVer carrier spelling
  */
 export function semverSpelling(recorded) {
+  /** `01.2.03` → `1.2.3`, as Python's `int()` per part; a string edit, so a long number keeps every digit. */
+  const withoutLeadingZeros = (/** @type {string} */ numbers) =>
+    numbers
+      .split(".")
+      .map((part) => part.replace(/^0+(?=\d)/, ""))
+      .join(".");
   const { base, ahead } = splitVersion(recorded);
   if (ahead !== null) {
     throw new Error(
@@ -198,11 +204,11 @@ export function semverSpelling(recorded) {
     );
   }
   if (FINAL_RE.test(base)) {
-    return base;
+    return withoutLeadingZeros(base);
   }
   const dev = base.match(/^(\d+\.\d+\.\d+)[-_.]?dev(\d+)$/);
   if (dev !== null) {
-    return `${dev[1]}-dev.${dev[2]}`;
+    return `${withoutLeadingZeros(dev[1])}-dev.${withoutLeadingZeros(dev[2])}`;
   }
   throw new Error(
     `'${recorded}' is not an npm-carriable PEP 440 version: .postN, +local and a pre-release step ` +

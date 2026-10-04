@@ -746,6 +746,8 @@ _UNCARRIABLE = (
     "1.2.3a1.dev0",
     "1.2.3rc1.dev4",
     "v1.2.3-3-g1234abcd",
+    "\u0661.\u0662.\u0663",  # Arabic-Indic digits: a Python `\d` once matched them, a JavaScript `\d` never did
+    "1.2.3.dev\u0663",
 )
 
 

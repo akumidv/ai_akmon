@@ -51,11 +51,15 @@ from __future__ import annotations
 
 import re
 
+# Every pattern below is ``re.ASCII``: the JavaScript twin's ``\d`` is ``[0-9]``, while Python's,
+# left alone, also matches other scripts' digits (Arabic-Indic ``1.2.3``), so the two would place the same
+# string differently. A version is ASCII; anything else is a tail the rule cannot name.
+
 #: ``git describe --tags`` distance from the tag: ``-<N>-g<sha>``, optionally ``-dirty``.
-DESCRIBE_SUFFIX_RE = re.compile(r"-(\d+)-g[0-9a-f]+(?:-dirty)?$")
+DESCRIBE_SUFFIX_RE = re.compile(r"-(\d+)-g[0-9a-f]+(?:-dirty)?$", re.ASCII)
 
 #: A final release version, after :func:`split_version` has removed the spelling.
-FINAL_RE = re.compile(r"\d+\.\d+\.\d+")
+FINAL_RE = re.compile(r"\d+\.\d+\.\d+", re.ASCII)
 
 
 def split_version(recorded: str) -> tuple[str, str | None]:
@@ -82,7 +86,7 @@ def is_final(recorded: str) -> bool:
 
 
 #: The release a version names or is on the way to: its leading ``X.Y.Z``.
-_RELEASE_PREFIX_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+_RELEASE_PREFIX_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)", re.ASCII)
 
 #: A development version of the release itself: the ``.dev0`` of ``0.4.0.dev0`` — attached to the
 #: release, not to a step. Its number is not read — the place is the same for every ``.devN``.
@@ -91,19 +95,19 @@ _RELEASE_PREFIX_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 #: one separator before a labelled component: ``1.0.0-dev1`` *is* ``1.0.0.dev1``. Reading only the
 #: dot would not merely be narrower — a hyphen-led tail fell to the "past the release" answer, so
 #: ``1.0.0-rc2`` ranked *above* ``1.0.0``, which is the inversion this rule exists to prevent.
-_DEV_OF_RELEASE_RE = re.compile(r"[-_.]?dev\d+")
+_DEV_OF_RELEASE_RE = re.compile(r"[-_.]?dev\d+", re.ASCII)
 
 #: A pre-release step of the release, and the development version of that step: ``0.5.0a1``,
 #: ``0.5.0a1.dev0``. PEP 440's spelled-out aliases (``alpha``, ``beta``, ``pre``, ``preview``,
 #: ``c``) are deliberately absent — the tail this rule cannot name is not quietly read as a
 #: step of the chain.
-_PRE_RELEASE_RE = re.compile(r"[-_.]?(a|b|rc)\d+(?:[-_.]?dev(\d+))?")
+_PRE_RELEASE_RE = re.compile(r"[-_.]?(a|b|rc)\d+(?:[-_.]?dev(\d+))?", re.ASCII)
 
 #: A tail that means the tree sits past the release rather than below it: ``1.0.0.post1``,
 #: ``1.0.0-post1``, and the ``-dirty`` akmon reads off a dirty work tree. Every other ``-`` tail is
 #: a divider, not a position — which is why this list is by name and the test below cannot simply
 #: look for a leading hyphen.
-_PAST_TAIL_RE = re.compile(r"[-_.]?post\d+(?:[-_.]?dev\d+)?|[-_.]?dirty")
+_PAST_TAIL_RE = re.compile(r"[-_.]?post\d+(?:[-_.]?dev\d+)?|[-_.]?dirty", re.ASCII)
 
 #: ``order_key``'s fourth element for a version at the release itself, and for anything past it
 #: (a ``git describe`` distance, a ``-dirty`` tree, a ``.postN`` or a ``+local`` build).
@@ -190,6 +194,11 @@ def compare_versions(a: str, b: str) -> int:
     return 0 if key_a == key_b else 1
 
 
+def _without_leading_zeros(release: str) -> str:
+    """``01.2.03`` → ``1.2.3``: PEP 440 reads a numeric segment as its integer, SemVer §2/§9 forbids the zero."""
+    return ".".join(str(int(part)) for part in release.split("."))
+
+
 def semver_spelling(recorded: str) -> str:
     """The SemVer carrier spelling of a PEP 440 version (the npm side of the version line).
 
@@ -211,10 +220,10 @@ def semver_spelling(recorded: str) -> str:
             f"{recorded!r} is a distance past its tag — a position, not a version the npm carrier can spell"
         )
     if FINAL_RE.fullmatch(base) is not None:
-        return base
-    match = re.fullmatch(r"(\d+\.\d+\.\d+)[-_.]?dev(\d+)", base)
+        return _without_leading_zeros(base)
+    match = re.fullmatch(r"(\d+\.\d+\.\d+)[-_.]?dev(\d+)", base, re.ASCII)
     if match is not None:
-        return f"{match[1]}-dev.{match[2]}"
+        return f"{_without_leading_zeros(match[1])}-dev.{int(match[2])}"
     raise ValueError(
         f"{recorded!r} is not an npm-carriable PEP 440 version: .postN, +local and a pre-release step "
         "(aN, bN, rcN, each with or without its own .devN) have no SemVer spelling"

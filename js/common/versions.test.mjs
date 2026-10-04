@@ -45,6 +45,9 @@ const _UNCARRIABLE = [
   "1.2.3a1.dev0",
   "1.2.3rc1.dev4",
   "v1.2.3-3-g1234abcd",
+  // Arabic-Indic digits: a Python `\d` once matched them, a JavaScript `\d` never did.
+  "١.٢.٣",
+  "1.2.3.dev٣",
 ];
 
 test("every semver case of the units table spells as pinned, and only the carriable ones are there", () => {
