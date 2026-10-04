@@ -15,7 +15,7 @@ is silent, the Python implementation is the reference, and the resolution become
 | `fixtures/<name>/` | static consumer-project files a scenario's project is copied from (`base`) |
 | `fixtures/attach/<layer>/` | the files a `native` attach lays over the base: `package` (both package modes), `python` (the Python carrier), `node` (C105) |
 | `fixtures/tree/` | corpus-owned stand-ins for the standard tree's prose documents (see the snapshot) |
-| `units/<name>.toml` | shared unit tables (inputs + expected answers) for the stdlib-gap functions |
+| `units/<name>.toml` | shared unit tables (inputs + expected answers) for a function whose answer a JS port cannot get for free: either a **stdlib gap** (`shlex`, `fnmatch`, `json.dumps`, float spelling) or a **shared data-driven module** whose answers are values (`runtime`, `check_runner`) |
 | `coverage.toml` | the coverage gate's **exceptions**: ecosystem ownership, exemptions, reviewed dynamic sites |
 | `pairing.toml` | the pairing gate's two lists: `[[exempt]]` — a `.py` whose port is outstanding, with reason and owning task — and `[[stub]]` — a `js/` counterpart that only announces it |
 | `normalize.py` | normalization v2 — the other half of the spec (tokens and rules) |

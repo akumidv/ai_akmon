@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "recorded_utc": "2026-10-03T10:33:02Z",
+  "routes": {
+    "codex": {
+      "expected": {
+        "executable": "codex",
+        "version": "codex-cli 0.156.1",
+        "model": "gpt-6-astra",
+        "effort": "medium"
+      },
+      "executable_path": "/home/ai/.local/bin/codex",
+      "version_output": "codex-cli 0.156.1\nWARNING: proceeding, even though we could not create PATH aliases: Read-only file system (os error 30)",
+      "version_matches_pin": true,
+      "help_exit_code": 0,
+      "output_token_limit_flag_in_help": false,
+      "provider_usage_format_verified": false,
+      "model_identity_verified": false,
+      "dispatch_status": "NOT_RUN"
+    },
+    "qwen": {
+      "expected": {
+        "executable": "qwen",
+        "version": "0.24.7",
+        "model": "qwen3.8-27b",
+        "max_tool_calls": 0
+      },
+      "executable_path": "/usr/bin/qwen",
+      "version_output": "0.24.7",
+      "version_matches_pin": true,
+      "help_exit_code": 0,
+      "output_token_limit_flag_in_help": false,
+      "provider_usage_format_verified": false,
+      "model_identity_verified": false,
+      "dispatch_status": "NOT_RUN"
+    }
+  }
+}

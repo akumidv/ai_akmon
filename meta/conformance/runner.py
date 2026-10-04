@@ -234,7 +234,8 @@ class RunCtx:
 def _run_node_unit(scenario: Scenario, ctx: RunCtx) -> tuple[int, str, str, Ctx]:
     """The node implementation's unit run: the same table through ``probe.mjs``, no consumer project.
 
-    Units test the stdlib-gap functions of the tree against its recorded answer, not process
+    Units test the functions of the tree that a JS port cannot inherit — stdlib gaps and shared
+    data-driven answers alike — against its recorded answer, not process
     behavior, so no fixture is materialized: the snapshot (the corpus-controlled copy of the
     tree under test) is the tree, the work dir is the cwd, and the document the probe prints
     is compared with the scenario's pinned stdout byte for byte, as on the Python side.

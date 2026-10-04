@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "record_type": "owner_acceptance_of_frozen_plan",
+  "owner_utterance": "запускай",
+  "recorded_utc": "2026-10-03T10:32:59Z",
+  "accepted_plan_sha256": "de0917c9fb75053a245b914ea888fc258d2d9a5ede438fb4bf759b49a78f130c",
+  "accepted_seal_sha256": "98710e76d2496910ae3560ad451c7c60b1eb5f132faebc10e7eb7591e2044b53",
+  "preflight_status": "NOT_RUN",
+  "route_facts_status": "UNVERIFIED",
+  "scoring_spend_control": {
+    "manual_ceiling_usd": 25,
+    "route_prices": "UNKNOWN",
+    "estimated_total_usd": "UNKNOWN",
+    "named_halt_operator": "UNKNOWN",
+    "dispatch_allowed": false,
+    "stop_reason": "Unknown pricing or halt operator blocks all scorer dispatches."
+  }
+}

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Unit-table probe for the Python implementation (C101).
 
-The corpus's stdlib-gap tables (design §2) test the *functions* the JavaScript
-implementation must mirror: version ordering, record parsing, shlex splitting, glob
-matching, the JSON writer, and code-point sorting. A scenario of kind ``unit`` names a
+The corpus's unit tables (design §2) test the *functions* the JavaScript implementation must
+mirror and cannot inherit: what the stdlib gives Python and not JS (shlex splitting, glob
+matching, the JSON writer, code-point sorting), and the shared data-driven answers whose result
+is a value rather than a process (version ordering, record parsing, the runtime's commands, the
+``[check]`` table and the argv it builds). A scenario of kind ``unit`` names a
 subcommand here and a shared table under ``units/``; the probe feeds every case to the
 tree-under-test's own function and compares with the table's expected value. The table is
 the spec — the probe is only the mouth the Python implementation answers through (the JS
