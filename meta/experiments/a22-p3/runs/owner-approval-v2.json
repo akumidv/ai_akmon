@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "record_type": "p3_v2_owner_approval",
-  "proposal_sha256": "913e334366304beb1a644fa8a3ceaa08f42402980fb30e83ea9641907d2f4c77",
+  "proposal_sha256": "001877228a00fdc74eeff347b210a89cf56ca7298b5c7a5e48f2fabfe0f55fdd",
   "accepted_v2_seal_sha256": null,
   "owner_accepted": false,
   "owner_acceptance_provenance": "UNIMPLEMENTED",

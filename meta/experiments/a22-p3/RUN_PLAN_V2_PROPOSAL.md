@@ -30,17 +30,21 @@ Keep the two independent blind scorer routes and their existing pins: Codex CLI 
 the frozen prompt, without arm, tier, subject-model, or qualification labels. Keep the two raw
 readings independent; do not adjudicate.
 
-Replace the failed 3,000-input/1,000-output per-pass proposal with a target acceptance cap of
-**20,000 observed input tokens and 1,000 output tokens per pass**. Count the whole CLI-reported
-request, including harness overhead, against the input cap. The real-packet Qwen calls verified
-that the configured 1,000-token output cap is active: both the default-thinking call and the
-separate thinking-disabled call used exactly 1,000 output tokens. The default-thinking call spent
-that output on a thinking block and returned no final answer. The thinking-disabled call returned
-text, but it did not contain the required TSV header and ended in an incomplete fragment. Thus the
-1,000-token limit is active, but these attempts do not show that it is sufficient for a valid
-Qwen score. The thinking-disabled route changes the scorer condition and is not evidence for the
-approved default-thinking route; the recorded overlay also does not prove the gateway honored the
-setting. Any future Qwen scorer must use the owner-approved condition and pass a fresh route check.
+Replace the failed 3,000-input per-pass proposal with route-specific candidate acceptance limits:
+**20,000 observed input / 1,000 output tokens for Codex** and **20,000 observed input / 2,000
+output tokens for Qwen**. Count the whole CLI-reported request, including harness overhead, against
+the input cap. The new Qwen real-packet canary returned a valid TSV at 1,758 output tokens under a
+locally configured 2,000-token setting, but it did not reach that limit; it therefore does not show
+that a 2,000-token cap is enforced. Its saved `command.json` still describes a 1,000-token
+enforcement setting, while its provider overlay and runner setting are 2,000; treat that metadata
+field as stale and resolve the discrepancy before a route claim. The previous 1,000-output Qwen
+canaries each reported exactly 1,000 output, but the default-thinking call had no final response and
+the thinking-disabled call failed TSV validation. Their usage alone does not prove a hard route cap.
+The valid 2,000-setting response used `enable_thinking=false`, which changes the scorer condition;
+the gateway's honoring of that switch remains unverified. A user authorization for this single
+technical canary covers only that exploratory mechanics call. It does not approve a scored V2
+condition, a new seal, or qualification dispatch. Any scored Qwen route must use the separately
+owner-approved condition and pass a fresh route check under it.
 
 Codex has no CLI output-limit flag in the inventoried help, so its output cap is post-hoc: inspect
 actual usage after each response and fail closed above 1,000. The Codex input cap is also post-hoc
@@ -69,27 +73,45 @@ IDs. All were explicitly recorded as mechanics-only, with `scored_p3=false` and
   and the CLI reported no stop reason, so truncation at the cap is plausible but unconfirmed. No
   outbound request body or gateway acknowledgement was captured, so whether the gateway honored
   `enable_thinking=false` remains unknown.
+- **Qwen thinking-disabled, local output setting 2,000:** a fresh packet ID `g9521230`, one
+  correlated provider request, 12,676 input / 1,758 output tokens, zero retries, and zero tool
+  calls. The final response passed the TSV parser's exact-header, four-element, verdict, and reason
+  checks; it had one leading blank line ignored by the parser and a complete final row. The
+  one-shot lock is consumed. The local provider overlay has `max_tokens=2000`, `maxRetries=0`, and
+  `enable_thinking=false`; the runner sets the output-token environment value to 2,000. Output did
+  not reach 2,000, so cap enforcement is untested. The saved `command.json` enforcement description
+  incorrectly says 1,000. Gateway handling of the thinking switch and hard output cap remains
+  unknown. This is an altered-condition mechanics pass only, not a P3 score or qualification result.
 
-All three one-shot locks were consumed by their calls. The Qwen routes recorded no tool calls and
+All four one-shot locks were consumed by their calls. The Qwen routes recorded no tool calls and
 no retries; Codex had no observed tool markers and no retries. These provider calls still consumed
-resources even though they produced no scoring data. The separate thinking-disabled call must
-remain excluded from the default-thinking condition.
+resources even though they produced no scoring data. Both thinking-disabled calls must remain
+excluded from the default-thinking condition. The user's authorization of `g9521230` is limited to
+that one technical canary and does not accept a scored V2 condition.
 
 This allows **at most 240 planned scorer passes**, including route canaries, all qualification and
-comparison readings, and every failed or retried attempt. The **5,040,000-token figure is an
-accepted-pass accounting envelope**, calculated as 240 × (20,000 input + 1,000 output); it is not
-a guaranteed maximum on actual provider usage. The input cap is post-hoc on both routes and the
-Codex output cap is post-hoc. A single request can exceed a post-hoc cap before the stop rule can
-act, so one overrun can exceed the aggregate envelope even if dispatch stops immediately afterward.
-Failed calls and route-verification probes also consume resources and must be entered at their
-actual usage; missing usage must fail closed and must not be treated as zero. Before authorization,
-the owner must decide whether this envelope covers only the proposed V2 passes or the whole P3
-effort, including the three completed real-packet calls.
+comparison readings, and every failed or retried attempt. Under the proposed route-specific limits,
+let `C` be Codex passes and `Q` be Qwen passes, with `C + Q = 240`; the accepted-pass accounting
+envelope is `21,000 × C + 22,000 × Q` tokens. A fixed 120/120 route split yields **5,160,000
+tokens**. If the route mix is not fixed, a conservative all-Qwen envelope is **5,280,000 tokens**;
+all-Codex would be 5,040,000. These are proposed accounting envelopes, not accepted limits or
+guaranteed maxima on actual provider usage. Input limits are post-hoc on both routes, Codex's output
+limit is post-hoc, and the Qwen 2,000 setting has not been shown to stop generation at that limit.
+A single request can exceed a post-hoc or unverified cap before the stop rule can act, so one overrun
+can exceed any aggregate envelope even if dispatch stops immediately afterward. Failed calls and
+route-verification probes also consume resources and must be entered at actual usage; missing usage
+must fail closed and must not be treated as zero. Before authorization, the owner must select the
+route allocation (or accept the conservative envelope) and decide whether its accounting includes
+the whole P3 effort, including the four completed real-packet mechanics calls.
+The current offline approval validator and usage ledger still hard-code 5,040,000 tokens; they
+cannot record either higher route-specific candidate envelope yet. Keep this proposal unselected
+and align those tools only through a separately reviewed, versioned update after the owner chooses.
 
 Stop a route immediately if model identity, tool behavior, usage provenance, or either observed
 per-pass cap fails. A cap overrun is an execution defect and remains recorded; do not retry or
-substitute a call. The 5.04M figure is not a provider-enforced hard billing or token limit. Do not
-dispatch if the owner requires a hard aggregate cap that these routes cannot enforce.
+substitute a call. Neither the 5.16M fixed-mix proposal nor the 5.28M conservative proposal is a
+provider-enforced hard billing or token limit. Do not dispatch if the owner requires a hard
+aggregate cap that these routes cannot enforce.
 
 Before qualification scoring, require a real-packet route check under the exact owner-approved
 scorer condition. The completed Codex mechanics attempt passed TSV shape checks but was recorded
@@ -111,10 +133,13 @@ attempt outcome, and the ledger before advancing to the next packet.
 ## Owner choice required before a new seal
 
 The present approval records unknown Qwen gateway pricing and no named cost-stop operator. The
-owner must choose and explicitly accept one resource-control option, decide whether the 5.04M
-accepted-pass envelope includes the three completed real-packet calls, and approve the exact
-default-thinking scorer condition before either scorer runs. The owner must also accept that the
-current CLI routes cannot guarantee a hard aggregate cap because per-pass input limits and the
+owner must choose and explicitly accept one resource-control option, decide whether the
+route-specific envelope (5.16M at a fixed 120/120 split, or 5.28M if the route mix is unconstrained)
+covers only future V2 passes or the whole P3 effort. The four completed real-packet calls used
+54,871 actual input-plus-output tokens in total; if the 240-pass ceiling is future-only, record that
+usage separately, while if the ceiling covers the whole P3 effort, count those four attempts within
+it. The owner must approve the exact default-thinking scorer condition before either scorer runs
+and accept that the current CLI routes cannot guarantee a hard aggregate cap because per-pass input limits and the
 Codex output limit are post-hoc. Independently, Qwen's approved default-thinking route has not
 passed route verification and must pass a new one-shot check before qualification scoring:
 
@@ -122,6 +147,9 @@ passed route verification and must pass a new one-shot check before qualificatio
   thresholds but returned no final answer at the output cap.
 - The later `enable_thinking=false` attempt is an altered scorer condition, returned an invalid
   TSV at the same cap, and does not verify gateway support for that setting.
+- The later Qwen call configured a 2,000 output setting and returned valid TSV at 1,758 output, but
+  did not test whether 2,000 is enforced; it also used `enable_thinking=false`, and its saved
+  command metadata incorrectly describes a 1,000 setting.
 - The Codex mechanics route passed TSV shape validation, but its caps remain post-hoc and its
   result was explicitly unscored.
 
@@ -130,16 +158,18 @@ requires a separate fresh canary and a versioned approval before scoring.
 
 1. **Keep the USD 25 ceiling.** Provide the actual gateway/account rates that apply to the Qwen
    route (including any markup, cache pricing, or fixed fee), provide the Codex route's applicable
-   cost basis, calculate the cost of the 5.04M accepted-pass envelope, and name the person who will
+   cost basis, calculate the cost of the selected route-specific envelope (up to 5.28M tokens if
+   route allocation is unconstrained), and name the person who will
    monitor spend and stop both routes at USD 25. State that a one-call overrun can exceed this
    estimate because the relevant limits are post-hoc. If the estimate exceeds USD 25 or the stop
    method is unavailable, do not dispatch.
-2. **Replace the money ceiling with a token-only limit.** Explicitly approve the 5.04M accepted-pass
-   accounting envelope, state whether completed exploratory calls count against it, and name a
-   human operator to track actual usage and stop before another pass would exceed the planned
-   amount. This option makes no USD cost claim and does not guarantee actual usage will stay within
-   5.04M when per-pass limits are post-hoc; it also does not bound monetary spend while the gateway
-   rate is unknown.
+2. **Replace the money ceiling with a token-only limit.** Explicitly approve a route mix and its
+   accounting envelope (5.16M at a fixed 120/120 split or up to 5.28M if unconstrained), state
+   whether completed exploratory calls count against it, and name a human operator to track actual
+   usage and stop before another pass would exceed the planned amount. This option makes no USD cost
+   claim and does not guarantee actual usage will stay within the selected route-specific envelope
+   when per-pass limits are post-hoc; it also does not bound monetary spend while the gateway rate
+   is unknown.
 
 Neither option is selected by this proposal. After the owner chooses, update a versioned approval
 record and seal the accepted plan; keep this proposal marked NOT AUTHORIZED until then. Preserve

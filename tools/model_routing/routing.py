@@ -682,7 +682,13 @@ def bound_model_for(config: dict, subagent_type: str) -> str | None:
     return model
 
 
-_ROLE_DECL_RE = re.compile(r"\A\s*🧭\s*agent:\s*([A-Za-z][\w-]*)")
+# The patterns of this module that use ``\s``/``\S``/``\w``/``\d`` are ``re.ASCII``: the JavaScript
+# twin's classes are narrower or differently drawn than Python's Unicode ones (``\d`` matching
+# Arabic-Indic digits, ``\s`` matching U+001C to U+001F and U+0085), so the two would read the same
+# text differently. Each one reads ASCII markup — a role declaration, a zone label, a markdown
+# heading, list item or table row — so the real answers are unchanged. ``_HEADING_WORD_RE`` is the
+# deliberate exception: its words are any script's letters (C98).
+_ROLE_DECL_RE = re.compile(r"\A\s*🧭\s*agent:\s*([A-Za-z][\w-]*)", re.ASCII)
 
 
 def _assistant_text(entry: dict) -> str:
@@ -1371,10 +1377,10 @@ def init_instruction(reason: str, runtime_root: str) -> list[str]:
 _SUBAGENT_TOOLS = frozenset({"Task", "Agent"})
 
 
-_ZONE_BRACKETED = re.compile(r"\[\s*zone\s*:\s*([^\]]*)\]\s*(.*)", re.IGNORECASE | re.DOTALL)
+_ZONE_BRACKETED = re.compile(r"\[\s*zone\s*:\s*([^\]]*)\]\s*(.*)", re.ASCII | re.IGNORECASE | re.DOTALL)
 # Unbracketed only as one token (``zone:auth``): with a space after the colon, prose such as
 # "zone: the auth module" would otherwise yield the label "the".
-_ZONE_BARE = re.compile(r"zone:(\S+)\s*(.*)", re.IGNORECASE | re.DOTALL)
+_ZONE_BARE = re.compile(r"zone:(\S+)\s*(.*)", re.ASCII | re.IGNORECASE | re.DOTALL)
 
 
 def zone_convention() -> str:
@@ -1564,16 +1570,16 @@ def gate_rules() -> tuple[GateRule, ...]:
 #: A markdown heading (`## Findings`) or a whole line in bold (`**Findings**`) — both are how
 #: a role's output actually labels its sections; a bold line counts as the deepest level, so
 #: the next heading of any level closes it.
-_MD_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
-_BOLD_HEADING_RE = re.compile(r"^\*\*(.+?)\*\*:?\s*$")
+_MD_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$", re.ASCII)
+_BOLD_HEADING_RE = re.compile(r"^\*\*(.+?)\*\*:?\s*$", re.ASCII)
 #: A heading's words, letters only: digits and punctuation never take one of the three
 #: leading slots, and a non-latin script yields its words like any other (C98 measured a
 #: latin-only split reading every Cyrillic heading as wordless, so no section ever opened).
 _HEADING_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 #: A structural item: a bullet or a numbered item, at whatever depth it sits.
-_LIST_ITEM_RE = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])\s+\S")
+_LIST_ITEM_RE = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])\s+\S", re.ASCII)
 #: A table row that carries content — not the header separator `|---|---|`.
-_TABLE_SEPARATOR_RE = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
+_TABLE_SEPARATOR_RE = re.compile(r"^\s*\|[\s:|-]+\|\s*$", re.ASCII)
 _GATE_MARKER_PREFIX = "gate-audit"
 
 

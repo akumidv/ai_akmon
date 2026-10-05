@@ -262,7 +262,7 @@ order. Stages: **0** spec · **1** data-first · **2** minimum Python-free slice
 | C101 | 0 | Conformance corpus + runner, seeded against Python | — | scenario kinds and normalization of §5 in `meta/conformance/`; the coverage gate lists every command, hook, tool and finding code covered; `self_ci` leg `selfci.conformance` green on Python |
 | C102 | 1 | Data-first reduction | C101 | inventory of logic that can be data (policy tables, message templates, matcher and tool-name tables) and its move into shared data files; corpus unchanged and green |
 | C103 | 2 | JS foundation | C101 | root `package.json` (no deps, `engines` node ≥22, `bin`, one file list with the wheel, tested); `tsc --checkJs` + `node:test` + JS lint in the verification set (`AGENTS.md`); vendored smol-toml passing `toml-test`; `js/common/` for record, versions (incl. PEP 440 → SemVer), project root, runtime, check runner, shlex, glob, JSON writer, each on the shared unit tables; pairing gate live with the exemption list; the orphan `package-lock.json` replaced by the committed dev lock (exact-pinned devDependencies; `npm ci --ignore-scripts`, `npx --no-install`); `release_check` checks the `package.json` version carrier |
-| C104 | 2 | JS hooks + Node wiring | C103 | all hook entry points, core and adapters in `js/hooks/` pass the hook corpus; Node wiring spelling and marker in both implementations' `sync`; latency budget met and recorded in `MEASUREMENTS.md` (JS vs Python p50, same host) |
+| C104 | 2 | JS hooks + Node wiring | C103 | all hook entry points, core and adapters in `js/hooks/` pass the hook corpus; Node wiring spelling and marker in both implementations' `sync`; latency budget met and recorded in `MEASUREMENTS.md` (JS vs Python p50, same host). Two passes, see below |
 | C105 | 2 | JS CLI for Node package mode | C103, C104 | `init` (package/node), `sync`, `verify`, `check`, `path`, `hook`, `version` pass the corpus; `package.json` pin reader; `ecosystem` in the record; PnP, runtime-class pin and missing `node_modules/akmon` each a named finding; per-ecosystem runtime declaration (`meta/checks/runtime.py` extended); Node CI template without Python |
 | C106 | 2 | npm smoke leg without Python | C105 | `selfci.npm-smoke`: `npm pack` → install into a fixture Node project → init/sync/verify/hook with `python3` hidden from PATH; the npm/network prerequisite named in its failure |
 | C107 | 3 | JS `update` for npm/pnpm/yarn/bun | C105 | each manager's exact command covered; unknown manager → printed command; rollback announced |
@@ -274,6 +274,25 @@ order. Stages: **0** spec · **1** data-first · **2** minimum Python-free slice
 | C111 | 5 | Differential fuzzing at release depth | C104 | recorded-payload + mutation run wired into the release gate; divergences become scenarios |
 | C112 | 5 | Docs | C105, C108, C109 | README, BOOTSTRAP (Node path), MODEL, ARCHETYPES, packaging open point closed, skills naming `akmon tool`; citation check green |
 | V5 | 5 | First npm publish (owner) | C101–C106, N10, V1 sequencing as V4 | `npm view akmon version` == the released tag |
+
+C104 runs in two passes (owner decision 2026-10-04), each ending at a master-control review.
+
+- **Pass 1 — what the hooks stand on.** `common/markers`, `common/materialization` and
+  `tools/model_routing/routing` ported to `js/common/` and `js/tools/model_routing/`, each with
+  a unit table in `meta/conformance/units/` and the shared JSON they read; the pairing entries
+  for these three leave the exemption list (the rest of `tools/*` stays exempt for C108).
+- **Pass 2 — the hooks.** `hook_core`, `claude_adapter`, `codex_adapter` and the nine entry
+  points in `js/hooks/`; the node layer of the hook corpus (`runner.py --impl node` on all 36
+  scenarios); Node wiring and marker in `bin/sync.py` / `bin/sync.json` and the matching part of
+  the JS `sync`; the `hooks/*` exemption removed; the JS latency measured against the Python
+  baseline (M122) with the P5 levers if it loses.
+
+`routing.py` belongs to C104 and not to C108 because `gate-audit`, `delegation-log` and
+`model-routing` import it: measured on 2026-10-04, 87 of its 91 definitions and 1317 of its 1688
+lines are reachable from those three hooks. The four definitions outside that reach
+(`second_opinion_command`, `second_opinion_unavailability`, `context_fill_ratio`,
+`UnpinnableModelError`) travel with the file, so the pair stays whole. C108 keeps the other
+`tools/` modules (`init`, `stats`, `gate_pack`, `coverage_map`, `second_opinion`).
 
 C101–C106 give the minimum usable Python-free slice. Everything after that extends it.
 Master-control review per task: the `AGENTS.md` verification set, plus the corpus result on both

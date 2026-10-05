@@ -63,6 +63,18 @@ export function harnessBinaries(data) {
 }
 
 /**
+ * The refusal Python raises as `ValueError`: an `Error` named after that class (the crash
+ * handler shows the class name to the owner, so the name is the twin's text too).
+ * @param {string} message
+ * @returns {Error}
+ */
+function _valueError(message) {
+  const error = new Error(message);
+  error.name = "ValueError";
+  return error;
+}
+
+/**
  * The argv for `operation` on `harness`, plus any caller-supplied policy tail. The single
  * constructor of the executable-plus-operation prefix: a caller needing a different
  * operation adds it to the `common/runtime.json` table rather than assembling a prefix.
@@ -76,11 +88,11 @@ export function harnessCommand(data, harness, operation, ...extra) {
   const table = harnessCommands(data);
   const spec = table[harness];
   if (spec === undefined) {
-    throw new Error(`unknown harness '${harness}'; known: ${codePointSort(Object.keys(table)).join(", ")}`);
+    throw _valueError(`unknown harness '${harness}'; known: ${codePointSort(Object.keys(table)).join(", ")}`);
   }
   const tail = spec.operations[operation];
   if (tail === undefined) {
-    throw new Error(
+    throw _valueError(
       `harness '${harness}' declares no operation '${operation}'; known: ` +
         codePointSort(Object.keys(spec.operations)).join(", "),
     );
