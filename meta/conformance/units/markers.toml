@@ -1,0 +1,362 @@
+# Unit table: the once-per-identity diagnostic markers (common/markers.py; JS mirror
+# js/common/markers.mjs, ADR 0020 D01). Data file: common/markers.json, read from the tree under
+# test on both sides — the Python module opens the file beside itself, the JS mouth hands the
+# same document to the module at its entry point.
+#
+# This table is the first to need a *filesystem*. A hook is a fresh process per event, so "say
+# this once per session" lives in a file in the tempdir, and the answer to "may I emit?" is the
+# result of an exclusive create. A row therefore describes a world, not a value: the probe builds
+# a scratch directory (`dir/` inside it), replays the row's steps against it, and reports what the
+# module did. A sequence's `expected` lists the answers of its `claim` steps (a bool) and its
+# `ls`/`outside` steps (a list, sorted by code point *after* the labelling below), in step order; the other steps answer nothing. A listing shows
+# each marker as `<kind>@<identity>` — the probe finds the identity by hashing it itself (hashlib
+# / node:crypto), which makes every row also a check that both modules hash what the probe does.
+# A name no identity owns (a planted file, a marker of another session) is shown as written.
+#
+# Call sites: claim_diagnostic_marker — hooks/hook_core.py (report_unclassified_shell_route and
+# the role-on-code and analysis-guard notices; the route-level and event-level throttle domains,
+# ADR-0012/D02) and tools/model_routing/routing.py (suppressed_rebind_warning, gate_audit_once);
+# release_diagnostic_markers — those two routing.py functions, the content-keyed notices that
+# re-arm when their condition clears; marker_kind — hook_core's three claims above;
+# unidentified_identity — hook_core, codex_adapter and the role-on-code, analysis-guard and
+# codex-hook entry points; delegation_state_name — hook_core's delegation-nudge state files
+# (C102). A table cannot ask a module for a synthetic data document, so every row answers about
+# the *shipped* common/markers.json.
+#
+# Families, each with the index base both mouths share: `kind` 0 — the tempdir spelling of one
+# vocabulary stem, `{ value }` or `{ raises }` (a stem the data does not carry; the message is the
+# language's, so only the refusal is pinned); `unidentified` 1000 — the substitute identity;
+# `state` 2000 — a delegation state-file name for an identity; `name` 3000 — the one file a claim
+# leaves: its whole name (so the hash is spec), its mode (0600 under the probe's umask 022) and
+# that nothing landed beside the directory; `sequence` 4000 — claims, releases and ageing over one
+# directory; `tempdir` 5000 — which directory the stdlib answers when none is given.
+#
+# Why each family: `kind` pins the data lookup including the keys a JS object would answer by
+# inheritance (`constructor`, `__proto__`), which are a miss in the Python dict; `state` pins the
+# `{{identity}}` fill, whose text is hostile on purpose (`{{x}}` and `$&` must reach the name
+# unread — a JS `replace` with a string template would eat the `$&`); `name` pins the exact
+# bytes a hook process and its twin must agree on, because a Python hook and a JS hook share one
+# tempdir (a marker one claimed must stop the other) — the hash is the first 20 hex digits of the
+# SHA-256 of the identity's UTF-8, so an identity with `/`, `..` or an astral character is one flat
+# file; `sequence` pins the claim contract (atomic, repeat when unidentified, stale age-out, the
+# noisy failure directions, release by prefix with `keep_kind`); `tempdir` pins the one place
+# Node's `os.tmpdir()` differs from `tempfile.gettempdir()` (TMP before TEMP, and no probing of
+# writability), which would put the twins' markers in different directories. A row marked
+# `nonroot` relies on file modes and is left out when the probe runs as root.
+#
+# Deliberate non-pins: a marker exactly MARKER_MAX_AGE_SECONDS old (it races the clock — the
+# rows age by a minute either side), a `kind`/prefix holding `/`, and an identity with a lone
+# surrogate (Python raises on `.encode()`, the twin refuses the same way, but the table is TOML
+# text and cannot spell one).
+
+# --- the vocabulary (base 0) ----------------------------------------------------------------
+
+[[kind]]
+stem = "shell_route"
+expected = { value = "shell-route" }
+
+[[kind]]
+stem = "role_on_code"
+expected = { value = "role-on-code" }
+
+[[kind]]
+stem = "analysis_guard"
+expected = { value = "analysis-guard" }
+
+[[kind]]
+stem = "codex_unreadable_target"
+expected = { value = "codex-unreadable-target" }
+
+[[kind]]
+stem = "codex_unmeasured_path"
+expected = { value = "codex-unmeasured-path" }
+
+[[kind]]
+# The data spells kinds with hyphens and stems with underscores: the hyphen spelling is a
+# *kind*, not a stem, and is not a key.
+stem = "shell-route"
+expected = { raises = true }
+
+[[kind]]
+stem = ""
+expected = { raises = true }
+
+[[kind]]
+# A JS object answers `{}.constructor` with a function; the Python dict raises KeyError.
+stem = "constructor"
+expected = { raises = true }
+
+[[kind]]
+stem = "__proto__"
+expected = { raises = true }
+
+# --- the substitute identity (base 1000) ----------------------------------------------------
+
+[[unidentified]]
+expected = "nosession"
+
+# --- delegation state-file names (base 2000) ------------------------------------------------
+
+[[state]]
+which = "counter"
+identity = "abc"
+expected = { value = "akmon-delegation-nudge-abc.count" }
+
+[[state]]
+which = "marker"
+identity = "abc"
+expected = { value = "akmon-delegation-nudge-abc.marker" }
+
+[[state]]
+which = "ask_marker"
+identity = "abc"
+expected = { value = "akmon-delegation-nudge-abc.ask-marker" }
+
+[[state]]
+# The identity is written as itself — not hashed, not sanitized — unlike a diagnostic marker's:
+# a state file is named by the session id the harness minted.
+which = "counter"
+identity = "a/b ../c"
+expected = { value = "akmon-delegation-nudge-a/b ../c.count" }
+
+[[state]]
+# Text that looks like a placeholder, or like a JS replacement pattern, is data, not syntax.
+which = "marker"
+identity = "{{identity}}$&$1"
+expected = { value = "akmon-delegation-nudge-{{identity}}$&$1.marker" }
+
+[[state]]
+which = "counter"
+identity = ""
+expected = { value = "akmon-delegation-nudge-.count" }
+
+[[state]]
+which = "counter"
+identity = "сессия-😀"
+expected = { value = "akmon-delegation-nudge-сессия-😀.count" }
+
+[[state]]
+which = "nope"
+identity = "abc"
+expected = { raises = true }
+
+[[state]]
+which = "constructor"
+identity = "abc"
+expected = { raises = true }
+
+# --- the file one claim leaves (base 3000) --------------------------------------------------
+
+[[name]]
+kind = "shell-route"
+identity = "session-1"
+expected = { names = ["akmon-shell-route-84097828fc31a8c8d292"], mode = "600", outside = [] }
+
+[[name]]
+# `/` and `..` in an identity cannot make a path: the hash is the only thing that reaches the name.
+kind = "role-on-code"
+identity = "../../escape/me"
+expected = { names = ["akmon-role-on-code-3d2157c3e6c84e38806c"], mode = "600", outside = [] }
+
+[[name]]
+# Hashed over UTF-8, so a non-BMP character is its four bytes on both sides, not a surrogate pair.
+kind = "analysis-guard"
+identity = "сессия-😀"
+expected = { names = ["akmon-analysis-guard-0f3b4125d410a216fc3e"], mode = "600", outside = [] }
+
+[[name]]
+# The event-level throttle folds a tool-use id into the identity: `<session>:<tool-use>`.
+kind = "codex-unreadable-target"
+identity = "sess:toolu_01"
+expected = { names = ["akmon-codex-unreadable-target-294769582a50396d42b2"], mode = "600", outside = [] }
+
+# --- claim, age, release (base 4000) --------------------------------------------------------
+
+[[sequence]]
+# Atomic claim: the first emits, the repeat is silent; another identity, and another kind of the
+# same identity, are their own markers.
+steps = [
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s2" },
+  { op = "claim", kind = "role-on-code", identity = "s1" },
+  { op = "ls" },
+]
+expected = [true, false, true, true, ["role-on-code@s1", "shell-route@s1", "shell-route@s2"]]
+
+[[sequence]]
+# An identity the throttle cannot key by never claims: it repeats (fail-visible) and leaves no
+# file — an anonymous session must not silence every later one.
+steps = [
+  { op = "claim", kind = "shell-route" },
+  { op = "claim", kind = "shell-route" },
+  { op = "claim", kind = "shell-route", identity = "" },
+  { op = "claim", kind = "shell-route", identity = "" },
+  { op = "claim", kind = "shell-route", identity = "nosession" },
+  { op = "claim", kind = "shell-route", identity = "nosession" },
+  { op = "ls" },
+]
+expected = [true, true, true, true, true, true, []]
+
+[[sequence]]
+# Age-out: a marker older than a day is replaced and the diagnostic speaks again; a fresh one,
+# and one dated in the future (a clock that moved), keep it silent. The probe sets the mtime.
+steps = [
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "age", label = "shell-route@s1", seconds = 86460 },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "age", label = "shell-route@s1", seconds = 86340 },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "age", label = "shell-route@s1", seconds = -3600 },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "ls" },
+]
+expected = [true, true, false, false, false, ["shell-route@s1"]]
+
+[[sequence]]
+# Something that is not a file sits at the marker's path. Fresh, it counts as a held marker;
+# once old, the twin cannot unlink it, tries twice, and emits rather than stay silent.
+steps = [
+  { op = "plant_dir", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "age", label = "shell-route@s1", seconds = 86460 },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "ls" },
+]
+expected = [false, true, true, ["shell-route@s1"]]
+
+[[sequence]]
+# A marker that cannot be written (the directory is not there) makes the diagnostic noisier,
+# never invisible; releasing in such a directory is a no-op, not an error.
+missing_dir = true
+steps = [
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "release", prefix = "shell-route", identity = "s1" },
+  { op = "ls" },
+]
+expected = [true, true, []]
+
+[[sequence]]
+# Identities that are paths, newlines or emoji each claim one flat file inside the directory.
+steps = [
+  { op = "claim", kind = "shell-route", identity = "a/b" },
+  { op = "claim", kind = "shell-route", identity = "../../x" },
+  { op = "claim", kind = "shell-route", identity = "line\nbreak" },
+  { op = "claim", kind = "shell-route", identity = "сессия-😀" },
+  { op = "claim", kind = "shell-route", identity = "a/b" },
+  { op = "ls" },
+  { op = "outside" },
+]
+expected = [true, true, true, true, false, ["shell-route@../../x", "shell-route@a/b", "shell-route@line\nbreak", "shell-route@сессия-😀"], []]
+
+[[sequence]]
+# Release by prefix: this identity's markers whose kind starts with the prefix go — and only
+# this identity's (another session's, a planted file, and a marker whose hash is nobody's stay);
+# `keep_kind` spares the marker just claimed; a released kind can be claimed again.
+steps = [
+  { op = "claim", kind = "role-on-code", identity = "s1" },
+  { op = "claim", kind = "role-on-code-x", identity = "s1" },
+  { op = "claim", kind = "role-on-code-y", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "role-on-code", identity = "s2" },
+  { op = "claim", kind = "role-on-code-x", identity = "s2" },
+  { op = "plant", name = "notes.txt" },
+  { op = "plant", name = "akmon-role-on-code-x-ffffffffffffffffffff" },
+  { op = "release", prefix = "role-on-code", identity = "s1", keep_kind = "role-on-code-y" },
+  { op = "ls" },
+  { op = "claim", kind = "role-on-code-x", identity = "s1" },
+  { op = "claim", kind = "role-on-code-y", identity = "s1" },
+]
+expected = [true, true, true, true, true, true, ["akmon-role-on-code-x-ffffffffffffffffffff", "notes.txt", "role-on-code-x@s2", "role-on-code-y@s1", "role-on-code@s2", "shell-route@s1"], true, false]
+
+[[sequence]]
+# An empty `keep_kind` is no `keep_kind`; an identity the throttle cannot key by releases nothing.
+steps = [
+  { op = "claim", kind = "role-on-code", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "release", prefix = "shell-route" },
+  { op = "release", prefix = "shell-route", identity = "" },
+  { op = "release", prefix = "shell-route", identity = "nosession" },
+  { op = "ls" },
+  { op = "release", prefix = "role-on-code", identity = "s1", keep_kind = "" },
+  { op = "ls" },
+]
+expected = [true, true, ["role-on-code@s1", "shell-route@s1"], ["shell-route@s1"]]
+
+[[sequence]]
+# The release prefix is matched as a glob pattern, as `Path.glob` does — a consequence both
+# twins keep, since prefixes are code constants and never user text.
+steps = [
+  { op = "claim", kind = "role-on-code", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "release", prefix = "role-on-?ode", identity = "s1" },
+  { op = "ls" },
+]
+expected = [true, true, ["shell-route@s1"]]
+
+[[sequence]]
+# With no directory given, the markers live in the stdlib's tempdir — here the one TMPDIR names.
+default_dir = true
+steps = [
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "role-on-code", identity = "s1" },
+  { op = "release", prefix = "shell-route", identity = "s1" },
+  { op = "ls" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+]
+expected = [true, false, true, ["role-on-code@s1"], true]
+
+# --- the tempdir when none is given (base 5000) ---------------------------------------------
+# `{{scratch}}` is the probe's own scratch directory; `dirs`/`files` are made inside it.
+
+[[tempdir]]
+# TMPDIR wins over TEMP and TMP.
+dirs = ["a", "b", "c"]
+env = { TMPDIR = "{{scratch}}/a", TEMP = "{{scratch}}/b", TMP = "{{scratch}}/c" }
+expected = "{{scratch}}/a"
+
+[[tempdir]]
+# Without TMPDIR it is TEMP, then TMP — the stdlib's order, not Node's (TMPDIR, TMP, TEMP).
+dirs = ["b", "c"]
+env = { TEMP = "{{scratch}}/b", TMP = "{{scratch}}/c" }
+expected = "{{scratch}}/b"
+
+[[tempdir]]
+dirs = ["c"]
+env = { TMP = "{{scratch}}/c" }
+expected = "{{scratch}}/c"
+
+[[tempdir]]
+# An empty variable is not set.
+dirs = ["b"]
+env = { TMPDIR = "", TEMP = "{{scratch}}/b" }
+expected = "{{scratch}}/b"
+
+[[tempdir]]
+# A candidate that is not there is passed over, so is one that is a file.
+dirs = ["c"]
+files = ["b"]
+env = { TMPDIR = "{{scratch}}/gone", TEMP = "{{scratch}}/b", TMP = "{{scratch}}/c" }
+expected = "{{scratch}}/c"
+
+[[tempdir]]
+# The answer is an absolute, normalized path: no trailing slash, no `..`.
+dirs = ["a", "b"]
+env = { TMPDIR = "{{scratch}}/a/../b/" }
+expected = "{{scratch}}/b"
+
+[[tempdir]]
+# A candidate no scratch file can be written in is passed over (a mode root ignores).
+nonroot = true
+dirs = ["a", "b"]
+chmod = { a = "500" }
+env = { TMPDIR = "{{scratch}}/a", TEMP = "{{scratch}}/b" }
+expected = "{{scratch}}/b"
+
+[[tempdir]]
+# With nothing set, the first fixed candidate that takes a file: /tmp on the hosts the corpus runs on.
+expected = "/tmp"

@@ -1,0 +1,15 @@
+id = "units/materialization"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:materialization"]
+
+[run]
+probe = "materialization"
+table = "materialization.toml"
+
+# The document is pinned, not just the exit code: the node run compares the *same* bytes, so this
+# row is where the two mouths are required to agree, not merely each to be green.
+[expected]
+exit = 0
+stdout = "{\n  \"ok\": true,\n  \"failed\": []\n}\n"
+stderr = ""

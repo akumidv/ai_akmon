@@ -36,16 +36,6 @@ reason = "first consumer in port order is hooks/hook_core.py; the JS hooks land 
 task = "C104"
 
 [[exempt]]
-path = "common/markers.py"
-reason = "first consumer in port order is hooks/hook_core.py; the JS hooks land in C104"
-task = "C104"
-
-[[exempt]]
-path = "common/materialization.py"
-reason = "first consumer in port order is hooks/hook_core.py (stale_materialized); the JS hooks land in C104"
-task = "C104"
-
-[[exempt]]
 path = "common/always_loaded.py"
 reason = "first consumer in port order is bin/verify.py; the JS CLI lands in C105"
 task = "C105"
@@ -87,9 +77,42 @@ path = "src/akmon/_update.py"
 reason = "the JS update for npm/pnpm/yarn/bun lands in C107, the plan row that owns update"
 task = "C107"
 
-# tools/: the tools port and `akmon tool` land in C108.
+# tools/: the tools port and `akmon tool` land in C108. tools/model_routing/routing.py is not
+# C108's: the hooks import it, so it was ported with the hooks (C104 pass 1) and is paired. The
+# rest are listed one by one, so this list names what is outstanding and a new tool module is a
+# gap until it is paired or listed.
 [[exempt]]
-path = "tools/*"
+path = "tools/model_routing/coverage_map.py"
+reason = "the tools port lands in C108"
+task = "C108"
+
+[[exempt]]
+path = "tools/model_routing/gate_pack.py"
+reason = "the tools port lands in C108"
+task = "C108"
+
+[[exempt]]
+path = "tools/model_routing/init.py"
+reason = "the tools port lands in C108"
+task = "C108"
+
+[[exempt]]
+path = "tools/model_routing/second_opinion.py"
+reason = "the tools port lands in C108"
+task = "C108"
+
+[[exempt]]
+path = "tools/model_routing/stats.py"
+reason = "the tools port lands in C108"
+task = "C108"
+
+[[exempt]]
+path = "tools/release/release_check.py"
+reason = "the tools port lands in C108"
+task = "C108"
+
+[[exempt]]
+path = "tools/tasks/archive.py"
 reason = "the tools port lands in C108"
 task = "C108"
 
