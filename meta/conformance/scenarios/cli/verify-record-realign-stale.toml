@@ -7,7 +7,7 @@ covers = ["command:verify", "code:attach.record", "code:attach.realign"]
 attach = "native"
 name = "base"
 warmup = true
-files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nlast_realign = \"0.1.0\"\nattached_archetype = \"demo\"\n" }
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\necosystem = \"{{ecosystem}}\"\nakmon_version = \"{{version}}\"\nlast_realign = \"0.1.0\"\nattached_archetype = \"demo\"\n" }
 
 [run]
 argv = ["verify"]

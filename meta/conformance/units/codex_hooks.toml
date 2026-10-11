@@ -1,0 +1,1718 @@
+# Unit table: the pure half of the Codex hook oracle (common/codex_hooks.py; JS mirror
+# js/common/codex_hooks.mjs, ADR 0020 D01, C105). Data file: common/codex_hooks.json (the closed
+# `protocol_failures` table, the event-name map and the trust vocabularies), read from the tree under
+# test on both sides: the Python module opens the file beside itself, the JS mouth hands the parsed
+# document to every export as its first argument (the error classes are built from it).
+#
+# Why this table exists: `verify` turns "codex resolved but is uninspectable" into a finding, and
+# everything between the wire and that finding is a pure function of a JSON document -- but of a
+# *Python* reading of it. `json.loads` accepts `NaN`, `Infinity` and `-Infinity` and refuses an
+# integer of more than 4300 digits with a plain `ValueError` (a `JSON.parse` does neither); a JSON
+# object is a `dict` and `isinstance(x, bool)` is not `isinstance(x, int)`; `2.0 == 2`; `x is True`
+# is not truthiness; `repr()` of an event name picks its quote by what the name contains and escapes
+# by its own rules; a tuple is a hashable identity and a list is not. The diagnostics are a closed
+# table (design §7: no vendor text reaches an owner's screen), so each failure kind is also pinned
+# by its fixed text. A JS port gets none of this for free. The table is the spec: every expected
+# value was produced by running the Python and then read against the docstrings.
+#
+# The mouth is the generic one of `routing.toml` (the row format is the block comment above
+# `probe_routing` in probe.py). A row names a public function -- or one of the four private parsers
+# the Python spells with an underscore (`_delivery_state`, `_check_hook_metadata`,
+# `_parse_hooks_list_message`, `_hooks_list_project_entry`; the JS exports drop it) -- and its JSON
+# arguments. `hook_trust_problems` wants tuples as expected identities, which JSON cannot spell, so a
+# row builds them with `{"$call": "expected_codex_hooks", "args": [wiring]}`, the function the
+# production caller uses. A raise answers `{"error": <class>, "message": …}`; the message of a
+# `CodexProtocolError` is always the table's fixed text, so a row that feeds a canary shows it is
+# not echoed.
+#
+# Call sites: expected_codex_hooks, hook_trust_problems and query_hooks_list --
+# bin/verify.py::check_codex_host_trust (and, on the JS side, js/bin/verify.mjs); the private parsers
+# are query_hooks_list's, in this order: runner -> _parse_hooks_list_message ->
+# _hooks_list_project_entry -> _check_hook_metadata per element.
+#
+# Families (the `id` prefix): `expected` -- the triples a wiring promises (matcher absent, null and
+# empty, non-command hooks ignored whatever their shape, order, duplicates kept); `wiring-error` --
+# every CodexWiringError in the order the checks run, with `repr()` of hostile event names;
+# `trust` -- missing, disabled (only the boolean `true` is enabled), untrusted, modified,
+# unrecognized (a vendor string is never a problem name), ambiguous (copies that disagree, in either
+# order) and the skipped misshapen identities; `state` -- one entry's delivery state; `metadata` --
+# each HookMetadata check in order; `parse` -- the response line: not JSON, not an object, the id
+# (`2.0` equals 2, `true` does not), the error key, `NaN` and the integer-digit limit; `project` --
+# the one `result.data` entry for this cwd.
+#
+# Deliberate non-pins: nesting deeper than the interpreter's recursion limit (a `RecursionError` at
+# a depth that depends on the Python version, 9997 on 3.12.3, about 990 on 3.11), a `bytes` response
+# (the JS runner returns a string), the iteration order of an event map whose keys are integer-like
+# (insertion order in Python, ascending in JS), and `query_hooks_list` / `default_runner`
+# themselves -- they await a runner and spawn a process: pytest (meta/tests/test_codex_hooks.py) and
+# node:test (js/common/codex_hooks.test.mjs) pin them with an injected runner and a fake `codex`.
+
+# --- expected: the (eventName, matcher, command) triples generated wiring promises ---
+
+[[case]]
+id = "expected/real-shape"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "akmon role-on-code"}, {"type": "command", "command": "akmon analysis-guard"}], "matcher": "Bash|apply_patch"}], "SessionStart": [{"hooks": [{"type": "command", "command": "akmon session-start"}], "matcher": "startup|resume|clear|compact"}]}}]'
+expected_json = '[["preToolUse", "Bash|apply_patch", "akmon role-on-code"], ["preToolUse", "Bash|apply_patch", "akmon analysis-guard"], ["sessionStart", "startup|resume|clear|compact", "akmon session-start"]]'
+
+[[case]]
+id = "expected/no-hooks-key"
+fn = "expected_codex_hooks"
+args_json = '[{}]'
+expected_json = '[]'
+
+[[case]]
+id = "expected/empty-hooks"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {}}]'
+expected_json = '[]'
+
+[[case]]
+id = "expected/extra-top-level-keys-ignored"
+fn = "expected_codex_hooks"
+args_json = '[{"version": 1, "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]'
+expected_json = '[["preToolUse", "m", "c1"]]'
+
+[[case]]
+id = "expected/matcher-absent-is-null"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "c"}]}]}}]'
+expected_json = '[["sessionStart", null, "c"]]'
+
+[[case]]
+id = "expected/matcher-null-is-null"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "c"}], "matcher": null}]}}]'
+expected_json = '[["sessionStart", null, "c"]]'
+
+[[case]]
+id = "expected/matcher-empty-string-stays"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "c"}], "matcher": ""}]}}]'
+expected_json = '[["sessionStart", "", "c"]]'
+
+[[case]]
+id = "expected/group-without-hooks-key"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"matcher": "m"}]}}]'
+expected_json = '[]'
+
+[[case]]
+id = "expected/group-with-empty-hooks"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"matcher": "m", "hooks": []}]}}]'
+expected_json = '[]'
+
+[[case]]
+id = "expected/no-groups"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [], "SessionStart": []}}]'
+expected_json = '[]'
+
+[[case]]
+id = "expected/non-command-hooks-ignored"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"matcher": "m", "hooks": [{"type": "prompt", "prompt": "x"}, {"type": "command", "command": "c"}, {"command": "no-type"}, {"type": "Command", "command": "case"}]}]}}]'
+expected_json = '[["preToolUse", "m", "c"]]'
+
+[[case]]
+id = "expected/non-command-hook-keeps-its-shape-free"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "prompt", "command": 7, "matcher": 3}]}]}}]'
+expected_json = '[]'
+
+[[case]]
+id = "expected/duplicate-commands-kept"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c"}, {"type": "command", "command": "c"}], "matcher": "m"}, {"hooks": [{"type": "command", "command": "c"}], "matcher": "m"}]}}]'
+expected_json = '[["preToolUse", "m", "c"], ["preToolUse", "m", "c"], ["preToolUse", "m", "c"]]'
+
+[[case]]
+id = "expected/order-groups-then-hooks"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "s1"}, {"type": "command", "command": "s2"}], "matcher": "s"}], "PreToolUse": [{"hooks": [{"type": "command", "command": "p1"}], "matcher": "p"}, {"hooks": [{"type": "command", "command": "q1"}], "matcher": "q"}]}}]'
+expected_json = '[["sessionStart", "s", "s1"], ["sessionStart", "s", "s2"], ["preToolUse", "p", "p1"], ["preToolUse", "q", "q1"]]'
+
+[[case]]
+id = "expected/empty-command-is-a-command"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": ""}], "matcher": "m"}]}}]'
+expected_json = '[["preToolUse", "m", ""]]'
+
+[[case]]
+id = "expected/unicode-command"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "node \"/ü/h.mjs\" 😀"}], "matcher": "é"}]}}]'
+expected_json = '[["preToolUse", "é", "node \"/ü/h.mjs\" 😀"]]'
+
+# --- expected-errors: every CodexWiringError, in the order the checks run ---
+
+[[case]]
+id = "wiring-error/list"
+fn = "expected_codex_hooks"
+args_json = '[[]]'
+expected_json = '{"error": "CodexWiringError", "message": "Codex wiring is not a JSON object"}'
+
+[[case]]
+id = "wiring-error/string"
+fn = "expected_codex_hooks"
+args_json = '["hooks"]'
+expected_json = '{"error": "CodexWiringError", "message": "Codex wiring is not a JSON object"}'
+
+[[case]]
+id = "wiring-error/null"
+fn = "expected_codex_hooks"
+args_json = '[null]'
+expected_json = '{"error": "CodexWiringError", "message": "Codex wiring is not a JSON object"}'
+
+[[case]]
+id = "wiring-error/number"
+fn = "expected_codex_hooks"
+args_json = '[7]'
+expected_json = '{"error": "CodexWiringError", "message": "Codex wiring is not a JSON object"}'
+
+[[case]]
+id = "wiring-error/bool"
+fn = "expected_codex_hooks"
+args_json = '[true]'
+expected_json = '{"error": "CodexWiringError", "message": "Codex wiring is not a JSON object"}'
+
+[[case]]
+id = "wiring-error/hooks-list"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": []}]'
+expected_json = '{"error": "CodexWiringError", "message": "Codex wiring `hooks` is not an object"}'
+
+[[case]]
+id = "wiring-error/hooks-null"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": null}]'
+expected_json = '{"error": "CodexWiringError", "message": "Codex wiring `hooks` is not an object"}'
+
+[[case]]
+id = "wiring-error/hooks-string"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": "x"}]'
+expected_json = '{"error": "CodexWiringError", "message": "Codex wiring `hooks` is not an object"}'
+
+[[case]]
+id = "wiring-error/unmapped-event"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PostToolUse": []}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event 'PostToolUse', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-event-with-quote"
+fn = "expected_codex_hooks"
+args_json = '''[{"hooks": {"it's": []}}]'''
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event \"it's\", which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-event-with-double-quote"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"say \"x\"": []}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event 'say \"x\"', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-event-both-quotes"
+fn = "expected_codex_hooks"
+args_json = '''[{"hooks": {"it's \"x\"": []}}]'''
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event 'it\\'s \"x\"', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-event-unicode"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"évent": []}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event 'évent', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-event-control"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"a\tb\n": []}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event 'a\\tb\\n', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-event-backslash"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"a\\b": []}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event 'a\\\\b', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-event-empty"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"": []}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event '', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-event-case"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"pretooluse": []}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event 'pretooluse', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-event-wins-over-a-bad-list"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"Bogus": "x"}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event 'Bogus', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/unmapped-after-a-good-event"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c"}], "matcher": "m"}], "Bogus": []}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring names event 'Bogus', which has no hooks/list mapping"}'''
+
+[[case]]
+id = "wiring-error/groups-dict"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": {}}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' is not a list of groups"}'''
+
+[[case]]
+id = "wiring-error/groups-string"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": "x"}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' is not a list of groups"}'''
+
+[[case]]
+id = "wiring-error/groups-null"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": null}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' is not a list of groups"}'''
+
+[[case]]
+id = "wiring-error/group-string"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": ["x"]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a group that is not an object"}'''
+
+[[case]]
+id = "wiring-error/group-list"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [[]]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a group that is not an object"}'''
+
+[[case]]
+id = "wiring-error/group-null"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [null]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a group that is not an object"}'''
+
+[[case]]
+id = "wiring-error/group-number"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"SessionStart": [7]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'SessionStart' has a group that is not an object"}'''
+
+[[case]]
+id = "wiring-error/matcher-number"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"matcher": 7, "hooks": []}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a non-string matcher"}'''
+
+[[case]]
+id = "wiring-error/matcher-list"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"matcher": ["a"], "hooks": []}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a non-string matcher"}'''
+
+[[case]]
+id = "wiring-error/matcher-bool"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"matcher": false, "hooks": []}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a non-string matcher"}'''
+
+[[case]]
+id = "wiring-error/matcher-checked-before-hooks"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"matcher": 1, "hooks": "x"}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a non-string matcher"}'''
+
+[[case]]
+id = "wiring-error/hooks-of-a-group-null"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"matcher": "m", "hooks": null}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a group whose hooks is not a list"}'''
+
+[[case]]
+id = "wiring-error/hooks-of-a-group-dict"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": {}}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a group whose hooks is not a list"}'''
+
+[[case]]
+id = "wiring-error/hooks-of-a-group-string"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": "c"}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a group whose hooks is not a list"}'''
+
+[[case]]
+id = "wiring-error/hook-string"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": ["c"]}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a hook that is not an object"}'''
+
+[[case]]
+id = "wiring-error/hook-null"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [null]}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a hook that is not an object"}'''
+
+[[case]]
+id = "wiring-error/hook-list"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [[]]}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a hook that is not an object"}'''
+
+[[case]]
+id = "wiring-error/command-missing"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command"}]}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a command hook without a command"}'''
+
+[[case]]
+id = "wiring-error/command-null"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": null}]}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a command hook without a command"}'''
+
+[[case]]
+id = "wiring-error/command-number"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": 7}]}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a command hook without a command"}'''
+
+[[case]]
+id = "wiring-error/command-list"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": ["a"]}]}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a command hook without a command"}'''
+
+[[case]]
+id = "wiring-error/second-group-bad"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c"}], "matcher": "m"}, "x"]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a group that is not an object"}'''
+
+[[case]]
+id = "wiring-error/second-event-bad"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c"}], "matcher": "m"}], "SessionStart": [{"hooks": [{"type": "command"}]}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'SessionStart' has a command hook without a command"}'''
+
+[[case]]
+id = "wiring-error/first-hook-ok-second-bad"
+fn = "expected_codex_hooks"
+args_json = '[{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "a"}, 5]}]}}]'
+expected_json = '''{"error": "CodexWiringError", "message": "Codex wiring event 'PreToolUse' has a hook that is not an object"}'''
+
+# --- trust: which expected entry is missing, disabled, untrusted, modified, unrecognized or ambiguous ---
+
+[[case]]
+id = "trust/all-live"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "akmon role-on-code"}, {"type": "command", "command": "akmon analysis-guard"}], "matcher": "Bash|apply_patch"}], "SessionStart": [{"hooks": [{"type": "command", "command": "akmon session-start"}], "matcher": "startup|resume|clear|compact"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "akmon role-on-code", "matcher": "Bash|apply_patch"}, {"handlerType": "command", "enabled": true, "trustStatus": "managed", "eventName": "preToolUse", "command": "akmon analysis-guard", "matcher": "Bash|apply_patch"}, {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "sessionStart", "command": "akmon session-start", "matcher": "startup|resume|clear|compact"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/expected-empty"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/entries-empty"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, []]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/missing-one-of-three"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "akmon role-on-code"}, {"type": "command", "command": "akmon analysis-guard"}], "matcher": "Bash|apply_patch"}], "SessionStart": [{"hooks": [{"type": "command", "command": "akmon session-start"}], "matcher": "startup|resume|clear|compact"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "akmon role-on-code", "matcher": "Bash|apply_patch"}, {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "sessionStart", "command": "akmon session-start", "matcher": "startup|resume|clear|compact"}]]'
+expected_json = '{"missing": ["akmon analysis-guard"]}'
+
+[[case]]
+id = "trust/missing-wrong-event"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "sessionStart", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/missing-wrong-matcher"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "x"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/missing-matcher-null-vs-string"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": null}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/matcher-absent-reads-as-null"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "c"}]}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "sessionStart", "command": "c"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/matcher-null-equals-absent"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "c"}], "matcher": null}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "sessionStart", "command": "c", "matcher": null}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/matcher-empty-is-not-null"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "c"}]}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "sessionStart", "command": "c", "matcher": ""}]]'
+expected_json = '{"missing": ["c"]}'
+
+[[case]]
+id = "trust/missing-wrong-command"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c2", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/command-is-exact"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1 ", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/disabled"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": false, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"disabled": ["c1"]}'
+
+[[case]]
+id = "trust/disabled-string-false"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": "false", "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"disabled": ["c1"]}'
+
+[[case]]
+id = "trust/disabled-string-true"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": "true", "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"disabled": ["c1"]}'
+
+[[case]]
+id = "trust/disabled-one"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": 1, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"disabled": ["c1"]}'
+
+[[case]]
+id = "trust/disabled-null"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": null, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"disabled": ["c1"]}'
+
+[[case]]
+id = "trust/disabled-absent"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"disabled": ["c1"]}'
+
+[[case]]
+id = "trust/disabled-wins-over-trust"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": false, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"disabled": ["c1"]}'
+
+[[case]]
+id = "trust/disabled-wins-over-unknown-trust"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": false, "trustStatus": "weird", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"disabled": ["c1"]}'
+
+[[case]]
+id = "trust/untrusted"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"untrusted": ["c1"]}'
+
+[[case]]
+id = "trust/modified"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "modified", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"modified": ["c1"]}'
+
+[[case]]
+id = "trust/managed-is-live"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "managed", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/trusted-is-live"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/unrecognized-string"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "VENDOR_CANARY", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"unrecognized": ["c1"]}'
+
+[[case]]
+id = "trust/unrecognized-case"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "Trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"unrecognized": ["c1"]}'
+
+[[case]]
+id = "trust/unrecognized-number"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": 1, "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"unrecognized": ["c1"]}'
+
+[[case]]
+id = "trust/unrecognized-null"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": null, "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"unrecognized": ["c1"]}'
+
+[[case]]
+id = "trust/unrecognized-absent"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"unrecognized": ["c1"]}'
+
+[[case]]
+id = "trust/unrecognized-list"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": ["trusted"], "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"unrecognized": ["c1"]}'
+
+[[case]]
+id = "trust/non-command-handler-is-missing"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "prompt", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/handler-absent-is-missing"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/handler-type-case"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "Command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/handler-non-string"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": ["command"], "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/prompt-beside-a-live-command"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "prompt", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/unhashable-command-skipped"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": ["c1"], "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/unhashable-event-skipped"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": {"a": 1}, "command": "c1", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/unhashable-matcher-skipped"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": ["m"]}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/number-matcher-skipped"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": 7}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/skipped-beside-a-live-one"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": ["c1"], "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/entry-non-dict-skipped"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, ["x", null, 7, [], {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/entries-all-junk"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, ["x", null, 7, [], true]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/event-null-in-entry"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": null, "command": "c1", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/command-absent-in-entry"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "matcher": "m"}]]'
+expected_json = '{"missing": ["c1"]}'
+
+[[case]]
+id = "trust/aggregates-per-problem-in-expected-order"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}, {"type": "command", "command": "c2"}], "matcher": "m"}], "SessionStart": [{"hooks": [{"type": "command", "command": "c3"}]}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c2", "matcher": "m"}, {"handlerType": "command", "enabled": false, "trustStatus": "trusted", "eventName": "sessionStart", "command": "c3", "matcher": null}]]'
+expected_json = '{"untrusted": ["c1", "c2"], "disabled": ["c3"]}'
+
+[[case]]
+id = "trust/several-problems-one-wiring"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}, {"type": "command", "command": "c2"}], "matcher": "m"}], "SessionStart": [{"hooks": [{"type": "command", "command": "c3"}]}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "modified", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"modified": ["c1"], "missing": ["c2", "c3"]}'
+
+[[case]]
+id = "trust/problem-keys-in-first-seen-order"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}, {"type": "command", "command": "c2"}], "matcher": "m"}], "SessionStart": [{"hooks": [{"type": "command", "command": "c3"}]}]}}]}, [{"handlerType": "command", "enabled": false, "trustStatus": "trusted", "eventName": "sessionStart", "command": "c3", "matcher": null}, {"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"untrusted": ["c1"], "missing": ["c2"], "disabled": ["c3"]}'
+
+[[case]]
+id = "trust/ambiguous-trusted-then-untrusted"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"ambiguous": ["c1"]}'
+
+[[case]]
+id = "trust/ambiguous-untrusted-then-trusted"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"ambiguous": ["c1"]}'
+
+[[case]]
+id = "trust/ambiguous-enabled-and-disabled"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": false, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"ambiguous": ["c1"]}'
+
+[[case]]
+id = "trust/ambiguous-untrusted-and-modified"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "modified", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"ambiguous": ["c1"]}'
+
+[[case]]
+id = "trust/ambiguous-three-copies"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"ambiguous": ["c1"]}'
+
+[[case]]
+id = "trust/agreeing-duplicates-live"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/trusted-beside-managed-live"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "managed", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/agreeing-duplicates-untrusted"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"untrusted": ["c1"]}'
+
+[[case]]
+id = "trust/agreeing-duplicates-disabled"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": false, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": false, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"disabled": ["c1"]}'
+
+[[case]]
+id = "trust/unrecognized-and-untrusted-disagree"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "weird", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{"ambiguous": ["c1"]}'
+
+[[case]]
+id = "trust/prompt-copy-does-not-make-it-ambiguous"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "prompt", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/same-command-two-expected-identities"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c"}], "matcher": "a"}, {"hooks": [{"type": "command", "command": "c"}], "matcher": "b"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "a"}]]'
+expected_json = '{"missing": ["c"]}'
+
+[[case]]
+id = "trust/same-identity-expected-twice"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c"}, {"type": "command", "command": "c"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}]]'
+expected_json = '{"untrusted": ["c", "c"]}'
+
+[[case]]
+id = "trust/extra-entries-ignored"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "other", "matcher": "m"}, {"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/entries-keep-other-fields"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c1"}], "matcher": "m"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m", "key": "k", "sourcePath": "/x", "warnings": [], "extra": {"a": 1}}]]'
+expected_json = '{}'
+
+[[case]]
+id = "trust/unicode-identity"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "ü 😀"}], "matcher": "é"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "modified", "eventName": "preToolUse", "command": "ü 😀", "matcher": "é"}]]'
+expected_json = '{"modified": ["ü 😀"]}'
+
+[[case]]
+id = "trust/identity-with-separator-characters"
+fn = "hook_trust_problems"
+args_json = '[{"$call": "expected_codex_hooks", "args": [{"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "c"}], "matcher": "a\",\"b"}]}}]}, [{"handlerType": "command", "enabled": true, "trustStatus": "modified", "eventName": "preToolUse", "command": "b\",\"c", "matcher": "a"}]]'
+expected_json = '{"missing": ["c"]}'
+
+# --- state: one entry's delivery state ---
+
+[[case]]
+id = "state/live-trusted"
+fn = "_delivery_state"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = 'null'
+
+[[case]]
+id = "state/live-managed"
+fn = "_delivery_state"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "managed", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = 'null'
+
+[[case]]
+id = "state/untrusted"
+fn = "_delivery_state"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "untrusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '"untrusted"'
+
+[[case]]
+id = "state/modified"
+fn = "_delivery_state"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "modified", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '"modified"'
+
+[[case]]
+id = "state/disabled"
+fn = "_delivery_state"
+args_json = '[{"handlerType": "command", "enabled": false, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '"disabled"'
+
+[[case]]
+id = "state/unrecognized"
+fn = "_delivery_state"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "x", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '"unrecognized"'
+
+[[case]]
+id = "state/enabled-only-true"
+fn = "_delivery_state"
+args_json = '[{"handlerType": "command", "enabled": "yes", "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '"disabled"'
+
+[[case]]
+id = "state/bare-object"
+fn = "_delivery_state"
+args_json = '[{}]'
+expected_json = '"disabled"'
+
+# --- metadata: the HookMetadata shape of every `hooks` element, one failure kind at a time ---
+
+[[case]]
+id = "metadata/ok-command"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = 'null'
+
+[[case]]
+id = "metadata/ok-command-matcher-null"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": null}]'
+expected_json = 'null'
+
+[[case]]
+id = "metadata/ok-command-matcher-absent"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1"}]'
+expected_json = 'null'
+
+[[case]]
+id = "metadata/ok-command-matcher-empty"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": ""}]'
+expected_json = 'null'
+
+[[case]]
+id = "metadata/ok-non-command-minimal"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "prompt", "enabled": false, "trustStatus": "untrusted"}]'
+expected_json = 'null'
+
+[[case]]
+id = "metadata/ok-non-command-ignores-identity"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "prompt", "enabled": true, "trustStatus": "managed", "eventName": 7, "command": null, "matcher": 3}]'
+expected_json = 'null'
+
+[[case]]
+id = "metadata/ok-extra-fields"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m", "key": "k", "warnings": [1], "anything": {"a": []}}]'
+expected_json = 'null'
+
+[[case]]
+id = "metadata/not-object-0"
+fn = "_check_hook_metadata"
+args_json = '["x"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry that is not an object"}'
+
+[[case]]
+id = "metadata/not-object-1"
+fn = "_check_hook_metadata"
+args_json = '[null]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry that is not an object"}'
+
+[[case]]
+id = "metadata/not-object-2"
+fn = "_check_hook_metadata"
+args_json = '[7]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry that is not an object"}'
+
+[[case]]
+id = "metadata/not-object-3"
+fn = "_check_hook_metadata"
+args_json = '[[]]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry that is not an object"}'
+
+[[case]]
+id = "metadata/not-object-4"
+fn = "_check_hook_metadata"
+args_json = '[true]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry that is not an object"}'
+
+[[case]]
+id = "metadata/not-object-5"
+fn = "_check_hook_metadata"
+args_json = '[1.5]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry that is not an object"}'
+
+[[case]]
+id = "metadata/handler-absent"
+fn = "_check_hook_metadata"
+args_json = '[{"enabled": true, "trustStatus": "trusted"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry without a string handlerType"}'
+
+[[case]]
+id = "metadata/handler-null"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": null, "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry without a string handlerType"}'
+
+[[case]]
+id = "metadata/handler-number"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": 1, "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry without a string handlerType"}'
+
+[[case]]
+id = "metadata/handler-list"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": ["command"], "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry without a string handlerType"}'
+
+[[case]]
+id = "metadata/enabled-absent"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry whose enabled is not a boolean"}'
+
+[[case]]
+id = "metadata/enabled-string"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": "true", "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry whose enabled is not a boolean"}'
+
+[[case]]
+id = "metadata/enabled-one"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": 1, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry whose enabled is not a boolean"}'
+
+[[case]]
+id = "metadata/enabled-zero"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": 0, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry whose enabled is not a boolean"}'
+
+[[case]]
+id = "metadata/enabled-null"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": null, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry whose enabled is not a boolean"}'
+
+[[case]]
+id = "metadata/trust-absent"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry with an unrecognized trustStatus"}'
+
+[[case]]
+id = "metadata/trust-unknown"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "VENDOR_CANARY", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry with an unrecognized trustStatus"}'
+
+[[case]]
+id = "metadata/trust-case"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "Trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry with an unrecognized trustStatus"}'
+
+[[case]]
+id = "metadata/trust-number"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": 1, "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry with an unrecognized trustStatus"}'
+
+[[case]]
+id = "metadata/trust-null"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": null, "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry with an unrecognized trustStatus"}'
+
+[[case]]
+id = "metadata/trust-list"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": ["trusted"], "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry with an unrecognized trustStatus"}'
+
+[[case]]
+id = "metadata/trust-checked-for-non-command-too"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "prompt", "enabled": true, "trustStatus": "weird"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry with an unrecognized trustStatus"}'
+
+[[case]]
+id = "metadata/enabled-before-trust"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": "x", "trustStatus": "weird", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry whose enabled is not a boolean"}'
+
+[[case]]
+id = "metadata/handler-before-enabled"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": 1, "enabled": "x", "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a hook entry without a string handlerType"}'
+
+[[case]]
+id = "metadata/event-absent"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook without a string eventName/command"}'
+
+[[case]]
+id = "metadata/event-number"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": 1, "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook without a string eventName/command"}'
+
+[[case]]
+id = "metadata/event-null"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": null, "command": "c1", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook without a string eventName/command"}'
+
+[[case]]
+id = "metadata/command-absent"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook without a string eventName/command"}'
+
+[[case]]
+id = "metadata/command-null"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": null, "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook without a string eventName/command"}'
+
+[[case]]
+id = "metadata/command-list"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": ["c"], "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook without a string eventName/command"}'
+
+[[case]]
+id = "metadata/command-number"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": 1, "matcher": "m"}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook without a string eventName/command"}'
+
+[[case]]
+id = "metadata/matcher-number"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": 1}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook with a non-string matcher"}'
+
+[[case]]
+id = "metadata/matcher-list"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": ["m"]}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook with a non-string matcher"}'
+
+[[case]]
+id = "metadata/matcher-bool"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c1", "matcher": false}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook with a non-string matcher"}'
+
+[[case]]
+id = "metadata/identity-before-matcher"
+fn = "_check_hook_metadata"
+args_json = '[{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": 1, "command": "c1", "matcher": 1}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a command hook without a string eventName/command"}'
+
+# --- parse: the response line before anything reads it (not-json, not-object, id-mismatch, jsonrpc-error) ---
+
+[[case]]
+id = "parse/empty"
+fn = "_parse_hooks_list_message"
+args_json = '[""]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/whitespace"
+fn = "_parse_hooks_list_message"
+args_json = '["  \n"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/truncated"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/garbage"
+fn = "_parse_hooks_list_message"
+args_json = '["Content-Length: 12"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/single-quotes"
+fn = "_parse_hooks_list_message"
+args_json = '''["{'id': 2}"]'''
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/trailing-comma"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2,}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/trailing-text"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2} x"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/two-documents"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2}{\"id\": 2}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/bom"
+fn = "_parse_hooks_list_message"
+args_json = '["\ufeff{\"id\": 2}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/null-bytes"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2}\u0000"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/raw-control-in-string"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"a\": \"x\ty\"}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/lone-surrogate-escape-is-json"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"a\": \"\\ud800\", \"error\": 1}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a JSON-RPC error"}'
+
+[[case]]
+id = "parse/nan-is-json-not-object"
+fn = "_parse_hooks_list_message"
+args_json = '["NaN"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not a JSON object"}'
+
+[[case]]
+id = "parse/infinity-not-object"
+fn = "_parse_hooks_list_message"
+args_json = '["Infinity"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not a JSON object"}'
+
+[[case]]
+id = "parse/minus-infinity-not-object"
+fn = "_parse_hooks_list_message"
+args_json = '["-Infinity"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not a JSON object"}'
+
+[[case]]
+id = "parse/nan-in-an-object-id-mismatch"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": NaN}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/nan-in-an-object-error"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"error\": NaN}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a JSON-RPC error"}'
+
+[[case]]
+id = "parse/huge-integer-digits"
+fn = "_parse_hooks_list_message"
+args_json = '["11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/huge-integer-digits-in-object"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"n\": 11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/integer-just-under-the-digit-limit"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"error\": 1, \"n\": 1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a JSON-RPC error"}'
+
+[[case]]
+id = "parse/number-id-string-of-digits-is-no-limit"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": \"11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111\"}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/raw-number"
+fn = "_parse_hooks_list_message"
+args_json = '[7]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/raw-null"
+fn = "_parse_hooks_list_message"
+args_json = '[null]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/raw-object"
+fn = "_parse_hooks_list_message"
+args_json = '[{"id": 2}]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/raw-list"
+fn = "_parse_hooks_list_message"
+args_json = '[[1]]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not valid JSON"}'
+
+[[case]]
+id = "parse/list"
+fn = "_parse_hooks_list_message"
+args_json = '["[1, 2]"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not a JSON object"}'
+
+[[case]]
+id = "parse/list-of-objects"
+fn = "_parse_hooks_list_message"
+args_json = '["[{\"id\": 2}]"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not a JSON object"}'
+
+[[case]]
+id = "parse/string"
+fn = "_parse_hooks_list_message"
+args_json = '["\"VENDOR_CANARY\""]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not a JSON object"}'
+
+[[case]]
+id = "parse/number"
+fn = "_parse_hooks_list_message"
+args_json = '["2"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not a JSON object"}'
+
+[[case]]
+id = "parse/bool"
+fn = "_parse_hooks_list_message"
+args_json = '["true"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not a JSON object"}'
+
+[[case]]
+id = "parse/null"
+fn = "_parse_hooks_list_message"
+args_json = '["null"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response is not a JSON object"}'
+
+[[case]]
+id = "parse/id-absent"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"result\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-1"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 1, \"result\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-3"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 3, \"result\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-string-2"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": \"2\", \"result\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-canary"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": \"VENDOR_CANARY\", \"result\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-null"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": null}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-true"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": true}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-false"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": false}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-list"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": [2]}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-object"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": {\"a\": 2}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-float-2.0-then-error"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2.0, \"error\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a JSON-RPC error"}'
+
+[[case]]
+id = "parse/id-exponent-then-error"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2e0, \"error\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a JSON-RPC error"}'
+
+[[case]]
+id = "parse/id-2.5"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2.5, \"error\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/id-negative-zero-ish"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": -2, \"error\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/error-object"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"error\": {\"code\": -32600, \"message\": \"VENDOR_CANARY\"}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a JSON-RPC error"}'
+
+[[case]]
+id = "parse/error-null"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"error\": null}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a JSON-RPC error"}'
+
+[[case]]
+id = "parse/error-empty-string"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"error\": \"\"}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a JSON-RPC error"}'
+
+[[case]]
+id = "parse/error-beside-result"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"error\": {}, \"result\": {\"data\": []}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list returned a JSON-RPC error"}'
+
+[[case]]
+id = "parse/id-mismatch-wins-over-error"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 9, \"error\": {}}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/ok-minimal"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2}"]'
+expected_json = '{"id": 2}'
+
+[[case]]
+id = "parse/ok-result"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"result\": {\"data\": []}}"]'
+expected_json = '{"id": 2, "result": {"data": []}}'
+
+[[case]]
+id = "parse/ok-leading-whitespace"
+fn = "_parse_hooks_list_message"
+args_json = '["  \n {\"id\": 2, \"result\": null}\n"]'
+expected_json = '{"id": 2, "result": null}'
+
+[[case]]
+id = "parse/ok-extra-keys"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"data\": []}, \"x\": [1, 2, {\"a\": null}]}"]'
+expected_json = '{"jsonrpc": "2.0", "id": 2, "result": {"data": []}, "x": [1, 2, {"a": null}]}'
+
+[[case]]
+id = "parse/ok-unicode"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"result\": {\"data\": [], \"n\": \"é😀\\u2028\"}}"]'
+expected_json = '{"id": 2, "result": {"data": [], "n": "é😀\u2028"}}'
+
+[[case]]
+id = "parse/ok-duplicate-id-last-wins"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 3, \"id\": 2}"]'
+expected_json = '{"id": 2}'
+
+[[case]]
+id = "parse/id-duplicate-last-wins-mismatch"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"id\": 3}"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response does not answer this request (id mismatch)"}'
+
+[[case]]
+id = "parse/ok-nested-error-key-is-not-error"
+fn = "_parse_hooks_list_message"
+args_json = '["{\"id\": 2, \"result\": {\"error\": 1}}"]'
+expected_json = '{"id": 2, "result": {"error": 1}}'
+
+# --- project: the one `result.data` entry answering this cwd ---
+
+[[case]]
+id = "project/ok-empty"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}'
+
+[[case]]
+id = "project/ok-with-hooks"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}, "not checked here"], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"cwd": "/proj", "hooks": [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}, "not checked here"], "warnings": [], "errors": []}'
+
+[[case]]
+id = "project/ok-with-warnings"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}], "warnings": ["w"], "errors": []}]}}, "/proj"]'
+expected_json = '{"cwd": "/proj", "hooks": [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}], "warnings": ["w"], "errors": []}'
+
+[[case]]
+id = "project/ok-other-cwd-first"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/other", "hooks": [], "warnings": [], "errors": []}, {"cwd": "/proj", "hooks": [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"cwd": "/proj", "hooks": [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}], "warnings": [], "errors": []}'
+
+[[case]]
+id = "project/ok-other-cwds-malformed"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/other"}, "junk", null, 7, [], {"cwd": "/other2", "hooks": 5}, {"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}'
+
+[[case]]
+id = "project/ok-entry-extra-keys"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": [], "extra": {"a": 1}, "key": "v"}]}}, "/proj"]'
+expected_json = '{"cwd": "/proj", "hooks": [], "warnings": [], "errors": [], "extra": {"a": 1}, "key": "v"}'
+
+[[case]]
+id = "project/ok-result-extra-keys"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}], "meta": 1}}, "/proj"]'
+expected_json = '{"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}'
+
+[[case]]
+id = "project/ok-cwd-trailing-slash-differs"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj/", "hooks": [], "warnings": [], "errors": []}]}}, "/proj/"]'
+expected_json = '{"cwd": "/proj/", "hooks": [], "warnings": [], "errors": []}'
+
+[[case]]
+id = "project/cwd-trailing-slash-is-no-match"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj/", "hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered no entry for this project"}'
+
+[[case]]
+id = "project/cwd-case-is-no-match"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/Proj", "hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered no entry for this project"}'
+
+[[case]]
+id = "project/cwd-unicode"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/é/😀", "hooks": [], "warnings": [], "errors": []}]}}, "/é/😀"]'
+expected_json = '{"cwd": "/é/😀", "hooks": [], "warnings": [], "errors": []}'
+
+[[case]]
+id = "project/cwd-number-entry-ignored"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": 7, "hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered no entry for this project"}'
+
+[[case]]
+id = "project/cwd-absent-entry-ignored"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered no entry for this project"}'
+
+[[case]]
+id = "project/no-result"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response has no result.data list"}'
+
+[[case]]
+id = "project/result-null"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": null}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response has no result.data list"}'
+
+[[case]]
+id = "project/result-list"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": []}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response has no result.data list"}'
+
+[[case]]
+id = "project/result-string"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": "x"}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response has no result.data list"}'
+
+[[case]]
+id = "project/result-without-data"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response has no result.data list"}'
+
+[[case]]
+id = "project/data-null"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": null}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response has no result.data list"}'
+
+[[case]]
+id = "project/data-dict"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": {"cwd": "/proj"}}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response has no result.data list"}'
+
+[[case]]
+id = "project/data-string"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": "x"}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response has no result.data list"}'
+
+[[case]]
+id = "project/data-number"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": 0}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list response has no result.data list"}'
+
+[[case]]
+id = "project/data-empty"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": []}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered no entry for this project"}'
+
+[[case]]
+id = "project/data-non-dicts"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": ["x", null, 7, []]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered no entry for this project"}'
+
+[[case]]
+id = "project/data-other-cwd-only"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/other", "hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered no entry for this project"}'
+
+[[case]]
+id = "project/duplicate-identical"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}, {"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered this project more than once"}'
+
+[[case]]
+id = "project/duplicate-trusted-then-empty"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}], "warnings": [], "errors": []}, {"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered this project more than once"}'
+
+[[case]]
+id = "project/duplicate-empty-then-trusted"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}, {"cwd": "/proj", "hooks": [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered this project more than once"}'
+
+[[case]]
+id = "project/duplicate-three"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}, {"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}, {"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered this project more than once"}'
+
+[[case]]
+id = "project/duplicate-with-a-broken-one"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": []}, {"cwd": "/proj"}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered this project more than once"}'
+
+[[case]]
+id = "project/duplicate-wins-over-shape"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj"}, {"cwd": "/proj"}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list answered this project more than once"}'
+
+[[case]]
+id = "project/shape-hooks-absent"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'
+
+[[case]]
+id = "project/shape-warnings-absent"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'
+
+[[case]]
+id = "project/shape-errors-absent"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'
+
+[[case]]
+id = "project/shape-hooks-null"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": null, "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'
+
+[[case]]
+id = "project/shape-hooks-dict"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": {}, "warnings": [], "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'
+
+[[case]]
+id = "project/shape-warnings-string"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": "w", "errors": []}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'
+
+[[case]]
+id = "project/shape-errors-null"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": null}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'
+
+[[case]]
+id = "project/shape-errors-dict"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": {"a": 1}}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'
+
+[[case]]
+id = "project/shape-only-cwd"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj"}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'
+
+[[case]]
+id = "project/errors-one"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": ["VENDOR_CANARY"]}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list reported discovery errors for this project"}'
+
+[[case]]
+id = "project/errors-empty-string-element"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": [""]}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list reported discovery errors for this project"}'
+
+[[case]]
+id = "project/errors-null-element"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [], "warnings": [], "errors": [null]}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list reported discovery errors for this project"}'
+
+[[case]]
+id = "project/errors-wins-over-hooks"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": [{"handlerType": "command", "enabled": true, "trustStatus": "trusted", "eventName": "preToolUse", "command": "c", "matcher": "m"}], "warnings": [], "errors": ["e"]}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list reported discovery errors for this project"}'
+
+[[case]]
+id = "project/shape-wins-over-errors"
+fn = "_hooks_list_project_entry"
+args_json = '[{"id": 2, "result": {"data": [{"cwd": "/proj", "hooks": null, "warnings": [], "errors": ["e"]}]}}, "/proj"]'
+expected_json = '{"error": "CodexProtocolError", "message": "hooks/list entry for this project lacks a hooks, warnings or errors list"}'

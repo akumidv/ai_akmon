@@ -25,11 +25,6 @@ reason = "structural — ES modules have no package init; js/common is a flat mo
 task = "C104"
 
 [[exempt]]
-path = "common/findings.py"
-reason = "first consumer in port order is bin/sync.py and bin/verify.py (no hook imports it); the JS CLI lands in C105"
-task = "C105"
-
-[[exempt]]
 path = "common/always_loaded.py"
 reason = "first consumer in port order is bin/verify.py; the JS CLI lands in C105"
 task = "C105"
@@ -39,18 +34,13 @@ path = "common/codex_hooks.py"
 reason = "first consumer in port order is bin/verify.py; the JS CLI lands in C105"
 task = "C105"
 
-# bin/: the JS CLI (the launchers themselves) lands in C105.
+# bin/: sync and check are ported (C105 pass 1); verify is pass 2's.
 [[exempt]]
-path = "bin/*"
-reason = "the JS CLI for Node package mode lands in C105"
+path = "bin/verify.py"
+reason = "the JS verify, with the Node findings, lands in C105 pass 2"
 task = "C105"
 
 # src/akmon/: the CLI port is C105; update is C107's plan row.
-[[exempt]]
-path = "src/akmon/cli.py"
-reason = "js/akmon/cli.mjs is only the placeholder stub of the JS CLI, which lands in C105 (see [[stub]])"
-task = "C105"
-
 [[exempt]]
 path = "src/akmon/__init__.py"
 reason = "structural — ES modules have no package init; the node-side version carrier is package.json"
@@ -109,11 +99,3 @@ task = "C108"
 path = "tools/tasks/archive.py"
 reason = "the tools port lands in C108"
 task = "C108"
-
-# The one placeholder that exists today: the npm bin entry ships so the manifest is real, while
-# the CLI behind it is C105's. Remove this entry and the src/akmon/cli.py exemption together,
-# when the CLI port lands.
-[[stub]]
-path = "akmon/cli.mjs"
-reason = "the placeholder of the JS CLI: it names the missing C105 port and exits non-zero"
-task = "C105"

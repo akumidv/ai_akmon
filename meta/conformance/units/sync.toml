@@ -1,0 +1,1736 @@
+# Unit table: the pure helpers of `sync` (bin/sync.py; JS mirror js/bin/sync.mjs, ADR 0020 D01, C105).
+#
+# Why this table exists: `sync` writes the bytes of a committed file, and the helpers below decide those
+# bytes through text the two stdlibs handle differently. Python's `str.splitlines()` breaks on `\r`,
+# `\v`, `\f`, `\x1c`-`\x1e`, `\x85`, U+2028 and U+2029 and `str.strip()` trims the Unicode `isspace` set
+# (U+00A0 and U+3000 yes, U+FEFF and U+200B no, `\x1c`-`\x1f` yes) -- neither is JavaScript's `\s` or
+# `trim`; `re` under MULTILINE|DOTALL puts `^` and `$` at a `\n` only (a U+2028, a `\x0b` or a lone `\r`
+# is not a line start) and lets `.` cross it; `re.escape` and `findall` answer for a dev-layer root such
+# as `a.b+c`; `tomllib` refuses a byte-order mark where the vendored parser folds it in, and a table
+# that is a date, an array or a string is not a table; `sorted()` orders names by code point. A JS port
+# gets none of this for free. The table is the spec: every expected value was produced by running the
+# Python and then read against the function's docstring.
+#
+# The mouth is the generic one of `routing.toml` (the row format is the block comment above
+# `probe_routing` in probe.py): a row is `{id, fn, args_json, expected_json}` plus world keys. What
+# this table adds: `fn` names the Python function, a private one included (`_upsert_toml_key`); the JS
+# mouth drops the underscore and calls the camelCase export of js/bin/sync.mjs, and hands it
+# `readSyncData()` (the bundle of bin/sync.json, common/materialization.json and common/findings.json)
+# as the FIRST argument of the exports that read a data file -- the Python takes `data` last and
+# optional, so a row never passes it. `$path` arguments are the string on the JS side. Every row runs
+# in its own scratch directory (`{{dir}}`), and the project it describes is that directory: the
+# `files` world key lays out `AGENTS.md`, the record and the ruff configurations, `files_parts` gives
+# the bytes TOML cannot spell, `env` sets AITNA_ROOT where a row relocates the dev layer.
+#
+# The worlds are package-mode projects (`mount = "package"` in `<AITNA_ROOT>/.akmon.toml`) unless the
+# row says otherwise, because that is the mode the JS sync serves (ADR 0020 D02); a mounted-prefix row
+# (`imported/no-record-*`) builds no `<AITNA_ROOT>/akmon`, since the JS side never consults a mount
+# and the Python side would. The standard tree the files are checked against is the tree under test.
+#
+# Families (the `id` prefix): `upsert` -- _upsert_toml_key, the comment-preserving edit of the record
+# (the key in place, before the first section, at the end; every line separator and every Unicode
+# space); `frontmatter` -- _skill_frontmatter_block, the lines a skill stub copies; `imported` --
+# imported_standard_files over a world: the fenced-block and inline-code scan that finds the
+# `@`-imports (fences of both kinds, unclosed, indented, mid-line, with trailing text; CRLF, lone CR,
+# U+2028, VT, FF, NEL as non-lines; inline spans), the plan errors with the line to write, the ruff
+# `extend` origins, the dev-layer root in the pattern, the sort; `ruff-extends` -- ruff_extends over
+# the three configuration files and the TOML shapes a project can hold; `moved-imports` -- the shipped
+# list; `akmon-entry` -- _is_akmon_entry, which entries of settings.json are sync's to replace;
+# `merge` -- _merge_hook_entries, the per-event merge that keeps the user's hooks.
+#
+# Deliberate non-pins, all of them `node:test` instead (js/bin/sync.test.mjs): the wiring and tree
+# spellings of Node mode, `packagePinStatus`, the refusal of a record that is not Node package mode,
+# the plan and the files `apply` writes and deletes (a world with a project root and a command to
+# run: the differential run of C105 compares those against the Python), and the mounted-tree branch
+# of `standard_tree_root`.
+
+[[case]]
+id = "upsert/empty"
+fn = "_upsert_toml_key"
+args_json = '["", "mount", "package"]'
+expected_json = '"mount = \"package\"\n"'
+
+[[case]]
+id = "upsert/replace-in-place"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\nmount = \"submodule\"\nb = 2\n", "mount", "package"]'
+expected_json = '"a = 1\nmount = \"package\"\nb = 2\n"'
+
+[[case]]
+id = "upsert/append-without-section"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\nb = 2\n", "mount", "package"]'
+expected_json = '"a = 1\nb = 2\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/insert-before-section"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n[test]\nrunner = \"x\"\n", "mount", "package"]'
+expected_json = '"a = 1\nmount = \"package\"\n[test]\nrunner = \"x\"\n"'
+
+[[case]]
+id = "upsert/section-first"
+fn = "_upsert_toml_key"
+args_json = '["[test]\nrunner = \"x\"\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\n[test]\nrunner = \"x\"\n"'
+
+[[case]]
+id = "upsert/key-only-in-section"
+fn = "_upsert_toml_key"
+args_json = '["[test]\nmount = \"inside\"\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\n[test]\nmount = \"inside\"\n"'
+
+[[case]]
+id = "upsert/key-after-section-not-replaced"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n[s]\nmount = \"inside\"\n[t]\n", "mount", "package"]'
+expected_json = '"a = 1\nmount = \"package\"\n[s]\nmount = \"inside\"\n[t]\n"'
+
+[[case]]
+id = "upsert/comment-ignored"
+fn = "_upsert_toml_key"
+args_json = '["# mount = \"x\"\na = 1\n", "mount", "package"]'
+expected_json = '"# mount = \"x\"\na = 1\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/comment-indented"
+fn = "_upsert_toml_key"
+args_json = '["   # mount = \"x\"\na = 1\n", "mount", "package"]'
+expected_json = '"   # mount = \"x\"\na = 1\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/no-trailing-newline-kept"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\nmount = \"x\"", "mount", "package"]'
+expected_json = '"a = 1\nmount = \"package\""'
+
+[[case]]
+id = "upsert/no-trailing-newline-insert"
+fn = "_upsert_toml_key"
+args_json = '["a = 1", "mount", "package"]'
+expected_json = '"a = 1\nmount = \"package\""'
+
+[[case]]
+id = "upsert/blank-lines-kept"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n\n\nb = 2\n", "mount", "package"]'
+expected_json = '"a = 1\n\n\nb = 2\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/trailing-blank-lines"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n\n\n", "mount", "package"]'
+expected_json = '"a = 1\n\n\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/only-newline"
+fn = "_upsert_toml_key"
+args_json = '["\n", "mount", "package"]'
+expected_json = '"\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/only-section"
+fn = "_upsert_toml_key"
+args_json = '["[s]\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\n[s]\n"'
+
+[[case]]
+id = "upsert/spaces-around-key"
+fn = "_upsert_toml_key"
+args_json = '["  mount   =   \"x\"  \nb = 1\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\nb = 1\n"'
+
+[[case]]
+id = "upsert/tab-around-key"
+fn = "_upsert_toml_key"
+args_json = '["\tmount\t=\t\"x\"\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\n"'
+
+[[case]]
+id = "upsert/prefix-key-not-matched"
+fn = "_upsert_toml_key"
+args_json = '["mount_extra = \"x\"\nmountain = 1\n", "mount", "package"]'
+expected_json = '"mount_extra = \"x\"\nmountain = 1\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/suffix-key-not-matched"
+fn = "_upsert_toml_key"
+args_json = '["xmount = 1\n", "mount", "package"]'
+expected_json = '"xmount = 1\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/line-without-equals"
+fn = "_upsert_toml_key"
+args_json = '["mount\nb = 1\n", "mount", "package"]'
+expected_json = '"mount\nb = 1\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/two-occurrences"
+fn = "_upsert_toml_key"
+args_json = '["mount = \"a\"\nmount = \"b\"\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\nmount = \"b\"\n"'
+
+[[case]]
+id = "upsert/crlf-input"
+fn = "_upsert_toml_key"
+args_json = '["mount = \"x\"\r\nb = 1\r\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\nb = 1\n"'
+
+[[case]]
+id = "upsert/crlf-insert"
+fn = "_upsert_toml_key"
+args_json = '["b = 1\r\n[s]\r\n", "mount", "package"]'
+expected_json = '"b = 1\nmount = \"package\"\n[s]\n"'
+
+[[case]]
+id = "upsert/cr-only"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\rmount = \"x\"\rb = 2\r", "mount", "package"]'
+expected_json = '"a = 1\nmount = \"package\"\nb = 2"'
+
+[[case]]
+id = "upsert/u2028-splits-lines"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\u2028mount = \"x\"\u2029b = 2\n", "mount", "package"]'
+expected_json = '"a = 1\nmount = \"package\"\nb = 2\n"'
+
+[[case]]
+id = "upsert/u2028-joined-to-lf"
+fn = "_upsert_toml_key"
+args_json = '["a = \"x\u2028y\"\n", "mount", "package"]'
+expected_json = '"a = \"x\ny\"\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/nel-splits"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\u0085b = 2\n", "mount", "package"]'
+expected_json = '"a = 1\nb = 2\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/vt-ff-split"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\u000bb = 2\fc = 3\n", "mount", "package"]'
+expected_json = '"a = 1\nb = 2\nc = 3\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/fs-gs-rs-split"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\u001cb = 2\u001dc = 3\u001ed = 4\n", "mount", "package"]'
+expected_json = '"a = 1\nb = 2\nc = 3\nd = 4\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/nbsp-strips-for-key"
+fn = "_upsert_toml_key"
+args_json = '["\u00a0mount\u00a0=\u00a0\"x\"\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\n"'
+
+[[case]]
+id = "upsert/ideographic-space-strips"
+fn = "_upsert_toml_key"
+args_json = '["\u3000mount = \"x\"\u3000\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\n"'
+
+[[case]]
+id = "upsert/bom-is-not-whitespace"
+fn = "_upsert_toml_key"
+args_json = '["\ufeffmount = \"x\"\na = 1\n", "mount", "package"]'
+expected_json = '"\ufeffmount = \"x\"\na = 1\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/fs-strips-for-key"
+fn = "_upsert_toml_key"
+args_json = '["\u001fmount = \"x\"\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\n"'
+
+[[case]]
+id = "upsert/zero-width-space-not-whitespace"
+fn = "_upsert_toml_key"
+args_json = '["\u200bmount = \"x\"\n", "mount", "package"]'
+expected_json = '"\u200bmount = \"x\"\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/section-after-nbsp"
+fn = "_upsert_toml_key"
+args_json = '["\u00a0[s]\nk = 1\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\n\u00a0[s]\nk = 1\n"'
+
+[[case]]
+id = "upsert/section-after-bom"
+fn = "_upsert_toml_key"
+args_json = '["\ufeff[s]\nk = 1\n", "mount", "package"]'
+expected_json = '"\ufeff[s]\nk = 1\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/value-inserted-verbatim"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n", "akmon_version", "0.4.0.dev0"]'
+expected_json = '"a = 1\nakmon_version = \"0.4.0.dev0\"\n"'
+
+[[case]]
+id = "upsert/value-with-quote"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n", "akmon_version", "a\"b\\c"]'
+expected_json = '"a = 1\nakmon_version = \"a\"b\\c\"\n"'
+
+[[case]]
+id = "upsert/value-unicode"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n", "k", "\u00e9\u65e5\u672c\u8a9e\ud83d\ude00"]'
+expected_json = '"a = 1\nk = \"\u00e9\u65e5\u672c\u8a9e\ud83d\ude00\"\n"'
+
+[[case]]
+id = "upsert/other-key"
+fn = "_upsert_toml_key"
+args_json = '["mount = \"package\"\nakmon_version = \"0.0.1\"\n", "akmon_version", "0.4.0-dev.0"]'
+expected_json = '"mount = \"package\"\nakmon_version = \"0.4.0-dev.0\"\n"'
+
+[[case]]
+id = "upsert/quoted-key-not-matched"
+fn = "_upsert_toml_key"
+args_json = '["\"mount\" = \"x\"\n", "mount", "package"]'
+expected_json = '"\"mount\" = \"x\"\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/dotted-key-not-matched"
+fn = "_upsert_toml_key"
+args_json = '["tool.mount = \"x\"\n", "mount", "package"]'
+expected_json = '"tool.mount = \"x\"\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/equals-in-value"
+fn = "_upsert_toml_key"
+args_json = '["mount = \"a=b\"\n", "mount", "package"]'
+expected_json = '"mount = \"package\"\n"'
+
+[[case]]
+id = "upsert/empty-key-line"
+fn = "_upsert_toml_key"
+args_json = '["= 1\nmount = 2\n", "mount", "package"]'
+expected_json = '"= 1\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/hash-after-text-line"
+fn = "_upsert_toml_key"
+args_json = '["a = 1 # mount = \"x\"\n", "mount", "package"]'
+expected_json = '"a = 1 # mount = \"x\"\nmount = \"package\"\n"'
+
+[[case]]
+id = "upsert/blank-then-section"
+fn = "_upsert_toml_key"
+args_json = '["\n\n[s]\n", "mount", "package"]'
+expected_json = '"\n\nmount = \"package\"\n[s]\n"'
+
+[[case]]
+id = "upsert/indented-section"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n  [s]\nb = 2\n", "mount", "package"]'
+expected_json = '"a = 1\nmount = \"package\"\n  [s]\nb = 2\n"'
+
+[[case]]
+id = "upsert/array-line-looks-like-section"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n[\"x\"]\nb = 2\n", "mount", "package"]'
+expected_json = '"a = 1\nmount = \"package\"\n[\"x\"]\nb = 2\n"'
+
+[[case]]
+id = "upsert/lf-then-cr"
+fn = "_upsert_toml_key"
+args_json = '["a = 1\n\rb = 2\n", "mount", "package"]'
+expected_json = '"a = 1\n\nb = 2\nmount = \"package\"\n"'
+
+[[case]]
+id = "frontmatter/standard"
+fn = "_skill_frontmatter_block"
+args_json = '["---\nname: x\ndescription: y\n---\n\n# x\n"]'
+expected_json = '"name: x\ndescription: y"'
+
+[[case]]
+id = "frontmatter/empty-text"
+fn = "_skill_frontmatter_block"
+args_json = '[""]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/no-opening"
+fn = "_skill_frontmatter_block"
+args_json = '["name: x\n---\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/unclosed"
+fn = "_skill_frontmatter_block"
+args_json = '["---\nname: x\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/only-dashes"
+fn = "_skill_frontmatter_block"
+args_json = '["---"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/only-dashes-newline"
+fn = "_skill_frontmatter_block"
+args_json = '["---\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/immediate-close"
+fn = "_skill_frontmatter_block"
+args_json = '["---\n---\n"]'
+expected_json = '""'
+
+[[case]]
+id = "frontmatter/blank-inside"
+fn = "_skill_frontmatter_block"
+args_json = '["---\n\n---\n"]'
+expected_json = '""'
+
+[[case]]
+id = "frontmatter/closing-only-first"
+fn = "_skill_frontmatter_block"
+args_json = '["---\na\n---\nb\n---\n"]'
+expected_json = '"a"'
+
+[[case]]
+id = "frontmatter/spaces-around-fences"
+fn = "_skill_frontmatter_block"
+args_json = '["  ---  \nname: x\n \t--- \n"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/trailing-text-on-opening"
+fn = "_skill_frontmatter_block"
+args_json = '["--- x\nname: y\n---\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/four-dashes"
+fn = "_skill_frontmatter_block"
+args_json = '["----\nname: x\n----\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/two-dashes-closing"
+fn = "_skill_frontmatter_block"
+args_json = '["---\nname: x\n--\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/crlf"
+fn = "_skill_frontmatter_block"
+args_json = '["---\r\nname: x\r\n---\r\n"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/cr-only"
+fn = "_skill_frontmatter_block"
+args_json = '["---\rname: x\r---\r"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/u2028-lines"
+fn = "_skill_frontmatter_block"
+args_json = '["---\nname: x\u2028description: y\u2029z: 1\n---\n"]'
+expected_json = '"name: x\ndescription: y\nz: 1"'
+
+[[case]]
+id = "frontmatter/u2028-fence"
+fn = "_skill_frontmatter_block"
+args_json = '["---\u2028name: x\u2029---\n"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/nel-fence"
+fn = "_skill_frontmatter_block"
+args_json = '["---\u0085name: x\u0085---\u0085"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/fs-lines"
+fn = "_skill_frontmatter_block"
+args_json = '["---\u001cname: x\u001d---\u001e"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/nbsp-strips"
+fn = "_skill_frontmatter_block"
+args_json = '["\u00a0---\u00a0\nname: x\n\u3000---\n"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/bom-first"
+fn = "_skill_frontmatter_block"
+args_json = '["\ufeff---\nname: x\n---\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/zero-width-fence"
+fn = "_skill_frontmatter_block"
+args_json = '["\u200b---\nname: x\n---\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/bom-before-closing"
+fn = "_skill_frontmatter_block"
+args_json = '["---\nname: x\n\ufeff---\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/indented-body-kept"
+fn = "_skill_frontmatter_block"
+args_json = '["---\nname: x\n  nested: y\n---\n"]'
+expected_json = '"name: x\n  nested: y"'
+
+[[case]]
+id = "frontmatter/unicode"
+fn = "_skill_frontmatter_block"
+args_json = '["---\nname: \u00e9\ndescription: \u65e5\u672c\u8a9e \ud83d\ude00\n---\n"]'
+expected_json = '"name: \u00e9\ndescription: \u65e5\u672c\u8a9e \ud83d\ude00"'
+
+[[case]]
+id = "frontmatter/tabs"
+fn = "_skill_frontmatter_block"
+args_json = '["\t---\nname: x\n---\t\n"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/leading-blank-line"
+fn = "_skill_frontmatter_block"
+args_json = '["\n---\nname: x\n---\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "frontmatter/vt-ff"
+fn = "_skill_frontmatter_block"
+args_json = '["---\u000bname: x\f---\n"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/trailing-no-newline"
+fn = "_skill_frontmatter_block"
+args_json = '["---\nname: x\n---"]'
+expected_json = '"name: x"'
+
+[[case]]
+id = "frontmatter/closing-with-crlf-and-spaces"
+fn = "_skill_frontmatter_block"
+args_json = '["---\r\na: 1\r\n---  \r\n"]'
+expected_json = '"a: 1"'
+
+[[case]]
+id = "frontmatter/lone-surrogate-escape-free"
+fn = "_skill_frontmatter_block"
+args_json = '["---\nname: a\n---\n\n\n"]'
+expected_json = '"name: a"'
+
+[[case]]
+id = "imported/no-agents"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/empty-agents"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/one-profile"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/common-twice"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/guardrails/_common.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/two-profiles-sorted"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/quant.md\n@_aitna/.akmon/profiles/python.md\n@_aitna/.akmon/guardrails/_common.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/unknown"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/nothing.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/nothing.md"], ["AGENTS.md imports a file the standard does not ship: profiles/nothing.md"]]'
+
+[[case]]
+id = "imported/unknown-and-known"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/python.md\n@_aitna/.akmon/guardrails/zzz.md\n@_aitna/.akmon/profiles/aaa.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "guardrails/zzz.md", "profiles/aaa.md", "profiles/python.md"], ["AGENTS.md imports a file the standard does not ship: guardrails/zzz.md", "AGENTS.md imports a file the standard does not ship: profiles/aaa.md"]]'
+
+[[case]]
+id = "imported/moved"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/guardrails/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "guardrails/python.md"], ["AGENTS.md imports guardrails/python.md, which the standard moved to profiles/python.md: replace the line with @_aitna/.akmon/profiles/python.md"]]'
+
+[[case]]
+id = "imported/moved-and-fine"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/guardrails/python.md\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "guardrails/python.md", "profiles/python.md"], ["AGENTS.md imports guardrails/python.md, which the standard moved to profiles/python.md: replace the line with @_aitna/.akmon/profiles/python.md"]]'
+
+[[case]]
+id = "imported/dotdot-name"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/guardrails/..\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/..", "guardrails/_common.md"], ["AGENTS.md imports a file the standard does not ship: guardrails/.."]]'
+
+[[case]]
+id = "imported/dot-name"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/.\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/."], ["AGENTS.md imports a file the standard does not ship: profiles/."]]'
+
+[[case]]
+id = "imported/trailing-punctuation"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "See @_aitna/.akmon/profiles/python.md, then @_aitna/.akmon/profiles/quant.md.\n(@_aitna/.akmon/profiles/python-stdlib.md)\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python-stdlib.md", "profiles/python.md", "profiles/quant.md."], ["AGENTS.md imports a file the standard does not ship: profiles/quant.md."]]'
+
+[[case]]
+id = "imported/same-line-glued"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/python.md@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/wrong-directory"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/other/python.md\n@_aitna/.akmon/profiles\n@_aitna/.akmon/profiles/\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/mount-prefix-ignored-in-package"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/unicode-name-stops"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/pyé.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/py"], ["AGENTS.md imports a file the standard does not ship: profiles/py"]]'
+
+[[case]]
+id = "imported/name-chars"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/a.b_c-d9\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/a.b_c-d9"], ["AGENTS.md imports a file the standard does not ship: profiles/a.b_c-d9"]]'
+
+[[case]]
+id = "imported/fenced-backticks"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/fenced-tildes"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "~~~\n@_aitna/.akmon/profiles/python.md\n~~~\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/fenced-lang-tag"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```markdown\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/fenced-unclosed"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/fenced-unclosed-after-import"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/quant.md\n```\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/fenced-close-with-text"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n``` closing words\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/fenced-mismatched-closer"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n~~~\n@_aitna/.akmon/profiles/quant.md\n```\n@_aitna/.akmon/profiles/python-stdlib.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python-stdlib.md"], []]'
+
+[[case]]
+id = "imported/fenced-four-backticks"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "````\n@_aitna/.akmon/profiles/python.md\n````\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/fenced-indented-is-not-fence"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "  ```\n@_aitna/.akmon/profiles/python.md\n  ```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/fenced-midline-is-not-fence"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "text ``` @_aitna/.akmon/profiles/python.md ``` more\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/fenced-at-eof-no-newline"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/quant.md\n```", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/fenced-fence-only"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/fenced-adjacent-blocks"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n```\n```\n@_aitna/.akmon/profiles/quant.md\n```\n@_aitna/.akmon/profiles/python-stdlib.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python-stdlib.md"], []]'
+
+[[case]]
+id = "imported/fenced-tilde-inside-backtick"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\n~~~\n@_aitna/.akmon/profiles/python.md\n~~~\n```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/fenced-crlf"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\u000d\n@_aitna/.akmon/profiles/python.md\u000d\n```\u000d\n@_aitna/.akmon/profiles/quant.md\u000d\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/fenced-cr-only"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\u000d@_aitna/.akmon/profiles/python.md\u000d```\u000d@_aitna/.akmon/profiles/quant.md\u000d", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/fenced-u2028-is-not-a-line"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "text\u2028```\n@_aitna/.akmon/profiles/python.md\n```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/fenced-u2028-before-closer"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\u2028```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/fenced-vt-ff-are-not-lines"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "a\u000b```\n@_aitna/.akmon/profiles/python.md\n```\u000c@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/fenced-nel-is-not-a-line"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "a\u0085```\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/fenced-fs-gs-are-not-lines"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "a\u001c```\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/fenced-bom-first-line"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "\ufeff```\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/inline-code-strips"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "`@_aitna/.akmon/profiles/python.md` and @_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/inline-code-unclosed"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "`@_aitna/.akmon/profiles/python.md\n@_aitna/.akmon/profiles/quant.md`\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/inline-code-spans-two-lines-not"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "`a\n@_aitna/.akmon/profiles/python.md\nb`\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/inline-code-empty-span"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "`` @_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/inline-code-double-backtick"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "``@_aitna/.akmon/profiles/python.md`` @_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/inline-code-in-fence"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\n`@_aitna/.akmon/profiles/python.md`\n```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+
+[[case]]
+id = "imported/inline-code-around-fence-open"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "`x` ```\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/crlf-file"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "# A\u000d\n\u000d\n@_aitna/.akmon/profiles/python.md\u000d\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/cr-only-file"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "# A\u000d\u000d@_aitna/.akmon/profiles/python.md\u000d", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/u2028-file"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "# A\u2028@_aitna/.akmon/profiles/python.md\u2028", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/unicode-prose"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "日本語 😀 @_aitna/.akmon/profiles/python.md é\n```\n😀\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/bom-file"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "\ufeff# A\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/long-line"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx @_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/many-fences"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/aaa0.md\n```\n```\n@_aitna/.akmon/profiles/aaa1.md\n```\n```\n@_aitna/.akmon/profiles/aaa2.md\n```\n```\n@_aitna/.akmon/profiles/aaa3.md\n```\n```\n@_aitna/.akmon/profiles/aaa4.md\n```\n```\n@_aitna/.akmon/profiles/aaa5.md\n```\n```\n@_aitna/.akmon/profiles/aaa6.md\n```\n```\n@_aitna/.akmon/profiles/aaa7.md\n```\n```\n@_aitna/.akmon/profiles/aaa8.md\n```\n```\n@_aitna/.akmon/profiles/aaa9.md\n```\n```\n@_aitna/.akmon/profiles/aaa10.md\n```\n```\n@_aitna/.akmon/profiles/aaa11.md\n```\n```\n@_aitna/.akmon/profiles/aaa12.md\n```\n```\n@_aitna/.akmon/profiles/aaa13.md\n```\n```\n@_aitna/.akmon/profiles/aaa14.md\n```\n```\n@_aitna/.akmon/profiles/aaa15.md\n```\n```\n@_aitna/.akmon/profiles/aaa16.md\n```\n```\n@_aitna/.akmon/profiles/aaa17.md\n```\n```\n@_aitna/.akmon/profiles/aaa18.md\n```\n```\n@_aitna/.akmon/profiles/aaa19.md\n```\n```\n@_aitna/.akmon/profiles/aaa20.md\n```\n```\n@_aitna/.akmon/profiles/aaa21.md\n```\n```\n@_aitna/.akmon/profiles/aaa22.md\n```\n```\n@_aitna/.akmon/profiles/aaa23.md\n```\n```\n@_aitna/.akmon/profiles/aaa24.md\n```\n```\n@_aitna/.akmon/profiles/aaa25.md\n```\n```\n@_aitna/.akmon/profiles/aaa26.md\n```\n```\n@_aitna/.akmon/profiles/aaa27.md\n```\n```\n@_aitna/.akmon/profiles/aaa28.md\n```\n```\n@_aitna/.akmon/profiles/aaa29.md\n```\n```\n@_aitna/.akmon/profiles/aaa30.md\n```\n```\n@_aitna/.akmon/profiles/aaa31.md\n```\n```\n@_aitna/.akmon/profiles/aaa32.md\n```\n```\n@_aitna/.akmon/profiles/aaa33.md\n```\n```\n@_aitna/.akmon/profiles/aaa34.md\n```\n```\n@_aitna/.akmon/profiles/aaa35.md\n```\n```\n@_aitna/.akmon/profiles/aaa36.md\n```\n```\n@_aitna/.akmon/profiles/aaa37.md\n```\n```\n@_aitna/.akmon/profiles/aaa38.md\n```\n```\n@_aitna/.akmon/profiles/aaa39.md\n```\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/no-record-mounted-prefix"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/akmon/profiles/python.md\n@_aitna/akmon/guardrails/gone.md\n@_aitna/.akmon/profiles/quant.md\n" }
+expected_json = '[["guardrails/gone.md", "profiles/python.md"], ["AGENTS.md imports a file the standard does not ship: guardrails/gone.md"]]'
+
+[[case]]
+id = "imported/no-record-common-not-added"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = {  }
+expected_json = '[[], []]'
+
+[[case]]
+id = "imported/record-other-mount"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon.toml" = "mount = \"vendored\"\n", "AGENTS.md" = "@_aitna/akmon/profiles/python.md\n" }
+expected_json = '[["profiles/python.md"], []]'
+
+[[case]]
+id = "imported/record-submodule"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon.toml" = "mount = \"submodule\"\n" }
+expected_json = '[[], []]'
+
+[[case]]
+id = "imported/custom-root"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "tools/ai/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@tools/ai/.akmon/profiles/python.md\n@_aitna/.akmon/profiles/quant.md\n" }
+env = { "AITNA_ROOT" = "tools/ai" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/custom-root-slashes"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "x/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@x/.akmon/profiles/python.md\n" }
+env = { "AITNA_ROOT" = "/x/" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/regex-special-root"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "a.b+c/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a.b+c/.akmon/profiles/python.md\n@aXb+c/.akmon/profiles/quant.md\n@a.b+cc/.akmon/profiles/python-stdlib.md\n" }
+env = { "AITNA_ROOT" = "a.b+c" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/regex-bracket-root"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "a[b]/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a[b]/.akmon/profiles/python.md\n@ab/.akmon/profiles/quant.md\n" }
+env = { "AITNA_ROOT" = "a[b]" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/regex-paren-dollar-root"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "(x)$/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@(x)$/.akmon/profiles/python.md\n@x/.akmon/profiles/quant.md\n" }
+env = { "AITNA_ROOT" = "(x)$" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/regex-backslash-root"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "a\\b/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a\\b/.akmon/profiles/python.md\n" }
+env = { "AITNA_ROOT" = "a\\b" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/record-lenient-parse"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon.toml" = "mount = package\n", "AGENTS.md" = "@_aitna/.akmon/profiles/python.md\n" }
+expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+
+[[case]]
+id = "imported/sorted-by-code-point"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "@_aitna/.akmon/profiles/b.md\n@_aitna/.akmon/profiles/B.md\n@_aitna/.akmon/profiles/a-b\n@_aitna/.akmon/profiles/a.b\n@_aitna/.akmon/profiles/a_b\n@_aitna/.akmon/profiles/a0\n@_aitna/.akmon/profiles/_x\n@_aitna/.akmon/guardrails/_common.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/B.md", "profiles/_x", "profiles/a-b", "profiles/a.b", "profiles/a0", "profiles/a_b", "profiles/b.md"], ["AGENTS.md imports a file the standard does not ship: profiles/B.md", "AGENTS.md imports a file the standard does not ship: profiles/_x", "AGENTS.md imports a file the standard does not ship: profiles/a-b", "AGENTS.md imports a file the standard does not ship: profiles/a.b", "AGENTS.md imports a file the standard does not ship: profiles/a0", "AGENTS.md imports a file the standard does not ship: profiles/a_b", "AGENTS.md imports a file the standard does not ship: profiles/b.md"]]'
+
+[[case]]
+id = "imported/ruff-pyproject"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool.ruff]\nextend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+
+[[case]]
+id = "imported/ruff-toml"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+
+[[case]]
+id = "imported/ruff-dot-toml"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".ruff.toml" = "extend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+
+[[case]]
+id = "imported/ruff-all-three-origins"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool.ruff]\nextend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "ruff.toml" = "extend = \"_aitna/.akmon/profiles/gone.toml\"\n", ".ruff.toml" = "extend = \"_aitna/.akmon/profiles/gone2.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/gone.toml", "profiles/gone2.toml", "profiles/ruff.toml"], ["ruff.toml extends a file the standard does not ship: profiles/gone.toml", ".ruff.toml extends a file the standard does not ship: profiles/gone2.toml"]]'
+
+[[case]]
+id = "imported/ruff-agents-import-wins-origin"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "AGENTS.md" = "@_aitna/.akmon/profiles/ruff.toml\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+
+[[case]]
+id = "imported/ruff-agents-missing-import-origin"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"_aitna/.akmon/profiles/gone.toml\"\n", "AGENTS.md" = "@_aitna/.akmon/profiles/gone.toml\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles/gone.toml"], ["AGENTS.md imports a file the standard does not ship: profiles/gone.toml"]]'
+
+[[case]]
+id = "imported/ruff-outside-prefix"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"../shared/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/ruff-wrong-dir"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"_aitna/.akmon/elsewhere/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/ruff-bare-dirname"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"_aitna/.akmon/profiles\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "profiles"], ["ruff.toml extends a file the standard does not ship: profiles"]]'
+
+[[case]]
+id = "imported/ruff-moved-guardrail"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"_aitna/.akmon/guardrails/python.md\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md", "guardrails/python.md"], ["ruff.toml extends guardrails/python.md, which the standard moved to profiles/python.md: replace the line with _aitna/.akmon/profiles/python.md"]]'
+
+[[case]]
+id = "imported/ruff-mount-prefix-in-package"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"_aitna/akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/ruff-not-string"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = 5\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/ruff-invalid-toml"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \n= =\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/ruff-bom"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "\ufeffextend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/ruff-bare-relative-dir-is-not-the-standard"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"profiles/ruff.toml\"\n", "pyproject.toml" = "[tool.ruff]\nextend = \"guardrails/gone.md\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/ruff-with-at-sign-is-not-a-path"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"@_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/ruff-ruff-toml-is-dir"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml/x" = "y", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
+expected_json = '[["guardrails/_common.md"], []]'
+
+[[case]]
+id = "imported/ruff-custom-root"
+fn = "imported_standard_files"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "tools/ai/.akmon.toml" = "mount = \"package\"\n", "ruff.toml" = "extend = \"tools/ai/.akmon/profiles/ruff.toml\"\n" }
+env = { "AITNA_ROOT" = "tools/ai" }
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+
+[[case]]
+id = "ruff-extends/none"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = {  }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/pyproject"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool.ruff]\nextend = \"a.toml\"\n" }
+expected_json = '[["pyproject.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/pyproject-dotted"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "tool.ruff.extend = \"a.toml\"\n" }
+expected_json = '[["pyproject.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/pyproject-inline-tables"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "tool = { ruff = { extend = \"a.toml\" } }\n" }
+expected_json = '[["pyproject.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/pyproject-other-table"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool.other]\nextend = \"a.toml\"\n[ruff]\nextend = \"b.toml\"\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/pyproject-lint-table-not-read"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool.ruff.lint]\nextend = \"a.toml\"\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/ruff-toml"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"b.toml\"\n" }
+expected_json = '[["ruff.toml", "b.toml"]]'
+
+[[case]]
+id = "ruff-extends/ruff-toml-tool-ruff-not-read"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "[tool.ruff]\nextend = \"b.toml\"\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/dot-ruff-toml"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".ruff.toml" = "extend = \"c.toml\"\n" }
+expected_json = '[[".ruff.toml", "c.toml"]]'
+
+[[case]]
+id = "ruff-extends/order-is-config-order"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".ruff.toml" = "extend = \"c.toml\"\n", "ruff.toml" = "extend = \"b.toml\"\n", "pyproject.toml" = "[tool.ruff]\nextend = \"a.toml\"\n" }
+expected_json = '[["pyproject.toml", "a.toml"], ["ruff.toml", "b.toml"], [".ruff.toml", "c.toml"]]'
+
+[[case]]
+id = "ruff-extends/not-a-string"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = 5\n", "pyproject.toml" = "[tool.ruff]\nextend = [\"a.toml\"]\n", ".ruff.toml" = "extend = true\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/empty-string"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"\"\n" }
+expected_json = '[["ruff.toml", ""]]'
+
+[[case]]
+id = "ruff-extends/literal-string"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = 'a.toml'\n" }
+expected_json = '[["ruff.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/multiline-string"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"\"\"a.toml\"\"\"\n" }
+expected_json = '[["ruff.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/escapes"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"a\\u00e9\\t.toml\"\n" }
+expected_json = '[["ruff.toml", "a\u00e9\t.toml"]]'
+
+[[case]]
+id = "ruff-extends/tool-ruff-is-string"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "tool = { ruff = \"x\" }\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/tool-is-int"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "tool = 3\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/tool-ruff-is-date"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool]\nruff = 1979-05-27\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/tool-ruff-is-array"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool]\nruff = [{ extend = \"a.toml\" }]\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/array-of-tables-not-read"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[[tool.ruff]]\nextend = \"a.toml\"\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/invalid-toml-skipped"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \n= =\n", "pyproject.toml" = "[tool.ruff]\nextend = \"a.toml\"\n" }
+expected_json = '[["pyproject.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/duplicate-key-invalid"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"a\"\nextend = \"b\"\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/duplicate-table-invalid"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool.ruff]\nextend = \"a\"\n[tool.ruff]\nx = 1\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/bom-refused"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "\ufeffextend = \"a.toml\"\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/bom-in-pyproject"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "\ufeff[tool.ruff]\nextend = \"a.toml\"\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/invalid-utf8-skipped"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool.ruff]\nextend = \"a.toml\"\n" }
+files_parts = { "ruff.toml" = [{ "hex" = "657874656e64203d2022ff22" }, "\n"] }
+expected_json = '[["pyproject.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/crlf"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"a.toml\"\u000d\nother = 1\u000d\n" }
+expected_json = '[["ruff.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/cr-only-invalid"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"a.toml\"\u000dother = 1\u000d" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/comments-and-blank"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "# c\n\nextend = \"a.toml\" # trailing\n" }
+expected_json = '[["ruff.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/quoted-keys"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "\"extend\" = \"a.toml\"\n" }
+expected_json = '[["ruff.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/quoted-table-names"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[\"tool\".\"ruff\"]\nextend = \"a.toml\"\n" }
+expected_json = '[["pyproject.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/unicode-value"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"é日本語😀.toml\"\n" }
+expected_json = '[["ruff.toml", "\u00e9\u65e5\u672c\u8a9e\ud83d\ude00.toml"]]'
+
+[[case]]
+id = "ruff-extends/directory-instead-of-file"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml/inner" = "x" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/empty-file"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/proto-key"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool.ruff]\n__proto__ = \"x\"\nextend = \"a.toml\"\n" }
+expected_json = '[["pyproject.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/proto-as-table"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "pyproject.toml" = "[tool.__proto__]\nruff = 1\n[tool.ruff]\nextend = \"a.toml\"\n" }
+expected_json = '[["pyproject.toml", "a.toml"]]'
+
+[[case]]
+id = "ruff-extends/extend-table"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "[extend]\nx = 1\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/extend-in-section-of-ruff-toml"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "[lint]\nextend = \"a.toml\"\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/integer-and-float-values"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = 1.5\n" }
+expected_json = '[]'
+
+[[case]]
+id = "ruff-extends/many-keys"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "k0 = 0\nk1 = 1\nk2 = 2\nk3 = 3\nk4 = 4\nk5 = 5\nk6 = 6\nk7 = 7\nk8 = 8\nk9 = 9\nk10 = 10\nk11 = 11\nk12 = 12\nk13 = 13\nk14 = 14\nk15 = 15\nk16 = 16\nk17 = 17\nk18 = 18\nk19 = 19\nk20 = 20\nk21 = 21\nk22 = 22\nk23 = 23\nk24 = 24\nk25 = 25\nk26 = 26\nk27 = 27\nk28 = 28\nk29 = 29\nk30 = 30\nk31 = 31\nk32 = 32\nk33 = 33\nk34 = 34\nk35 = 35\nk36 = 36\nk37 = 37\nk38 = 38\nk39 = 39\nk40 = 40\nk41 = 41\nk42 = 42\nk43 = 43\nk44 = 44\nk45 = 45\nk46 = 46\nk47 = 47\nk48 = 48\nk49 = 49\nk50 = 50\nk51 = 51\nk52 = 52\nk53 = 53\nk54 = 54\nk55 = 55\nk56 = 56\nk57 = 57\nk58 = 58\nk59 = 59\nk60 = 60\nk61 = 61\nk62 = 62\nk63 = 63\nk64 = 64\nk65 = 65\nk66 = 66\nk67 = 67\nk68 = 68\nk69 = 69\nk70 = 70\nk71 = 71\nk72 = 72\nk73 = 73\nk74 = 74\nk75 = 75\nk76 = 76\nk77 = 77\nk78 = 78\nk79 = 79\nk80 = 80\nk81 = 81\nk82 = 82\nk83 = 83\nk84 = 84\nk85 = 85\nk86 = 86\nk87 = 87\nk88 = 88\nk89 = 89\nk90 = 90\nk91 = 91\nk92 = 92\nk93 = 93\nk94 = 94\nk95 = 95\nk96 = 96\nk97 = 97\nk98 = 98\nk99 = 99\nk100 = 100\nk101 = 101\nk102 = 102\nk103 = 103\nk104 = 104\nk105 = 105\nk106 = 106\nk107 = 107\nk108 = 108\nk109 = 109\nk110 = 110\nk111 = 111\nk112 = 112\nk113 = 113\nk114 = 114\nk115 = 115\nk116 = 116\nk117 = 117\nk118 = 118\nk119 = 119\nk120 = 120\nk121 = 121\nk122 = 122\nk123 = 123\nk124 = 124\nk125 = 125\nk126 = 126\nk127 = 127\nk128 = 128\nk129 = 129\nk130 = 130\nk131 = 131\nk132 = 132\nk133 = 133\nk134 = 134\nk135 = 135\nk136 = 136\nk137 = 137\nk138 = 138\nk139 = 139\nk140 = 140\nk141 = 141\nk142 = 142\nk143 = 143\nk144 = 144\nk145 = 145\nk146 = 146\nk147 = 147\nk148 = 148\nk149 = 149\nk150 = 150\nk151 = 151\nk152 = 152\nk153 = 153\nk154 = 154\nk155 = 155\nk156 = 156\nk157 = 157\nk158 = 158\nk159 = 159\nk160 = 160\nk161 = 161\nk162 = 162\nk163 = 163\nk164 = 164\nk165 = 165\nk166 = 166\nk167 = 167\nk168 = 168\nk169 = 169\nk170 = 170\nk171 = 171\nk172 = 172\nk173 = 173\nk174 = 174\nk175 = 175\nk176 = 176\nk177 = 177\nk178 = 178\nk179 = 179\nk180 = 180\nk181 = 181\nk182 = 182\nk183 = 183\nk184 = 184\nk185 = 185\nk186 = 186\nk187 = 187\nk188 = 188\nk189 = 189\nk190 = 190\nk191 = 191\nk192 = 192\nk193 = 193\nk194 = 194\nk195 = 195\nk196 = 196\nk197 = 197\nk198 = 198\nk199 = 199\nk200 = 200\nk201 = 201\nk202 = 202\nk203 = 203\nk204 = 204\nk205 = 205\nk206 = 206\nk207 = 207\nk208 = 208\nk209 = 209\nk210 = 210\nk211 = 211\nk212 = 212\nk213 = 213\nk214 = 214\nk215 = 215\nk216 = 216\nk217 = 217\nk218 = 218\nk219 = 219\nk220 = 220\nk221 = 221\nk222 = 222\nk223 = 223\nk224 = 224\nk225 = 225\nk226 = 226\nk227 = 227\nk228 = 228\nk229 = 229\nk230 = 230\nk231 = 231\nk232 = 232\nk233 = 233\nk234 = 234\nk235 = 235\nk236 = 236\nk237 = 237\nk238 = 238\nk239 = 239\nk240 = 240\nk241 = 241\nk242 = 242\nk243 = 243\nk244 = 244\nk245 = 245\nk246 = 246\nk247 = 247\nk248 = 248\nk249 = 249\nk250 = 250\nk251 = 251\nk252 = 252\nk253 = 253\nk254 = 254\nk255 = 255\nk256 = 256\nk257 = 257\nk258 = 258\nk259 = 259\nk260 = 260\nk261 = 261\nk262 = 262\nk263 = 263\nk264 = 264\nk265 = 265\nk266 = 266\nk267 = 267\nk268 = 268\nk269 = 269\nk270 = 270\nk271 = 271\nk272 = 272\nk273 = 273\nk274 = 274\nk275 = 275\nk276 = 276\nk277 = 277\nk278 = 278\nk279 = 279\nk280 = 280\nk281 = 281\nk282 = 282\nk283 = 283\nk284 = 284\nk285 = 285\nk286 = 286\nk287 = 287\nk288 = 288\nk289 = 289\nk290 = 290\nk291 = 291\nk292 = 292\nk293 = 293\nk294 = 294\nk295 = 295\nk296 = 296\nk297 = 297\nk298 = 298\nk299 = 299\nextend = \"z.toml\"\n" }
+expected_json = '[["ruff.toml", "z.toml"]]'
+
+[[case]]
+id = "ruff-extends/custom-root-irrelevant"
+fn = "ruff_extends"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "ruff.toml" = "extend = \"a.toml\"\n" }
+env = { "AITNA_ROOT" = "tools/ai" }
+expected_json = '[["ruff.toml", "a.toml"]]'
+
+[[case]]
+id = "moved-imports/shipped"
+fn = "moved_imports"
+args_json = '[]'
+expected_json = '{"guardrails/python.md": "profiles/python.md"}'
+
+[[case]]
+id = "akmon-entry/launcher-spelling"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook role-on-code"}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/node-spelling"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/mounted-spelling"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/role-on-code.py\""}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/materialized-spelling"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/.akmon/hooks/role-on-code.py\""}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/custom-root-mounted"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/ai/akmon/hooks/role-on-code.py\""}]}]'
+env = { "AITNA_ROOT" = "tools/ai" }
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/custom-root-not-default"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/role-on-code.py\""}]}]'
+env = { "AITNA_ROOT" = "tools/ai" }
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/user-command"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "echo mine"}]}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/prose-mention"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "echo akmon hook mention"}]}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/bare-launcher-no-quote"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "akmon hook role-on-code"}]}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/quote-before-hook"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "x\" hook "}]}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/mixed-entry"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook role-on-code"}, {"type": "command", "command": "echo mine"}]}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/two-akmon-commands"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook a"}, {"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/b.mjs\""}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/no-hooks-key"
+fn = "_is_akmon_entry"
+args_json = '[{"matcher": "Bash"}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/empty-hooks"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": []}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/hooks-not-list"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": "x"}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/hooks-dict"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": {"command": "\"x/.venv/bin/akmon\" hook a"}}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/hook-not-dict"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": ["x", 1, null]}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/command-not-string"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"command": 5}, {"command": null}, {"command": ["akmon"]}]}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/command-missing"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command"}]}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/non-string-commands-ignored-akmon-remains"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"command": 5}, {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook a"}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/not-a-dict-string"
+fn = "_is_akmon_entry"
+args_json = '["x"]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/not-a-dict-list"
+fn = "_is_akmon_entry"
+args_json = '[[{"hooks": [{"type": "command", "command": "\"a/.venv/bin/akmon\" hook b"}]}]]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/not-a-dict-null"
+fn = "_is_akmon_entry"
+args_json = '[null]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/empty-dict"
+fn = "_is_akmon_entry"
+args_json = '[{}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/marker-in-middle"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "FOO=1 \"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook x && other"}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/node-marker-substring"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "/node_modules/akmon/js/hooks/"}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/node-marker-other-package"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "node \"/node_modules/akmon-extra/js/hooks/x.mjs\""}]}]'
+expected_json = 'false'
+
+[[case]]
+id = "akmon-entry/duplicate-commands"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "\"a/.venv/bin/akmon\" hook x"}, {"type": "command", "command": "\"a/.venv/bin/akmon\" hook x"}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "akmon-entry/unicode-command"
+fn = "_is_akmon_entry"
+args_json = '[{"hooks": [{"type": "command", "command": "\"\u00e9/.venv/bin/akmon\" hook \u65e5\u672c\u8a9e"}]}]'
+expected_json = 'true'
+
+[[case]]
+id = "merge/existing-missing"
+fn = "_merge_hook_entries"
+args_json = '[null, [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/existing-not-list"
+fn = "_merge_hook_entries"
+args_json = '["x", [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
+
+[[case]]
+id = "merge/existing-dict"
+fn = "_merge_hook_entries"
+args_json = '[{"a": 1}, [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/existing-empty"
+fn = "_merge_hook_entries"
+args_json = '[[], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
+
+[[case]]
+id = "merge/wanted-empty"
+fn = "_merge_hook_entries"
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], []]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}]'
+
+[[case]]
+id = "merge/wanted-empty-drops-stale"
+fn = "_merge_hook_entries"
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], []]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}]'
+
+[[case]]
+id = "merge/keeps-user-appends-wanted"
+fn = "_merge_hook_entries"
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/replaces-stale-akmon"
+fn = "_merge_hook_entries"
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/replacement-order"
+fn = "_merge_hook_entries"
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
+
+[[case]]
+id = "merge/idempotent"
+fn = "_merge_hook_entries"
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
+
+[[case]]
+id = "merge/mixed-entry-kept"
+fn = "_merge_hook_entries"
+args_json = '[[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook x"}, {"type": "command", "command": "mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook x"}, {"type": "command", "command": "mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/user-owns-same-command"
+fn = "_merge_hook_entries"
+args_json = '[[{"hooks": [{"type": "command", "command": "shared"}]}], [{"hooks": [{"type": "command", "command": "shared"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"hooks": [{"type": "command", "command": "shared"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/user-owns-one-of-two"
+fn = "_merge_hook_entries"
+args_json = '[[{"hooks": [{"type": "command", "command": "shared"}]}], [{"hooks": [{"type": "command", "command": "shared"}, {"type": "command", "command": "fresh"}]}]]'
+expected_json = '[{"hooks": [{"type": "command", "command": "shared"}]}]'
+
+[[case]]
+id = "merge/wanted-duplicate-skipped"
+fn = "_merge_hook_entries"
+args_json = '[[], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/wanted-overlap-skipped"
+fn = "_merge_hook_entries"
+args_json = '[[], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}, {"type": "command", "command": "other"}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/wanted-without-commands-always-appended"
+fn = "_merge_hook_entries"
+args_json = '[[], [{"matcher": "x"}, {"matcher": "x"}, {"hooks": []}, {"hooks": []}]]'
+expected_json = '[{"matcher": "x"}, {"matcher": "x"}, {"hooks": []}, {"hooks": []}]'
+
+[[case]]
+id = "merge/wanted-non-dict-appended"
+fn = "_merge_hook_entries"
+args_json = '[[], [1, "x", null]]'
+expected_json = '[1, "x", null]'
+
+[[case]]
+id = "merge/existing-non-dict-entries-kept"
+fn = "_merge_hook_entries"
+args_json = '[[1, "x", null, [], {}, {"hooks": "no"}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[1, "x", null, [], {}, {"hooks": "no"}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/existing-non-string-commands-kept"
+fn = "_merge_hook_entries"
+args_json = '[[{"hooks": [{"command": 5}]}, {"hooks": [{"command": null}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"hooks": [{"command": 5}]}, {"hooks": [{"command": null}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/custom-root-stale"
+fn = "_merge_hook_entries"
+args_json = '[[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/ai/akmon/hooks/a.py\""}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+env = { "AITNA_ROOT" = "tools/ai" }
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/default-root-not-stale-under-custom"
+fn = "_merge_hook_entries"
+args_json = '[[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/a.py\""}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+env = { "AITNA_ROOT" = "tools/ai" }
+expected_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/a.py\""}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/extra-fields-preserved"
+fn = "_merge_hook_entries"
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "mine"}], "x": {"y": [1, 2.5, null]}}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "mine"}], "x": {"y": [1, 2.5, null]}}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/floats-preserved"
+fn = "_merge_hook_entries"
+args_json = '[[{"hooks": [{"type": "command", "command": "mine"}], "timeout": {"$float": "1.0"}}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"hooks": [{"type": "command", "command": "mine"}], "timeout": 1.0}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/order-of-user-entries"
+fn = "_merge_hook_entries"
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"hooks": [{"type": "command", "command": "b"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"hooks": [{"type": "command", "command": "c"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"hooks": [{"type": "command", "command": "b"}]}, {"hooks": [{"type": "command", "command": "c"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
+
+[[case]]
+id = "merge/shared-command-across-existing"
+fn = "_merge_hook_entries"
+args_json = '[[{"hooks": [{"type": "command", "command": "p"}]}, {"hooks": [{"type": "command", "command": "q"}]}], [{"hooks": [{"type": "command", "command": "q"}]}, {"hooks": [{"type": "command", "command": "r"}]}]]'
+expected_json = '[{"hooks": [{"type": "command", "command": "p"}]}, {"hooks": [{"type": "command", "command": "q"}]}, {"hooks": [{"type": "command", "command": "r"}]}]'

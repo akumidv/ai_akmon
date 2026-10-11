@@ -636,6 +636,14 @@ def test_sync_data_pins_its_structure():
         "cli_name",
         "default_launcher_rel",
         "akmon_hook_markers",
+        # the JavaScript sync's own keys (C105): the Node wiring spelling and the refusal of a record
+        # that is not Node package mode; this file never reads them
+        "node_hook_command",
+        "node_codex_hook_command",
+        "unsupported_record",
+        "unsupported_found",
+        # the Python sync's refusal of a record the JavaScript implementation wrote (C105)
+        "python_refuses_ecosystem",
         "claude_hooks",
         "codex_hooks",
         "vendor_pointers",

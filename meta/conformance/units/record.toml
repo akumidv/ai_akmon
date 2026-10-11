@@ -113,3 +113,142 @@ expected = '"back \\\\ quote # data"'
 [[strip]]
 input = '  spaced  '
 expected = 'spaced'
+
+# --- ecosystem: recorded_ecosystem / recordedEcosystem (C105) -------------------------------------
+# A project whose record (`<AITNA_ROOT>/.akmon.toml`, `text`; `absent = true` for no file at all;
+# `aitna_root` relocates the dev layer and is exported as AITNA_ROOT for the row) answers `expected`:
+# the string the top-level `ecosystem` key holds, `python` when the key is missing, empty, not a
+# string, nested in a table, or the record is absent. The value is returned as written -- no case
+# folding, no trim -- because whether it names an ecosystem a caller serves is the caller's question.
+# The reader is the lenient one: a record the strict parser refuses still answers what its lines say.
+
+[[ecosystem]]
+text = 'ecosystem = "node"'
+expected = "node"
+
+[[ecosystem]]
+text = 'ecosystem = "python"'
+expected = "python"
+
+[[ecosystem]]
+# A record written before the key existed: no change in meaning.
+text = '''
+mount = "package"
+akmon_version = "v0.4.0"
+'''
+expected = "python"
+
+[[ecosystem]]
+absent = true
+expected = "python"
+
+[[ecosystem]]
+text = ""
+expected = "python"
+
+[[ecosystem]]
+text = 'ecosystem = ""'
+expected = "python"
+
+[[ecosystem]]
+# Not a string: an integer, a boolean, an array and a table are each the default.
+text = "ecosystem = 3"
+expected = "python"
+
+[[ecosystem]]
+text = "ecosystem = true"
+expected = "python"
+
+[[ecosystem]]
+text = 'ecosystem = ["node"]'
+expected = "python"
+
+[[ecosystem]]
+text = '''
+[ecosystem]
+name = "node"
+'''
+expected = "python"
+
+[[ecosystem]]
+# Only the top-level key counts: the same name inside a table is another key.
+text = '''
+mount = "package"
+[akmon]
+ecosystem = "node"
+'''
+expected = "python"
+
+[[ecosystem]]
+# Returned as written: a capital is not folded, a blank is not trimmed away.
+text = 'ecosystem = "Node"'
+expected = "Node"
+
+[[ecosystem]]
+text = 'ecosystem = " "'
+expected = " "
+
+[[ecosystem]]
+text = 'ecosystem = "ruby"'
+expected = "ruby"
+
+[[ecosystem]]
+text = "ecosystem = 'node'"
+expected = "node"
+
+[[ecosystem]]
+text = 'ecosystem = "node"  # the carrier'
+expected = "node"
+
+[[ecosystem]]
+text = "mount = \"package\"\r\necosystem = \"node\"\r\n"
+expected = "node"
+
+[[ecosystem]]
+# A record the strict parser refuses (a broken header) still answers from the lenient fallback.
+text = '''
+ecosystem = "node"
+[broke =
+'''
+expected = "node"
+
+[[ecosystem]]
+# The fallback strips the quotes it finds, and an unquoted value is no TOML but is read as a word.
+text = '''
+ecosystem = node
+[broke =
+'''
+expected = "node"
+
+[[ecosystem]]
+# The fallback flattens every value to a string, so a number in a broken record is the word, not a default.
+text = '''
+ecosystem = 3
+[broke =
+'''
+expected = "3"
+
+[[ecosystem]]
+# A byte-order mark in front of the first key is dropped by the fallback (the C101 fold).
+text = "\ufeffecosystem = \"node\"\n"
+expected = "node"
+
+[[ecosystem]]
+# Duplicate keys: strict TOML refuses, so the fallback reads the lines in order and the last wins.
+text = '''
+ecosystem = "python"
+ecosystem = "node"
+'''
+expected = "node"
+
+[[ecosystem]]
+# The relocated dev layer is where the record is read from.
+aitna_root = "tools/ai"
+text = 'ecosystem = "node"'
+expected = "node"
+
+[[ecosystem]]
+# An empty record at the relocated layer is still no declaration.
+aitna_root = "tools/ai"
+text = ""
+expected = "python"

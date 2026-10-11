@@ -34,7 +34,17 @@ def _fixture(tmp_path: Path, option: str = "usd25") -> tuple[Path, Path, Path, d
         "proposal_sha256": _sha(plan),
         "accepted_v2_seal_sha256": _sha(seal),
         "owner_accepted": True,
-        "owner_acceptance_provenance": "UNIMPLEMENTED",
+        "owner_acceptance_provenance": "TRANSCRIPT_EVIDENCE_NONCRYPTOGRAPHIC",
+        "retry_evidence_policy": "OBSERVED_NO_RETRY",
+        "acceptance_evidence": {
+            "record_type": "p3_owner_acceptance_transcript_evidence",
+            "accepted_utc": "2026-10-11T00:00:00Z", "transcript_ref": "test-only fixture",
+            "transcript_sha256": "a" * 64,
+            "exact_quote": "I accept OBSERVED_NO_RETRY for the test-only fixture.",
+            "decision_ref": "test-only fixture decision", "proposal_sha256": _sha(plan),
+            "accepted_v2_seal_sha256": _sha(seal),
+        },
+        "authorized_phases": ["route_check", "qualification"],
         "selected_resource_option": option,
         "options": {
             "usd25": {
@@ -56,8 +66,9 @@ def _fixture(tmp_path: Path, option: str = "usd25") -> tuple[Path, Path, Path, d
                 "exploratory_calls_counted": True,
             },
         },
-        "preflight_status": "NOT_RUN",
-        "dispatch_allowed": False,
+        "preflight_status": "PASSED",
+        "dispatch_allowed": True,
+        "test_only_fixture": True,
     }
     approval = tmp_path / "approval.json"
     approval.write_text(json.dumps(record), encoding="utf-8")
@@ -70,6 +81,7 @@ def test_live_v2_record_is_unselected_and_denied_without_dispatch():
     assert record["selected_resource_option"] is None
     assert record["accepted_v2_seal_sha256"] is None
     assert record["dispatch_allowed"] is False
+    assert record["retry_evidence_policy"] == "UNSELECTED"
     with pytest.raises(ValueError, match="unselected"):
         approval_v2.validate()
 
@@ -89,6 +101,27 @@ def test_usd25_option_is_unsupported_even_with_zero_rates_or_low_asserted_cost(t
 def test_valid_token_only_policy_passes_pure_validation(tmp_path):
     approval, plan, seal, _ = _fixture(tmp_path, "token_only")
     assert approval_v2.validate(approval, plan, seal)["selected_resource_option"] == "token_only"
+
+
+@pytest.mark.parametrize("value,match", [
+    ("UNSELECTED", "retry evidence policy is unselected"),
+    ("PROVIDER_ZERO_RETRIES", "retry evidence policy is unknown"),
+    ([], "retry evidence policy is unknown"),
+])
+def test_retry_evidence_policy_must_be_owner_selected_supported_value(tmp_path, value, match):
+    approval, plan, seal, record = _fixture(tmp_path, "token_only")
+    record["retry_evidence_policy"] = value
+    approval.write_text(json.dumps(record), encoding="utf-8")
+    with pytest.raises(ValueError, match=match):
+        approval_v2.validate(approval, plan, seal)
+
+
+def test_retry_policy_must_appear_in_recorded_owner_quote(tmp_path):
+    approval, plan, seal, record = _fixture(tmp_path, "token_only")
+    record["acceptance_evidence"]["exact_quote"] = "I accept the protocol."
+    approval.write_text(json.dumps(record), encoding="utf-8")
+    with pytest.raises(ValueError, match="quote does not select"):
+        approval_v2.validate(approval, plan, seal)
 
 
 def test_token_policy_fixes_codex_only_limit_and_qwen_has_no_aggregate_cap(tmp_path):
@@ -118,11 +151,11 @@ def test_invalid_or_missing_accepted_limits_fail_closed(tmp_path, field, value):
         approval_v2.validate(approval, plan, seal)
 
 
-def test_policy_validator_cannot_authorize_dispatch_or_assert_preflight(tmp_path):
+def test_policy_validator_requires_explicit_phases_and_a_completed_preflight(tmp_path):
     approval, plan, seal, record = _fixture(tmp_path)
-    record["dispatch_allowed"] = True
+    record["authorized_phases"] = ["route_check"]
     approval.write_text(json.dumps(record), encoding="utf-8")
-    with pytest.raises(ValueError, match="cannot authorize dispatch"):
+    with pytest.raises(ValueError, match="phase authorization"):
         approval_v2.validate(approval, plan, seal)
 
 
@@ -163,7 +196,7 @@ def test_owner_boolean_is_not_owner_provenance(tmp_path):
     approval, plan, seal, record = _fixture(tmp_path, "token_only")
     record["owner_acceptance_provenance"] = "VERIFIED"
     approval.write_text(json.dumps(record), encoding="utf-8")
-    with pytest.raises(ValueError, match="provenance is not implemented"):
+    with pytest.raises(ValueError, match="transcript provenance"):
         approval_v2.validate(approval, plan, seal)
 
 

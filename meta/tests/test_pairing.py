@@ -157,6 +157,8 @@ def test_bad_stub_entry_is_refused(tmp_path: Path, body: str) -> None:
 def test_live_tree_passes_the_gate() -> None:
     findings = pairing.check_pairing(_AKMON)
     assert [(f.severity, f.code) for f in findings] == [("ok", "pairing.ok")]
-    # The npm bin entry of this tree is C105's placeholder: it must not read as a landed port.
-    assert "akmon/cli.mjs" in pairing.load_stubs()
-    assert "1 of the exempt covered by a stub .mjs only" in findings[0].message
+    # No placeholder is left: the npm bin entry is the real dispatcher since C105 pass 1.
+    assert pairing.load_stubs() == frozenset()
+    assert "0 of the exempt covered by a stub .mjs only" in findings[0].message
+    assert pairing.is_ported(_AKMON, "src/akmon/cli.py")
+    assert not pairing.is_ported(_AKMON, "bin/verify.py")

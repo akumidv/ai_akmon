@@ -148,6 +148,24 @@ surface is a public API under the release versioning (a breaking change is a bre
 - **Update.** `akmon update` uses the detected manager's exact dev-install command. Any other
   manager gets the command printed (ADR-0018/D03).
 
+### D08 — The port is native: it may diverge where the runtime's own standard differs
+
+`Decision-ID: ADR-0020/D08`
+
+The JavaScript implementation is a native Node program, not a transliteration of the Python one.
+It follows the conventions of its platform: the command line and argument handling a Node tool
+has, the names and casing of JavaScript, the error classes and number handling of the runtime.
+Where the standard behavior of Node differs from Python's, the port keeps Node's, on one condition:
+the difference sits in the runtime layer and changes no **product behavior** — a hook decision,
+the bytes of a written file, a `verify` finding, a `check` result, the text an owner reads in
+normal use. Product behavior is identical in both implementations (D01, D03).
+
+Every such difference is entered in the divergence register,
+[`meta/conformance/DIVERGENCES.md`](../conformance/DIVERGENCES.md), with what differs, why it is
+accepted, and who sees it. A difference that is neither fixed nor in the register is a defect;
+a differential run (D03) that finds one ends in one of the two. The register is the place to look
+before reading a port's behavior as a bug.
+
 ## Considered alternatives
 
 - **An npm wrapper that runs the Python code** (a launcher calling host `python3`, or `uvx`).

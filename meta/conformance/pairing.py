@@ -112,6 +112,15 @@ def _counterpart(repo: Path, rel: str, stubs: frozenset[str]) -> Counterpart:
     return "stub" if mirror in stubs else "port"
 
 
+def is_ported(repo: Path, rel: str) -> bool:
+    """Whether a repo-relative ``.py`` has a real port under ``js/`` (a stub does not count).
+
+    The one answer to "is this part of the node implementation there yet" -- the runner asks it to
+    decide which scenarios a node run owes.
+    """
+    return _counterpart(repo, rel, load_stubs(repo=repo)) == "port"
+
+
 def _is_exempt(rel: str, exemptions: Iterable[str]) -> bool:
     """True when some ``[[exempt]]`` glob covers the file."""
     return any(fnmatch.fnmatch(rel, pattern) for pattern in exemptions)

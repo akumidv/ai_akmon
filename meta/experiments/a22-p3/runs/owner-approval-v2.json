@@ -1,10 +1,13 @@
 {
   "schema": 2,
   "record_type": "p3_v2_owner_approval",
-  "proposal_sha256": "7b013d476aa695d67a81d7294adcf9bc5d532436d227d8d5841ff62593e95317",
+  "proposal_sha256": "bb6684380e43322abe090fd8fcf729d334eb3e9cb7ea3b1ec0295f572e61cdc5",
   "accepted_v2_seal_sha256": null,
   "owner_accepted": false,
   "owner_acceptance_provenance": "UNIMPLEMENTED",
+  "retry_evidence_policy": "UNSELECTED",
+  "acceptance_evidence": null,
+  "authorized_phases": [],
   "selected_resource_option": null,
   "options": {
     "usd25": {
@@ -24,5 +27,6 @@
     }
   },
   "preflight_status": "NOT_RUN",
-  "dispatch_allowed": false
+  "dispatch_allowed": false,
+  "test_only_fixture": false
 }

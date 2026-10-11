@@ -15,12 +15,25 @@ import {
 const data = JSON.parse(fs.readFileSync(new URL("../../common/runtime.json", import.meta.url), "utf-8"));
 
 test("the declared runtimes come from the shared data file, ordered", () => {
-  const runtimes = declaredRuntimes(data);
+  const runtimes = declaredRuntimes(data, "python");
   assert.equal(runtimes.length, 5);
+  assert.equal(runtimes[1].binary, "python3");
   assert.deepEqual(runtimes[0], { binary: "POSIX shell", population: GENERATED_WIRING, modality: "required" });
   assert.deepEqual(runtimes[2], { binary: "git", population: GENERATED_WIRING, modality: REQUIRED_ON + "codex" });
   assert.ok(runtimes[3].modality, OPTIONAL);
   assert.equal(runtimes[4].population, OWN_TOOLING);
+});
+
+test("the node ecosystem declares node where python declares python3", () => {
+  const runtimes = declaredRuntimes(data, "node");
+  assert.deepEqual(runtimes.map((r) => r.binary), ["POSIX shell", "node", "git", "claude", "codex"]);
+  assert.deepEqual(runtimes[1], { binary: "node", population: GENERATED_WIRING, modality: "required" });
+});
+
+test("an unknown ecosystem raises a ValueError naming it", () => {
+  assert.throws(() => declaredRuntimes(data, "ruby"), (/** @type {Error} */ error) =>
+    error.name === "ValueError" && error.message === "unknown ecosystem 'ruby'; known: node, python");
+  assert.throws(() => declaredRuntimes(data, "toString"), /unknown ecosystem 'toString'/);
 });
 
 test("the harness binaries are the executables the table names, sorted", () => {

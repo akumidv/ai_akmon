@@ -111,5 +111,6 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   — two permanent implementations (Python, JavaScript) bound by a normative process-level
   conformance corpus; Python-free only in Node `package` mode; JS + JSDoc, Node ≥22, vendored
   smol-toml; npm carrier with one version line and file list; `node` hook wiring; all tools ported
-  behind `akmon tool` and exported for JS projects; Node checks per ADR 0014. Narrows ADR 0009
+  behind `akmon tool` and exported for JS projects; Node checks per ADR 0014; a native port may
+  diverge in the runtime layer, never in product behavior, each divergence registered. Narrows ADR 0009
   D01/D02 for executable code.

@@ -1,0 +1,1812 @@
+# Unit table: the shared finding envelope (common/findings.py; JS mirror js/common/findings.mjs,
+# ADR 0020 D01, C105). One data file, read from the tree under test: common/findings.json (the
+# severity vocabulary, the retired-code record, the render skeleton). The Python module opens it
+# beside itself; the JS module reads it at `../../common/findings.json` of its own file.
+#
+# Why this table exists: every answer here is the text an owner reads on a failing check, and the
+# two implementations reach it through different stdlibs. Python's `repr()` quotes a string,
+# escapes a control character and writes `None`/`True`/`1.0` where JavaScript writes `null`/`true`/
+# `1`; `str.strip()` strips every Unicode space (`\x1c`-`\x1f`, `\x85`, `\xa0`, `\u3000`) and a
+# JS `trim()` strips others (a BOM); `str.splitlines` names ten line separators where a JS regex
+# has to be told each; `\s` is Unicode in Python until `re.ASCII` (the Python side is `re.ASCII`, by
+# decision, so a no-break space after a full stop is text, not a boundary, in both);
+# `frozenset` answers sorted here. A JS port gets none of this for free. The table is the spec:
+# every expected value was produced by running the Python and then read against the docstrings.
+#
+# The mouth is the generic one of `routing.toml` (the row format is the block comment above
+# `probe_routing` in probe.py): a row names a public function, its JSON arguments and kwargs.
+# `Finding` is called by name with its five fields (and `data`, a plain object standing for the
+# parsed findings.json, where a row proves the data is honoured, not the file); inside `args_json`
+# `{"$new": "Finding", "fields": {...}}` builds one. A construction that raises answers
+# `{"error": <class>, "message": <first argument>}`; one that does not answers the five fields.
+# `print_findings` (stdout) and `Finding.to_dict` (a method) are not reachable by the mouth: the
+# node:test and the pytest suite pin them.
+#
+# Families (the `id` prefix): `vocab` -- severities and retired codes read from the data;
+# `severity`, `code`, `message`, `target`, `fix` -- the five validations, each with the repr of the
+# offending value in the message; `order` -- which check speaks first; `data` -- a data object
+# passed in place of the file; `line-safe` -- every separator escaped, nothing else; `render` -- the
+# canonical line, with and without a target, the skeleton from data, fill that is not re-scanned;
+# `exit` -- the severity-by-strict matrix.
+#
+# Deliberate non-pins: the TypeError text of a missing or unexpected `Finding` argument (a typed
+# contract, not a behavior), the `repr()` of a lone surrogate (JSON cannot carry one), a
+# `findings.json` that is missing or broken (jsondata owns that), `retired_codes()` of the shipped
+# file (appending a retired code is process-owned: a code is spent forever, so the row below pins the
+# one that is, and the data rows pin the mechanism).
+
+# --- vocab: the data file's vocabulary, as the module reads it ---
+
+[[case]]
+id = "vocab/severities"
+fn = "severities"
+args_json = '[]'
+expected_json = '["ok", "warn", "error"]'
+
+[[case]]
+id = "vocab/retired-codes-data"
+fn = "retired_codes"
+args_json = '[{"retired_codes": ["b.c", "a.b"], "severities": ["ok"]}]'
+expected_json = '["a.b", "b.c"]'
+
+[[case]]
+id = "vocab/retired-codes-empty"
+fn = "retired_codes"
+args_json = '[{"retired_codes": []}]'
+expected_json = '[]'
+
+[[case]]
+id = "vocab/severities-data"
+fn = "severities"
+args_json = '[{"severities": ["x", "y", "z"], "retired_codes": []}]'
+expected_json = '["x", "y", "z"]'
+
+[[case]]
+id = "vocab/shipped-retired-code-refused"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "hooks.package-mode", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code 'hooks.package-mode' is retired and must not be reused by a live check\"}"
+
+# --- severity: the closed vocabulary, repr of what was given ---
+
+[[case]]
+id = "severity/ok"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "severity/warn"
+fn = "Finding"
+kwargs_json = '{"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "severity/error"
+fn = "Finding"
+kwargs_json = '{"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "severity/refused-unknown"
+fn = "Finding"
+kwargs_json = '{"severity": "fatal", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'fatal'\"}"
+
+[[case]]
+id = "severity/refused-empty"
+fn = "Finding"
+kwargs_json = '{"severity": "", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got ''\"}"
+
+[[case]]
+id = "severity/refused-upper"
+fn = "Finding"
+kwargs_json = '{"severity": "OK", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'OK'\"}"
+
+[[case]]
+id = "severity/refused-padded"
+fn = "Finding"
+kwargs_json = '{"severity": " ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got ' ok'\"}"
+
+[[case]]
+id = "severity/refused-quote"
+fn = "Finding"
+kwargs_json = "{\"severity\": \"it's\", \"code\": \"area.rule\", \"message\": \"m\", \"target\": \"\", \"fix\": \"Do it\"}"
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got \\\"it's\\\"\"}"
+
+[[case]]
+id = "severity/refused-double-quote"
+fn = "Finding"
+kwargs_json = '{"severity": "say \"ok\"", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'say \\\"ok\\\"'\"}"
+
+[[case]]
+id = "severity/refused-both-quotes"
+fn = "Finding"
+kwargs_json = "{\"severity\": \"it's \\\"ok\\\"\", \"code\": \"area.rule\", \"message\": \"m\", \"target\": \"\", \"fix\": \"Do it\"}"
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'it\\\\'s \\\"ok\\\"'\"}"
+
+[[case]]
+id = "severity/refused-backslash"
+fn = "Finding"
+kwargs_json = '{"severity": "a\\b", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'a\\\\\\\\b'\"}"
+
+[[case]]
+id = "severity/refused-newline"
+fn = "Finding"
+kwargs_json = '{"severity": "ok\n", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'ok\\\\n'\"}"
+
+[[case]]
+id = "severity/refused-tab"
+fn = "Finding"
+kwargs_json = '{"severity": "o\tk", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'o\\\\tk'\"}"
+
+[[case]]
+id = "severity/refused-non-ascii"
+fn = "Finding"
+kwargs_json = '{"severity": "oké", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'oké'\"}"
+
+[[case]]
+id = "severity/refused-nbsp"
+fn = "Finding"
+kwargs_json = '{"severity": "ok\u00a0", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'ok\\\\xa0'\"}"
+
+[[case]]
+id = "severity/refused-ls"
+fn = "Finding"
+kwargs_json = '{"severity": "ok\u2028", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'ok\\\\u2028'\"}"
+
+[[case]]
+id = "severity/refused-nel"
+fn = "Finding"
+kwargs_json = '{"severity": "ok\u0085", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'ok\\\\x85'\"}"
+
+[[case]]
+id = "severity/refused-zwsp"
+fn = "Finding"
+kwargs_json = '{"severity": "ok\u200b", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'ok\\\\u200b'\"}"
+
+[[case]]
+id = "severity/refused-bom"
+fn = "Finding"
+kwargs_json = '{"severity": "\ufeffok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got '\\\\ufeffok'\"}"
+
+[[case]]
+id = "severity/refused-emoji"
+fn = "Finding"
+kwargs_json = '{"severity": "ok😀", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'ok😀'\"}"
+
+[[case]]
+id = "severity/refused-nul"
+fn = "Finding"
+kwargs_json = '{"severity": "ok\u0000", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'ok\\\\x00'\"}"
+
+[[case]]
+id = "severity/refused-del"
+fn = "Finding"
+kwargs_json = '{"severity": "ok\u007f", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'ok\\\\x7f'\"}"
+
+[[case]]
+id = "severity/refused-none"
+fn = "Finding"
+kwargs_json = '{"severity": null, "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "severity must be one of ok | warn | error, got None"}'
+
+[[case]]
+id = "severity/refused-int"
+fn = "Finding"
+kwargs_json = '{"severity": 3, "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "severity must be one of ok | warn | error, got 3"}'
+
+[[case]]
+id = "severity/refused-true"
+fn = "Finding"
+kwargs_json = '{"severity": true, "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "severity must be one of ok | warn | error, got True"}'
+
+[[case]]
+id = "severity/refused-false"
+fn = "Finding"
+kwargs_json = '{"severity": false, "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "severity must be one of ok | warn | error, got False"}'
+
+[[case]]
+id = "severity/refused-float"
+fn = "Finding"
+kwargs_json = '{"severity": 1.5, "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "severity must be one of ok | warn | error, got 1.5"}'
+
+[[case]]
+id = "severity/refused-list"
+fn = "Finding"
+kwargs_json = '{"severity": ["ok"], "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got ['ok']\"}"
+
+[[case]]
+id = "severity/refused-dict"
+fn = "Finding"
+kwargs_json = '{"severity": {"ok": 1}, "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got {'ok': 1}\"}"
+
+[[case]]
+id = "severity/refused-nested"
+fn = "Finding"
+kwargs_json = "{\"severity\": [null, true, \"a'b\", 2], \"code\": \"area.rule\", \"message\": \"m\", \"target\": \"\", \"fix\": \"Do it\"}"
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got [None, True, \\\"a'b\\\", 2]\"}"
+
+[[case]]
+id = "severity/refused-float-whole"
+fn = "Finding"
+kwargs_json = '{"severity": 1.0, "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "severity must be one of ok | warn | error, got 1.0"}'
+
+# --- code: a dotted slug, and never a retired one ---
+
+[[case]]
+id = "code/valid-two-segments"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "code/valid-one-letter"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "a.b", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "a.b", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "code/valid-digits"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "a1.b2", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "a1.b2", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "code/valid-hyphen-inside"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "caps.always-loaded", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "caps.always-loaded", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "code/valid-three-segments"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "a.b.c", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "a.b.c", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "code/valid-hyphens-both"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "a-b.c-d.e-f", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "a-b.c-d.e-f", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "code/valid-digit-first"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "1.2", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "1.2", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "code/refused-no-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'area'\"}"
+
+[[case]]
+id = "code/refused-empty"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got ''\"}"
+
+[[case]]
+id = "code/refused-upper"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "Area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'Area.rule'\"}"
+
+[[case]]
+id = "code/refused-upper-second"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.Rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'area.Rule'\"}"
+
+[[case]]
+id = "code/refused-trailing-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule.", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'area.rule.'\"}"
+
+[[case]]
+id = "code/refused-leading-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": ".area", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got '.area'\"}"
+
+[[case]]
+id = "code/refused-double-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area..rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'area..rule'\"}"
+
+[[case]]
+id = "code/refused-hyphen-trailing"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area-.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'area-.rule'\"}"
+
+[[case]]
+id = "code/refused-hyphen-leading"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "-area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got '-area.rule'\"}"
+
+[[case]]
+id = "code/refused-hyphen-leading-second"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.-rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'area.-rule'\"}"
+
+[[case]]
+id = "code/refused-double-hyphen"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "a--b.c", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'a--b.c'\"}"
+
+[[case]]
+id = "code/refused-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'area rule'\"}"
+
+[[case]]
+id = "code/refused-space-around"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": " area.rule ", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got ' area.rule '\"}"
+
+[[case]]
+id = "code/refused-trailing-newline"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule\n", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'area.rule\\\\n'\"}"
+
+[[case]]
+id = "code/refused-leading-newline"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "\narea.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got '\\\\narea.rule'\"}"
+
+[[case]]
+id = "code/refused-underscore"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "a_b.c", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'a_b.c'\"}"
+
+[[case]]
+id = "code/refused-slash"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area/rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'area/rule'\"}"
+
+[[case]]
+id = "code/refused-non-ascii"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "área.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'área.rule'\"}"
+
+[[case]]
+id = "code/refused-arabic-digit"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "a.١", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'a.١'\"}"
+
+[[case]]
+id = "code/refused-fullwidth"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "ａ.b", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'ａ.b'\"}"
+
+[[case]]
+id = "code/refused-none"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": null, "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got None\"}"
+
+[[case]]
+id = "code/refused-int"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": 5, "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 5\"}"
+
+[[case]]
+id = "code/refused-true"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": true, "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got True\"}"
+
+[[case]]
+id = "code/refused-list"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": ["a.b"], "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got ['a.b']\"}"
+
+[[case]]
+id = "code/refused-dict"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": {"a": "b"}, "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got {'a': 'b'}\"}"
+
+[[case]]
+id = "code/retired"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "hooks.package-mode", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code 'hooks.package-mode' is retired and must not be reused by a live check\"}"
+
+[[case]]
+id = "code/retired-near-miss"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "hooks.package-mode2", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "hooks.package-mode2", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "code/retired-case"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "Hooks.package-mode", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'Hooks.package-mode'\"}"
+
+# --- message: non-empty after a Unicode strip, one logical line ---
+
+[[case]]
+id = "message/valid-plain"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "what was seen", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "what was seen", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-quote"
+fn = "Finding"
+kwargs_json = "{\"severity\": \"ok\", \"code\": \"area.rule\", \"message\": \"it's \\\"there\\\"\", \"target\": \"\", \"fix\": \"Do it\"}"
+expected_json = "{\"severity\": \"ok\", \"code\": \"area.rule\", \"message\": \"it's \\\"there\\\"\", \"target\": \"\", \"fix\": \"Do it\"}"
+
+[[case]]
+id = "message/valid-inner-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a  b", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "a  b", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-nbsp-inside"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u00a0b", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "a\u00a0b", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-zwsp-only"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\u200b", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "\u200b", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-bom-only"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\ufeff", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "\ufeff", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-emoji"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "seen 😀", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "seen 😀", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-non-ascii"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "présent → vu", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "présent → vu", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-tab-inside"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\tb", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "a\tb", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-backslash-n-text"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\\nb", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "a\\nb", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-del"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u007fb", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "a\u007fb", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-nul"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u0000b", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "a\u0000b", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-brace"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "see {{head}} and {x}", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "see {{head}} and {x}", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/valid-dot-sentence-ok"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "One. Two sentences are fine here", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "One. Two sentences are fine here", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "message/refused-empty-empty"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got ''\"}"
+
+[[case]]
+id = "message/refused-empty-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": " ", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got ' '\"}"
+
+[[case]]
+id = "message/refused-empty-spaces"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "   ", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got '   '\"}"
+
+[[case]]
+id = "message/refused-empty-tab"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\t", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got '\\\\t'\"}"
+
+[[case]]
+id = "message/refused-empty-crlf-only"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\r\n", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got '\\\\r\\\\n'\"}"
+
+[[case]]
+id = "message/refused-empty-nbsp"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\u00a0", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got '\\\\xa0'\"}"
+
+[[case]]
+id = "message/refused-empty-ideographic"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\u3000", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got '\\\\u3000'\"}"
+
+[[case]]
+id = "message/refused-empty-nel"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\u0085", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got '\\\\x85'\"}"
+
+[[case]]
+id = "message/refused-empty-fs-only"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\u001c", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got '\\\\x1c'\"}"
+
+[[case]]
+id = "message/refused-empty-us"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\u001f", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got '\\\\x1f'\"}"
+
+[[case]]
+id = "message/refused-empty-ls-only"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\u2028", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got '\\\\u2028'\"}"
+
+[[case]]
+id = "message/refused-empty-mixed-spaces"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": " \t\u00a0\u3000 ", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got ' \\\\t\\\\xa0\\\\u3000 '\"}"
+
+[[case]]
+id = "message/refused-empty-none"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": null, "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "message must be non-empty, got None"}'
+
+[[case]]
+id = "message/refused-empty-int"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": 0, "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "message must be non-empty, got 0"}'
+
+[[case]]
+id = "message/refused-empty-true"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": true, "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "message must be non-empty, got True"}'
+
+[[case]]
+id = "message/refused-empty-list"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": ["a"], "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got ['a']\"}"
+
+[[case]]
+id = "message/refused-empty-dict"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": {}, "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "message must be non-empty, got {}"}'
+
+[[case]]
+id = "message/refused-empty-float"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": 2.5, "target": "", "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "message must be non-empty, got 2.5"}'
+
+[[case]]
+id = "message/refused-line-lf"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\nb", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\nb'\"}"
+
+[[case]]
+id = "message/refused-line-cr"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\rb", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\rb'\"}"
+
+[[case]]
+id = "message/refused-line-vt"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u000bb", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\x0bb'\"}"
+
+[[case]]
+id = "message/refused-line-ff"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\fb", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\x0cb'\"}"
+
+[[case]]
+id = "message/refused-line-fs"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u001cb", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\x1cb'\"}"
+
+[[case]]
+id = "message/refused-line-gs"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u001db", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\x1db'\"}"
+
+[[case]]
+id = "message/refused-line-rs"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u001eb", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\x1eb'\"}"
+
+[[case]]
+id = "message/refused-line-nel"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u0085b", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\x85b'\"}"
+
+[[case]]
+id = "message/refused-line-ls"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u2028b", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\u2028b'\"}"
+
+[[case]]
+id = "message/refused-line-ps"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\u2029b", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\u2029b'\"}"
+
+[[case]]
+id = "message/refused-line-trailing-lf"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\n", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\n'\"}"
+
+[[case]]
+id = "message/refused-line-leading-ls"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "\u2028a", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got '\\\\u2028a'\"}"
+
+[[case]]
+id = "message/refused-line-crlf"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "a\r\nb", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got 'a\\\\r\\\\nb'\"}"
+
+[[case]]
+id = "message/refused-line-after-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": " \n a", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be one line, got ' \\\\n a'\"}"
+
+[[case]]
+id = "message/refused-empty-before-line"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": " \n ", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got ' \\\\n '\"}"
+
+# --- target: any string on one line, empty allowed ---
+
+[[case]]
+id = "target/valid-empty"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "target/valid-path"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "meta/CONCEPT.md", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "meta/CONCEPT.md", "fix": "Do it"}'
+
+[[case]]
+id = "target/valid-spaces"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a b/c d.md", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a b/c d.md", "fix": "Do it"}'
+
+[[case]]
+id = "target/valid-whitespace"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "   ", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "   ", "fix": "Do it"}'
+
+[[case]]
+id = "target/valid-nbsp"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "\u00a0", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "\u00a0", "fix": "Do it"}'
+
+[[case]]
+id = "target/valid-non-ascii"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "déjà/vu.md", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "déjà/vu.md", "fix": "Do it"}'
+
+[[case]]
+id = "target/valid-tab"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\tb", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\tb", "fix": "Do it"}'
+
+[[case]]
+id = "target/valid-brace"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "{{message}}", "fix": "Do it"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "{{message}}", "fix": "Do it"}'
+
+[[case]]
+id = "target/refused-none"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": null, "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "target must be a string (possibly empty), got None"}'
+
+[[case]]
+id = "target/refused-int"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": 0, "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "target must be a string (possibly empty), got 0"}'
+
+[[case]]
+id = "target/refused-false"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": false, "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "target must be a string (possibly empty), got False"}'
+
+[[case]]
+id = "target/refused-list"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": [], "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "target must be a string (possibly empty), got []"}'
+
+[[case]]
+id = "target/refused-dict"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": {"a": 1}, "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be a string (possibly empty), got {'a': 1}\"}"
+
+[[case]]
+id = "target/refused-float"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": 0.5, "fix": "Do it"}'
+expected_json = '{"error": "ValueError", "message": "target must be a string (possibly empty), got 0.5"}'
+
+[[case]]
+id = "target/refused-line-lf"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\nb", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\nb'\"}"
+
+[[case]]
+id = "target/refused-line-cr"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\rb", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\rb'\"}"
+
+[[case]]
+id = "target/refused-line-vt"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\u000bb", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\x0bb'\"}"
+
+[[case]]
+id = "target/refused-line-ff"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\fb", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\x0cb'\"}"
+
+[[case]]
+id = "target/refused-line-fs"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\u001cb", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\x1cb'\"}"
+
+[[case]]
+id = "target/refused-line-gs"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\u001db", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\x1db'\"}"
+
+[[case]]
+id = "target/refused-line-rs"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\u001eb", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\x1eb'\"}"
+
+[[case]]
+id = "target/refused-line-nel"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\u0085b", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\x85b'\"}"
+
+[[case]]
+id = "target/refused-line-ls"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\u2028b", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\u2028b'\"}"
+
+[[case]]
+id = "target/refused-line-ps"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\u2029b", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\u2029b'\"}"
+
+[[case]]
+id = "target/refused-line-trailing-lf"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "a\n", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"target must be one line, got 'a\\\\n'\"}"
+
+# --- fix: required, one line, one sentence (a terminator followed by text is the second) ---
+
+[[case]]
+id = "fix/valid-plain"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run the thing"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run the thing"}'
+
+[[case]]
+id = "fix/valid-terminated"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run the thing."}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run the thing."}'
+
+[[case]]
+id = "fix/valid-terminated-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run the thing. "}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run the thing. "}'
+
+[[case]]
+id = "fix/valid-terminated-tab"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run the thing.\t"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run the thing.\t"}'
+
+[[case]]
+id = "fix/valid-path-dots"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Edit meta/CONCEPT.md to add the section"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Edit meta/CONCEPT.md to add the section"}'
+
+[[case]]
+id = "fix/valid-version"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Pin v1.2.3 in the manifest"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Pin v1.2.3 in the manifest"}'
+
+[[case]]
+id = "fix/valid-lowercase-after-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "see a.b for the rule"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "see a.b for the rule"}'
+
+[[case]]
+id = "fix/valid-question-lowercase"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "why?because"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "why?because"}'
+
+[[case]]
+id = "fix/valid-exclaim-end"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Stop!"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Stop!"}'
+
+[[case]]
+id = "fix/valid-ellipsis-end"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Wait..."}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Wait..."}'
+
+[[case]]
+id = "fix/valid-nbsp-after-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u00a0Then that"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u00a0Then that"}'
+
+[[case]]
+id = "fix/valid-nbsp-after-dot-lowercase"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u00a0then that"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u00a0then that"}'
+
+[[case]]
+id = "fix/valid-ideographic-after-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u3000then that"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u3000then that"}'
+
+[[case]]
+id = "fix/valid-us-after-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u001fthen that"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u001fthen that"}'
+
+[[case]]
+id = "fix/valid-zwsp-after-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u200bthen that"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\u200bthen that"}'
+
+[[case]]
+id = "fix/valid-non-ascii-upper-after-dot"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.Étape"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.Étape"}'
+
+[[case]]
+id = "fix/valid-quote"
+fn = "Finding"
+kwargs_json = "{\"severity\": \"ok\", \"code\": \"area.rule\", \"message\": \"m\", \"target\": \"\", \"fix\": \"Use 'x' or \\\"y\\\"\"}"
+expected_json = "{\"severity\": \"ok\", \"code\": \"area.rule\", \"message\": \"m\", \"target\": \"\", \"fix\": \"Use 'x' or \\\"y\\\"\"}"
+
+[[case]]
+id = "fix/valid-brace"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run {{cmd}} now"}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Run {{cmd}} now"}'
+
+[[case]]
+id = "fix/refused-empty-empty"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": ""}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix is required and must be non-empty, got ''\"}"
+
+[[case]]
+id = "fix/refused-empty-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": " "}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix is required and must be non-empty, got ' '\"}"
+
+[[case]]
+id = "fix/refused-empty-nbsp"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "\u00a0"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix is required and must be non-empty, got '\\\\xa0'\"}"
+
+[[case]]
+id = "fix/refused-empty-ideographic"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "\u3000"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix is required and must be non-empty, got '\\\\u3000'\"}"
+
+[[case]]
+id = "fix/refused-empty-us"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "\u001f"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix is required and must be non-empty, got '\\\\x1f'\"}"
+
+[[case]]
+id = "fix/refused-empty-none"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": null}'
+expected_json = '{"error": "ValueError", "message": "fix is required and must be non-empty, got None"}'
+
+[[case]]
+id = "fix/refused-empty-int"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": 7}'
+expected_json = '{"error": "ValueError", "message": "fix is required and must be non-empty, got 7"}'
+
+[[case]]
+id = "fix/refused-empty-false"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": false}'
+expected_json = '{"error": "ValueError", "message": "fix is required and must be non-empty, got False"}'
+
+[[case]]
+id = "fix/refused-empty-list"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": ["Do it"]}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix is required and must be non-empty, got ['Do it']\"}"
+
+[[case]]
+id = "fix/refused-empty-dict"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": {"fix": "x"}}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix is required and must be non-empty, got {'fix': 'x'}\"}"
+
+[[case]]
+id = "fix/refused-line-lf"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\nb"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\nb'\"}"
+
+[[case]]
+id = "fix/refused-line-cr"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\rb"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\rb'\"}"
+
+[[case]]
+id = "fix/refused-line-vt"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\u000bb"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\x0bb'\"}"
+
+[[case]]
+id = "fix/refused-line-ff"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\fb"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\x0cb'\"}"
+
+[[case]]
+id = "fix/refused-line-fs"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\u001cb"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\x1cb'\"}"
+
+[[case]]
+id = "fix/refused-line-gs"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\u001db"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\x1db'\"}"
+
+[[case]]
+id = "fix/refused-line-rs"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\u001eb"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\x1eb'\"}"
+
+[[case]]
+id = "fix/refused-line-nel"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\u0085b"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\x85b'\"}"
+
+[[case]]
+id = "fix/refused-line-ls"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\u2028b"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\u2028b'\"}"
+
+[[case]]
+id = "fix/refused-line-ps"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a\u2029b"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a\\\\u2029b'\"}"
+
+[[case]]
+id = "fix/refused-line-trailing-lf"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it\n"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'Do it\\\\n'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this. Then that"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this. Then that'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-space-lowercase"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this. then that"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this. then that'\"}"
+
+[[case]]
+id = "fix/refused-sentence-abbreviation"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Use e.g. foo"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Use e.g. foo'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-tab"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\tThen that"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this.\\\\tThen that'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-spaces"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.   Then that"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this.   Then that'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-compact-upper"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.Then that"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this.Then that'\"}"
+
+[[case]]
+id = "fix/refused-sentence-exclaim-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Stop! Then go"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Stop! Then go'\"}"
+
+[[case]]
+id = "fix/refused-sentence-exclaim-compact"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Stop!Go"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Stop!Go'\"}"
+
+[[case]]
+id = "fix/refused-sentence-question-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Why? Because"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Why? Because'\"}"
+
+[[case]]
+id = "fix/refused-sentence-question-compact"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Why?Because"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Why?Because'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-nbsp-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this. \u00a0"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this. \\\\xa0'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-space-nbsp"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this. \u00a0x"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this. \\\\xa0x'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-nbsp-after-space"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this. \u00a0Then"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this. \\\\xa0Then'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-space-ideographic"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this. \u3000"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this. \\\\u3000'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-space-us"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this. \u001fthen"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Do this. \\\\x1fthen'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-two-sentences-end"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "One. Two."}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'One. Two.'\"}"
+
+[[case]]
+id = "fix/refused-sentence-period-mid-word-upper"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a.B"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'a.B'\"}"
+
+[[case]]
+id = "fix/refused-sentence-ellipsis-upper"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Wait...Go"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Wait...Go'\"}"
+
+[[case]]
+id = "fix/refused-sentence-first-of-many"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Fine path a/b.md. Second thought"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one sentence, got 'Fine path a/b.md. Second thought'\"}"
+
+[[case]]
+id = "fix/refused-empty-before-line"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": " \n "}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix is required and must be non-empty, got ' \\\\n '\"}"
+
+[[case]]
+id = "fix/refused-line-before-sentence"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do this.\nThen that"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'Do this.\\\\nThen that'\"}"
+
+# --- order: severity, code, message, target, fix -- the first broken one speaks ---
+
+[[case]]
+id = "order/severity-before-code"
+fn = "Finding"
+kwargs_json = '{"severity": "x", "code": "bad", "message": "m", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'x'\"}"
+
+[[case]]
+id = "order/code-before-message"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "bad", "message": "", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code must be a dotted slug like 'area.rule', got 'bad'\"}"
+
+[[case]]
+id = "order/retired-before-message"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "hooks.package-mode", "message": "", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code 'hooks.package-mode' is retired and must not be reused by a live check\"}"
+
+[[case]]
+id = "order/message-before-target"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "", "target": 3, "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got ''\"}"
+
+[[case]]
+id = "order/target-before-fix"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": 3, "fix": ""}'
+expected_json = '{"error": "ValueError", "message": "target must be a string (possibly empty), got 3"}'
+
+[[case]]
+id = "order/all-broken"
+fn = "Finding"
+kwargs_json = '{"severity": "x", "code": "bad", "message": "", "target": 3, "fix": ""}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of ok | warn | error, got 'x'\"}"
+
+[[case]]
+id = "order/message-empty-before-line"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": " \n", "target": "", "fix": "Do it"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"message must be non-empty, got ' \\\\n'\"}"
+
+[[case]]
+id = "order/fix-empty-before-sentence"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "  "}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix is required and must be non-empty, got '  '\"}"
+
+[[case]]
+id = "order/fix-line-before-sentence"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "a.\nB"}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"fix must be one line, got 'a.\\\\nB'\"}"
+
+# --- data: a parsed findings.json handed in is what the checks use, not the shipped file ---
+
+[[case]]
+id = "data/severity-custom-accepted"
+fn = "Finding"
+kwargs_json = '{"severity": "x", "code": "area.rule", "message": "m", "target": "", "fix": "Do it", "data": {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}}'
+expected_json = '{"severity": "x", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "data/severity-custom-second"
+fn = "Finding"
+kwargs_json = '{"severity": "y", "code": "area.rule", "message": "m", "target": "", "fix": "Do it", "data": {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}}'
+expected_json = '{"severity": "y", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "data/severity-shipped-refused"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it", "data": {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of x | y, got 'ok'\"}"
+
+[[case]]
+id = "data/severity-single"
+fn = "Finding"
+kwargs_json = '{"severity": "no", "code": "area.rule", "message": "m", "target": "", "fix": "Do it", "data": {"severities": ["only"], "retired_codes": []}}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"severity must be one of only, got 'no'\"}"
+
+[[case]]
+id = "data/retired-custom-refused"
+fn = "Finding"
+kwargs_json = '{"severity": "x", "code": "gone.rule", "message": "m", "target": "", "fix": "Do it", "data": {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}}'
+expected_json = "{\"error\": \"ValueError\", \"message\": \"code 'gone.rule' is retired and must not be reused by a live check\"}"
+
+[[case]]
+id = "data/retired-shipped-accepted"
+fn = "Finding"
+kwargs_json = '{"severity": "x", "code": "hooks.package-mode", "message": "m", "target": "", "fix": "Do it", "data": {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}}'
+expected_json = '{"severity": "x", "code": "hooks.package-mode", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "data/retired-none"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "gone.rule", "message": "m", "target": "", "fix": "Do it", "data": {"severities": ["ok"], "retired_codes": []}}'
+expected_json = '{"severity": "ok", "code": "gone.rule", "message": "m", "target": "", "fix": "Do it"}'
+
+[[case]]
+id = "data/explicit-null-reads-file"
+fn = "Finding"
+kwargs_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it", "data": null}'
+expected_json = '{"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}'
+
+# --- line-safe: each of the ten separators escaped, every other character kept ---
+
+[[case]]
+id = "line-safe/lf"
+fn = "line_safe"
+args_json = '["a\nb"]'
+expected_json = '"a\\nb"'
+
+[[case]]
+id = "line-safe/cr"
+fn = "line_safe"
+args_json = '["a\rb"]'
+expected_json = '"a\\rb"'
+
+[[case]]
+id = "line-safe/vt"
+fn = "line_safe"
+args_json = '["a\u000bb"]'
+expected_json = '"a\\vb"'
+
+[[case]]
+id = "line-safe/ff"
+fn = "line_safe"
+args_json = '["a\fb"]'
+expected_json = '"a\\fb"'
+
+[[case]]
+id = "line-safe/fs"
+fn = "line_safe"
+args_json = '["a\u001cb"]'
+expected_json = '"a\\u001cb"'
+
+[[case]]
+id = "line-safe/gs"
+fn = "line_safe"
+args_json = '["a\u001db"]'
+expected_json = '"a\\u001db"'
+
+[[case]]
+id = "line-safe/rs"
+fn = "line_safe"
+args_json = '["a\u001eb"]'
+expected_json = '"a\\u001eb"'
+
+[[case]]
+id = "line-safe/nel"
+fn = "line_safe"
+args_json = '["a\u0085b"]'
+expected_json = '"a\\u0085b"'
+
+[[case]]
+id = "line-safe/ls"
+fn = "line_safe"
+args_json = '["a\u2028b"]'
+expected_json = '"a\\u2028b"'
+
+[[case]]
+id = "line-safe/ps"
+fn = "line_safe"
+args_json = '["a\u2029b"]'
+expected_json = '"a\\u2029b"'
+
+[[case]]
+id = "line-safe/all-ten"
+fn = "line_safe"
+args_json = '["\n\r\u000b\f\u001c\u001d\u001e\u0085\u2028\u2029"]'
+expected_json = '"\\n\\r\\v\\f\\u001c\\u001d\\u001e\\u0085\\u2028\\u2029"'
+
+[[case]]
+id = "line-safe/crlf"
+fn = "line_safe"
+args_json = '["a\r\nb"]'
+expected_json = '"a\\r\\nb"'
+
+[[case]]
+id = "line-safe/doubled"
+fn = "line_safe"
+args_json = '["a\n\nb"]'
+expected_json = '"a\\n\\nb"'
+
+[[case]]
+id = "line-safe/edges"
+fn = "line_safe"
+args_json = '["\na\n"]'
+expected_json = '"\\na\\n"'
+
+[[case]]
+id = "line-safe/none"
+fn = "line_safe"
+args_json = '["plain text"]'
+expected_json = '"plain text"'
+
+[[case]]
+id = "line-safe/empty"
+fn = "line_safe"
+args_json = '[""]'
+expected_json = '""'
+
+[[case]]
+id = "line-safe/backslash-kept"
+fn = "line_safe"
+args_json = '["a\\nb"]'
+expected_json = '"a\\nb"'
+
+[[case]]
+id = "line-safe/backslash-then-lf"
+fn = "line_safe"
+args_json = '["a\\\nb"]'
+expected_json = '"a\\\\nb"'
+
+[[case]]
+id = "line-safe/other-controls-kept"
+fn = "line_safe"
+args_json = '["a\u0000\u0001\b\t\u000e\u001b\u001f\u007fb"]'
+expected_json = '"a\u0000\u0001\b\t\u000e\u001b\u001f\u007fb"'
+
+[[case]]
+id = "line-safe/other-unicode-kept"
+fn = "line_safe"
+args_json = '["é\u00a0\u3000\u200b\ufeff→😀"]'
+expected_json = '"é\u00a0\u3000\u200b\ufeff→😀"'
+
+[[case]]
+id = "line-safe/near-misses-kept"
+fn = "line_safe"
+args_json = '["\u0084\u0086‧\u202a\u001b\u001f"]'
+expected_json = '"\u0084\u0086‧\u202a\u001b\u001f"'
+
+# --- render: SEVERITY code target: message -> fix; the target slot collapses when empty ---
+
+[[case]]
+id = "render/with-target"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "seen", "target": "meta/x.md", "fix": "Fix it"}}]'
+expected_json = '"OK area.rule meta/x.md: seen → Fix it"'
+
+[[case]]
+id = "render/no-target"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "warn", "code": "a.b", "message": "seen", "target": "", "fix": "Fix it"}}]'
+expected_json = '"WARN a.b: seen → Fix it"'
+
+[[case]]
+id = "render/error"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "error", "code": "caps.always-loaded", "message": "too big", "target": "AGENTS.md", "fix": "Trim it"}}]'
+expected_json = '"ERROR caps.always-loaded AGENTS.md: too big → Trim it"'
+
+[[case]]
+id = "render/target-with-spaces"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "a b/c d.md", "fix": "Do it"}}]'
+expected_json = '"OK area.rule a b/c d.md: m → Do it"'
+
+[[case]]
+id = "render/target-whitespace"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "   ", "fix": "Do it"}}]'
+expected_json = '"OK area.rule    : m → Do it"'
+
+[[case]]
+id = "render/unicode"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "présent → vu 😀", "target": "déjà.md", "fix": "Corrige-le"}}]'
+expected_json = '"OK area.rule déjà.md: présent → vu 😀 → Corrige-le"'
+
+[[case]]
+id = "render/placeholder-in-message"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "see {{head}} and {{fix}}", "target": "", "fix": "Do it"}}]'
+expected_json = '"OK area.rule: see {{head}} and {{fix}} → Do it"'
+
+[[case]]
+id = "render/placeholder-in-target"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "{{message}}", "fix": "Do it"}}]'
+expected_json = '"OK area.rule {{message}}: m → Do it"'
+
+[[case]]
+id = "render/placeholder-in-fix"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Use {{severity}} here"}}]'
+expected_json = '"OK area.rule: m → Use {{severity}} here"'
+
+[[case]]
+id = "render/dollar-patterns"
+fn = "render"
+args_json = "[{\"$new\": \"Finding\", \"fields\": {\"severity\": \"ok\", \"code\": \"area.rule\", \"message\": \"cost $& and $1 and $$ and $`\", \"target\": \"t$'\", \"fix\": \"Pay $0\"}}]"
+expected_json = "\"OK area.rule t$': cost $& and $1 and $$ and $` → Pay $0\""
+
+[[case]]
+id = "render/empty-brace"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "{{}} {x} {{ a }} {{A}}", "target": "", "fix": "Do it"}}]'
+expected_json = '"OK area.rule: {{}} {x} {{ a }} {{A}} → Do it"'
+
+[[case]]
+id = "render/skeleton-from-data-target"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "x", "code": "area.rule", "message": "m", "target": "t", "fix": "Do it", "data": {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}}}, {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}]'
+expected_json = '"m <- area.rule/X@t :: Do it"'
+
+[[case]]
+id = "render/skeleton-from-data-no-target"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "x", "code": "area.rule", "message": "m", "target": "", "fix": "Do it", "data": {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}}}, {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}]'
+expected_json = '"m <- area.rule/X :: Do it"'
+
+[[case]]
+id = "render/skeleton-severity-upper"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "y", "code": "area.rule", "message": "m", "target": "", "fix": "Do it", "data": {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}}}, {"severities": ["x", "y"], "retired_codes": ["gone.rule"], "render": {"head": "{{code}}/{{severity}}", "head_with_target": "{{head}}@{{target}}", "line": "{{message}} <- {{head}} :: {{fix}}"}}]'
+expected_json = '"m <- area.rule/Y :: Do it"'
+
+[[case]]
+id = "render/skeleton-repeated-placeholder"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"render": {"head": "{{severity}}{{severity}}", "head_with_target": "{{head}}", "line": "{{head}}{{head}}:{{message}}"}}]'
+expected_json = '"OKOKOKOK:m"'
+
+[[case]]
+id = "render/skeleton-unfilled"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"render": {"head": "{{severity}} {{code}}", "head_with_target": "{{head}} {{target}}", "line": "{{head}}: {{nope}}"}}]'
+expected_json = '{"error": "DataFileError", "message": "placeholder {{nope}} in a data template has no value"}'
+
+[[case]]
+id = "render/skeleton-unfilled-in-head"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "t", "fix": "Do it"}}, {"render": {"head": "{{severity}} {{missing}}", "head_with_target": "{{head}}", "line": "{{head}}"}}]'
+expected_json = '{"error": "DataFileError", "message": "placeholder {{missing}} in a data template has no value"}'
+
+[[case]]
+id = "render/skeleton-text-untouched"
+fn = "render"
+args_json = '[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"render": {"head": "{{severity}} {{code}}", "head_with_target": "{{head}} {{target}}", "line": "[{x}] {{head}}: {{message}} -> {{fix}} (100%)"}}]'
+expected_json = '"[{x}] OK area.rule: m -> Do it (100%)"'
+
+# --- exit: errors fail; warnings fail only under strict ---
+
+[[case]]
+id = "exit/none"
+fn = "exit_code"
+args_json = '[[]]'
+expected_json = '0'
+
+[[case]]
+id = "exit/none-strict"
+fn = "exit_code"
+args_json = '[[]]'
+kwargs_json = '{"strict": true}'
+expected_json = '0'
+
+[[case]]
+id = "exit/none-strict-false"
+fn = "exit_code"
+args_json = '[[]]'
+kwargs_json = '{"strict": false}'
+expected_json = '0'
+
+[[case]]
+id = "exit/ok"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+expected_json = '0'
+
+[[case]]
+id = "exit/ok-strict"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": true}'
+expected_json = '0'
+
+[[case]]
+id = "exit/ok-strict-false"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": false}'
+expected_json = '0'
+
+[[case]]
+id = "exit/warn"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+expected_json = '0'
+
+[[case]]
+id = "exit/warn-strict"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": true}'
+expected_json = '1'
+
+[[case]]
+id = "exit/warn-strict-false"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": false}'
+expected_json = '0'
+
+[[case]]
+id = "exit/error"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+expected_json = '1'
+
+[[case]]
+id = "exit/error-strict"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": true}'
+expected_json = '1'
+
+[[case]]
+id = "exit/error-strict-false"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": false}'
+expected_json = '1'
+
+[[case]]
+id = "exit/ok-warn"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+expected_json = '0'
+
+[[case]]
+id = "exit/ok-warn-strict"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": true}'
+expected_json = '1'
+
+[[case]]
+id = "exit/ok-warn-strict-false"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": false}'
+expected_json = '0'
+
+[[case]]
+id = "exit/warn-error"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+expected_json = '1'
+
+[[case]]
+id = "exit/warn-error-strict"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": true}'
+expected_json = '1'
+
+[[case]]
+id = "exit/warn-error-strict-false"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": false}'
+expected_json = '1'
+
+[[case]]
+id = "exit/error-first"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+expected_json = '1'
+
+[[case]]
+id = "exit/error-first-strict"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": true}'
+expected_json = '1'
+
+[[case]]
+id = "exit/error-first-strict-false"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": false}'
+expected_json = '1'
+
+[[case]]
+id = "exit/all-three"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+expected_json = '1'
+
+[[case]]
+id = "exit/all-three-strict"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": true}'
+expected_json = '1'
+
+[[case]]
+id = "exit/all-three-strict-false"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "error", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": false}'
+expected_json = '1'
+
+[[case]]
+id = "exit/many-ok"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+expected_json = '0'
+
+[[case]]
+id = "exit/many-ok-strict"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": true}'
+expected_json = '0'
+
+[[case]]
+id = "exit/many-ok-strict-false"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "ok", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": false}'
+expected_json = '0'
+
+[[case]]
+id = "exit/many-warn"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+expected_json = '0'
+
+[[case]]
+id = "exit/many-warn-strict"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": true}'
+expected_json = '1'
+
+[[case]]
+id = "exit/many-warn-strict-false"
+fn = "exit_code"
+args_json = '[[{"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}, {"$new": "Finding", "fields": {"severity": "warn", "code": "area.rule", "message": "m", "target": "", "fix": "Do it"}}]]'
+kwargs_json = '{"strict": false}'
+expected_json = '0'

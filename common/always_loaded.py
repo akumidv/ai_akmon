@@ -40,8 +40,10 @@ def block_heading() -> str:
 
 # An ``@``-import as the harness reads it: a token starting a line or following whitespace.
 # Code spans, fenced blocks and HTML comments are stripped first — the harness does not import
-# from them (a commented example import is documentation, not context).
-_IMPORT_RE = re.compile(r"(?:^|(?<=\s))@([^\s`]+)", re.MULTILINE)
+# from them (a commented example import is documentation, not context). ASCII whitespace only
+# (``re.ASCII``, the JavaScript twin's explicit class): a no-break space or U+2028 beside an
+# ``@``-token is text, not a boundary.
+_IMPORT_RE = re.compile(r"(?:^|(?<=\s))@([^\s`]+)", re.MULTILINE | re.ASCII)
 _FENCED_RE = re.compile(r"^(```|~~~).*?^\1[^\n]*$", re.MULTILINE | re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)

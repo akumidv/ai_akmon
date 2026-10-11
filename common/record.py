@@ -24,6 +24,7 @@ from pathlib import Path
 from common.project_root import aitna_root
 
 _PACKAGE_MODE = "package"
+_ECOSYSTEM_DEFAULT = "python"
 
 
 def _strip_inline_comment(value: str) -> str:
@@ -159,3 +160,16 @@ def records_package_mode(project_root: Path) -> bool:
     ``read_akmon_toml_strict`` instead (C75).
     """
     return recorded_mount(project_root) == _PACKAGE_MODE
+
+
+def recorded_ecosystem(project_root: Path) -> str:
+    """The ecosystem the record names (``"node"`` for a Node package attach), ``"python"`` by default.
+
+    Never ``None``: an absent key, an empty or non-string value, an absent or unreadable record
+    all read as ``"python"``, so no record written before the key existed changes meaning (ADR 0020
+    D05). The Python ``init`` and ``sync`` do not write the key; the JavaScript ones write
+    ``ecosystem = "node"``. The value is returned as written — whether it names an ecosystem a
+    caller serves is the caller's question.
+    """
+    value = read_akmon_toml(aitna_root(project_root) / ".akmon.toml").get("ecosystem")
+    return value if isinstance(value, str) and value else _ECOSYSTEM_DEFAULT

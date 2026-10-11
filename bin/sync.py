@@ -40,7 +40,7 @@ from common.project_root import (
     resolve_project_root,
 )
 from common.project_root import akmon_mount as akmon_root
-from common.record import _strip_inline_comment, read_akmon_toml, recorded_mount  # noqa: F401
+from common.record import _strip_inline_comment, read_akmon_toml, recorded_ecosystem, recorded_mount  # noqa: F401
 
 # Two shared owners, both for the same reason a hook must reach them. The integration record
 # (C69, ADR-0009/D02): the hooks needed it too, and a sixth narrow copy is what that decision refused.
@@ -1025,6 +1025,12 @@ def main(argv: list[str] | None = None) -> int:
     if root_notice:
         print(root_notice, file=sys.stderr)
     data = read_sync_data()
+    # A record another implementation wrote (C105): this file would spell the wiring for the
+    # Python launcher, and a wrong-spelling write is worse than a refusal.
+    ecosystem = recorded_ecosystem(root)
+    if ecosystem != "python":
+        print(data["python_refuses_ecosystem"].replace("{{value}}", line_safe(ecosystem)), file=sys.stderr)
+        return 2
     files, errors = _planned_files(root, data)
     write = not args.check and not args.dry_run
     result = _apply(files, write=write, root=root, data=data)

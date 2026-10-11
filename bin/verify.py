@@ -47,7 +47,7 @@ from common.codex_hooks import (
 )
 from common.findings import Finding, exit_code, line_safe, print_findings, read_findings_data
 from common.project_root import resolve_project_root
-from common.record import RecordError, read_akmon_toml_strict
+from common.record import RecordError, read_akmon_toml_strict, recorded_ecosystem
 from common.runtime import codex_hooks_list_command
 from common.versions import split_version
 
@@ -1476,6 +1476,13 @@ def main(argv: list[str] | None = None) -> int:
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
         print(root_notice, file=sys.stderr)
+    # A record another implementation wrote (C105): this file's checks read the Python carrier
+    # (the launcher, the pyproject pin), so a report on it would be wrong rather than partial.
+    ecosystem = recorded_ecosystem(root)
+    if ecosystem != "python":
+        text = read_verify_data()["python_refuses_ecosystem"]
+        print(text.replace("{{value}}", line_safe(ecosystem)), file=sys.stderr)
+        return 2
     verify = Verifier(root)
     verify.run()
     print_findings(verify.findings, quiet=args.quiet)

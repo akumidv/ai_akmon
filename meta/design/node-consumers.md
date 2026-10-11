@@ -1,7 +1,7 @@
 # Design: Node.js consumers — a JavaScript implementation on npm (A34)
 
 > **Status: decided in [ADR 0020](../decisions/0020-node-consumers-js-implementation.md)**
-> (D01–D07). This document keeps the analysis behind it and the implementation plan (§6). Closes
+> (D01–D08). This document keeps the analysis behind it and the implementation plan (§6). Closes
 > the "Non-Python consumers" open point of the [packaging design](packaging/README.md#open-points)
 > (`meta/design/packaging/README.md:324`).
 
@@ -290,6 +290,22 @@ C104 runs in two passes (owner decision 2026-10-04), each ending at a master-con
   *marker* in `bin/sync.json` (recognised by the Python `sync`, pinned by tests) and the spelling waits for the JS `sync`;
   until then a node project of the hook corpus is synced by the Python reference. JS p50 145–152 ms against Python 178 ms
   ([M124](../MEASUREMENTS.md)). Evidence: [C104 evidence](../reviews/c104-evidence-20261004.md).
+
+C105 runs in three passes (plan 2026-10-11, each ending at a master-control review), cut so that each ends with a command
+the corpus can run on node:
+
+- **Pass 1 — the writer.** `ecosystem` in the integration record (absent means `python`; only the JS `init` writes `node`);
+  `common/findings`; `bin/sync` with the Node wiring spelling (data in `bin/sync.json`), the tree spelled
+  `node_modules/akmon` unresolved, the `package.json` pin reader; `bin/check`; `js/akmon/cli.mjs` as the dispatcher for
+  `sync`, `check`, `path`, `hook`, `version` (the other commands say they are not ported); the CLI layer of the corpus on node
+  (`runner.py --impl node --area cli`; a scenario whose command's Python file is still unpaired is pending). The node fixture
+  is warmed up by the JS `sync`, replacing the Python-synced warmup of C104.
+- **Pass 2 — the reader.** `common/always_loaded`, `common/codex_hooks`, `bin/verify` and the Node findings (Yarn PnP, a pin in
+  the wrong class or not exact, `node_modules/akmon` missing), the per-ecosystem runtime declaration
+  (`common/runtime.json`, `meta/checks/runtime.py` joined to both implementations' wiring).
+- **Pass 3 — attach.** `init` for `package`/`node` (writes `ecosystem = "node"`, the AGENTS.md block, the Node CI template
+  without Python, the `.gitignore` lines), `_tree`, the refusal of the mounted modes with the pointer to the Python
+  implementation; `update` stays C107's.
 
 `routing.py` belongs to C104 and not to C108 because `gate-audit`, `delegation-log` and
 `model-routing` import it: measured on 2026-10-04, 87 of its 91 definitions and 1317 of its 1688

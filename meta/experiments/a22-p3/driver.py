@@ -13,7 +13,6 @@ import argparse
 import hashlib
 import json
 import re
-import secrets
 import shutil
 import subprocess
 import tempfile
@@ -231,6 +230,16 @@ def validate_attempt_class(attempt_class: str | None, origin_attempt_id: str | N
         raise ValueError("only a defect subject attempt may name an origin attempt ID")
 
 
+def registered_subject_attempt_id(attempt: dict[str, Any]) -> str:
+    """Return the ledger ID already recorded on an attempt; never retrofit legacy slots."""
+    subject_attempt_id = attempt.get("subject_attempt_id")
+    if not isinstance(subject_attempt_id, str) or not re.fullmatch(r"[0-9a-f]{32}", subject_attempt_id):
+        raise ValueError(
+            "legacy partial preflight recovery is blocked: attempt has no registered V2 subject ID"
+        )
+    return subject_attempt_id
+
+
 def _turn_usage(info: Any) -> dict[str, int] | None:
     usage = info.get("last_token_usage") if isinstance(info, dict) else None
     if not isinstance(usage, dict):
@@ -392,10 +401,10 @@ def run_codex(command: list[str], cwd: Path, run_id: str, turn: int,  # noqa: C9
     return events, stdout.decode("utf-8")
 
 
-def _persisted_usage_evidence(args: argparse.Namespace, events: list[dict[str, Any]], *,
+def _persisted_usage_evidence(args: argparse.Namespace, events: list[dict[str, Any]], *,  # noqa: PLR0913
                               turn_id: str, turn_index: int, expected_turns: int,
                               input_caps: tuple[int, ...], call_id: str,
-                              arm_text: str) -> tuple[
+                              arm_text: str, subject_attempt_id: str) -> tuple[
                                   dict[str, int], dict[str, str]]:
     session_id = thread_id(events)
     rollout_path, rollout_digest, per_turn = verify_rollout(
@@ -409,18 +418,20 @@ def _persisted_usage_evidence(args: argparse.Namespace, events: list[dict[str, A
     request_id = f"{session_id}:{turn_id}"
     write_json(usage_artifact_path, {
         "request_id": request_id, "session_id": session_id, "model_id": args.model,
-        "turn_id": turn_id, "call_id": call_id, "usage": usage,
+        "turn_id": turn_id, "call_id": call_id, "subject_attempt_id": subject_attempt_id,
+        "usage": usage,
         "rollout_path": str(rollout_path), "rollout_sha256": rollout_digest,
     })
     artifact = {
         "artifact_path": usage_artifact_path.name,
         "artifact_sha256": sha(usage_artifact_path.read_bytes()),
         "request_id": request_id, "session_id": session_id, "model_id": args.model,
+        "call_id": call_id, "turn_id": turn_id, "subject_attempt_id": subject_attempt_id,
     }
     return usage, artifact
 
 
-def run_accounted_codex(args: argparse.Namespace, command: list[str], *, subject_attempt_id: str,
+def run_accounted_codex(args: argparse.Namespace, command: list[str], *, subject_attempt_id: str,  # noqa: PLR0913
                         turn_id: str, turn_index: int, expected_turns: int,
                         input_caps: tuple[int, ...], turn: int,
                         arm_text: str,
@@ -442,7 +453,7 @@ def run_accounted_codex(args: argparse.Namespace, command: list[str], *, subject
             usage, artifact = _persisted_usage_evidence(
                 args, events, turn_id=turn_id, turn_index=turn_index,
                 expected_turns=expected_turns, input_caps=input_caps, call_id=call_id,
-                arm_text=arm_text,
+                arm_text=arm_text, subject_attempt_id=subject_attempt_id,
             )
         except (OSError, UnicodeDecodeError, ValueError):
             usage, artifact = None, None
@@ -456,7 +467,7 @@ def run_accounted_codex(args: argparse.Namespace, command: list[str], *, subject
         usage, artifact = _persisted_usage_evidence(
             args, events, turn_id=turn_id, turn_index=turn_index,
             expected_turns=expected_turns, input_caps=input_caps, call_id=call_id,
-            arm_text=arm_text,
+            arm_text=arm_text, subject_attempt_id=subject_attempt_id,
         )
     except (OSError, UnicodeDecodeError, ValueError):
         usage_ledger.complete_subject_call(
@@ -525,7 +536,7 @@ def partial_retry_number(run_id: str, runs: Path = RUNS) -> int:
         number += 1
 
 
-def execute(args: argparse.Namespace) -> Path:
+def execute(args: argparse.Namespace) -> Path:  # noqa: PLR0915
     if not args.execute:
         raise ValueError("refusing model call without --execute")
     validate_attempt_class(args.attempt_class, args.origin_attempt_id)
@@ -535,6 +546,7 @@ def execute(args: argparse.Namespace) -> Path:
         raise ValueError("scratch must be an existing directory outside the repository")
     if not args.rollout_root.is_dir():
         raise ValueError("rollout root must exist before dispatch")
+    usage_ledger.require_dispatch_authorization(paths=LEDGER_PATHS, phase="qualification")
     if shutil.which(args.codex) is None:
         raise ValueError(f"Codex executable is unavailable: {args.codex}")
     version_result = subprocess.run([args.codex, "--version"], capture_output=True, text=True,
@@ -626,11 +638,6 @@ def resume_partial_preflight(args: argparse.Namespace) -> Path:  # noqa: C901, P
         raise ValueError("scratch must be an existing directory outside the repository")
     if not args.rollout_root.is_dir():
         raise ValueError("rollout root must exist before resume")
-    if shutil.which(args.codex) is None:
-        raise ValueError(f"Codex executable is unavailable: {args.codex}")
-    version = subprocess.run([args.codex, "--version"], capture_output=True, text=True, check=False)
-    if version.returncode or "codex-cli 0.156.1" not in version.stdout + version.stderr:
-        raise ValueError("Codex CLI does not match the frozen 0.156.1 pin")
     input_cap("turn 1 declared input tokens", args.turn1_input_tokens, args.turn_cap)
     input_cap("turn 2 declared input tokens", args.turn2_input_tokens, args.turn_cap)
     cell = load_cell(args.map, args.run_id)
@@ -645,13 +652,19 @@ def resume_partial_preflight(args: argparse.Namespace) -> Path:  # noqa: C901, P
     attempt = read_json(attempt_path)
     if any(attempt.get(key) != cell[key] for key in ("case", "arm", "tier", "repeat")):
         raise ValueError("attempt marker does not match the supplied sealed preflight cell")
-    subject_attempt_id = attempt.get("subject_attempt_id")
-    if not isinstance(subject_attempt_id, str) or not re.fullmatch(r"[0-9a-f]{32}", subject_attempt_id):
-        subject_attempt_id = usage_ledger.register_subject_attempt(
-            None, "technical", paths=LEDGER_PATHS,
-        )
-        attempt.update({"subject_attempt_id": subject_attempt_id, "attempt_class": "technical"})
-        write_json(attempt_path, attempt)
+    subject_attempt_id = registered_subject_attempt_id(attempt)
+    if attempt.get("attempt_class") != args.attempt_class or \
+            attempt.get("origin_attempt_id") != args.origin_attempt_id:
+        raise ValueError("attempt marker class/origin differs from the requested resume")
+    usage_ledger.validate_registered_subject_attempt(
+        subject_attempt_id, args.attempt_class, args.origin_attempt_id, paths=LEDGER_PATHS,
+    )
+    usage_ledger.require_dispatch_authorization(paths=LEDGER_PATHS, phase="qualification")
+    if shutil.which(args.codex) is None:
+        raise ValueError(f"Codex executable is unavailable: {args.codex}")
+    version = subprocess.run([args.codex, "--version"], capture_output=True, text=True, check=False)
+    if version.returncode or "codex-cli 0.156.1" not in version.stdout + version.stderr:
+        raise ValueError("Codex CLI does not match the frozen 0.156.1 pin")
     if attempt.get("model") != args.model or attempt.get("effort") != args.effort:
         raise ValueError("attempt marker model/effort differs from the requested resume")
     case_path = HERE / "cases" / f"{cell['case']}.json"

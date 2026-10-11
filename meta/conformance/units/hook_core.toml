@@ -1478,6 +1478,74 @@ cwd = "."
 env = { "GIT_DIR" = "{{dir}}/no-such-git-dir" }
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}detached HEAD{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
 
+# --- guard: git, whole words (a name is not a command) ---
+
+# `git` is a command word only when no letter, digit, `_`, `.` or `-` touches it; a subcommand must not
+# continue a name from the left (`pre-commit`) but may take a hyphen after it (`commit-tree`).
+
+[[case]]
+id = "git/name-hook-echo"
+fn = "git_commit_guard_result"
+args_json = '["echo git-commit-guard", "main"]'
+kwargs_json = '{"permission_mode": "default"}'
+expected_json = 'null'
+
+[[case]]
+id = "git/name-hook-script"
+fn = "git_commit_guard_result"
+args_json = '["python3 hooks/git-commit-guard.py --x", "main"]'
+kwargs_json = '{"permission_mode": "default"}'
+expected_json = 'null'
+
+[[case]]
+id = "git/name-dot-git-dir"
+fn = "git_commit_guard_result"
+args_json = '["cat .git/hooks/pre-push", "main"]'
+kwargs_json = '{"permission_mode": "default"}'
+expected_json = 'null'
+
+[[case]]
+id = "git/name-pre-commit-file"
+fn = "git_commit_guard_result"
+args_json = '["git add pre-commit-config.yaml", "main"]'
+kwargs_json = '{"permission_mode": "default"}'
+expected_json = 'null'
+
+[[case]]
+id = "git/name-underscore-git"
+fn = "git_commit_guard_result"
+args_json = '["my_git push", "main"]'
+kwargs_json = '{"permission_mode": "default"}'
+expected_json = 'null'
+
+[[case]]
+id = "git/name-git-dot"
+fn = "git_commit_guard_result"
+args_json = '["git.exe push", "main"]'
+kwargs_json = '{"permission_mode": "default"}'
+expected_json = 'null'
+
+[[case]]
+id = "git/name-dotted-subcommand"
+fn = "git_commit_guard_result"
+args_json = '["git log commit.md", "main"]'
+kwargs_json = '{"permission_mode": "default"}'
+expected_json = 'null'
+
+[[case]]
+id = "git/word-commit-tree"
+fn = "git_commit_guard_result"
+args_json = '["git commit-tree HEAD", "main"]'
+kwargs_json = '{"permission_mode": "default"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/word-absolute-path"
+fn = "git_commit_guard_result"
+args_json = '["/usr/bin/git commit -m x", "main"]'
+kwargs_json = '{"permission_mode": "default"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+
 # --- agents: agent_names(directory) -- charters are subdirectories with a README.md ------------------
 # Sorted by code point, hidden names skipped; a link to a directory counts.
 

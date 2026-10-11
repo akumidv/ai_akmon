@@ -6,7 +6,9 @@ The corpus is the normative behavioral spec both permanent implementations must 
 surface a harness invokes — against the Python implementation by default; the Node
 implementation joins here as ``--impl node``: the unit tables through ``probe.mjs`` (C103) and
 the hooks, run as ``node node_modules/akmon/js/hooks/<name>.mjs`` in a Node-package project
-(C104); the CLI and the tools land with C105 and C108.
+(C104), and the CLI commands whose port has landed (C105), run as ``node node_modules/akmon/js/akmon/cli.mjs``;
+a scenario of a command or tool whose Python file is still unpaired in ``pairing.toml`` is *pending* on node
+(a skip that names the file), so the pairing list stays the one honest record of what is outstanding.
 
 Usage:
     python3 meta/conformance/runner.py [--tree REPO] [--impl python] [--area hooks]
@@ -50,12 +52,25 @@ from corpus import (  # noqa: E402
     build_snapshot,
     load_scenarios,
     materialize_fixture,
+    python_metadata,
 )
 from coverage import check_coverage, load_exceptions  # noqa: E402
 from normalize import NORM_VERSION, Ctx, normalize  # noqa: E402
-from pairing import check_pairing  # noqa: E402
+from pairing import check_pairing, is_ported  # noqa: E402
 
 IMPL_SCOPE = {"python": ("shared", "python"), "node": ("shared", "node")}
+#: The Python file that owns each CLI command: the node implementation runs a CLI scenario only when
+#: that file has its port (``pairing.is_ported``). ``path``, ``hook`` and ``version`` live in the dispatcher.
+COMMAND_FILE = {
+    "init": "src/akmon/_init.py",
+    "update": "src/akmon/_update.py",
+    "sync": "bin/sync.py",
+    "verify": "bin/verify.py",
+    "check": "bin/check.py",
+    "path": "src/akmon/cli.py",
+    "hook": "src/akmon/cli.py",
+    "version": "src/akmon/cli.py",
+}
 #: One finding line as ``common.findings.render`` prints it: ``SEVERITY code[ target]: …``.
 FINDING_LINE = re.compile(r"^(OK|WARN|ERROR) ([a-z][a-z_]*\.[a-z0-9-]+)[ :]")
 
@@ -266,6 +281,11 @@ def _run_node_unit(scenario: Scenario, ctx: RunCtx) -> tuple[int, str, str, Ctx]
     )
 
 
+def _python_path(tree: Path, ctx: Ctx) -> str:
+    """``PYTHONPATH`` of a Python CLI run: the snapshot's ``src`` and the installed-package metadata."""
+    return os.pathsep.join([str(tree / "src"), str(python_metadata(Path(ctx.tmp).parent, ctx.version))])
+
+
 def _command_for(
     scenario: Scenario, tree: Path, proj_dir: Path, ctx: Ctx, impl: str = "python"
 ) -> tuple[list[str], str, dict]:
@@ -287,7 +307,12 @@ def _command_for(
         payload = _materialize_tokens(json.dumps(run_spec.payload), ctx) if run_spec.payload else ""
         return command, payload, {}
     if scenario.kind == "cli":
-        return [sys.executable, str(tree / "src" / "akmon" / "cli.py"), *argv], "", {"PYTHONPATH": str(tree / "src")}
+        if impl == "node":
+            # A consumer runs the package it installed; the carrier link makes that the tree.
+            cli = proj_dir / "node_modules" / "akmon" if fixture.attach == "native" else tree
+            return ["node", str(cli / "js" / "akmon" / "cli.mjs"), *argv], "", {}
+        command = [sys.executable, str(tree / "src" / "akmon" / "cli.py"), *argv]
+        return command, "", {"PYTHONPATH": _python_path(tree, ctx)}
     if scenario.kind == "tool":
         return [sys.executable, str(tree / "tools" / f"{run_spec.tool}.py"), *argv], "", {}
     # unit: the table is the expectation; the probe is only the implementation's mouth.
@@ -320,19 +345,25 @@ def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
     }
 
     def warmup(proj: Path, tree: Path) -> None:
-        """The project's sync (write): the mounted script, or the package CLI.
+        """The project's sync (write): the mounted script, or the implementation's own package CLI.
 
-        A node fixture is synced by the Python reference too, until the JS ``sync`` lands (C105):
-        what a hook reads from a synced project — the materialized guardrails, the agent
-        roster, the routing config — is the same files whichever implementation wrote them
-        (the corpus is the spec), and the hooks under test are the only code that differs.
+        A node fixture is synced by the JS ``sync`` (C105): the hooks and the CLI commands under
+        test then read a project the implementation itself wrote, as a consumer's does.
         """
-        if fixture.attach == "mount":
+        if run.impl == "node":
+            cli = proj / "node_modules" / "akmon" / "js" / "akmon" / "cli.mjs"
+            warm = ["node", str(cli), "sync", "--project-root", str(proj)]
+        elif fixture.attach == "mount":
             warm = [sys.executable, str(proj / "_aitna" / "akmon" / "bin" / "sync.py"), "--project-root", str(proj)]
         else:
             warm = [sys.executable, str(tree / "src" / "akmon" / "cli.py"), "sync", "--project-root", str(proj)]
         result = subprocess.run(
-            warm, cwd=proj, env={**env, "PYTHONPATH": str(tree / "src")}, capture_output=True, text=True, check=False
+            warm,
+            cwd=proj,
+            env={**env, "PYTHONPATH": os.pathsep.join([str(tree / "src"), str(python_metadata(work, version))])},
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if result.returncode != 0:
             raise CorpusError(
@@ -533,6 +564,25 @@ def _wanted_scenarios(scenarios: list[Scenario], scenario_ids: list[str]) -> lis
     return [s for s in scenarios if s.id in full or (s.id.split("/")[-1] in stems and s.id in stems.values())]
 
 
+def _pending_file(scenario: Scenario, repo: Path) -> str | None:
+    """The unported Python file a node run of this scenario waits for, or ``None`` when it can run.
+
+    A CLI scenario waits for the file of its command, a tool scenario for the tool's file; a hook
+    scenario never waits (the hooks are paired). Derived from the pairing gate's own answer, so
+    the moment a port lands its scenarios are in scope, and nothing is listed twice.
+    """
+    if scenario.kind == "cli":
+        command = scenario.run.argv[0] if scenario.run.argv else None
+        rel = COMMAND_FILE.get(command or "")
+        if rel is None:
+            raise CorpusError(f"{scenario.id}: the runner knows no source file for command {command!r}")
+    elif scenario.kind == "tool":
+        rel = f"tools/{scenario.run.tool}.py"
+    else:
+        return None
+    return None if is_ported(repo, rel) else rel
+
+
 def _skip(scenario: Scenario, impl: str) -> Outcome:
     """A skip for a scenario outside the implementation's ecosystem scope."""
     return Outcome(scenario.id, "skip", f"ecosystem {scenario.ecosystem} not in scope of impl {impl}")
@@ -625,11 +675,12 @@ def run_scenarios(repo: Path, impl: str, areas: list[str], scenario_ids: list[st
                 outcomes.append(_skip(scenario, impl))
                 continue
             try:
-                if impl == "node" and scenario.kind not in ("unit", "hook"):
-                    raise CorpusError(
-                        f"{scenario.id}: the node implementation joins the corpus with C105 (cli) and "
-                        f"C108 (tools); only the unit tables (C103) and the hooks (C104) run so far"
+                pending = _pending_file(scenario, repo) if impl == "node" else None
+                if pending is not None:
+                    outcomes.append(
+                        Outcome(scenario.id, "skip", f"pending on node: {pending} has no port yet (pairing.toml)")
                     )
+                    continue
                 if record and scenario.kind == "unit":  # a unit table is its own expectation
                     outcomes.append(_judge_outcome(scenario, run_ctx))
                 elif record:

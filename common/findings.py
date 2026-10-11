@@ -30,7 +30,8 @@ The five fields, and why each is load-bearing:
     field, it contains no logical line separator.
 ``fix``
     What to do about it — required, non-empty, one sentence on one line. The mechanical
-    heuristic rejects a terminator followed by whitespace and the compact uppercase form;
+    heuristic rejects a terminator followed by ASCII whitespace (the class both implementations
+    share; a no-break space is not a boundary) and the compact uppercase form;
     residual natural-language sentence boundaries are review-owned so ordinary paths remain
     valid. A finding a reader cannot act on is a defect of the check, not of the tree, so the
     envelope refuses to carry one. That holds for ``ok`` too, where the sentence states the
@@ -87,7 +88,9 @@ def severities(data: Mapping[str, Any] | None = None) -> tuple[str, ...]:
 # A sentence terminator followed by more text — the mechanical half of "one sentence".
 # The uppercase lookahead catches the compact but still multi-sentence ``Do this.Then that.``
 # form without rejecting dots inside ordinary paths such as ``meta/CONCEPT.md``.
-_SECOND_SENTENCE_RE = re.compile(r"[.!?](?:\s+\S|(?=[A-Z]))")
+# ``re.ASCII``: ``\s`` is ``[ \t\n\r\f\v]``, the same class the JavaScript twin spells out, so a
+# no-break space after the terminator is text, not a boundary, on both sides (C105).
+_SECOND_SENTENCE_RE = re.compile(r"[.!?](?:\s+\S|(?=[A-Z]))", re.ASCII)
 
 # ``str.splitlines`` recognizes more separators than LF/CR. Any one of them would turn the
 # canonical one-record-per-line rendering into multiple apparent findings.

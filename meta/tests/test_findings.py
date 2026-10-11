@@ -257,6 +257,18 @@ def test_ordinary_one_sentence_fixes_construct(fix):
     assert _finding(fix=fix).fix == fix
 
 
+@pytest.mark.parametrize("space", ["\xa0", "\u3000", "\x1f", "\u200b"])
+def test_the_sentence_boundary_is_ascii_whitespace_only(space):
+    """C105: the JavaScript twin spells `\\s` out as `[ \\t\\n\\r\\f\\v]`, so this side is `re.ASCII`.
+
+    A no-break space (or any other non-ASCII space) after a full stop is text, not a boundary: the
+    fix below constructs on both implementations, where the Unicode `\\s` once rejected it here only.
+    """
+    assert _finding(fix=f"Do this.{space}then that").fix
+    with pytest.raises(ValueError):
+        _finding(fix="Do this. then that")
+
+
 def test_ok_findings_carry_a_fix_too():
     """An `ok` finding states the invariant to keep; the envelope refuses a blank one."""
     assert _finding(severity="ok", fix="Keep every required anchor in place.").fix

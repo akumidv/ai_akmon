@@ -14,6 +14,12 @@ assert SPEC and SPEC.loader
 packet_builder = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(packet_builder)
 
+REDUCER_PATH = MODULE_PATH.with_name("reduce_scorer_tsvs.py")
+REDUCER_SPEC = importlib.util.spec_from_file_location("a22_p3_reduce_scorer_tsvs", REDUCER_PATH)
+assert REDUCER_SPEC and REDUCER_SPEC.loader
+scorer_reducer = importlib.util.module_from_spec(REDUCER_SPEC)
+REDUCER_SPEC.loader.exec_module(scorer_reducer)
+
 
 def _write(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -153,7 +159,7 @@ def test_nonsealed_selector_and_missing_exchange_fail_closed(tmp_path, monkeypat
     run_id, out_dir = _fixture(root)
     _fixed_id(monkeypatch)
 
-    with pytest.raises(ValueError, match="not in the current sealed qualification map"):
+    with pytest.raises(ValueError, match="not in the selected verified source map"):
         packet_builder.build_single_packet("other1", out_dir, project_root=root)
     (root / "runs" / f"{run_id}.exchange.json").unlink()
     with pytest.raises(ValueError, match="missing verified record or exchange"):
@@ -223,4 +229,58 @@ def test_current_sealed_map_has_no_matching_exchange_and_emits_nothing(tmp_path,
     with pytest.raises(ValueError, match="missing verified record or exchange"):
         packet_builder.build_single_packet(source_run_id, out_dir)
 
+    assert not out_dir.exists()
+
+
+def test_reducer_rejects_unreceipted_blind_pair(tmp_path, monkeypatch):
+    root = tmp_path / "project"
+    run_id, packet_dir = _fixture(root)
+    _fixed_id(monkeypatch)
+    packet_builder.build_single_packet(run_id, packet_dir, project_root=root)
+    scorer_dir = tmp_path / "scorers"
+    scorer_dir.mkdir()
+    header = "run_id\telement\tverdict\treason\n"
+    rows = "".join(f"g0123456789abcdef\tE{i}\tFAIL\treason {i}\n" for i in range(1, 5))
+    scorer1, scorer2 = scorer_dir / "s1.tsv", scorer_dir / "s2.tsv"
+    scorer1.write_text(header + rows, encoding="utf-8")
+    scorer2.write_text(header + rows.replace("FAIL", "PASS"), encoding="utf-8")
+
+    out_dir = tmp_path / "reduced"
+    with pytest.raises(ValueError, match="directory of accepted reading receipts"):
+        scorer_reducer.reduce_scores(scorer1, scorer2, tmp_path, out_dir)
+    assert not out_dir.exists()
+
+
+@pytest.mark.parametrize("bad_rows", [
+    "g0123456789abcdef\tE1\tFAIL\tone\ng0123456789abcdef\tE1\tFAIL\tduplicate\n",
+    "g0123456789abcdef\tE1\tFAIL\tone\n",
+    "gffffffffffffffff\tE1\tFAIL\tunknown ID\n",
+])
+def test_reducer_rejects_duplicate_partial_or_mismatched_pair_before_output(tmp_path, monkeypatch, bad_rows):
+    root = tmp_path / "project"
+    run_id, packet_dir = _fixture(root)
+    _fixed_id(monkeypatch)
+    packet_builder.build_single_packet(run_id, packet_dir, project_root=root)
+    scorer_dir = tmp_path / "scorers"
+    scorer_dir.mkdir()
+    scorer1, scorer2 = scorer_dir / "s1.tsv", scorer_dir / "s2.tsv"
+    header = "run_id\telement\tverdict\treason\n"
+    good = "".join(f"g0123456789abcdef\tE{i}\tFAIL\treason {i}\n" for i in range(1, 5))
+    scorer1.write_text(header + bad_rows, encoding="utf-8")
+    scorer2.write_text(header + good, encoding="utf-8")
+    out_dir = tmp_path / "reduced"
+
+    with pytest.raises(ValueError):
+        scorer_reducer.reduce_scores(scorer1, scorer2, tmp_path, out_dir)
+
+    assert not out_dir.exists()
+
+
+def test_grid_packet_requires_rederivation_inputs(tmp_path, monkeypatch):
+    root = tmp_path / "project"
+    run_id, out_dir = _fixture(root)
+    _fixed_id(monkeypatch)
+    with pytest.raises(ValueError, match="both original qualification TSVs"):
+        packet_builder.build_single_packet(run_id, out_dir, project_root=root,
+                                           map_kind="grid", map_path=root / "runs" / "grid-sealed-map.json")
     assert not out_dir.exists()

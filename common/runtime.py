@@ -3,7 +3,8 @@
 
 Two things live here because both are *declarations* a consumer's tooling reads, not checks:
 
-**The runtime contract.** Akmon requires a POSIX shell and ``python3`` on PATH. The Codex route
+**The runtime contract.** Akmon requires a POSIX shell and the ecosystem's interpreter on PATH (``python3`` for a Python
+project, ``node`` for a Node package; ``common/runtime.json`` declares one list per ecosystem). The Codex route
 additionally requires ``git``, because the generated Codex wiring resolves the project root
 through ``$(git rev-parse --show-toplevel)`` while the Claude wiring uses the harness-provided
 ``$CLAUDE_PROJECT_DIR``. ``claude`` and ``codex`` are optional: akmon never requires a harness to
@@ -63,12 +64,14 @@ class RuntimeDeclaration:
     modality: str
 
 
-def declared_runtimes() -> tuple[RuntimeDeclaration, ...]:
-    """The ordered runtime declarations, from the shared data file."""
-    return tuple(
-        RuntimeDeclaration(binary, population, modality)
-        for binary, population, modality in _runtime_data()["declared_runtimes"]
-    )
+def declared_runtimes(ecosystem: str) -> tuple[RuntimeDeclaration, ...]:
+    """The ordered runtime declarations of ``ecosystem`` (``python`` or ``node``), from the shared data file."""
+    table = _runtime_data()["declared_runtimes"]
+    try:
+        rows = table[ecosystem]
+    except (KeyError, TypeError):
+        raise ValueError(f"unknown ecosystem {ecosystem!r}; known: {', '.join(sorted(table))}") from None
+    return tuple(RuntimeDeclaration(binary, population, modality) for binary, population, modality in rows)
 
 
 @dataclass(frozen=True)

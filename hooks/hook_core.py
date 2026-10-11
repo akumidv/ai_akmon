@@ -319,6 +319,17 @@ def _escalate_unattended_ask(result: HookResult, permission_mode: str | None) ->
 # non-ASCII case partner (only ``i``, ``s`` and ``k`` do, via U+0131, U+017F and U+212A).
 _SUDO_RE = re.compile(r"\bsudo\b", re.ASCII)
 
+# `git` is a command word only when no name character (letter, digit, `_`, `.`, `-`) touches it:
+# `git-commit-guard.py`, `.git/hooks` and `my_git` are names. A subcommand must not continue a
+# name from the left (`pre-commit`, `.push`, `x_tag`), but may be followed by a hyphen: `git
+# commit-tree` and `git merge-base` are still a commit and a merge command.
+_GIT_WORD = r"(?<![\w.-])git(?![\w.-])"
+
+
+def _subcommand(word: str) -> str:
+    """``word`` as a git subcommand: no name character before it, no letter, digit, ``_`` or ``.`` after."""
+    return r"(?<![\w.-])" + word + r"(?![\w.])"
+
 
 def privilege_escalation_guard_result(command: str) -> HookResult | None:
     """Deny any Bash command that invokes ``sudo``, unconditionally.
@@ -358,7 +369,7 @@ def git_commit_guard_result(
         )
 
     def is_git(subcommand: str) -> bool:
-        return re.search(r"\bgit\b[^|&;]*\b" + subcommand + r"\b", command, re.ASCII) is not None
+        return re.search(_GIT_WORD + r"[^|&;]*" + _subcommand(subcommand), command, re.ASCII) is not None
 
     if is_git("push") or is_git("tag") or is_git("merge"):
         return _escalate_unattended_ask(

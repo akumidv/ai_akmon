@@ -60,6 +60,7 @@ def test_cli_data_pins_its_structure():
         "hook_missing_name",
         "hook_path_refused",
         "hook_unknown",
+        "not_ported",
         "skew_version",
         "skew_commits",
     }
@@ -69,6 +70,8 @@ def test_cli_data_pins_its_structure():
         "akmon hook: {{name}} is a path; name the hook instead (e.g. 'role-on-code')"
     )
     assert _CLI_DATA["hook_unknown"] == "akmon hook: unknown hook {{name}}; available: {{available}}"
+    # Read by the JavaScript CLI only (init / update / verify, until they are ported).
+    assert _CLI_DATA["not_ported"] == "akmon {{command}}: not ported to the JavaScript implementation yet ({{task}})"
     assert _CLI_DATA["skew_version"] == (
         "akmon: CLI is {{cli_version}}, mounted/pinned standard is {{pinned}} — the mounted tree governs."
     )

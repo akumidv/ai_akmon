@@ -260,6 +260,7 @@ SNAPSHOT_FILES = (
     "src/akmon/init.json",
     "src/akmon/update.json",
     "src/akmon/cli.json",
+    "package.json",
     "README.md",
     "BOOTSTRAP.md",
     "ARCHETYPES.md",
@@ -280,6 +281,8 @@ SNAPSHOT_FILES = (
     "pipelines/release.md",
     "pipelines/tasks.md",
     "profiles/python.md",
+    "profiles/python-stdlib.md",
+    "profiles/quant.md",
     "profiles/ruff.toml",
     "common/__init__.py",
     "common/always_loaded.json",
@@ -415,21 +418,31 @@ def _remove_paths(proj: Path, remove: tuple[str, ...]) -> None:
             shutil.rmtree(target)
 
 
-def _rewrite_tokens(proj: Path, version: str) -> None:
-    """Materialize ``{{version}}`` in the copied base fixture to the implementation's live version."""
+def materialize_text(text: str, env: RunEnv) -> str:
+    """Materialize the fixture tokens of one text.
+
+    ``{{version}}`` is the implementation's live version and ``{{ecosystem}}`` the ecosystem it serves
+    (``python`` or ``node``), so a shared scenario can write the integration record's ``ecosystem`` line
+    without naming either.
+    """
+    return text.replace("{{version}}", env.version).replace("{{ecosystem}}", env.impl)
+
+
+def _rewrite_tokens(proj: Path, env: RunEnv) -> None:
+    """Materialize the fixture tokens in the copied base fixture."""
     for path in proj.rglob("*"):
-        if path.is_file():
+        if path.is_file() and not path.is_symlink():
             text = path.read_text(encoding="utf-8")
-            if "{{version}}" in text:
-                path.write_text(text.replace("{{version}}", version), encoding="utf-8")
+            if "{{version}}" in text or "{{ecosystem}}" in text:
+                path.write_text(materialize_text(text, env), encoding="utf-8")
 
 
-def _write_fixture_files(proj: Path, files: dict[str, str], version: str) -> None:
-    """Write the scenario's fixture files (version tokens materialized) into the project."""
+def _write_fixture_files(proj: Path, files: dict[str, str], env: RunEnv) -> None:
+    """Write the scenario's fixture files (tokens materialized) into the project."""
     for relative, content in files.items():
         target = proj / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content.replace("{{version}}", version), encoding="utf-8")
+        target.write_text(materialize_text(content, env), encoding="utf-8")
 
 
 def _tree_with_overrides(snapshot: Path, work: Path, scenario_id: str, version: str, fixture: FixtureSpec) -> Path:
@@ -453,13 +466,27 @@ def _tree_with_overrides(snapshot: Path, work: Path, scenario_id: str, version: 
     return tree
 
 
-def _python_launcher(proj: Path, tree: Path) -> None:
+def python_metadata(work: Path, version: str) -> Path:
+    """A directory holding the ``akmon`` distribution metadata of an installed package.
+
+    The corpus runs the Python CLI out of the snapshot, which is not installed, so
+    ``importlib.metadata`` knows no ``akmon`` and ``sync`` stamps no pin. A consumer's package-mode
+    ``sync`` always does (the package is installed, its version is the pin), so the Python runs get this
+    directory on ``PYTHONPATH``: the corpus then pins what an installed package does, on any host.
+    """
+    dist = work / "py-metadata" / f"akmon-{version}.dist-info"
+    dist.mkdir(parents=True, exist_ok=True)
+    (dist / "METADATA").write_text(f"Metadata-Version: 2.1\nName: akmon\nVersion: {version}\n", encoding="utf-8")
+    return dist.parent
+
+
+def _python_launcher(proj: Path, tree: Path, metadata: Path) -> None:
     """The launcher Python package-mode wiring names: a shim that execs the tree's own CLI."""
     launcher = proj / ".venv" / "bin" / "akmon"
     launcher.parent.mkdir(parents=True, exist_ok=True)
     src = tree / "src"
     launcher.write_text(
-        f'#!/bin/sh\nPYTHONPATH="{src}" exec "{sys.executable}" "{src / "akmon" / "cli.py"}" "$@"\n',
+        f'#!/bin/sh\nPYTHONPATH="{src}:{metadata}" exec "{sys.executable}" "{src / "akmon" / "cli.py"}" "$@"\n',
         encoding="utf-8",
     )
     launcher.chmod(0o755)
@@ -492,7 +519,7 @@ def _lay_out_project(fixture: FixtureSpec, env: RunEnv, scenario_id: str) -> Pat
             # `{{version}}` token is not a valid requirement.
             (proj / "pyproject.toml").write_text(PYTHON_PIN, encoding="utf-8")
     _remove_paths(proj, fixture.remove)
-    _rewrite_tokens(proj, env.version)
+    _rewrite_tokens(proj, env)
     return proj
 
 
@@ -515,14 +542,14 @@ def materialize_fixture(
     if fixture.attach == "mount":
         (proj / "_aitna" / "akmon").symlink_to(tree)
     if fixture.attach == "native" and env.impl == "python":
-        _python_launcher(proj, tree)
+        _python_launcher(proj, tree, python_metadata(env.work, env.version))
     if fixture.attach == "native" and env.impl == "node":
         _node_carrier(proj, tree)
     if fixture.git:
         _git(["init", "-b", fixture.branch], cwd=proj)
     if fixture.warmup == "before" and sync:
         sync(proj, tree)
-    _write_fixture_files(proj, fixture.files, env.version)
+    _write_fixture_files(proj, fixture.files, env)
     if fixture.warmup == "after" and sync:
         sync(proj, tree)
     if fixture.git:  # one baseline: a synced consumer's sync output is committed, not a change

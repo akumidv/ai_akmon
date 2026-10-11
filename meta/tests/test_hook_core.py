@@ -65,6 +65,29 @@ def test_command_word_boundaries_are_ascii():
     assert git_commit_guard_result("gitpush", "feat", permission_mode="default") is None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo git-commit-guard",
+        "python3 hooks/git-commit-guard.py --x",
+        "cat .git/hooks/pre-push",
+        "git add pre-commit-config.yaml",
+        "my_git push",
+        "git.exe push",
+        "git log commit.md",
+    ],
+)
+def test_a_name_that_holds_git_or_a_subcommand_is_not_a_command(command):
+    # `git` and a subcommand are command words, not pieces of a file or hook name: a shell command that
+    # only mentions `git-commit-guard` (an echo, a grep, the hook's own path) is not a commit.
+    assert git_commit_guard_result(command, "main", permission_mode="default") is None
+
+
+@pytest.mark.parametrize("command", ["git commit-tree HEAD", "git merge-base a b", "/usr/bin/git commit -m x"])
+def test_a_subcommand_family_and_an_absolute_git_stay_guarded(command):
+    assert git_commit_guard_result(command, "main", permission_mode="default") is not None
+
+
 # --------------------------------------------------------------------------------------
 # git_commit_guard_result
 # --------------------------------------------------------------------------------------

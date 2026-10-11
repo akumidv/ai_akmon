@@ -16,11 +16,20 @@
       }
     }
   },
-  "declared_runtimes": [
-    ["POSIX shell", "generated-wiring", "required"],
-    ["python3", "generated-wiring", "required"],
-    ["git", "generated-wiring", "required-on:codex"],
-    ["claude", "akmon-own-tooling", "optional"],
-    ["codex", "akmon-own-tooling", "optional"]
-  ]
+  "declared_runtimes": {
+    "python": [
+      ["POSIX shell", "generated-wiring", "required"],
+      ["python3", "generated-wiring", "required"],
+      ["git", "generated-wiring", "required-on:codex"],
+      ["claude", "akmon-own-tooling", "optional"],
+      ["codex", "akmon-own-tooling", "optional"]
+    ],
+    "node": [
+      ["POSIX shell", "generated-wiring", "required"],
+      ["node", "generated-wiring", "required"],
+      ["git", "generated-wiring", "required-on:codex"],
+      ["claude", "akmon-own-tooling", "optional"],
+      ["codex", "akmon-own-tooling", "optional"]
+    ]
+  }
 }

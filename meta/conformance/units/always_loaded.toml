@@ -1,0 +1,1442 @@
+# Unit table: the always-loaded counter (common/always_loaded.py; JS mirror
+# js/common/always_loaded.mjs, ADR 0020 D01, C105). Data file: common/always_loaded.json (the
+# block heading, the two scopes, the caps and their severities), read from the tree under test on
+# both sides: the Python module opens the file beside itself, the JS mouth hands the parsed document
+# to the exports that read it as their first argument.
+#
+# Why this table exists: the counter decides whether a consumer's context ratchet is green, and it is
+# the one place where two stdlibs must agree on *which characters are lines, which are whitespace and
+# which paths are inside a project*. Python `str.splitlines` names ten line separators, JS regexes
+# know four; Python `\s` is Unicode until `re.ASCII` (the Python side is `re.ASCII`, by decision, so a
+# no-break space beside an `@`-token is text in both); `^`/`$`/`.` under `MULTILINE`/`DOTALL` mean
+# "after \n", "before \n" and "anything" -- never \r or U+2028; `Path.read_text` translates \r\n and
+# \r to \n before the bytes are counted; `Path.resolve`, `Path.expanduser` and `Path.relative_to` are
+# the stdlib's, with a `RuntimeError` for a symlink loop or an unknown `~user`. A JS port gets none of
+# this for free. The table is the spec: every expected value was produced by running the Python and
+# then read against the docstrings.
+#
+# The mouth is the generic one of `routing.toml` (the row format is the block comment above
+# `probe_routing` in probe.py): a row names a public function (`marked_block`, `import_chain`,
+# `populations`, `report`, `over`, the vocabulary readers), its JSON arguments and the world it runs
+# in -- the files of a scratch project (`files`, `files_parts` for bytes TOML cannot spell), links,
+# `env` (HOME for the `~` rows). `Cap`, `Member` and `Population` are built with `$new`; a `Path`
+# argument is `{"$path": "{{dir}}/…"}` and comes back as its POSIX string with the scratch directory
+# tokenized `{{dir}}`; `import_chain`'s keyword `root` is `kwargs_json`. A raise answers
+# `{"error": <class>, "message": …}`, or the class alone (`class_only`) where the message is the
+# platform's or the Python version's. `Member.lines`/`size` and `Population.lines`/`size` are
+# properties: the `report` and `over` rows print and compare them.
+#
+# Call sites: marked_block, import_chain, populations -- meta/checks/always_loaded.py (the shipped
+# leg, self_ci) and bin/verify.py::check_always_loaded (the consumer leg, C105 pass 2); report and
+# over -- the same two; the vocabulary readers (block_heading, shipped, consumer, caps, severity) --
+# those two plus the finding's severity lookup.
+#
+# Families (the `id` prefix): `vocab` -- the data as the module exposes it; `block` -- the marked
+# block: where it starts, what ends it (`## ` with its space, not `###`), every line separator, a BOM
+# or an indent before the heading, a fence that does not hide a peer heading; `chain` -- which files
+# an import reaches and in which order: relative to the importer, transitive and first-seen,
+# breadth-first, cycles, missing, directories, outside the root (absolute, `..`, a link out), links
+# inside, `~` and `~user`, the ASCII/Unicode whitespace boundary, tokens, inline code, comments and
+# fences (closed and unclosed, `~~~`, a longer fence, a closer with trailing text, CRLF, a lone \r
+# and U+2028 which are no line start), nested files with a BOM, CRLF or bytes that are not UTF-8;
+# `report` -- lines and bytes of one population as the report prints them, for every separator and
+# for multi-byte text; `over` -- the inclusive boundary on each dimension; `pop` -- both scopes of one
+# project: the block, the chain and the tail, the selected files (added after the chain, never doubled,
+# skipped when missing or a directory, a link taking its target's name, outside the root raising), a
+# root behind a link, CRLF text kept as given and CRLF files translated.
+#
+# Deliberate non-pins: the message of the `ValueError` `Path.relative_to` raises (the Python version's
+# wording), a symlink loop's and an unknown user's message (class only), `~name` of a real user other
+# than the one running (NSS), and an import whose path the platform cannot stat (a permission error
+# class depends on the user running the probe).
+
+# --- vocab: what the data file carries, as the module exposes it (base 0) ---
+
+[[case]]
+id = "vocab/code"
+fn = "CODE"
+args_json = '[]'
+expected_json = '"caps.always-loaded"'
+
+[[case]]
+id = "vocab/block-heading"
+fn = "block_heading"
+args_json = '[]'
+expected_json = '"## Dev layer — akmon"'
+
+[[case]]
+id = "vocab/shipped"
+fn = "shipped"
+args_json = '[]'
+expected_json = '"akmon-shipped"'
+
+[[case]]
+id = "vocab/consumer"
+fn = "consumer"
+args_json = '[]'
+expected_json = '"consumer-total"'
+
+[[case]]
+id = "vocab/caps"
+fn = "caps"
+args_json = '[]'
+expected_json = '{"akmon-shipped": {"lines": 320, "bytes": 21000}, "consumer-total": {"lines": 570, "bytes": 34000}}'
+
+[[case]]
+id = "vocab/severity"
+fn = "severity"
+args_json = '[]'
+expected_json = '{"akmon-shipped": "error", "consumer-total": "warn"}'
+
+# --- block: the marked block, from its heading line to the next peer `##` or EOF ---
+
+[[case]]
+id = "block/absent"
+fn = "marked_block"
+args_json = '["# A\n\n## Other\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "block/empty-text"
+fn = "marked_block"
+args_json = '[""]'
+expected_json = 'null'
+
+[[case]]
+id = "block/heading-only-no-newline"
+fn = "marked_block"
+args_json = '["## Dev layer — akmon"]'
+expected_json = '"## Dev layer — akmon"'
+
+[[case]]
+id = "block/heading-then-eof"
+fn = "marked_block"
+args_json = '["# A\n\n## Dev layer — akmon\nx\ny\n"]'
+expected_json = '"## Dev layer — akmon\nx\ny\n"'
+
+[[case]]
+id = "block/ends-at-next-peer"
+fn = "marked_block"
+args_json = '["# A\n\n## Dev layer — akmon\n\nx\n## Next\nz\n"]'
+expected_json = '"## Dev layer — akmon\n\nx\n"'
+
+[[case]]
+id = "block/subheading-stays"
+fn = "marked_block"
+args_json = '["## Dev layer — akmon\n\nx\n### sub\ny\n## Next\nz\n"]'
+expected_json = '"## Dev layer — akmon\n\nx\n### sub\ny\n"'
+
+[[case]]
+id = "block/heading-with-suffix"
+fn = "marked_block"
+args_json = '["# A\n\n## Dev layer — akmon (developing)\n\nx\n### sub\ny\n## Next\nz\n"]'
+expected_json = '"## Dev layer — akmon (developing)\n\nx\n### sub\ny\n"'
+
+[[case]]
+id = "block/peer-needs-the-space"
+fn = "marked_block"
+args_json = '["## Dev layer — akmon\nx\n##y\n## \n## Next\n"]'
+expected_json = '"## Dev layer — akmon\nx\n##y\n"'
+
+[[case]]
+id = "block/peer-heading-alone"
+fn = "marked_block"
+args_json = '["## Dev layer — akmon\nx\n##\n## Next\n"]'
+expected_json = '"## Dev layer — akmon\nx\n##\n"'
+
+[[case]]
+id = "block/first-heading-wins"
+fn = "marked_block"
+args_json = '["## Dev layer — akmon\na\n## Mid\n## Dev layer — akmon\nb\n"]'
+expected_json = '"## Dev layer — akmon\na\n"'
+
+[[case]]
+id = "block/indented-heading-is-not-one"
+fn = "marked_block"
+args_json = '[" ## Dev layer — akmon\nx\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "block/bom-before-heading-is-not-one"
+fn = "marked_block"
+args_json = '["\ufeff## Dev layer — akmon\nx\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "block/heading-mid-line-is-not-one"
+fn = "marked_block"
+args_json = '["see ## Dev layer — akmon\nx\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "block/fence-does-not-hide-the-peer"
+fn = "marked_block"
+args_json = '["## Dev layer — akmon\n```\n## Next\n```\ny\n"]'
+expected_json = '"## Dev layer — akmon\n```\n"'
+
+[[case]]
+id = "block/crlf"
+fn = "marked_block"
+args_json = '["# A\r\n## Dev layer — akmon\r\nx\r\n## Next\r\nz\r\n"]'
+expected_json = '"## Dev layer — akmon\r\nx\r\n"'
+
+[[case]]
+id = "block/crlf-no-final-newline"
+fn = "marked_block"
+args_json = '["## Dev layer — akmon\r\nx\r\n## Next"]'
+expected_json = '"## Dev layer — akmon\r\nx\r\n"'
+
+[[case]]
+id = "block/cr-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\r## Dev layer — akmon\rx\r## Next\rz"]'
+expected_json = '"## Dev layer — akmon\rx\r"'
+
+[[case]]
+id = "block/crlf-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\r\n## Dev layer — akmon\r\nx\r\n## Next\r\nz"]'
+expected_json = '"## Dev layer — akmon\r\nx\r\n"'
+
+[[case]]
+id = "block/ls-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\u2028## Dev layer — akmon\u2028x\u2028## Next\u2028z"]'
+expected_json = '"## Dev layer — akmon\u2028x\u2028"'
+
+[[case]]
+id = "block/ps-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\u2029## Dev layer — akmon\u2029x\u2029## Next\u2029z"]'
+expected_json = '"## Dev layer — akmon\u2029x\u2029"'
+
+[[case]]
+id = "block/nel-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\u0085## Dev layer — akmon\u0085x\u0085## Next\u0085z"]'
+expected_json = '"## Dev layer — akmon\u0085x\u0085"'
+
+[[case]]
+id = "block/vt-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\u000b## Dev layer — akmon\u000bx\u000b## Next\u000bz"]'
+expected_json = '"## Dev layer — akmon\u000bx\u000b"'
+
+[[case]]
+id = "block/ff-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\f## Dev layer — akmon\fx\f## Next\fz"]'
+expected_json = '"## Dev layer — akmon\fx\f"'
+
+[[case]]
+id = "block/fs-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\u001c## Dev layer — akmon\u001cx\u001c## Next\u001cz"]'
+expected_json = '"## Dev layer — akmon\u001cx\u001c"'
+
+[[case]]
+id = "block/gs-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\u001d## Dev layer — akmon\u001dx\u001d## Next\u001dz"]'
+expected_json = '"## Dev layer — akmon\u001dx\u001d"'
+
+[[case]]
+id = "block/rs-breaks-lines"
+fn = "marked_block"
+args_json = '["# A\u001e## Dev layer — akmon\u001ex\u001e## Next\u001ez"]'
+expected_json = '"## Dev layer — akmon\u001ex\u001e"'
+
+[[case]]
+id = "block/nbsp-is-no-break"
+fn = "marked_block"
+args_json = '["# A\u00a0## Dev layer — akmon\u00a0x\u00a0## Next\u00a0z\n## Next\n"]'
+expected_json = 'null'
+
+[[case]]
+id = "block/crlf-is-one-break"
+fn = "marked_block"
+args_json = '["## Dev layer — akmon\r\n## Next"]'
+expected_json = '"## Dev layer — akmon\r\n"'
+
+[[case]]
+id = "block/blank-lines-stay"
+fn = "marked_block"
+args_json = '["## Dev layer — akmon\n\n\nx\n\n## Next\n"]'
+expected_json = '"## Dev layer — akmon\n\n\nx\n\n"'
+
+[[case]]
+id = "block/heading-substring-only-at-start"
+fn = "marked_block"
+args_json = '["x## Dev layer — akmon\n## Dev layer — akmonz\nq\n## N\n"]'
+expected_json = '"## Dev layer — akmonz\nq\n"'
+
+# --- chain: which files an `@`-import reaches, in which order (base 1000: index in the table) ---
+
+[[case]]
+id = "chain/plain"
+fn = "import_chain"
+args_json = '["@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/missing"
+fn = "import_chain"
+args_json = '["@nope.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+expected_json = '[]'
+
+[[case]]
+id = "chain/order-first-seen"
+fn = "import_chain"
+args_json = '["@b.md\n@a.md\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md", "{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/relative-to-the-importer"
+fn = "import_chain"
+args_json = '["@sub/a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "sub/a.md" = "@b.md\n", "sub/b.md" = "b\n", "b.md" = "top\n" }
+expected_json = '["{{dir}}/sub/a.md", "{{dir}}/sub/b.md"]'
+
+[[case]]
+id = "chain/nested-dotdot"
+fn = "import_chain"
+args_json = '["@sub/a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "sub/a.md" = "@../b.md\n", "b.md" = "top\n" }
+expected_json = '["{{dir}}/sub/a.md", "{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/base-is-the-first-level"
+fn = "import_chain"
+args_json = '["@a.md\n", {"$path": "{{dir}}/x"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "x/a.md" = "x\n", "a.md" = "top\n" }
+expected_json = '["{{dir}}/x/a.md"]'
+
+[[case]]
+id = "chain/cycle"
+fn = "import_chain"
+args_json = '["@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "@b.md\n", "b.md" = "@a.md\n" }
+expected_json = '["{{dir}}/a.md", "{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/self-import"
+fn = "import_chain"
+args_json = '["@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "@a.md\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/duplicate-spellings"
+fn = "import_chain"
+args_json = '["@a.md\n@./a.md\n@sub/../a.md\n@./sub//../a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "sub/x.md" = "x\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/directory-is-not-a-file"
+fn = "import_chain"
+args_json = '["@sub\n@sub/\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "sub/a.md" = "a\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/absolute-inside"
+fn = "import_chain"
+args_json = '["@{{dir}}/a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/absolute-outside"
+fn = "import_chain"
+args_json = '["@/etc/hostname\n@/etc/passwd\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+expected_json = '[]'
+
+[[case]]
+id = "chain/dotdot-outside"
+fn = "import_chain"
+args_json = '["@../outside.md\n", {"$path": "{{dir}}/proj"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}/proj"}}'
+files = { "outside.md" = "no\n", "proj/x.md" = "x\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/sibling-with-a-shared-prefix-is-outside"
+fn = "import_chain"
+args_json = '["@../proj2/x.md\n@../proj/y.md\n", {"$path": "{{dir}}/proj"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}/proj"}}'
+files = { "proj2/x.md" = "x\n", "proj/y.md" = "y\n" }
+expected_json = '["{{dir}}/proj/y.md"]'
+
+[[case]]
+id = "chain/dotdot-inside"
+fn = "import_chain"
+args_json = '["@sub/../a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "sub/x.md" = "x\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/link-out-of-root"
+fn = "import_chain"
+args_json = '["@lnk.md\n", {"$path": "{{dir}}/proj"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}/proj"}}'
+files = { "out/real.md" = "o\n", "proj/x.md" = "x\n" }
+links = { "proj/lnk.md" = "{{dir}}/out/real.md" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/link-inside-root"
+fn = "import_chain"
+args_json = '["@lnk.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "real.md" = "o\n" }
+links = { "lnk.md" = "{{dir}}/real.md" }
+expected_json = '["{{dir}}/real.md"]'
+
+[[case]]
+id = "chain/link-and-target-once"
+fn = "import_chain"
+args_json = '["@lnk.md\n@real.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "real.md" = "o\n" }
+links = { "lnk.md" = "{{dir}}/real.md" }
+expected_json = '["{{dir}}/real.md"]'
+
+[[case]]
+id = "chain/dir-link-through"
+fn = "import_chain"
+args_json = '["@lnkdir/a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "real/a.md" = "o\n" }
+links = { "lnkdir" = "{{dir}}/real" }
+expected_json = '["{{dir}}/real/a.md"]'
+
+[[case]]
+id = "chain/link-loop"
+fn = "import_chain"
+args_json = '["@loop.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+class_only = true
+links = { "loop.md" = "{{dir}}/loop.md" }
+expected_json = '{"error": "RuntimeError"}'
+
+[[case]]
+id = "chain/root-through-a-link"
+fn = "import_chain"
+args_json = '["@a.md\n", {"$path": "{{dir}}/proj"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}/proj"}}'
+files = { "real/a.md" = "a\n" }
+links = { "proj" = "{{dir}}/real" }
+expected_json = '["{{dir}}/real/a.md"]'
+
+[[case]]
+id = "chain/root-is-the-filesystem-root-never-escapes"
+fn = "import_chain"
+args_json = '["@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "/"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/home-import"
+fn = "import_chain"
+args_json = '["@~/a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+env = { HOME = "{{dir}}" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/home-import-trailing-slash-home"
+fn = "import_chain"
+args_json = '["@~/a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+env = { HOME = "{{dir}}/" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/home-import-dot-prefix"
+fn = "import_chain"
+args_json = '["@./~/a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "~/a.md" = "tilde-dir\n", "a.md" = "a\n" }
+env = { HOME = "{{dir}}" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/home-alone-is-a-directory"
+fn = "import_chain"
+args_json = '["@~\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+env = { HOME = "{{dir}}" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/home-unknown-user"
+fn = "import_chain"
+args_json = '["@~no-such-user-akmon/a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+class_only = true
+expected_json = '{"error": "RuntimeError"}'
+
+[[case]]
+id = "chain/absolute-path-with-a-tilde-component"
+fn = "import_chain"
+args_json = '["@/~no-such-user-akmon/a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+expected_json = '[]'
+
+[[case]]
+id = "chain/tilde-inside-a-name"
+fn = "import_chain"
+args_json = '["@a~b.md\n@sub/~c.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a~b.md" = "a\n", "sub/~c.md" = "c\n" }
+expected_json = '["{{dir}}/a~b.md", "{{dir}}/sub/~c.md"]'
+
+[[case]]
+id = "chain/after-space"
+fn = "import_chain"
+args_json = '["x @a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/after-tab"
+fn = "import_chain"
+args_json = '["x\t@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/after-newline-and-start"
+fn = "import_chain"
+args_json = '["@a.md\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/a.md", "{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/after-cr"
+fn = "import_chain"
+args_json = '["x\r@a.md\r", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/after-ff-vt"
+fn = "import_chain"
+args_json = '["x\f@a.md\u000b@b.md", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/a.md", "{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/glued-to-a-word-is-not-an-import"
+fn = "import_chain"
+args_json = '["mail@a.md\n(@b.md)\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/trailing-punctuation-is-part-of-the-token"
+fn = "import_chain"
+args_json = '["@a.md)\n@b.md.\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/double-at"
+fn = "import_chain"
+args_json = '["@@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "@a.md" = "at\n", "a.md" = "a\n" }
+expected_json = '["{{dir}}/@a.md"]'
+
+[[case]]
+id = "chain/lone-at"
+fn = "import_chain"
+args_json = '["@\n@ a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/nbsp-before-at-is-not-whitespace"
+fn = "import_chain"
+args_json = '["x\u00a0@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/nbsp-inside-the-token"
+fn = "import_chain"
+args_json = '["@a.md\u00a0b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "a.md b.md" = "ab\n" }
+expected_json = '["{{dir}}/a.md\u00a0b.md"]'
+
+[[case]]
+id = "chain/nbsp-ends-no-token"
+fn = "import_chain"
+args_json = '["@a.md\u00a0b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/ls-inside-the-token"
+fn = "import_chain"
+args_json = '["@a.md\u2028b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "a.md b.md" = "ab\n" }
+expected_json = '["{{dir}}/a.md\u2028b.md"]'
+
+[[case]]
+id = "chain/nel-inside-the-token"
+fn = "import_chain"
+args_json = '["@a.md\u0085b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "a.mdb.md" = "ab\n" }
+expected_json = '["{{dir}}/a.md\u0085b.md"]'
+
+[[case]]
+id = "chain/fs-inside-the-token"
+fn = "import_chain"
+args_json = '["@a.md\u001cb.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "a.md\u001cb.md" = "ab\n" }
+expected_json = '["{{dir}}/a.md\u001cb.md"]'
+
+[[case]]
+id = "chain/ideographic-space-before-at"
+fn = "import_chain"
+args_json = '["x\u3000@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/bom-before-at-is-not-whitespace"
+fn = "import_chain"
+args_json = '["\ufeff@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/non-ascii-name"
+fn = "import_chain"
+args_json = '["@é/ü.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "é/ü.md" = "u\n" }
+expected_json = '["{{dir}}/é/ü.md"]'
+
+[[case]]
+id = "chain/space-in-a-name-stops-the-token"
+fn = "import_chain"
+args_json = '["@my file.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "my file.md" = "x\n", "my" = "m\n" }
+expected_json = '["{{dir}}/my"]'
+
+[[case]]
+id = "chain/backtick-ends-the-token"
+fn = "import_chain"
+args_json = '["@a.md`x\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/inline-code-hides"
+fn = "import_chain"
+args_json = '["`@a.md` and @b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/inline-code-spans-two-lines-do-not-hide"
+fn = "import_chain"
+args_json = '["`x\n@a.md`\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/inline-code-unclosed"
+fn = "import_chain"
+args_json = '["`@a.md and @b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/inline-code-empty-pair"
+fn = "import_chain"
+args_json = '["`` @a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/inline-code-empty-pair-glued"
+fn = "import_chain"
+args_json = '["``@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/inline-code-adjacent"
+fn = "import_chain"
+args_json = '["x`y`@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/comment-hides"
+fn = "import_chain"
+args_json = '["<!-- @a.md -->\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/comment-multiline-hides"
+fn = "import_chain"
+args_json = '["<!--\n@a.md\n-->\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/comment-unclosed-does-not-hide"
+fn = "import_chain"
+args_json = '["<!-- @a.md\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/a.md", "{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/comment-eats-up-to-the-first-close"
+fn = "import_chain"
+args_json = '["<!-- x --> @a.md <!-- y -->\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/comment-makes-a-gap"
+fn = "import_chain"
+args_json = '["x<!-- c -->@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/comment-with-ls-inside"
+fn = "import_chain"
+args_json = '["<!--\u2028@a.md\u2028-->@b.md", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-backticks-hides"
+fn = "import_chain"
+args_json = '["```\n@a.md\n```\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-tildes-hides"
+fn = "import_chain"
+args_json = '["~~~\n@a.md\n~~~\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-info-string-hides"
+fn = "import_chain"
+args_json = '["```md\n@a.md\n```\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-closer-with-trailing-text"
+fn = "import_chain"
+args_json = '["```\n@a.md\n``` trailing\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-four-backticks"
+fn = "import_chain"
+args_json = '["````\n@a.md\n````\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-mismatch-kinds"
+fn = "import_chain"
+args_json = '["```\n@a.md\n~~~\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/a.md", "{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-unclosed-does-not-hide"
+fn = "import_chain"
+args_json = '["```\n@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/fence-indented-is-not-a-fence"
+fn = "import_chain"
+args_json = '[" ```\n@a.md\n ```\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/a.md", "{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-at-the-very-start"
+fn = "import_chain"
+args_json = '["```\n@a.md\n```", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/fence-closer-at-eof-without-newline"
+fn = "import_chain"
+args_json = '["x\n```\n@a.md\n```", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/fence-two-in-a-row"
+fn = "import_chain"
+args_json = '["```\n@a.md\n```\n@b.md\n```\n@c.md\n```\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n", "c.md" = "c\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-crlf"
+fn = "import_chain"
+args_json = '["```\r\n@a.md\r\n```\r\n@b.md\r\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-lone-cr-is-no-line-start"
+fn = "import_chain"
+args_json = '["```\r@a.md\r```\r@b.md\r", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-ls-is-no-line-start"
+fn = "import_chain"
+args_json = '["```\n@a.md\u2028```\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/fence-closer-glued-to-text-hides-nothing-more"
+fn = "import_chain"
+args_json = '["```\n@a.md\n```@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/fence-opener-with-text-before-is-not-one"
+fn = "import_chain"
+args_json = '["x ```\n@a.md\n```\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/fence-inside-comment"
+fn = "import_chain"
+args_json = '["<!--\n```\n-->\n@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/comment-inside-fence"
+fn = "import_chain"
+args_json = '["```\n<!--\n```\n@a.md\n-->\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/code-span-around-a-fence-marker"
+fn = "import_chain"
+args_json = '["`x```\n@a.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/nested-file-is-filtered-the-same"
+fn = "import_chain"
+args_json = '["@n.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "n.md" = "```\n@a.md\n```\n`@b.md` @c.md\n", "a.md" = "a\n", "b.md" = "b\n", "c.md" = "c\n" }
+expected_json = '["{{dir}}/n.md", "{{dir}}/c.md"]'
+
+[[case]]
+id = "chain/nested-file-with-bom-first-token"
+fn = "import_chain"
+args_json = '["@n.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "n.md" = "﻿@a.md\n@b.md\n", "a.md" = "a\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/n.md", "{{dir}}/b.md"]'
+
+[[case]]
+id = "chain/nested-file-crlf"
+fn = "import_chain"
+args_json = '["@n.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "n.md" = "x\r\n@a.md\r\n", "a.md" = "a\n" }
+expected_json = '["{{dir}}/n.md", "{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/nested-file-lone-cr"
+fn = "import_chain"
+args_json = '["@n.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "n.md" = "x\r@a.md\r", "a.md" = "a\n" }
+expected_json = '["{{dir}}/n.md", "{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/nested-file-not-utf8"
+fn = "import_chain"
+args_json = '["@bad.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+class_only = true
+files_parts = { "bad.md" = [{ hex = "ff" }] }
+expected_json = '{"error": "UnicodeDecodeError"}'
+
+[[case]]
+id = "chain/nested-file-truncated-utf8-class"
+fn = "import_chain"
+args_json = '["@bad.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+class_only = true
+files_parts = { "bad.md" = ["ab", { hex = "e282" }] }
+expected_json = '{"error": "UnicodeDecodeError"}'
+
+[[case]]
+id = "chain/breadth-first-order"
+fn = "import_chain"
+args_json = '["@a.md\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "@c.md\n", "b.md" = "@d.md\n", "c.md" = "c\n", "d.md" = "d\n" }
+expected_json = '["{{dir}}/a.md", "{{dir}}/b.md", "{{dir}}/c.md", "{{dir}}/d.md"]'
+
+[[case]]
+id = "chain/deep-then-wide"
+fn = "import_chain"
+args_json = '["@a.md\n@b.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "@a1.md\n", "a1.md" = "@a2.md\n", "a2.md" = "z\n", "b.md" = "b\n" }
+expected_json = '["{{dir}}/a.md", "{{dir}}/b.md", "{{dir}}/a1.md", "{{dir}}/a2.md"]'
+
+[[case]]
+id = "chain/empty-text"
+fn = "import_chain"
+args_json = '["", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '[]'
+
+[[case]]
+id = "chain/no-trailing-newline"
+fn = "import_chain"
+args_json = '["@a.md", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "a.md" = "a\n" }
+expected_json = '["{{dir}}/a.md"]'
+
+[[case]]
+id = "chain/file-with-no-newline-import"
+fn = "import_chain"
+args_json = '["@n.md\n", {"$path": "{{dir}}"}]'
+kwargs_json = '{"root": {"$path": "{{dir}}"}}'
+files = { "n.md" = "@a.md", "a.md" = "a\n" }
+expected_json = '["{{dir}}/n.md", "{{dir}}/a.md"]'
+
+# --- report: lines and bytes of a population, as the report prints them (the members' `lines`/`size`) ---
+
+[[case]]
+id = "report/empty"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": ""}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=0/10 bytes=0/100"'
+
+[[case]]
+id = "report/one-line-with-newline"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=2/100"'
+
+[[case]]
+id = "report/one-line-without-newline"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=1/100"'
+
+[[case]]
+id = "report/blank-lines-count"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\n\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=2/10 bytes=3/100"'
+
+[[case]]
+id = "report/only-a-newline"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=1/100"'
+
+[[case]]
+id = "report/crlf"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\r\nb\r\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=2/10 bytes=6/100"'
+
+[[case]]
+id = "report/lone-cr"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\rb"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=2/10 bytes=3/100"'
+
+[[case]]
+id = "report/ls"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u2028b"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=2/10 bytes=5/100"'
+
+[[case]]
+id = "report/ps"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u2029b\u2029"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=2/10 bytes=8/100"'
+
+[[case]]
+id = "report/nel"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u0085b"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=2/10 bytes=4/100"'
+
+[[case]]
+id = "report/vt-ff"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u000bb\fc"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=3/10 bytes=5/100"'
+
+[[case]]
+id = "report/fs-gs-rs"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u001cb\u001dc\u001ed"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=4/10 bytes=7/100"'
+
+[[case]]
+id = "report/ls-alone"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "\u2028"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=3/100"'
+
+[[case]]
+id = "report/bom-bytes"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "\ufeffa\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=5/100"'
+
+[[case]]
+id = "report/two-byte"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "é\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=3/100"'
+
+[[case]]
+id = "report/three-byte"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "€\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=4/100"'
+
+[[case]]
+id = "report/four-byte-astral"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "😀\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=5/100"'
+
+[[case]]
+id = "report/nbsp-is-not-a-break"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u00a0b\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=5/100"'
+
+[[case]]
+id = "report/tab-and-space-are-not-breaks"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\tb c\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=1/10 bytes=6/100"'
+
+[[case]]
+id = "report/crlf-then-lf"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\r\n\nb"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=3/10 bytes=5/100"'
+
+[[case]]
+id = "report/cr-cr-lf"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\r\r\nb"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=3/10 bytes=5/100"'
+
+[[case]]
+id = "report/sum-of-members"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "scope-x", "members": [{"$new": "Member", "fields": {"name": "a", "text": "1\n2\n"}}, {"$new": "Member", "fields": {"name": "b", "text": "xyz"}}, {"$new": "Member", "fields": {"name": "c", "text": "é"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"scope-x: lines=4/10 bytes=9/100"'
+
+[[case]]
+id = "report/no-separator-between-members"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "a", "text": "no newline"}}, {"$new": "Member", "fields": {"name": "b", "text": "next"}}]}}, {"$new": "Cap", "fields": {"lines": 5, "bytes": 50}}]'
+expected_json = '"s: lines=2/5 bytes=14/50"'
+
+[[case]]
+id = "report/no-members"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": []}}, {"$new": "Cap", "fields": {"lines": 3, "bytes": 7}}]'
+expected_json = '"s: lines=0/3 bytes=0/7"'
+
+[[case]]
+id = "report/uses-the-cap-as-given"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "a", "text": "x\n"}}]}}, {"$new": "Cap", "fields": {"lines": 0, "bytes": 0}}]'
+expected_json = '"s: lines=1/0 bytes=2/0"'
+
+[[case]]
+id = "report/scope-name-verbatim"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "a b: c", "members": [{"$new": "Member", "fields": {"name": "a", "text": "x"}}]}}, {"$new": "Cap", "fields": {"lines": 1, "bytes": 1}}]'
+expected_json = '"a b: c: lines=1/1 bytes=1/1"'
+
+# --- over: the inclusive boundary on each dimension (Cap {lines, bytes}) ---
+
+[[case]]
+id = "over/under-both"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "x\nx\n"}}]}}, {"$new": "Cap", "fields": {"lines": 3, "bytes": 100}}]'
+expected_json = 'false'
+
+[[case]]
+id = "over/lines-at-cap"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "x\nx\nx\n"}}]}}, {"$new": "Cap", "fields": {"lines": 3, "bytes": 100}}]'
+expected_json = 'false'
+
+[[case]]
+id = "over/lines-over-cap"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "x\nx\nx\nx\n"}}]}}, {"$new": "Cap", "fields": {"lines": 3, "bytes": 100}}]'
+expected_json = 'true'
+
+[[case]]
+id = "over/bytes-at-cap"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "yyyyyyyyyy"}}]}}, {"$new": "Cap", "fields": {"lines": 5, "bytes": 10}}]'
+expected_json = 'false'
+
+[[case]]
+id = "over/bytes-over-cap"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "yyyyyyyyyyy"}}]}}, {"$new": "Cap", "fields": {"lines": 5, "bytes": 10}}]'
+expected_json = 'true'
+
+[[case]]
+id = "over/bytes-count-utf8"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "ééééé"}}]}}, {"$new": "Cap", "fields": {"lines": 5, "bytes": 9}}]'
+expected_json = 'true'
+
+[[case]]
+id = "over/bytes-count-utf8-at-cap"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "ééééé"}}]}}, {"$new": "Cap", "fields": {"lines": 5, "bytes": 10}}]'
+expected_json = 'false'
+
+[[case]]
+id = "over/crlf-lines"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\r\nb\r\nc\r\n"}}]}}, {"$new": "Cap", "fields": {"lines": 2, "bytes": 100}}]'
+expected_json = 'true'
+
+[[case]]
+id = "over/lines-sum-across-members"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "a", "text": "1\n2\n"}}, {"$new": "Member", "fields": {"name": "b", "text": "3\n"}}]}}, {"$new": "Cap", "fields": {"lines": 2, "bytes": 100}}]'
+expected_json = 'true'
+
+[[case]]
+id = "over/lines-sum-across-members-at-cap"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "a", "text": "1\n2\n"}}, {"$new": "Member", "fields": {"name": "b", "text": "3\n"}}]}}, {"$new": "Cap", "fields": {"lines": 3, "bytes": 100}}]'
+expected_json = 'false'
+
+[[case]]
+id = "over/both-over"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "xxxxx\nxxxxx\nxxxxx\nxxxxx\n"}}]}}, {"$new": "Cap", "fields": {"lines": 3, "bytes": 10}}]'
+expected_json = 'true'
+
+[[case]]
+id = "over/zero-cap-empty"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": []}}, {"$new": "Cap", "fields": {"lines": 0, "bytes": 0}}]'
+expected_json = 'false'
+
+[[case]]
+id = "over/zero-cap-one-byte"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "x"}}]}}, {"$new": "Cap", "fields": {"lines": 0, "bytes": 0}}]'
+expected_json = 'true'
+
+[[case]]
+id = "over/ls-counts-as-a-line"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u2028b\u2028c"}}]}}, {"$new": "Cap", "fields": {"lines": 2, "bytes": 100}}]'
+expected_json = 'true'
+
+# --- populations: both scopes of one project, members by name and text ---
+
+[[case]]
+id = "pop/no-block"
+fn = "populations"
+args_json = '["# AGENTS.md\n\n## Other\n", {"$path": "{{dir}}"}]'
+expected_json = 'null'
+
+[[case]]
+id = "pop/block-without-imports"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro\n\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro\n\n## Project\n\nhand-owned prose\n"}]}}'
+
+[[case]]
+id = "pop/block-chain-and-tail"
+fn = "populations"
+args_json = '["# AGENTS.md\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "rule one\nrule two\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "rule one\nrule two\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# AGENTS.md\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "rule one\nrule two\n"}]}}'
+
+[[case]]
+id = "pop/import-in-the-tail-is-prose-only"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n@extra.md\n", {"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "extra.md" = "e\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n@extra.md\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+
+[[case]]
+id = "pop/import-in-the-block-counts-in-both"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n@extra.md\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+files = { "extra.md" = "e\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n@extra.md\n"}, {"name": "extra.md", "text": "e\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n@extra.md\n## Project\n\nhand-owned prose\n"}, {"name": "extra.md", "text": "e\n"}]}}'
+
+[[case]]
+id = "pop/missing-import"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}]}}'
+
+[[case]]
+id = "pop/chain-is-transitive-and-once"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "common\n@nested.md\n@nested.md\n", "_aitna/.akmon/guardrails/nested.md" = "nested\n@_common.md\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "common\n@nested.md\n@nested.md\n"}, {"name": "_aitna/.akmon/guardrails/nested.md", "text": "nested\n@_common.md\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "common\n@nested.md\n@nested.md\n"}, {"name": "_aitna/.akmon/guardrails/nested.md", "text": "nested\n@_common.md\n"}]}}'
+
+[[case]]
+id = "pop/links-and-examples-stay-out"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n- [roles](r.md) — link\n<!-- @c.md -->\n`@d.md`\n```\n@e.md\n```\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "r.md" = "R\n", "c.md" = "C\n", "d.md" = "D\n", "e.md" = "E\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n- [roles](r.md) — link\n<!-- @c.md -->\n`@d.md`\n```\n@e.md\n```\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n- [roles](r.md) — link\n<!-- @c.md -->\n`@d.md`\n```\n@e.md\n```\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+
+[[case]]
+id = "pop/selected-added-after-the-chain"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/_aitna/.akmon/profiles/python.md"}]]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "_aitna/.akmon/profiles/python.md" = "py\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}]}}'
+
+[[case]]
+id = "pop/selected-already-in-the-chain-is-not-doubled"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/_aitna/.akmon/profiles/python.md"}, {"$path": "{{dir}}/_aitna/.akmon/guardrails/_common.md"}]]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "_aitna/.akmon/profiles/python.md" = "py\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}]}}'
+
+[[case]]
+id = "pop/selected-twice-counts-once"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/p.md"}, {"$path": "{{dir}}/p.md"}]]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "p.md" = "p\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "p.md", "text": "p\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "p.md", "text": "p\n"}]}}'
+
+[[case]]
+id = "pop/selected-missing-is-skipped"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/nope.md"}]]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+
+[[case]]
+id = "pop/selected-directory-is-skipped"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/d"}]]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "d/x.md" = "x\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+
+[[case]]
+id = "pop/selected-through-a-link-takes-the-target-name"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/lnk.md"}]]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "real.md" = "p\n" }
+links = { "lnk.md" = "{{dir}}/real.md" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "real.md", "text": "p\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "real.md", "text": "p\n"}]}}'
+
+[[case]]
+id = "pop/selected-outside-the-root-raises"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}/proj"}, [{"$path": "{{dir}}/out/x.md"}]]'
+class_only = true
+dirs = ["proj"]
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "out/x.md" = "x\n" }
+expected_json = '{"error": "ValueError"}'
+
+[[case]]
+id = "pop/selected-sibling-with-a-shared-prefix-raises"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}/proj"}, [{"$path": "{{dir}}/proj2/x.md"}]]'
+class_only = true
+files = { "proj/_aitna/.akmon/guardrails/_common.md" = "r\n", "proj2/x.md" = "x\n" }
+expected_json = '{"error": "ValueError"}'
+
+[[case]]
+id = "pop/selected-empty-list"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, []]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+
+[[case]]
+id = "pop/root-through-a-link"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}/proj"}]'
+files = { "real/_aitna/.akmon/guardrails/_common.md" = "r\n" }
+links = { "proj" = "{{dir}}/real" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+
+[[case]]
+id = "pop/crlf-agents-text-is-kept-as-given"
+fn = "populations"
+args_json = '["# A\r\n\r\n## Dev layer — akmon\r\n\r\nintro\r\n@_aitna/.akmon/guardrails/_common.md\r\n## P\r\nx\r\n", {"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\r\n\r\nintro\r\n@_aitna/.akmon/guardrails/_common.md\r\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\r\n\r\n## Dev layer — akmon\r\n\r\nintro\r\n@_aitna/.akmon/guardrails/_common.md\r\n## P\r\nx\r\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+
+[[case]]
+id = "pop/crlf-file-is-translated"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "one\r\ntwo\r\nthree\rfour" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "one\ntwo\nthree\nfour"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "one\ntwo\nthree\nfour"}]}}'
+
+[[case]]
+id = "pop/bom-file-keeps-its-bom"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "﻿rule\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "\ufeffrule\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "\ufeffrule\n"}]}}'
+
+[[case]]
+id = "pop/ls-in-agents-text"
+fn = "populations"
+args_json = '["# A\u2028## Dev layer — akmon\u2028@_aitna/.akmon/guardrails/_common.md\u2028## P\u2028x", {"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\u2028@_aitna/.akmon/guardrails/_common.md\u2028"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\u2028## Dev layer — akmon\u2028@_aitna/.akmon/guardrails/_common.md\u2028## P\u2028x"}]}}'
+
+[[case]]
+id = "pop/import-in-a-fenced-block-heading-line-is-text"
+fn = "populations"
+args_json = '["# A\n## Dev layer — akmon\n```\n@_aitna/.akmon/guardrails/_common.md\n```\n", {"$path": "{{dir}}"}]'
+files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n```\n@_aitna/.akmon/guardrails/_common.md\n```\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n## Dev layer — akmon\n```\n@_aitna/.akmon/guardrails/_common.md\n```\n"}]}}'
+
+[[case]]
+id = "pop/same-file-twice-via-spellings"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n@a.md\n@./a.md\n@sub/../a.md\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+files = { "a.md" = "a\n", "sub/x.md" = "x\n" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n@a.md\n@./a.md\n@sub/../a.md\n"}, {"name": "a.md", "text": "a\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n@a.md\n@./a.md\n@sub/../a.md\n## Project\n\nhand-owned prose\n"}, {"name": "a.md", "text": "a\n"}]}}'
+
+[[case]]
+id = "pop/nested-not-utf8-raises"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n@n.md\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+class_only = true
+files = { "n.md" = "@bad.md\n" }
+files_parts = { "bad.md" = [{ hex = "ff" }] }
+expected_json = '{"error": "UnicodeDecodeError"}'
+
+[[case]]
+id = "pop/home-import-counted"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n@~/a.md\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
+files = { "a.md" = "a\n" }
+env = { HOME = "{{dir}}" }
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n@~/a.md\n"}, {"name": "a.md", "text": "a\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n@~/a.md\n## Project\n\nhand-owned prose\n"}, {"name": "a.md", "text": "a\n"}]}}'
