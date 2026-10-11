@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import re
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -20,8 +21,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+import usage_ledger_v2 as usage_ledger
+
 HERE = Path(__file__).resolve().parent
 RUNS = HERE / "runs"
+LEDGER_PATHS = usage_ledger.DEFAULT_PATHS
 TEST_NONZERO_EXIT = 9
 RETRY_SECOND = 2
 RETRY_THIRD = 3
@@ -216,10 +220,34 @@ def input_cap(name: str, declared: int, cap: int) -> None:
         raise ValueError(f"{name} {declared} exceeds per-turn cap {cap}")
 
 
+def validate_attempt_class(attempt_class: str | None, origin_attempt_id: str | None) -> None:
+    """Require an explicit subject-run class and a prior origin for defects."""
+    if attempt_class not in {"scored", "technical", "defect"}:
+        raise ValueError("subject attempt class must be explicitly set to scored, technical, or defect")
+    if attempt_class == "defect":
+        if not isinstance(origin_attempt_id, str) or not re.fullmatch(r"[0-9a-f]{32}", origin_attempt_id):
+            raise ValueError("defect subject attempt requires an immutable 128-bit origin attempt ID")
+    elif origin_attempt_id is not None:
+        raise ValueError("only a defect subject attempt may name an origin attempt ID")
+
+
+def _turn_usage(info: Any) -> dict[str, int] | None:
+    usage = info.get("last_token_usage") if isinstance(info, dict) else None
+    if not isinstance(usage, dict):
+        return None
+    input_tokens, output_tokens = usage.get("input_tokens"), usage.get("output_tokens")
+    if any(not isinstance(value, int) or isinstance(value, bool) or value < 0
+           for value in (input_tokens, output_tokens)):
+        return None
+    if input_tokens < 1:
+        return None
+    return {"input_tokens": input_tokens, "output_tokens": output_tokens}
+
+
 def verify_rollout(root: Path, identifier: str, *, model: str, effort: str,  # noqa: C901, PLR0912, PLR0913, PLR0915
                    cli_version: str, arm_text: str, scratch: Path,
                    input_caps: tuple[int, ...], expected_turns: int = 2
-                   ) -> tuple[Path, str, list[int]]:
+                   ) -> tuple[Path, str, list[dict[str, int]]]:
     """Find and verify the unique rollout, including model, instructions, and usage."""
     matches = []
     for path in root.rglob("*"):
@@ -259,7 +287,7 @@ def verify_rollout(root: Path, identifier: str, *, model: str, effort: str,  # n
             if any(context.get("model") != model or context.get("effort") != effort
                    for context in contexts):
                 raise ValueError(f"persisted model/effort differs from {model}/{effort}")
-            per_turn: list[list[int]] = [[] for _ in range(expected_turns)]
+            per_turn: list[list[dict[str, int]]] = [[] for _ in range(expected_turns)]
             turn_index = -1
             for event in events:
                 if event.get("type") == "turn_context":
@@ -269,16 +297,17 @@ def verify_rollout(root: Path, identifier: str, *, model: str, effort: str,  # n
                       and event["payload"].get("type") == "token_count"):
                     if turn_index < 0:
                         continue
-                    usage = event["payload"].get("info", {}).get("last_token_usage", {})
-                    count = usage.get("input_tokens") if isinstance(usage, dict) else None
-                    if isinstance(count, int) and not isinstance(count, bool) and count > 0:
-                        per_turn[turn_index].append(count)
+                    usage = _turn_usage(event["payload"].get("info", {}))
+                    if usage is not None:
+                        per_turn[turn_index].append(usage)
             if any(not counts for counts in per_turn):
-                raise ValueError("persisted rollout is missing per-turn local input token usage")
-            actual = [max(counts) for counts in per_turn]
+                raise ValueError("persisted rollout is missing per-turn input/output token usage")
+            actual = [max(counts, key=lambda usage: usage["input_tokens"] + usage["output_tokens"])
+                      for counts in per_turn]
             if len(input_caps) != expected_turns:
                 raise ValueError("input cap count differs from persisted turn count")
-            if any(count > cap for count, cap in zip(actual, input_caps, strict=True)):
+            if any(usage["input_tokens"] > cap
+                   for usage, cap in zip(actual, input_caps, strict=True)):
                 raise ValueError(f"persisted input usage exceeds declared turn caps: {actual}")
             matches.append((path, actual))
     if len(matches) != 1:
@@ -363,6 +392,84 @@ def run_codex(command: list[str], cwd: Path, run_id: str, turn: int,  # noqa: C9
     return events, stdout.decode("utf-8")
 
 
+def _persisted_usage_evidence(args: argparse.Namespace, events: list[dict[str, Any]], *,
+                              turn_id: str, turn_index: int, expected_turns: int,
+                              input_caps: tuple[int, ...], call_id: str,
+                              arm_text: str) -> tuple[
+                                  dict[str, int], dict[str, str]]:
+    session_id = thread_id(events)
+    rollout_path, rollout_digest, per_turn = verify_rollout(
+        args.rollout_root, session_id, model=args.model, effort=args.effort,
+        cli_version="0.156.1",
+        arm_text=arm_text,
+        scratch=args.scratch.resolve(), input_caps=input_caps, expected_turns=expected_turns,
+    )
+    usage = per_turn[turn_index]
+    usage_artifact_path = RUNS / f"{args.run_id}.{call_id}.usage.json"
+    request_id = f"{session_id}:{turn_id}"
+    write_json(usage_artifact_path, {
+        "request_id": request_id, "session_id": session_id, "model_id": args.model,
+        "turn_id": turn_id, "call_id": call_id, "usage": usage,
+        "rollout_path": str(rollout_path), "rollout_sha256": rollout_digest,
+    })
+    artifact = {
+        "artifact_path": usage_artifact_path.name,
+        "artifact_sha256": sha(usage_artifact_path.read_bytes()),
+        "request_id": request_id, "session_id": session_id, "model_id": args.model,
+    }
+    return usage, artifact
+
+
+def run_accounted_codex(args: argparse.Namespace, command: list[str], *, subject_attempt_id: str,
+                        turn_id: str, turn_index: int, expected_turns: int,
+                        input_caps: tuple[int, ...], turn: int,
+                        arm_text: str,
+                        artifact_prefix: str | None = None,
+                        continuation_id: str | None = None) -> tuple[list[dict[str, Any]], str]:
+    """Reserve before dispatch and close the provider call from persisted rollout evidence."""
+    call_id = usage_ledger.reserve_subject_call(
+        subject_attempt_id, turn_id, continuation_id=continuation_id, route="codex",
+        paths=LEDGER_PATHS,
+    )
+    try:
+        events, raw = run_codex(command, args.scratch.resolve(), args.run_id, turn,
+                                artifact_prefix=artifact_prefix)
+    except BaseException:
+        try:
+            prefix = RUNS / (artifact_prefix or f"{args.run_id}.turn{turn}")
+            stdout = Path(str(prefix) + ".stdout.txt").read_text(encoding="utf-8")
+            events = event_stream(stdout)
+            usage, artifact = _persisted_usage_evidence(
+                args, events, turn_id=turn_id, turn_index=turn_index,
+                expected_turns=expected_turns, input_caps=input_caps, call_id=call_id,
+                arm_text=arm_text,
+            )
+        except (OSError, UnicodeDecodeError, ValueError):
+            usage, artifact = None, None
+        usage_ledger.complete_subject_call(
+            call_id, outcome="failed", actual_usage=usage, usage_artifact=artifact,
+            failure_code="attempt_failed" if usage is not None else "missing_usage",
+            paths=LEDGER_PATHS,
+        )
+        raise
+    try:
+        usage, artifact = _persisted_usage_evidence(
+            args, events, turn_id=turn_id, turn_index=turn_index,
+            expected_turns=expected_turns, input_caps=input_caps, call_id=call_id,
+            arm_text=arm_text,
+        )
+    except (OSError, UnicodeDecodeError, ValueError):
+        usage_ledger.complete_subject_call(
+            call_id, outcome="failed", failure_code="missing_usage", paths=LEDGER_PATHS,
+        )
+        raise
+    usage_ledger.complete_subject_call(
+        call_id, outcome="accepted", actual_usage=usage, usage_artifact=artifact,
+        paths=LEDGER_PATHS,
+    )
+    return events, raw
+
+
 def command_for_initial(args: argparse.Namespace, arm_path: Path, prompt: str) -> list[str]:
     return [
         args.codex, "exec", "--json", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules",
@@ -421,6 +528,7 @@ def partial_retry_number(run_id: str, runs: Path = RUNS) -> int:
 def execute(args: argparse.Namespace) -> Path:
     if not args.execute:
         raise ValueError("refusing model call without --execute")
+    validate_attempt_class(args.attempt_class, args.origin_attempt_id)
     scratch = args.scratch.resolve()
     repository = HERE.parents[2].resolve()
     if not scratch.is_dir() or not scratch_outside_repository(scratch, repository):
@@ -453,24 +561,37 @@ def execute(args: argparse.Namespace) -> Path:
 
     # Persist before dispatch, so failed/interrupted runs consume the subject-run budget.
     RUNS.mkdir(parents=True, exist_ok=True)
+    subject_attempt_id = usage_ledger.register_subject_attempt(
+        None, args.attempt_class, origin_attempt_id=args.origin_attempt_id, paths=LEDGER_PATHS,
+    )
     with attempt_path.open("x", encoding="utf-8") as stream:
-        json.dump({"run_id": args.run_id, **cell, "model": args.model, "effort": args.effort,
+        json.dump({"run_id": args.run_id, **cell, "subject_attempt_id": subject_attempt_id,
+                   "attempt_class": args.attempt_class,
+                   "origin_attempt_id": args.origin_attempt_id,
+                   "model": args.model, "effort": args.effort,
                    "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, stream, indent=2)
         stream.write("\n")
 
-    events1, raw1 = run_codex(command_for_initial(args, arm_path, case["subject"]["turn1"]), scratch,
-                              args.run_id, 1)
+    events1, raw1 = run_accounted_codex(
+        args, command_for_initial(args, arm_path, case["subject"]["turn1"]),
+        subject_attempt_id=subject_attempt_id, turn_id="turn-1", turn_index=0,
+        expected_turns=1, input_caps=(args.turn1_input_tokens,), turn=1, arm_text=arm_text,
+    )
     answer1, id1 = completed_reply(events1), thread_id(events1)
     item_id, item, second_prompt = second_turn(case, answer1)
     turns = [{"user": case["subject"]["turn1"], "assistant": answer1, "events_sha256": sha(raw1)}]
     raw = [raw1]
-    events2, raw2 = run_codex(command_for_resume(args, id1, second_prompt), scratch, args.run_id, 2)
+    events2, raw2 = run_accounted_codex(
+        args, command_for_resume(args, id1, second_prompt), subject_attempt_id=subject_attempt_id,
+        turn_id="turn-2", turn_index=1, expected_turns=2,
+        input_caps=(args.turn1_input_tokens, args.turn2_input_tokens), turn=2, arm_text=arm_text,
+    )
     answer2, id2 = completed_reply(events2), thread_id(events2)
     if id2 != id1:
         raise ValueError("resume did not retain the initial thread/session id")
     turns.append({"user": second_prompt, "assistant": answer2, "events_sha256": sha(raw2)})
     raw.append(raw2)
-    rollout_path, rollout_sha, actual_input_tokens = verify_rollout(
+    rollout_path, rollout_sha, actual_usage = verify_rollout(
         args.rollout_root, id1, model=args.model, effort=args.effort,
         cli_version="0.156.1", arm_text=arm_text, scratch=scratch,
         input_caps=(args.turn1_input_tokens, args.turn2_input_tokens))
@@ -481,9 +602,8 @@ def execute(args: argparse.Namespace) -> Path:
         "arm_sha256": sha(arm_text), "thread_id": id1, "model": args.model, "effort": args.effort,
         "declared_input_tokens": {"turn1": args.turn1_input_tokens, "turn2": args.turn2_input_tokens,
                                   "source": args.token_estimate_source, "cap": args.turn_cap},
-        "local_rollout_input_tokens": {"turn1": actual_input_tokens[0],
-                                       "turn2": actual_input_tokens[1],
-                                       "counter": "token_count.info.last_token_usage.input_tokens"},
+        "local_rollout_usage": {"turn1": actual_usage[0], "turn2": actual_usage[1],
+                                 "counter": "token_count.info.last_token_usage"},
         "menu_id": item_id, "menu_right": item.get("right") if item else None,
         "tool_use_detected": False, "events_sha256": [sha(data) for data in raw],
         "rollout": {"path": str(rollout_path), "sha256": rollout_sha, "verified": True},
@@ -525,6 +645,13 @@ def resume_partial_preflight(args: argparse.Namespace) -> Path:  # noqa: C901, P
     attempt = read_json(attempt_path)
     if any(attempt.get(key) != cell[key] for key in ("case", "arm", "tier", "repeat")):
         raise ValueError("attempt marker does not match the supplied sealed preflight cell")
+    subject_attempt_id = attempt.get("subject_attempt_id")
+    if not isinstance(subject_attempt_id, str) or not re.fullmatch(r"[0-9a-f]{32}", subject_attempt_id):
+        subject_attempt_id = usage_ledger.register_subject_attempt(
+            None, "technical", paths=LEDGER_PATHS,
+        )
+        attempt.update({"subject_attempt_id": subject_attempt_id, "attempt_class": "technical"})
+        write_json(attempt_path, attempt)
     if attempt.get("model") != args.model or attempt.get("effort") != args.effort:
         raise ValueError("attempt marker model/effort differs from the requested resume")
     case_path = HERE / "cases" / f"{cell['case']}.json"
@@ -563,16 +690,20 @@ def resume_partial_preflight(args: argparse.Namespace) -> Path:  # noqa: C901, P
                                   "turn2": args.turn2_input_tokens,
                                   "source": args.token_estimate_source,
                                   "cap": args.turn_cap},
-        "verified_turn1_rollout_input_tokens": usage1[0],
+        "verified_turn1_rollout_usage": usage1[0],
     })
     dispatch_prefix = (f"{args.run_id}.turn2" if retry_number == 1
                        else f"{args.run_id}.turn2.retry-{retry_number:02d}")
-    events2, raw2 = run_codex(command_for_resume(args, id1, prompt2), scratch, args.run_id, 2,
-                              artifact_prefix=dispatch_prefix)
+    events2, raw2 = run_accounted_codex(
+        args, command_for_resume(args, id1, prompt2), subject_attempt_id=subject_attempt_id,
+        turn_id="turn-2", turn_index=1, expected_turns=2,
+        input_caps=(args.turn1_input_tokens, args.turn2_input_tokens), turn=2, arm_text=arm_text,
+        artifact_prefix=dispatch_prefix, continuation_id=f"retry-{retry_number:02d}",
+    )
     answer2, id2 = completed_reply(events2), thread_id(events2)
     if id2 != id1:
         raise ValueError("resume did not retain the original thread/session id")
-    rollout_path, rollout_sha, actual_input_tokens = verify_rollout(
+    rollout_path, rollout_sha, actual_usage = verify_rollout(
         args.rollout_root, id1, model=args.model, effort=args.effort, cli_version="0.156.1",
         arm_text=arm_text, scratch=scratch,
         input_caps=(args.turn1_input_tokens, args.turn2_input_tokens))
@@ -590,9 +721,8 @@ def resume_partial_preflight(args: argparse.Namespace) -> Path:  # noqa: C901, P
                                   "turn2": args.turn2_input_tokens,
                                   "source": args.token_estimate_source,
                                   "cap": args.turn_cap},
-        "local_rollout_input_tokens": {"turn1": actual_input_tokens[0],
-                                       "turn2": actual_input_tokens[1],
-                                       "counter": "token_count.info.last_token_usage.input_tokens"},
+        "local_rollout_usage": {"turn1": actual_usage[0], "turn2": actual_usage[1],
+                                 "counter": "token_count.info.last_token_usage"},
         "menu_id": item_id, "menu_right": item.get("right"), "tool_use_detected": False,
         "events_sha256": [sha(raw1), sha(raw2)],
         "rollout": {"path": str(rollout_path), "sha256": rollout_sha, "verified": True},
@@ -723,17 +853,20 @@ def self_test() -> None:  # noqa: C901, PLR0915
              "cwd": str(outside), "base_instructions": {"text": "arm"}}},
             {"type": "turn_context", "payload": {"model": "gpt-6-astra", "effort": "medium"}},
             {"type": "event_msg", "payload": {"type": "token_count", "info": {
-             "last_token_usage": {"input_tokens": 120}}}},
+             "last_token_usage": {"input_tokens": 120, "output_tokens": 0}}}},
             {"type": "turn_context", "payload": {"model": "gpt-6-astra", "effort": "medium"}},
             {"type": "event_msg", "payload": {"type": "token_count", "info": {
-             "last_token_usage": {"input_tokens": 125}}}},
+             "last_token_usage": {"input_tokens": 125, "output_tokens": 7}}}},
         ]
         (root / "rollout.jsonl").write_text(
             "".join(json.dumps(event) + "\n" for event in synthetic_events), encoding="utf-8")
         rollout, _digest, counts = verify_rollout(
             root, "s-1", model="gpt-6-astra", effort="medium", cli_version="0.156.1",
             arm_text="arm\n", scratch=outside, input_caps=(40_000, 40_000))
-        assert rollout.name == "rollout.jsonl" and counts == [120, 125]
+        assert rollout.name == "rollout.jsonl" and counts == [
+            {"input_tokens": 120, "output_tokens": 0},
+            {"input_tokens": 125, "output_tokens": 7},
+        ]
         (root / "runs").mkdir()
         (root / "runs" / "failed.attempt.json").write_text("{}", encoding="utf-8")
         assert subject_run_count(root / "runs") == 1
@@ -748,6 +881,10 @@ def parser() -> argparse.ArgumentParser:
                         help="complete turn 2 for an existing preflight attempt")
     result.add_argument("--map", type=Path)
     result.add_argument("--run-id")
+    result.add_argument("--attempt-class", choices=("scored", "technical", "defect"),
+                        help="required subject-run class for a new attempt")
+    result.add_argument("--origin-attempt-id",
+                        help="required immutable 128-bit origin ID for a defect attempt")
     result.add_argument("--scratch", type=Path)
     result.add_argument("--rollout-root", type=Path)
     result.add_argument("--codex", default="codex")

@@ -107,6 +107,38 @@ cold resumption are separate A22 steps and still open. The block makes no choice
 non-textual means of catching the remaining failures, such as a deterministic check or an
 automated audit. That question is open design work.
 
+### D02 — P3 resource and attempt accounting
+
+`Decision-ID: ADR-0019/D02`
+
+**Owner accepted 2026-10-11.** For the P3 decision-ground routing experiment, Codex provider usage
+across the full effort is accounted against a 5,000,000-token aggregate ceiling. Debit each Codex
+provider call exactly once, including subject turns, scorer readings, route checks, technical
+attempts, and failed or defective calls. Missing or uncorrelated usage blocks further dispatch and
+is never zero. This is an observed-usage accounting ceiling, not a provider-enforced hard cap; an
+individual call may exceed it before the stop rule can act.
+
+The previously observed 153,614-token debit leaves 4,846,386 tokens. Its recorded components are
+126,014 subject-control tokens and 27,600 exploratory scorer tokens. This is a reconstructed
+aggregate from existing records; the historical calls are not covered by an authenticated,
+event-by-event ledger. Preserve that provenance limitation and do not describe the old debit as
+freshly validated per-call accounting.
+
+Qwen follows the same fixed P3 experimental matrix and has no aggregate token ceiling. Its scorer
+condition is default thinking with a configured maximum output of 2,000 tokens; the observed canary
+did not reach that setting, so enforcement remains unverified. The scorer schedule is 120 accepted
+readings per model. The subject-run schedule is 96 scored runs plus at most 24 technical/defect
+attempts, for no more than 120 total. Each subject attempt has exactly one class: `scored`,
+`technical`, or `defect`. A `defect` must name its originating attempt with an immutable origin ID
+recorded at creation. Technical and defect attempts are not scored readings, and their actual
+Codex usage remains chargeable to the aggregate ceiling.
+
+This decision accepts the protocol and accounting direction only. It does not certify the runner,
+shared ledger, or routes as technically ready, create the new V2 seal, or authorize dispatch. Before
+dispatch, the implementation must enforce these fields and account for all Codex P3 calls exactly
+once; the scorer routes must pass their fresh one-shot checks under the accepted conditions; and a
+named human stop operator must be recorded. No operator identity was supplied in this decision.
+
 ## Rejected alternatives
 
 - **Adopt the clause.** Rejected: it added no detected benefit over the standard on two vendors,

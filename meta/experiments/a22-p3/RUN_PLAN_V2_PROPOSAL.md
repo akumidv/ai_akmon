@@ -1,7 +1,9 @@
 # A22 P3 scorer plan V2 — proposal only, NOT AUTHORIZED
 
-**Status: draft for owner decision. This document does not authorize scorer or subject calls.**
-It is a proposed amendment to scorer mechanics and resource accounting after the failed synthetic
+**Status: owner-accepted protocol direction; technical readiness and dispatch remain gated. This
+document does not authorize scorer or subject calls.** The owner confirmed the subject-run accounting
+rule and directed launch on 2026-10-11; see [ADR 0019 D02](../../decisions/0019-collaboration-guidance-from-a22.md#d02--p3-resource-and-attempt-accounting).
+This remains a proposed amendment to scorer mechanics and resource accounting after the failed synthetic
 CLI canaries and the later real-packet mechanics attempts. It does not alter `RUN_PLAN.md`, the
 current seal, the case packets, the arms, the rubric, or the P3 hypothesis. It must be reviewed,
 accepted, and sealed as a new plan before use.
@@ -16,12 +18,16 @@ showing at least two more `C` failures under both scorers. Anything else is inco
 never equivalence. P3 still makes no claim about native consumer delivery, project match, examples,
 or the later fresh-task/cold-resumption pilot.
 
-The subject grid is unchanged: eight cards across two tiers and two repeats under qualification
+The scored subject grid is unchanged: eight cards across two tiers and two repeats under qualification
 arm `A` (32 runs); a card × tier stratum qualifies only when both scorers fail the same `A` repeat.
 Seal the qualification map before `B`/`C`; continue only with at least four qualifying strata and
 at least one from every pair. Score both `B` and `C` twice in each qualified stratum, for up to
 64 comparison runs and 96 planned subject runs total. Preserve the absolute 120 two-turn subject
-run ceiling and all current stop rules.
+run ceiling and all current stop rules. The 120 total subject-run slots consist of **96 scored runs**
+and at most **24 technical or defect attempts**. Every attempt has exactly one class from
+`scored`, `technical`, or `defect`. A defect attempt must carry an immutable origin attempt ID;
+origin is required at creation and cannot be edited later. Technical and defect attempts do not
+become scored observations. Their actual provider usage still counts toward the Codex aggregate.
 
 ## Proposed CLI scorer amendment
 
@@ -30,26 +36,29 @@ Keep the two independent blind scorer routes and their existing pins: Codex CLI 
 the frozen prompt, without arm, tier, subject-model, or qualification labels. Keep the two raw
 readings independent; do not adjudicate.
 
-Replace the failed 3,000-input per-pass proposal with route-specific candidate acceptance limits:
-**20,000 observed input / 1,000 output tokens for Codex** and **20,000 observed input / 2,000
-output tokens for Qwen**. Count the whole CLI-reported request, including harness overhead, against
-the input cap. The new Qwen real-packet canary returned a valid TSV at 1,758 output tokens under a
-locally configured 2,000-token setting, but it did not reach that limit; it therefore does not show
-that a 2,000-token cap is enforced. Its saved `command.json` still describes a 1,000-token
-enforcement setting, while its provider overlay and runner setting are 2,000; treat that metadata
-field as stale and resolve the discrepancy before a route claim. The previous 1,000-output Qwen
-canaries each reported exactly 1,000 output, but the default-thinking call had no final response and
-the thinking-disabled call failed TSV validation. Their usage alone does not prove a hard route cap.
-The valid 2,000-setting response used `enable_thinking=false`, which changes the scorer condition;
-the gateway's honoring of that switch remains unverified. A user authorization for this single
-technical canary covers only that exploratory mechanics call. It does not approve a scored V2
-condition, a new seal, or qualification dispatch. Any scored Qwen route must use the separately
-owner-approved condition and pass a fresh route check under it.
+Use the same frozen blind packet, prompt, rubric, scorer pass schedule, model pin, no-tools setting,
+and no-retry rule for both routes. Keep the pins at Codex CLI 0.156.1 / `gpt-6-astra` and Qwen CLI
+0.24.7 / `qwen3.8-27b`. Accept at most **20,000 observed input tokens per scorer call** on either
+route, counting the whole CLI-reported request including harness overhead. For Codex, also accept
+at most **1,000 observed output tokens per call**, checked after the response. These per-call
+observed-usage bounds are validity/mechanics checks, not aggregate economic caps. Qwen has no
+aggregate token ceiling. For Qwen, use its default-thinking condition and a
+**2,000-token maximum-output setting**; this candidate is based on
+the 2026-10-07 unscored canary, whose output was 1,363 tokens and whose response had the exact TSV
+shape. That response stayed below 2,000, so provider enforcement of the setting remains untested;
+the setting is not a hard cap. The earlier valid 1,758-token Qwen response used
+`enable_thinking=false`, an altered condition, and its `command.json` incorrectly describes a
+1,000-token setting. Resolve the stale metadata before a route claim. The first default-thinking
+2,000-setting attempt failed DNS resolution before provider contact; a fresh one-shot succeeded.
+Both attempts remain exploratory and unscored. The successful default-thinking canary recorded a
+thinking block, but did not capture gateway acknowledgement of the setting. No scored V2 condition,
+new seal, or qualification dispatch is authorized here; any route check must use the accepted
+condition and a fresh one-shot packet.
 
-Codex has no CLI output-limit flag in the inventoried help, so its output cap is post-hoc: inspect
-actual usage after each response and fail closed above 1,000. The Codex input cap is also post-hoc
-because the CLI does not expose a hard input limit. The Qwen input cap is post-hoc as well. Pre-count
-packet material where possible, but do not treat that count as the full CLI request size.
+Codex exposes no CLI output-limit flag in inventoried help, and neither route exposes a hard input
+limit; check the observed usage after every call and fail closed on an overrun. Pre-count packet
+material where possible, but do not treat that count as the full CLI request size. These checks
+cannot prevent a single call from overshooting its allowance.
 
 ### Observed real-packet mechanics attempts
 
@@ -89,29 +98,36 @@ resources even though they produced no scoring data. Both thinking-disabled call
 excluded from the default-thinking condition. The user's authorization of `g9521230` is limited to
 that one technical canary and does not accept a scored V2 condition.
 
-This allows **at most 240 planned scorer passes**, including route canaries, all qualification and
-comparison readings, and every failed or retried attempt. Under the proposed route-specific limits,
-let `C` be Codex passes and `Q` be Qwen passes, with `C + Q = 240`; the accepted-pass accounting
-envelope is `21,000 × C + 22,000 × Q` tokens. A fixed 120/120 route split yields **5,160,000
-tokens**. If the route mix is not fixed, a conservative all-Qwen envelope is **5,280,000 tokens**;
-all-Codex would be 5,040,000. These are proposed accounting envelopes, not accepted limits or
-guaranteed maxima on actual provider usage. Input limits are post-hoc on both routes, Codex's output
-limit is post-hoc, and the Qwen 2,000 setting has not been shown to stop generation at that limit.
-A single request can exceed a post-hoc or unverified cap before the stop rule can act, so one overrun
-can exceed any aggregate envelope even if dispatch stops immediately afterward. Failed calls and
-route-verification probes also consume resources and must be entered at actual usage; missing usage
-must fail closed and must not be treated as zero. Before authorization, the owner must select the
-route allocation (or accept the conservative envelope) and decide whether its accounting includes
-the whole P3 effort, including the four completed real-packet mechanics calls.
-The current offline approval validator and usage ledger still hard-code 5,040,000 tokens; they
-cannot record either higher route-specific candidate envelope yet. Keep this proposal unselected
-and align those tools only through a separately reviewed, versioned update after the owner chooses.
+The scorer schedule is **exactly 120 accepted readings per model** (120 Codex and 120 Qwen), with
+no uncontrolled extra scoring. Preserve all preregistered qualification, comparison, and stop
+rules; failed attempts remain recorded and do not become readings or justify retries. Codex's
+observed aggregate accounting ceiling for the full P3 quality evaluation is **5,000,000 tokens**.
+Known prior Codex P3 usage is 153,614 tokens (126,014 subject-control tokens plus 27,600 scorer
+exploratory tokens), leaving **4,846,386 tokens**. This prior debit is a reconstructed aggregate from
+existing subject-control and scorer-exploration records; an authenticated event-by-event ledger
+covering those historical calls is not available, so the breakdown is provenance-limited and must
+not be represented as newly validated per-call accounting. Include every subsequent Codex P3
+provider call exactly once, across subject turns, scorer readings, route checks, technical attempts,
+and failed/defect calls, in the same observed-usage ledger. Missing usage fails closed and is never
+zero. This is an accounting ceiling, not a hard provider cap: input and output checks happen
+after a call, so one call can overshoot 5,000,000 before dispatch stops. Qwen has no aggregate token
+ceiling; retain usage and session records for every attempt. The existing approval validator and
+scorer ledger now encode the Codex-only aggregate ceiling, uncapped Qwen aggregate usage, and the
+120 accepted-reading limit per route. The ledger keeps route checks separate from scored readings
+and stops a route after a per-call allowance breach. Its accounting scope is scorer attempts only:
+it does not debit future subject-run usage or yet record the required run-class and defect-origin
+provenance. It provides no dispatch path or authorization.
 
-Stop a route immediately if model identity, tool behavior, usage provenance, or either observed
-per-pass cap fails. A cap overrun is an execution defect and remains recorded; do not retry or
-substitute a call. Neither the 5.16M fixed-mix proposal nor the 5.28M conservative proposal is a
-provider-enforced hard billing or token limit. Do not dispatch if the owner requires a hard
-aggregate cap that these routes cannot enforce.
+The subject-run driver still needs to implement and validate the accepted run-class and immutable
+defect-origin fields, and shared accounting across subject and scorer calls. Fail closed on an
+ambiguous class, missing defect origin, duplicate debit, or unknown usage. The accepted protocol
+keeps the 120 subject-run ceiling, partitioned into 96 scored and 24 technical/defect attempts.
+
+Stop a route immediately if model identity, tool behavior, usage provenance, or an observed
+per-call allowance fails. A breach is an execution defect and remains recorded; do not retry or
+substitute a call. Stop further Codex dispatch when its observed aggregate reaches 5,000,000; the
+ceiling cannot prevent a single-call overrun. Qwen has no aggregate token stop, but still follows
+the same fixed reading schedule and preregistered stop rules.
 
 Before qualification scoring, require a real-packet route check under the exact owner-approved
 scorer condition. The completed Codex mechanics attempt passed TSV shape checks but was recorded
@@ -130,49 +146,26 @@ absence of recorded tool events does not prove hidden tool definitions were unav
 both route versions, exact model identity, settings, per-pass input/output use, event/tool audit,
 attempt outcome, and the ledger before advancing to the next packet.
 
-## Owner choice required before a new seal
+## Remaining prerequisites before a new seal
 
-The present approval records unknown Qwen gateway pricing and no named cost-stop operator. The
-owner must choose and explicitly accept one resource-control option, decide whether the
-route-specific envelope (5.16M at a fixed 120/120 split, or 5.28M if the route mix is unconstrained)
-covers only future V2 passes or the whole P3 effort. The four completed real-packet calls used
-54,871 actual input-plus-output tokens in total; if the 240-pass ceiling is future-only, record that
-usage separately, while if the ceiling covers the whole P3 effort, count those four attempts within
-it. The owner must approve the exact default-thinking scorer condition before either scorer runs
-and accept that the current CLI routes cannot guarantee a hard aggregate cap because per-pass input limits and the
-Codex output limit are post-hoc. Independently, Qwen's approved default-thinking route has not
-passed route verification and must pass a new one-shot check before qualification scoring:
+The owner has accepted the protocol direction: Codex's 5,000,000-token aggregate accounting ceiling
+covers the full P3 effort, including known prior usage and all future Codex provider calls; Qwen uses
+the same fixed experimental matrix but has no aggregate token ceiling. The owner also accepted 96
+scored subject runs plus a maximum of 24 technical/defect attempts (120 total), exact class values,
+and immutable required defect origin. This acceptance does not establish technical readiness, create
+a new seal, or authorize dispatch. Keep the exact 120/120 accepted scorer-reading schedule and
+preserve usage/session records for both routes. Before
+qualification scoring, verify each route on a fresh one-shot under the exact accepted scorer
+condition, with model identity, complete TSV, correlated usage, no tools, and no retries. The
+default-thinking Qwen canary on 2026-10-07 returned valid TSV after an initial DNS failure, but
+stayed below the configured 2,000 output setting; enforcement remains untested. The older
+thinking-disabled 2,000-setting canary does not establish the default-thinking route.
 
-- The Qwen default-thinking attempt used the pinned model and remained within the observed token
-  thresholds but returned no final answer at the output cap.
-- The later `enable_thinking=false` attempt is an altered scorer condition, returned an invalid
-  TSV at the same cap, and does not verify gateway support for that setting.
-- The later Qwen call configured a 2,000 output setting and returned valid TSV at 1,758 output, but
-  did not test whether 2,000 is enforced; it also used `enable_thinking=false`, and its saved
-  command metadata incorrectly describes a 1,000 setting.
-- The Codex mechanics route passed TSV shape validation, but its caps remain post-hoc and its
-  result was explicitly unscored.
-
-Owner approval of cost accounting alone does not clear a failed route. Any route-control change
-requires a separate fresh canary and a versioned approval before scoring.
-
-1. **Keep the USD 25 ceiling.** Provide the actual gateway/account rates that apply to the Qwen
-   route (including any markup, cache pricing, or fixed fee), provide the Codex route's applicable
-   cost basis, calculate the cost of the selected route-specific envelope (up to 5.28M tokens if
-   route allocation is unconstrained), and name the person who will
-   monitor spend and stop both routes at USD 25. State that a one-call overrun can exceed this
-   estimate because the relevant limits are post-hoc. If the estimate exceeds USD 25 or the stop
-   method is unavailable, do not dispatch.
-2. **Replace the money ceiling with a token-only limit.** Explicitly approve a route mix and its
-   accounting envelope (5.16M at a fixed 120/120 split or up to 5.28M if unconstrained), state
-   whether completed exploratory calls count against it, and name a human operator to track actual
-   usage and stop before another pass would exceed the planned amount. This option makes no USD cost
-   claim and does not guarantee actual usage will stay within the selected route-specific envelope
-   when per-pass limits are post-hoc; it also does not bound monetary spend while the gateway rate
-   is unknown.
-
-Neither option is selected by this proposal. After the owner chooses, update a versioned approval
-record and seal the accepted plan; keep this proposal marked NOT AUTHORIZED until then. Preserve
-the existing M91/M99 limitations, current subject-run history, 240-pass planned count, actual
-provider-call/token ledger, and all P3 stop conditions in that new record. No scorer dispatch is
-authorized by this proposal or by the mechanics results above.
+The current V2 approval validator and scorer ledger do not yet prove end-to-end accounting across
+subject and scorer calls or enforce the accepted subject-run class/origin rules. Preserve M91/M99
+limitations, current run history, the 96 scored plus 24 technical/defect subject-run partition,
+actual provider-call/token records, and all preregistered P3 stop conditions. The V2 approval record
+also needs a named human stop operator before dispatch; no operator identity has been recorded.
+Keep this proposal marked **NOT AUTHORIZED** until the remaining protocol and accounting gaps are
+resolved, the plan is reviewed and accepted, a new seal is created, and dispatch is separately
+authorized. No scorer dispatch is authorized by this document or by the mechanics results above.

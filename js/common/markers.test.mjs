@@ -131,7 +131,7 @@ test("release removes this identity's markers by kind prefix and spares keepKind
 
 test("an identity with a lone surrogate is refused, as Python's encode() refuses it", () => {
   withDir((directory) => {
-    assert.throws(() => claimDiagnosticMarker(data, "shell-route", "a\ud800b", { directory }), TypeError);
+    assert.throws(() => claimDiagnosticMarker(data, "shell-route", "a\ud800b", { directory }), { name: "UnicodeEncodeError" });
     assert.deepEqual(fs.readdirSync(directory), []);
   });
 });
@@ -178,5 +178,30 @@ test("a candidate that cannot take a file is passed over", { skip: process.getui
     } finally {
       fs.chmodSync(a, 0o700);
     }
+  });
+});
+
+test("a falsy identity of any JSON type is no identity: claim repeats, release does nothing", () => {
+  withDir((dir) => {
+    for (const empty of [null, undefined, "", 0, false, [], {}]) {
+      assert.equal(claimDiagnosticMarker(data, "k", /** @type {any} */ (empty), { directory: dir }), true);
+      assert.equal(claimDiagnosticMarker(data, "k", /** @type {any} */ (empty), { directory: dir }), true);
+      releaseDiagnosticMarkers(data, "k", /** @type {any} */ (empty), { directory: dir });
+    }
+    assert.deepEqual(fs.readdirSync(dir), []);
+  });
+});
+
+test("a truthy non-string identity is the AttributeError of `identity.encode()`, and writes nothing", () => {
+  withDir((dir) => {
+    for (const bad of [1, 1.5, true, ["x"], { a: 1 }]) {
+      assert.throws(() => claimDiagnosticMarker(data, "k", /** @type {any} */ (bad), { directory: dir }), {
+        name: "AttributeError",
+      });
+      assert.throws(() => releaseDiagnosticMarkers(data, "k", /** @type {any} */ (bad), { directory: dir }), {
+        name: "AttributeError",
+      });
+    }
+    assert.deepEqual(fs.readdirSync(dir), []);
   });
 });

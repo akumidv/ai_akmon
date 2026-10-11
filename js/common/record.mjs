@@ -7,11 +7,12 @@
  */
 
 import fs from "node:fs";
-import { basename, posix } from "node:path";
+import { basename } from "node:path";
 import { TextDecoder } from "node:util";
 
 import { TomlError, parse } from "../vendor/smol-toml/dist/index.js";
 import { aitnaRoot } from "./project_root.mjs";
+import { pyPath } from "./pyvalue.mjs";
 
 const _PACKAGE_MODE = "package";
 
@@ -233,7 +234,7 @@ export function readAkmonTomlStrict(filePath) {
  * @returns {string | null}
  */
 export function recordedMount(projectRoot) {
-  const value = readAkmonToml(posix.join(aitnaRoot(projectRoot), ".akmon.toml"))["mount"];
+  const value = readAkmonToml(pyPath(aitnaRoot(projectRoot), ".akmon.toml"))["mount"];
   return typeof value === "string" && value !== "" ? value : null;
 }
 

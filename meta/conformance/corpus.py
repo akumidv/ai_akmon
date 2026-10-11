@@ -465,6 +465,18 @@ def _python_launcher(proj: Path, tree: Path) -> None:
     launcher.chmod(0o755)
 
 
+def _node_carrier(proj: Path, tree: Path) -> None:
+    """The Node carrier a package-mode hook runs from: ``node_modules/akmon`` is the tree itself.
+
+    The wiring names ``node_modules/akmon/js/hooks/<script>.mjs`` (ADR 0020 D05), and the
+    package a manager installs there carries the whole tree, so linking the tree is the same
+    layout; Node resolves the link, which makes the hook's own location the tree, as the
+    Python launcher's ``cli.py`` does for the embedded one.
+    """
+    (proj / "node_modules").mkdir(parents=True, exist_ok=True)
+    (proj / "node_modules" / "akmon").symlink_to(tree)
+
+
 def _lay_out_project(fixture: FixtureSpec, env: RunEnv, scenario_id: str) -> Path:
     """The fixture's files on disk: the base, a native attach's layers, then ``remove`` and tokens."""
     proj = env.work / f"proj-{scenario_id}"
@@ -504,6 +516,8 @@ def materialize_fixture(
         (proj / "_aitna" / "akmon").symlink_to(tree)
     if fixture.attach == "native" and env.impl == "python":
         _python_launcher(proj, tree)
+    if fixture.attach == "native" and env.impl == "node":
+        _node_carrier(proj, tree)
     if fixture.git:
         _git(["init", "-b", fixture.branch], cwd=proj)
     if fixture.warmup == "before" and sync:

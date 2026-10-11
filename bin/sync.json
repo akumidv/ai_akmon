@@ -4,7 +4,8 @@
   "akmon_hook_markers": [
     "{{aitna}}/akmon/hooks/",
     "{{aitna}}/.akmon/hooks/",
-    "{{cli}}\" hook "
+    "{{cli}}\" hook ",
+    "/node_modules/akmon/js/hooks/"
   ],
   "claude_hooks": {
     "PreToolUse": [

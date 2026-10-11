@@ -14,7 +14,7 @@
  * (the flag parses in any position, the way argparse reorders probe.py's).
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -1140,6 +1140,15 @@ async function probeMaterialization(tree, table) {
 // non-whole number is a float in either language already. Expected and actual compare as the
 // canonical form (`json_writer.mjs`, the twin of `json.dumps(sort_keys=True)`), so `1.0` is not
 // `1` and `true` is not `1`, as on the Python side.
+//
+// The hook modules (C104 pass 2) use the same mouth (`probeRows`): `probeHookCore`,
+// `probeClaudeAdapter` and `probeCodexAdapter` differ from `probeRouting` in the module, in what a
+// call hands the export before its Python arguments (`dataArgs`: the lazy bundle of hook_data.mjs
+// as ONE first argument for the exports that read a data file or a marker, `HOOK_DATA_EXPORTS`),
+// and in `plain`: a hook function only ever sees a payload field's type and truthiness, so a
+// `FloatValue` is unwrapped to its number before the call. The new row keys and constructors are
+// documented above `probe_routing` in probe.py; `HookResult` is built from ONE options object of
+// camelCase keys (`ROUTING_OPTIONS_CLASSES`), not positionally.
 // --------------------------------------------------------------------------------------
 
 const ROUTING_DATA_FILES = {
@@ -1184,8 +1193,47 @@ const ROUTING_CLASS_FIELDS = /** @type {Record<string, string[]>} */ ({
   GateRule: ["role", "trigger", "noun", "headings", "anchor"],
 });
 
-const ROUTING_BASE_ENV = ["AKMON_CONTEXT_RECOMMENDED_MAX", "AITNA_ROOT"];
-const ROUTING_CONSTRUCTORS = ["$path", "$registry", "$call", "$new"];
+/** The dataclasses built from one options object of camelCase keys instead of positionally. */
+const ROUTING_OPTIONS_CLASSES = new Set(["HookResult"]);
+
+const ROUTING_BASE_ENV = [
+  "AKMON_CONTEXT_RECOMMENDED_MAX",
+  "AITNA_ROOT",
+  "AKMON_DELEGATION_GRACE",
+  "AKMON_DELEGATION_NUDGE_THRESHOLD",
+  "AKMON_DELEGATION_ASK_THRESHOLD",
+];
+const ROUTING_CONSTRUCTORS = ["$path", "$registry", "$call", "$new", "$float", "$exc"];
+
+/** `{{dir}}` and `{{tree}}` filled in a string of the table. */
+function routingFill(/** @type {any} */ ctx, /** @type {string} */ text) {
+  return text.split("{{dir}}").join(ctx.dir).split("{{tree}}").join(ctx.tree);
+}
+
+/** What `$float` stands for: Python's `float(text)` of the spellings a table uses. */
+function routingFloat(/** @type {string} */ text) {
+  const named = /** @type {Record<string, number>} */ ({ nan: Number.NaN, inf: Number.POSITIVE_INFINITY, "-inf": Number.NEGATIVE_INFINITY });
+  return Object.hasOwn(named, text) ? named[text] : Number(text);
+}
+
+/**
+ * A `FloatValue` unwrapped to its number, recursively (`plain` modules see no float wrapper).
+ * @param {any} ctx
+ * @param {any} value
+ * @returns {any}
+ */
+function routingPlain(ctx, value) {
+  if (value instanceof ctx.FloatValue) {
+    return value.n;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => routingPlain(ctx, item));
+  }
+  if (value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, routingPlain(ctx, item)]));
+  }
+  return value;
+}
 
 /** `snake_case` → `camelCase`; a CamelCase class or SCREAMING constant keeps its name. */
 function routingCamel(/** @type {string} */ name) {
@@ -1223,7 +1271,7 @@ function routingParse(floatValue, text) {
  */
 function routingArg(ctx, value) {
   if (typeof value === "string") {
-    return value.split("{{dir}}").join(ctx.dir);
+    return routingFill(ctx, value);
   }
   if (Array.isArray(value)) {
     return value.map((item) => routingArg(ctx, item));
@@ -1268,6 +1316,13 @@ function routingConstructed(ctx, value) {
     ctx.hashes.add(createHash("sha256").update(ctx.canonicalForm(registry), "utf8").digest("hex").slice(0, 16));
     return registry;
   }
+  if ("$float" in value) {
+    const number = routingFloat(value.$float);
+    return !ctx.plain && Number.isInteger(number) ? new ctx.FloatValue(number) : number;
+  }
+  if ("$exc" in value) {
+    return ctx.pyError(value.$exc, routingArg(ctx, value.message ?? ""));
+  }
   if ("$call" in value) {
     const answer = routingCall(ctx, { fn: value.$call, args: value.args ?? [], kwargs: value.kwargs ?? {} });
     return "pick" in value ? answer[value.pick] : answer;
@@ -1277,8 +1332,12 @@ function routingConstructed(ctx, value) {
 
 /** A dataclass from its snake_case fields, in the declaration order of `ROUTING_CLASS_FIELDS`. */
 function routingNew(/** @type {any} */ ctx, /** @type {string} */ name, /** @type {Record<string, any>} */ fields) {
+  const cls = ctx.module[name] ?? ctx.classes[name];
+  if (ROUTING_OPTIONS_CLASSES.has(name)) {
+    return new cls(Object.fromEntries(Object.entries(fields).map(([key, value]) => [routingCamel(key), value])));
+  }
   const order = ROUTING_CLASS_FIELDS[name] ?? [];
-  return new ctx.module[name](...order.map((field) => fields[field]));
+  return new cls(...order.map((field) => fields[field]));
 }
 
 /**
@@ -1289,19 +1348,23 @@ function routingNew(/** @type {any} */ ctx, /** @type {string} */ name, /** @typ
  */
 function routingCall(ctx, call) {
   const name = routingCamel(call.fn);
-  const target = ctx.module[name];
+  const target = ctx.module[name] ?? ctx.classes[name];
   if (target === undefined) {
     throw new Error(`probe: routing.mjs exports no ${name} (for ${call.fn})`);
   }
-  const args = routingArg(ctx, call.args ?? []);
-  const kwargs = routingArg(ctx, call.kwargs ?? {});
+  const resolved = routingArg(ctx, call.args ?? []);
+  const args = ctx.plain ? routingPlain(ctx, resolved) : resolved;
+  const kwargs = ctx.plain ? routingPlain(ctx, routingArg(ctx, call.kwargs ?? {})) : routingArg(ctx, call.kwargs ?? {});
+  if (ROUTING_OPTIONS_CLASSES.has(name)) {
+    return routingNew(ctx, name, kwargs);
+  }
   if (name in ROUTING_CLASS_FIELDS) {
     return routingNew(ctx, name, { ...Object.fromEntries(args.map((/** @type {any} */ a, /** @type {number} */ i) => [ROUTING_CLASS_FIELDS[name][i], a])), ...kwargs });
   }
   if (typeof target !== "function") {
     return target;
   }
-  const data = (ROUTING_DATA_PARAMS[name] ?? []).map((file) => ctx.data[file]);
+  const data = ctx.dataArgs(name);
   const options = Object.fromEntries(Object.entries(kwargs).map(([key, value]) => [routingCamel(key), value]));
   return target(...data, ...args, ...(Object.keys(options).length > 0 ? [options] : []));
 }
@@ -1341,12 +1404,15 @@ function routingPairs(/** @type {any} */ ctx, /** @type {any} */ raw) {
  */
 function routingText(ctx, value) {
   if (typeof value === "string") {
-    let text = value.split(ctx.dir).join("{{dir}}");
+    let text = value.split(ctx.dir).join("{{dir}}").split(ctx.tree).join("{{tree}}");
     for (const [name, body] of ctx.bodies) {
       text = text.split(body).join(`{{body:${name}}}`);
     }
     for (const digest of ctx.hashes) {
       text = text.split(digest).join("{{registry_hash}}");
+    }
+    for (const [token, prose] of ctx.texts) {
+      text = text.split(prose).join(token);
     }
     return text;
   }
@@ -1373,13 +1439,16 @@ function routingTree(/** @type {string} */ base, /** @type {boolean} */ withMode
       if (entry.isDirectory()) {
         walk(full);
       } else if (entry.isFile()) {
-        const raw = fs.readFileSync(full);
         /** @type {any} */
         let content;
+        /** @type {Buffer | null} */
+        let raw = null;
         try {
+          raw = fs.readFileSync(full);
           content = decoder.decode(raw);
         } catch {
-          content = { hex: raw.toString("hex") };
+          // a file the row made unreadable: that it is there is the fact
+          content = raw === null ? { unreadable: true } : { hex: raw.toString("hex") };
         }
         if (withModes) {
           content = { text: content, mode: (fs.statSync(full).mode & 0o7777).toString(8) };
@@ -1393,7 +1462,10 @@ function routingTree(/** @type {string} */ base, /** @type {boolean} */ withMode
 }
 
 /** Write the row's files, then set the mtimes and modes it names. */
-function routingWorld(/** @type {string} */ scratch, /** @type {any} */ case_) {
+function routingWorld(/** @type {any} */ ctx, /** @type {string} */ scratch, /** @type {any} */ case_) {
+  for (const relative of case_.dirs ?? []) {
+    fs.mkdirSync(path.join(scratch, relative), { recursive: true });
+  }
   /** @type {Array<[string, Buffer]>} */
   const contents = Object.entries(case_.files ?? {}).map(([relative, text]) => [relative, Buffer.from(String(text), "utf-8")]);
   for (const [relative, parts] of Object.entries(case_.files_parts ?? {})) {
@@ -1412,6 +1484,10 @@ function routingWorld(/** @type {string} */ scratch, /** @type {any} */ case_) {
     fs.mkdirSync(path.dirname(path.join(scratch, relative)), { recursive: true });
     fs.writeFileSync(path.join(scratch, relative), data);
   }
+  for (const [relative, target] of Object.entries(case_.links ?? {})) {
+    fs.mkdirSync(path.dirname(path.join(scratch, relative)), { recursive: true });
+    fs.symlinkSync(routingFill(ctx, String(target)), path.join(scratch, relative));
+  }
   for (const [relative, seconds] of Object.entries(case_.mtimes ?? {})) {
     const moment = Date.now() / 1000 - Number(seconds);
     fs.utimesSync(path.join(scratch, relative), moment, moment);
@@ -1421,26 +1497,51 @@ function routingWorld(/** @type {string} */ scratch, /** @type {any} */ case_) {
   }
 }
 
-/** The row's answer in table form, a raise included. */
-function routingAnswer(/** @type {any} */ ctx, /** @type {any} */ case_) {
-  for (const setup of routingParse(ctx.FloatValue, case_.setup_json ?? "[]")) {
-    routingCall(ctx, setup);
-  }
-  const call = {
-    fn: case_.fn,
-    args: routingParse(ctx.FloatValue, case_.args_json ?? "[]"),
-    kwargs: routingParse(ctx.FloatValue, case_.kwargs_json ?? "{}"),
-  };
+/**
+ * One call's answer in table form: `[raised, value]`; a raise is `{error, message}`.
+ * @param {any} ctx
+ * @param {any} case_
+ * @param {any} call
+ * @returns {[boolean, any]}
+ */
+function routingOutcome(ctx, case_, call) {
   /** @type {any} */
   let raw;
   try {
     raw = routingCall(ctx, call);
   } catch (error) {
     const caught = /** @type {Error} */ (error);
-    return { error: caught.name, message: routingText(ctx, caught.message) };
+    // The class is what the module's crash handler would print: a Node system error under its Python name.
+    const name = ctx.exceptionClassName(caught);
+    return [true, case_.class_only === true ? { error: name } : { error: name, message: routingText(ctx, caught.message) }];
   }
   const isObject = raw !== null && typeof raw === "object" && !Array.isArray(raw) && !(raw instanceof ctx.FloatValue);
-  const value = routingText(ctx, case_.ordered === true && isObject ? routingPairs(ctx, raw) : routingJson(ctx, raw));
+  return [false, routingText(ctx, case_.ordered === true && isObject ? routingPairs(ctx, raw) : routingJson(ctx, raw))];
+}
+
+/** The row's answer in table form, a raise included. */
+function routingAnswer(/** @type {any} */ ctx, /** @type {any} */ case_) {
+  for (const setup of routingParse(ctx.FloatValue, case_.setup_json ?? "[]")) {
+    routingCall(ctx, setup);
+  }
+  /** @type {any} */
+  let value;
+  if (case_.steps_json !== undefined) {
+    value = routingParse(ctx.FloatValue, case_.steps_json).flatMap((/** @type {any} */ step) =>
+      Array.from({ length: step.times ?? 1 }, () => routingOutcome(ctx, case_, step)[1]),
+    );
+  } else {
+    const call = {
+      fn: case_.fn,
+      args: routingParse(ctx.FloatValue, case_.args_json ?? "[]"),
+      kwargs: routingParse(ctx.FloatValue, case_.kwargs_json ?? "{}"),
+    };
+    const [raised, outcome] = routingOutcome(ctx, case_, call);
+    if (raised) {
+      return outcome;
+    }
+    value = outcome;
+  }
   if (!("tree" in case_)) {
     return value;
   }
@@ -1450,19 +1551,28 @@ function routingAnswer(/** @type {any} */ ctx, /** @type {any} */ case_) {
 
 /** One row in its own scratch directory and environment, both restored afterwards. */
 function routingCase(/** @type {any} */ base, /** @type {any} */ case_) {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "akmon-probe-routing-"));
+  // A lowercase name: classify_target lowercases a path, so a scratch directory with a capital in its
+  // name (`mkdtemp` draws from both cases) would come back from a row unmasked.
+  const made = path.join(os.tmpdir(), `akmon-probe-routing-${randomBytes(6).toString("hex")}`);
+  fs.mkdirSync(made, { mode: 0o700 });
+  const scratch = fs.realpathSync(made);
   const ctx = { ...base, dir: scratch, hashes: new Set() };
   /** @type {Record<string, string | null>} */
   const changes = Object.fromEntries(ROUTING_BASE_ENV.map((name) => [name, null]));
   changes.TMPDIR = scratch;
   for (const [name, value] of Object.entries(case_.env ?? {})) {
-    changes[name] = value === "" ? null : String(value).split("{{dir}}").join(scratch);
+    changes[name] = value === "" ? null : routingFill(ctx, String(value));
   }
   const previous = process.umask(0o022);
+  const working = process.cwd();
   try {
-    routingWorld(scratch, case_);
+    routingWorld(ctx, scratch, case_);
+    if (case_.cwd !== undefined) {
+      process.chdir(path.join(scratch, case_.cwd));
+    }
     return withEnvironment(changes, () => routingAnswer(ctx, case_));
   } finally {
+    process.chdir(working);
     process.umask(previous);
     for (const relative of Object.keys(case_.modes ?? {})) {
       try {
@@ -1495,23 +1605,87 @@ function routingPrintable(ctx, value) {
 }
 
 /**
- * The model-routing core, one public call per row, against the tree's routing.mjs.
+ * The exports of each hook module that take `data` (hook_data.mjs's lazy bundle) as their first
+ * argument: the ones whose Python twin reads a data file or a marker, directly or through a callee
+ * (the contract table of the C104 pass-2 spec). A name absent here takes none.
+ * @type {Record<string, Set<string>>}
+ */
+const HOOK_DATA_EXPORTS = {
+  hook_core: new Set([
+    "neutralKind", "editTool", "shellTool", "readTool", "subagentTool", "unclassifiedShellRouteNotice",
+    "reportUnclassifiedShellRoute", "privilegeEscalationGuardResult", "gitCommitGuardResult",
+    "staleGuardrailNotice", "sessionStartResult", "isCodePath", "isPlanningDoc", "roleOnCodeMessage",
+    "roleOnCodeResult", "analysisBeforeMutationMessage", "analysisWriteResult", "delegationGrace",
+    "delegationNudgeThreshold", "delegationAskThreshold", "delegationNudgeMessage", "delegationAskMessage",
+    "delegationNudgeResult",
+  ]),
+  claude_adapter: new Set(["normalizeTool", "renderResult"]),
+  codex_adapter: new Set([
+    "normalizeTool", "toolKind", "toolName", "sessionId", "toolUseId", "command", "unmeasuredPathSource",
+    "filePaths", "payloadShape", "cwd",
+  ]),
+};
+
+/** A text of the hook data file shorter than this many bytes stays in the table as written. */
+const HOOK_PROSE_BYTES = 40;
+
+/**
+ * The `{{core:<key>}}` tokens (probe.py's `_hook_prose`): long texts of hooks/hook_core.json and the
+ * stretches between their placeholders, longest first.
+ * @param {string} tree
+ * @returns {Array<[string, string]>}
+ */
+function hookProse(tree) {
+  /** @type {Array<[string, string]>} */
+  const pieces = [];
+  const walk = (/** @type {string} */ keyPath, /** @type {any} */ node) => {
+    if (typeof node === "string") {
+      const stretches = node.split(/\{\{[a-z0-9_]+\}\}/);
+      stretches.forEach((stretch, number) => {
+        if (Buffer.byteLength(stretch, "utf8") >= HOOK_PROSE_BYTES) {
+          pieces.push([`{{core:${keyPath}${stretches.length > 1 ? `#${number}` : ""}}}`, stretch]);
+        }
+      });
+    } else if (node !== null && typeof node === "object" && !Array.isArray(node)) {
+      for (const [key, item] of Object.entries(node)) {
+        walk(keyPath === "" ? key : `${keyPath}.${key}`, item);
+      }
+    }
+  };
+  walk("", readData(tree, "hooks/hook_core.json"));
+  const size = (/** @type {[string, string]} */ piece) => Buffer.byteLength(piece[1], "utf8");
+  return pieces.sort((a, b) => size(b) - size(a) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
+/**
+ * The generic mouth: every `[[case]]` of the table against the module `spec` names.
  * @param {string} tree
  * @param {Record<string, any>} table
+ * @param {{module: string, classes?: string, dataArgs: (tree: string, base: any) => ((name: string) => any[]), plain?: boolean, texts?: boolean}} spec
  * @returns {Promise<any[]>}
  */
-async function probeRouting(tree, table) {
-  const module = await loadModule(tree, "js/tools/model_routing/routing.mjs");
+async function probeRows(tree, table, spec) {
+  const module = await loadModule(tree, spec.module);
+  const classes = spec.classes === undefined ? {} : await loadModule(tree, spec.classes);
   const writer = await loadModule(tree, "js/common/json_writer.mjs");
+  const values = await loadModule(tree, "js/common/pyvalue.mjs");
   const data = Object.fromEntries(Object.entries(ROUTING_DATA_FILES).map(([key, relative]) => [key, readData(tree, relative)]));
   const base = {
     module,
+    classes,
     FloatValue: writer.FloatValue,
     canonicalForm: writer.canonicalForm,
+    pyError: values.pyError,
+    exceptionClassName: values.exceptionClassName,
     data,
     registryText: fs.readFileSync(path.join(tree, "tools/model_routing/registry.json"), "utf-8"),
-    bodies: data.agents.agent_specs.map((/** @type {any} */ spec) => [spec.name, spec.body]),
+    bodies: data.agents.agent_specs.map((/** @type {any} */ spec_) => [spec_.name, spec_.body]),
+    tree: fs.realpathSync(tree),
+    texts: spec.texts === true ? hookProse(tree) : [],
+    plain: spec.plain === true,
+    dataArgs: /** @type {(name: string) => any[]} */ (() => []),
   };
+  base.dataArgs = spec.dataArgs(tree, base);
   const results = [];
   for (const [index, case_] of (table.case ?? []).entries()) {
     if (skippedAsRoot(case_)) {
@@ -1529,6 +1703,53 @@ async function probeRouting(tree, table) {
   return results;
 }
 
+/**
+ * The model-routing core, one public call per row, against the tree's routing.mjs.
+ * @param {string} tree
+ * @param {Record<string, any>} table
+ * @returns {Promise<any[]>}
+ */
+async function probeRouting(tree, table) {
+  return probeRows(tree, table, {
+    module: "js/tools/model_routing/routing.mjs",
+    dataArgs: (_tree, base) => (name) => (ROUTING_DATA_PARAMS[name] ?? []).map((file) => base.data[file]),
+  });
+}
+
+/**
+ * One hook module, one public call per row: `data` is hook_data.mjs's lazy bundle of the tree.
+ * @param {string} tree
+ * @param {Record<string, any>} table
+ * @param {string} stem the module's file stem, `hook_core` / `claude_adapter` / `codex_adapter`
+ * @returns {Promise<any[]>}
+ */
+async function probeHook(tree, table, stem) {
+  const { lazyHookData } = await loadModule(tree, "js/hooks/hook_data.mjs");
+  const bundle = lazyHookData(fs.realpathSync(tree));
+  return probeRows(tree, table, {
+    module: `js/hooks/${stem}.mjs`,
+    classes: "js/hooks/hook_core.mjs", // the adapters take a HookResult, which only hook_core exports
+    dataArgs: () => (name) => (HOOK_DATA_EXPORTS[stem].has(name) ? [bundle] : []),
+    plain: true,
+    texts: true,
+  });
+}
+
+/** The vendor-neutral hook decisions, against the tree's hook_core.mjs. */
+async function probeHookCore(/** @type {string} */ tree, /** @type {any} */ table) {
+  return probeHook(tree, table, "hook_core");
+}
+
+/** The pure half of the Claude adapter, against the tree's claude_adapter.mjs. */
+async function probeClaudeAdapter(/** @type {string} */ tree, /** @type {any} */ table) {
+  return probeHook(tree, table, "claude_adapter");
+}
+
+/** The pure half of the Codex adapter, against the tree's codex_adapter.mjs. */
+async function probeCodexAdapter(/** @type {string} */ tree, /** @type {any} */ table) {
+  return probeHook(tree, table, "codex_adapter");
+}
+
 /** @type {Record<string, (tree: string, table: any, text: string) => Promise<any[]>>} */
 const PROBES = {
   versions: probeVersions,
@@ -1542,6 +1763,9 @@ const PROBES = {
   markers: probeMarkers,
   materialization: probeMaterialization,
   routing: probeRouting,
+  hook_core: probeHookCore,
+  claude_adapter: probeClaudeAdapter,
+  codex_adapter: probeCodexAdapter,
 };
 
 /**
@@ -1582,8 +1806,9 @@ async function main(argv) {
 // empty stdout, which the runner reports as a units scenario whose document does not match the
 // pinned one: red, but naming nothing about the cause.
 if (process.argv[1] !== undefined && _realpath(path.resolve(process.argv[1])) === _realpath(fileURLToPath(import.meta.url))) {
-  const code = await main();
-  process.exit(code);
+  // `process.exitCode`, not `process.exit()`: a pipe is written asynchronously, and the document of a
+  // failing hook table is larger than the 64 KiB a pipe takes at once (measured: a cut-off document).
+  process.exitCode = await main();
 }
 
 export { main };

@@ -1,0 +1,3270 @@
+# Unit table: the pure half of the Codex adapter (hooks/codex_adapter.py; JS mirror
+# js/hooks/codex_adapter.mjs, ADR 0020 D01, C104 pass 2). Data files, read from the tree under
+# test: hooks/vocabulary.json (the Codex tool names and the payload key spellings),
+# hooks/codex_hook.json (the payload-shape template) and common/markers.json (the unidentified
+# session). The JS mouth hands the modules hook_data.mjs's lazy bundle as the first argument of every
+# export that reads one of them; `is_apply_patch_command` reads none.
+#
+# Why this table exists. `is_apply_patch_command` decides, from a shell command string, whether a
+# Bash call is the one effect akmon can path-classify: a quote-and-escape walker, three regular
+# expressions and a heredoc opener. Python's `re` and JS's differ exactly where this reads text --
+# `\s`/`\S`/`\b` (Unicode in Python unless `re.ASCII`, which the Python side now sets and the JS side
+# spells as explicit ASCII classes), `^`/`$` under MULTILINE (Python sees only `\n`; JS also sees
+# `\r`, U+2028 and U+2029), and `.` (Python excludes only `\n`) -- so the rows put CRLF, a lone CR,
+# U+2028/2029, NEL, NBSP and the control separators U+001C-U+001F next to every pattern. The payload
+# accessors are Python `dict.get` + `isinstance` + truthiness over arbitrary JSON: `tool_name`
+# returns an empty string at once, `command` reads `tool_input.get(k) or payload.get(k)` (so a
+# non-string input value *blocks* the top-level value of the same key and a falsy one *defers* to
+# it), `session_id`/`cwd`/`tool_use_id` skip an empty string. `file_paths` strips the patch paths with
+# `str.strip()` (Unicode whitespace incl. U+2028, NEL and U+001C-U+001F), de-duplicates comparing
+# `\` as `/`, and keeps an empty path a name of only U+2028 leaves. `payload_shape` sorts keys by code
+# point (an astral key after U+E000 and U+FF5E; UTF-16 order would differ). The table is the spec:
+# every expected value was produced by running the Python and then read against the docstring.
+#
+# The mouth is the generic one of `routing.toml` (row format: the block comment above `probe_routing`
+# in probe.py); `class_only` answers the exception class alone (a payload that is not an object is an
+# AttributeError at `.get`, a null payload to `payload_shape` a TypeError at the iteration).
+#
+# Families (the `id` prefix): `patch` -- is_apply_patch_command: the heredoc forms, the envelope
+# lines, the path line, the command position (separators, `{ `, `$(`, `command`, a path prefix,
+# a `-c` wrapper), the quote walker, non-ASCII whitespace and letters; `tool` and `kind` --
+# normalize_tool and tool_kind (a shell call carrying a patch acts as an edit; a missing tool name is
+# apply_patch); `tool_name`, `session_id`, `tool_use_id`, `cwd`, `command` -- every key spelling in
+# priority order and every wrong type; `paths` and `unmeasured` -- file_paths and
+# unmeasured_path_source (rename `Move to`, guessed keys kept apart, dedupe, strip, CRLF, U+2028);
+# `shape` -- payload_shape.
+#
+# Deliberate non-pins: `load_payload` and `print_result` (stdin and stdout), `report_failure` (stderr
+# and the exit code) -- the hook corpus pins them -- and a `HookResult` rendered by print_result.
+
+# --- patch: is_apply_patch_command -- a command-position apply_patch directly opening a complete inline envelope ----
+# The shell is read by a narrow walker (quotes and escapes), not parsed; the classes are ASCII on both sides.
+
+[[case]]
+id = "patch/plain"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-bare"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-single-quoted"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-double-quoted"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\"EOF\"\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-dash"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<-EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-dash-single-quoted"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<-\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-dash-double-quoted"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<-\"EOF\"\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-space-after-operator"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch << EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-spaces-and-tabs-around"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch   <<\t\u0027EOF\u0027\t \n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-dash-space"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<- \u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-lowercase-delimiter"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<eof\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-underscore-delimiter"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<_PATCH_1\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-digit-first-delimiter"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<1EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-hyphen-in-delimiter"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<E-OF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-empty-delimiter"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-mismatched-quotes"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\"\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-unclosed-quote"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-non-ascii-delimiter"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<ÉOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-herestring"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-redirect-instead"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-trailing-comment"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF # note\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-trailing-word"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF extra\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-crlf-opener"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\r\n*** Begin Patch\r\n*** Add File: a.txt\r\n+x\r\n*** End Patch\r\nEOF\r\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-crlf-only-opener"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\r\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/heredoc-double-cr"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\r\r\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-cr-only"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\r*** Begin Patch\r*** Add File: a.txt\r+x\r*** End Patch\rEOF\r"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-without-newline-after-delimiter"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-then-envelope-after-blank-line"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/heredoc-then-envelope-after-spaces"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n  *** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-missing"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\n*** Add File: a.txt\n+x\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-begin-only"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-end-only"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-no-path-line"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\n*** Begin Patch\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-begin-trailing-spaces"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch   \n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/envelope-begin-trailing-text"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch now\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-begin-lowercase"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** begin patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-begin-one-star-short"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-begin-extra-space"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n***  Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-begin-indented"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n *** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-end-trailing-spaces"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch  \nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/envelope-end-indented"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n  *** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-end-trailing-text"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch!\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-end-missing-newline-at-end"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/envelope-begin-line-separator-after"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\u2028\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-end-line-separator-after"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\u2028\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-end-nbsp-after"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\u00a0\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-end-next-line-separator"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\u2028EOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-end-cr-before-newline"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\r\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/envelope-end-vertical-tab-after"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\u000b\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/envelope-end-form-feed-after"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\u000c\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/envelope-end-nel-after"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\u0085\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-begin-file-separator-after"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\u001f\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/envelope-end-in-middle-of-body"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\n*** Begin Patch\n*** End Patch\n*** Add File: a.txt\n+x\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-update"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.txt\n@@\n-a\n+b\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-delete"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Delete File: a.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-move-to"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Move to: b.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-move-to-with-update"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.txt\n*** Move to: b.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-no-space-after-colon"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File:a.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/path-line-empty-name"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: \n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/path-line-one-space-name"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File:  \n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-only-line-separator-name"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: \u2028\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-only-cr-name"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: \r\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-name-with-line-separator"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a\u2028b.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-lowercase"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** add file: a.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/path-line-indented"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n  *** Add File: a.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/path-line-unknown-verb"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Rename File: a.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/path-line-in-added-content"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.txt\n+*** Add File: b.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/path-line-after-cr"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\nx\r*** Add File: a.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-at-start"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-leading-spaces"
+fn = "is_apply_patch_command"
+args_json = '["  apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-leading-tab"
+fn = "is_apply_patch_command"
+args_json = '["\tapply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-leading-newline"
+fn = "is_apply_patch_command"
+args_json = '["\napply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-leading-newline-and-spaces"
+fn = "is_apply_patch_command"
+args_json = '[" \napply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-after-and"
+fn = "is_apply_patch_command"
+args_json = '["cd sub && apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-after-semicolon"
+fn = "is_apply_patch_command"
+args_json = '["cd sub; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-after-semicolon-glued"
+fn = "is_apply_patch_command"
+args_json = '["cd sub;apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-after-or"
+fn = "is_apply_patch_command"
+args_json = '["false || apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-after-pipe"
+fn = "is_apply_patch_command"
+args_json = '["echo x | apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-after-background"
+fn = "is_apply_patch_command"
+args_json = '["sleep 1 & apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-after-double-semicolon"
+fn = "is_apply_patch_command"
+args_json = '["x ;; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-after-newline"
+fn = "is_apply_patch_command"
+args_json = '["cd sub\napply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-after-newline-glued-heredoc"
+fn = "is_apply_patch_command"
+args_json = '["echo hi\napply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-after-backslash-newline"
+fn = "is_apply_patch_command"
+args_json = '["cd sub \\\napply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-command-substitution"
+fn = "is_apply_patch_command"
+args_json = '["$(apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-subshell"
+fn = "is_apply_patch_command"
+args_json = '["(apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-subshell-spaced"
+fn = "is_apply_patch_command"
+args_json = '["( apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-group"
+fn = "is_apply_patch_command"
+args_json = '["{ apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-group-tab"
+fn = "is_apply_patch_command"
+args_json = '["{\tapply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-group-newline"
+fn = "is_apply_patch_command"
+args_json = '["{\napply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-group-glued"
+fn = "is_apply_patch_command"
+args_json = '["{apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-backticks"
+fn = "is_apply_patch_command"
+args_json = '["`apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-after-echo"
+fn = "is_apply_patch_command"
+args_json = '["echo apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-after-word"
+fn = "is_apply_patch_command"
+args_json = '["x apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-after-redirect"
+fn = "is_apply_patch_command"
+args_json = '["> out apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-after-colon"
+fn = "is_apply_patch_command"
+args_json = '["x: apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-after-less-than"
+fn = "is_apply_patch_command"
+args_json = '["x < apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-command-builtin"
+fn = "is_apply_patch_command"
+args_json = '["command apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-with-command-builtin-two-spaces"
+fn = "is_apply_patch_command"
+args_json = '["command  apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-with-command-builtin-tab"
+fn = "is_apply_patch_command"
+args_json = '["command\tapply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-with-command-glued"
+fn = "is_apply_patch_command"
+args_json = '["commandapply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-command-twice"
+fn = "is_apply_patch_command"
+args_json = '["command command apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-env-prefix"
+fn = "is_apply_patch_command"
+args_json = '["env apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-assignment-prefix"
+fn = "is_apply_patch_command"
+args_json = '["A=1 apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-exec"
+fn = "is_apply_patch_command"
+args_json = '["exec apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-elevation-prefix"
+fn = "is_apply_patch_command"
+args_json = '["x; sudo apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-time"
+fn = "is_apply_patch_command"
+args_json = '["time apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-absolute-path"
+fn = "is_apply_patch_command"
+args_json = '["/usr/local/bin/apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-relative-path"
+fn = "is_apply_patch_command"
+args_json = '["./bin/apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-home-path"
+fn = "is_apply_patch_command"
+args_json = '["~/bin/apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-dotdot-path"
+fn = "is_apply_patch_command"
+args_json = '["../apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-path-with-command"
+fn = "is_apply_patch_command"
+args_json = '["command /usr/bin/apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-path-trailing-slash"
+fn = "is_apply_patch_command"
+args_json = '["dir/ apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-path-with-space-before-slash"
+fn = "is_apply_patch_command"
+args_json = '["a /apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-name-prefixed"
+fn = "is_apply_patch_command"
+args_json = '["my_apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-name-prefixed-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls; xapply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-name-suffixed"
+fn = "is_apply_patch_command"
+args_json = '["apply_patchx <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-name-suffixed-underscore"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch_ <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-name-hyphenated"
+fn = "is_apply_patch_command"
+args_json = '["apply-patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-name-uppercase"
+fn = "is_apply_patch_command"
+args_json = '["APPLY_PATCH <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-name-mixed-case"
+fn = "is_apply_patch_command"
+args_json = '["Apply_Patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-glued-heredoc"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch<<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-glued-heredoc-quoted"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch<<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-tab-before-heredoc"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch\t<<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-many-spaces-before-heredoc"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch      <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-vertical-tab-before-heredoc"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch\u000b<<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-form-feed-before-heredoc"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch\u000c<<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-option"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch -v <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-argument"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch a.patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-without-heredoc"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-printed"
+fn = "is_apply_patch_command"
+args_json = '["echo apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-with-cat-pipe"
+fn = "is_apply_patch_command"
+args_json = '["cat patch.txt | apply_patch"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-only-name"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-empty"
+fn = "is_apply_patch_command"
+args_json = '[""]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-whitespace-only"
+fn = "is_apply_patch_command"
+args_json = '["   \n  "]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-twice-first-ok"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\napply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-second-on-line-ok"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch -v; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-second-on-line-after-bad"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch x; apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-on-second-line-only"
+fn = "is_apply_patch_command"
+args_json = '["echo x\napply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-on-first-line-second-ok"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch -v\napply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/invocation-then-more-commands"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\ncat a.txt\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/invocation-then-chain"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF && cat a.txt\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-bash-lc-single"
+fn = "is_apply_patch_command"
+args_json = '["bash -lc \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-bash-lc-double"
+fn = "is_apply_patch_command"
+args_json = '["bash -lc \"apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\""]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-bash-c"
+fn = "is_apply_patch_command"
+args_json = '["bash -c \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-sh-c"
+fn = "is_apply_patch_command"
+args_json = '["sh -c \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-zsh-ec"
+fn = "is_apply_patch_command"
+args_json = '["zsh -ec \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-option-glued-to-quote"
+fn = "is_apply_patch_command"
+args_json = '["bash -c\u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-extra-spaces-before-script"
+fn = "is_apply_patch_command"
+args_json = '["bash -lc   \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-with-leading-space-in-script"
+fn = "is_apply_patch_command"
+args_json = '["bash -lc \u0027 apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-script-with-chain"
+fn = "is_apply_patch_command"
+args_json = '["bash -lc \u0027cd sub && apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/wrapper-script-with-command"
+fn = "is_apply_patch_command"
+args_json = '["bash -lc \u0027command apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-long-option-ending-in-c"
+fn = "is_apply_patch_command"
+args_json = '["bash --norc -lc \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-option-with-digit"
+fn = "is_apply_patch_command"
+args_json = '["bash -l1c \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-option-with-underscore"
+fn = "is_apply_patch_command"
+args_json = '["bash -l_c \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/wrapper-option-not-ending-in-c"
+fn = "is_apply_patch_command"
+args_json = '["bash -lx \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/wrapper-script-in-backticks"
+fn = "is_apply_patch_command"
+args_json = '["bash -lc `apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n`"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/wrapper-script-on-second-line"
+fn = "is_apply_patch_command"
+args_json = '["echo x\nbash -lc \u0027apply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/wrapper-heredoc-inside-quotes-quoted-delimiter"
+fn = "is_apply_patch_command"
+args_json = '["bash -lc \"apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\""]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-separator-inside-single"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027a; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\u0027 "]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/quotes-separator-inside-double"
+fn = "is_apply_patch_command"
+args_json = '["echo \"a; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\" "]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/quotes-closed-then-separator"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027a\u0027; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-closed-double-then-separator"
+fn = "is_apply_patch_command"
+args_json = '["echo \"a\"; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-apostrophe-inside-double"
+fn = "is_apply_patch_command"
+args_json = '["echo \"it\u0027s\"; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-double-inside-single"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027say \"x\"\u0027; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-open-apostrophe-then-separator"
+fn = "is_apply_patch_command"
+args_json = '["echo it\u0027s; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/quotes-escaped-quote-keeps-outside"
+fn = "is_apply_patch_command"
+args_json = '["echo \\\u0027; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-escaped-double-quote-keeps-outside"
+fn = "is_apply_patch_command"
+args_json = '["echo \\\"; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-escaped-quote-inside-double"
+fn = "is_apply_patch_command"
+args_json = '["echo \"a\\\"; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\" "]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/quotes-backslash-literal-inside-single"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027a\\\u0027; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-backslash-before-quote-inside-single-ends-it"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027a\\\\\u0027; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-escaped-backslash-then-quote"
+fn = "is_apply_patch_command"
+args_json = '["echo \\\\\"; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n\" "]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/quotes-two-pairs-then-separator"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027a\u0027 \"b\"; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-adjacent-pairs"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027\u0027\"\"; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-first-match-quoted-second-fine"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027a; apply_patch\u0027; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-only-match-quoted"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027x; apply_patch <<EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/quotes-heredoc-body-quote-not-counted"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\n*** Begin Patch\n*** Add File: it\u0027s.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/quotes-backslash-at-end"
+fn = "is_apply_patch_command"
+args_json = '["echo \\"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/quotes-start-in-quote-from-zero"
+fn = "is_apply_patch_command"
+args_json = '["\u0027apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/quotes-escaped-first-char"
+fn = "is_apply_patch_command"
+args_json = '["\\apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-nbsp-before"
+fn = "is_apply_patch_command"
+args_json = '["\u00a0apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-nbsp-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls;\u00a0apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-em-space-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls;\u2003apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-ideographic-space-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls;\u3000apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-nbsp-after-name"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch\u00a0<<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-nbsp-before-heredoc-operator"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch \u00a0<<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-letter-before-name"
+fn = "is_apply_patch_command"
+args_json = '["éapply_patch <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-letter-after-name"
+fn = "is_apply_patch_command"
+args_json = '["apply_patché <<EOF\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-nonspace-prefix-path"
+fn = "is_apply_patch_command"
+args_json = '["é/apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/unicode-file-separator-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls;\u001fapply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-nel-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls;\u0085apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-line-separator-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls;\u2028apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-vertical-tab-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls;\u000bapply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/unicode-form-feed-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls;\u000capply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/unicode-cr-after-separator"
+fn = "is_apply_patch_command"
+args_json = '["ls;\rapply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/unicode-bom-before"
+fn = "is_apply_patch_command"
+args_json = '["\ufeffapply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/unicode-name-with-non-ascii-path"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: café/中.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/unicode-astral-path"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: 𝒜.txt\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/unicode-delimiter-line-separator-after"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<EOF\u2028\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'false'
+
+[[case]]
+id = "patch/large-patch"
+fn = "is_apply_patch_command"
+args_json = '["apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n+line\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/long-command-before"
+fn = "is_apply_patch_command"
+args_json = '["echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; echo x; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+[[case]]
+id = "patch/long-quoted-prefix-then-ok"
+fn = "is_apply_patch_command"
+args_json = '["echo \u0027aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u0027; apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\nEOF\n"]'
+expected_json = 'true'
+
+# --- tool: normalize_tool and tool_kind -- the route a call took, and the effect it has --------------
+
+[[case]]
+id = "tool/normalize-apply-patch"
+fn = "normalize_tool"
+args_json = '["apply_patch"]'
+expected_json = '"edit"'
+
+[[case]]
+id = "tool/normalize-bash"
+fn = "normalize_tool"
+args_json = '["Bash"]'
+expected_json = '"shell"'
+
+[[case]]
+id = "tool/normalize-bash-lowercase"
+fn = "normalize_tool"
+args_json = '["bash"]'
+expected_json = '"bash"'
+
+[[case]]
+id = "tool/normalize-shell"
+fn = "normalize_tool"
+args_json = '["shell"]'
+expected_json = '"shell"'
+
+[[case]]
+id = "tool/normalize-exec-command"
+fn = "normalize_tool"
+args_json = '["exec_command"]'
+expected_json = '"exec_command"'
+
+[[case]]
+id = "tool/normalize-edit"
+fn = "normalize_tool"
+args_json = '["Edit"]'
+expected_json = '"Edit"'
+
+[[case]]
+id = "tool/normalize-write"
+fn = "normalize_tool"
+args_json = '["Write"]'
+expected_json = '"Write"'
+
+[[case]]
+id = "tool/normalize-read"
+fn = "normalize_tool"
+args_json = '["Read"]'
+expected_json = '"Read"'
+
+[[case]]
+id = "tool/normalize-empty"
+fn = "normalize_tool"
+args_json = '[""]'
+expected_json = '""'
+
+[[case]]
+id = "tool/normalize-neutral-edit"
+fn = "normalize_tool"
+args_json = '["edit"]'
+expected_json = '"edit"'
+
+[[case]]
+id = "tool/normalize-padded"
+fn = "normalize_tool"
+args_json = '[" apply_patch"]'
+expected_json = '" apply_patch"'
+
+[[case]]
+id = "tool/normalize-uppercase"
+fn = "normalize_tool"
+args_json = '["APPLY_PATCH"]'
+expected_json = '"APPLY_PATCH"'
+
+[[case]]
+id = "tool/normalize-mcp"
+fn = "normalize_tool"
+args_json = '["mcp__x__y"]'
+expected_json = '"mcp__x__y"'
+
+[[case]]
+id = "tool/normalize-unicode"
+fn = "normalize_tool"
+args_json = '["Básh"]'
+expected_json = '"Básh"'
+
+[[case]]
+id = "tool/normalize-proto"
+fn = "normalize_tool"
+args_json = '["constructor"]'
+expected_json = '"constructor"'
+
+[[case]]
+id = "tool/normalize-dunder-proto"
+fn = "normalize_tool"
+args_json = '["__proto__"]'
+expected_json = '"__proto__"'
+
+[[case]]
+id = "kind/apply-patch-route"
+fn = "tool_kind"
+args_json = '[{"tool_name": "apply_patch", "tool_input": {"command": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/apply-patch-route-without-input"
+fn = "tool_kind"
+args_json = '[{"tool_name": "apply_patch"}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/shell-route-plain"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Bash", "tool_input": {"command": "ls -la"}}]'
+expected_json = '"shell"'
+
+[[case]]
+id = "kind/shell-route-patch-body"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Bash", "tool_input": {"command": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/shell-route-patch-body-after-cd"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Bash", "tool_input": {"command": "cd sub && apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/shell-route-patch-without-envelope"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Bash", "tool_input": {"command": "apply_patch <<EOF\nhello\nEOF\n"}}]'
+expected_json = '"shell"'
+
+[[case]]
+id = "kind/shell-route-patch-printed"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Bash", "tool_input": {"command": "echo apply_patch <<EOF\n*** Begin Patch\n*** Add File: a\n+x\n*** End Patch\nEOF\n"}}]'
+expected_json = '"shell"'
+
+[[case]]
+id = "kind/shell-route-no-command"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Bash"}]'
+expected_json = '"shell"'
+
+[[case]]
+id = "kind/shell-route-command-at-top-level"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Bash", "command": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/shell-route-command-under-other-input-key"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Bash", "input": {"cmd": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/shell-route-command-not-a-string"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Bash", "tool_input": {"command": ["apply_patch"]}}]'
+expected_json = '"shell"'
+
+[[case]]
+id = "kind/lowercase-bash-is-not-the-shell-route"
+fn = "tool_kind"
+args_json = '[{"tool_name": "bash", "tool_input": {"command": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"bash"'
+
+[[case]]
+id = "kind/no-tool-name-defaults-to-apply-patch"
+fn = "tool_kind"
+args_json = '[{"tool_input": {"command": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/empty-tool-name-defaults-to-apply-patch"
+fn = "tool_kind"
+args_json = '[{"tool_name": ""}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/tool-name-wrong-type-defaults-to-apply-patch"
+fn = "tool_kind"
+args_json = '[{"tool_name": 5}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/tool-name-from-other-spelling"
+fn = "tool_kind"
+args_json = '[{"toolName": "Bash", "tool_input": {"command": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/tool-name-from-nested-name"
+fn = "tool_kind"
+args_json = '[{"tool_name": {"name": "Bash"}, "tool_input": {"command": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/other-tool"
+fn = "tool_kind"
+args_json = '[{"tool_name": "Read", "tool_input": {"command": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"Read"'
+
+[[case]]
+id = "kind/unknown-tool-passes-through"
+fn = "tool_kind"
+args_json = '[{"tool_name": "WebSearch"}]'
+expected_json = '"WebSearch"'
+
+[[case]]
+id = "kind/empty-payload"
+fn = "tool_kind"
+args_json = '[{}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/raw-payload"
+fn = "tool_kind"
+args_json = '[{"raw": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/neutral-edit-name"
+fn = "tool_kind"
+args_json = '[{"tool_name": "edit"}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/neutral-shell-name"
+fn = "tool_kind"
+args_json = '[{"tool_name": "shell", "tool_input": {"command": "apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Update File: a.py\n@@\n-a\n+b\n*** End Patch\nEOF\n"}}]'
+expected_json = '"edit"'
+
+[[case]]
+id = "kind/payload-is-a-list"
+fn = "tool_kind"
+args_json = '[[]]'
+expected_json = '{"error": "AttributeError", "message": "\u0027list\u0027 object has no attribute \u0027get\u0027"}'
+
+[[case]]
+id = "kind/payload-is-null"
+fn = "tool_kind"
+args_json = '[null]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+# --- fields: tool_name / session_id / tool_use_id / command / cwd -- every measured key spelling, in priority order ----
+# A string wins as soon as it is one (tool_name: even the empty one); a wrong type is skipped, never coerced.
+
+[[case]]
+id = "tool_name/key-tool_name"
+fn = "tool_name"
+args_json = '[{"tool_name": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "tool_name/key-toolName"
+fn = "tool_name"
+args_json = '[{"toolName": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "tool_name/key-tool"
+fn = "tool_name"
+args_json = '[{"tool": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "tool_name/key-name"
+fn = "tool_name"
+args_json = '[{"name": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "tool_name/missing"
+fn = "tool_name"
+args_json = '[{}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/other-keys-only"
+fn = "tool_name"
+args_json = '[{"unrelated": "v", "path": "p"}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/priority-first-wins"
+fn = "tool_name"
+args_json = '[{"name": "last", "tool_name": "first"}]'
+expected_json = '"first"'
+
+[[case]]
+id = "tool_name/priority-second-over-last"
+fn = "tool_name"
+args_json = '[{"name": "last", "toolName": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_name/wrong-type-skipped-for-next"
+fn = "tool_name"
+args_json = '[{"tool_name": 5, "toolName": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_name/null-skipped-for-next"
+fn = "tool_name"
+args_json = '[{"tool_name": null, "toolName": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_name/list-skipped-for-next"
+fn = "tool_name"
+args_json = '[{"tool_name": ["a"], "toolName": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_name/bool-skipped-for-next"
+fn = "tool_name"
+args_json = '[{"tool_name": true, "toolName": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_name/number-only"
+fn = "tool_name"
+args_json = '[{"tool_name": 5}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/zero-only"
+fn = "tool_name"
+args_json = '[{"tool_name": 0}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/dict-only"
+fn = "tool_name"
+args_json = '[{"tool_name": {"id": "x"}}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/unicode-value"
+fn = "tool_name"
+args_json = '[{"tool_name": "sé中𝒜"}]'
+expected_json = '"sé中𝒜"'
+
+[[case]]
+id = "tool_name/value-with-spaces-is-kept"
+fn = "tool_name"
+args_json = '[{"tool_name": "  v  "}]'
+expected_json = '"  v  "'
+
+[[case]]
+id = "tool_name/key-is-case-sensitive"
+fn = "tool_name"
+args_json = '[{"TOOL_NAME": "v"}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/key-inside-tool-input-is-not-read"
+fn = "tool_name"
+args_json = '[{"tool_input": {"tool_name": "v"}}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/payload-is-a-list"
+fn = "tool_name"
+args_json = '[[]]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "tool_name/payload-is-null"
+fn = "tool_name"
+args_json = '[null]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "tool_name/payload-is-a-string"
+fn = "tool_name"
+args_json = '["x"]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "session_id/key-session_id"
+fn = "session_id"
+args_json = '[{"session_id": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "session_id/key-sessionId"
+fn = "session_id"
+args_json = '[{"sessionId": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "session_id/key-conversation_id"
+fn = "session_id"
+args_json = '[{"conversation_id": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "session_id/key-conversationId"
+fn = "session_id"
+args_json = '[{"conversationId": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "session_id/key-thread_id"
+fn = "session_id"
+args_json = '[{"thread_id": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "session_id/key-threadId"
+fn = "session_id"
+args_json = '[{"threadId": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "session_id/missing"
+fn = "session_id"
+args_json = '[{}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "session_id/other-keys-only"
+fn = "session_id"
+args_json = '[{"unrelated": "v", "path": "p"}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "session_id/priority-first-wins"
+fn = "session_id"
+args_json = '[{"threadId": "last", "session_id": "first"}]'
+expected_json = '"first"'
+
+[[case]]
+id = "session_id/priority-second-over-last"
+fn = "session_id"
+args_json = '[{"threadId": "last", "sessionId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "session_id/wrong-type-skipped-for-next"
+fn = "session_id"
+args_json = '[{"session_id": 5, "sessionId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "session_id/null-skipped-for-next"
+fn = "session_id"
+args_json = '[{"session_id": null, "sessionId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "session_id/list-skipped-for-next"
+fn = "session_id"
+args_json = '[{"session_id": ["a"], "sessionId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "session_id/bool-skipped-for-next"
+fn = "session_id"
+args_json = '[{"session_id": true, "sessionId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "session_id/number-only"
+fn = "session_id"
+args_json = '[{"session_id": 5}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "session_id/zero-only"
+fn = "session_id"
+args_json = '[{"session_id": 0}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "session_id/dict-only"
+fn = "session_id"
+args_json = '[{"session_id": {"id": "x"}}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "session_id/unicode-value"
+fn = "session_id"
+args_json = '[{"session_id": "sé中𝒜"}]'
+expected_json = '"sé中𝒜"'
+
+[[case]]
+id = "session_id/value-with-spaces-is-kept"
+fn = "session_id"
+args_json = '[{"session_id": "  v  "}]'
+expected_json = '"  v  "'
+
+[[case]]
+id = "session_id/key-is-case-sensitive"
+fn = "session_id"
+args_json = '[{"SESSION_ID": "v"}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "session_id/key-inside-tool-input-is-not-read"
+fn = "session_id"
+args_json = '[{"tool_input": {"session_id": "v"}}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "session_id/payload-is-a-list"
+fn = "session_id"
+args_json = '[[]]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "session_id/payload-is-null"
+fn = "session_id"
+args_json = '[null]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "session_id/payload-is-a-string"
+fn = "session_id"
+args_json = '["x"]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "tool_use_id/key-tool_use_id"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "tool_use_id/key-toolUseId"
+fn = "tool_use_id"
+args_json = '[{"toolUseId": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "tool_use_id/key-call_id"
+fn = "tool_use_id"
+args_json = '[{"call_id": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "tool_use_id/key-callId"
+fn = "tool_use_id"
+args_json = '[{"callId": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "tool_use_id/missing"
+fn = "tool_use_id"
+args_json = '[{}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_use_id/other-keys-only"
+fn = "tool_use_id"
+args_json = '[{"unrelated": "v", "path": "p"}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_use_id/priority-first-wins"
+fn = "tool_use_id"
+args_json = '[{"callId": "last", "tool_use_id": "first"}]'
+expected_json = '"first"'
+
+[[case]]
+id = "tool_use_id/priority-second-over-last"
+fn = "tool_use_id"
+args_json = '[{"callId": "last", "toolUseId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_use_id/wrong-type-skipped-for-next"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": 5, "toolUseId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_use_id/null-skipped-for-next"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": null, "toolUseId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_use_id/list-skipped-for-next"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": ["a"], "toolUseId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_use_id/bool-skipped-for-next"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": true, "toolUseId": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "tool_use_id/number-only"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": 5}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_use_id/zero-only"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": 0}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_use_id/dict-only"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": {"id": "x"}}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_use_id/unicode-value"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": "sé中𝒜"}]'
+expected_json = '"sé中𝒜"'
+
+[[case]]
+id = "tool_use_id/value-with-spaces-is-kept"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": "  v  "}]'
+expected_json = '"  v  "'
+
+[[case]]
+id = "tool_use_id/key-is-case-sensitive"
+fn = "tool_use_id"
+args_json = '[{"TOOL_USE_ID": "v"}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_use_id/key-inside-tool-input-is-not-read"
+fn = "tool_use_id"
+args_json = '[{"tool_input": {"tool_use_id": "v"}}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_use_id/payload-is-a-list"
+fn = "tool_use_id"
+args_json = '[[]]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "tool_use_id/payload-is-null"
+fn = "tool_use_id"
+args_json = '[null]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "tool_use_id/payload-is-a-string"
+fn = "tool_use_id"
+args_json = '["x"]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "cwd/key-cwd"
+fn = "cwd"
+args_json = '[{"cwd": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "cwd/key-working_directory"
+fn = "cwd"
+args_json = '[{"working_directory": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "cwd/key-workingDirectory"
+fn = "cwd"
+args_json = '[{"workingDirectory": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "cwd/key-workdir"
+fn = "cwd"
+args_json = '[{"workdir": "v1"}]'
+expected_json = '"v1"'
+
+[[case]]
+id = "cwd/missing"
+fn = "cwd"
+args_json = '[{}]'
+expected_json = '""'
+
+[[case]]
+id = "cwd/other-keys-only"
+fn = "cwd"
+args_json = '[{"unrelated": "v", "path": "p"}]'
+expected_json = '""'
+
+[[case]]
+id = "cwd/priority-first-wins"
+fn = "cwd"
+args_json = '[{"workdir": "last", "cwd": "first"}]'
+expected_json = '"first"'
+
+[[case]]
+id = "cwd/priority-second-over-last"
+fn = "cwd"
+args_json = '[{"workdir": "last", "working_directory": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "cwd/wrong-type-skipped-for-next"
+fn = "cwd"
+args_json = '[{"cwd": 5, "working_directory": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "cwd/null-skipped-for-next"
+fn = "cwd"
+args_json = '[{"cwd": null, "working_directory": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "cwd/list-skipped-for-next"
+fn = "cwd"
+args_json = '[{"cwd": ["a"], "working_directory": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "cwd/bool-skipped-for-next"
+fn = "cwd"
+args_json = '[{"cwd": true, "working_directory": "second"}]'
+expected_json = '"second"'
+
+[[case]]
+id = "cwd/number-only"
+fn = "cwd"
+args_json = '[{"cwd": 5}]'
+expected_json = '""'
+
+[[case]]
+id = "cwd/zero-only"
+fn = "cwd"
+args_json = '[{"cwd": 0}]'
+expected_json = '""'
+
+[[case]]
+id = "cwd/dict-only"
+fn = "cwd"
+args_json = '[{"cwd": {"id": "x"}}]'
+expected_json = '""'
+
+[[case]]
+id = "cwd/unicode-value"
+fn = "cwd"
+args_json = '[{"cwd": "sé中𝒜"}]'
+expected_json = '"sé中𝒜"'
+
+[[case]]
+id = "cwd/value-with-spaces-is-kept"
+fn = "cwd"
+args_json = '[{"cwd": "  v  "}]'
+expected_json = '"  v  "'
+
+[[case]]
+id = "cwd/key-is-case-sensitive"
+fn = "cwd"
+args_json = '[{"CWD": "v"}]'
+expected_json = '""'
+
+[[case]]
+id = "cwd/key-inside-tool-input-is-not-read"
+fn = "cwd"
+args_json = '[{"tool_input": {"cwd": "v"}}]'
+expected_json = '""'
+
+[[case]]
+id = "cwd/payload-is-a-list"
+fn = "cwd"
+args_json = '[[]]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "cwd/payload-is-null"
+fn = "cwd"
+args_json = '[null]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "cwd/payload-is-a-string"
+fn = "cwd"
+args_json = '["x"]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "tool_name/empty-string-wins"
+fn = "tool_name"
+args_json = '[{"tool_name": "", "toolName": "Bash"}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/empty-string-in-later-key"
+fn = "tool_name"
+args_json = '[{"tool": "", "name": "Bash"}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/nested-name"
+fn = "tool_name"
+args_json = '[{"tool_name": {"name": "Bash"}}]'
+expected_json = '"Bash"'
+
+[[case]]
+id = "tool_name/nested-name-in-later-key"
+fn = "tool_name"
+args_json = '[{"tool": {"name": "Bash"}}]'
+expected_json = '"Bash"'
+
+[[case]]
+id = "tool_name/nested-name-wrong-type-skipped"
+fn = "tool_name"
+args_json = '[{"tool_name": {"name": 5}, "toolName": "Bash"}]'
+expected_json = '"Bash"'
+
+[[case]]
+id = "tool_name/nested-name-missing-skipped"
+fn = "tool_name"
+args_json = '[{"tool_name": {"id": "x"}, "toolName": "Bash"}]'
+expected_json = '"Bash"'
+
+[[case]]
+id = "tool_name/nested-empty-name-wins"
+fn = "tool_name"
+args_json = '[{"tool_name": {"name": ""}, "toolName": "Bash"}]'
+expected_json = '""'
+
+[[case]]
+id = "tool_name/nested-name-beats-later-string"
+fn = "tool_name"
+args_json = '[{"tool_name": {"name": "A"}, "toolName": "B"}]'
+expected_json = '"A"'
+
+[[case]]
+id = "tool_name/nested-deeper-is-not-read"
+fn = "tool_name"
+args_json = '[{"tool_name": {"name": {"name": "x"}}, "toolName": "B"}]'
+expected_json = '"B"'
+
+[[case]]
+id = "tool_name/dict-with-other-keys"
+fn = "tool_name"
+args_json = '[{"tool_name": {"type": "function", "name": "Bash"}}]'
+expected_json = '"Bash"'
+
+[[case]]
+id = "tool_name/list-of-dicts-skipped"
+fn = "tool_name"
+args_json = '[{"tool_name": [{"name": "x"}], "toolName": "B"}]'
+expected_json = '"B"'
+
+[[case]]
+id = "session_id/empty-string-skipped"
+fn = "session_id"
+args_json = '[{"session_id": "", "sessionId": "s2"}]'
+expected_json = '"s2"'
+
+[[case]]
+id = "session_id/all-empty-is-unidentified"
+fn = "session_id"
+args_json = '[{"session_id": "", "sessionId": ""}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "session_id/none-is-unidentified"
+fn = "session_id"
+args_json = '[{}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "session_id/literal-unidentified-passes"
+fn = "session_id"
+args_json = '[{"session_id": "nosession"}]'
+expected_json = '"nosession"'
+
+[[case]]
+id = "tool_use_id/empty-string-skipped"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": "", "call_id": "c"}]'
+expected_json = '"c"'
+
+[[case]]
+id = "tool_use_id/all-empty"
+fn = "tool_use_id"
+args_json = '[{"tool_use_id": "", "toolUseId": "", "call_id": "", "callId": ""}]'
+expected_json = '""'
+
+[[case]]
+id = "cwd/empty-string-skipped"
+fn = "cwd"
+args_json = '[{"cwd": "", "workdir": "/w"}]'
+expected_json = '"/w"'
+
+[[case]]
+id = "cwd/all-empty"
+fn = "cwd"
+args_json = '[{"cwd": "", "working_directory": ""}]'
+expected_json = '""'
+
+[[case]]
+id = "cwd/relative-kept"
+fn = "cwd"
+args_json = '[{"cwd": "sub/dir"}]'
+expected_json = '"sub/dir"'
+
+[[case]]
+id = "command/input-key-tool_input"
+fn = "command"
+args_json = '[{"tool_input": {"command": "ls"}}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/input-key-toolInput"
+fn = "command"
+args_json = '[{"toolInput": {"command": "ls"}}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/input-key-input"
+fn = "command"
+args_json = '[{"input": {"command": "ls"}}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/input-key-args"
+fn = "command"
+args_json = '[{"args": {"command": "ls"}}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/input-key-arguments"
+fn = "command"
+args_json = '[{"arguments": {"command": "ls"}}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/input-key-params"
+fn = "command"
+args_json = '[{"params": {"command": "ls"}}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/command-key-command-in-input"
+fn = "command"
+args_json = '[{"tool_input": {"command": "ls"}}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/command-key-command-at-top"
+fn = "command"
+args_json = '[{"command": "ls"}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/command-key-cmd-in-input"
+fn = "command"
+args_json = '[{"tool_input": {"cmd": "ls"}}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/command-key-cmd-at-top"
+fn = "command"
+args_json = '[{"cmd": "ls"}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/command-key-script-in-input"
+fn = "command"
+args_json = '[{"tool_input": {"script": "ls"}}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/command-key-script-at-top"
+fn = "command"
+args_json = '[{"script": "ls"}]'
+expected_json = '"ls"'
+
+[[case]]
+id = "command/missing"
+fn = "command"
+args_json = '[{}]'
+expected_json = '""'
+
+[[case]]
+id = "command/input-priority-first-dict"
+fn = "command"
+args_json = '[{"params": {"command": "p"}, "tool_input": {"command": "t"}}]'
+expected_json = '"t"'
+
+[[case]]
+id = "command/input-priority-skips-non-dicts"
+fn = "command"
+args_json = '[{"tool_input": "ls", "toolInput": ["ls"], "input": {"command": "i"}}]'
+expected_json = '"i"'
+
+[[case]]
+id = "command/input-first-dict-wins-even-without-command"
+fn = "command"
+args_json = '[{"tool_input": {"other": 1}, "input": {"command": "i"}}]'
+expected_json = '""'
+
+[[case]]
+id = "command/input-null-skipped"
+fn = "command"
+args_json = '[{"tool_input": null, "input": {"command": "i"}}]'
+expected_json = '"i"'
+
+[[case]]
+id = "command/input-empty-dict-is-taken"
+fn = "command"
+args_json = '[{"tool_input": {}, "input": {"command": "i"}, "command": "top"}]'
+expected_json = '"top"'
+
+[[case]]
+id = "command/key-priority-command-over-cmd"
+fn = "command"
+args_json = '[{"tool_input": {"cmd": "c", "command": "m"}}]'
+expected_json = '"m"'
+
+[[case]]
+id = "command/key-priority-cmd-over-script"
+fn = "command"
+args_json = '[{"tool_input": {"script": "s", "cmd": "c"}}]'
+expected_json = '"c"'
+
+[[case]]
+id = "command/input-over-top-for-same-key"
+fn = "command"
+args_json = '[{"tool_input": {"command": "in"}, "command": "top"}]'
+expected_json = '"in"'
+
+[[case]]
+id = "command/top-fills-an-empty-input-value"
+fn = "command"
+args_json = '[{"tool_input": {"command": ""}, "command": "top"}]'
+expected_json = '"top"'
+
+[[case]]
+id = "command/top-fills-a-missing-input-value"
+fn = "command"
+args_json = '[{"tool_input": {"cmd": "c"}, "command": "top"}]'
+expected_json = '"top"'
+
+[[case]]
+id = "command/non-string-input-value-blocks-top-of-same-key"
+fn = "command"
+args_json = '[{"tool_input": {"command": 5}, "command": "top"}]'
+expected_json = '""'
+
+[[case]]
+id = "command/non-string-input-value-falls-to-next-key"
+fn = "command"
+args_json = '[{"tool_input": {"command": 5, "cmd": "c"}}]'
+expected_json = '"c"'
+
+[[case]]
+id = "command/list-input-value-falls-to-next-key"
+fn = "command"
+args_json = '[{"tool_input": {"command": ["ls"], "script": "s"}}]'
+expected_json = '"s"'
+
+[[case]]
+id = "command/dict-input-value-falls-to-next-key"
+fn = "command"
+args_json = '[{"tool_input": {"command": {"a": 1}, "cmd": "c"}}]'
+expected_json = '"c"'
+
+[[case]]
+id = "command/zero-input-value-defers-to-top"
+fn = "command"
+args_json = '[{"tool_input": {"command": 0}, "command": "top"}]'
+expected_json = '"top"'
+
+[[case]]
+id = "command/false-input-value-defers-to-top"
+fn = "command"
+args_json = '[{"tool_input": {"command": false}, "command": "top"}]'
+expected_json = '"top"'
+
+[[case]]
+id = "command/null-input-value-defers-to-top"
+fn = "command"
+args_json = '[{"tool_input": {"command": null}, "command": "top"}]'
+expected_json = '"top"'
+
+[[case]]
+id = "command/empty-list-input-value-defers-to-top"
+fn = "command"
+args_json = '[{"tool_input": {"command": []}, "command": "top"}]'
+expected_json = '"top"'
+
+[[case]]
+id = "command/empty-dict-input-value-defers-to-top"
+fn = "command"
+args_json = '[{"tool_input": {"command": {}}, "command": "top"}]'
+expected_json = '"top"'
+
+[[case]]
+id = "command/top-non-string-skipped"
+fn = "command"
+args_json = '[{"command": 5, "cmd": "c"}]'
+expected_json = '"c"'
+
+[[case]]
+id = "command/top-list-skipped"
+fn = "command"
+args_json = '[{"command": ["ls"], "script": "s"}]'
+expected_json = '"s"'
+
+[[case]]
+id = "command/empty-string-everywhere"
+fn = "command"
+args_json = '[{"tool_input": {"command": ""}, "command": ""}]'
+expected_json = '""'
+
+[[case]]
+id = "command/empty-string-then-later-key"
+fn = "command"
+args_json = '[{"tool_input": {"command": "", "cmd": "c"}}]'
+expected_json = '"c"'
+
+[[case]]
+id = "command/empty-input-string-and-empty-top-then-cmd"
+fn = "command"
+args_json = '[{"tool_input": {"command": ""}, "command": "", "cmd": "c"}]'
+expected_json = '""'
+
+[[case]]
+id = "command/multiline"
+fn = "command"
+args_json = '[{"tool_input": {"command": "a\nb\r\nc"}}]'
+expected_json = '"a\nb\r\nc"'
+
+[[case]]
+id = "command/unicode"
+fn = "command"
+args_json = '[{"tool_input": {"command": "echo é中𝒜"}}]'
+expected_json = '"echo é中𝒜"'
+
+[[case]]
+id = "command/whitespace-only"
+fn = "command"
+args_json = '[{"tool_input": {"command": "  "}}]'
+expected_json = '"  "'
+
+[[case]]
+id = "command/payload-is-a-list"
+fn = "command"
+args_json = '[[]]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "command/payload-is-null"
+fn = "command"
+args_json = '[null]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+# --- paths: file_paths / unmeasured_path_source -- the patch body's path lines, plus guessed keys kept apart ----
+# Order is guessed keys (tool_input, then payload; string keys, then list keys) and then the patch body; the stable de-duplication
+# compares with `\` as `/` and keeps the first spelling; the patch paths are stripped with Python's str.strip().
+
+[[case]]
+id = "paths/add"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/update"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Update File: src/a.py\n@@\n-a\n+b\n*** End Patch\n"}}]'
+expected_json = '["src/a.py"]'
+
+[[case]]
+id = "paths/delete"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Delete File: old.txt\n*** End Patch\n"}}]'
+expected_json = '["old.txt"]'
+
+[[case]]
+id = "paths/update-with-move"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Update File: a.txt\n*** Move to: b.txt\n@@\n+x\n*** End Patch\n"}}]'
+expected_json = '["a.txt", "b.txt"]'
+
+[[case]]
+id = "paths/move-to-alone"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Move to: b.txt\n*** End Patch\n"}}]'
+expected_json = '["b.txt"]'
+
+[[case]]
+id = "paths/several-in-patch-order"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: c.txt\n+x\n*** Update File: a.txt\n*** Move to: z/b.txt\n*** Delete File: m.txt\n*** End Patch\n"}}]'
+expected_json = '["c.txt", "a.txt", "z/b.txt", "m.txt"]'
+
+[[case]]
+id = "paths/duplicate-exact"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a.txt\n*** Update File: a.txt\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/duplicate-with-backslashes"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a/b.txt\n*** Update File: a\\b.txt\n*** End Patch\n"}}]'
+expected_json = '["a/b.txt"]'
+
+[[case]]
+id = "paths/duplicate-backslash-first-keeps-first-spelling"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a\\b.txt\n*** Update File: a/b.txt\n*** End Patch\n"}}]'
+expected_json = '["a\\b.txt"]'
+
+[[case]]
+id = "paths/duplicate-case-differs-kept"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: A.txt\n*** Update File: a.txt\n*** End Patch\n"}}]'
+expected_json = '["A.txt", "a.txt"]'
+
+[[case]]
+id = "paths/duplicate-dot-slash-kept"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: ./a.txt\n*** Update File: a.txt\n*** End Patch\n"}}]'
+expected_json = '["./a.txt", "a.txt"]'
+
+[[case]]
+id = "paths/duplicate-trailing-slash-kept"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: d/\n*** Update File: d\n*** End Patch\n"}}]'
+expected_json = '["d/", "d"]'
+
+[[case]]
+id = "paths/duplicate-source-and-destination"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Update File: a.txt\n*** Move to: a.txt\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/windows-path"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: C:\\work\\a.txt\n*** End Patch\n"}}]'
+expected_json = '["C:\\work\\a.txt"]'
+
+[[case]]
+id = "paths/name-with-spaces"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: my dir/a b.txt\n*** End Patch\n"}}]'
+expected_json = '["my dir/a b.txt"]'
+
+[[case]]
+id = "paths/name-with-leading-and-trailing-spaces-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File:   a.txt   \n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-tab-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \ta.txt\t\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-nbsp-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \u00a0a.txt\u00a0\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-em-space-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \u2003a.txt\u2003\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-ideographic-space-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \u3000a.txt\u3000\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-line-separator-at-the-end-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a.txt\u2028\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-paragraph-separator-at-the-end-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a.txt\u2029\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-nel-at-the-end-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a.txt\u0085\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-file-separators-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \u001ca.txt\u001f\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-vertical-tab-and-form-feed-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \u000ba.txt\u000c\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/name-with-zero-width-space-kept"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \u200ba.txt\u200b\n*** End Patch\n"}}]'
+expected_json = '["\u200ba.txt\u200b"]'
+
+[[case]]
+id = "paths/name-with-bom-kept"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \ufeffa.txt\n*** End Patch\n"}}]'
+expected_json = '["\ufeffa.txt"]'
+
+[[case]]
+id = "paths/name-with-line-separator-inside-kept"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a\u2028b.txt\n*** End Patch\n"}}]'
+expected_json = '["a\u2028b.txt"]'
+
+[[case]]
+id = "paths/name-with-paragraph-separator-inside-kept"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a\u2029b.txt\n*** End Patch\n"}}]'
+expected_json = '["a\u2029b.txt"]'
+
+[[case]]
+id = "paths/name-with-nel-inside-kept"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a\u0085b.txt\n*** End Patch\n"}}]'
+expected_json = '["a\u0085b.txt"]'
+
+[[case]]
+id = "paths/name-only-line-separator-is-empty"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \u2028\n*** End Patch\n"}}]'
+expected_json = '[""]'
+
+[[case]]
+id = "paths/name-only-spaces-is-empty"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File:    \n*** End Patch\n"}}]'
+expected_json = '[""]'
+
+[[case]]
+id = "paths/name-only-nbsp-is-empty"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \u00a0\n*** End Patch\n"}}]'
+expected_json = '[""]'
+
+[[case]]
+id = "paths/empty-name-line-is-not-a-path"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: \n*** End Patch\n"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/no-space-after-colon-is-not-a-path"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File:a.txt\n*** End Patch\n"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/unicode-name"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: café/中文.txt\n*** End Patch\n"}}]'
+expected_json = '["café/中文.txt"]'
+
+[[case]]
+id = "paths/astral-name"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: 𝒜/🧭.txt\n*** End Patch\n"}}]'
+expected_json = '["𝒜/🧭.txt"]'
+
+[[case]]
+id = "paths/crlf-lines"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\r\n*** Add File: a.txt\r\n+x\r\n*** Update File: b.txt\r\n*** End Patch\r\n"}}]'
+expected_json = '["a.txt", "b.txt"]'
+
+[[case]]
+id = "paths/cr-only-lines-are-one-line"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\r*** Add File: a.txt\r*** Update File: b.txt\r*** End Patch\r"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/cr-at-line-end-is-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Add File: a.txt\r\n*** Delete File: b.txt\r\n"}}]'
+expected_json = '["a.txt", "b.txt"]'
+
+[[case]]
+id = "paths/line-separator-joined-lines-are-one-line"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Add File: a.txt\u2028*** Add File: b.txt\n"}}]'
+expected_json = '["a.txt\u2028*** Add File: b.txt"]'
+
+[[case]]
+id = "paths/no-trailing-newline"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Add File: a.txt"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/path-line-inside-added-content"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a.txt\n+*** Add File: b.txt\n*** Update File: c.txt\n*** End Patch\n"}}]'
+expected_json = '["a.txt", "c.txt"]'
+
+[[case]]
+id = "paths/path-line-after-text-on-same-line"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "x *** Add File: a.txt\n"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/path-line-indented-is-not-a-path"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n  *** Add File: a.txt\n*** End Patch\n"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/path-line-lowercase-is-not-a-path"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** add file: a.txt\n*** End Patch\n"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/unknown-verb-is-not-a-path"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Rename File: a.txt\n*** End Patch\n"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/whole-command-not-just-heredoc"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "cd sub && apply_patch <<\u0027EOF\u0027\n*** Begin Patch\n*** Add File: a.txt\n*** End Patch\nEOF\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/no-envelope-still-reads-path-lines"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "*** Add File: a.txt\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/nothing"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": "ls -la"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/empty-command"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": ""}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/empty-payload"
+fn = "file_paths"
+args_json = '[{}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/patch-in-top-level-command"
+fn = "file_paths"
+args_json = '[{"command": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/patch-in-cmd-key"
+fn = "file_paths"
+args_json = '[{"tool_input": {"cmd": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/patch-in-script-key"
+fn = "file_paths"
+args_json = '[{"tool_input": {"script": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/patch-in-other-input-key"
+fn = "file_paths"
+args_json = '[{"input": {"command": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/patch-in-patch-key-is-not-read"
+fn = "file_paths"
+args_json = '[{"tool_input": {"patch": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/patch-in-payload-patch-key-is-not-read"
+fn = "file_paths"
+args_json = '[{"patch": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/raw-fallback"
+fn = "file_paths"
+args_json = '[{"raw": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/raw-ignored-when-command-present"
+fn = "file_paths"
+args_json = '[{"raw": "*** Begin Patch\n*** Add File: r.txt\n*** End Patch\n", "tool_input": {"command": "*** Begin Patch\n*** Add File: c.txt\n*** End Patch\n"}}]'
+expected_json = '["c.txt"]'
+
+[[case]]
+id = "paths/raw-used-when-command-empty"
+fn = "file_paths"
+args_json = '[{"raw": "*** Begin Patch\n*** Add File: r.txt\n*** End Patch\n", "tool_input": {"command": ""}}]'
+expected_json = '["r.txt"]'
+
+[[case]]
+id = "paths/raw-not-a-string"
+fn = "file_paths"
+args_json = '[{"raw": 5}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/raw-a-list"
+fn = "file_paths"
+args_json = '[{"raw": ["*** Begin Patch\n*** Add File: r.txt\n*** End Patch\n"]}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/command-not-a-string-then-raw"
+fn = "file_paths"
+args_json = '[{"tool_input": {"command": 5}, "raw": "*** Begin Patch\n*** Add File: r.txt\n*** End Patch\n"}]'
+expected_json = '["r.txt"]'
+
+[[case]]
+id = "paths/payload-wrapper-key-is-not-read"
+fn = "file_paths"
+args_json = '[{"payload": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/guessed-file-path"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "a.py"}}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-file-path-camel"
+fn = "file_paths"
+args_json = '[{"tool_input": {"filePath": "a.py"}}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-path"
+fn = "file_paths"
+args_json = '[{"tool_input": {"path": "a.py"}}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-target"
+fn = "file_paths"
+args_json = '[{"tool_input": {"target": "a.py"}}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-filename"
+fn = "file_paths"
+args_json = '[{"tool_input": {"filename": "a.py"}}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-string-key-order"
+fn = "file_paths"
+args_json = '[{"tool_input": {"filename": "5", "target": "4", "path": "3", "filePath": "2", "file_path": "1"}}]'
+expected_json = '["1", "2", "3", "4", "5"]'
+
+[[case]]
+id = "paths/guessed-file-paths-list"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_paths": ["a.py", "b.py"]}}]'
+expected_json = '["a.py", "b.py"]'
+
+[[case]]
+id = "paths/guessed-file-paths-camel"
+fn = "file_paths"
+args_json = '[{"tool_input": {"filePaths": ["a.py"]}}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-paths-list"
+fn = "file_paths"
+args_json = '[{"tool_input": {"paths": ["a.py"]}}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-files-list"
+fn = "file_paths"
+args_json = '[{"tool_input": {"files": ["a.py"]}}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-list-key-order"
+fn = "file_paths"
+args_json = '[{"tool_input": {"files": ["4"], "paths": ["3"], "filePaths": ["2"], "file_paths": ["1"]}}]'
+expected_json = '["1", "2", "3", "4"]'
+
+[[case]]
+id = "paths/guessed-strings-before-lists"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_paths": ["l"], "file_path": "s"}}]'
+expected_json = '["s", "l"]'
+
+[[case]]
+id = "paths/guessed-list-skips-non-strings-and-empties"
+fn = "file_paths"
+args_json = '[{"tool_input": {"files": ["a.py", "", 5, null, ["x"], {"p": 1}, true, "b.py"]}}]'
+expected_json = '["a.py", "b.py"]'
+
+[[case]]
+id = "paths/guessed-list-of-non-lists"
+fn = "file_paths"
+args_json = '[{"tool_input": {"files": "a.py"}}]'
+expected_json = '[]'
+
+[[case]]
+id = "paths/guessed-string-empty-skipped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "", "path": "p.py"}}]'
+expected_json = '["p.py"]'
+
+[[case]]
+id = "paths/guessed-string-wrong-type-skipped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": 5, "path": "p.py"}}]'
+expected_json = '["p.py"]'
+
+[[case]]
+id = "paths/guessed-in-payload-top-level"
+fn = "file_paths"
+args_json = '[{"file_path": "a.py"}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-tool-input-before-payload"
+fn = "file_paths"
+args_json = '[{"file_path": "top.py", "tool_input": {"file_path": "in.py"}}]'
+expected_json = '["in.py", "top.py"]'
+
+[[case]]
+id = "paths/guessed-tool-input-list-before-payload-string"
+fn = "file_paths"
+args_json = '[{"path": "top.py", "tool_input": {"files": ["in.py"]}}]'
+expected_json = '["in.py", "top.py"]'
+
+[[case]]
+id = "paths/guessed-both-sources-all-keys"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "a", "files": ["b"]}, "path": "c", "paths": ["d"]}]'
+expected_json = '["a", "b", "c", "d"]'
+
+[[case]]
+id = "paths/guessed-tool-input-from-other-spelling"
+fn = "file_paths"
+args_json = '[{"args": {"file_path": "a.py"}}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-then-patch"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "a.py", "command": "*** Begin Patch\n*** Add File: b.txt\n*** End Patch\n"}}]'
+expected_json = '["a.py", "b.txt"]'
+
+[[case]]
+id = "paths/guessed-duplicates-patch"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "a.txt", "command": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}}]'
+expected_json = '["a.txt"]'
+
+[[case]]
+id = "paths/guessed-duplicate-with-backslashes"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "a\\b.txt", "command": "*** Begin Patch\n*** Add File: a/b.txt\n*** End Patch\n"}}]'
+expected_json = '["a\\b.txt"]'
+
+[[case]]
+id = "paths/guessed-duplicates-itself"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "a.py"}, "file_path": "a.py"}]'
+expected_json = '["a.py"]'
+
+[[case]]
+id = "paths/guessed-backslash-duplicate-itself"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "a\\b"}, "file_path": "a/b"}]'
+expected_json = '["a\\b"]'
+
+[[case]]
+id = "paths/guessed-values-are-not-stripped"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "  a.py  "}}]'
+expected_json = '["  a.py  "]'
+
+[[case]]
+id = "paths/guessed-value-whitespace-only-kept"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": " "}}]'
+expected_json = '[" "]'
+
+[[case]]
+id = "paths/guessed-value-unicode"
+fn = "file_paths"
+args_json = '[{"tool_input": {"file_path": "café/中.py"}}]'
+expected_json = '["café/中.py"]'
+
+[[case]]
+id = "paths/tool-input-not-a-dict"
+fn = "file_paths"
+args_json = '[{"tool_input": "a.py", "file_path": "t.py"}]'
+expected_json = '["t.py"]'
+
+[[case]]
+id = "paths/tool-input-list"
+fn = "file_paths"
+args_json = '[{"tool_input": ["a.py"], "paths": ["t.py"]}]'
+expected_json = '["t.py"]'
+
+[[case]]
+id = "paths/payload-is-a-list"
+fn = "file_paths"
+args_json = '[[]]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "paths/payload-is-null"
+fn = "file_paths"
+args_json = '[null]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "unmeasured/none"
+fn = "unmeasured_path_source"
+args_json = '[{}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/patch-only"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"command": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/guessed-only"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"file_path": "a.py"}}]'
+expected_json = 'true'
+
+[[case]]
+id = "unmeasured/guessed-list-only"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"files": ["a.py"]}}]'
+expected_json = 'true'
+
+[[case]]
+id = "unmeasured/guessed-top-level-only"
+fn = "unmeasured_path_source"
+args_json = '[{"path": "a.py"}]'
+expected_json = 'true'
+
+[[case]]
+id = "unmeasured/guessed-and-patch"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"file_path": "a.py", "command": "*** Begin Patch\n*** Add File: b.txt\n*** End Patch\n"}}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/guessed-and-patch-with-no-paths"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"file_path": "a.py", "command": "ls"}}]'
+expected_json = 'true'
+
+[[case]]
+id = "unmeasured/guessed-and-empty-patch-name"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"file_path": "a.py", "command": "*** Begin Patch\n*** Add File: \u2028\n*** End Patch\n"}}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/guessed-and-raw-patch"
+fn = "unmeasured_path_source"
+args_json = '[{"file_path": "a.py", "raw": "*** Begin Patch\n*** Add File: b.txt\n*** End Patch\n"}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/guessed-empty-string"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"file_path": ""}}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/guessed-empty-list"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"files": []}}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/guessed-list-without-strings"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"files": [1, null, ""]}}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/guessed-wrong-type"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"file_path": 5}}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/command-is-not-a-path"
+fn = "unmeasured_path_source"
+args_json = '[{"tool_input": {"command": "ls a.py"}}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/raw-only"
+fn = "unmeasured_path_source"
+args_json = '[{"raw": "*** Begin Patch\n*** Add File: a.txt\n*** End Patch\n"}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/raw-without-paths"
+fn = "unmeasured_path_source"
+args_json = '[{"raw": "garbage"}]'
+expected_json = 'false'
+
+[[case]]
+id = "unmeasured/payload-is-a-list"
+fn = "unmeasured_path_source"
+args_json = '[[]]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+# --- shape: payload_shape -- the key names of the payload and its tool input, sorted by code point ----
+
+[[case]]
+id = "shape/empty"
+fn = "payload_shape"
+args_json = '[{}]'
+expected_json = '"tool_input keys: <none>; payload keys: <none>"'
+
+[[case]]
+id = "shape/top-only"
+fn = "payload_shape"
+args_json = '[{"b": 1, "a": 2}]'
+expected_json = '"tool_input keys: <none>; payload keys: a, b"'
+
+[[case]]
+id = "shape/tool-input-only"
+fn = "payload_shape"
+args_json = '[{"tool_input": {"z": 1, "y": 2}}]'
+expected_json = '"tool_input keys: y, z; payload keys: tool_input"'
+
+[[case]]
+id = "shape/both"
+fn = "payload_shape"
+args_json = '[{"session_id": "s", "tool_name": "Bash", "tool_input": {"command": "ls"}}]'
+expected_json = '"tool_input keys: command; payload keys: session_id, tool_input, tool_name"'
+
+[[case]]
+id = "shape/tool-input-empty-dict"
+fn = "payload_shape"
+args_json = '[{"tool_input": {}}]'
+expected_json = '"tool_input keys: <none>; payload keys: tool_input"'
+
+[[case]]
+id = "shape/tool-input-not-a-dict"
+fn = "payload_shape"
+args_json = '[{"tool_input": "ls", "b": 1}]'
+expected_json = '"tool_input keys: <none>; payload keys: b, tool_input"'
+
+[[case]]
+id = "shape/other-input-spelling"
+fn = "payload_shape"
+args_json = '[{"input": {"command": "ls"}}]'
+expected_json = '"tool_input keys: command; payload keys: input"'
+
+[[case]]
+id = "shape/two-input-spellings-first-dict-wins"
+fn = "payload_shape"
+args_json = '[{"params": {"p": 1}, "tool_input": {"t": 1}}]'
+expected_json = '"tool_input keys: t; payload keys: params, tool_input"'
+
+[[case]]
+id = "shape/uppercase-before-lowercase"
+fn = "payload_shape"
+args_json = '[{"b": 1, "B": 2, "a": 3, "A": 4}]'
+expected_json = '"tool_input keys: <none>; payload keys: A, B, a, b"'
+
+[[case]]
+id = "shape/digits-before-letters"
+fn = "payload_shape"
+args_json = '[{"b": 1, "1": 2, "10": 3, "2": 4}]'
+expected_json = '"tool_input keys: <none>; payload keys: 1, 10, 2, b"'
+
+[[case]]
+id = "shape/underscore-between"
+fn = "payload_shape"
+args_json = '[{"a": 1, "_": 2, "Z": 3}]'
+expected_json = '"tool_input keys: <none>; payload keys: Z, _, a"'
+
+[[case]]
+id = "shape/non-ascii-after-ascii"
+fn = "payload_shape"
+args_json = '[{"z": 1, "é": 2, "a": 3}]'
+expected_json = '"tool_input keys: <none>; payload keys: a, z, é"'
+
+[[case]]
+id = "shape/astral-after-bmp-high"
+fn = "payload_shape"
+args_json = '[{"～": 1, "𝒜": 2, "\ue000": 3, "z": 4}]'
+expected_json = '"tool_input keys: <none>; payload keys: z, \ue000, ～, 𝒜"'
+
+[[case]]
+id = "shape/astral-after-private-use"
+fn = "payload_shape"
+args_json = '[{"𝒜": 1, "\ue000": 2}]'
+expected_json = '"tool_input keys: <none>; payload keys: \ue000, 𝒜"'
+
+[[case]]
+id = "shape/empty-key"
+fn = "payload_shape"
+args_json = '[{"": 1, "a": 2}]'
+expected_json = '"tool_input keys: <none>; payload keys: , a"'
+
+[[case]]
+id = "shape/key-with-comma-and-space"
+fn = "payload_shape"
+args_json = '[{"a, b": 1, "c": 2}]'
+expected_json = '"tool_input keys: <none>; payload keys: a, b, c"'
+
+[[case]]
+id = "shape/key-with-braces"
+fn = "payload_shape"
+args_json = '[{"{{x}}": 1, "a": 2}]'
+expected_json = '"tool_input keys: <none>; payload keys: a, {{x}}"'
+
+[[case]]
+id = "shape/key-with-newline"
+fn = "payload_shape"
+args_json = '[{"a\nb": 1}]'
+expected_json = '"tool_input keys: <none>; payload keys: a\nb"'
+
+[[case]]
+id = "shape/keys-with-prefix"
+fn = "payload_shape"
+args_json = '[{"ab": 1, "a": 2, "abc": 3}]'
+expected_json = '"tool_input keys: <none>; payload keys: a, ab, abc"'
+
+[[case]]
+id = "shape/unicode-keys-tool-input"
+fn = "payload_shape"
+args_json = '[{"tool_input": {"中": 1, "é": 2, "𝒜": 3}}]'
+expected_json = '"tool_input keys: é, 中, 𝒜; payload keys: tool_input"'
+
+[[case]]
+id = "shape/many-keys"
+fn = "payload_shape"
+args_json = '[{"k000": 0, "k001": 1, "k002": 2, "k003": 3, "k004": 4, "k005": 5, "k006": 6, "k007": 7, "k008": 8, "k009": 9, "k010": 10, "k011": 11, "k012": 12, "k013": 13, "k014": 14, "k015": 15, "k016": 16, "k017": 17, "k018": 18, "k019": 19, "k020": 20, "k021": 21, "k022": 22, "k023": 23, "k024": 24, "k025": 25, "k026": 26, "k027": 27, "k028": 28, "k029": 29, "k030": 30, "k031": 31, "k032": 32, "k033": 33, "k034": 34, "k035": 35, "k036": 36, "k037": 37, "k038": 38, "k039": 39}]'
+expected_json = '"tool_input keys: <none>; payload keys: k000, k001, k002, k003, k004, k005, k006, k007, k008, k009, k010, k011, k012, k013, k014, k015, k016, k017, k018, k019, k020, k021, k022, k023, k024, k025, k026, k027, k028, k029, k030, k031, k032, k033, k034, k035, k036, k037, k038, k039"'
+
+[[case]]
+id = "shape/values-are-not-printed"
+fn = "payload_shape"
+args_json = '[{"tool_input": {"command": "SECRET"}, "api_key": "SECRET"}]'
+expected_json = '"tool_input keys: command; payload keys: api_key, tool_input"'
+
+[[case]]
+id = "shape/payload-is-a-list"
+fn = "payload_shape"
+args_json = '[[]]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "shape/payload-is-null"
+fn = "payload_shape"
+args_json = '[null]'
+class_only = true
+expected_json = '{"error": "TypeError"}'

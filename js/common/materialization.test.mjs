@@ -125,6 +125,26 @@ test("a copy equal to what the tree would produce is current; every other answer
   );
 });
 
+test("a `..` in the root reaches the filesystem as written: Path keeps it, a lexical join would not", () => {
+  withRoot(null, () => {
+    assert.equal(materializedDir("a/../b"), "a/../b/_aitna/.akmon");
+    assert.equal(materializedDir(""), "_aitna/.akmon");
+    assert.equal(materializedDir("/p//q/"), "/p/q/_aitna/.akmon");
+    assert.equal(materializedDir("//p"), "//p/_aitna/.akmon");
+  });
+  withRoot("x//y/", () => assert.equal(materializedDir("/p"), "/p/x/y/.akmon"));
+  withRoot(null, () =>
+    withWorld((project, tree, copies) => {
+      put(tree, "guardrails/a.md", "# A\n");
+      put(copies, "guardrails/a.md", "old");
+      assert.deepEqual(staleMaterialized(data, project, tree), ["guardrails/a.md"]);
+      // `missing/..` is not a directory the kernel can walk through, so nothing is found there
+      assert.deepEqual(staleMaterialized(data, `${project}/missing/..`, tree), []);
+      assert.deepEqual(staleMaterialized(data, `${project}/_aitna/..`, tree), ["guardrails/a.md"]);
+    }),
+  );
+});
+
 test("a project with no materialization has nothing stale", () => {
   withRoot(null, () =>
     withWorld((project, tree) => {

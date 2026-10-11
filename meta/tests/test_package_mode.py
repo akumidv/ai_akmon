@@ -558,6 +558,20 @@ def test_is_akmon_entry_recognises_every_spelling_the_generator_ever_emitted(mon
     assert sync._is_akmon_entry(_launcher_entry())
 
 
+def test_is_akmon_entry_recognises_the_node_package_spelling(monkeypatch):
+    """ADR 0020 D05: ``node "<anchor>/node_modules/akmon/js/hooks/<script>.mjs"``. The JS ``sync`` (C105)
+    writes it; this implementation never does, but a project that moves from a Node package
+    to another mode must have the entries replaced, not left running beside the new ones."""
+    monkeypatch.delenv("AITNA_ROOT", raising=False)
+    claude = '"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs"'
+    codex = '"$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs"'
+    for anchored in (claude, codex):
+        entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": f"node {anchored} analysis-guard"}]}
+        assert sync._is_akmon_entry(entry)
+    own = {"matcher": "Bash", "hooks": [{"type": "command", "command": "node tools/node_modules/other/hooks/x.mjs"}]}
+    assert not sync._is_akmon_entry(own)
+
+
 def test_a_projects_own_hook_mentioning_akmon_is_not_recognised_as_ours(monkeypatch):
     """The marker carries the closing quote (``akmon" hook ``) for this reason: a bare
     ``akmon hook`` would also match a project hook that merely names the package."""

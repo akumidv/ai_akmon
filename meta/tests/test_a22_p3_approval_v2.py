@@ -47,7 +47,11 @@ def _fixture(tmp_path: Path, option: str = "usd25") -> tuple[Path, Path, Path, d
                 "exploratory_calls_counted": True,
             },
             "token_only": {
-                "accepted_pass_envelope_tokens": 5_040_000,
+                "codex_aggregate_limit_tokens": 5_000_000,
+                "known_prior_codex_usage_tokens": 153_614,
+                "remaining_codex_tokens_at_approval": 4_846_386,
+                "qwen_aggregate_limit_tokens": None,
+                "accepted_scorer_readings_per_route": 120,
                 "named_operator": "Ada Owner",
                 "exploratory_calls_counted": True,
             },
@@ -85,6 +89,33 @@ def test_usd25_option_is_unsupported_even_with_zero_rates_or_low_asserted_cost(t
 def test_valid_token_only_policy_passes_pure_validation(tmp_path):
     approval, plan, seal, _ = _fixture(tmp_path, "token_only")
     assert approval_v2.validate(approval, plan, seal)["selected_resource_option"] == "token_only"
+
+
+def test_token_policy_fixes_codex_only_limit_and_qwen_has_no_aggregate_cap(tmp_path):
+    approval, plan, seal, record = _fixture(tmp_path, "token_only")
+    option = record["options"]["token_only"]
+    assert option["codex_aggregate_limit_tokens"] == 5_000_000
+    assert option["known_prior_codex_usage_tokens"] == 153_614
+    assert option["remaining_codex_tokens_at_approval"] == 4_846_386
+    assert option["qwen_aggregate_limit_tokens"] is None
+    assert option["accepted_scorer_readings_per_route"] == 120
+    assert approval_v2.validate(approval, plan, seal)["selected_resource_option"] == "token_only"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("codex_aggregate_limit_tokens", 5_040_000),
+    ("known_prior_codex_usage_tokens", None),
+    ("remaining_codex_tokens_at_approval", 5_000_000),
+    ("qwen_aggregate_limit_tokens", 5_000_000),
+    ("accepted_scorer_readings_per_route", 240),
+    ("exploratory_calls_counted", False),
+])
+def test_invalid_or_missing_accepted_limits_fail_closed(tmp_path, field, value):
+    approval, plan, seal, record = _fixture(tmp_path, "token_only")
+    record["options"]["token_only"][field] = value
+    approval.write_text(json.dumps(record), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"Codex-only 5,000,000 limit|exploratory calls must count"):
+        approval_v2.validate(approval, plan, seal)
 
 
 def test_policy_validator_cannot_authorize_dispatch_or_assert_preflight(tmp_path):

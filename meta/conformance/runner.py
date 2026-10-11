@@ -4,8 +4,9 @@
 The corpus is the normative behavioral spec both permanent implementations must pass
 (ADR 0020 D01/D03). This runner executes the scenarios at the process boundary — the same
 surface a harness invokes — against the Python implementation by default; the Node
-implementation joins here as ``--impl node`` and runs the unit tables through
-``probe.mjs`` at C103 (C104 hooks, C105 CLI and C108 tools land the rest).
+implementation joins here as ``--impl node``: the unit tables through ``probe.mjs`` (C103) and
+the hooks, run as ``node node_modules/akmon/js/hooks/<name>.mjs`` in a Node-package project
+(C104); the CLI and the tools land with C105 and C108.
 
 Usage:
     python3 meta/conformance/runner.py [--tree REPO] [--impl python] [--area hooks]
@@ -265,15 +266,21 @@ def _run_node_unit(scenario: Scenario, ctx: RunCtx) -> tuple[int, str, str, Ctx]
     )
 
 
-def _command_for(scenario: Scenario, tree: Path, proj_dir: Path, ctx: Ctx) -> tuple[list[str], str, dict]:
+def _command_for(
+    scenario: Scenario, tree: Path, proj_dir: Path, ctx: Ctx, impl: str = "python"
+) -> tuple[list[str], str, dict]:
     """The process-boundary command for one scenario: argv, the stdin payload, and the env additions."""
     run_spec = scenario.run
     fixture = scenario.fixture
     argv = tuple(_materialize_tokens(a, ctx) for a in run_spec.argv)
     args = tuple(_materialize_tokens(a, ctx) for a in run_spec.args)
     if scenario.kind == "hook":
-        # The harness's own entry: package wiring calls the launcher, mounted wiring the script.
-        if fixture.attach == "native":
+        # The harness's own entry: package wiring calls the launcher (Python) or the script inside
+        # node_modules/akmon (Node, ADR 0020 D05); mounted wiring the script.
+        if fixture.attach == "native" and impl == "node":
+            script = proj_dir / "node_modules" / "akmon" / "js" / "hooks" / f"{run_spec.script}.mjs"
+            command = ["node", str(script), *args]
+        elif fixture.attach == "native":
             command = [str(proj_dir / ".venv" / "bin" / "akmon"), "hook", run_spec.script, *args]
         else:
             command = [sys.executable, str(tree / "hooks" / f"{run_spec.script}.py"), *args]
@@ -313,7 +320,13 @@ def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
     }
 
     def warmup(proj: Path, tree: Path) -> None:
-        """The implementation's own sync (write): the mounted script, or the package CLI."""
+        """The project's sync (write): the mounted script, or the package CLI.
+
+        A node fixture is synced by the Python reference too, until the JS ``sync`` lands (C105):
+        what a hook reads from a synced project — the materialized guardrails, the agent
+        roster, the routing config — is the same files whichever implementation wrote them
+        (the corpus is the spec), and the hooks under test are the only code that differs.
+        """
         if fixture.attach == "mount":
             warm = [sys.executable, str(proj / "_aitna" / "akmon" / "bin" / "sync.py"), "--project-root", str(proj)]
         else:
@@ -329,7 +342,7 @@ def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
     # The tree is the corpus-controlled snapshot (or a private override copy): a mounted
     # consumer links it, a native one runs the CLI inside it as its embedded tree.
     proj_dir, tree = materialize_fixture(
-        fixture, RunEnv(snapshot=snapshot, repo=repo, work=work, version=version, impl="python"), tag, warmup
+        fixture, RunEnv(snapshot=snapshot, repo=repo, work=work, version=version, impl=run.impl), tag, warmup
     )
     local_repo = _build_local_repo(snapshot, work, version) if fixture.repo else None
     mount = proj_dir / "_aitna" / "akmon"
@@ -346,7 +359,7 @@ def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
         target = run_tmp / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(_materialize_tokens(content, ctx), encoding="utf-8")
-    command, payload, extra_env = _command_for(scenario, tree, proj_dir, ctx)
+    command, payload, extra_env = _command_for(scenario, tree, proj_dir, ctx, run.impl)
     env.update(extra_env)
     result = subprocess.run(command, cwd=proj_dir, env=env, input=payload, capture_output=True, text=True, check=False)
     last_day = _today()
@@ -585,18 +598,23 @@ def _print_report(impl: str, version: str, outcomes: list[Outcome], repo: Path, 
     return 0
 
 
-def run_scenarios(repo: Path, impl: str, area: str | None, scenario_ids: list[str], *, record: bool) -> int:
+def run_scenarios(repo: Path, impl: str, areas: list[str], scenario_ids: list[str], *, record: bool) -> int:
     """Run the corpus against one implementation, print the report, and return the exit code.
 
     The gates (coverage, pairing) run on a full run only: with ``--area`` the run is a slice
-    of the corpus and its gate verdicts would be about the rest as much as the slice.
+    of the corpus (one area, or several named ones) and its gate verdicts would be about the rest
+    as much as the slice.
     """
     version = _impl_version(repo, impl)
-    run_gates = area is None
+    run_gates = not areas
     with tempfile.TemporaryDirectory(prefix="akmon-conformance-") as raw:
         work = Path(raw)
         snapshot = build_snapshot(repo, work)
-        scenarios = load_scenarios(area, strict_seeded=not record)
+        scenarios = (
+            [s for area in areas for s in load_scenarios(area, strict_seeded=not record)]
+            if areas
+            else load_scenarios(None, strict_seeded=not record)
+        )
         if scenario_ids:
             scenarios = _wanted_scenarios(scenarios, scenario_ids)
         scope = IMPL_SCOPE[impl]
@@ -607,10 +625,10 @@ def run_scenarios(repo: Path, impl: str, area: str | None, scenario_ids: list[st
                 outcomes.append(_skip(scenario, impl))
                 continue
             try:
-                if impl == "node" and scenario.kind != "unit":
+                if impl == "node" and scenario.kind not in ("unit", "hook"):
                     raise CorpusError(
-                        f"{scenario.id}: the node implementation joins the corpus with C104 (hooks), "
-                        f"C105 (cli) and C108 (tools); only the unit tables run at C103"
+                        f"{scenario.id}: the node implementation joins the corpus with C105 (cli) and "
+                        f"C108 (tools); only the unit tables (C103) and the hooks (C104) run so far"
                     )
                 if record and scenario.kind == "unit":  # a unit table is its own expectation
                     outcomes.append(_judge_outcome(scenario, run_ctx))
@@ -632,10 +650,18 @@ def main(argv: list[str] | None = None) -> int:
         help="the repository under test (default: the corpus's own repo)",
     )
     parser.add_argument("--impl", choices=sorted(IMPL_SCOPE), default="python")
-    parser.add_argument("--area", choices=["hooks", "cli", "tools", "units"], help="run one area only")
+    parser.add_argument(
+        "--area",
+        action="append",
+        default=[],
+        choices=["hooks", "cli", "tools", "units"],
+        help="run this area only (repeatable: several areas are one slice)",
+    )
     parser.add_argument("--scenario", action="append", default=[], help="run one scenario id (repeatable)")
     parser.add_argument("--record", action="store_true", help="reseed [expected] from live behavior")
     args = parser.parse_args(argv)
+    if args.record and args.impl != "python":
+        parser.error("--record reseeds the expectations from the reference: it runs with --impl python only")
     return run_scenarios(Path(args.tree).resolve(), args.impl, args.area, args.scenario, record=args.record)
 
 

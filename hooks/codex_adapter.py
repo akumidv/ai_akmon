@@ -64,6 +64,12 @@ def _shell_tools() -> frozenset[str]:
 # for the next form to be missing from.
 _PATCH_PATH_RE = re.compile(r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$", re.MULTILINE)
 
+# The patterns below that use ``\s``/``\S``/``\w`` are ``re.ASCII``: the JavaScript twin spells those
+# classes as ASCII ones (its ``\s`` also matches U+FEFF and misses U+001C to U+001F and U+0085), so
+# the two would read the same command differently. They read shell and patch-envelope markup, which
+# is ASCII, so the real answers are unchanged. ``_PATCH_PATH_RE`` and ``_PATCH_HEREDOC_RE`` use
+# none of those classes and stay as they are.
+
 # A deliberately narrow recognition rule for the one shell effect we can classify exactly:
 # an apply_patch invocation in *command position*, with the patch body carried inline.
 # Command position is the start of the command string, the position after a `;`/`&&`/`||`/`|`
@@ -80,14 +86,15 @@ _PATCH_PATH_RE = re.compile(r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.
 # false positive costs one advisory reminder, a false negative costs the route its only
 # classification.
 _APPLY_PATCH_INVOCATION_RE = re.compile(
-    r"""(?:^|[;&|(]|\{(?=\s)|-\w*c\s*["'])\s*(?:command\s+)?(?:\S*/)?apply_patch(?=[\s<]|$)"""
+    r"""(?:^|[;&|(]|\{(?=\s)|-\w*c\s*["'])\s*(?:command\s+)?(?:\S*/)?apply_patch(?=[\s<]|$)""",
+    re.ASCII,
 )
 _PATCH_HEREDOC_RE = re.compile(
     r"[ \t]*<<-?[ \t]*(?P<quote>['\"]?)(?P<delimiter>[A-Za-z_][A-Za-z0-9_]*)"
     r"(?P=quote)[ \t]*\r?\n"
 )
-_PATCH_ENVELOPE_RE = re.compile(r"^\*\*\* Begin Patch\s*$", re.MULTILINE)
-_PATCH_END_RE = re.compile(r"^\*\*\* End Patch\s*$", re.MULTILINE)
+_PATCH_ENVELOPE_RE = re.compile(r"^\*\*\* Begin Patch\s*$", re.MULTILINE | re.ASCII)
+_PATCH_END_RE = re.compile(r"^\*\*\* End Patch\s*$", re.MULTILINE | re.ASCII)
 
 
 def _outside_shell_quotes(text: str, position: int) -> bool:
