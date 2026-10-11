@@ -21,15 +21,20 @@ export const REQUIRED_ON = "required-on:";
 /** @typedef {{binary: string, population: string, modality: string}} RuntimeDeclaration */
 /** @typedef {{binary: string, operations: Record<string, string[]>}} HarnessCommands */
 /** The shape of `common/runtime.json`: the ordered declarations and the harness table. */
-/** @typedef {{declared_runtimes: [string, string, string][], harness_commands: Record<string, HarnessCommands>}} RuntimeData */
+/** @typedef {{declared_runtimes: Record<string, [string, string, string][]>, harness_commands: Record<string, HarnessCommands>}} RuntimeData */
 
 /**
- * The ordered runtime declarations, as `common/runtime.json` carries them.
+ * The ordered runtime declarations of one ecosystem, as `common/runtime.json` carries them.
  * @param {RuntimeData} data the parsed `common/runtime.json`
+ * @param {string} ecosystem `python` or `node`
  * @returns {RuntimeDeclaration[]}
  */
-export function declaredRuntimes(data) {
-  return data.declared_runtimes.map(([binary, population, modality]) => ({ binary, population, modality }));
+export function declaredRuntimes(data, ecosystem) {
+  const table = data.declared_runtimes;
+  if (!Object.hasOwn(table, ecosystem)) {
+    throw _valueError(`unknown ecosystem '${ecosystem}'; known: ${codePointSort(Object.keys(table)).join(", ")}`);
+  }
+  return table[ecosystem].map(([binary, population, modality]) => ({ binary, population, modality }));
 }
 
 /**

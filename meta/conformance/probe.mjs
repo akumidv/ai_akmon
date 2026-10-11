@@ -362,6 +362,33 @@ async function probeRecord(tree, table) {
     actual: module.stripInlineComment(case_.input),
   }));
   results.push(...stripResults);
+  results.push(...recordEcosystem(module, table));
+  return results;
+}
+
+/**
+ * The `[[ecosystem]]` family: a project whose record holds `text` (or none) answers `expected`.
+ * @param {any} module
+ * @param {Record<string, any>} table
+ * @returns {any[]}
+ */
+function recordEcosystem(module, table) {
+  /** @type {any[]} */
+  const results = [];
+  for (const [index, case_] of (table.ecosystem ?? []).entries()) {
+    const relative = case_.aitna_root ?? "_aitna";
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "akmon-probe-ecosystem-"));
+    try {
+      if (case_.absent !== true) {
+        fs.mkdirSync(path.join(scratch, relative), { recursive: true });
+        fs.writeFileSync(path.join(scratch, relative, ".akmon.toml"), case_.text ?? "", "utf-8");
+      }
+      const actual = withEnvironment({ AITNA_ROOT: case_.aitna_root ?? null }, () => module.recordedEcosystem(scratch));
+      results.push({ index: 1000 + index, expected: case_.expected, actual });
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  }
   return results;
 }
 
@@ -561,9 +588,9 @@ function runtimeLabels(module, table) {
  * @returns {any[]}
  */
 function runtimeDeclared(module, data, table) {
-  const declarations = module.declaredRuntimes(data);
   const results = [];
   for (const [index, case_] of (table.declared ?? []).entries()) {
+    const declarations = module.declaredRuntimes(data, case_.ecosystem ?? "python");
     const found = declarations[case_.index] ?? null;
     results.push({ index: 1000 + index, expected: case_.expected ?? null, actual: renderDeclaration(found) });
   }
@@ -629,6 +656,27 @@ function runtimeErrors(module, data, table) {
 }
 
 /**
+ * The refusal for an ecosystem nobody declared, by its whole text (index base 6000).
+ * @param {any} module
+ * @param {any} data
+ * @param {Record<string, any>} table
+ * @returns {any[]}
+ */
+function runtimeEcosystemErrors(module, data, table) {
+  const results = [];
+  for (const [index, case_] of (table.ecosystem_error ?? []).entries()) {
+    let actual = null;
+    try {
+      module.declaredRuntimes(data, case_.ecosystem);
+    } catch (error) {
+      actual = error instanceof Error ? error.message : null;
+    }
+    results.push({ index: 6000 + index, expected: case_.expected ?? null, actual });
+  }
+  return results;
+}
+
+/**
  * @param {string} tree
  * @param {Record<string, any>} table
  * @returns {Promise<any[]>}
@@ -646,6 +694,7 @@ async function probeRuntime(tree, table) {
     ...runtimeArgv(module, data, table),
     ...binaries,
     ...runtimeErrors(module, data, table),
+    ...runtimeEcosystemErrors(module, data, table),
   ];
 }
 
@@ -1191,10 +1240,13 @@ const ROUTING_CLASS_FIELDS = /** @type {Record<string, string[]>} */ ({
   FloorGap: ["kind", "agent", "floor", "bound"],
   DelegationEntry: ["timestamp", "session_id", "subagent", "model", "zone", "description"],
   GateRule: ["role", "trigger", "noun", "headings", "anchor"],
+  Cap: ["lines", "bytes"],
+  Member: ["name", "text"],
+  Population: ["scope", "members"],
 });
 
 /** The dataclasses built from one options object of camelCase keys instead of positionally. */
-const ROUTING_OPTIONS_CLASSES = new Set(["HookResult"]);
+const ROUTING_OPTIONS_CLASSES = new Set(["HookResult", "Finding"]);
 
 const ROUTING_BASE_ENV = [
   "AKMON_CONTEXT_RECOMMENDED_MAX",
@@ -1235,9 +1287,14 @@ function routingPlain(ctx, value) {
   return value;
 }
 
-/** `snake_case` → `camelCase`; a CamelCase class or SCREAMING constant keeps its name. */
+/**
+ * `snake_case` → `camelCase`; a CamelCase class or SCREAMING constant keeps its name. A Python
+ * private name (`_upsert_toml_key`) is the public export of the port (`upsertTomlKey`): the sync
+ * table (C105) names the helpers a port cannot inherit, and Python keeps them private.
+ */
 function routingCamel(/** @type {string} */ name) {
-  return /^[a-z]/.test(name) ? name.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase()) : name;
+  const bare = name.replace(/^_(?=[a-z])/, "");
+  return /^[a-z]/.test(bare) ? bare.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase()) : bare;
 }
 
 /** `camelCase` → `snake_case` (an instance field back to its Python name). */
@@ -1384,6 +1441,9 @@ function routingJson(ctx, value) {
   }
   if (Array.isArray(value)) {
     return value.map((item) => routingJson(ctx, item));
+  }
+  if (value instanceof Set) {
+    return [...value].map((item) => routingJson(ctx, item)).sort(); // a frozenset answers as a sorted list
   }
   const entries = value instanceof Map ? [...value.entries()] : Object.entries(value);
   const isClass = !(value instanceof Map) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null;
@@ -1750,9 +1810,76 @@ async function probeCodexAdapter(/** @type {string} */ tree, /** @type {any} */ 
   return probeHook(tree, table, "codex_adapter");
 }
 
+/**
+ * The finding envelope, one public call per row, against the tree's findings.mjs (C105).
+ * @param {string} tree
+ * @param {Record<string, any>} table
+ * @returns {Promise<any[]>}
+ */
+async function probeFindings(tree, table) {
+  return probeRows(tree, table, { module: "js/common/findings.mjs", dataArgs: () => () => [] });
+}
+
+/**
+ * The exports of `bin/sync.mjs` that take the sync data bundle (`readSyncData()`) as their first
+ * argument: the ones whose Python twin reads `sync.json` (or `materialization.json`) itself, directly
+ * or through a callee. A name absent here takes none.
+ */
+const SYNC_DATA_EXPORTS = new Set(["importedStandardFiles", "ruffExtends", "movedImports", "isAkmonEntry", "mergeHookEntries"]);
+
+/**
+ * The pure helpers of `sync` (C105), one public call per row, against the tree's `js/bin/sync.mjs`.
+ * @param {string} tree
+ * @param {Record<string, any>} table
+ * @returns {Promise<any[]>}
+ */
+async function probeSync(tree, table) {
+  const bundle = (await loadModule(tree, "js/bin/sync.mjs")).readSyncData();
+  return probeRows(tree, table, {
+    module: "js/bin/sync.mjs",
+    dataArgs: () => (name) => (SYNC_DATA_EXPORTS.has(name) ? [bundle] : []),
+  });
+}
+
+/** The exports of `always_loaded.mjs` that take its data bundle first: the Python twins read `always_loaded.json` themselves. */
+const ALWAYS_LOADED_DATA_EXPORTS = new Set(["blockHeading", "shipped", "consumer", "caps", "severity", "markedBlock", "populations"]);
+
+/**
+ * The always-loaded counter (C105), one public call per row, against the tree's `js/common/always_loaded.mjs`.
+ * @param {string} tree
+ * @param {Record<string, any>} table
+ * @returns {Promise<any[]>}
+ */
+async function probeAlwaysLoaded(tree, table) {
+  const bundle = (await loadModule(tree, "js/common/always_loaded.mjs")).readAlwaysLoadedData();
+  return probeRows(tree, table, {
+    module: "js/common/always_loaded.mjs",
+    dataArgs: () => (name) => (ALWAYS_LOADED_DATA_EXPORTS.has(name) ? [bundle] : []),
+  });
+}
+
+/**
+ * The pure half of the Codex hook oracle (C105), one public call per row, against the tree's
+ * `js/common/codex_hooks.mjs`: every export that builds or checks a protocol error takes the data first.
+ * @param {string} tree
+ * @param {Record<string, any>} table
+ * @returns {Promise<any[]>}
+ */
+async function probeCodexHooks(tree, table) {
+  const bundle = (await loadModule(tree, "js/common/codex_hooks.mjs")).readCodexHooksData();
+  return probeRows(tree, table, {
+    module: "js/common/codex_hooks.mjs",
+    dataArgs: () => (name) => (typeof name === "string" && name !== "CODE" ? [bundle] : []),
+  });
+}
+
 /** @type {Record<string, (tree: string, table: any, text: string) => Promise<any[]>>} */
 const PROBES = {
+  always_loaded: probeAlwaysLoaded,
+  codex_hooks: probeCodexHooks,
+  sync: probeSync,
   versions: probeVersions,
+  findings: probeFindings,
   record: probeRecord,
   shlex: probeShlex,
   glob: probeGlob,

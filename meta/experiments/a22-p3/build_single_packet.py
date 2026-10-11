@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build one opaque, blind scorer packet from a sealed P3 run and its exchange.
+"""Build one opaque, blind scorer packet from a verified P3 run and its exchange.
 
-This tool is offline-only. It reads the sealed qualification map, seal, case,
-scorer prompt, renderer, and one matching exchange. It never starts a model or
-records scoring output. The evaluator mapping is kept in a separate file from
-the sole model-visible packet. At this checkout, no sealed-map entry has a
-matching exchange, so live packet generation fails closed until one is present.
+This tool is offline-only. Qualification packets use the base seal; B/C packets
+also re-derive the generated grid from both complete qualification scorer TSVs.
+It never starts a model or records scoring output. The evaluator mapping is kept
+separate from the sole model-visible packet. At this checkout, no sealed-map
+entry has a matching exchange, so live packet generation fails closed.
 """
 from __future__ import annotations
 
@@ -80,6 +80,53 @@ def _sealed_context(root: Path) -> tuple[dict[str, str], dict[str, Any], dict[st
         RENDERER_PATH.as_posix(): _sha(renderer_bytes),
     }
     return seal_files, sealed_map, source_hashes
+
+
+def _grid_map_from_qualification(root: Path, scorer1: Path, scorer2: Path) -> tuple[dict[str, Any], dict[str, str]]:
+    """Re-derive the B/C map from complete A scorer readings; never trust a sidecar."""
+    seal_files, qual_map, hashes = _sealed_context(root)
+    grid_path = root / "grid.py"
+    grid_bytes = _sealed_bytes(root, seal_files, Path("grid.py"))
+    spec = importlib.util.spec_from_file_location("a22_p3_grid_for_packet_reduction", grid_path)
+    if spec is None or spec.loader is None:
+        raise ValueError("cannot load P3 qualification verifier")
+    grid = importlib.util.module_from_spec(spec)
+    exec(compile(grid_bytes, str(grid_path), "exec"), grid.__dict__)  # noqa: S102
+    qualified, _evidence = grid.import_qualifications(
+        scorer1, scorer2, root / "runs" / "qual-sealed-map.json", root / "runs", root / "cases", root / "arms"
+    )
+    pairs = {card["id"]: card["pair"] for card in
+             (json.loads(path.read_text(encoding="utf-8")) for path in sorted((root / "cases").glob("P3-*.json")))}
+    seen = grid.validate_qualifications(qualified, qual_map, pairs)
+    cells = [(case, arm, tier, repeat) for case, tier in sorted(seen)
+             for arm in ("B", "C") for repeat in (1, 2)]
+    ids = __import__("random").Random(20261004).sample(range(10000, 100000), len(cells))
+    derived = {f"g{ident}": {"case": case, "arm": arm, "tier": tier, "repeat": repeat}
+               for ident, (case, arm, tier, repeat) in zip(ids, cells, strict=True)}
+    hashes["qualification_scorer_1.tsv"] = _sha(scorer1.read_bytes())
+    hashes["qualification_scorer_2.tsv"] = _sha(scorer2.read_bytes())
+    return derived, hashes
+
+
+def _load_source_map(root: Path, map_kind: str, map_path: Path | None,
+                     scorer1: Path | None, scorer2: Path | None) -> tuple[dict[str, Any], dict[str, str]]:
+    if map_kind == "qualification":
+        if map_path is not None or scorer1 is not None or scorer2 is not None:
+            raise ValueError("qualification packets use only the base sealed map")
+        _seal_files, mapping, hashes = _sealed_context(root)
+        return mapping, hashes
+    if map_kind != "grid" or map_path is None or scorer1 is None or scorer2 is None:
+        raise ValueError("B/C packets require the grid map and both original qualification TSVs")
+    expected_path = (root / "runs" / "grid-sealed-map.json").resolve(strict=True)
+    selected_path = map_path.resolve(strict=True)
+    if selected_path != expected_path or map_path.is_symlink() or not map_path.is_file():
+        raise ValueError("B/C map must be the generated runs/grid-sealed-map.json")
+    derived, hashes = _grid_map_from_qualification(root, scorer1, scorer2)
+    actual = _read_json(map_path)
+    if actual != derived:
+        raise ValueError("B/C map does not match deterministic re-derivation from qualification readings")
+    hashes["runs/grid-sealed-map.json"] = _sha(map_path.read_bytes())
+    return actual, hashes
 
 
 def _load_case(root: Path, seal_files: dict[str, str], cell: dict[str, Any]) -> tuple[Path, bytes, list[str]]:
@@ -178,14 +225,19 @@ def _write_exclusive(path: Path, data: bytes) -> None:
         os.close(fd)
 
 
-def build_single_packet(source_run_id: str, out_dir: Path, *, project_root: Path = HERE) -> dict[str, Any]:
+def build_single_packet(source_run_id: str, out_dir: Path, *, project_root: Path = HERE,  # noqa: PLR0913
+                        map_kind: str = "qualification", map_path: Path | None = None,
+                        qualification_scorer1: Path | None = None,
+                        qualification_scorer2: Path | None = None) -> dict[str, Any]:
     """Write one model packet plus evaluator-only metadata; refuse any overwrite."""
     root = project_root.resolve(strict=True)
     if not RUN_ID_RE.fullmatch(source_run_id):
         raise ValueError("source run selector has an invalid form")
-    seal_files, case_map, source_hashes = _sealed_context(root)
+    seal_files, _qual_map, _base_hashes = _sealed_context(root)
+    case_map, source_hashes = _load_source_map(root, map_kind, map_path,
+                                               qualification_scorer1, qualification_scorer2)
     if source_run_id not in case_map:
-        raise ValueError("source run is not in the current sealed qualification map")
+        raise ValueError("source run is not in the selected verified source map")
     cell = case_map[source_run_id]
     if not isinstance(cell, dict):
         raise ValueError("sealed source entry has no valid case mapping")
@@ -205,6 +257,7 @@ def build_single_packet(source_run_id: str, out_dir: Path, *, project_root: Path
         "schema": 1,
         "opaque_packet_id": opaque_id,
         "source_run_id": source_run_id,
+        "source_map_kind": map_kind,
         "sealed_cell": cell,
         "provenance": provenance,
     }
@@ -214,6 +267,7 @@ def build_single_packet(source_run_id: str, out_dir: Path, *, project_root: Path
         "schema": 1,
         "record_type": "p3_single_scorer_packet",
         "opaque_packet_id": opaque_id,
+        "source_map_kind": map_kind,
         "model_visible_files": ["packet.md"],
         "model_visible_packet_count": 1,
         "packet_sha256": packet_hash,
@@ -239,7 +293,7 @@ def build_single_packet(source_run_id: str, out_dir: Path, *, project_root: Path
             "model_visible_packet_count": 1}
 
 
-def verify_bundle(packet_dir: Path, evaluator_dir: Path) -> dict[str, Any]:  # noqa: C901
+def verify_bundle(packet_dir: Path, evaluator_dir: Path) -> dict[str, Any]:  # noqa: C901, PLR0912
     """Verify the isolated model packet and its private evaluator metadata."""
     packet_path, evaluator_path = Path(packet_dir), Path(evaluator_dir)
     if packet_path.is_symlink() or evaluator_path.is_symlink():
@@ -272,6 +326,8 @@ def verify_bundle(packet_dir: Path, evaluator_dir: Path) -> dict[str, Any]:  # n
         raise ValueError("evaluator mapping hash mismatch")
     if evaluator.get("opaque_packet_id") != manifest.get("opaque_packet_id"):
         raise ValueError("opaque packet id does not match evaluator mapping")
+    if evaluator.get("source_map_kind") != manifest.get("source_map_kind"):
+        raise ValueError("source map kind does not match evaluator mapping")
     return {"opaque_packet_id": manifest["opaque_packet_id"],
             "packet_sha256": manifest["packet_sha256"], "model_visible_packet_count": 1}
 
@@ -281,10 +337,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-run-id", required=True, help="evaluator-only key from the current sealed map")
     parser.add_argument("--out-dir", required=True, type=Path, help="new private output directory outside this project")
+    parser.add_argument("--map-kind", choices=("qualification", "grid"), default="qualification")
+    parser.add_argument("--map", type=Path, help="generated B/C map; required with --map-kind grid")
+    parser.add_argument("--qualification-scorer-1", type=Path,
+                        help="private source-ID TSV produced by reduce_scorer_tsvs.py")
+    parser.add_argument("--qualification-scorer-2", type=Path,
+                        help="private source-ID TSV produced by reduce_scorer_tsvs.py")
     parser.add_argument("--project-root", type=Path, default=HERE, help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
-        result = build_single_packet(args.source_run_id, args.out_dir, project_root=args.project_root)
+        result = build_single_packet(args.source_run_id, args.out_dir, project_root=args.project_root,
+                                     map_kind=args.map_kind, map_path=args.map,
+                                     qualification_scorer1=args.qualification_scorer_1,
+                                     qualification_scorer2=args.qualification_scorer_2)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))

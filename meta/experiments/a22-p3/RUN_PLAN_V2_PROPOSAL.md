@@ -111,17 +111,28 @@ provider call exactly once, across subject turns, scorer readings, route checks,
 and failed/defect calls, in the same observed-usage ledger. Missing usage fails closed and is never
 zero. This is an accounting ceiling, not a hard provider cap: input and output checks happen
 after a call, so one call can overshoot 5,000,000 before dispatch stops. Qwen has no aggregate token
-ceiling; retain usage and session records for every attempt. The existing approval validator and
-scorer ledger now encode the Codex-only aggregate ceiling, uncapped Qwen aggregate usage, and the
-120 accepted-reading limit per route. The ledger keeps route checks separate from scored readings
-and stops a route after a per-call allowance breach. Its accounting scope is scorer attempts only:
-it does not debit future subject-run usage or yet record the required run-class and defect-origin
-provenance. It provides no dispatch path or authorization.
+ceiling; retain usage and session records for every attempt. The offline V2 approval validator,
+unified append-only usage ledger, subject driver, and scorer route-check runner are implemented with
+regression tests. The ledger binds reservations and usage records to the proposal, packet seal,
+approval bytes, and route; accounts for scorer readings, route checks, and subject calls in one
+Codex aggregate; keeps Qwen uncapped in aggregate; separates route checks from scored readings; and
+fails closed on missing usage, duplicate debits, cap breaches, or a denied approval. Subject attempts
+record exactly one of `scored`, `technical`, or `defect`; defect attempts carry an immutable origin
+attempt ID. The driver reserves usage before each provider call and closes the reservation from
+persisted rollout evidence. These are offline implementation and test results, not evidence that an
+owner-accepted V2 seal or operator exists, that any route has passed a live check, or that P3 has
+produced a score.
 
-The subject-run driver still needs to implement and validate the accepted run-class and immutable
-defect-origin fields, and shared accounting across subject and scorer calls. Fail closed on an
-ambiguous class, missing defect origin, duplicate debit, or unknown usage. The accepted protocol
-keeps the 120 subject-run ceiling, partitioned into 96 scored and 24 technical/defect attempts.
+The route-check runner is a real dispatch path in code, but it remains default-denied by the current
+approval. The proposed owner-selectable `OBSERVED_NO_RETRY` policy means one CLI process, one
+correlated session/turn and usage record, and no CLI-visible retry/error markers. For Qwen it also
+requires the generated provider overlay to set `maxRetries=0` and the correlated usage row to report
+one request. It records `retry_count: null`: these observations cannot prove that a provider or
+transport made no hidden retry. Literal provider-level zero retries is unavailable as a verifiable
+policy with the current Codex CLI telemetry and is therefore not a selectable criterion. The
+approval field defaults to `UNSELECTED`; this candidate awaits explicit owner acceptance and does not
+change the dispatch gate until selected. The accepted subject-run ceiling remains 120, partitioned
+into 96 scored and at most 24 technical/defect attempts.
 
 Stop a route immediately if model identity, tool behavior, usage provenance, or an observed
 per-call allowance fails. A breach is an execution defect and remains recorded; do not retry or
@@ -136,12 +147,14 @@ Qwen attempt used a different condition and also failed TSV validation, so it ca
 replace the default-thinking route check. Do not count any of these existing mechanics attempts as
 ordinary P3 scorer readings. Any new route check must use a fresh packet ID and one-shot lock, match
 the pinned model, return the complete required TSV, report correlated usage, stay within the
-accepted per-pass limits, preserve blinding, and record zero tool calls/retries. Any mismatch fails
-the route; no substitution or retry may hide the failed attempt. Include every such provider call
-and its actual usage in the owner-approved resource ledger before dispatch.
+accepted per-pass limits, preserve blinding, and record zero observed tool calls plus the selected
+retry evidence policy. Under `OBSERVED_NO_RETRY`, any observed CLI retry/error marker or failed
+route-specific control fails the route; a pass is mechanics-only and makes no provider-level retry
+claim. Any mismatch fails the route; no substitution or retry may hide the failed attempt. Include
+every such provider call and its actual usage in the owner-approved resource ledger before dispatch.
 
 Continue to fail closed on tool events, identity mismatch, missing usage, malformed/incomplete
-TSV, cap breach, uncorrelated request provenance, or any retry. The existing M91 limitation remains:
+TSV, cap breach, uncorrelated request provenance, or any observed retry/error marker. The existing M91 limitation remains:
 absence of recorded tool events does not prove hidden tool definitions were unavailable. Record
 both route versions, exact model identity, settings, per-pass input/output use, event/tool audit,
 attempt outcome, and the ledger before advancing to the next packet.
@@ -156,16 +169,21 @@ and immutable required defect origin. This acceptance does not establish technic
 a new seal, or authorize dispatch. Keep the exact 120/120 accepted scorer-reading schedule and
 preserve usage/session records for both routes. Before
 qualification scoring, verify each route on a fresh one-shot under the exact accepted scorer
-condition, with model identity, complete TSV, correlated usage, no tools, and no retries. The
+condition, with model identity, complete TSV, correlated usage, no observed tool calls, and the
+owner-selected retry evidence policy. `UNSELECTED` denies route dispatch; selecting
+`OBSERVED_NO_RETRY` accepts only CLI/session-observable evidence and cannot establish absence of
+hidden transport retries. The
 default-thinking Qwen canary on 2026-10-07 returned valid TSV after an initial DNS failure, but
 stayed below the configured 2,000 output setting; enforcement remains untested. The older
 thinking-disabled 2,000-setting canary does not establish the default-thinking route.
 
-The current V2 approval validator and scorer ledger do not yet prove end-to-end accounting across
-subject and scorer calls or enforce the accepted subject-run class/origin rules. Preserve M91/M99
-limitations, current run history, the 96 scored plus 24 technical/defect subject-run partition,
-actual provider-call/token records, and all preregistered P3 stop conditions. The V2 approval record
-also needs a named human stop operator before dispatch; no operator identity has been recorded.
-Keep this proposal marked **NOT AUTHORIZED** until the remaining protocol and accounting gaps are
-resolved, the plan is reviewed and accepted, a new seal is created, and dispatch is separately
-authorized. No scorer dispatch is authorized by this document or by the mechanics results above.
+The unified accounting and attempt-class implementation is present and covered by offline tests;
+live route validation and scored/qualification results remain absent. Preserve M91/M99 limitations,
+current run history, the 96 scored plus 24 technical/defect subject-run partition, actual
+provider-call/token records, and all preregistered P3 stop conditions. The approval record remains
+default-deny (`owner_accepted=false`, no selected resource option, `dispatch_allowed=false`); it has
+no owner-accepted V2 seal, completed preflight, or named human stop operator. The retry criterion
+decision above is also outstanding. Keep this proposal marked **NOT AUTHORIZED** until these gates
+are resolved, the plan is reviewed and accepted, a new seal is created, and dispatch is separately
+authorized. No scorer or subject dispatch is authorized by this document or by the mechanics results
+above.

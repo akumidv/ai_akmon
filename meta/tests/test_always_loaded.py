@@ -113,6 +113,28 @@ def test_an_import_leaving_the_project_is_not_counted(tmp_path):
 
 
 @pytest.mark.parametrize(
+    ("block", "imported"),
+    [
+        (BLOCK + "x\u00a0@_aitna/.akmon/profiles/python.md\n", False),  # no-break space is text, not a boundary
+        (BLOCK + "x\u3000@_aitna/.akmon/profiles/python.md\n", False),
+        (BLOCK + "x\u2028@_aitna/.akmon/profiles/python.md\n", False),
+        (BLOCK + "x\x85@_aitna/.akmon/profiles/python.md\n", False),
+        (BLOCK + "x @_aitna/.akmon/profiles/python.md\n", True),
+        (BLOCK + "x\t@_aitna/.akmon/profiles/python.md\n", True),
+        (BLOCK + "x\r@_aitna/.akmon/profiles/python.md\n", True),
+        (BLOCK + "x\f@_aitna/.akmon/profiles/python.md\n", True),
+        (BLOCK + "@_aitna/.akmon/profiles/python.md\u00a0y\n", False),  # a no-break space stays inside the token
+    ],
+    ids=["nbsp", "ideographic", "line-separator", "nel", "space", "tab", "cr", "ff", "nbsp-in-token"],
+)
+def test_only_ascii_whitespace_makes_an_import_boundary(tmp_path, block, imported):
+    """The JavaScript twin spells ``\\s`` as ``[ \\t\\n\\r\\f\\v]``; ``re.ASCII`` makes this side the same."""
+    files = {"_aitna/.akmon/profiles/python.md": "py\n"}
+    found = al.populations(_project(tmp_path, block=block, files=files), tmp_path)[al.shipped()]
+    assert ("_aitna/.akmon/profiles/python.md" in _names(found)) is imported
+
+
+@pytest.mark.parametrize(
     ("scope", "delta", "expected"),
     [
         (al.shipped(), -1, False),

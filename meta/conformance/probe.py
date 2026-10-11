@@ -144,6 +144,23 @@ def probe_record(repo: Path, table: dict) -> list[dict]:
             {"index": index, "expected": case["expected"], "actual": module._strip_inline_comment(case["input"])}
         )
     results.extend(strip_results)
+    results += _record_ecosystem(module, table)
+    return results
+
+
+def _record_ecosystem(module: types.ModuleType, table: dict) -> list[dict]:
+    """The ``[[ecosystem]]`` family: a project whose record holds ``text`` (or none) answers ``expected``."""
+    results = []
+    for index, case in enumerate(table.get("ecosystem", [])):
+        relative = case.get("aitna_root", "_aitna")
+        with tempfile.TemporaryDirectory(prefix="akmon-probe-ecosystem-") as scratch:
+            root = Path(scratch)
+            if not case.get("absent"):
+                (root / relative).mkdir(parents=True, exist_ok=True)
+                (root / relative / ".akmon.toml").write_text(case.get("text", ""), encoding="utf-8", newline="")
+            with _environment({"AITNA_ROOT": case.get("aitna_root")}):
+                actual = module.recorded_ecosystem(root)
+        results.append({"index": 1000 + index, "expected": case["expected"], "actual": actual})
     return results
 
 
@@ -294,10 +311,10 @@ def _render_declaration(declaration: object) -> dict | None:
 
 
 def _runtime_declared(module: types.ModuleType, table: dict) -> list[dict]:
-    """The ordered declaration list, answered by the position the row names (index base 1000)."""
-    declarations = module.declared_runtimes()
+    """The ordered declaration list of the ecosystem a row names (default python), by position (base 1000)."""
     results = []
     for index, case in enumerate(table.get("declared", [])):
+        declarations = module.declared_runtimes(case.get("ecosystem", "python"))
         position = case.get("index")
         in_range = isinstance(position, int) and 0 <= position < len(declarations)
         found = declarations[position] if in_range else None
@@ -346,6 +363,19 @@ def _runtime_errors(module: types.ModuleType, table: dict) -> list[dict]:
     return results
 
 
+def _runtime_ecosystem_errors(module: types.ModuleType, table: dict) -> list[dict]:
+    """The refusal for an ecosystem nobody declared, by its whole text (index base 6000)."""
+    results = []
+    for index, case in enumerate(table.get("ecosystem_error", [])):
+        try:
+            module.declared_runtimes(case.get("ecosystem"))
+            actual = None
+        except ValueError as exc:
+            actual = str(exc)
+        results.append({"index": 6000 + index, "expected": case.get("expected"), "actual": actual})
+    return results
+
+
 def probe_runtime(repo: Path, table: dict) -> list[dict]:
     """The harness-command map and the runtime declaration, against the tree's common/runtime."""
     module = _load_module(repo, "common/runtime.py", "conform_runtime")
@@ -361,6 +391,7 @@ def probe_runtime(repo: Path, table: dict) -> list[dict]:
             }
         )
     results += _runtime_errors(module, table)
+    results += _runtime_ecosystem_errors(module, table)
     return results
 
 
@@ -1080,8 +1111,57 @@ def probe_codex_adapter(repo: Path, table: dict) -> list[dict]:
     return _probe_rows(repo, table, _load_hook_module(repo, "codex_adapter"), _hook_prose(repo))
 
 
+def probe_findings(repo: Path, table: dict) -> list[dict]:
+    """The finding envelope, one public call per row, against the tree's common/findings (C105).
+
+    The generic mouth reaches all of it: ``Finding`` is a call with keyword arguments (``data``
+    among them: a plain object standing for the parsed ``findings.json``), a frozenset answers as a
+    sorted list, and ``printFindings`` — the one function that writes stdout — is the node:test's.
+    """
+    return _probe_rows(repo, table, _load_module(repo, "common/findings.py", "conform_findings"), [])
+
+
+def probe_sync(repo: Path, table: dict) -> list[dict]:
+    """The pure helpers of ``sync``, one public call per row, against the tree's ``bin/sync`` (C105).
+
+    A row names the Python function, a private one included (``_upsert_toml_key``): the JS mouth
+    drops the underscore and calls the camelCase export of ``js/bin/sync.mjs``, and hands it the
+    sync data bundle (``readSyncData()``) as the first argument of the exports that read one. The
+    mounted tree is never consulted by the JS side, so no row builds ``<AITNA_ROOT>/akmon``.
+    """
+    return _probe_rows(repo, table, _load_module(repo, "bin/sync.py", "conform_sync"), [])
+
+
+def probe_always_loaded(repo: Path, table: dict) -> list[dict]:
+    """The always-loaded counter, one public call per row, against the tree's ``common/always_loaded`` (C105).
+
+    The generic mouth: ``Cap``, ``Member`` and ``Population`` are built with ``$new`` (a ``members``
+    list stands for the tuple), a ``Path`` argument with ``$path`` (the JS side takes the POSIX
+    string), and a row's files are the project the import chain walks. The ``lines``/``size``
+    properties are reached through ``report`` and ``over``, which print and compare them.
+    """
+    return _probe_rows(repo, table, _load_module(repo, "common/always_loaded.py", "conform_always_loaded"), [])
+
+
+def probe_codex_hooks(repo: Path, table: dict) -> list[dict]:
+    """The pure half of the Codex hook oracle, one call per row, against the tree's ``common/codex_hooks`` (C105).
+
+    Private parsers (``_parse_hooks_list_message``, ``_hooks_list_project_entry``,
+    ``_check_hook_metadata``, ``_delivery_state``) are named as the Python spells them; the JS mouth
+    drops the underscore and hands the module's data first. Expected identities for
+    ``hook_trust_problems`` come from ``{"$call": "expected_codex_hooks", ...}`` (Python wants tuples;
+    JSON has lists). ``default_runner`` and ``query_hooks_list`` spawn or await: the node:test's and
+    pytest's.
+    """
+    return _probe_rows(repo, table, _load_module(repo, "common/codex_hooks.py", "conform_codex_hooks"), [])
+
+
 PROBES = {
+    "always_loaded": probe_always_loaded,
+    "codex_hooks": probe_codex_hooks,
+    "sync": probe_sync,
     "versions": probe_versions,
+    "findings": probe_findings,
     "record": probe_record,
     "shlex": probe_shlex,
     "glob": probe_glob,

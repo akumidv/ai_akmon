@@ -6,8 +6,8 @@ covers = ["command:verify", "code:check.config", "code:attach.record"]
 [fixture]
 attach = "native"
 name = "base"
-warmup = true
-files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\n" }
+warmup = "before"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\necosystem = \"{{ecosystem}}\"\nakmon_version = \"{{version}}\n" }
 
 [run]
 argv = ["verify"]
@@ -30,7 +30,7 @@ findings = [
   "OK memory.index-coverage _aitna/memory: memory index mentions all memory markdown files → Keep every memory file listed in the index.",
   "OK tasks.entry-status _aitna/TASKS.md: TASKS.md uses well-formed index entries → Keep every entry's status field within active | blocked | deferred | done.",
   "OK skills.present: found 1 skill(s) → Keep at least one SKILL.md in a skill root.",
-  "OK pointers.generated-freshness: generated pointers match `akmon sync` → Re-run akmon sync after every change to a generated file's source.",
+  "ERROR pointers.generated-freshness: generated pointers are stale or missing: _aitna/.akmon.toml; run `akmon sync` → Run akmon sync to regenerate the listed files.",
   "OK codex.host-trust .codex/hooks.json: codex is not installed; Codex host-trust delivery is not verified → Install codex to verify hook delivery, or ignore if this project does not run it.",
   "OK routing.registry-parse standard tree:tools/model_routing/registry.json: model-routing registry parses → Keep the model-routing registry valid JSON.",
   "OK routing.selection-policy tools/model_routing/registry.json#anthropic: model-routing anthropic semantic selection policy exists → Keep the semantic selection policy on this vendor.",

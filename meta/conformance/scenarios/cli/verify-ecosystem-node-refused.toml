@@ -1,0 +1,20 @@
+id = "cli/verify-ecosystem-node-refused"
+ecosystem = "python"
+kind = "cli"
+covers = ["command:verify"]
+
+# A record the JavaScript implementation wrote: the Python verify would report on the Python carrier (launcher,
+# pyproject pin), so it refuses and names the implementation that serves the project (C105).
+[fixture]
+attach = "native"
+warmup = "before"
+name = "base"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\necosystem = \"node\"\nakmon_version = \"{{version}}\"\nattached_archetype = \"unclassified\"\nlast_realign = \"{{version}}\"\n" }
+
+[run]
+argv = ["verify"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "akmon verify: this project's integration record names ecosystem = \"node\" (<AITNA_ROOT>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon verify\n"

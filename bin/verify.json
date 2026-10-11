@@ -163,6 +163,47 @@
   "tasks_max_lines": 200,
   "hook_launcher_error": "generated hook wiring calls {{relative}}, which is missing or not executable — every akmon hook command fails silently (an unavailable executable produces no session-visible error), so the guardrails are off",
   "hook_launcher_error_fix": "Install the akmon dev pin into a project-local virtualenv, then re-run akmon sync.",
+  "python_refuses_ecosystem": "akmon verify: this project's integration record names ecosystem = \"{{value}}\" (<AITNA_ROOT>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon verify",
   "changelog_package_mode": "package mode: changelog discipline is owned by the akmon repository",
-  "changelog_package_mode_fix": "Track the standard's changelog discipline in the akmon repository itself."
+  "changelog_package_mode_fix": "Track the standard's changelog discipline in the akmon repository itself.",
+  "unsupported_record": "akmon verify: the JavaScript implementation serves Node package mode only (mount = \"package\" and ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has {{found}}; run the Python implementation of akmon for it.",
+  "node_wired_hook_scripts": [
+    "hook_core.mjs",
+    "claude_adapter.mjs",
+    "codex_adapter.mjs",
+    "hook_data.mjs",
+    "codex-hook.mjs",
+    "git-commit-guard.mjs",
+    "session-start-agent.mjs",
+    "role-on-code.mjs",
+    "analysis-guard.mjs",
+    "model-routing.mjs",
+    "delegation-log.mjs",
+    "delegation-nudge.mjs",
+    "gate-audit.mjs"
+  ],
+  "node": {
+    "pnp_markers": [
+      ".pnp.cjs",
+      ".pnp.loader.mjs"
+    ],
+    "launcher_pnp": "Yarn Plug'n'Play is in use ({{found}} is present) and installs no node_modules — the generated hook wiring runs node on node_modules/akmon/js/hooks, so every akmon hook command fails silently (an unavailable script produces no session-visible error) and the guardrails are off",
+    "launcher_pnp_fix": "Set nodeLinker: node-modules in .yarnrc.yml and reinstall the dependencies, then re-run akmon sync.",
+    "launcher_hoisted": "generated hook wiring runs node on {{relative}}, which is missing, but akmon is installed at {{found}} — neither the committed wiring nor the generated pointers can reach it, so every akmon hook command fails silently and the guardrails are off",
+    "launcher_hoisted_fix": "Install akmon in this package's own devDependencies so it is linked into its own node_modules, then re-run akmon sync.",
+    "launcher_missing": "generated hook wiring runs node on {{relative}}, which is missing — every akmon hook command fails silently (an unavailable script produces no session-visible error), so the guardrails are off",
+    "launcher_missing_fix": "Install the project's dependencies so node_modules/akmon exists, then re-run akmon sync.",
+    "launcher_ok": "generated hook wiring runs node on {{relative}}, which is present",
+    "launcher_ok_fix": "Keep akmon installed in the project's own node_modules.",
+    "pin_runtime": "package.json pins akmon as a runtime dependency (dependencies, optionalDependencies or peerDependencies); it is dev tooling and belongs in devDependencies",
+    "pin_runtime_fix": "Move the akmon requirement into devDependencies.",
+    "pin_unreadable": "package mode: package.json is not a valid JSON object — no akmon pin can be read from it, and npm cannot resolve `akmon` from it either",
+    "pin_unreadable_fix": "Fix the JSON syntax in package.json; akmon stays pinned in devDependencies.",
+    "pin_none": "package mode: package.json does not pin akmon in devDependencies — `akmon` cannot resolve here, so the CI checks above cannot run",
+    "pin_none_fix": "Pin akmon in devDependencies with `npm install -D -E akmon`.",
+    "pin_ok": "package.json pins akmon in devDependencies",
+    "pin_ok_fix": "Keep akmon pinned in devDependencies.",
+    "exact_pin_warn": "package.json pins akmon as {{value}}, not an exact version — two installs can resolve different akmon versions while the record and the generated wiring are written per version",
+    "exact_pin_warn_fix": "Pin an exact version with `npm install -D -E akmon@<version>`."
+  }
 }

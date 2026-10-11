@@ -22,7 +22,8 @@
 # — declaration number `index` of the ordered list, as {binary, population, modality}; `command`
 # 2000 — harness_command's argv, where `extra` is the caller's policy tail; `named` 3000 —
 # version_command and codex_hooks_list_command; `binaries` 4000 — the executable list; `error`
-# 5000 — the refusal text for a harness or operation nobody declared.
+# 5000 — the refusal text for a harness or operation nobody declared; `ecosystem_error` 6000 — the
+# refusal text for an ecosystem nobody declared.
 #
 # Why each family: the labels are the vocabulary a consumer's report prints, and a rename on one
 # side would split the implementations' findings apart while each still read as correct;
@@ -64,6 +65,8 @@ expected = "required-on:"
 # the checker joins to the wiring, and the field mapping is the port's easiest mistake. ---------
 
 [[declared]]
+# `ecosystem` names the list (python when absent): the data file keeps one per ecosystem, and the
+# Node list differs from the Python one in exactly the interpreter row.
 index = 0
 expected = { binary = "POSIX shell", population = "generated-wiring", modality = "required" }
 
@@ -187,3 +190,57 @@ expected = "harness 'claude' declares no operation 'hooks-list'; known: review, 
 harness = "коdex"
 operation = "version"
 expected = "unknown harness 'коdex'; known: claude, codex"
+
+# --- the per-ecosystem declaration (C105): a row names its `ecosystem`; python is the default
+# the rows above rely on. The Node list swaps `python3` for `node` and nothing else. ----------
+
+[[declared]]
+ecosystem = "node"
+index = 0
+expected = { binary = "POSIX shell", population = "generated-wiring", modality = "required" }
+
+[[declared]]
+ecosystem = "node"
+index = 1
+expected = { binary = "node", population = "generated-wiring", modality = "required" }
+
+[[declared]]
+ecosystem = "node"
+index = 2
+expected = { binary = "git", population = "generated-wiring", modality = "required-on:codex" }
+
+[[declared]]
+ecosystem = "node"
+index = 3
+expected = { binary = "claude", population = "akmon-own-tooling", modality = "optional" }
+
+[[declared]]
+ecosystem = "node"
+index = 4
+expected = { binary = "codex", population = "akmon-own-tooling", modality = "optional" }
+
+[[declared]]
+# The list has five entries on both sides; one past the end answers null, not an error.
+ecosystem = "node"
+index = 5
+
+# --- the ecosystem refusal (base 6000): the whole text, quote style and sorted known list. ----
+
+[[ecosystem_error]]
+ecosystem = "ruby"
+expected = "unknown ecosystem 'ruby'; known: node, python"
+
+[[ecosystem_error]]
+# A name that is an Object.prototype key on the JavaScript side is still unknown.
+ecosystem = "toString"
+expected = "unknown ecosystem 'toString'; known: node, python"
+
+[[ecosystem_error]]
+# Case matters: the key is the record's spelling.
+ecosystem = "Node"
+expected = "unknown ecosystem 'Node'; known: node, python"
+
+[[ecosystem_error]]
+# A non-ASCII name is written as itself on both sides.
+ecosystem = "пайтон"
+expected = "unknown ecosystem 'пайтон'; known: node, python"

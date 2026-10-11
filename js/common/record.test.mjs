@@ -14,7 +14,7 @@ import { posix } from "node:path";
 
 import { parse as parseToml } from "../vendor/smol-toml/dist/index.js";
 import {
-  readAkmonToml, readAkmonTomlStrict, recordedMount, recordsPackageMode, stripInlineComment, RecordError } from "./record.mjs";
+  readAkmonToml, readAkmonTomlStrict, recordedEcosystem, recordedMount, recordsPackageMode, stripInlineComment, RecordError } from "./record.mjs";
 
 const _UNITS = new URL("../../meta/conformance/units/record.toml", import.meta.url);
 
@@ -177,4 +177,68 @@ test("bytes that are not UTF-8 degrade leniently and are refused strictly", () =
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/**
+ * Run `body` on a fresh project root whose record (at `relative`, `_aitna` by default) holds
+ * `text` (`null`: no record), with `AITNA_ROOT` set as given (`null`: unset), all restored after.
+ */
+function withProject(
+  /** @type {string | null} */ text,
+  /** @type {(root: string) => void} */ body,
+  /** @type {{relative?: string, aitnaRoot?: string | null}} */ { relative = "_aitna", aitnaRoot = null } = {},
+) {
+  const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-ecosystem-"));
+  const saved = process.env.AITNA_ROOT;
+  if (aitnaRoot === null) {
+    delete process.env.AITNA_ROOT;
+  } else {
+    process.env.AITNA_ROOT = aitnaRoot;
+  }
+  try {
+    if (text !== null) {
+      fs.mkdirSync(posix.join(root, relative), { recursive: true });
+      fs.writeFileSync(posix.join(root, relative, ".akmon.toml"), text);
+    }
+    body(root);
+  } finally {
+    if (saved === undefined) {
+      delete process.env.AITNA_ROOT;
+    } else {
+      process.env.AITNA_ROOT = saved;
+    }
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("recordedEcosystem: a Node attach is named by the record, anything else is python", () => {
+  withProject('mount = "package"\necosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "node"));
+  // A record that predates the key: no existing Python record changes meaning.
+  withProject('mount = "package"\nakmon_version = "v0.4.0"\n', (root) => assert.equal(recordedEcosystem(root), "python"));
+  withProject(null, (root) => assert.equal(recordedEcosystem(root), "python"));
+  for (const text of ['ecosystem = ""', "ecosystem = 3", "ecosystem = true", 'ecosystem = ["node"]', '[akmon]\necosystem = "node"']) {
+    withProject(`${text}\n`, (root) => assert.equal(recordedEcosystem(root), "python"), {});
+  }
+});
+
+test("recordedEcosystem returns the value as written and answers from a broken record's lines", () => {
+  withProject('ecosystem = "Node"\n', (root) => assert.equal(recordedEcosystem(root), "Node"));
+  withProject('ecosystem = "node"\n[broke =\n', (root) => assert.equal(recordedEcosystem(root), "node"));
+});
+
+test("recordedEcosystem: bytes that are not UTF-8 and a directory in the record's place read as python", () => {
+  withProject(null, (root) => {
+    fs.mkdirSync(posix.join(root, "_aitna"));
+    fs.writeFileSync(posix.join(root, "_aitna", ".akmon.toml"), Buffer.from('ecosystem = "node\xff"\n', "latin1"));
+    assert.equal(recordedEcosystem(root), "python");
+  });
+  withProject(null, (root) => {
+    fs.mkdirSync(posix.join(root, "_aitna", ".akmon.toml"), { recursive: true });
+    assert.equal(recordedEcosystem(root), "python");
+  });
+});
+
+test("recordedEcosystem reads the record of the relocated dev layer", () => {
+  withProject('ecosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "python"), { aitnaRoot: "tools/ai" });
+  withProject('ecosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "node"), { relative: "tools/ai", aitnaRoot: "tools/ai" });
 });

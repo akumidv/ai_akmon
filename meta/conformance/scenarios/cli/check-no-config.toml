@@ -6,7 +6,7 @@ covers = ["command:check", "code:check.config"]
 [fixture]
 attach = "native"
 name = "base"
-files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nlast_realign = \"{{version}}\"\nattached_archetype = \"demo\"\n" }
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\necosystem = \"{{ecosystem}}\"\nakmon_version = \"{{version}}\"\nlast_realign = \"{{version}}\"\nattached_archetype = \"demo\"\n" }
 
 [run]
 argv = ["check"]

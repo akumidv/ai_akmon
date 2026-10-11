@@ -7,6 +7,15 @@
     "{{cli}}\" hook ",
     "/node_modules/akmon/js/hooks/"
   ],
+  "node_hook_command": "node \"{{anchor}}/node_modules/akmon/js/hooks/{{script}}.mjs\"",
+  "node_codex_hook_command": "node \"{{anchor}}/node_modules/akmon/js/hooks/codex-hook.mjs\"",
+  "unsupported_record": "akmon sync: the JavaScript implementation serves Node package mode only (mount = \"package\" and ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has {{found}}; run the Python implementation of akmon for it.",
+  "python_refuses_ecosystem": "akmon sync: this project's integration record names ecosystem = \"{{value}}\" (<AITNA_ROOT>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon sync",
+  "unsupported_found": {
+    "no_record": "no integration record ({{record}})",
+    "mount": "mount = \"{{value}}\"",
+    "ecosystem": "ecosystem = \"{{value}}\""
+  },
   "claude_hooks": {
     "PreToolUse": [
       {

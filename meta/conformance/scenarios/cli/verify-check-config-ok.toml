@@ -8,7 +8,7 @@ covers = ["command:verify", "code:check.config"]
 
 [fixture]
 attach = "native"
-files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nlast_realign = \"{{version}}\"\nattached_archetype = \"demo\"\n\n[check]\nlint = \"echo checked {files}\"\n" }
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\necosystem = \"{{ecosystem}}\"\nakmon_version = \"{{version}}\"\nlast_realign = \"{{version}}\"\nattached_archetype = \"demo\"\n\n[check]\nlint = \"echo checked {files}\"\n" }
 
 [run]
 argv = ["verify"]

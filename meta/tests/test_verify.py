@@ -1881,8 +1881,14 @@ def test_verify_data_pins_its_structure():
         "tasks_max_lines",
         "hook_launcher_error",
         "hook_launcher_error_fix",
+        # the Python verify's refusal of a record the JavaScript implementation wrote (C105)
+        "python_refuses_ecosystem",
         "changelog_package_mode",
         "changelog_package_mode_fix",
+        # the JavaScript verify's own keys (C105); this file never reads them
+        "unsupported_record",
+        "node_wired_hook_scripts",
+        "node",
     }
     assert _VERIFY_DATA["wired_hook_scripts"][0] == "hook_core.py"
     assert _VERIFY_DATA["wired_hook_scripts"][-1] == "gate-audit.py"

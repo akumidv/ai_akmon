@@ -416,6 +416,21 @@ function _subject(text) {
 // ``re.ASCII`` on the Python side: ``\b`` here is ASCII-only.
 const _SUDO_RE = /\bsudo\b/;
 
+// `git` is a command word only when no name character (letter, digit, `_`, `.`, `-`) touches it:
+// `git-commit-guard.py`, `.git/hooks` and `my_git` are names. A subcommand must not continue a
+// name from the left (`pre-commit`, `.push`, `x_tag`), but may be followed by a hyphen: `git
+// commit-tree` and `git merge-base` are still a commit and a merge command.
+const _GIT_WORD = "(?<![\\w.-])git(?![\\w.-])";
+
+/**
+ * `word` as a git subcommand: no name character before it, no letter, digit, `_` or `.` after.
+ * @param {string} word
+ * @returns {string}
+ */
+function _subcommand(word) {
+  return `(?<![\\w.-])${word}(?![\\w.])`;
+}
+
 /**
  * Deny any Bash command that invokes `sudo`, unconditionally.
  *
@@ -465,7 +480,7 @@ export function gitCommitGuardResult(data, command, branch = null, { permissionM
   }
 
   const isGit = (/** @type {string} */ subcommand) =>
-    new RegExp(`\\bgit\\b[^|&;]*\\b${subcommand}\\b`).test(_subject(command));
+    new RegExp(`${_GIT_WORD}[^|&;]*${_subcommand(subcommand)}`).test(_subject(command));
 
   if (isGit("push") || isGit("tag") || isGit("merge")) {
     return _escalateUnattendedAsk(

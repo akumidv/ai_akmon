@@ -15,6 +15,7 @@ import { aitnaRoot } from "./project_root.mjs";
 import { pyPath } from "./pyvalue.mjs";
 
 const _PACKAGE_MODE = "package";
+const _ECOSYSTEM_DEFAULT = "python";
 
 /** Whether `filePath` is a regular file (a directory named like one does not count). */
 function _isFile(/** @type {string} */ filePath) {
@@ -250,4 +251,20 @@ export function recordedMount(projectRoot) {
  */
 export function recordsPackageMode(projectRoot) {
   return recordedMount(projectRoot) === _PACKAGE_MODE;
+}
+
+/**
+ * The ecosystem the record names (`"node"` for a Node package attach), `"python"` by default.
+ *
+ * Never `null`: an absent key, an empty or non-string value, an absent or unreadable record all
+ * read as `"python"`, so no record written before the key existed changes meaning (ADR 0020
+ * D05). The value is returned as written — whether it names an ecosystem a caller serves is the
+ * caller's question.
+ *
+ * @param {string} projectRoot
+ * @returns {string}
+ */
+export function recordedEcosystem(projectRoot) {
+  const value = readAkmonToml(pyPath(aitnaRoot(projectRoot), ".akmon.toml"))["ecosystem"];
+  return typeof value === "string" && value !== "" ? value : _ECOSYSTEM_DEFAULT;
 }

@@ -22,7 +22,10 @@ instead of quietly outliving the fact it describes.
 from __future__ import annotations
 
 import ast
+import json
 import re
+import shutil
+import subprocess
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
@@ -438,6 +441,9 @@ def _head_kind(token: str) -> str | None:
 #: naming a harness is describing the map, not bypassing it.
 _OWN_TOOL_SOURCE_DIRS = ("bin", "hooks", "tools", "src/akmon")
 
+#: Where a finding about the Node ecosystem's declaration points.
+NODE_TARGET = "common/runtime.json#node"
+
 
 def _read_substitution(text: str, start: int) -> tuple:
     """The body of a ``$(`` opened at ``start``, and the index just past its closing ``)``.
@@ -652,14 +658,98 @@ def generated_wiring(root: Path) -> dict:
     return {"claude": entries(sync._claude_hooks(root)), "codex": entries(sync._codex_hooks(root))}
 
 
+#: The script ``node --input-type=module -e`` runs to read the wiring the JavaScript ``sync`` emits:
+#: the command strings of each vendor, as JSON on stdout. It imports the module under ``root``
+#: (the tree being checked), so the join cannot be satisfied by a stale copy elsewhere.
+_NODE_WIRING_SCRIPT = """
+const sync = await import(process.argv[1]);
+const data = sync.readSyncData();
+const get = (node, key) => (node instanceof Map ? node.get(key) : node[key]);
+const commands = (config) => {
+  const out = [];
+  const groups = get(config, "hooks");
+  for (const entries of groups instanceof Map ? groups.values() : Object.values(groups)) {
+    for (const entry of entries) {
+      for (const hook of get(entry, "hooks")) {
+        out.push(get(hook, "command"));
+      }
+    }
+  }
+  return out;
+};
+console.log(JSON.stringify({ claude: commands(sync.claudeHooks(data)), codex: commands(sync.codexHooks(data)) }));
+"""
+
+
+class NodeWiringError(Exception):
+    """The JavaScript ``sync``'s wiring could not be read; the message names the prerequisite or the failure."""
+
+
+def node_generated_wiring(root: Path) -> dict:
+    """``vendor -> command entries`` as the JavaScript ``sync`` would emit them for ``root``.
+
+    Read by running ``node`` over ``<root>/js/bin/sync.mjs`` — the generators of the Node
+    ecosystem live in JavaScript, so the Python checker asks them rather than restating them.
+    """
+    if shutil.which("node") is None:
+        raise NodeWiringError(
+            "the Node ecosystem's wiring could not be read: the `node` binary is not on PATH :: "
+            "prerequisite of this check, not a defect — it needs node >= 22 on PATH"
+        )
+    module = (root / "js" / "bin" / "sync.mjs").resolve().as_uri()
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", _NODE_WIRING_SCRIPT, module],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        tail = (result.stderr or "").strip().splitlines()
+        reason = tail[-1] if tail else f"exit {result.returncode}"
+        raise NodeWiringError(f"the Node ecosystem's wiring could not be read from js/bin/sync.mjs: {reason}")
+    try:
+        wiring = json.loads(result.stdout)
+    except ValueError as exc:
+        raise NodeWiringError(f"js/bin/sync.mjs printed no JSON wiring ({exc})") from None
+    return {vendor: [str(command) for command in commands] for vendor, commands in wiring.items()}
+
+
 def check_declared_runtimes(root: Path) -> list:
-    """The join over akmon's own declaration, map and wiring — what ``self_ci`` calls."""
-    return check_runtime(
-        declarations=runtime_declaration.declared_runtimes(),
+    """The join over akmon's own declarations, map and wiring — what ``self_ci`` calls.
+
+    Both ecosystems are joined: the Python declaration to the Python ``sync``'s wiring, the Node
+    declaration to the JavaScript ``sync``'s wiring (read through ``node``). A Node finding's
+    target names its table, ``common/runtime.json#node``.
+    """
+    findings = check_runtime(
+        declarations=runtime_declaration.declared_runtimes("python"),
         harness_commands=runtime_declaration.harness_commands(),
         wiring=generated_wiring(root),
         root=root,
     )
+    try:
+        node_wiring = node_generated_wiring(root)
+    except NodeWiringError as exc:
+        findings.append(
+            Finding(
+                "error",
+                "runtime.node-wiring-unreadable",
+                str(exc),
+                NODE_TARGET,
+                "Install node >= 22 on PATH and re-run python3 meta/self_ci.py.",
+            )
+        )
+        return findings
+    findings.extend(
+        check_runtime(
+            declarations=runtime_declaration.declared_runtimes("node"),
+            harness_commands=runtime_declaration.harness_commands(),
+            wiring=node_wiring,
+            root=None,
+            target=NODE_TARGET,
+        )
+    )
+    return findings
 
 
 def check_runtime(
@@ -667,9 +757,15 @@ def check_runtime(
     declarations: Sequence[RuntimeDeclaration],
     harness_commands: Mapping[str, HarnessCommands],
     wiring: Mapping[str, list],
-    root: Path,
+    root: Path | None,
+    target: str = "common/runtime.py",
 ) -> list:
-    """The F16 join, as one pure function over its four inputs."""
+    """The F16 join, as one pure function over its four inputs.
+
+    ``target`` is where a declaration finding points. ``root`` is the tree whose sources are
+    scanned for a second owner of a harness binary; ``None`` skips that scan, as the second
+    ecosystem's join does, since it would only repeat the first one's.
+    """
     findings: list = []
     per_vendor, refusals = derive_generated_population_with_refusals(wiring)
     for vendor, command, reason in refusals:
@@ -694,7 +790,7 @@ def check_runtime(
             "error",
             "runtime.undeclared-binary",
             f"generated wiring invokes {binary!r}, which no runtime declaration names",
-            "common/runtime.py",
+            target,
             f"Declare {binary} in the {GENERATED_WIRING} population, or stop emitting it.",
         )
         for binary in sorted(generated - set(declared))
@@ -704,7 +800,7 @@ def check_runtime(
             "error",
             "runtime.undeclared-binary",
             f"the harness-command map invokes {binary!r}, which no runtime declaration names",
-            "common/runtime.py",
+            target,
             f"Declare {binary} in the {OWN_TOOLING} population, or drop it from the map.",
         )
         for binary in sorted(own - set(declared))
@@ -720,7 +816,7 @@ def check_runtime(
                     "runtime.unused-binary",
                     f"{binary!r} is declared in {declaration.population or '(no population)'} "
                     f"but nothing in that population invokes it",
-                    "common/runtime.py",
+                    target,
                     f"Drop the {binary} declaration, or restore the call that needed it.",
                 )
             )
@@ -732,7 +828,7 @@ def check_runtime(
                     "runtime.wrong-population",
                     f"{binary!r} is declared in {declaration.population or '(no population)'} "
                     f"but is invoked by {found}",
-                    "common/runtime.py",
+                    target,
                     f"Declare {binary} in the {found} population.",
                 )
             )
@@ -744,12 +840,12 @@ def check_runtime(
                     "error",
                     "runtime.wrong-modality",
                     f"{binary!r} is declared {declaration.modality!r} but its {found} use is {expected!r}",
-                    "common/runtime.py",
+                    target,
                     f"Declare {binary} as {expected}.",
                 )
             )
 
-    for relative, line, binary in own_tool_literals(root, own):
+    for relative, line, binary in own_tool_literals(root, own) if root is not None else ():
         findings.append(
             Finding(
                 "error",

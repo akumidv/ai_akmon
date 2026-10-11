@@ -1,0 +1,20 @@
+id = "cli/sync-ecosystem-python-refused"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:sync"]
+
+# A record without `ecosystem` is a Python project: the JavaScript sync serves Node package mode only
+# and refuses rather than write the Node spelling into it (C105).
+[fixture]
+attach = "native"
+warmup = "before"
+name = "base"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\nakmon_version = \"{{version}}\"\nattached_archetype = \"unclassified\"\nlast_realign = \"{{version}}\"\n" }
+
+[run]
+argv = ["sync"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "akmon sync: the JavaScript implementation serves Node package mode only (mount = \"package\" and ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has ecosystem = \"python\"; run the Python implementation of akmon for it.\n"

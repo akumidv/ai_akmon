@@ -652,7 +652,7 @@ def _run(akmon_root: Path) -> list[Finding]:
     )
     _js_leg(
         findings,
-        "conformance corpus (node units and hooks)",
+        "conformance corpus (node units, hooks and cli)",
         LegInvocation(
             [
                 sys.executable,
@@ -665,17 +665,21 @@ def _run(akmon_root: Path) -> list[Finding]:
                 "units",
                 "--area",
                 "hooks",
+                "--area",
+                "cli",
             ],
             cwd=akmon_root,
         ),
         code="selfci.corpus-node",
         fixes=LegFixes(
             ok_fix=(
-                "Keep the unit tables green on the node implementation through probe.mjs, and every hook "
-                "scenario green on the JS hooks run from node_modules/akmon."
+                "Keep the unit tables green on the node implementation through probe.mjs, every hook "
+                "scenario green on the JS hooks run from node_modules/akmon, and every CLI scenario of a "
+                "command with a JS port green on the JS CLI."
             ),
             error_fix=(
-                "Run python3 meta/conformance/runner.py --tree <repo> --impl node --area units --area hooks and "
+                "Run python3 meta/conformance/runner.py --tree <repo> --impl node --area units --area hooks "
+                "--area cli and "
                 "fix the prerequisite or the failing scenario it names."
             ),
         ),

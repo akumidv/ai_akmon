@@ -91,6 +91,74 @@ def test_the_real_tree_satisfies_its_own_declaration():
     assert runtime_checks.check_declared_runtimes(_AKMON) == []
 
 
+# --------------------------------------------------------------------------------------
+# the Node ecosystem: its declaration joined to the JavaScript sync's wiring
+# --------------------------------------------------------------------------------------
+
+NODE_WIRING = {
+    "claude": ['node "$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/session-start-agent.mjs"'],
+    "codex": ['node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" session-start'],
+}
+NODE_DECLARATIONS = runtime_declaration.declared_runtimes("node")
+
+
+def _check_node(declarations=NODE_DECLARATIONS, wiring=None):
+    return runtime_checks.check_runtime(
+        declarations=declarations,
+        harness_commands=MAP,
+        wiring=NODE_WIRING if wiring is None else wiring,
+        root=None,
+        target=runtime_checks.NODE_TARGET,
+    )
+
+
+def test_the_node_world_has_no_findings():
+    assert _check_node() == []
+
+
+def test_the_javascript_wiring_of_the_real_tree_matches_the_node_declaration():
+    wiring = runtime_checks.node_generated_wiring(_AKMON)
+    assert (
+        runtime_checks.check_runtime(
+            declarations=NODE_DECLARATIONS,
+            harness_commands=runtime_declaration.harness_commands(),
+            wiring=wiring,
+            root=None,
+            target=runtime_checks.NODE_TARGET,
+        )
+        == []
+    )
+    assert all(command.startswith("node ") for commands in wiring.values() for command in commands)
+
+
+def test_a_node_declaration_missing_node_is_an_undeclared_binary():
+    declarations = tuple(d for d in NODE_DECLARATIONS if d.binary != "node")
+    finding = _only(_check_node(declarations), "runtime.undeclared-binary")
+    assert "'node'" in finding.message
+    assert finding.target == "common/runtime.json#node"
+
+
+def test_a_node_declaration_naming_python3_is_an_unused_binary():
+    declarations = tuple(replace(d, binary="python3") if d.binary == "node" else d for d in NODE_DECLARATIONS)
+    findings = _check_node(declarations)
+    assert sorted((f.severity, f.code) for f in findings) == [
+        ("error", "runtime.undeclared-binary"),
+        ("warn", "runtime.unused-binary"),
+    ]
+    assert {f.target for f in findings} == {"common/runtime.json#node"}
+
+
+def test_no_node_on_path_is_one_finding_naming_the_prerequisite(monkeypatch):
+    monkeypatch.setattr(runtime_checks.shutil, "which", lambda _name: None)
+    findings = runtime_checks.check_declared_runtimes(_AKMON)
+    finding = _only(findings, "runtime.node-wiring-unreadable")
+    assert "node" in finding.message
+    assert "PATH" in finding.message
+    assert "node >= 22" in finding.message
+    assert "node >= 22" in finding.fix
+    assert finding.target == "common/runtime.json#node"
+
+
 def test_the_derivation_reproduces_the_declared_populations():
     per_vendor = runtime_checks.derive_generated_population(runtime_checks.generated_wiring(_AKMON))
     assert per_vendor["claude"] == {POSIX_SHELL, "python3"}
@@ -275,9 +343,7 @@ def test_a_key_into_any_other_mapping_still_counts_as_a_second_owner(tmp_path, s
     hook = tmp_path / "hooks" / "adapter.py"
     hook.parent.mkdir(parents=True)
     hook.write_text(source, encoding="utf-8")
-    assert [literal for _path, _line, literal in runtime_checks.own_tool_literals(tmp_path, ["claude"])] == [
-        "claude"
-    ]
+    assert [literal for _path, _line, literal in runtime_checks.own_tool_literals(tmp_path, ["claude"])] == ["claude"]
 
 
 # --------------------------------------------------------------------------------------
@@ -293,8 +359,7 @@ def test_c57_lock_text_pins_prefix_ownership_without_the_old_overclaim():
     across them, so archiving a task cannot become a way to drop the sentence pinned here.
     """
     backlog = "\n".join(
-        (_AKMON / "meta" / name).read_text(encoding="utf-8")
-        for name in ("TASKS.md", "TASKS_ARCHIVE.md")
+        (_AKMON / "meta" / name).read_text(encoding="utf-8") for name in ("TASKS.md", "TASKS_ARCHIVE.md")
     )
     entries = [line for line in backlog.splitlines() if line.startswith("- C57 · ")]
 
@@ -812,12 +877,24 @@ def test_runtime_json_carries_the_tables_the_module_reads():
     assert set(data) == {"harness_commands", "declared_runtimes"}
     assert set(data["harness_commands"]) == {"claude", "codex"}
     assert data["harness_commands"]["claude"]["operations"]["review"] == ["-p", "--output-format", "text"]
-    assert data["declared_runtimes"][0] == [POSIX_SHELL, GENERATED_WIRING, REQUIRED]
-    assert data["declared_runtimes"][2] == ["git", GENERATED_WIRING, REQUIRED_ON + "codex"]
+    assert set(data["declared_runtimes"]) == {"python", "node"}
+    assert data["declared_runtimes"]["python"][0] == [POSIX_SHELL, GENERATED_WIRING, REQUIRED]
+    assert data["declared_runtimes"]["python"][2] == ["git", GENERATED_WIRING, REQUIRED_ON + "codex"]
+    assert data["declared_runtimes"]["node"][1] == ["node", GENERATED_WIRING, REQUIRED]
+
+
+def test_the_node_declaration_names_node_where_python_names_python3():
+    binaries = [d.binary for d in runtime_declaration.declared_runtimes("node")]
+    assert binaries == [POSIX_SHELL, "node", "git", "claude", "codex"]
+
+
+def test_an_unknown_ecosystem_is_a_value_error_naming_it():
+    with pytest.raises(ValueError, match="unknown ecosystem 'ruby'; known: node, python"):
+        runtime_declaration.declared_runtimes("ruby")
 
 
 def test_the_loaders_reconstruct_the_module_shapes_from_the_data_file():
-    declarations = runtime_declaration.declared_runtimes()
+    declarations = runtime_declaration.declared_runtimes("python")
     assert len(declarations) == 5
     assert declarations[0] == RuntimeDeclaration(POSIX_SHELL, GENERATED_WIRING, REQUIRED)
     assert declarations[3] == RuntimeDeclaration("claude", OWN_TOOLING, OPTIONAL)
@@ -835,7 +912,7 @@ def test_the_loader_reads_exactly_runtime_json(monkeypatch):
         return real_read(path)
 
     monkeypatch.setattr(jsondata, "read", capture)
-    runtime_declaration.declared_runtimes()
+    runtime_declaration.declared_runtimes("python")
     runtime_declaration.harness_commands()
     assert seen == [Path(runtime_declaration.__file__).with_name("runtime.json")] * 2
 
@@ -846,6 +923,6 @@ def test_a_missing_data_file_fails_from_the_public_functions(monkeypatch):
 
     monkeypatch.setattr(jsondata, "read", broken)
     with pytest.raises(jsondata.DataFileError):
-        runtime_declaration.declared_runtimes()
+        runtime_declaration.declared_runtimes("python")
     with pytest.raises(jsondata.DataFileError):
         runtime_declaration.harness_command("claude", "version")

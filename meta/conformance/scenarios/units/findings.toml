@@ -1,0 +1,14 @@
+id = "units/findings"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:findings"]
+
+[run]
+probe = "findings"
+table = "findings.toml"
+
+# The document is pinned, not just the exit code: the node run compares the same bytes.
+[expected]
+exit = 0
+stdout = "{\n  \"ok\": true,\n  \"failed\": []\n}\n"
+stderr = ""
