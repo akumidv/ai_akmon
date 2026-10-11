@@ -1962,3 +1962,30 @@ def test_verify_data_file_error_propagates_uncaught(monkeypatch, tmp_path):
         verify.wired_hook_scripts()
     with pytest.raises(verify.jsondata.DataFileError, match=r"verify\.json"):
         verify.Verifier(tmp_path)
+
+
+# The text patterns carry re.ASCII (C105, the C103 twin rule); js/bin/verify.mjs pins the same rows.
+@pytest.mark.parametrize(
+    ("name", "text", "found"),
+    [
+        ("_DATE_RE", "2026-10-11", True),
+        ("_DATE_RE", "\u0662\u0660\u0662\u0666-\u0661\u0660-\u0661\u0661", False),
+        ("_DATE_RE", "é2026-10-11", True),
+        ("_DELEGATION_DEFAULT_RE", "Delegation is the default", True),
+        ("_DELEGATION_DEFAULT_RE", "delegation\xa0is the default", False),
+        ("_DELEGATION_DEFAULT_RE", "delegation is the defaulté", True),
+        ("_NUMBERED_DR_RE", "ADR 12", True),
+        ("_NUMBERED_DR_RE", "ADR-0020", True),
+        ("_NUMBERED_DR_RE", "ADR\xa012", False),
+        ("_NUMBERED_DR_RE", "ADR\u0661\u0662", False),
+        ("_ROADMAP_CITE_RE", "ROADMAP O1", True),
+        ("_ROADMAP_CITE_RE", "ROADMAP\u3000O1", False),
+        ("_DEV_NAME_RE", "éself_ci", True),
+        ("_DEV_NAME_RE", "self_ciß", True),
+        ("_DEV_NAME_RE", "xself_ci", False),
+        ("_LEGACY_OWNER_ANCHOR_RE", "**D2** — the owner verifies", True),
+        ("_LEGACY_OWNER_ANCHOR_RE", "**D2**\xa0— the owner verifies", False),
+    ],
+)
+def test_verify_text_patterns_are_ascii(name, text, found):
+    assert bool(getattr(verify, name).search(text)) is found

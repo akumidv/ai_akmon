@@ -1,0 +1,14 @@
+id = "units/codex_hooks"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:codex_hooks"]
+
+[run]
+probe = "codex_hooks"
+table = "codex_hooks.toml"
+
+# The document is pinned, not just the exit code: the node run compares the same bytes.
+[expected]
+exit = 0
+stdout = "{\n  \"ok\": true,\n  \"failed\": []\n}\n"
+stderr = ""

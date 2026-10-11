@@ -126,7 +126,8 @@ match exactly**. Rules, in normative order (see `normalize.py`):
    ` → ` become `{{parse-error}}`: that a file failed to parse, and which, is spec; the
    parser's words are the implementation's.
 4. **Paths**: mount → `{{mount}}`, tree → `{{tree}}`, project root → `{{root}}` (longest first;
-   the mount path contains the root), run tempdir → `{{tmp}}`, the local standard repo → `{{repo}}`.
+   the mount path contains the root), run tempdir → `{{tmp}}`, the local standard repo → `{{repo}}`. On a node
+   native run `<root>/node_modules/akmon` is `{{tree}}` too: that link is the tree the consumer runs, read unresolved.
 5. **Point-in-time**: the running version → `{{version}}`; datetimes and `YYYYMMDD-HHMMSS`
    stamps → `{{ts}}` and bare dates → `{{date}}` **only for the run's own day(s)**. A date from
    any other day came from a fixture and is compared literally.

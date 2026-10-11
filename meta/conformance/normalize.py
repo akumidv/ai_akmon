@@ -66,6 +66,9 @@ class Ctx:
     version: str  # the version the implementation under test reports
     repo: str = ""  # the local standard-tree git repo the runner builds for --repo runs, else ""
     days: tuple[str, ...] = field(default=())  # YYYY-MM-DD dates the run spans (usually one)
+    # <root>/node_modules/akmon on a node native run, else "": the link *is* the tree the consumer
+    # runs (the implementation reads it unresolved, as pnpm requires), so it normalizes to {{tree}}
+    carrier: str = ""
 
 
 # The two anchors a generated hook command may hang from (sync's spellings), as regex.
@@ -104,7 +107,14 @@ def normalize(text: str, ctx: Ctx) -> str:
     out = _TOOL.sub(lambda m: f"{{{{tool {m.group(1)}}}}}", out)
     out = _PARSE_DETAIL.sub(lambda m: f"{m.group(1)}: {PARSE_ERROR}", out)
     # Longest path first: a path nested in another (the mount in the root) must win over its parent.
-    paths = ((ctx.mount, MOUNT), (ctx.tree, TREE), (ctx.root, ROOT), (ctx.repo, REPO), (ctx.tmp, TMP))
+    paths = (
+        (ctx.mount, MOUNT),
+        (ctx.carrier, TREE),
+        (ctx.tree, TREE),
+        (ctx.root, ROOT),
+        (ctx.repo, REPO),
+        (ctx.tmp, TMP),
+    )
     for raw, token in sorted((pair for pair in paths if pair[0]), key=lambda pair: -len(pair[0])):
         out = out.replace(raw, token)
     if ctx.version:
