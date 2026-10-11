@@ -41,9 +41,9 @@
  * Twin notes (ADR 0020 D08, `meta/conformance/DIVERGENCES.md`):
  * - the arguments are parsed by `node:util` `parseArgs`: a usage error is the one line
  *   `akmon verify: error: …` on stderr and exit 2, `-h`/`--help` prints a short usage and exits 0;
- * - the Python's text patterns use `\\d \\w \\s \\b` with the Unicode meaning of `str` patterns, and
- *   so do these: `\\p{Nd}`, `[\\p{L}\\p{N}_]` (look-arounds for `\\b`) and the `str.isspace()` set, with
- *   the `u` flag — nothing is ASCII-only on either side;
+ * - the Python's text patterns carry `re.ASCII` (the C103 twin rule), so these spell `\\d \\w \\s \\b`
+ *   as ASCII classes: `[0-9]`, look-arounds over `[A-Za-z0-9_]`, `[ \\t\\n\\r\\f\\v]` (JS `\\s` is
+ *   Unicode even without `u`), and `i` without `u` folds ASCII letters only, as `re.IGNORECASE | re.ASCII`;
  * - `Path.glob` over the isolation patterns (`skills/**\/*.md`): a literal segment must be a
  *   directory, `**` is the directory and every real subdirectory below it (a linked one is listed,
  *   not entered), the last segment matches any entry, hidden ones included; `sorted()` orders paths
@@ -122,24 +122,33 @@ import { splitVersion } from "../common/versions.mjs";
 /** The tree this module executes from, links dereferenced: `<tree>/js/bin/verify.mjs` → `<tree>`. */
 const TREE_ROOT = fs.realpathSync(posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", ".."));
 
-// `str` patterns of the Python module, with the Unicode meaning of `\d \w \s \b` (see the header).
-const _WORD = "\\p{L}\\p{N}_";
-const _SPACE = "\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
-const _DATE_RE = new RegExp(`(?<![${_WORD}])\\p{Nd}{4}-\\p{Nd}{2}-\\p{Nd}{2}(?![${_WORD}])`, "u");
+// The Python module's patterns under `re.ASCII` (see the header).
+const _WORD = "A-Za-z0-9_";
+const _SPACE = " \\t\\n\\r\\f\\v";
+const _DATE_RE = new RegExp(`(?<![${_WORD}])[0-9]{4}-[0-9]{2}-[0-9]{2}(?![${_WORD}])`);
 // A backlog entry's `·`-separated fields (pipelines/tasks.md): id, title, status, goal, detail.
 // Reading the status field needs at least the first three.
 const _MIN_STATUS_FIELDS = 3;
 const _DELEGATION_DEFAULT_RE = new RegExp(
   `(?<![${_WORD}])delegation[${_SPACE}]+is[${_SPACE}]+the[${_SPACE}]+default(?![${_WORD}])`,
-  "iu",
+  "i",
 );
 const _SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const _NUMBERED_DR_RE = new RegExp(`(?<![${_WORD}])ADR[${_SPACE}-]?\\p{Nd}{2,4}(?![${_WORD}])`, "gu");
-const _ROADMAP_CITE_RE = new RegExp(`(?<![${_WORD}])ROADMAP(?:\\.md|[${_SPACE}]+O\\p{Nd}+)`, "gu");
-const _DEV_NAME_RE = new RegExp(`(?<![${_WORD}])self_ci(?![${_WORD}])|(?<![${_WORD}])CONCEPT\\.md(?![${_WORD}])`, "gu");
+const _NUMBERED_DR_RE = new RegExp(`(?<![${_WORD}])ADR[${_SPACE}-]?[0-9]{2,4}(?![${_WORD}])`, "g");
+const _ROADMAP_CITE_RE = new RegExp(`(?<![${_WORD}])ROADMAP(?:\\.md|[${_SPACE}]+O[0-9]+)`, "g");
+const _DEV_NAME_RE = new RegExp(`(?<![${_WORD}])self_ci(?![${_WORD}])|(?<![${_WORD}])CONCEPT\\.md(?![${_WORD}])`, "g");
 const _LINK_RE = /\]\(([^)]+)\)/gu;
 const _INLINE_CODE_RE = /`([^`]+)`/gu;
-const _LEGACY_OWNER_ANCHOR_RE = new RegExp(`\\*\\*D2\\*\\*[${_SPACE}]+—[${_SPACE}]+the owner[${_SPACE}]+verifies`, "u");
+const _LEGACY_OWNER_ANCHOR_RE = new RegExp(`\\*\\*D2\\*\\*[${_SPACE}]+—[${_SPACE}]+the owner[${_SPACE}]+verifies`);
+/** The text patterns, exported for the twin test that pins their ASCII meaning against the Python's. */
+export const TEXT_PATTERNS = {
+  date: _DATE_RE,
+  delegationDefault: _DELEGATION_DEFAULT_RE,
+  numberedDr: _NUMBERED_DR_RE,
+  roadmapCite: _ROADMAP_CITE_RE,
+  devName: _DEV_NAME_RE,
+  legacyOwnerAnchor: _LEGACY_OWNER_ANCHOR_RE,
+};
 const _EXACT_VERSION_RE = /^=?[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 /** The standard files the Node project's wiring runs, relative to the standard tree. */

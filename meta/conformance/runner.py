@@ -385,6 +385,7 @@ def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
         version=version,
         repo=str(local_repo) if local_repo else "",
         days=(first_day,),
+        carrier=str(proj_dir / "node_modules" / "akmon") if run.impl == "node" and fixture.attach == "native" else "",
     )
     for relative, content in fixture.tmp_files.items():
         target = run_tmp / relative

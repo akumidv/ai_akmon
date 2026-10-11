@@ -24,22 +24,6 @@ path = "common/__init__.py"
 reason = "structural — ES modules have no package init; js/common is a flat module directory the C104 hooks import first"
 task = "C104"
 
-[[exempt]]
-path = "common/always_loaded.py"
-reason = "first consumer in port order is bin/verify.py; the JS CLI lands in C105"
-task = "C105"
-
-[[exempt]]
-path = "common/codex_hooks.py"
-reason = "first consumer in port order is bin/verify.py; the JS CLI lands in C105"
-task = "C105"
-
-# bin/: sync and check are ported (C105 pass 1); verify is pass 2's.
-[[exempt]]
-path = "bin/verify.py"
-reason = "the JS verify, with the Node findings, lands in C105 pass 2"
-task = "C105"
-
 # src/akmon/: the CLI port is C105; update is C107's plan row.
 [[exempt]]
 path = "src/akmon/__init__.py"

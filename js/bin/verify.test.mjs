@@ -13,7 +13,7 @@ import os from "node:os";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Verifier, main, readVerifyData } from "./verify.mjs";
+import { TEXT_PATTERNS, Verifier, main, readVerifyData } from "./verify.mjs";
 import { apply, codexHooksText, plannedFiles, readSyncData } from "./sync.mjs";
 import * as alwaysLoaded from "../common/always_loaded.mjs";
 import * as codexHooks from "../common/codex_hooks.mjs";
@@ -729,12 +729,13 @@ function recorded(root, check) {
   return verifier.findings.map((f) => `${f.severity} ${f.code} ${f.message}`);
 }
 
-test("delegation-default and the legacy owner anchor accept every Unicode space, in any case", async () => {
+test("delegation-default and the legacy owner anchor accept ASCII whitespace only, in any case", async () => {
   for (const [text, ok] of /** @type {Array<[string, boolean]>} */ ([
-    ["Delegation is the default", true], ["DELEGATION\u00a0IS\u2003THE\u3000DEFAULT", true], ["delegation\nis\tthe\u2028default", true],
+    ["Delegation is the default", true], ["DELEGATION\u00a0IS\u2003THE\u3000DEFAULT", false], ["delegation\nis\tthe\u2028default", false],
+    ["DELEGATION\nIS\tTHE\fDEFAULT", true],
     ["delegation is the defaulty", false], ["xdelegation is the default", false], ["_delegation is the default", false],
-    ["7delegation is the default", false], ["édelegation is the default", false], ["delegation\u200bis the default", false],
-    ["delegation is the default_", false], ["delegation is the default\u0662", false],
+    ["7delegation is the default", false], ["édelegation is the default", true], ["delegation\u200bis the default", false],
+    ["delegation is the default_", false], ["delegation is the default\u0662", true],
   ])) {
     await withScratch((scratch) => {
       const root = project(scratch);
@@ -745,7 +746,7 @@ test("delegation-default and the legacy owner anchor accept every Unicode space,
   }
   // the legacy owner anchor stands in for "owner verifies" when only the whitespace between the words differs
   for (const [anchor, ok] of /** @type {Array<[string, boolean]>} */ ([
-    ["**D2** \u2014 the owner\u00a0verifies", true], ["**D2**\u00a0\u2014\u3000the owner\u2003verifies", true],
+    ["**D2** \u2014 the owner\tverifies", true], ["**D2** \u2014 the owner\u00a0verifies", false], ["**D2**\u00a0\u2014\u3000the owner\u2003verifies", false],
     ["**D2**\u2014 the owner\u00a0verifies", false], ["**D2** \u2014 the owner\u200bverifies", false],
     ["the owner\u00a0verifies", false], ["**D2** - the owner\u00a0verifies", false],
   ])) {
@@ -758,12 +759,12 @@ test("delegation-default and the legacy owner anchor accept every Unicode space,
   }
 });
 
-test("the dates of TASKS.md are found with Unicode digits and a Unicode word boundary", async () => {
+test("the dates of TASKS.md are found with ASCII digits and an ASCII word boundary", async () => {
   for (const [text, found] of [
     ["Started 2026-10-11.", true], ["x2026-10-11", false], ["2026-10-110", false], ["_2026-10-11_", false], ["2026-10-11x", false],
-    ["\u0662\u0660\u0662\u0666-\u0661\u0660-\u0661\u0661", true], ["\uff12\uff10\uff12\uff16-\uff11\uff10-\uff11\uff11", true],
-    ["é2026-10-11", false], ["\u00b22026-10-11", false], ["\u03012026-10-11", true], ["\u21602026-10-11", false], ["2026-10-11é", false],
-    ["a 2026-1-11", false], ["(2026-10-11)", true], ["\u{1d7ec}2026-10-11", false],
+    ["\u0662\u0660\u0662\u0666-\u0661\u0660-\u0661\u0661", false], ["\uff12\uff10\uff12\uff16-\uff11\uff10-\uff11\uff11", false],
+    ["é2026-10-11", true], ["\u00b22026-10-11", true], ["\u03012026-10-11", true], ["\u21602026-10-11", true], ["2026-10-11é", true],
+    ["a 2026-1-11", false], ["(2026-10-11)", true], ["\u{1d7ec}2026-10-11", true],
   ]) {
     await withScratch((scratch) => {
       const root = project(scratch);
@@ -925,7 +926,7 @@ test("isolation: roles/*.md, skills/**/*.md, tools/**/*.md and the top-level fil
     put(tree, "tools/t/u/v.md", "`ROADMAP/x` ok\n");
     put(tree, "profiles/none.txt", "ADR 0001\n");
     put(tree, "ARCHETYPES.md", "plain ADR vocabulary: file an ADR\n");
-    put(tree, "MODEL.md", "ADR\u00a00005\n");
+    put(tree, "MODEL.md", "ADR 0005\n");
     put(scratch, "outside/in-link.md", "ADR 0042\n");
     fs.symlinkSync(posix.join(scratch, "outside"), posix.join(tree, "skills", "linked"));
     const verifier = new Verifier(root);
@@ -936,7 +937,7 @@ test("isolation: roles/*.md, skills/**/*.md, tools/**/*.md and the top-level fil
     const parts = message.slice(message.indexOf("): ") + 3).split("; ");
     // `sorted(set(sources))`: by path components, by code point — MODEL.md before guardrails/
     assert.deepEqual(parts, [
-      "standard tree:MODEL.md → cites ADR\u00a00005",
+      "standard tree:MODEL.md → cites ADR 0005",
       "standard tree:guardrails/.hidden.md → names self_ci",
       "standard tree:pipelines/p.md → path meta/design.md",
       "standard tree:pipelines/p.md → path decisions/0001.md",
@@ -1112,4 +1113,33 @@ test("the always-loaded block heading and cap are read through the twin, once pe
   assert.equal(typeof alwaysLoaded.blockHeading(verifier.alwaysLoadedData), "string");
   assert.strictEqual(verifier.alwaysLoadedData, verifier.alwaysLoadedData);
   assert.strictEqual(verifier.codexHooksData, verifier.codexHooksData);
+});
+
+// The text patterns are the Python's under re.ASCII (C105); meta/tests/test_verify.py pins the same rows.
+/** @type {[keyof typeof TEXT_PATTERNS, string, boolean][]} */
+const ASCII_ROWS = [
+  ["date", "2026-10-11", true],
+  ["date", "\u0662\u0660\u0662\u0666-\u0661\u0660-\u0661\u0661", false],
+  ["date", "\u00e92026-10-11", true],
+  ["delegationDefault", "Delegation is the default", true],
+  ["delegationDefault", "delegation\u00a0is the default", false],
+  ["delegationDefault", "delegation is the default\u00e9", true],
+  ["numberedDr", "ADR 12", true],
+  ["numberedDr", "ADR-0020", true],
+  ["numberedDr", "ADR\u00a012", false],
+  ["numberedDr", "ADR\u0661\u0662", false],
+  ["roadmapCite", "ROADMAP O1", true],
+  ["roadmapCite", "ROADMAP\u3000O1", false],
+  ["devName", "\u00e9self_ci", true],
+  ["devName", "self_ci\u00df", true],
+  ["devName", "xself_ci", false],
+  ["legacyOwnerAnchor", "**D2** \u2014 the owner verifies", true],
+  ["legacyOwnerAnchor", "**D2**\u00a0\u2014 the owner verifies", false],
+];
+
+test("the text patterns have the ASCII meaning of the Python's", () => {
+  for (const [name, text, found] of ASCII_ROWS) {
+    const pattern = new RegExp(TEXT_PATTERNS[name].source, TEXT_PATTERNS[name].flags.replace("g", ""));
+    assert.equal(pattern.test(text), found, `${name} ${JSON.stringify(text)}`);
+  }
 });

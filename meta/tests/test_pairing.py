@@ -161,4 +161,6 @@ def test_live_tree_passes_the_gate() -> None:
     assert pairing.load_stubs() == frozenset()
     assert "0 of the exempt covered by a stub .mjs only" in findings[0].message
     assert pairing.is_ported(_AKMON, "src/akmon/cli.py")
-    assert not pairing.is_ported(_AKMON, "bin/verify.py")
+    assert pairing.is_ported(_AKMON, "bin/verify.py")
+    # init is C105 pass 3's
+    assert not pairing.is_ported(_AKMON, "src/akmon/_init.py")

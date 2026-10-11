@@ -1,0 +1,14 @@
+id = "units/always_loaded"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:always_loaded"]
+
+[run]
+probe = "always_loaded"
+table = "always_loaded.toml"
+
+# The document is pinned, not just the exit code: the node run compares the same bytes.
+[expected]
+exit = 0
+stdout = "{\n  \"ok\": true,\n  \"failed\": []\n}\n"
+stderr = ""

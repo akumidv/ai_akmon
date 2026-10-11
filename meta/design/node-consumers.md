@@ -303,6 +303,9 @@ the corpus can run on node:
 - **Pass 2 — the reader.** `common/always_loaded`, `common/codex_hooks`, `bin/verify` and the Node findings (Yarn PnP, a pin in
   the wrong class or not exact, `node_modules/akmon` missing), the per-ecosystem runtime declaration
   (`common/runtime.json`, `meta/checks/runtime.py` joined to both implementations' wiring).
+  **Done (2026-10-11), with two review decisions folded in:** the Python `sync` and `verify` refuse a record naming another
+  ecosystem, and a hoisted `node_modules/akmon` is a `hooks.launcher` error with its fix. Exactness of the pin is a warning
+  of `package.dev-pin`, not a code of its own: the coverage gate derives codes from the Python implementation.
 - **Pass 3 — attach.** `init` for `package`/`node` (writes `ecosystem = "node"`, the AGENTS.md block, the Node CI template
   without Python, the `.gitignore` lines), `_tree`, the refusal of the mounted modes with the pointer to the Python
   implementation; `update` stays C107's.

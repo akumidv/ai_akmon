@@ -51,7 +51,7 @@ from common.record import RecordError, read_akmon_toml_strict, recorded_ecosyste
 from common.runtime import codex_hooks_list_command
 from common.versions import split_version
 
-_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b", re.ASCII)
 # A backlog entry's ``·``-separated fields (pipelines/tasks.md): id, title, status, goal,
 # detail. Reading the status field needs at least the first three.
 _MIN_STATUS_FIELDS = 3
@@ -93,7 +93,7 @@ def _sample(ids: list[str], limit: int = 4) -> str:
     return shown if len(ids) <= limit else f"{shown}, +{len(ids) - limit} more"
 
 
-_DELEGATION_DEFAULT_RE = re.compile(r"\bdelegation\s+is\s+the\s+default\b", re.IGNORECASE)
+_DELEGATION_DEFAULT_RE = re.compile(r"\bdelegation\s+is\s+the\s+default\b", re.IGNORECASE | re.ASCII)
 _SKILL_NAME_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
 
@@ -151,13 +151,14 @@ def _use_operative_files(data: Mapping[str, Any]) -> tuple[str, ...]:
 # Citations that pin a specific akmon development artifact, even in plain prose:
 #  - a numbered decision record ("ADR 0001", "ADR-12") — the bare word "ADR" as a concept is fine;
 #  - a roadmap item or file ("ROADMAP O1", "ROADMAP.md") — the generic word "roadmap" is fine.
-_NUMBERED_DR_RE = re.compile(r"\bADR[\s-]?\d{2,4}\b")
-_ROADMAP_CITE_RE = re.compile(r"\bROADMAP(?:\.md|\s+O\d+)")
+_NUMBERED_DR_RE = re.compile(r"\bADR[\s-]?\d{2,4}\b", re.ASCII)
+_ROADMAP_CITE_RE = re.compile(r"\bROADMAP(?:\.md|\s+O\d+)", re.ASCII)
 # Unambiguous dev-artifact names that leak even in plain prose. Kept deliberately narrow: only
 # tokens that can mean nothing *but* a akmon dev file. Generic words a consumer legitimately
 # uses ("sync", "verify", "pytest", "design", "decisions") are excluded.
-_DEV_NAME_RE = re.compile(r"\bself_ci\b|\bCONCEPT\.md\b")
+_DEV_NAME_RE = re.compile(r"\bself_ci\b|\bCONCEPT\.md\b", re.ASCII)
 # Markdown link target and inline-code span — the two ways a path is written in these docs.
+_LEGACY_OWNER_ANCHOR_RE = re.compile(r"\*\*D2\*\*\s+—\s+the owner\s+verifies", re.ASCII)
 _LINK_RE = re.compile(r"\]\(([^)]+)\)")
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 # Path fragments that only ever point into akmon's own development tree / artifacts. A path
@@ -392,7 +393,7 @@ class Verifier:
         # C94 migrates the source contract, but consumer AGENTS.md blocks are hand-owned and
         # explicitly outside that cutover. Accept the former exact anchor until consumer
         # migration gets its own task; new blocks emit the ADR wording above.
-        legacy_owner_anchor = re.search(r"\*\*D2\*\*\s+—\s+the owner\s+verifies", text)
+        legacy_owner_anchor = _LEGACY_OWNER_ANCHOR_RE.search(text)
         if "owner verifies" not in text and legacy_owner_anchor is None:
             missing.append("owner verifies directive")
         if not _DELEGATION_DEFAULT_RE.search(text):
@@ -1248,7 +1249,7 @@ class Verifier:
         if not path.is_file():
             return
         text = path.read_text(encoding="utf-8")
-        if re.search(r"^##\s+Unreleased\b", text, re.MULTILINE | re.IGNORECASE):
+        if re.search(r"^##\s+Unreleased\b", text, re.MULTILINE | re.IGNORECASE | re.ASCII):
             self.ok(
                 "changelog.unreleased",
                 "CHANGELOG.md has an Unreleased section",
