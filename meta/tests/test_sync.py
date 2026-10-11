@@ -652,7 +652,14 @@ def test_sync_data_pins_its_structure():
     assert _SYNC_DATA["default_launcher_rel"] == ".venv/bin/akmon"
     # the third marker's quote sits before `hook` (the launcher is quoted in the wiring); the
     # trailing space is what keeps it from matching a prose mention
-    assert _SYNC_DATA["akmon_hook_markers"] == ["{{aitna}}/akmon/hooks/", "{{aitna}}/.akmon/hooks/", '{{cli}}" hook ']
+    # the fourth is the Node package spelling (ADR 0020 D05, C104): the JS sync writes it, the
+    # Python sync only has to recognise it so a mode switch replaces it instead of orphaning it
+    assert _SYNC_DATA["akmon_hook_markers"] == [
+        "{{aitna}}/akmon/hooks/",
+        "{{aitna}}/.akmon/hooks/",
+        '{{cli}}" hook ',
+        "/node_modules/akmon/js/hooks/",
+    ]
     # the wiring tables: matcher entries and hook commands, order load-bearing
     assert list(_SYNC_DATA["claude_hooks"]) == ["PreToolUse", "SessionStart", "UserPromptSubmit", "Stop"]
     assert len(_SYNC_DATA["claude_hooks"]["PreToolUse"]) == 4

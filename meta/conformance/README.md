@@ -13,9 +13,9 @@ is silent, the Python implementation is the reference, and the resolution become
 |---|---|
 | `scenarios/<area>/*.toml` | one scenario per file; areas: `hooks`, `cli`, `tools`, `units` |
 | `fixtures/<name>/` | static consumer-project files a scenario's project is copied from (`base`) |
-| `fixtures/attach/<layer>/` | the files a `native` attach lays over the base: `package` (both package modes), `python` (the Python carrier), `node` (C105) |
+| `fixtures/attach/<layer>/` | the files a `native` attach lays over the base: `package` (both package modes), `python` (the Python carrier), `node` (C104: the record and the `package.json` dev pin) |
 | `fixtures/tree/` | corpus-owned stand-ins for the standard tree's prose documents (see the snapshot) |
-| `units/<name>.toml` | shared unit tables (inputs + expected answers) for a function whose answer a JS port cannot get for free: either a **stdlib gap** (`shlex`, `fnmatch`, `json.dumps`, float spelling) or a **shared data-driven module** whose answers are values (`runtime`, `check_runner`), or a **module that acts on files and the environment** (`markers`, `materialization`), whose table describes a world — a scratch directory, environment variables — that the probe builds, replays against and removes; `routing` (C104) is both kinds at once and too large for per-family mouths, so its table is **generic**: a row names a public function, its JSON arguments and the world it runs in, and pins the whole answer plus the files the call leaves (the row format is the block comment above `probe_routing` in `probe.py`) |
+| `units/<name>.toml` | shared unit tables (inputs + expected answers) for a function whose answer a JS port cannot get for free: either a **stdlib gap** (`shlex`, `fnmatch`, `json.dumps`, float spelling) or a **shared data-driven module** whose answers are values (`runtime`, `check_runner`), or a **module that acts on files and the environment** (`markers`, `materialization`), whose table describes a world — a scratch directory, environment variables — that the probe builds, replays against and removes; `routing` (C104) is both kinds at once and too large for per-family mouths, so its table is **generic**: a row names a public function, its JSON arguments and the world it runs in, and pins the whole answer plus the files the call leaves (the row format is the block comment above `probe_routing` in `probe.py`); the three hook tables (`hook_core`, `claude_adapter`, `codex_adapter`, C104 pass 2) use that same mouth over `hooks/*.py` and `js/hooks/*.mjs` — on the JS side the module's `data` (the lazy bundle of `hook_data.mjs`) is handed over as the first argument of the exports that read a data file or a marker — and add the `{{tree}}` and `{{core:<key>}}` tokens, sequences (`steps_json`), links and a working directory to the world |
 | `coverage.toml` | the coverage gate's **exceptions**: ecosystem ownership, exemptions, reviewed dynamic sites |
 | `pairing.toml` | the pairing gate's two lists: `[[exempt]]` — a `.py` whose port is outstanding, with reason and owning task — and `[[stub]]` — a `js/` counterpart that only announces it |
 | `normalize.py` | normalization v2 — the other half of the spec (tokens and rules) |
@@ -37,7 +37,12 @@ says both what it is spec for and how its consumer is connected:
   fixture plus the `package` layer (a package-mode `AGENTS.md` block) and the ecosystem's carrier
   layer (Python: the record with `mount = "package"`, the `pyproject.toml` dev pin (written by `corpus.py`, as the launcher is), CI calling
   `uv run akmon`, and the `.venv/bin/akmon` launcher the runner writes). Hooks run through the
-  launcher (`akmon hook <name>`), the way package wiring calls them.
+  launcher (`akmon hook <name>`), the way package wiring calls them. Node: the record, the
+  `package.json` dev pin, and `node_modules/akmon` linked to the tree (the runner makes the
+  link); hooks run as `node node_modules/akmon/js/hooks/<name>.mjs`, the spelling the wiring uses
+  (ADR 0020 D05). Until the JS `sync` lands (C105) a Node project is synced by the Python
+  reference: what a hook reads from a synced project (the materialized guardrails, the roster,
+  the routing config) is the same files whichever implementation wrote them.
 - `attach = "mount"` — `<AITNA_ROOT>/akmon` links the snapshot. **Python only**: the loader
   refuses it on a `shared` or `node` scenario. Hooks run as `python3 <tree>/hooks/<name>.py`.
 - `attach = "none"` — nothing connected (usage errors, `init` onto a bare project).
@@ -199,8 +204,9 @@ implementation + coverage gate). The corpus is green when the leg is green. The 
 pinned by `meta/tests/test_conformance_coverage.py` and `meta/tests/test_conformance_corpus.py`.
 
 From C103 the corpus also runs on the node implementation: `selfci.corpus-node` runs
-`runner.py --tree <repo> --impl node --area units` — the same unit tables through
-`probe.mjs`, fixture-free, with the gates off (they run on a full run only). The node
+`runner.py --tree <repo> --impl node --area units --area hooks` — the same unit tables through
+`probe.mjs`, fixture-free, and (from C104) every hook scenario on the JS hooks, with the gates
+off (they run on a full run only; `--area` repeats to name a slice of several areas). The node
 toolchain's own checks are independent self-CI legs on the same prerequisite-naming stance as
 the wheel smoke: `selfci.js-deps` (`npm ci --ignore-scripts`), `selfci.js-typecheck`
 (`npx --no-install tsc --checkJs --noEmit -p .`), `selfci.js-unit` (`node --test js/`) and

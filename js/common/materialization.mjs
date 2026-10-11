@@ -28,10 +28,10 @@
  */
 
 import fs from "node:fs";
-import { posix } from "node:path";
 import { TextDecoder } from "node:util";
 
 import { aitnaRoot, aitnaRootName } from "./project_root.mjs";
+import { pyPath } from "./pyvalue.mjs";
 import { codePointSort } from "./sort.mjs";
 
 /**
@@ -198,7 +198,7 @@ export function importedDirs(data) {
  * @returns {string}
  */
 export function materializedDir(projectRoot) {
-  return posix.join(aitnaRoot(projectRoot), ".akmon");
+  return pyPath(aitnaRoot(projectRoot), ".akmon");
 }
 
 /**

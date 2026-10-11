@@ -18,12 +18,6 @@
 # entry: the stub keeps the pair out of the paired count, the exemption keeps the gap green.
 # Once the real port lands the two names look identical to the gate — drop both by hand.
 
-# The JS hooks, core and adapters land in C104 (port order: hooks first).
-[[exempt]]
-path = "hooks/*"
-reason = "the JS hooks, core and adapters land in C104"
-task = "C104"
-
 # common/: owned by the task that ports the first consumer in port order.
 [[exempt]]
 path = "common/__init__.py"
@@ -32,8 +26,8 @@ task = "C104"
 
 [[exempt]]
 path = "common/findings.py"
-reason = "first consumer in port order is hooks/hook_core.py; the JS hooks land in C104"
-task = "C104"
+reason = "first consumer in port order is bin/sync.py and bin/verify.py (no hook imports it); the JS CLI lands in C105"
+task = "C105"
 
 [[exempt]]
 path = "common/always_loaded.py"

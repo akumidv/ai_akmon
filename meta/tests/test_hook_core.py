@@ -52,6 +52,19 @@ def test_sudo_as_substring_of_another_word_is_not_matched():
     assert privilege_escalation_guard_result("ls /opt/pseudo-tool") is None
 
 
+def test_command_word_boundaries_are_ascii():
+    # The JavaScript twin's ``\b`` is ASCII-only (C104), so a letter of another script is a boundary
+    # in both: "ésudo" is a command word next to a stray letter, not one longer word.
+    assert privilege_escalation_guard_result("ésudo ls") is not None
+    assert privilege_escalation_guard_result("sudoé ls") is not None
+    assert privilege_escalation_guard_result("sudo_x") is None
+    ask = git_commit_guard_result("βgit push", "feat", permission_mode="default")
+    assert ask is not None and ask.permission_decision == "ask"
+    ask = git_commit_guard_result("git pushé", "feat", permission_mode="default")
+    assert ask is not None and ask.permission_decision == "ask"
+    assert git_commit_guard_result("gitpush", "feat", permission_mode="default") is None
+
+
 # --------------------------------------------------------------------------------------
 # git_commit_guard_result
 # --------------------------------------------------------------------------------------

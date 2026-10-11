@@ -312,7 +312,12 @@ def _escalate_unattended_ask(result: HookResult, permission_mode: str | None) ->
     )
 
 
-_SUDO_RE = re.compile(r"\bsudo\b")
+# Every pattern of the command guards that uses ``\b`` is ``re.ASCII``: the JavaScript twin's ``\b`` is
+# ASCII-only, while Python's, left alone, also counts other scripts' letters as word characters, so
+# ``ésudo`` or ``βgit push`` would be placed differently by the two. A shell command word is ASCII.
+# The ``co-authored-by`` pattern below stays ``IGNORECASE`` only: none of its letters has a
+# non-ASCII case partner (only ``i``, ``s`` and ``k`` do, via U+0131, U+017F and U+212A).
+_SUDO_RE = re.compile(r"\bsudo\b", re.ASCII)
 
 
 def privilege_escalation_guard_result(command: str) -> HookResult | None:
@@ -353,7 +358,7 @@ def git_commit_guard_result(
         )
 
     def is_git(subcommand: str) -> bool:
-        return re.search(r"\bgit\b[^|&;]*\b" + subcommand + r"\b", command) is not None
+        return re.search(r"\bgit\b[^|&;]*\b" + subcommand + r"\b", command, re.ASCII) is not None
 
     if is_git("push") or is_git("tag") or is_git("merge"):
         return _escalate_unattended_ask(

@@ -17,7 +17,10 @@ HERE = Path(__file__).resolve().parent
 PLAN = HERE / "RUN_PLAN_V2_PROPOSAL.md"
 PACKET_SEAL = HERE / "seal.json"
 APPROVAL = HERE / "runs" / "owner-approval-v2.json"
-MAX_TOKEN_ENVELOPE = 5_040_000
+CODEX_AGGREGATE_LIMIT = 5_000_000
+KNOWN_PRIOR_CODEX_USAGE = 153_614
+CODEX_REMAINING_AT_APPROVAL = CODEX_AGGREGATE_LIMIT - KNOWN_PRIOR_CODEX_USAGE
+SCORER_READINGS_PER_ROUTE = 120
 SCHEMA = 2
 SHA256_LENGTH = 64
 
@@ -50,9 +53,13 @@ def draft_record() -> dict:
                 "exploratory_calls_counted": None,
             },
             "token_only": {
-                "accepted_pass_envelope_tokens": None,
+                "codex_aggregate_limit_tokens": CODEX_AGGREGATE_LIMIT,
+                "known_prior_codex_usage_tokens": KNOWN_PRIOR_CODEX_USAGE,
+                "remaining_codex_tokens_at_approval": CODEX_REMAINING_AT_APPROVAL,
+                "qwen_aggregate_limit_tokens": None,
+                "accepted_scorer_readings_per_route": SCORER_READINGS_PER_ROUTE,
                 "named_operator": None,
-                "exploratory_calls_counted": None,
+                "exploratory_calls_counted": True,
             },
         },
         "preflight_status": "NOT_RUN",
@@ -88,16 +95,29 @@ def _validate_usd25(option: object) -> None:
 
 
 def _validate_token_only(option: object) -> None:
-    required = {"accepted_pass_envelope_tokens", "named_operator", "exploratory_calls_counted"}
+    required = {
+        "codex_aggregate_limit_tokens", "known_prior_codex_usage_tokens",
+        "remaining_codex_tokens_at_approval", "qwen_aggregate_limit_tokens",
+        "accepted_scorer_readings_per_route", "named_operator", "exploratory_calls_counted",
+    }
     if not isinstance(option, dict) or set(option) != required:
         raise ValueError("token-only option is incomplete")
-    envelope = option["accepted_pass_envelope_tokens"]
-    if not isinstance(envelope, int) or isinstance(envelope, bool) or not 0 < envelope <= MAX_TOKEN_ENVELOPE:
-        raise ValueError("token envelope must be explicit and no larger than 5,040,000")
+    expected = {
+        "codex_aggregate_limit_tokens": CODEX_AGGREGATE_LIMIT,
+        "known_prior_codex_usage_tokens": KNOWN_PRIOR_CODEX_USAGE,
+        "remaining_codex_tokens_at_approval": CODEX_REMAINING_AT_APPROVAL,
+        "qwen_aggregate_limit_tokens": None,
+        "accepted_scorer_readings_per_route": SCORER_READINGS_PER_ROUTE,
+    }
+    if any(option[key] != value or (isinstance(value, int) and isinstance(option[key], bool))
+           for key, value in expected.items()):
+        raise ValueError(
+            "Codex-only 5,000,000 limit, prior usage, Qwen no-cap policy, and 120 readings per route are fixed"
+        )
     if not _operator(option["named_operator"]):
         raise ValueError("named token-stop operator is required")
-    if not isinstance(option["exploratory_calls_counted"], bool):
-        raise ValueError("whether exploratory calls count must be explicit")
+    if option["exploratory_calls_counted"] is not True:
+        raise ValueError("exploratory calls must count toward the Codex aggregate debit")
 
 
 def validate(approval_path: Path = APPROVAL, plan_path: Path = PLAN,

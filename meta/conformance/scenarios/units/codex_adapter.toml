@@ -1,0 +1,15 @@
+id = "units/codex_adapter"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:codex_adapter"]
+
+[run]
+probe = "codex_adapter"
+table = "codex_adapter.toml"
+
+# The document is pinned, not just the exit code: the node run compares the *same* bytes, so this
+# row is where the two mouths are required to agree, not merely each to be green.
+[expected]
+exit = 0
+stdout = "{\n  \"ok\": true,\n  \"failed\": []\n}\n"
+stderr = ""

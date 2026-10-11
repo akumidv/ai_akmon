@@ -63,6 +63,37 @@ test("a mounted tree beside AGENTS.md is a project root", () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("the dev-layer paths keep a `..` as Path does: it is the filesystem's to resolve, not a lexical join's", () => {
+  const saved = process.env.AITNA_ROOT;
+  delete process.env.AITNA_ROOT;
+  try {
+    assert.equal(aitnaRoot("a/../b"), "a/../b/_aitna");
+    assert.equal(akmonMount("a/../b"), "a/../b/_aitna/akmon");
+    assert.equal(aitnaRoot(""), "_aitna");
+    assert.equal(aitnaRoot("/p//q/"), "/p/q/_aitna");
+    assert.equal(aitnaRoot("//p"), "//p/_aitna");
+    assert.equal(aitnaRoot("///p"), "/p/_aitna");
+    process.env.AITNA_ROOT = "dev//sub/";
+    assert.equal(akmonMount("/p"), "/p/dev/sub/akmon");
+    process.env.AITNA_ROOT = "../dev";
+    assert.equal(aitnaRoot("/p"), "/p/../dev");
+  } finally {
+    if (saved === undefined) {
+      delete process.env.AITNA_ROOT;
+    } else {
+      process.env.AITNA_ROOT = saved;
+    }
+  }
+  // `missing/..` cannot be walked through: Python's `Path.is_file` says no, a lexical join said yes
+  const root = tmpdir();
+  fs.writeFileSync(posix.join(root, "AGENTS.md"), "# A\n");
+  fs.mkdirSync(posix.join(root, "_aitna", "akmon"), { recursive: true });
+  assert.equal(isProjectRoot(root), true);
+  assert.equal(isProjectRoot(`${root}/missing/..`), false);
+  assert.equal(isProjectRoot(`${root}/_aitna/..`), true);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test("an integration record beside AGENTS.md is a project root (package mode)", () => {
   const root = tmpdir();
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# A\n");
@@ -194,6 +225,35 @@ test("path resolution matches the twin for links, `..`, and components that are 
     }
   } finally {
     process.chdir(saved);
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("a component the kernel refuses to look up is kept as written, as Python 3.12's resolve() keeps it", () => {
+  // Measured on Python 3.12.3: `Path(p).resolve()` takes any OSError from a component's lstat as
+  // "not a link" — a name over NAME_MAX (ENAMETOOLONG) or a directory that cannot be searched
+  // (EACCES) resolves to the path itself, and a `..` after it pops the component lexically.
+  const base = tmpdir();
+  const long = "x".repeat(300);
+  try {
+    assert.equal(resolveProjectRoot(`${base}/${long}`, null).root, `${base}/${long}`);
+    assert.equal(resolveProjectRoot(`${base}/${long}/a/b`, null).root, `${base}/${long}/a/b`);
+    assert.equal(resolveProjectRoot(`${base}/${long}/../z`, null).root, `${base}/z`);
+    assert.equal(findProjectRoot(`${base}/${long}`), `${base}/${long}`);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("a directory that cannot be searched does not stop the resolution", { skip: process.getuid?.() === 0 }, () => {
+  const base = tmpdir();
+  fs.mkdirSync(posix.join(base, "locked", "inner"), { recursive: true });
+  fs.chmodSync(posix.join(base, "locked"), 0o000);
+  try {
+    assert.equal(resolveProjectRoot(`${base}/locked/inner/x`, null).root, `${base}/locked/inner/x`);
+    assert.equal(resolveProjectRoot(`${base}/locked/inner/../y`, null).root, `${base}/locked/y`);
+  } finally {
+    fs.chmodSync(posix.join(base, "locked"), 0o755);
     fs.rmSync(base, { recursive: true, force: true });
   }
 });

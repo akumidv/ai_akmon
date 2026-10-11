@@ -1,0 +1,7 @@
+{
+  "name": "corpus-consumer",
+  "private": true,
+  "devDependencies": {
+    "akmon": "{{version}}"
+  }
+}

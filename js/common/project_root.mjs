@@ -6,13 +6,15 @@
  * Paths are project-root-relative or absolute POSIX strings, the way the corpus
  * normalizes them. Stdlib only: `node:fs` and `node:path`.
  *
- * `_absolute` is the only path resolver on this side, and the only one a later port may use:
+ * `resolvePath` is the only path resolver on this side, and the only one a later port may use:
  * every Python call site that writes `.resolve()` (the hooks, `_init`, `_update`, the CLI) will
  * need it here, and `path.resolve`/`path.join` answer a different question — see M114.
  */
 
 import fs from "node:fs";
 import { posix } from "node:path";
+
+import { pyPath } from "./pyvalue.mjs";
 
 /** The default dev-layer (local) root; a project may relocate it via the `AITNA_ROOT` env var. */
 export const AITNA_ROOT_DEFAULT = "_aitna";
@@ -40,11 +42,13 @@ function _isFile(/** @type {string} */ path) {
  * component before it.
  *
  * A loop raises, as the stdlib's `RuntimeError` does: an answer built on the alias would be a
- * path no other answer agrees with, which is the failure this function exists to avoid.
+ * path no other answer agrees with, which is the failure this function exists to avoid. Any other
+ * filesystem error on the way (a name too long, a directory that cannot be searched) only means
+ * that component is not a link the stdlib could follow, and it is kept as written.
  * @param {string} path
  * @returns {string}
  */
-function _absolute(path) {
+export function resolvePath(path) {
   // The cwd prefix is concatenated, never `path.join`ed: join normalizes, which collapses `..`
   // against the *written* path — the exact mistake the walk below exists to avoid. A relative
   // start of `link/..` has to reach the resolver as `link` then `..`, so that `..` applies to
@@ -60,9 +64,14 @@ function _absolute(path) {
       if (code === "ELOOP") {
         // The same refusal the stdlib raises (`RuntimeError: Symlink loop from '<path>'`), with
         // the filesystem's own error kept underneath it.
-        throw new Error(`Symlink loop from '${cursor}'`, { cause: error });
+        const refusal = new Error(`Symlink loop from '${cursor}'`, { cause: error });
+        refusal.name = "RuntimeError";
+        throw refusal;
       }
-      if (code !== "ENOENT" && code !== "ENOTDIR") {
+      // Python 3.12's `realpath(strict=False)` takes any `OSError` from the `lstat` of a component
+      // (ENOENT, ENOTDIR, EACCES, ENAMETOOLONG, …) as "not a link" and goes on; only an error
+      // that is no system call's — an argument Node refuses — is not its to swallow.
+      if (typeof (/** @type {{errno?: unknown}} */ (error).errno) !== "number") {
         throw error;
       }
       const parent = posix.dirname(cursor);
@@ -108,7 +117,7 @@ export function aitnaRootName() {
  * @returns {string}
  */
 export function aitnaRoot(projectRoot) {
-  return posix.join(projectRoot, aitnaRootName());
+  return pyPath(projectRoot, aitnaRootName());
 }
 
 /**
@@ -118,7 +127,7 @@ export function aitnaRoot(projectRoot) {
  * @returns {string}
  */
 export function akmonMount(projectRoot) {
-  return posix.join(aitnaRoot(projectRoot), "akmon");
+  return pyPath(aitnaRoot(projectRoot), "akmon");
 }
 
 /**
@@ -128,11 +137,11 @@ export function akmonMount(projectRoot) {
  * @returns {boolean}
  */
 export function isProjectRoot(candidate) {
-  if (!_isFile(posix.join(candidate, "AGENTS.md"))) {
+  if (!_isFile(pyPath(candidate, "AGENTS.md"))) {
     return false;
   }
   const aitna = aitnaRoot(candidate);
-  return fs.existsSync(posix.join(aitna, "akmon")) || _isFile(posix.join(aitna, ".akmon.toml"));
+  return fs.existsSync(pyPath(aitna, "akmon")) || _isFile(pyPath(aitna, ".akmon.toml"));
 }
 
 /**
@@ -142,7 +151,7 @@ export function isProjectRoot(candidate) {
  * @returns {string}
  */
 export function findProjectRoot(start = null) {
-  const origin = _absolute(start ?? process.cwd());
+  const origin = resolvePath(start ?? process.cwd());
   let candidate = origin;
   for (;;) {
     if (isProjectRoot(candidate)) {
@@ -169,9 +178,9 @@ export function findProjectRoot(start = null) {
  */
 export function resolveProjectRoot(explicit, start = null) {
   if (explicit !== null && explicit !== undefined) {
-    return { root: _absolute(explicit), notice: null };
+    return { root: resolvePath(explicit), notice: null };
   }
-  const origin = _absolute(start ?? process.cwd());
+  const origin = resolvePath(start ?? process.cwd());
   const found = findProjectRoot(origin);
   if (isProjectRoot(found)) {
     return { root: found, notice: null };

@@ -17,6 +17,7 @@ Usage: python3 meta/conformance/probe.py <subcommand> <table.toml> [--tree REPO]
 from __future__ import annotations
 
 import argparse
+import builtins
 import contextlib
 import dataclasses
 import fnmatch
@@ -24,6 +25,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shlex
 import shutil
 import stat
@@ -745,9 +747,32 @@ def probe_materialization(repo: Path, table: dict) -> list[dict]:
 # directory unless a row says otherwise), `setup_json` (calls made first, answers dropped),
 # `ordered` (an object answer becomes its [key, value] pairs: the order is pinned), `nonroot`.
 # Expected and actual compare as canonical JSON, so `true` is not `1` and `1.0` is not `1`.
+#
+# The hook modules (C104 pass 2) use the same mouth: `probe_hook_core`, `probe_claude_adapter` and
+# `probe_codex_adapter` differ from `probe_routing` only in which module they load and which texts
+# they tokenize (`_probe_rows`); the JS twins differ in how a call hands the module its data (`data`,
+# the lazy bundle of hook_data.mjs, is the first argument of the exports that read a data file or a
+# marker; the Python module reads them itself). What the hook rows add: `{{tree}}` (the tree under
+# test, in an argument, an environment value, a link target and, back in an answer, the token);
+# `$float` (a float JSON cannot spell: "nan", "inf", "-inf", or a decimal text) and `$exc` (an
+# exception to hand over, by Python class name and message); the world keys `dirs` (empty
+# directories), `links` (relpath → link target) and `cwd` (the process works in this scratch
+# subdirectory for the row); `steps_json` (calls whose answers are the row's answer, in order, each
+# optionally repeated `times` times — a counter file survives from one to the next); `class_only`
+# (a raise answers `{"error": <class>}` alone — the message is the language's); and the tokens
+# `{{core:<key>}}`, the prose of hooks/hook_core.json: each text of 40 bytes or more that the data
+# file holds, or a stretch of one between its `{{placeholders}}`, comes back as the token
+# `{{core:<dotted key>}}` (`#<n>` for the n-th stretch of a template), so the prose has one owner and
+# a reword does not move the table; the placement of the pieces and everything filled in remain.
 # ---------------------------------------------------------------------------------------
 
-_ROUTING_BASE_ENV = ("AKMON_CONTEXT_RECOMMENDED_MAX", "AITNA_ROOT")
+_ROUTING_BASE_ENV = (
+    "AKMON_CONTEXT_RECOMMENDED_MAX",
+    "AITNA_ROOT",
+    "AKMON_DELEGATION_GRACE",
+    "AKMON_DELEGATION_NUDGE_THRESHOLD",
+    "AKMON_DELEGATION_ASK_THRESHOLD",
+)
 
 
 def _routing_deep_merge(base: dict, override: dict) -> dict:
@@ -767,7 +792,16 @@ def _routing_hash(registry: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
-_ROUTING_CONSTRUCTORS = ("$path", "$registry", "$call", "$new")
+_ROUTING_CONSTRUCTORS = ("$path", "$registry", "$call", "$new", "$float", "$exc")
+
+
+def _routing_exception(name: str, message: str) -> BaseException:
+    """The exception `$exc` stands for: a builtin class by name, or one of the two with a longer signature."""
+    if name == "JSONDecodeError":
+        return json.JSONDecodeError(message, "", 0)
+    if name == "UnicodeDecodeError":
+        return UnicodeDecodeError("utf-8", b"\xff", 0, 1, message)
+    return getattr(builtins, name)(message)
 
 
 def _routing_registry(module: types.ModuleType, world: dict, change: dict) -> dict:
@@ -787,6 +821,10 @@ def _routing_constructed(module: types.ModuleType, world: dict, value: dict) -> 
         return Path(_routing_arg(module, world, value["$path"]))
     if "$registry" in value:
         return _routing_registry(module, world, value["$registry"])
+    if "$float" in value:
+        return float(value["$float"])
+    if "$exc" in value:
+        return _routing_exception(value["$exc"], _routing_arg(module, world, value.get("message", "")))
     if "$call" in value:
         args = _routing_arg(module, world, value.get("args", []))
         answer = getattr(module, value["$call"])(*args, **_routing_arg(module, world, value.get("kwargs", {})))
@@ -794,10 +832,15 @@ def _routing_constructed(module: types.ModuleType, world: dict, value: dict) -> 
     return getattr(module, value["$new"])(**_routing_arg(module, world, value.get("fields", {})))
 
 
+def _routing_fill(world: dict, text: str) -> str:
+    """``{{dir}}`` and ``{{tree}}`` filled in a string of the table."""
+    return text.replace("{{dir}}", str(world["dir"])).replace("{{tree}}", str(world["tree"]))
+
+
 def _routing_arg(module: types.ModuleType, world: dict, value: object) -> object:
-    """One argument with its constructors resolved and `{{dir}}` filled, recursively."""
+    """One argument with its constructors resolved and `{{dir}}` and `{{tree}}` filled, recursively."""
     if isinstance(value, str):
-        return value.replace("{{dir}}", str(world["dir"]))
+        return _routing_fill(world, value)
     if isinstance(value, list):
         return [_routing_arg(module, world, item) for item in value]
     if not isinstance(value, dict):
@@ -823,13 +866,15 @@ def _routing_json(value: object) -> object:
 
 
 def _routing_text(world: dict, value: object) -> object:
-    """Every string of an answer with the scratch path, agent bodies and registry hashes tokenized."""
+    """Every string of an answer with the scratch path, tree, agent bodies, prose and registry hashes tokenized."""
     if isinstance(value, str):
-        text = value.replace(str(world["dir"]), "{{dir}}")
+        text = value.replace(str(world["dir"]), "{{dir}}").replace(str(world["tree"]), "{{tree}}")
         for name, body in world["bodies"]:
             text = text.replace(body, f"{{{{body:{name}}}}}")
         for digest in world["hashes"]:
             text = text.replace(digest, "{{registry_hash}}")
+        for token, prose in world["texts"]:
+            text = text.replace(prose, token)
         return text
     if isinstance(value, list):
         return [_routing_text(world, item) for item in value]
@@ -846,19 +891,23 @@ def _routing_tree(base: Path, *, with_modes: bool) -> dict:
     for path in sorted(base.rglob("*")):
         if not path.is_file():
             continue
-        raw = path.read_bytes()
         try:
+            raw = path.read_bytes()
             content: object = raw.decode("utf-8")
         except UnicodeDecodeError:
             content = {"hex": raw.hex()}
+        except OSError:  # a file the row made unreadable: that it is there is the fact
+            content = {"unreadable": True}
         if with_modes:
             content = {"text": content, "mode": format(stat.S_IMODE(path.stat().st_mode), "o")}
         tree[path.relative_to(base).as_posix()] = content
     return tree
 
 
-def _routing_world(scratch: Path, case: dict) -> None:
-    """Write the row's files, then set the mtimes and modes it names."""
+def _routing_world(scratch: Path, case: dict, world: dict) -> None:
+    """Make the row's directories, files and links, then set the mtimes and modes it names."""
+    for relative in case.get("dirs", []):
+        (scratch / relative).mkdir(parents=True, exist_ok=True)
     contents = {relative: text.encode("utf-8") for relative, text in case.get("files", {}).items()}
     for relative, parts in case.get("files_parts", {}).items():
         data = b""
@@ -873,6 +922,9 @@ def _routing_world(scratch: Path, case: dict) -> None:
     for relative, data in contents.items():
         (scratch / relative).parent.mkdir(parents=True, exist_ok=True)
         (scratch / relative).write_bytes(data)
+    for relative, target in case.get("links", {}).items():
+        (scratch / relative).parent.mkdir(parents=True, exist_ok=True)
+        (scratch / relative).symlink_to(_routing_fill(world, target))
     for relative, seconds in case.get("mtimes", {}).items():
         moment = time.time() - seconds
         os.utime(scratch / relative, (moment, moment))
@@ -890,47 +942,69 @@ def _routing_call(module: types.ModuleType, world: dict, call: dict) -> object:
     return target(*args, **kwargs)
 
 
+def _routing_outcome(module: types.ModuleType, world: dict, case: dict, call: dict) -> tuple[bool, object]:
+    """One call's answer in table form: ``(raised, value)``; a raise is ``{"error", "message"}``."""
+    try:
+        value = _routing_json(_routing_call(module, world, call))
+    except Exception as exc:  # noqa: BLE001 — every raise is an answer the table pins
+        if case.get("class_only"):
+            return True, {"error": type(exc).__name__}
+        message = exc.args[0] if len(exc.args) == 1 and isinstance(exc.args[0], str) else str(exc)
+        return True, {"error": type(exc).__name__, "message": _routing_text(world, message)}
+    if case.get("ordered") and isinstance(value, dict):
+        value = [[key, item] for key, item in value.items()]
+    return False, _routing_text(world, value)
+
+
 def _routing_answer(module: types.ModuleType, world: dict, case: dict) -> object:
     """The row's answer in table form, a raise included."""
     for setup in json.loads(case.get("setup_json", "[]")):
         _routing_call(module, world, setup)
-    call = {"fn": case["fn"], "args": json.loads(case.get("args_json", "[]"))}
-    call["kwargs"] = json.loads(case.get("kwargs_json", "{}"))
-    try:
-        value = _routing_json(_routing_call(module, world, call))
-    except Exception as exc:  # noqa: BLE001 — every raise is an answer the table pins
-        message = exc.args[0] if len(exc.args) == 1 and isinstance(exc.args[0], str) else str(exc)
-        return {"error": type(exc).__name__, "message": _routing_text(world, message)}
-    if case.get("ordered") and isinstance(value, dict):
-        value = [[key, item] for key, item in value.items()]
-    value = _routing_text(world, value)
+    if "steps_json" in case:
+        value: object = [
+            _routing_outcome(module, world, case, step)[1]
+            for step in json.loads(case["steps_json"])
+            for _ in range(step.get("times", 1))
+        ]
+    else:
+        call = {"fn": case["fn"], "args": json.loads(case.get("args_json", "[]"))}
+        call["kwargs"] = json.loads(case.get("kwargs_json", "{}"))
+        raised, value = _routing_outcome(module, world, case, call)
+        if raised:
+            return value
     if "tree" not in case:
         return value
     tree = _routing_tree(world["dir"] / case["tree"], with_modes=bool(case.get("tree_modes")))
     return {"value": value, "tree": _routing_text(world, tree)}
 
 
-def _routing_case(module: types.ModuleType, repo: Path, case: dict) -> object:
-    """One row in its own scratch directory and environment, both restored afterwards."""
-    scratch = Path(tempfile.mkdtemp(prefix="akmon-probe-routing-"))
+def _routing_case(module: types.ModuleType, repo: Path, case: dict, texts: list[tuple[str, str]]) -> object:
+    """One row in its own scratch directory, environment and working directory, all restored afterwards."""
+    scratch = Path(tempfile.mkdtemp(prefix="akmon-probe-routing-")).resolve()
     agents = _data_document(repo, "tools/model_routing/agents.json")
     world = {
         "dir": scratch,
+        "tree": repo,
         "registry": _data_document(repo, "tools/model_routing/registry.json"),
         "bodies": [(spec["name"], spec["body"]) for spec in agents["agent_specs"]],
         "hashes": set(),
+        "texts": texts,
     }
     changes: dict[str, str | None] = dict.fromkeys(_ROUTING_BASE_ENV)
     changes["TMPDIR"] = str(scratch)
     for name, value in case.get("env", {}).items():
-        changes[name] = value.replace("{{dir}}", str(scratch)) if value != "" else None
+        changes[name] = _routing_fill(world, value) if value != "" else None
     previous = os.umask(0o022)
+    working = Path.cwd()
     try:
-        _routing_world(scratch, case)
+        _routing_world(scratch, case, world)
+        if "cwd" in case:
+            os.chdir(scratch / case["cwd"])
         with _environment(changes):
             tempfile.tempdir = None
             return _routing_answer(module, world, case)
     finally:
+        os.chdir(working)
         tempfile.tempdir = None
         os.umask(previous)
         for relative in case.get("modes", {}):
@@ -939,21 +1013,71 @@ def _routing_case(module: types.ModuleType, repo: Path, case: dict) -> object:
         shutil.rmtree(scratch, ignore_errors=True)
 
 
-def probe_routing(repo: Path, table: dict) -> list[dict]:
-    """The model-routing core, one public call per row, against the tree's tools/model_routing/routing."""
-    module = _load_module(repo, "tools/model_routing/routing.py", "conform_routing")
+_HOOK_PROSE_BYTES = 40  # a text of the hook data file shorter than this stays in the table as written
+
+
+def _hook_prose(repo: Path) -> list[tuple[str, str]]:
+    """The ``{{core:<key>}}`` tokens: long texts of hooks/hook_core.json, and the stretches between placeholders."""
+    pieces: list[tuple[str, str]] = []
+
+    def walk(path: str, node: object) -> None:
+        if isinstance(node, dict):
+            for key, item in node.items():
+                walk(f"{path}.{key}" if path else key, item)
+        elif isinstance(node, str):
+            stretches = re.split(r"\{\{[a-z0-9_]+\}\}", node)
+            for number, stretch in enumerate(stretches):
+                if len(stretch.encode("utf-8")) >= _HOOK_PROSE_BYTES:
+                    suffix = f"#{number}" if len(stretches) > 1 else ""
+                    pieces.append((f"{{{{core:{path}{suffix}}}}}", stretch))
+
+    walk("", _data_document(repo, "hooks/hook_core.json"))
+    return sorted(pieces, key=lambda piece: (-len(piece[1].encode("utf-8")), piece[0]))
+
+
+def _probe_rows(repo: Path, table: dict, module: types.ModuleType, texts: list[tuple[str, str]]) -> list[dict]:
+    """The generic mouth: every ``[[case]]`` of the table against ``module``."""
     results = []
     for index, case in enumerate(table.get("case", [])):
         if _skipped_as_root(case):
             continue
         expected = json.loads(case["expected_json"])
-        actual = _routing_case(module, repo, case)
+        actual = _routing_case(module, repo, case, texts)
         if json.dumps(expected, sort_keys=True) == json.dumps(actual, sort_keys=True):
             actual = expected
         elif expected == actual:  # Python calls `True == 1` and `1 == 1.0`; the table does not
             actual = {"strictly": json.dumps(actual, sort_keys=True)}
         results.append({"index": index, "id": case["id"], "expected": expected, "actual": actual})
     return results
+
+
+def probe_routing(repo: Path, table: dict) -> list[dict]:
+    """The model-routing core, one public call per row, against the tree's tools/model_routing/routing."""
+    module = _load_module(repo, "tools/model_routing/routing.py", "conform_routing")
+    return _probe_rows(repo, table, module, [])
+
+
+def _load_hook_module(repo: Path, name: str) -> types.ModuleType:
+    """A module of ``hooks/``; the adapters import ``hook_core`` by its bare name, so the folder is a path."""
+    hooks = str(repo / "hooks")
+    if hooks not in sys.path:
+        sys.path.insert(0, hooks)
+    return _load_module(repo, f"hooks/{name}.py", f"conform_{name}")
+
+
+def probe_hook_core(repo: Path, table: dict) -> list[dict]:
+    """The vendor-neutral hook decisions, one public call per row, against the tree's hooks/hook_core."""
+    return _probe_rows(repo, table, _load_hook_module(repo, "hook_core"), _hook_prose(repo))
+
+
+def probe_claude_adapter(repo: Path, table: dict) -> list[dict]:
+    """The pure half of the Claude adapter, one public call per row, against the tree's hooks/claude_adapter."""
+    return _probe_rows(repo, table, _load_hook_module(repo, "claude_adapter"), _hook_prose(repo))
+
+
+def probe_codex_adapter(repo: Path, table: dict) -> list[dict]:
+    """The pure half of the Codex adapter, one public call per row, against the tree's hooks/codex_adapter."""
+    return _probe_rows(repo, table, _load_hook_module(repo, "codex_adapter"), _hook_prose(repo))
 
 
 PROBES = {
@@ -968,6 +1092,9 @@ PROBES = {
     "markers": probe_markers,
     "materialization": probe_materialization,
     "routing": probe_routing,
+    "hook_core": probe_hook_core,
+    "claude_adapter": probe_claude_adapter,
+    "codex_adapter": probe_codex_adapter,
 }
 
 
@@ -981,7 +1108,11 @@ def main(argv: list[str] | None = None) -> int:
     table = tomllib.loads(args.table.read_text(encoding="utf-8"))
     results = PROBES[args.probe](Path(args.tree).resolve(), table)
     failed = [r for r in results if r["expected"] != r["actual"]]
-    print(json.dumps({"ok": not failed, "failed": failed}, indent=2, ensure_ascii=False, default=str))
+    document = {"ok": not failed, "failed": failed}
+    try:
+        print(json.dumps(document, indent=2, ensure_ascii=False, default=str))
+    except UnicodeEncodeError:  # a lone surrogate in a wrong answer has no UTF-8 spelling: escape it
+        print(json.dumps(document, indent=2, default=str))
     return 1 if failed else 0
 
 

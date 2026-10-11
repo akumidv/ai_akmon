@@ -1,0 +1,723 @@
+# Unit table: the pure half of the Claude Code adapter (hooks/claude_adapter.py; JS mirror
+# js/hooks/claude_adapter.mjs, ADR 0020 D01, C104 pass 2). Data file: hooks/vocabulary.json (the
+# Claude tool names and the document keys), read from the tree under test; the JS mouth hands the
+# module hook_data.mjs's lazy bundle as the first argument of `normalize_tool` and `render_result`.
+#
+# Why this table exists: `render_result` is the one document Claude Code reads, and it is written
+# with `json.dumps` defaults -- `", "` and `": "` separators, every non-ASCII character as a
+# `\uXXXX` escape (an astral one as a surrogate pair, U+2028 and U+0085 included), the DEL character
+# raw -- which a JS port reproduces by hand (`hookForm`). Key order is part of the document
+# (`hookSpecificOutput` first, then `decision`/`reason`, then `systemMessage`), and so is what is
+# *left out*: a `reason` without a `decision` is dropped, a `decision` without a `reason` is
+# emitted with `""`, an empty string is not `None`. `project_root` is the Python truthiness and
+# `isinstance` of a payload field (`cwd` of `0`, `[]`, `{}`, `true` and `""` all ask the process's
+# directory), followed by a resolve and a walk up to AGENTS.md. The table is the spec: every
+# expected value was produced by running the Python and then read against the docstring.
+#
+# The mouth is the generic one of `routing.toml` (row format: the block comment above `probe_routing`
+# in probe.py); the adapters build a HookResult from `{"$new": "HookResult", "fields": {...}}` (the
+# class lives in hook_core on both sides). `render_result`'s answer is the document text itself,
+# compared as a string; a row with `cwd` runs with the scratch subdirectory as the process's working
+# directory; `class_only` answers the exception class alone (a payload that is not an object is an
+# AttributeError at `.get`, which the crash handler would print by name).
+#
+# Families (the `id` prefix): `tool` -- Claude's edit and read tools become the neutral kinds, every
+# other name (case, padding, an object-prototype name) passes through; `render` -- every field
+# combination, Stop's decision and reason, the escapes, `None`; `root` -- the payload's cwd in every
+# shape, the marker that makes a project root, a custom dev-layer root, and a payload that is not a
+# dict.
+#
+# Deliberate non-pins: `load_payload`, `print_result` and `run_guarded` (stdin, stdout, stderr and
+# the exit code are the hook corpus's), and a HookResult field of the wrong type (typed contract).
+
+# --- tool: Claude Code's tool names map to the neutral kinds; every other name passes through --------
+
+[[case]]
+id = "tool/edit-Edit"
+fn = "normalize_tool"
+args_json = '["Edit"]'
+expected_json = '"edit"'
+
+[[case]]
+id = "tool/edit-Write"
+fn = "normalize_tool"
+args_json = '["Write"]'
+expected_json = '"edit"'
+
+[[case]]
+id = "tool/edit-MultiEdit"
+fn = "normalize_tool"
+args_json = '["MultiEdit"]'
+expected_json = '"edit"'
+
+[[case]]
+id = "tool/read-Read"
+fn = "normalize_tool"
+args_json = '["Read"]'
+expected_json = '"read"'
+
+[[case]]
+id = "tool/read-Grep"
+fn = "normalize_tool"
+args_json = '["Grep"]'
+expected_json = '"read"'
+
+[[case]]
+id = "tool/read-Glob"
+fn = "normalize_tool"
+args_json = '["Glob"]'
+expected_json = '"read"'
+
+[[case]]
+id = "tool/passes-through-bash"
+fn = "normalize_tool"
+args_json = '["Bash"]'
+expected_json = '"Bash"'
+
+[[case]]
+id = "tool/passes-through-task"
+fn = "normalize_tool"
+args_json = '["Task"]'
+expected_json = '"Task"'
+
+[[case]]
+id = "tool/passes-through-agent"
+fn = "normalize_tool"
+args_json = '["Agent"]'
+expected_json = '"Agent"'
+
+[[case]]
+id = "tool/passes-through-notebook-edit"
+fn = "normalize_tool"
+args_json = '["NotebookEdit"]'
+expected_json = '"NotebookEdit"'
+
+[[case]]
+id = "tool/passes-through-web-fetch"
+fn = "normalize_tool"
+args_json = '["WebFetch"]'
+expected_json = '"WebFetch"'
+
+[[case]]
+id = "tool/passes-through-apply-patch"
+fn = "normalize_tool"
+args_json = '["apply_patch"]'
+expected_json = '"apply_patch"'
+
+[[case]]
+id = "tool/passes-through-empty"
+fn = "normalize_tool"
+args_json = '[""]'
+expected_json = '""'
+
+[[case]]
+id = "tool/passes-through-lowercase-edit"
+fn = "normalize_tool"
+args_json = '["edit"]'
+expected_json = '"edit"'
+
+[[case]]
+id = "tool/passes-through-lowercase-read"
+fn = "normalize_tool"
+args_json = '["read"]'
+expected_json = '"read"'
+
+[[case]]
+id = "tool/passes-through-lowercase-write"
+fn = "normalize_tool"
+args_json = '["write"]'
+expected_json = '"write"'
+
+[[case]]
+id = "tool/passes-through-uppercase-edit"
+fn = "normalize_tool"
+args_json = '["EDIT"]'
+expected_json = '"EDIT"'
+
+[[case]]
+id = "tool/passes-through-lowercase-multiedit"
+fn = "normalize_tool"
+args_json = '["multiedit"]'
+expected_json = '"multiedit"'
+
+[[case]]
+id = "tool/passes-through-padded-edit"
+fn = "normalize_tool"
+args_json = '[" Edit"]'
+expected_json = '" Edit"'
+
+[[case]]
+id = "tool/passes-through-trailing-space-edit"
+fn = "normalize_tool"
+args_json = '["Edit "]'
+expected_json = '"Edit "'
+
+[[case]]
+id = "tool/passes-through-grep-lowercase"
+fn = "normalize_tool"
+args_json = '["grep"]'
+expected_json = '"grep"'
+
+[[case]]
+id = "tool/passes-through-glob-lowercase"
+fn = "normalize_tool"
+args_json = '["glob"]'
+expected_json = '"glob"'
+
+[[case]]
+id = "tool/passes-through-todo-write"
+fn = "normalize_tool"
+args_json = '["TodoWrite"]'
+expected_json = '"TodoWrite"'
+
+[[case]]
+id = "tool/passes-through-mcp-tool"
+fn = "normalize_tool"
+args_json = '["mcp__server__edit"]'
+expected_json = '"mcp__server__edit"'
+
+[[case]]
+id = "tool/passes-through-neutral-shell"
+fn = "normalize_tool"
+args_json = '["shell"]'
+expected_json = '"shell"'
+
+[[case]]
+id = "tool/passes-through-neutral-subagent"
+fn = "normalize_tool"
+args_json = '["subagent"]'
+expected_json = '"subagent"'
+
+[[case]]
+id = "tool/passes-through-unicode"
+fn = "normalize_tool"
+args_json = '["Édit"]'
+expected_json = '"Édit"'
+
+[[case]]
+id = "tool/passes-through-proto-name"
+fn = "normalize_tool"
+args_json = '["constructor"]'
+expected_json = '"constructor"'
+
+[[case]]
+id = "tool/passes-through-dunder-proto-name"
+fn = "normalize_tool"
+args_json = '["__proto__"]'
+expected_json = '"__proto__"'
+
+[[case]]
+id = "tool/passes-through-has-own-property"
+fn = "normalize_tool"
+args_json = '["hasOwnProperty"]'
+expected_json = '"hasOwnProperty"'
+
+[[case]]
+id = "tool/passes-through-to-string"
+fn = "normalize_tool"
+args_json = '["toString"]'
+expected_json = '"toString"'
+
+# --- render: the one JSON document Claude Code reads (json.dumps defaults: ', ' and ': ', ASCII only) ----
+# hookSpecificOutput carries the event, the context and the permission pair; Stop's decision/reason and systemMessage ride at the top level.
+
+[[case]]
+id = "render/event-only"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\"}}"'
+
+[[case]]
+id = "render/context"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "SessionStart", "additional_context": "hello"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"hello\"}}"'
+
+[[case]]
+id = "render/permission-ask"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "permission_decision": "ask", "permission_reason": "why"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"why\"}}"'
+
+[[case]]
+id = "render/permission-deny"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "permission_decision": "deny", "permission_reason": "no"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"no\"}}"'
+
+[[case]]
+id = "render/permission-decision-only"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "permission_decision": "deny"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\"}}"'
+
+[[case]]
+id = "render/permission-reason-only"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "permission_reason": "why"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecisionReason\": \"why\"}}"'
+
+[[case]]
+id = "render/system-message"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "SessionStart", "system_message": "to the owner"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\"}, \"systemMessage\": \"to the owner\"}"'
+
+[[case]]
+id = "render/context-and-system-message"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "SessionStart", "additional_context": "ctx", "system_message": "msg"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"ctx\"}, \"systemMessage\": \"msg\"}"'
+
+[[case]]
+id = "render/stop-block"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "Stop", "decision": "block", "reason": "finish the audit"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"Stop\"}, \"decision\": \"block\", \"reason\": \"finish the audit\"}"'
+
+[[case]]
+id = "render/stop-block-no-reason"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "Stop", "decision": "block"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"Stop\"}, \"decision\": \"block\", \"reason\": \"\"}"'
+
+[[case]]
+id = "render/stop-block-empty-reason"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "Stop", "decision": "block", "reason": ""}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"Stop\"}, \"decision\": \"block\", \"reason\": \"\"}"'
+
+[[case]]
+id = "render/stop-approve"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "Stop", "decision": "approve", "reason": "done"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"Stop\"}, \"decision\": \"approve\", \"reason\": \"done\"}"'
+
+[[case]]
+id = "render/reason-without-decision-is-dropped"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "Stop", "reason": "orphan"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"Stop\"}}"'
+
+[[case]]
+id = "render/decision-with-context"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "Stop", "decision": "block", "reason": "r", "additional_context": "c"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"Stop\", \"additionalContext\": \"c\"}, \"decision\": \"block\", \"reason\": \"r\"}"'
+
+[[case]]
+id = "render/every-field"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "c", "permission_decision": "ask", "permission_reason": "r", "system_message": "m", "decision": "block", "reason": "why"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"c\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"r\"}, \"decision\": \"block\", \"reason\": \"why\", \"systemMessage\": \"m\"}"'
+
+[[case]]
+id = "render/empty-strings-are-emitted"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "", "additional_context": "", "permission_decision": "", "permission_reason": "", "system_message": "", "decision": "", "reason": ""}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"\", \"additionalContext\": \"\", \"permissionDecision\": \"\", \"permissionDecisionReason\": \"\"}, \"decision\": \"\", \"reason\": \"\", \"systemMessage\": \"\"}"'
+
+[[case]]
+id = "render/empty-event-name"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": ""}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"\"}}"'
+
+[[case]]
+id = "render/empty-context-kept"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": ""}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"\"}}"'
+
+[[case]]
+id = "render/empty-system-message-kept"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "SessionStart", "system_message": ""}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\"}, \"systemMessage\": \"\"}"'
+
+[[case]]
+id = "render/empty-decision-kept-with-reason"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "Stop", "decision": "", "reason": "r"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"Stop\"}, \"decision\": \"\", \"reason\": \"r\"}"'
+
+[[case]]
+id = "render/quotes-and-backslash"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "say \"hi\" \\ done"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"say \\\"hi\\\" \\\\ done\"}}"'
+
+[[case]]
+id = "render/newline-tab-return"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "a\nb\tc\rd"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"a\\nb\\tc\\rd\"}}"'
+
+[[case]]
+id = "render/control-characters"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "\u0000\u0001\u0008\u000b\u000c\u001f"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"\\u0000\\u0001\\b\\u000b\\f\\u001f\"}}"'
+
+[[case]]
+id = "render/delete-character-stays-raw"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "a\u007fb"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"a\\u007fb\"}}"'
+
+[[case]]
+id = "render/slash-and-angle-stay-raw"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "</script> & \u0027"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"</script> & \u0027\"}}"'
+
+[[case]]
+id = "render/latin-letter-escaped"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "café"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"caf\\u00e9\"}}"'
+
+[[case]]
+id = "render/cjk-escaped"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "中文"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"\\u4e2d\\u6587\"}}"'
+
+[[case]]
+id = "render/astral-as-surrogate-pair"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "🧭 𝒜"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"\\ud83e\\udded \\ud835\\udc9c\"}}"'
+
+[[case]]
+id = "render/line-separators-escaped"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "a\u2028b\u2029c\u0085d"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"a\\u2028b\\u2029c\\u0085d\"}}"'
+
+[[case]]
+id = "render/nbsp-and-zero-width-escaped"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "a\u00a0b\u200bc\ufeffd"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"a\\u00a0b\\u200bc\\ufeffd\"}}"'
+
+[[case]]
+id = "render/warning-sign-and-arrows"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "SessionStart", "system_message": "⚠ akmon: a → b · c — d"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\"}, \"systemMessage\": \"\\u26a0 akmon: a \\u2192 b \\u00b7 c \\u2014 d\"}"'
+
+[[case]]
+id = "render/unicode-in-event-and-reason"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "Stöp", "decision": "block", "reason": "ré"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"St\\u00f6p\"}, \"decision\": \"block\", \"reason\": \"r\\u00e9\"}"'
+
+[[case]]
+id = "render/unicode-in-permission-reason"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "permission_decision": "deny", "permission_reason": "nö"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"n\\u00f6\"}}"'
+
+[[case]]
+id = "render/lone-surrogate-escaped"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "a\ud800b"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"a\\ud800b\"}}"'
+
+[[case]]
+id = "render/long-text"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "line\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\nline\n"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"line\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\nline\\n\"}}"'
+
+[[case]]
+id = "render/braces-and-placeholders"
+fn = "render_result"
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "{{x}} {y} %s \\u00e9"}}]'
+expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"{{x}} {y} %s \\\\u00e9\"}}"'
+
+[[case]]
+id = "render/none"
+fn = "render_result"
+args_json = '[null]'
+expected_json = 'null'
+
+# --- root: project_root(payload) -- the project of the payload's cwd, not of the hook process --------
+# A missing, empty or non-string cwd asks the process's working directory (the row's `cwd`); the walk goes up to AGENTS.md beside a mount or a record.
+
+[[case]]
+id = "root/cwd-is-the-root"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-below-the-root"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-deep-and-missing"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub/nope/deeper"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-with-dotdot"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub/../sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-with-trailing-slash"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub/"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-with-double-slash"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj//sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-through-a-link"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/alias/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+links = { "alias" = "{{dir}}/proj" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-relative"
+fn = "project_root"
+args_json = '[{"cwd": "sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-relative-dotdot"
+fn = "project_root"
+args_json = '[{"cwd": ".."}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-dot"
+fn = "project_root"
+args_json = '[{"cwd": "."}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-padded-is-a-relative-name"
+fn = "project_root"
+args_json = '[{"cwd": " "}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-windows-spelling-is-a-relative-name"
+fn = "project_root"
+args_json = '[{"cwd": "C:\\work"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/no-project-above"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/plain/sub"}]'
+files = { "plain/sub/x" = "" }
+expected_json = '"{{dir}}/plain/sub"'
+
+[[case]]
+id = "root/no-project-nonexistent"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/nowhere/deeper"}]'
+expected_json = '"{{dir}}/nowhere/deeper"'
+
+[[case]]
+id = "root/agents-alone-is-not-a-root"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj/sub"'
+
+[[case]]
+id = "root/mount-marker"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/akmon/x" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/record-marker"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/custom-root"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
+env = { "AITNA_ROOT" = "tools/ai" }
+files = { "proj/AGENTS.md" = "", "proj/tools/ai/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/custom-root-record-elsewhere"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
+env = { "AITNA_ROOT" = "tools/ai" }
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj/sub"'
+
+[[case]]
+id = "root/nested-projects-nearest-wins"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/proj/inner/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "", "proj/inner/AGENTS.md" = "", "proj/inner/_aitna/.akmon.toml" = "", "proj/inner/sub/x" = "" }
+expected_json = '"{{dir}}/proj/inner"'
+
+[[case]]
+id = "root/missing-cwd-key"
+fn = "project_root"
+args_json = '[{}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/missing-cwd-key-other-keys"
+fn = "project_root"
+args_json = '[{"tool_name": "Edit", "session_id": "s"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-null"
+fn = "project_root"
+args_json = '[{"cwd": null}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-empty"
+fn = "project_root"
+args_json = '[{"cwd": ""}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-number"
+fn = "project_root"
+args_json = '[{"cwd": 5}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-zero"
+fn = "project_root"
+args_json = '[{"cwd": 0}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-true"
+fn = "project_root"
+args_json = '[{"cwd": true}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-list"
+fn = "project_root"
+args_json = '[{"cwd": ["{{dir}}/proj"]}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-dict"
+fn = "project_root"
+args_json = '[{"cwd": {"path": "{{dir}}/proj"}}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/cwd-missing-and-no-project"
+fn = "project_root"
+args_json = '[{}]'
+files = { "plain/x" = "" }
+cwd = "plain"
+expected_json = '"{{dir}}/plain"'
+
+[[case]]
+id = "root/cwd-has-nul"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/pro\u0000j"}]'
+class_only = true
+expected_json = '{"error": "ValueError"}'
+
+[[case]]
+id = "root/cwd-has-lone-surrogate"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/pro\ud800j"}]'
+class_only = true
+expected_json = '{"error": "UnicodeEncodeError"}'
+
+[[case]]
+id = "root/cwd-unicode"
+fn = "project_root"
+args_json = '[{"cwd": "{{dir}}/pröj/süb"}]'
+files = { "pröj/AGENTS.md" = "", "pröj/_aitna/.akmon.toml" = "", "pröj/süb/x" = "" }
+expected_json = '"{{dir}}/pröj"'
+
+[[case]]
+id = "root/payload-is-a-list"
+fn = "project_root"
+args_json = '[[]]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "root/payload-is-a-string"
+fn = "project_root"
+args_json = '["x"]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "root/payload-is-a-number"
+fn = "project_root"
+args_json = '[5]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'
+
+[[case]]
+id = "root/payload-is-null"
+fn = "project_root"
+args_json = '[null]'
+class_only = true
+expected_json = '{"error": "AttributeError"}'

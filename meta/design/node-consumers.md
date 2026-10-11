@@ -286,6 +286,10 @@ C104 runs in two passes (owner decision 2026-10-04), each ending at a master-con
   scenarios); Node wiring and marker in `bin/sync.py` / `bin/sync.json` and the matching part of
   the JS `sync`; the `hooks/*` exemption removed; the JS latency measured against the Python
   baseline (M122) with the P5 levers if it loses.
+  **Done (2026-10-07):** all of it except the JS half of the Node wiring — the JS `sync` is C105's, so C104 carries the Node
+  *marker* in `bin/sync.json` (recognised by the Python `sync`, pinned by tests) and the spelling waits for the JS `sync`;
+  until then a node project of the hook corpus is synced by the Python reference. JS p50 145–152 ms against Python 178 ms
+  ([M124](../MEASUREMENTS.md)). Evidence: [C104 evidence](../reviews/c104-evidence-20261004.md).
 
 `routing.py` belongs to C104 and not to C108 because `gate-audit`, `delegation-log` and
 `model-routing` import it: measured on 2026-10-04, 87 of its 91 definitions and 1317 of its 1688

@@ -23,12 +23,13 @@
  *   named `constructor` is a miss, not a function) and the error says which stem.
  */
 
-import { createHash, randomInt } from "node:crypto";
 import fs from "node:fs";
 import { posix } from "node:path";
 
 import { fnmatchCase } from "./glob.mjs";
 import { fill } from "./jsondata.mjs";
+import { pyError, pyTypeName, truthy } from "./pyvalue.mjs";
+import { sha256Hex } from "./sha256.mjs";
 
 /** A day: longer than a working session, short enough that a crashed or reused session id does
  * not suppress a diagnostic for long. */
@@ -88,7 +89,7 @@ export function gettempdir() {
     for (let attempt = 0; attempt < 100; attempt++) {
       let name = "tmp";
       for (let i = 0; i < 8; i++) {
-        name += characters[randomInt(characters.length)];
+        name += characters[Math.floor(Math.random() * characters.length)];
       }
       const scratch = _under(directory, name);
       let descriptor;
@@ -115,7 +116,10 @@ export function gettempdir() {
       }
     }
   }
-  throw new Error(`No usable temporary directory found in [${candidates.map((c) => `'${c}'`).join(", ")}]`);
+  throw pyError(
+    "FileNotFoundError",
+    `No usable temporary directory found in [${candidates.map((c) => `'${c}'`).join(", ")}]`,
+  );
 }
 
 /** Whether `identity` is one a marker cannot be keyed by: absent, empty or the substitute. */
@@ -123,27 +127,31 @@ function _isUnidentified(
   /** @type {MarkersData} */ data,
   /** @type {string | null | undefined} */ identity,
 ) {
-  return !identity || identity === data.unidentified;
+  return !truthy(identity) || identity === data.unidentified;
 }
 
 /**
  * The hashed marker name stem for `identity`: the head of its SHA-256, so an identity holding
- * `/` or `..` cannot name a path.
+ * `/` or `..` cannot name a path. A hook payload may hand over any JSON value; only a string encodes.
  * @param {MarkersData} data
- * @param {string} identity
+ * @param {any} identity
  * @returns {string}
  */
 function _digest(data, identity) {
-  if (/\p{Surrogate}/u.test(identity)) {
-    throw new TypeError("a marker identity must be encodable as UTF-8: it holds a lone surrogate");
+  if (typeof identity !== "string") {
+    // `identity.encode()`: a payload's session id may be any JSON value, and only a string has it.
+    throw pyError("AttributeError", `'${pyTypeName(identity)}' object has no attribute 'encode'`);
   }
-  return createHash("sha256").update(identity, "utf8").digest("hex").slice(0, data.name_sha256_tail);
+  if (/\p{Surrogate}/u.test(identity)) {
+    throw pyError("UnicodeEncodeError", "a marker identity must be encodable as UTF-8: it holds a lone surrogate");
+  }
+  return sha256Hex(identity).slice(0, data.name_sha256_tail);
 }
 
 /**
  * @param {MarkersData} data
  * @param {string} kind
- * @param {string} identity
+ * @param {any} identity
  * @param {string | null} directory
  * @returns {string}
  */
@@ -157,11 +165,11 @@ function _markerPath(data, kind, identity, directory) {
  * @param {MarkersData} data the parsed `common/markers.json`
  * @param {string} stem
  * @returns {string}
- * @throws {Error} for a stem the table does not carry (Python: `KeyError`)
+ * @throws {Error} named `KeyError` for a stem the table does not carry
  */
 export function markerKind(data, stem) {
   if (!Object.hasOwn(data.kinds, stem)) {
-    throw new Error(`no marker kind for stem ${JSON.stringify(stem)}`);
+    throw pyError("KeyError", `no marker kind for stem ${JSON.stringify(stem)}`);
   }
   return data.kinds[stem];
 }
@@ -181,11 +189,11 @@ export function unidentifiedIdentity(data) {
  * @param {string} which
  * @param {string} identity
  * @returns {string}
- * @throws {Error} for a state file the table does not carry (Python: `KeyError`)
+ * @throws {Error} named `KeyError` for a state file the table does not carry
  */
 export function delegationStateName(data, which, identity) {
   if (!Object.hasOwn(data.delegation_state_files, which)) {
-    throw new Error(`no delegation state file ${JSON.stringify(which)}`);
+    throw pyError("KeyError", `no delegation state file ${JSON.stringify(which)}`);
   }
   return fill(data.delegation_state_files[which], { identity });
 }
@@ -227,7 +235,7 @@ function _discard(/** @type {string} */ marker) {
  * @returns {boolean}
  */
 export function claimDiagnosticMarker(data, kind, identity, { directory = null } = {}) {
-  if (!identity || _isUnidentified(data, identity)) {
+  if (!truthy(identity) || _isUnidentified(data, identity)) {
     return true; // no identity to throttle by: repeat rather than hide the diagnostic
   }
   const marker = _markerPath(data, kind, identity, directory);
@@ -274,7 +282,7 @@ export function claimDiagnosticMarker(data, kind, identity, { directory = null }
  * @returns {void}
  */
 export function releaseDiagnosticMarkers(data, kindPrefix, identity, { keepKind = null, directory = null } = {}) {
-  if (!identity || _isUnidentified(data, identity)) {
+  if (!truthy(identity) || _isUnidentified(data, identity)) {
     return;
   }
   const keep = keepKind ? posix.basename(_markerPath(data, keepKind, identity, directory)) : null;

@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "record_type": "p3_v2_owner_approval",
-  "proposal_sha256": "001877228a00fdc74eeff347b210a89cf56ca7298b5c7a5e48f2fabfe0f55fdd",
+  "proposal_sha256": "7b013d476aa695d67a81d7294adcf9bc5d532436d227d8d5841ff62593e95317",
   "accepted_v2_seal_sha256": null,
   "owner_accepted": false,
   "owner_acceptance_provenance": "UNIMPLEMENTED",
@@ -14,9 +14,13 @@
       "exploratory_calls_counted": null
     },
     "token_only": {
-      "accepted_pass_envelope_tokens": null,
+      "codex_aggregate_limit_tokens": 5000000,
+      "known_prior_codex_usage_tokens": 153614,
+      "remaining_codex_tokens_at_approval": 4846386,
+      "qwen_aggregate_limit_tokens": null,
+      "accepted_scorer_readings_per_route": 120,
       "named_operator": null,
-      "exploratory_calls_counted": null
+      "exploratory_calls_counted": true
     }
   },
   "preflight_status": "NOT_RUN",
