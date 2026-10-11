@@ -1,4 +1,84 @@
 {
+  "python_refuses_ecosystem": "this project's integration record names ecosystem = \"{{value}}\" ({{aitna}}/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon init",
+  "node_refuses_mode": "mode '{{mode}}' is served by the Python implementation of akmon; the JavaScript implementation attaches Node projects in mode 'package' only",
+  "node_refuses_record": "this project's integration record is not a Node package attach ({{found}}); the JavaScript implementation attaches Node projects in package mode only, and the Python implementation of akmon serves the other records",
+  "node_checks_pending": "--checks {{choice}}: linter setup for Node projects is not available yet; attach without --checks (or with --checks none)",
+  "node_mode_reason": "the JavaScript implementation attaches in package mode",
+  "agents_shared_layer_node": "installed `akmon` npm package (hooks run from `node_modules/akmon/js/hooks`; only the imported guardrails are materialized, at `{{aitna}}/.akmon/guardrails/`; `npx akmon path` locates the rest)",
+  "gitignore_lines_node": [
+    "# secrets",
+    "*.env",
+    "!*.env.example",
+    "",
+    "# Node dependencies",
+    "node_modules/",
+    "",
+    "# akmon model routing — per-user/per-session artifacts (never committed)",
+    ".claude/model-routing.local.json",
+    ".claude/model-routing.log",
+    ".claude/second-opinion/",
+    ".claude/agents/k_*.md"
+  ],
+  "node_managers": {
+    "pnpm": {
+      "install": "pnpm install --frozen-lockfile",
+      "install_unlocked": "pnpm install",
+      "exec": "pnpm exec ",
+      "add_dev_exact": "pnpm add -D -E",
+      "test": "pnpm test",
+      "ci_setup_unpinned": "      - uses: pnpm/action-setup@v4\n        with:\n          version: latest\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 22",
+      "ci_setup": "      - uses: pnpm/action-setup@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 22",
+      "lockfiles": [
+        "pnpm-lock.yaml"
+      ]
+    },
+    "yarn": {
+      "install": "yarn install --frozen-lockfile",
+      "install_unlocked": "yarn install",
+      "install_berry": "yarn install --immutable",
+      "exec": "yarn ",
+      "add_dev_exact": "yarn add -D -E",
+      "test": "yarn test",
+      "ci_setup": "      - uses: actions/setup-node@v4\n        with:\n          node-version: 22",
+      "lockfiles": [
+        "yarn.lock"
+      ]
+    },
+    "bun": {
+      "install": "bun install --frozen-lockfile",
+      "install_unlocked": "bun install",
+      "exec": "bunx ",
+      "add_dev_exact": "bun add -d --exact",
+      "test": "bun run test",
+      "ci_setup": "      - uses: oven-sh/setup-bun@v2",
+      "lockfiles": [
+        "bun.lock",
+        "bun.lockb"
+      ]
+    },
+    "npm": {
+      "install": "npm ci",
+      "install_unlocked": "npm install",
+      "exec": "npx ",
+      "add_dev_exact": "npm install -D -E",
+      "test": "npm test",
+      "ci_setup": "      - uses: actions/setup-node@v4\n        with:\n          node-version: 22",
+      "lockfiles": [
+        "package-lock.json"
+      ]
+    }
+  },
+  "ci_workflow_steps_node": "      - uses: actions/checkout@v4\n{{setup}}\n      - run: {{install}}\n      - run: {{exec}}akmon sync --check\n      - run: {{exec}}akmon verify --strict",
+  "record_fresh_node": "# akmon integration record — written by `akmon init`, refreshed on realign.\n# The version this project sits on; a later bump diffs the CHANGELOG window against it.\nmount = \"package\"\necosystem = \"node\"\n{{recorded}}attached_archetype = \"{{archetype}}\"\n\n[test]\n# The project's own test invocation, used verbatim by the release check\n# (BOOTSTRAP §A5). Uncomment and set it to whatever this project already uses:\n# runner = \"{{runner}}\"\n",
+  "pin_step_node": {
+    "none": "**pin akmon in `devDependencies`** of package.json at an exact version, never in the runtime dependencies: `{{command}}`. Until then `node_modules/akmon` is missing: the CI checks cannot run, and the generated hook commands fail silently because the scripts they name do not exist",
+    "runtime": "**move the akmon pin** out of `dependencies`, `optionalDependencies` or `peerDependencies` into `devDependencies`: akmon is dev tooling and must not reach this project's own users (ADR 0009 §4)",
+    "unreadable": "**fix package.json** — it is not valid JSON, so neither akmon nor npm can read an akmon pin from it; once it parses, pin akmon in `devDependencies` at an exact version: `{{command}}`"
+  },
+  "report_missing_node": {
+    "unreadable": "cannot read an akmon pin: package.json is not valid JSON (step 1)",
+    "absent": "has no akmon pin in devDependencies yet (step 1) — nothing else attaches it"
+  },
   "akmon_repo": "https://github.com/akumidv/ai_akmon",
   "tree_members": [
     "ARCHETYPES.md",
@@ -113,7 +193,9 @@
   "closing_steps": {
     "classify": "classify the project (archetype + language) against ARCHETYPES.md, import the language profile in AGENTS.md, and set `attached_archetype` in {{aitna}}/.akmon.toml",
     "pin_test": "pin the test environment: record the project's own pytest invocation as `[test].runner` in {{aitna}}/.akmon.toml (BOOTSTRAP §A5 — do not build a venv when the project already has one)",
+    "pin_test_node": "pin the test environment: record the project's own test command (`{{test}}`, for example) as `[test].runner` in {{aitna}}/.akmon.toml (BOOTSTRAP §A5)",
     "export_aitna": "export AITNA_ROOT={{aitna}} in every shell and CI job that runs the akmon tooling",
+    "verify_node": "run `{{exec}}akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)",
     "verify": "run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)"
   }
 }

@@ -1,6 +1,8 @@
 id = "cli/init-vendored-bad-ref"
-ecosystem = "shared"
+ecosystem = "python"
 kind = "cli"
+# Python-tagged since C105 pass 3: the mounted modes are the Python implementation's (ADR 0020 D02); the
+# JavaScript init refuses them (cli/init-node-* pins that refusal).
 covers = ["command:init"]
 
 [fixture]

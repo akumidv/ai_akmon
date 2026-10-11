@@ -1080,6 +1080,11 @@ def _plan(args: argparse.Namespace, root: Path) -> tuple[_Attach, str]:
     aitna = _effective_aitna_root(args.aitna_root, root)
     os.environ["AITNA_ROOT"] = aitna
 
+    # A record another implementation wrote (C105): the run would re-spell its wiring for the Python
+    # launcher through `sync`, which refuses it; `init` says so before touching anything.
+    ecosystem = _record_fields(root, aitna).get("ecosystem")
+    if isinstance(ecosystem, str) and ecosystem and ecosystem != "python":
+        raise _InitError(_jsondata().fill(_data()["python_refuses_ecosystem"], {"value": ecosystem, "aitna": aitna}))
     previous = _recorded_mount(root, aitna)
     if args.mode:
         mode, reason = args.mode, "requested"

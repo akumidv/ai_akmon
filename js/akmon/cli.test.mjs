@@ -102,7 +102,7 @@ test("imported rather than run, the module writes nothing and leaves the exit co
 
 test("the exit code is process.exitCode: the run ends by itself, never through process.exit", () => {
   assert.ok(!/process\.exit\(/.test(fs.readFileSync(CLI, "utf8")));
-  assert.equal(akmon(["init"]).status, 2);
+  assert.equal(akmon(["update"]).status, 2);
 });
 
 // -- the lean hot path -------------------------------------------------------------------------
@@ -110,10 +110,10 @@ test("the exit code is process.exitCode: the run ends by itself, never through p
 test("the static imports of the CLI are the few a hook run needs; every command module is a dynamic import", () => {
   const source = fs.readFileSync(CLI, "utf8");
   const statics = [...source.matchAll(/^import [^;]*? from "([^"]+)";$/gms)].map((match) => match[1]);
-  assert.deepEqual(statics, ["node:fs", "node:path", "node:url", "../common/jsondata.mjs"]);
+  assert.deepEqual(statics, ["node:fs", "node:path", "node:url", "../common/jsondata.mjs", "./_tree.mjs"]);
   const dynamics = [...source.matchAll(/\bimport\("([^"]+)"\)/g)].map((match) => match[1]);
   assert.ok(dynamics.includes("../bin/sync.mjs") && dynamics.includes("../bin/check.mjs"));
-  assert.ok(dynamics.includes("../bin/verify.mjs"));
+  assert.ok(dynamics.includes("../bin/verify.mjs") && dynamics.includes("./_init.mjs"));
   assert.ok(!/findings|parseArgs|node:util/.test(statics.join(" ")));
 });
 
@@ -134,8 +134,8 @@ test("path prints the real path of the running tree, whatever the cwd", async ()
 
 // -- the commands that are not ported ---------------------------------------------------------
 
-test("init and update name the task that ports them, with or without arguments", async () => {
-  const tasks = { init: "C105 pass 3", update: "C107" };
+test("update names the task that ports it, with or without arguments", async () => {
+  const tasks = { update: "C107" };
   for (const [command, task] of Object.entries(tasks)) {
     const expected = `akmon ${command}: not ported to the JavaScript implementation yet (${task})\n`;
     assert.deepEqual(await inProcess([command]), { status: 2, stdout: "", stderr: expected });

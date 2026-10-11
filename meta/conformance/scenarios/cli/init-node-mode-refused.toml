@@ -1,0 +1,18 @@
+id = "cli/init-node-mode-refused"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:init"]
+
+# The mounted modes belong to the Python implementation: the JavaScript init refuses them before
+# touching the project (exit 2, one line).
+[fixture]
+attach = "none"
+name = "base"
+
+[run]
+argv = ["init", "--mode", "vendored", "--yes", "--project-root", "{{root}}"]
+
+[expected]
+exit = 2
+stderr = "akmon init: mode 'vendored' is served by the Python implementation of akmon; the JavaScript implementation attaches Node projects in mode 'package' only\n"
+stdout = ""

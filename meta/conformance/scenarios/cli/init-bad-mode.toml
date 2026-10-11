@@ -1,6 +1,8 @@
 id = "cli/init-bad-mode"
-ecosystem = "shared"
+ecosystem = "python"
 kind = "cli"
+# Python-tagged since C105 pass 3: the usage-error text is argparse's (DIVERGENCES DV12); the node twin is
+# cli/init-node-bad-mode.
 covers = ["command:init"]
 
 [fixture]

@@ -1,0 +1,18 @@
+id = "cli/init-node-bad-mode"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:init"]
+
+# A mode that is none of the four choices is a usage error (the Python twin is cli/init-bad-mode;
+# the sentence around argparse's is DV12).
+[fixture]
+attach = "none"
+name = "base"
+
+[run]
+argv = ["init", "--mode", "bogus", "--project-root", "{{root}}", "--yes"]
+
+[expected]
+exit = 2
+stderr_contains = ["akmon init: error: argument --mode: invalid choice: 'bogus' (choose from 'submodule', 'vendored', 'subtree', 'package')"]
+stdout = ""

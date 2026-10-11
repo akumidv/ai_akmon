@@ -1,0 +1,17 @@
+id = "cli/init-not-a-directory"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:init"]
+
+# A project root that is not a directory: refused before anything is planned, by both implementations.
+[fixture]
+attach = "none"
+name = "base"
+
+[run]
+argv = ["init", "--yes", "--project-root", "{{root}}/missing"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "akmon init: {{root}}/missing is not a directory\n"
