@@ -31,22 +31,13 @@ reason = "structural — ES modules have no package init; the node-side version 
 task = "C105"
 
 [[exempt]]
-path = "src/akmon/_init.py"
-reason = "the JS CLI for Node package mode lands in C105 (init is its first command)"
-task = "C105"
-
-[[exempt]]
-path = "src/akmon/_tree.py"
-reason = "the JS CLI lands in C105; embedded-tree resolution is part of that port"
-task = "C105"
-
-[[exempt]]
 path = "src/akmon/_update.py"
 reason = "the JS update for npm/pnpm/yarn/bun lands in C107, the plan row that owns update"
 task = "C107"
 
 # tools/: the tools port and `akmon tool` land in C108. tools/model_routing/routing.py is not
-# C108's: the hooks import it, so it was ported with the hooks (C104 pass 1) and is paired. The
+# C108's: the hooks import it, so it was ported with the hooks (C104 pass 1) and is paired; init.py
+# was pulled into C105 pass 3, because a Node attach is incomplete without it. The
 # rest are listed one by one, so this list names what is outstanding and a new tool module is a
 # gap until it is paired or listed.
 [[exempt]]
@@ -56,11 +47,6 @@ task = "C108"
 
 [[exempt]]
 path = "tools/model_routing/gate_pack.py"
-reason = "the tools port lands in C108"
-task = "C108"
-
-[[exempt]]
-path = "tools/model_routing/init.py"
 reason = "the tools port lands in C108"
 task = "C108"
 

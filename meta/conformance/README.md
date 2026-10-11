@@ -205,10 +205,11 @@ implementation + coverage gate). The corpus is green when the leg is green. The 
 pinned by `meta/tests/test_conformance_coverage.py` and `meta/tests/test_conformance_corpus.py`.
 
 From C103 the corpus also runs on the node implementation: `selfci.corpus-node` runs
-`runner.py --tree <repo> --impl node --area units --area hooks --area cli` — the same unit tables through
+`runner.py --tree <repo> --impl node --area units --area hooks --area cli --area tools` — the same unit tables through
 `probe.mjs`, fixture-free; (from C104) every hook scenario on the JS hooks; and (from C105) every CLI scenario
 of a command whose Python file has its port under `js/`, run as `node node_modules/akmon/js/akmon/cli.mjs`
-in a Node-package project that the JS `sync` itself warmed up. A scenario of a command or tool still unpaired
+in a Node-package project that the JS `sync` itself warmed up; and every scenario of a tool with a JS port, run as
+`node node_modules/akmon/js/tools/<tool>.mjs` (from C105 pass 3, `model_routing/init`). A scenario of a command or tool still unpaired
 in `pairing.toml` is *pending* on node and reported as a skip that names the file, so the pairing list is the
 one record of what is outstanding. The gates are off (they run on a full run only; `--area` repeats to
 name a slice of several areas). The node

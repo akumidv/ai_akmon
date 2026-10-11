@@ -4,8 +4,9 @@
  * ADR 0020 D01). The Python module is the spec: the same answers, the same texts, the same exit
  * codes and the same stdout and stderr, for the commands that exist here.
  *
- * `sync`, `verify`, `check`, `path`, `hook` and `version` are real. `init` and `update` are not
- * ported yet: each prints the `not_ported` text of `src/akmon/cli.json` and exits 2.
+ * `init`, `sync`, `verify`, `check`, `path`, `hook` and `version` are real (`init` serves Node
+ * package mode only, see `_init.mjs`). `update` is not ported yet: it prints the `not_ported` text
+ * of `src/akmon/cli.json` and exits 2.
  *
  * `hook` is the hot path of a session — the generated wiring of a Node project names the hook
  * scripts directly, but `akmon hook <name>` is the same entry for a hand run and for the corpus —
@@ -37,6 +38,7 @@ import { posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { fill, read } from "../common/jsondata.mjs";
+import { embeddedTreeRoot } from "./_tree.mjs";
 
 /**
  * The shape of `src/akmon/cli.json` the JavaScript CLI reads (the Python reads more keys).
@@ -55,10 +57,7 @@ const TREE_ROOT = posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "
 const COMMANDS = ["init", "update", "sync", "verify", "check", "path", "hook", "version"];
 
 /** The commands that are not ported yet, and the task that ports each. */
-const PORTS = new Map([
-  ["init", "C105 pass 3"],
-  ["update", "C107"],
-]);
+const PORTS = new Map([["update", "C107"]]);
 
 /** The line `-h` prints under the usage line (the Python's `argparse` description). */
 const DESCRIPTION = "akmon — the akmon AI-agent development standard, as an installable package.";
@@ -227,6 +226,9 @@ export async function main(argv = process.argv.slice(2)) {
     process.stderr.write(`${fill(data.not_ported, { command, task })}\n`);
     return 2;
   }
+  if (command === "init") {
+    return (await import("./_init.mjs")).main(rest);
+  }
   if (command === "sync") {
     return (await import("../bin/sync.mjs")).main(rest);
   }
@@ -237,7 +239,7 @@ export async function main(argv = process.argv.slice(2)) {
     return (await import("../bin/check.mjs")).main(rest);
   }
   if (command === "path") {
-    process.stdout.write(`${fs.realpathSync(TREE_ROOT)}\n`);
+    process.stdout.write(`${embeddedTreeRoot()}\n`);
     return 0;
   }
   // `version`: the `package.json` of the running tree.

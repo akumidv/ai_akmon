@@ -1,0 +1,20 @@
+id = "cli/init-ecosystem-node-refused"
+ecosystem = "python"
+kind = "cli"
+covers = ["command:init"]
+
+# A record the JavaScript implementation wrote: the Python init refuses before touching anything and
+# names the implementation that serves the project (C105).
+[fixture]
+attach = "native"
+warmup = "before"
+name = "base"
+files = { "_aitna/.akmon.toml" = "mount = \"package\"\necosystem = \"node\"\nakmon_version = \"{{version}}\"\nattached_archetype = \"unclassified\"\nlast_realign = \"{{version}}\"\n" }
+
+[run]
+argv = ["init", "--yes", "--project-root", "{{root}}"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "akmon init: this project's integration record names ecosystem = \"node\" (_aitna/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon init\n"

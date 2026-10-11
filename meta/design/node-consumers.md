@@ -309,6 +309,9 @@ the corpus can run on node:
 - **Pass 3 — attach.** `init` for `package`/`node` (writes `ecosystem = "node"`, the AGENTS.md block, the Node CI template
   without Python, the `.gitignore` lines), `_tree`, the refusal of the mounted modes with the pointer to the Python
   implementation; `update` stays C107's.
+  **Done (2026-10-11):** plus `tools/model_routing/init` pulled forward from C108 (a Node attach is incomplete without the
+  subagent definitions and the routing config, and the initializer is thin over the C104 `routing` port). The CI template
+  follows the detected package manager (`packageManager`, else the lockfile, else npm). JS/TS linter setup stays C109's.
 
 `routing.py` belongs to C104 and not to C108 because `gate-audit`, `delegation-log` and
 `model-routing` import it: measured on 2026-10-04, 87 of its 91 definitions and 1317 of its 1688

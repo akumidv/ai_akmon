@@ -90,6 +90,20 @@ def test_init_data_pins_its_structure():
     """The data file is the single owner of the init text: pin the key set and a few
     characteristic exact values so a transcription drift is caught here, not in the corpus."""
     assert set(_INIT_DATA) == {
+        # the Python init's refusal of a record the JavaScript implementation wrote (C105)
+        "python_refuses_ecosystem",
+        # the JavaScript init's own keys (C105); this file never reads them
+        "node_refuses_mode",
+        "node_refuses_record",
+        "node_checks_pending",
+        "node_mode_reason",
+        "agents_shared_layer_node",
+        "gitignore_lines_node",
+        "node_managers",
+        "ci_workflow_steps_node",
+        "record_fresh_node",
+        "pin_step_node",
+        "report_missing_node",
         "akmon_repo",
         "tree_members",
         "tree_markers",

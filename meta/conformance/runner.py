@@ -314,6 +314,10 @@ def _command_for(
         command = [sys.executable, str(tree / "src" / "akmon" / "cli.py"), *argv]
         return command, "", {"PYTHONPATH": _python_path(tree, ctx)}
     if scenario.kind == "tool":
+        if impl == "node":
+            # The tool inside the package the consumer installed, as `akmon tool` will run it (C108).
+            carrier = proj_dir / "node_modules" / "akmon" if fixture.attach == "native" else tree
+            return ["node", str(carrier / "js" / "tools" / f"{run_spec.tool}.mjs"), *argv], "", {}
         return [sys.executable, str(tree / "tools" / f"{run_spec.tool}.py"), *argv], "", {}
     # unit: the table is the expectation; the probe is only the implementation's mouth.
     return [
