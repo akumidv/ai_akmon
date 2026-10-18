@@ -680,6 +680,10 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **A symlink loop on a project path is refused on Python 3.13 too (M154).** 3.13's
+  `Path.resolve()` answers a loop unresolved where 3.12 raises; root discovery and the
+  always-loaded import chain now raise `RuntimeError("Symlink loop from …")` on every supported
+  interpreter, as the JavaScript implementation does.
 - **`release_check --plan` prints its `cd` only for a mounted akmon tree (C130).** In akmon's own
   repository the plan no longer opens with `cd _aitna/akmon`; a consumer's mount is named by its
   real `<AITNA_ROOT>/akmon` path.
