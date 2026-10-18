@@ -78,6 +78,19 @@ def parse_zone_plan(text: str) -> list[str]:
     return zones
 
 
+def unlabelled_plan_error(entries: Iterable[routing.DelegationEntry], zone_plan: list[str] | None) -> str | None:
+    """The refusal for a zone plan no delegation is labelled against, else None (C33 review).
+
+    With a plan and in-scope delegations that all lack a zone label, every planned zone would read
+    as uncovered — a map that says the fan-out missed everything because nobody wrote the label.
+    That is a broken input, not a finding about coverage, so the run fails instead of writing it.
+    """
+    entries = list(entries)
+    if zone_plan is None or not entries or any(entry.zone for entry in entries):
+        return None
+    return jsondata.fill(_gate_data()["coverage_map"]["all_unlabelled_error"], {"count": len(entries)})
+
+
 def _worker(entry: routing.DelegationEntry) -> str:
     return f"{entry.subagent}/{entry.model}" if entry.model else entry.subagent
 
@@ -87,7 +100,7 @@ def build_coverage_map(entries: Iterable[routing.DelegationEntry], zone_plan: li
 
     ``entries`` are already scoped to the fan-out round (the CLI does the filtering). With a
     ``zone_plan``, planned zones with no worker surface as *uncovered seams* and worked zones
-    absent from the plan as *off-plan*.
+    absent from the plan as *off-plan*; a label matches a planned zone case-insensitively.
     """
     data = _gate_data()["coverage_map"]
     entries = list(entries)
@@ -118,10 +131,13 @@ def build_coverage_map(entries: Iterable[routing.DelegationEntry], zone_plan: li
     )
 
     if zone_plan is not None:
+        # Matched case-insensitively (C33 review): `[zone:Auth]` covers a planned `auth`. Both
+        # sides keep their spelling in the output; only the comparison folds.
         unlabelled = unlabelled_marker()
-        labelled = {z for z in order if z != unlabelled}
-        uncovered = [z for z in zone_plan if z not in labelled]
-        off_plan = [z for z in order if z != unlabelled and z not in zone_plan]
+        labelled = {z.casefold() for z in order if z != unlabelled}
+        planned = {z.casefold() for z in zone_plan}
+        uncovered = [z for z in zone_plan if z.casefold() not in labelled]
+        off_plan = [z for z in order if z != unlabelled and z.casefold() not in planned]
 
         lines += ["", data["uncovered_heading"]]
         if uncovered:
@@ -220,6 +236,18 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _read_zone_plan(
+    parser: argparse.ArgumentParser, path: Path | None, entries: list[routing.DelegationEntry]
+) -> list[str] | None:
+    """The ``--zone-plan`` file's zones, or None without one; a usage error when no entry is labelled."""
+    if path is None:
+        return None
+    zone_plan = parse_zone_plan(path.read_text(encoding="utf-8"))
+    if (unlabelled := unlabelled_plan_error(entries, zone_plan)) is not None:
+        parser.error(unlabelled)
+    return zone_plan
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: assemble the scoped coverage map and write it under ``artifacts/gates/``."""
     parser = _build_parser()
@@ -249,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
         ]
     except ValueError as exc:
         parser.error(f"a delegation-log row cannot be placed inside --since/--until ({exc}); no map written")
-    zone_plan = parse_zone_plan(args.zone_plan.read_text(encoding="utf-8")) if args.zone_plan else None
+    zone_plan = _read_zone_plan(parser, args.zone_plan, entries)
     coverage = build_coverage_map(entries, zone_plan)
 
     # The default lands under the *configured* dev layer, like every other generated artifact:

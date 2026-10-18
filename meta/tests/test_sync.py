@@ -10,6 +10,7 @@ Run from the akmon root::
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -366,6 +367,31 @@ def test_apply_write_deletes_obsolete_generated_agents_skill_stub(tmp_path):
 # --------------------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("mount", ["submodule", "vendored", "subtree"])
+def test_main_refuses_a_mounted_node_record_and_writes_nothing(tmp_path, capsys, mount):
+    """The C129 amendment of ADR 0020 D02: a mounted record naming ``ecosystem = "node"`` runs the
+    JavaScript implementation from the mount. This one refuses it as it refuses a Node package record
+    (exit 2, one line naming the ecosystem), rather than rewrite the Node wiring in its own spelling."""
+    root = _make_root(tmp_path)
+    (root / "_aitna" / ".akmon.toml").write_text(f'mount = "{mount}"\necosystem = "node"\n', encoding="utf-8")
+    before = sorted(path.relative_to(root) for path in root.rglob("*"))
+    assert sync.main(["--project-root", str(root)]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert 'names ecosystem = "node"' in captured.err
+    assert captured.err.count("\n") == 1
+    # the CLI it names is the mount's own, not the package's npx (C129 step 8)
+    assert captured.err.endswith("for it: node _aitna/akmon/js/akmon/cli.mjs sync\n")
+    assert sorted(path.relative_to(root) for path in root.rglob("*")) == before
+
+
+def test_main_names_npx_for_a_node_package_record(tmp_path, capsys):
+    root = _make_root(tmp_path)
+    (root / "_aitna" / ".akmon.toml").write_text('mount = "package"\necosystem = "node"\n', encoding="utf-8")
+    assert sync.main(["--project-root", str(root)]) == 2
+    assert capsys.readouterr().err.endswith("for it: npx akmon sync\n")
+
+
 def test_main_check_returns_1_when_stale_then_0_when_synced(tmp_path):
     root = _make_root(tmp_path)
     assert sync.main(["--project-root", str(root), "--check"]) == 1
@@ -642,8 +668,10 @@ def test_sync_data_pins_its_structure():
         "node_codex_hook_command",
         "unsupported_record",
         "unsupported_found",
-        # the Python sync's refusal of a record the JavaScript implementation wrote (C105)
+        # the Python sync's refusal of a record the JavaScript implementation wrote (C105), and the
+        # CLI it names per mode (C129); verify names it too
         "python_refuses_ecosystem",
+        "node_cli",
         "claude_hooks",
         "codex_hooks",
         "vendor_pointers",
@@ -652,7 +680,13 @@ def test_sync_data_pins_its_structure():
         "skill_stub_dirs",
         "always_materialized",
         "moved_imports",
+        # the language → profile map init writes a fresh block from and verify checks against (C127)
+        "language_profiles",
         "ruff_configs",
+        # the ruff.toml init writes and verify's check.ruff-without-python recognizes, and the
+        # manifests that make a project a Python one (C129)
+        "ruff_toml_template",
+        "python_markers",
         "check_findings",
         "summary_verbs",
     }
@@ -661,13 +695,19 @@ def test_sync_data_pins_its_structure():
     # the third marker's quote sits before `hook` (the launcher is quoted in the wiring); the
     # trailing space is what keeps it from matching a prose mention
     # the fourth is the Node package spelling (ADR 0020 D05, C104): the JS sync writes it, the
-    # Python sync only has to recognise it so a mode switch replaces it instead of orphaning it
+    # Python sync only has to recognise it so a mode switch replaces it instead of orphaning it;
+    # the fifth is the Node mount's (the C129 amendment of ADR 0020 D02), recognised the same way
     assert _SYNC_DATA["akmon_hook_markers"] == [
         "{{aitna}}/akmon/hooks/",
         "{{aitna}}/.akmon/hooks/",
         '{{cli}}" hook ',
         "/node_modules/akmon/js/hooks/",
+        "{{aitna}}/akmon/js/hooks/",
     ]
+    # one template per harness, the hooks directory a placeholder: node_modules/akmon/js/hooks in
+    # package mode, <AITNA_ROOT>/akmon/js/hooks in a mounted one (js/bin/sync.mjs::nodeHooksDir)
+    assert _SYNC_DATA["node_hook_command"] == 'node "{{anchor}}/{{hooks_dir}}/{{script}}.mjs"'
+    assert _SYNC_DATA["node_codex_hook_command"] == 'node "{{anchor}}/{{hooks_dir}}/codex-hook.mjs"'
     # the wiring tables: matcher entries and hook commands, order load-bearing
     assert list(_SYNC_DATA["claude_hooks"]) == ["PreToolUse", "SessionStart", "UserPromptSubmit", "Stop"]
     assert len(_SYNC_DATA["claude_hooks"]["PreToolUse"]) == 4
@@ -749,3 +789,121 @@ def test_sync_data_file_error_propagates_uncaught(monkeypatch, tmp_path):
         sync._planned_files(root)
     with pytest.raises(sync.jsondata.DataFileError, match=r"sync\.json"):
         sync._codex_hooks(root)
+
+
+# --------------------------------------------------------------------------------------
+# language profiles (C127): the mapping init writes from and verify checks against
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("languages", "expected"),
+    [
+        (["python"], ["python.md"]),
+        (["package/python"], ["python.md"]),
+        (["JavaScript"], ["js.md"]),
+        (["service/typescript"], ["js.md"]),
+        (["python", "javascript"], ["python.md", "js.md"]),
+        (["unclassified"], []),
+        (["<archetype>/<language>"], []),
+        (["rust"], []),
+        ([], []),
+    ],
+)
+def test_language_profiles_map_the_named_languages(tmp_path, languages, expected):
+    assert [found.profile for found in sync.language_profiles(tmp_path, languages)] == expected
+
+
+def test_language_profiles_read_the_manifests_python_first(tmp_path):
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    assert sync.language_profiles(tmp_path, []) == [
+        sync.LanguageProfile("python.md", "pyproject.toml"),
+        sync.LanguageProfile("js.md", "package.json"),
+    ]
+
+
+def test_language_profiles_name_the_manifest_over_the_language(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    assert sync.language_profiles(tmp_path, ["package/python", "javascript"]) == [
+        sync.LanguageProfile("python.md", "pyproject.toml"),
+        sync.LanguageProfile("js.md", "javascript"),
+    ]
+
+
+def test_profile_imports_skip_code_spans_and_fenced_blocks():
+    text = (
+        "Import one per line (`@_aitna/.akmon/profiles/<name>.md`, `@_aitna/.akmon/profiles/js.md`).\n\n"
+        "```\n@_aitna/.akmon/profiles/quant.md\n```\n\n"
+        "@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/profiles/python.md\n"
+        "  @_aitna/akmon/profiles/js.md\n@profiles/python-stdlib.md\nmail@profiles/x.md\n"
+    )
+    assert [(found.prefix, found.name, found.line) for found in sync.profile_imports(text)] == [
+        ("_aitna/.akmon/", "python.md", "@_aitna/.akmon/profiles/python.md"),
+        ("_aitna/akmon/", "js.md", "@_aitna/akmon/profiles/js.md"),
+        ("", "python-stdlib.md", "@profiles/python-stdlib.md"),
+    ]
+
+
+# --------------------------------------------------------------------------------------
+# has_python — what counts as Python (C129; the JavaScript twin is hasPython)
+# --------------------------------------------------------------------------------------
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=root, check=True)
+
+
+def _put(root: Path, relative: str, text: str = "") -> None:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "Pipfile",
+        "uv.lock",
+        "poetry.lock",
+    ],
+)
+def test_has_python_reads_a_marker_file_at_the_root(tmp_path: Path, marker: str) -> None:
+    _put(tmp_path, "package.json", "{}")
+    assert not sync.has_python(tmp_path, _SYNC_DATA, "_aitna")
+    _put(tmp_path, marker)
+    assert sync.has_python(tmp_path, _SYNC_DATA, "_aitna")
+
+
+def test_has_python_reads_markers_at_the_root_only(tmp_path: Path) -> None:
+    _put(tmp_path, "package.json", "{}")
+    _put(tmp_path, "docs/requirements.txt")
+    assert not sync.has_python(tmp_path, _SYNC_DATA, "_aitna")
+
+
+def test_has_python_counts_tracked_sources_outside_the_dev_layer_and_node_modules(tmp_path: Path) -> None:
+    for relative in ("package.json", "app/x.py", "_aitna/akmon/bin/sync.py", "node_modules/pkg/y.py"):
+        _put(tmp_path, relative)
+    _git(tmp_path, "init", "-q")
+    assert not sync.has_python(tmp_path, _SYNC_DATA, "_aitna"), "untracked app/x.py"
+    _git(tmp_path, "add", "-f", "_aitna", "node_modules")
+    assert not sync.has_python(tmp_path, _SYNC_DATA, "_aitna"), "tracked, but the dev layer and node_modules"
+    assert sync.has_python(tmp_path, _SYNC_DATA, "tools/ai"), "another dev layer leaves _aitna as project code"
+    _git(tmp_path, "add", "app/x.py")
+    assert sync.has_python(tmp_path, _SYNC_DATA, "_aitna")
+
+
+def test_has_python_walks_outside_a_work_tree_skipping_dev_layer_node_modules_dot_dirs(tmp_path: Path) -> None:
+    _put(tmp_path, "package.json", "{}")
+    for skipped in ("tools/ai/akmon/x.py", "node_modules/p/x.py", ".venv/x.py"):
+        _put(tmp_path, skipped)
+    assert not sync.has_python(tmp_path, _SYNC_DATA, "tools/ai")
+    _put(tmp_path, "src/deep/app.py")
+    assert sync.has_python(tmp_path, _SYNC_DATA, "tools/ai")
+    bounded = {**_SYNC_DATA, "python_markers": {**_SYNC_DATA["python_markers"], "walk_limit": 3}}
+    assert not sync.has_python(tmp_path, bounded, "tools/ai"), "the walk stopped first"

@@ -15,8 +15,9 @@ akmon layer in a project. Also carries **ready prompts for the user**.
 > the reference behind what it wrote, or as the manual path when you would rather attach by
 > hand. One exception is deliberate: `--mode subtree` prints the `git subtree add` command for
 > you to run instead of running it, because that command *commits* (§A10).
-> On a **Node project** `npx akmon init` does the same mechanical half in package mode, with no
-> Python anywhere (§G); the steps below hold, with the Node spellings §G names.
+> On a **Node project** `npx akmon init` does the same mechanical half in package mode, and
+> `npx github:akumidv/ai_akmon#vX.Y.Z init --mode submodule` in a mounted one, with no Python
+> anywhere (§G); the steps below hold, with the Node spellings §G names.
 
 Source of rules: [README.md](README.md) (the three axes, the layer decision tree, the
 learn loop) and [ARCHETYPES.md](ARCHETYPES.md) (archetypes + the guardrail/profile
@@ -156,9 +157,10 @@ pointer drift and structural contract drift fail before merge.
 Attach akmon to this project with the CLI, then finish the judgement steps:
   uvx --from git+https://github.com/akumidv/ai_akmon akmon init
 (add `--mode package` for a dependency pin with no tree in the repo, `--mode vendored` for
-an offline copy). Then classify the project per ARCHETYPES.md, import the language profile
-into the AGENTS.md akmon block, pin `[test].runner` in <AITNA_ROOT>/.akmon.toml, and
-run `akmon verify --strict`. Show the diff, do not commit.
+an offline copy). Then classify the project per ARCHETYPES.md, check the language-profile
+imports init wrote into the AGENTS.md akmon block (one per detected language; add a missing
+one), pin `[test].runner` in <AITNA_ROOT>/.akmon.toml, and run `akmon verify --strict`.
+Show the diff, do not commit.
 ```
 
 For a Node project (§G):
@@ -167,9 +169,10 @@ For a Node project (§G):
 Attach akmon to this Node project with the npm package, then finish the judgement steps:
   npm install -D -E akmon   (or the project's manager: pnpm add -D -E / yarn add -D -E / bun add -d --exact)
   npx akmon init
-Then classify the project per ARCHETYPES.md, import the language profile into the AGENTS.md
-akmon block, pin `[test].runner` in <AITNA_ROOT>/.akmon.toml to the project's own test command,
-and run `npx akmon verify --strict`. Show the diff, do not commit.
+Then classify the project per ARCHETYPES.md, check the language-profile imports init wrote into
+the AGENTS.md akmon block (one per detected language; add a missing one), pin `[test].runner` in
+<AITNA_ROOT>/.akmon.toml to the project's own test command, and run `npx akmon verify --strict`.
+Show the diff, do not commit.
 ```
 
 The prompts below are the **manual** path — use them when the CLI is unavailable, or when a
@@ -378,7 +381,8 @@ installation. `sync.py --check` exits non-zero when generated pointers are stale
 missing; `verify.py --strict` validates the wider akmon structure and treats warnings
 as failures for CI. A Node project runs `npx akmon sync --check` and
 `npx akmon verify --strict` after its dependency install instead (§G), since the commands
-come from `node_modules/akmon`.
+come from `node_modules/akmon`; a Node project attached in a mounted mode runs
+`node _aitna/akmon/js/akmon/cli.mjs sync --check` and `… verify --strict` from the mount.
 
 ---
 
@@ -600,6 +604,51 @@ the project or its CI needs Python. Everything in §F holds, with these Node spe
   until the first publish move the git-tag pin by hand and run `npx akmon init`. The Codex
   `/hooks` re-approval of §F applies after every bump.
 - **One implementation per record.** The Python CLI refuses a record with `ecosystem = "node"`
-  (exit 2, naming the `npx akmon` command to run), and the JavaScript CLI refuses a mounted or
-  Python record the same way. A Node attach cannot yet be moved back to a Python one through
-  `akmon init`.
+  (exit 2, naming the command to run: `npx akmon` in package mode, the mount's
+  `node _aitna/akmon/js/akmon/cli.mjs` in a mounted one), and the JavaScript CLI refuses a record
+  that does not name `ecosystem = "node"` the same way. A Node attach cannot yet be moved back to
+  a Python one through `akmon init`.
+- **A mounted Node attach.** A Node repository can also take the standard as a `submodule`,
+  `vendored` or `subtree` mount and still need no Python: the record names `ecosystem = "node"`,
+  the CLI runs from the mount as `node _aitna/akmon/js/akmon/cli.mjs …`, and the hooks as
+  `node "$CLAUDE_PROJECT_DIR/_aitna/akmon/js/hooks/<hook>.mjs"`. The first attach runs the
+  JavaScript `init` straight from the akmon repository:
+  `npx github:akumidv/ai_akmon#vX.Y.Z init --mode submodule` (`--mode vendored` likewise;
+  `--mode subtree` prints the `git subtree add` to run, as in §A). A repository with
+  `package.json` and no Python files is a Node one — Python files being a `pyproject.toml`,
+  `setup.py`, `setup.cfg`, `requirements*.txt`, `Pipfile`, `uv.lock` or `poetry.lock` at the root,
+  or a `*.py` file git tracks outside `_aitna/` and `node_modules` (outside a git work tree, one a
+  walk finds there, skipping dot-directories); a mixed
+  repository stays Python unless `--ecosystem node` is given, and the Python `akmon init` hands a
+  Node repository's first mounted attach over to this command (exit 2) unless it is given
+  `--ecosystem python`. `init` offers, and never writes, a `package.json` script
+  `"akmon": "node _aitna/akmon/js/akmon/cli.mjs"`; `update` fetches and realigns a submodule and
+  prints the commands for `subtree` and `vendored`, as in §E.
+
+### Moving a Python mount to Node
+
+A Node repository whose mount runs on the Python implementation (`akmon verify` names it,
+`attach.mount-ecosystem`) moves to the JavaScript one with an explicit `init --ecosystem node`;
+there is no move back.
+
+The switch needs a mount or CLI at this release or later.
+
+- **Submodule or subtree:** update the mount to this release or later first — a submodule with
+  `git -C <AITNA_ROOT>/akmon fetch --tags && git -C <AITNA_ROOT>/akmon checkout <tag>`, a subtree
+  with `git subtree pull --prefix <AITNA_ROOT>/akmon <repo> <tag> --squash` — then run
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs init --ecosystem node` (a subtree also takes
+  `--ref <tag>`, the ref merged into the mount). A mount that predates the switch is refused
+  before anything is written, and the refusal names both commands.
+- **Vendored:** `npx github:akumidv/ai_akmon#<tag> init --ecosystem node`, with `<tag>` this
+  release or later — the newer of the release the record names and the running one, which is
+  what every printed switch command names; network access is required. A copy the Python
+  implementation vendored lacks the data the JavaScript CLI reads, and this `init` vendors it
+  again whole.
+
+`init` rewrites the record and the hook wiring, decides `[check]` again only when it holds
+exactly akmon's ruff default, and never deletes `ruff.toml`. Then: re-approve the rewritten Codex
+hooks with `/hooks` (the §F rule — a changed entry runs nothing until re-approved), review
+`[check]` in `<AITNA_ROOT>/.akmon.toml` — when it is empty,
+`node <AITNA_ROOT>/akmon/js/akmon/cli.mjs init --checks own` detects the project's JavaScript
+checks, since an explicit `--checks` decides an empty table again — and remove `ruff.toml` if a
+closing step names it.

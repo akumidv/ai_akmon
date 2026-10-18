@@ -323,9 +323,14 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[st
     materialized = sorted(
         path.relative_to(fixture).as_posix() for path in (fixture / "_aitna" / ".akmon").rglob("*") if path.is_file()
     )
-    # The fixture has no linter of its own, so `init` set up ruff with akmon's Python rules and
-    # `sync` materialized them beside the imported guardrail — and nothing else.
-    if materialized != ["_aitna/.akmon/guardrails/_common.md", "_aitna/.akmon/profiles/ruff.toml"]:
+    # The fixture has no linter of its own, so `init` set up ruff with akmon's Python rules, and its
+    # pyproject.toml made the fresh block import the Python profile (C127); `sync` materialized both
+    # beside the imported guardrail — and nothing else.
+    if materialized != [
+        "_aitna/.akmon/guardrails/_common.md",
+        "_aitna/.akmon/profiles/python.md",
+        "_aitna/.akmon/profiles/ruff.toml",
+    ]:
         raise RuntimeError(f"package mode materialized more than the imported rules: {materialized}")
 
     nested = fixture / "src" / "package"
@@ -549,9 +554,10 @@ def _installed_npm_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[str,
         path.relative_to(fixture).as_posix() for path in (fixture / "_aitna" / ".akmon").rglob("*") if path.is_file()
     )
     # The lint rules are extended in place from node_modules/akmon/profiles/oxlint.json (C109), so only
-    # the imported guardrail is materialized.
-    if materialized != ["_aitna/.akmon/guardrails/_common.md"]:
-        raise RuntimeError(f"the Node attach materialized more than the imported guardrail: {materialized}")
+    # the imported guardrail and the js profile the fresh block imports for a package.json (C127) are
+    # materialized.
+    if materialized != ["_aitna/.akmon/guardrails/_common.md", "_aitna/.akmon/profiles/js.md"]:
+        raise RuntimeError(f"the Node attach materialized more than the imported rules: {materialized}")
     wiring = [command for _, _, command in _generated_hook_commands(fixture)]
     if not wiring or any("/node_modules/akmon/js/hooks/" not in command for command in wiring):
         raise RuntimeError(f"the Node wiring does not run every hook from node_modules/akmon/js/hooks: {wiring}")

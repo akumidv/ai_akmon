@@ -16,9 +16,11 @@ consumer runs the snapshot's own CLI, which resolves the snapshot as its embedde
 An *attach* says how the consumer is connected to the implementation under test
 (ADR 0020 D02): ``native`` is the implementation's own package mode (Python: a
 ``pyproject.toml`` dev pin and the ``.venv/bin/akmon`` launcher; Node: ``package.json`` and
-``node_modules/akmon``), ``mount`` is a mounted mode — Python only, so a ``shared`` scenario
-may not use it — and ``none`` connects nothing. The files of a ``native`` attach live in
-``fixtures/attach/<layer>/`` and are laid over the base fixture before the scenario's own files.
+``node_modules/akmon``), ``mount`` is a mounted mode — ``<AITNA_ROOT>/akmon`` links the tree, and
+the Node implementation runs from the mount (the C129 amendment of ADR 0020 D02) — and ``none``
+connects nothing. The files of an attach live in ``fixtures/attach/<layer>/`` and are laid over the
+base fixture before the scenario's own files: ``NATIVE_LAYERS`` for ``native``, ``MOUNT_LAYERS`` for
+``mount`` (none on Python, whose mounted consumer is the base fixture itself).
 """
 
 from __future__ import annotations
@@ -42,6 +44,11 @@ WARMUPS = ("after", "before", "none")
 #: The fixture layers a ``native`` attach lays over the base, per implementation: what every
 #: package mode shares (the package-mode AGENTS.md block), then the ecosystem's own carrier.
 NATIVE_LAYERS = {"python": ("package", "python"), "node": ("package", "node")}
+#: The fixture layers a ``mount`` attach lays over the base, per implementation. The base fixture is
+#: a Python-mounted consumer already; a Node-mounted one adds its record (``ecosystem = "node"``), a
+#: ``package.json`` without an akmon pin, the AGENTS.md profile imports and the CI that runs the
+#: mount's JavaScript CLI (C129).
+MOUNT_LAYERS = {"python": (), "node": ("node-mount",)}
 #: The Python carrier's dev pin (``{{version}}`` materializes to the live version).
 PYTHON_PIN = '[project]\nname = "consumer"\nversion = "0.1.0"\n\n[dependency-groups]\ndev = ["akmon=={{version}}"]\n'
 COVER_RE = r"^(command|hook|tool|code|unit):[a-z0-9][a-z0-9_./-]*$"
@@ -113,13 +120,11 @@ class Scenario:
     expected: ExpectedSpec
 
 
-def _parse_fixture(path: Path, ecosystem: str, data: dict) -> FixtureSpec:
-    """The [fixture] table, with its defaults; a mounted attach is refused on a non-Python scenario."""
+def _parse_fixture(path: Path, data: dict) -> FixtureSpec:
+    """The [fixture] table, with its defaults (a mounted attach serves every ecosystem since C129)."""
     attach = data.get("attach", "native")
     if attach not in ATTACHES:
         raise CorpusError(f"{path}: fixture.attach must be one of {ATTACHES}")
-    if attach == "mount" and ecosystem != "python":
-        raise CorpusError(f"{path}: a mounted attach is Python-only (ADR 0020 D02); tag the scenario python")
     # A native consumer is a synced one unless the scenario says otherwise.
     warmup = data.get("warmup", "after" if attach == "native" else "none")
     warmup = {True: "after", False: "none"}.get(warmup, warmup)
@@ -231,7 +236,7 @@ def load_scenario(path: Path, *, strict_seeded: bool = True) -> Scenario:
         ecosystem=ecosystem,
         kind=kind,
         covers=covers,
-        fixture=_parse_fixture(path, ecosystem, data.get("fixture", {})),
+        fixture=_parse_fixture(path, data.get("fixture", {})),
         env=dict(data.get("env", {})),
         run=_parse_run(path, kind, data.get("run", {})),
         expected=_parse_expected(path, kind, strict_seeded=strict_seeded, data=data),
@@ -283,6 +288,7 @@ SNAPSHOT_FILES = (
     "pipelines/design-flow.md",
     "pipelines/release.md",
     "pipelines/tasks.md",
+    "profiles/js.md",
     "profiles/python.md",
     "profiles/python-stdlib.md",
     "profiles/quant.md",
@@ -509,19 +515,19 @@ def _node_carrier(proj: Path, tree: Path) -> None:
 
 
 def _lay_out_project(fixture: FixtureSpec, env: RunEnv, scenario_id: str) -> Path:
-    """The fixture's files on disk: the base, a native attach's layers, then ``remove`` and tokens."""
+    """The fixture's files on disk: the base, the attach's layers, then ``remove`` and tokens."""
     proj = env.work / f"proj-{scenario_id}"
     if proj.exists():
         shutil.rmtree(proj)
     shutil.copytree(CORPUS_ROOT / "fixtures" / fixture.name, proj)
-    if fixture.attach == "native":
-        for layer in NATIVE_LAYERS[env.impl]:
-            shutil.copytree(CORPUS_ROOT / "fixtures" / "attach" / layer, proj, dirs_exist_ok=True)
-        if env.impl == "python":
-            # The Python carrier's manifest pin. Written here rather than kept as a layer file: a
-            # `pyproject.toml` in the repository is read by akmon's own tooling (ruff), and the
-            # `{{version}}` token is not a valid requirement.
-            (proj / "pyproject.toml").write_text(PYTHON_PIN, encoding="utf-8")
+    layers = {"native": NATIVE_LAYERS, "mount": MOUNT_LAYERS}.get(fixture.attach, {})
+    for layer in layers.get(env.impl, ()):
+        shutil.copytree(CORPUS_ROOT / "fixtures" / "attach" / layer, proj, dirs_exist_ok=True)
+    if fixture.attach == "native" and env.impl == "python":
+        # The Python carrier's manifest pin. Written here rather than kept as a layer file: a
+        # `pyproject.toml` in the repository is read by akmon's own tooling (ruff), and the
+        # `{{version}}` token is not a valid requirement.
+        (proj / "pyproject.toml").write_text(PYTHON_PIN, encoding="utf-8")
     _remove_paths(proj, fixture.remove)
     _rewrite_tokens(proj, env)
     return proj

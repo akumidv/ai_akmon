@@ -1,0 +1,60 @@
+# C32: the recorded binding runs the orchestrator — and so k_reasoner — on sonnet, one rung below
+# the quant-derivation floor (opus, the corridor's boundary). A k_reasoner call with no model
+# override gets the owner-facing floor line in the systemMessage and the orchestrator-facing one —
+# model=<floor> from the next call on — in additionalContext (ADR 0006 item 4, M149); the log
+# line names the bound model. The call does not say which kind it carries, so both are conditional
+# on the kind.
+id = "hooks/delegation-log-floor-gap"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:delegation-log"]
+
+[fixture]
+attach = "native"
+files = { ".claude/model-routing.local.json" = """{
+  "vendor": "anthropic",
+  "orchestrator": "sonnet",
+  "binding": {
+    "reasoner": "sonnet",
+    "worker": "haiku",
+    "mid": "sonnet",
+    "auditor": "fable",
+    "escalation": [
+      "sonnet",
+      "opus"
+    ]
+  },
+  "second_opinion": false,
+  "available": [
+    "haiku",
+    "sonnet",
+    "opus",
+    "fable"
+  ],
+  "task_kind_floors": {
+    "quant-derivation": "opus"
+  }
+}
+"""}
+
+[run]
+script = "delegation-log"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Task"
+session_id = "sess-dl-floor"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { subagent_type = "k_reasoner", description = "derive the hedge ratio" }
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+systemMessage = "[akmon] → k_reasoner (sonnet): derive the hedge ratio\n[akmon] ⚠ k_reasoner runs on sonnet, below the floor of quant-derivation (floor opus)"
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+additionalContext = "[akmon] ⚠ k_reasoner is bound to sonnet, below a task-kind floor — this call runs as issued; from the next call on, delegate quant-derivation with model=opus"
+[expected.files]
+".claude/model-routing.log" = "{{ts}}\tsess-dl-floor\tk_reasoner\tsonnet\t-\tderive the hedge ratio\n"

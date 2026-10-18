@@ -2,10 +2,11 @@
  * How akmon spells a version, in one place — the JavaScript twin of `common/versions.py`
  * (ADR 0020 D01): the unit table (units/versions.toml) is the spec both must pass.
  *
- * The same five questions, the same answers: what part of a recorded string names the version
+ * The same six questions, the same answers: what part of a recorded string names the version
  * (splitVersion), whether it names a release (isFinal), where it sits among releases
- * (orderKey), which of two comes first (compareVersions), and the npm carrier's SemVer
- * spelling of a PEP 440 one (semverSpelling).
+ * (orderKey), which of two comes first (compareVersions), the npm carrier's SemVer
+ * spelling of a PEP 440 one (semverSpelling), and which release a printed switch to this
+ * implementation names (switchTag).
  */
 
 /** `git describe --tags` distance from the tag: `-<N>-g<sha>`, optionally `-dirty`. Anchored:
@@ -171,6 +172,32 @@ export function compareVersions(a, b) {
     }
   }
   return 0;
+}
+
+/**
+ * The ref a printed switch to the JavaScript implementation names: the newer release's tag (C129,
+ * the Python `switch_tag`). The newer of the version the record names and the running
+ * implementation's, as `compareVersions` orders them — the switch exists from one release on, so
+ * neither an older record nor an older CLI may name a tag before it. `v<X.Y.Z>` when that version is
+ * final, else `main` (no tag exists for it); `main` too when neither can be placed.
+ * @param {string | null | undefined} recorded
+ * @param {string | null | undefined} running
+ * @returns {string}
+ */
+export function switchTag(recorded, running) {
+  const placed = [recorded, running].filter(
+    (version) => typeof version === "string" && version !== "" && orderKey(version) !== null,
+  );
+  if (placed.length === 0) {
+    return "main";
+  }
+  let newest = /** @type {string} */ (placed[0]);
+  for (const version of placed.slice(1)) {
+    if (compareVersions(/** @type {string} */ (version), newest) > 0) {
+      newest = /** @type {string} */ (version);
+    }
+  }
+  return isFinal(newest) ? `v${splitVersion(newest).base}` : "main";
 }
 
 /**

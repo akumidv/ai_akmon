@@ -13,3 +13,5 @@ substeps without waiting for an owner prompt; the orchestrator keeps decompositi
 synthesis, and owner dialogue.
 
 @_aitna/.akmon/guardrails/_common.md
+@_aitna/.akmon/profiles/python.md
+@_aitna/.akmon/profiles/js.md

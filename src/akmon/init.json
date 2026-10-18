@@ -1,8 +1,37 @@
 {
-  "python_refuses_ecosystem": "this project's integration record names ecosystem = \"{{value}}\" ({{aitna}}/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon init",
-  "node_refuses_mode": "mode '{{mode}}' is served by the Python implementation of akmon; the JavaScript implementation attaches Node projects in mode 'package' only",
-  "node_refuses_record": "this project's integration record is not a Node package attach ({{found}}); the JavaScript implementation attaches Node projects in package mode only, and the Python implementation of akmon serves the other records",
+  "python_refuses_ecosystem": "this project's integration record names ecosystem = \"{{value}}\" ({{aitna}}/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: {{cli}} init",
+  "python_hands_over_node": "this project is a Node repository ({{why}}), and the JavaScript implementation of akmon attaches it, with no Python needed; run it instead:\n    {{command}}",
+  "python_hands_over_why": {
+    "flag": "--ecosystem node",
+    "inferred": "package.json and no Python files"
+  },
+  "python_switch_hands_over": "this project's integration record runs the Python implementation of akmon ({{aitna}}/.akmon.toml); moving it to ecosystem \"node\" is the JavaScript implementation's step:\n    {{command}}",
+  "node_refuses_record": "this project's integration record is not a Node attach ({{found}}); the JavaScript implementation serves records that name ecosystem = \"node\", and the Python implementation of akmon serves the other records",
+  "node_refuses_python_ecosystem": "this project is attached by the Python implementation of akmon ({{why}}); run it, or pass `--ecosystem node` to attach it with this JavaScript implementation:\n    {{command}}",
+  "node_refuses_python_why": {
+    "flag": "--ecosystem python",
+    "inferred": "a mounted attach is Node only for a repository with package.json and no Python files"
+  },
+  "node_refuses_record_switch": "; this repository has package.json and no Python files, so its mount can move to this implementation, which needs no Python:\n    {{command}}",
+  "node_switch_mounted_only": "`--ecosystem node` moves a mounted record (mode submodule, vendored or subtree) from the Python implementation of akmon to this one, and this run goes from mode '{{previous}}' to mode '{{mode}}'; a package attach does not move between implementations",
+  "node_switch_log": "moving the integration record to the JavaScript implementation: ecosystem python → node ({{aitna}}/.akmon.toml)",
+  "node_switch_checks_redecided": "[check] held akmon's ruff default, which the Python implementation recorded — deciding it again",
+  "node_switch_codex_step": "Codex: the move rewrote the akmon entries of `.codex/hooks.json` to run node, which voids their `/hooks` approval — such an entry keeps reporting `enabled: true` and runs nothing until re-approved; open `/hooks` in Codex and review and trust them again (BOOTSTRAP §F)",
+  "node_switch_ruff_step": "ruff.toml is the template the Python implementation of akmon wrote (ruff with akmon's Python rules) and init never deletes it: remove it (`git rm ruff.toml`) unless the project lints Python with it",
+  "node_switch_requires": {
+    "src/akmon/init.json": "node_switch_log",
+    "bin/sync.json": "node_cli"
+  },
+  "node_switch_mount_predates": "{{relative}} predates the move to this implementation ({{file}} there has no `{{key}}`), so the switch would stop half done — nothing was changed. Update the mount to {{ref}} or a later release first, then switch:\n    {{update}}\n    {{command}}",
+  "node_switch_mount_update": {
+    "submodule": "git -C {{relative}} fetch --tags && git -C {{relative}} checkout {{ref}}",
+    "subtree": "git subtree pull --prefix {{relative}} {{repo}} {{ref}} --squash"
+  },
+  "node_refuses_reverse": "this project's integration record names ecosystem = \"node\" ({{aitna}}/.akmon.toml), and a record does not move back to \"python\"; drop `--ecosystem python` to realign it",
+  "node_package_cli": "npx akmon",
+  "node_mounted_cli": "node {{aitna}}/akmon/js/akmon/cli.mjs",
   "node_oxlint_rules": "./node_modules/akmon/profiles/oxlint.json",
+  "node_oxlint_rules_mounted": "./{{aitna}}/akmon/profiles/oxlint.json",
   "node_oxlintrc_text": "{\n  \"extends\": [\"{{rules}}\"],\n  \"env\": { \"browser\": true, \"node\": true }\n}\n",
   "node_oxlintrc_wrote": "wrote .oxlintrc.json extending akmon's JavaScript/TypeScript rules ({{rules}})",
   "node_oxlintrc_env_step": "narrow `env` in .oxlintrc.json to where the project's code runs (`node`, `browser`, …); oxlint does not read `/* global */` comments, so name globals under `globals`",
@@ -10,7 +39,7 @@
   "node_oxlint_step": "add oxlint as a development dependency so `akmon check` can run it: `{{command}}`",
   "node_scripts_step": "package.json scripts {{names}}: to have `akmon check` run them, name them under `[check]` in {{record}} (`{{example}}`)",
   "node_mode_reason": "the JavaScript implementation attaches in package mode",
-  "agents_shared_layer_node": "installed `akmon` npm package (hooks run from `node_modules/akmon/js/hooks`; only the imported guardrails are materialized, at `{{aitna}}/.akmon/guardrails/`; `npx akmon path` locates the rest)",
+  "agents_shared_layer_node": "installed `akmon` npm package (hooks run from `node_modules/akmon/js/hooks`; only the imported guardrails and profiles are materialized, under `{{aitna}}/.akmon/`; `npx akmon path` locates the rest)",
   "gitignore_lines_node": [
     "# secrets",
     "*.env",
@@ -83,7 +112,8 @@
     }
   },
   "ci_workflow_steps_node": "      - uses: actions/checkout@v4\n{{setup}}\n      - run: {{install}}\n      - run: {{exec}}akmon sync --check\n      - run: {{exec}}akmon verify --strict",
-  "record_fresh_node": "# akmon integration record — written by `akmon init`, refreshed on realign.\n# The version this project sits on; a later bump diffs the CHANGELOG window against it.\nmount = \"package\"\necosystem = \"node\"\n{{recorded}}attached_archetype = \"{{archetype}}\"\n\n[test]\n# The project's own test invocation, used verbatim by the release check\n# (BOOTSTRAP §A5). Uncomment and set it to whatever this project already uses:\n# runner = \"{{runner}}\"\n",
+  "ci_workflow_steps_node_mounted": "      - uses: actions/checkout@v4\n        with:\n          submodules: recursive\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 22\n      - run: {{cli}} sync --check\n      - run: {{cli}} verify --strict",
+  "record_fresh_node": "# akmon integration record — written by `akmon init`, refreshed on realign.\n# The version this project sits on; a later bump diffs the CHANGELOG window against it.\nmount = \"{{mode}}\"\necosystem = \"node\"\n{{recorded}}attached_archetype = \"{{archetype}}\"\n\n[test]\n# The project's own test invocation, used verbatim by the release check\n# (BOOTSTRAP §A5). Uncomment and set it to whatever this project already uses:\n# runner = \"{{runner}}\"\n",
   "pin_step_node": {
     "none": "**pin akmon in `devDependencies`** of package.json at an exact version, never in the runtime dependencies: `{{command}}`. Until then `node_modules/akmon` is missing: the CI checks cannot run, and the generated hook commands fail silently because the scripts they name do not exist",
     "runtime": "**move the akmon pin** out of `dependencies`, `optionalDependencies` or `peerDependencies` into `devDependencies`: akmon is dev tooling and must not reach this project's own users (ADR 0009 §4)",
@@ -114,18 +144,60 @@
     "tools",
     "js"
   ],
+  "tree_members_node": [
+    "src/akmon",
+    "package.json"
+  ],
   "tree_markers": [
     "bin/sync.py",
     "bin/verify.py",
     "roles/README.md",
     "guardrails/_common.md"
   ],
+  "copy_ignore": [
+    "__pycache__",
+    "*.py[cod]",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".git",
+    ".DS_Store",
+    "*.test.mjs"
+  ],
   "mount_gitignore": "__pycache__/\n*.py[cod]\n",
+  "mount_text": {
+    "submodule_not_git": "{{root}} is not a git repository — mode 'submodule' needs one. Run `git init` first, or attach with `--mode vendored`.",
+    "submodule_not_recorded": "{{relative}} exists but git does not record it as a submodule — it is {{what}}. `init` will not delete a tree it did not create, and the removal is a commit of yours (D5). Remove it, then re-run:\n{{removal}}",
+    "submodule_what_mounted": "an akmon tree mounted some other way (vendored or subtree)",
+    "submodule_what_foreign": "not an akmon tree",
+    "submodule_add": "git submodule add {{repo}} {{relative}}",
+    "submodule_add_failed": "git submodule add failed ({{code}}); see the git output above",
+    "submodule_realigning": "{{relative}} is already mounted — realigning",
+    "submodule_checkout_failed": "cannot check out {{pin}} in {{relative}}",
+    "submodule_pinned": "pinned {{relative}} at {{pin}}",
+    "submodule_moved": "moved {{relative}} to {{pin}} — left unstaged",
+    "submodule_bump_step": "review the pin bump and stage it yourself — `git add -- {{relative}}` (D5: the pin bump and its commit are the owner's; read the CHANGELOG window between the two versions first)",
+    "submodule_no_release": "{{relative}} carries no release tag; left at the default branch",
+    "submodule_left": "{{relative}} left at its current pin (pass --ref to move it)",
+    "subtree_not_git": "{{root}} is not a git repository — mode 'subtree' needs one (or use `--mode vendored`).",
+    "subtree_is_submodule": "git records {{relative}} as a submodule, not a subtree. Retire it first, then add the subtree:\n{{removal}}",
+    "subtree_needs_ref": "mode 'subtree': pass `--ref <tag>` naming the ref merged into {{relative}}. A subtree keeps no git metadata of its own, so the recorded pin can only come from you.",
+    "subtree_realigning": "{{relative}} is already mounted as a subtree — realigning at {{ref}} (bump it with `git subtree pull`)",
+    "subtree_refusal": "mode 'subtree' needs one command `init` must not run for you — `git subtree add` creates commits, and commits are the owner's (D5). Run it, then re-run init:\n    git subtree add --prefix {{relative}} {{repo}} {{pin}} --squash\n    {{cli}} init --mode subtree --ref {{pin}}",
+    "vendored_ref": "mode 'vendored' copies the embedded tree of the installed akmon package, so its pin is that package's version ({{version}}) and `--ref {{ref}}` cannot change it. Pin a ref with `--mode submodule`/`--mode subtree`, or install the akmon version you want to vendor.",
+    "vendored_into_submodule": "git records {{relative}} as a submodule; vendoring into it would leave the consumer with a gitlink over hand-copied files. Retire the submodule first, then re-run:\n{{removal}}",
+    "vendored_foreign": "{{relative}} exists and is not an akmon tree — refusing to copy over it; remove it or pick another --aitna-root",
+    "vendored": "vendored {{count}} standard-tree members into {{relative}} (pin: {{version}})",
+    "vendored_in_place": "{{relative}} is the tree this CLI runs from — nothing to copy (pin: {{version}})",
+    "ref_unreachable": "cannot discover the latest release tag from {{repo}} (`git ls-remote` needs git and network access to it); pass --ref explicitly",
+    "ref_no_release": "repository {{repo}} advertises no release tags; pass --ref explicitly",
+    "switch_old_mount": "switching mount mode {{previous}} → {{mode}} needs the old mount gone first — `init` does not delete a tree it did not create, and the removal is your commit (D5). Retire {{relative}}, then re-run:\n{{removal}}\n    {{cli}} init --mode {{target}} --switch-mode",
+    "switch_needs_flag": "this project is attached in mount mode {{previous}}; {{mode}} is a **migration**, not a realign — the AGENTS.md akmon block still points at the old layout and the old mount is still on disk, so finishing silently would leave `{{cli}} verify --strict` red. Re-run with `--switch-mode` and init will attach in the new mode and print the edits it must not make for you."
+  },
   "agents_header": "# AGENTS.md\n\nGuidance for AI coding agents (Claude Code, Codex, Gemini, Copilot) working in this\nrepository. Vendor pointer files import this document — it is the single source of truth.\n\n",
-  "agents_block": "{{heading}} (developing the project)\n\nThis project uses the akmon dev layer — one standard for how an assistant helps develop it.\nModel & notation: [`MODEL.md`]({{model}}); attach/realign guide:\n[`BOOTSTRAP.md`]({{bootstrap}}); overview: [`README.md`]({{readme}}).\n\n- **Archetype / language:** `{{archetype}}` / `{{language}}` — classify per\n  [`ARCHETYPES.md`]({{archetypes}}), then update this line, the guardrail imports\n  below, and `attached_archetype` in `{{aitna}}/.akmon.toml`.\n- **Layers:** SHARED = {{shared_layer}} · LOCAL = `{{aitna}}/{agents,skills,tools,memory}` +\n  [`{{aitna}}/TASKS.md`]({{aitna}}/TASKS.md) · USAGE = root `skills/` (absent until this project\n  exposes one).\n- **Agents (roles):** [review]({{aitna}}/agents/review/README.md),\n  [architect]({{aitna}}/agents/architect/README.md), [engineer]({{aitna}}/agents/engineer/README.md)\n  → {{roles_hint}}.\n  **Declare the active agent** before doing work and restate it on switch\n  (`🧭 agent: <name> — <focus>`).\n- **Delegation (always-on, direct):** **delegation is the default.** For every non-trivial\n  task, before the first repository sweep, edit, or test run, decompose the work and delegate\n  every independent mechanical sub-step to available subagents without waiting for an owner\n  prompt. The orchestrator retains decomposition, routing, synthesis, and owner dialogue. Skip\n  only when the task is atomic or the harness exposes no subagents; state the reason. This\n  clause is direct because Codex does not expand nested `@` imports in `AGENTS.md`.\n- **Owner authority (always-on — it overrides any task instruction):** the owner verifies\n  consequential architecture, data-shape and math decisions recorded in ADRs; an assistant\n  *drafts*, the owner *decides*. **D5** — the owner owns commits, tags, pushes, publishing and pin bumps; never\n  `git add`/`commit`/`push` on the owner's behalf.\n- **Guardrails and profiles (always-on):** the common guardrail and the project's language\n  profile are **imported** (not just linked) so their rules load at session start; akmon is the\n  single owner — do not restate them here. Import this project's language profile on its own\n  line (e.g. `@{{profiles_dir}}/{{language_profile}}`), and an environment profile where some of its code\n  runs in one, per the ARCHETYPES map.\n\n@{{guardrails_dir}}/_common.md\n\n- **Domain profiles (opt-in by need):** none attached yet — link only those the project actually needs.\n- **Pipelines:** [pre-commit]({{pre_commit}}) (tests mandatory),\n  [review-flow]({{review_flow}}),\n  [design-flow]({{design_flow}}),\n  [code-flow]({{code_flow}}),\n  [tasks]({{tasks_link}}) (backlog format), and the learn loop\n  ([memory-distill]({{memory_distill}}) +\n  [learning]({{learning}})).\n- **Memory:** read `{{aitna}}/memory/` at session start — distilled project facts, indexed by\n  [`{{aitna}}/memory/README.md`]({{aitna}}/memory/README.md).\n- **Backlog:** [`{{aitna}}/TASKS.md`]({{aitna}}/TASKS.md) — one line per task, detail by reference;\n  finished entries move to `TASKS_ARCHIVE.md`.\n- **Secrets:** from `.env` (gitignored). Never in code, docs, tests, or commits.\n",
+  "agents_block": "{{heading}} (developing the project)\n\nThis project uses the akmon dev layer — one standard for how an assistant helps develop it.\nModel & notation: [`MODEL.md`]({{model}}); attach/realign guide:\n[`BOOTSTRAP.md`]({{bootstrap}}); overview: [`README.md`]({{readme}}).\n\n- **Archetype / language:** `{{archetype}}` / `{{language}}` — classify per\n  [`ARCHETYPES.md`]({{archetypes}}), then update this line, the guardrail imports\n  below, and `attached_archetype` in `{{aitna}}/.akmon.toml`.\n- **Layers:** SHARED = {{shared_layer}} · LOCAL = `{{aitna}}/{agents,skills,tools,memory}` +\n  [`{{aitna}}/TASKS.md`]({{aitna}}/TASKS.md) · USAGE = root `skills/` (absent until this project\n  exposes one).\n- **Agents (roles):** [review]({{aitna}}/agents/review/README.md),\n  [architect]({{aitna}}/agents/architect/README.md), [engineer]({{aitna}}/agents/engineer/README.md)\n  → {{roles_hint}}.\n  **Declare the active agent** before doing work and restate it on switch\n  (`🧭 agent: <name> — <focus>`).\n- **Delegation (always-on, direct):** **delegation is the default.** For every non-trivial\n  task, before the first repository sweep, edit, or test run, decompose the work and delegate\n  every independent mechanical sub-step to available subagents without waiting for an owner\n  prompt. The orchestrator retains decomposition, routing, synthesis, and owner dialogue. Skip\n  only when the task is atomic or the harness exposes no subagents; state the reason. This\n  clause is direct because Codex does not expand nested `@` imports in `AGENTS.md`.\n- **Owner authority (always-on — it overrides any task instruction):** the owner verifies\n  consequential architecture, data-shape and math decisions recorded in ADRs; an assistant\n  *drafts*, the owner *decides*. **D5** — the owner owns commits, tags, pushes, publishing and pin bumps; never\n  `git add`/`commit`/`push` on the owner's behalf.\n- **Guardrails and profiles (always-on):** the common guardrail and the project's language\n  profiles are **imported** (not just linked) so their rules load at session start; akmon is the\n  single owner — do not restate them here. One import per line below: `init` writes one per\n  language it detected; add any other (`@{{profiles_dir}}/<name>.md`), and an environment\n  profile where some of the code runs in one, per the ARCHETYPES map.\n\n@{{guardrails_dir}}/_common.md{{profile_imports}}\n\n- **Domain profiles (opt-in by need):** none attached yet — link only those the project actually needs.\n- **Pipelines:** [pre-commit]({{pre_commit}}) (tests mandatory),\n  [review-flow]({{review_flow}}),\n  [design-flow]({{design_flow}}),\n  [code-flow]({{code_flow}}),\n  [tasks]({{tasks_link}}) (backlog format), and the learn loop\n  ([memory-distill]({{memory_distill}}) +\n  [learning]({{learning}})).\n- **Memory:** read `{{aitna}}/memory/` at session start — distilled project facts, indexed by\n  [`{{aitna}}/memory/README.md`]({{aitna}}/memory/README.md).\n- **Backlog:** [`{{aitna}}/TASKS.md`]({{aitna}}/TASKS.md) — one line per task, detail by reference;\n  finished entries move to `TASKS_ARCHIVE.md`.\n- **Secrets:** from `.env` (gitignored). Never in code, docs, tests, or commits.\n",
   "agents_roles_hint_package": "roles: [`akmon/roles/`]({{roles_link}}) — run `akmon path` to read them locally",
   "agents_roles_hint_mounted": "roles: [`{{aitna}}/akmon/roles/`]({{aitna}}/akmon/roles/)",
-  "agents_shared_layer_package": "installed `akmon` package (hooks and tools run from it via `akmon hook`; only the imported guardrails are materialized, at `{{aitna}}/.akmon/guardrails/`; `akmon path` locates the rest)",
+  "agents_shared_layer_package": "installed `akmon` package (hooks and tools run from it via `akmon hook`; only the imported guardrails and profiles are materialized, under `{{aitna}}/.akmon/`; `akmon path` locates the rest)",
   "agents_shared_layer_mounted": "`{{aitna}}/akmon/`",
   "tasks_skeleton": "# TASKS — project backlog\n\nThe single backlog for this project. **Index, not a document:** one line per task, detail by\nreference; a finished entry moves to `TASKS_ARCHIVE.md`. No dates — git history is the\ntimeline. Format (akmon `pipelines/tasks.md`):\n\n`- <id> · <title> · <status> · <goal, 12 words max> · [detail](link)`\n\nThe id is typed — `A` architecture · `C` code · `N` analysis · `L` learning · `V` release —\nand the owning role follows from that letter, so it is not a separate field. Status is one of\n`active | blocked | deferred | done`.\n\n- A1 · classify archetype and language · active · pick archetype/language per ARCHETYPES.md; import its language profile\n- C1 · pin the test runner · active · record `[test].runner` in `{{aitna}}/.akmon.toml`, reusing this project's manager\n",
   "memory_index": "# Project memory\n\nDistilled, durable facts about this project — read at session start. One file per fact,\nlisted here; the learn loop (akmon `pipelines/memory-distill.md`) writes them.\n\n<!-- - [example-fact](example-fact.md) — one-line hook -->\n",
@@ -175,6 +247,7 @@
     "poetry": "add ruff as a development dependency so `akmon check` can run it: `poetry add --group dev ruff`",
     "none": "add ruff to the project's development dependencies so `akmon check` can run it"
   },
+  "checks_redecided_empty": "[check] records no checks and --checks was given — deciding it again",
   "run_prefix": {
     "uv.lock": "uv run ",
     "poetry.lock": "poetry run "
@@ -187,6 +260,10 @@
     "mounted": [
       "python3 {{aitna}}/akmon/bin/sync.py --check",
       "python3 {{aitna}}/akmon/bin/verify.py --strict"
+    ],
+    "mounted_node": [
+      "{{cli}} sync --check",
+      "{{cli}} verify --strict"
     ]
   },
   "report": {
@@ -205,10 +282,15 @@
   },
   "closing_steps": {
     "classify": "classify the project (archetype + language) against ARCHETYPES.md, import the language profile in AGENTS.md, and set `attached_archetype` in {{aitna}}/.akmon.toml",
+    "classify_archetype": "classify the project's archetype against ARCHETYPES.md and set `attached_archetype` in {{aitna}}/.akmon.toml",
     "pin_test": "pin the test environment: record the project's own pytest invocation as `[test].runner` in {{aitna}}/.akmon.toml (BOOTSTRAP §A5 — do not build a venv when the project already has one)",
     "pin_test_node": "pin the test environment: record the project's own test command (`{{test}}`, for example) as `[test].runner` in {{aitna}}/.akmon.toml (BOOTSTRAP §A5)",
     "export_aitna": "export AITNA_ROOT={{aitna}} in every shell and CI job that runs the akmon tooling",
     "verify_node": "run `{{exec}}akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)",
+    "verify_node_mounted": "run `{{cli}} verify --strict` and review the diff — the owner commits, not the assistant (D5)",
+    "node_mounted_script": "optional: name the mounted CLI in package.json `scripts` (`\"akmon\": \"{{cli}}\"`, then `{{run_script}} akmon -- verify --strict`); init does not edit package.json",
+    "node_no_ruff": "this project has package.json and no Python files, so no ruff was set up: name the project's own JavaScript checks under `[check]` in {{record}}",
+    "node_no_ruff_mounted": "this project has package.json and no Python files, so no ruff was set up: name the project's own JavaScript checks under `[check]` in {{record}}, or move this mount to the JavaScript implementation of akmon, which needs no Python, with `{{switch}}`, then have it detect them with `{{detect}}` (a first attach of a Node repository is `{{attach}}`)",
     "verify": "run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)"
   }
 }

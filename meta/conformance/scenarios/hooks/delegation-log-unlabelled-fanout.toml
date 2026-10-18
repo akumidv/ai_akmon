@@ -1,5 +1,6 @@
 # C33: an earlier delegation of the same session carried a zone label (seeded into the log),
-# so this unlabelled one gets the advisory ⚠ line in the systemMessage.
+# so this unlabelled one gets the advisory ⚠ line in the systemMessage, and the orchestrator gets
+# its own — label fan-out calls with [zone:<label>] — in additionalContext (ADR 0006 item 4, M149).
 id = "hooks/delegation-log-unlabelled-fanout"
 ecosystem = "shared"
 kind = "hook"
@@ -24,8 +25,9 @@ tool_input = { subagent_type = "k_mechanic", description = "sweep config" }
 exit = 0
 stderr = ""
 [expected.stdout_json]
-systemMessage = "[akmon] → k_mechanic: sweep config\n[akmon] ⚠ this k_mechanic delegation carries no zone label while this session's fan-out is zoned (auth) — the coverage map will count it as unlabelled; start the description with [zone:<label>]"
+systemMessage = "[akmon] → k_mechanic: sweep config\n[akmon] ⚠ this k_mechanic delegation carries no zone label while this session's fan-out is zoned (auth) — the coverage map will count it as unlabelled"
 [expected.stdout_json.hookSpecificOutput]
 hookEventName = "PreToolUse"
+additionalContext = "[akmon] ⚠ this k_mechanic call carries no zone label while this session's fan-out is zoned (auth) — label fan-out calls with [zone:<label>] at the start of the description"
 [expected.files]
 ".claude/model-routing.log" = "2026-09-01T10:00:00+0000\tsess-dl-2\tk_explorer\t-\tauth\tsweep tokens\n{{ts}}\tsess-dl-2\tk_mechanic\t-\t-\tsweep config\n"

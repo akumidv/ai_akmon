@@ -1,0 +1,27 @@
+# C129: a Node repository (package.json, no Python files) attached in a mounted mode by the
+# Python CLI, with no --checks: ruff would have nothing to lint, so init records the empty
+# [check] table `--checks none` records, writes no ruff.toml, and the next step says where the
+# project's own JavaScript checks go. Python-tagged: the Python CLI makes a Python-mounted attach, which
+# in a Node repository takes `--ecosystem python` since the hand-over (cli/init-node-repo-hands-over).
+id = "cli/init-mounted-node-repo-no-ruff"
+ecosystem = "python"
+kind = "cli"
+covers = ["command:init"]
+
+[fixture]
+attach = "none"
+name = "base"
+# src/app.py is Python (C129: a Python source makes a Python repository)
+remove = ["_aitna", "AGENTS.md", "src"]
+files = { "package.json" = "{\n  \"name\": \"demo\",\n  \"private\": true\n}\n" }
+
+[run]
+argv = ["init", "--mode", "vendored", "--ecosystem", "python", "--project-root", "{{root}}", "--yes"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "akmon init: attaching to {{root}}\nakmon init: mount mode: vendored (requested) · dev layer: _aitna/\nakmon init: vendored 15 standard-tree members into _aitna/akmon (pin: {{version}})\nakmon init: wrote _aitna/TASKS.md\nakmon init: wrote _aitna/memory/README.md\nakmon init: wrote _aitna/agents/review/README.md\nakmon init: wrote _aitna/agents/architect/README.md\nakmon init: wrote _aitna/agents/engineer/README.md\nakmon init: wrote AGENTS.md with the akmon block\nakmon init: .gitignore: added the akmon entries (secrets, dev-layer venv, routing artifacts)\nakmon init: recorded _aitna/.akmon.toml (mount=vendored, akmon_version={{version}})\nakmon init: akmon check: no checks recorded — no Python files, so no ruff\nakmon init: running sync (generated pointers, hook wiring, imported guardrails)\nupdated: CLAUDE.md\nupdated: .github/copilot-instructions.md\nupdated: GEMINI.md\nupdated: .codex/README.md\nupdated: .codex/hooks.json\nupdated: .claude/settings.json\nupdated: .claude/skills/demo/SKILL.md\nupdated: .agents/skills/demo/SKILL.md\nakmon init: running model-routing init (subagent definitions + local routing config)\nupdated: .claude/agents/k_explorer.md\nupdated: .claude/agents/k_mechanic.md\nupdated: .claude/agents/k_validator.md\nupdated: .claude/agents/k_implementer.md\nupdated: .claude/agents/k_reasoner.md\nupdated: .claude/agents/k_auditor.md\nupdated: .claude/model-routing.local.json\nmodel routing: vendor=anthropic · orchestrator=strongest · reasoner=strongest · auditor=strongest · worker=worker · mid=mid · second-opinion=codex(off)\n⚠ using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally\n\nakmon init: attached, with steps left to a human/agent decision:\n  1. classify the project's archetype against ARCHETYPES.md and set `attached_archetype` in _aitna/.akmon.toml\n  2. add the contract checks to your existing workflow(s): `python3 _aitna/akmon/bin/sync.py --check` and `python3 _aitna/akmon/bin/verify.py --strict`\n  3. this project has package.json and no Python files, so no ruff was set up: name the project's own JavaScript checks under `[check]` in .akmon.toml, or move this mount to the JavaScript implementation of akmon, which needs no Python, with `npx github:akumidv/ai_akmon#main init --ecosystem node`, then have it detect them with `node _aitna/akmon/js/akmon/cli.mjs init --checks own` (a first attach of a Node repository is `npx github:akumidv/ai_akmon#main init --mode vendored`)\n  4. pin the test environment: record the project's own pytest invocation as `[test].runner` in _aitna/.akmon.toml (BOOTSTRAP §A5 — do not build a venv when the project already has one)\n  5. run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)\n"
+file_absent = ["ruff.toml"]
+[expected.files]
+"_aitna/.akmon.toml" = "# akmon integration record — written by `akmon init`, refreshed on realign.\n# The version this project sits on; a later bump diffs the CHANGELOG window against it.\nmount = \"vendored\"\nakmon_version = \"{{version}}\"\nattached_archetype = \"unclassified\"\n\nlast_realign = \"{{version}}\"\n[test]\n# The project's own pytest invocation, used verbatim by the release check\n# (BOOTSTRAP §A5). Uncomment and set it to whatever this project already uses:\n# runner = \"uv run pytest\"\n\n[check]\n# What `akmon check` runs: the project's own commands, `{files}` becoming the files a run covers.\n"

@@ -48,7 +48,7 @@ breaking change to it is a breaking release. Nothing else under `js/` (hooks, `c
 
 | Specifier | Exports besides `main` |
 |---|---|
-| `akmon/tools/model_routing/coverage_map` | `buildCoverageMap`, `parseZonePlan`, `unlabelledMarker`, `parseInstant`, `parseBound`, `inScope`, `describeScope`, `IsoError` |
+| `akmon/tools/model_routing/coverage_map` | `buildCoverageMap`, `parseZonePlan`, `unlabelledMarker`, `unlabelledPlanError`, `parseInstant`, `parseBound`, `inScope`, `describeScope`, `IsoError` |
 | `akmon/tools/model_routing/gate_pack` | `buildFullPack`, `buildPlanCheckPack`, `roleQuestion`, `planCheckQuestion`, `reportDir`, `reportPrefix`, `digest`, `relativeTo` |
 | `akmon/tools/model_routing/init` | — |
 | `akmon/tools/model_routing/second_opinion` | `reviewPrompt`, `unavailableNotice`, `reportPrefix`, `digest`, `reportDirError`, `standardTreeRoot`, `readJsonObject` |

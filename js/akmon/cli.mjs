@@ -4,8 +4,8 @@
  * ADR 0020 D01). The Python module is the spec: the same answers, the same texts, the same exit
  * codes and the same stdout and stderr, for the commands that exist here.
  *
- * Every command is real; `init` and `update` serve Node package mode only (`_init.mjs`,
- * `_update.mjs`).
+ * Every command is real; `init` and `update` serve a Node project in every mount mode (`_init.mjs`,
+ * `_update.mjs`; the mounted modes since C129).
  *
  * `hook` is the hot path of a session — the generated wiring of a Node project names the hook
  * scripts directly, but `akmon hook <name>` is the same entry for a hand run and for the corpus —
@@ -23,8 +23,11 @@
  * A pure function that needs a text takes the bundle first.
  *
  * Twin notes (ADR 0020 D02, D08, `meta/conformance/DIVERGENCES.md`):
- * - there is no mounted tree and no version-skew notice: the tree is the package that holds the
- *   running file (D02), so `path` prints its real path and `version` its `package.json` version;
+ * - the tree is the package that holds the running file (D02), so `path` prints its real path and
+ *   `version` its `package.json` version — except in a Node repository attached in a mounted mode
+ *   (the C129 amendment of D02): there a CLI that is not the mount's own hands `sync`, `verify`,
+ *   `check`, `path`, `hook` and `tool` over to the mount's `cli.mjs`, with the Python's version-skew
+ *   notice for the commands it dispatches (`_mount.mjs`, ADR 0009 decision 5);
  * - `hook <name>` accepts `<name>` and `<name>.mjs` (the Python accepts `<name>.py`); the hooks
  *   it lists as `available:` are the stems of `js/hooks/*.mjs` except `hook_data` and the tests;
  * - the top level is not `argparse`: `-h`/`--help` prints the same block, a usage error is the
@@ -36,12 +39,13 @@ import fs from "node:fs";
 import { posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { fill, read } from "../common/jsondata.mjs";
+import { DataFileError, fill, read } from "../common/jsondata.mjs";
 import { embeddedTreeRoot } from "./_tree.mjs";
 
 /**
  * The shape of `src/akmon/cli.json` the JavaScript CLI reads (the Python reads more keys).
  * @typedef {object} CliData
+ * @property {string[]} dispatched_commands
  * @property {string} epilog
  * @property {string} hook_missing_name
  * @property {string} hook_path_refused
@@ -57,11 +61,15 @@ const TREE_ROOT = posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "
 /** The commands, in the order the Python lists them. */
 const COMMANDS = ["init", "update", "sync", "verify", "check", "path", "hook", "tool", "version"];
 
+/** The commands a Node mount's own CLI serves when another CLI is asked (the Python's controlling tree). */
+const HANDED_OVER = ["sync", "verify", "check", "path", "hook", "tool"];
+
 /** The line `-h` prints under the usage line (the Python's `argparse` description). */
 const DESCRIPTION = "akmon — the akmon AI-agent development standard, as an installable package.";
 
 /** The keys of `cli.json` the bundle exposes. */
 const DATA_KEYS = [
+  "dispatched_commands",
   "epilog",
   "hook_missing_name",
   "hook_path_refused",
@@ -229,6 +237,19 @@ function _help(data) {
 }
 
 /**
+ * Hand the command over to the CLI of the Node mount that governs the working directory's project,
+ * when this CLI is not that mount's own (`_mount.mjs`); `null` when this CLI does the work. A
+ * project without a mount pays one walk up for `AGENTS.md` and a look for `<AITNA_ROOT>/akmon`.
+ * @param {string[]} argv the full command line, the command first
+ * @param {boolean} notice whether a version skew is announced (the commands the Python dispatches)
+ * @returns {Promise<number | null>}
+ */
+async function _handOver(argv, notice) {
+  const { handOver } = await import("./_mount.mjs");
+  return handOver(argv, { notice });
+}
+
+/**
  * One usage error: the one line, and exit 2.
  * @param {string} message
  * @returns {number}
@@ -249,7 +270,7 @@ export async function main(argv = process.argv.slice(2)) {
   // `hook` is dispatched before anything else is looked at: it is the hottest entry point there
   // is (a hand-run hook, the corpus), and it takes no flags of its own.
   if (command === "hook") {
-    return _cmdHook(data, rest);
+    return (await _handOver(argv, false)) ?? _cmdHook(data, rest);
   }
   if (command === "-h" || command === "--help") {
     process.stdout.write(_help(data));
@@ -261,6 +282,12 @@ export async function main(argv = process.argv.slice(2)) {
   if (!COMMANDS.includes(command)) {
     const choices = COMMANDS.map((choice) => `'${choice}'`).join(", ");
     return _usageError(`argument command: invalid choice: '${command}' (choose from ${choices})`);
+  }
+  if (HANDED_OVER.includes(command)) {
+    const code = await _handOver(argv, data.dispatched_commands.includes(command));
+    if (code !== null) {
+      return code;
+    }
   }
   if (command === "init") {
     return (await import("./_init.mjs")).main(rest);
@@ -309,8 +336,55 @@ function runAsEntryPoint(invoked) {
   }
 }
 
+/** The `npx` spelling of the akmon repository: `init.json`'s `akmon_repo`, which a tree without its data lacks. */
+const NPX_REPOSITORY = "github:akumidv/ai_akmon";
+
+/**
+ * The one line a tree without the data this CLI reads answers with: a mount the Python
+ * implementation vendored carries `tree_members` only, not `src/akmon` (C129 audit F5). It names
+ * the missing file and the switch that re-vendors the mount whole, at the release `switchTag`
+ * names — the newer of the one the mount's record holds (`<tree>/../.akmon.toml`) and this tree's;
+ * a record that is missing or cannot be read leaves the tree's own, else `main`.
+ * @param {DataFileError} error
+ * @returns {Promise<string>}
+ */
+async function _missingDataLine(error) {
+  const { switchTag } = await import("../common/versions.mjs");
+  /** @type {unknown} */
+  let recorded = null;
+  try {
+    const { readAkmonToml } = await import("../common/record.mjs");
+    recorded = readAkmonToml(posix.join(posix.dirname(TREE_ROOT), ".akmon.toml"))["akmon_version"];
+  } catch {
+    // the answer stays one line: a record (or a reader) this broken tree cannot load leaves the
+    // tag to the running version, else `main`
+  }
+  /** @type {unknown} */
+  let running = null;
+  try {
+    running = /** @type {{version?: unknown}} */ (read(posix.join(TREE_ROOT, "package.json"))).version;
+  } catch (failure) {
+    if (!(failure instanceof DataFileError)) {
+      throw failure;
+    }
+  }
+  const tag = switchTag(typeof recorded === "string" ? recorded : null, typeof running === "string" ? running : null);
+  return (
+    `akmon: ${error.message} — this tree lacks the data the JavaScript implementation reads (a mount the ` +
+    `Python implementation vendored?); move the mount to it with \`npx ${NPX_REPOSITORY}#${tag} init --ecosystem node\`\n`
+  );
+}
+
 // Run as the entry point, not imported: the ESM way to say so is to compare the file node was
 // actually told to execute with this module's own path.
 if (process.argv[1] !== undefined && runAsEntryPoint(process.argv[1])) {
-  process.exitCode = await main();
+  try {
+    process.exitCode = await main();
+  } catch (error) {
+    if (!(error instanceof DataFileError)) {
+      throw error;
+    }
+    process.stderr.write(await _missingDataLine(error));
+    process.exitCode = 2;
+  }
 }

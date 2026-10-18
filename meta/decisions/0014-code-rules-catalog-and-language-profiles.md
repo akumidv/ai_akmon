@@ -77,3 +77,41 @@ a standard ruff configuration that runs without akmon too.
   alias for the old path; the check inside `verify --strict`; parsing each linter's output into
   findings; uv or any package manager as a consumer requirement; the size family in the same
   change; Google's 80 or 100 for akmon.
+
+## Addressable accepted decision blocks
+
+### D02 — `init` writes the language-profile import; `verify` warns on a missing or unresolved one
+
+`Decision-ID: ADR-0014/D02`
+
+Accepted by the owner in the C127 review (option a). It makes D01 §2's "language profiles attach
+automatically" true at attach time, where it had been a line a person added by hand — and one
+consumer added it under the mounted prefix in a package attach, where it resolved to nothing.
+
+- **One mapping.** `bin/sync.json` `language_profiles` maps a language to its profile and
+  manifests: `python.md` for `python` or a `pyproject.toml`; `js.md` for `javascript`,
+  `typescript` or a `package.json`. Table order is write order, so a project with both manifests
+  gets both, Python first. A language is read from `--archetype` and `--language` and from the
+  record's `attached_archetype`, each `/`-separated part compared without case. Both
+  implementations read this table and no other place pairs a language with a profile.
+- **`init` writes the imports.** A fresh AGENTS block carries one `@`-import per detected
+  profile, right after the `_common.md` import, under the attach's prefix:
+  `@<AITNA_ROOT>/.akmon/profiles/<name>.md` in package mode, `@<AITNA_ROOT>/akmon/profiles/<name>.md`
+  in a mounted mode. The block's prose quotes only the placeholder form, never a value. An
+  unknown or unclassified language writes no profile line and keeps the `classify` step, which
+  also stays while the archetype is unclassified. An existing block is never rewritten.
+- **`sync` still reads the document.** Materialization follows the imports `AGENTS.md` makes, not
+  the mapping: after `init` the block is hand-owned.
+- **`verify` warns, never errors.** `agents.profile-import` warns on a profile import that
+  resolves to nothing — one under another prefix than the record's mount reads (unless it is a
+  file of the project), or one naming a profile the standard does not ship — and names the
+  replacement line. `agents.language-profile` warns once per profile the record or a manifest
+  calls for that `AGENTS.md` does not import, and names the line to add. A warning, because the
+  import is hand-owned text; `--strict` fails on it through the shared exit policy.
+- **Boundary.** Environment profiles (`python-stdlib`) and domain profiles stay a person's choice.
+  No other language is mapped until akmon ships its profile. An existing consumer's block is not
+  migrated; `verify` names the line to change.
+- **Cost.** A project with two languages loads two profiles. The akmon-shipped always-loaded
+  share (ADR 0012 F18) is measured with one, the largest; with both it is over that cap. The owner
+  kept the cap and did not re-baseline it (C127, option b): a two-language project's shipped
+  always-loaded share is over the cap by design, and that is accepted.

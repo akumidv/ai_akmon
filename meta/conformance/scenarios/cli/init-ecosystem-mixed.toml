@@ -1,0 +1,21 @@
+# C129: a repository with package.json and pyproject.toml stays Python unless --ecosystem node is
+# given: the JavaScript init refuses the mounted first attach before touching anything and names the
+# Python implementation's command.
+id = "cli/init-ecosystem-mixed"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:init"]
+
+[fixture]
+attach = "none"
+name = "base"
+remove = ["_aitna", "AGENTS.md"]
+files = { "package.json" = "{}\n", "pyproject.toml" = "[project]\nname = \"demo\"\n" }
+
+[run]
+argv = ["init", "--mode", "vendored", "--project-root", "{{root}}", "--yes"]
+
+[expected]
+exit = 2
+stderr = "akmon init: this project is attached by the Python implementation of akmon (a mounted attach is Node only for a repository with package.json and no Python files); run it, or pass `--ecosystem node` to attach it with this JavaScript implementation:\n    uvx --from git+https://github.com/akumidv/ai_akmon@main akmon init --mode vendored\n"
+stdout = ""

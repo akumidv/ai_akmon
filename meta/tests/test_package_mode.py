@@ -558,21 +558,27 @@ def test_is_akmon_entry_recognises_every_spelling_the_generator_ever_emitted(mon
     assert sync._is_akmon_entry(_launcher_entry())
 
 
-def _node_wiring_commands() -> list[str]:
+def _node_wiring_commands(hooks_dir: str = "node_modules/akmon/js/hooks") -> list[str]:
     """Every hook command the JS ``sync`` writes, built from the ``sync.json`` templates it fills.
 
     Mirrors ``js/bin/sync.mjs::claudeHooks``/``codexHooks``: the Claude command is
     ``node_hook_command`` with no argument, the Codex one ``node_codex_hook_command`` plus the
     script — the spelling a Node project really carries, not a hand-written lookalike (C16).
+    ``hooks_dir`` is ``nodeHooksDir``'s answer: the package one by default, the mount's
+    (``_aitna/akmon/js/hooks``) for a mounted record (C129).
     """
     data = sync.read_sync_data()
     claude = [
-        jsondata.fill(data["node_hook_command"], {"anchor": "$CLAUDE_PROJECT_DIR", "script": script})
+        jsondata.fill(
+            data["node_hook_command"], {"anchor": "$CLAUDE_PROJECT_DIR", "hooks_dir": hooks_dir, "script": script}
+        )
         for entries in data["claude_hooks"].values()
         for entry in entries
         for script in entry["commands"]
     ]
-    codex_base = jsondata.fill(data["node_codex_hook_command"], {"anchor": "$(git rev-parse --show-toplevel)"})
+    codex_base = jsondata.fill(
+        data["node_codex_hook_command"], {"anchor": "$(git rev-parse --show-toplevel)", "hooks_dir": hooks_dir}
+    )
     codex = [
         f"{codex_base} {script}"
         for entries in data["codex_hooks"].values()
@@ -594,6 +600,20 @@ def test_is_akmon_entry_recognises_the_node_package_spelling(monkeypatch):
         entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": command}]}
         assert sync._is_akmon_entry(entry), command
     own = {"matcher": "Bash", "hooks": [{"type": "command", "command": "node tools/node_modules/other/hooks/x.mjs"}]}
+    assert not sync._is_akmon_entry(own)
+
+
+def test_is_akmon_entry_recognises_the_node_mount_spelling(monkeypatch):
+    """The C129 amendment of ADR 0020 D02: a mounted Node record's wiring is
+    ``node "<anchor>/<AITNA_ROOT>/akmon/js/hooks/<script>.mjs"``. This implementation never writes it,
+    and recognising it changes nothing it writes for its own records."""
+    monkeypatch.delenv("AITNA_ROOT", raising=False)
+    commands = _node_wiring_commands("_aitna/akmon/js/hooks")
+    assert '"$CLAUDE_PROJECT_DIR/_aitna/akmon/js/hooks/role-on-code.mjs"' in " ".join(commands)
+    for command in commands:
+        entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": command}]}
+        assert sync._is_akmon_entry(entry), command
+    own = {"matcher": "Bash", "hooks": [{"type": "command", "command": "node _aitna/tools/js/hooks/x.mjs"}]}
     assert not sync._is_akmon_entry(own)
 
 

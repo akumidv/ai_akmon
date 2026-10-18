@@ -14,7 +14,9 @@ in CI, and `akmon check` running **the project's own** linters and analyzers, wi
 akmon-provided ruleset offered only when the project has none. **It needs Node and no Python.**
 
 akmon therefore keeps two permanent implementations of everything a consumer executes: Python
-for Python consumers and the mounted modes, JavaScript for Node package mode. A language-neutral
+for Python consumers and the mounted modes, JavaScript for Node package mode. Since C129 the
+JavaScript implementation also serves a mounted record that names `ecosystem = "node"`, run from
+the mount with no Python ([ADR 0020 D02 amendment](../decisions/0020-node-consumers-js-implementation.md#amendment--d02-the-javascript-implementation-serves-mounted-node-repositories-c129)). A language-neutral
 conformance corpus is the normative spec both must pass. The Python implementation is the
 reference where the corpus is silent.
 
@@ -239,7 +241,9 @@ rules follow, and each has a single owner:
   must match exactly.
 - **Ecosystem tag.** A scenario is `shared`, `python` or `node`. Shared scenarios run on both.
   Because the mounted modes stay Python-only (D02), a shared scenario attaches its consumer in
-  the implementation's **native package mode**, and a mounted scenario is `python`-tagged. A
+  the implementation's **native package mode**, and a mounted scenario is `python`-tagged. Since
+  C129 a mounted scenario may also be `shared` or `node`-tagged, the Node side laying its own
+  `node-mount` layer over the base ([ADR 0020 D02 amendment](../decisions/0020-node-consumers-js-implementation.md#amendment--d02-the-javascript-implementation-serves-mounted-node-repositories-c129)). A
   finding code whose lines name one ecosystem's carrier (tree layout, manifest pin, launcher) is
   owned by that ecosystem; a shared scenario pins every other finding line (owner decision on
   the C101 review; mechanics in `meta/conformance/README.md`).
@@ -341,7 +345,8 @@ stayed refused and the default with nothing detected was `none` until C110.
 C110 (done): with no linter detected the default is `akmon`. It writes `.oxlintrc.json` extending
 `./node_modules/akmon/profiles/oxlint.json` (`env` browser + node, with a step to narrow it), or names the line when the
 project's own `.oxlintrc.json` exists. It records oxlint plus the detected `tsc` and Prettier (DV25), and names the
-oxlint dev-install command. The AGENTS block's profile example is `js.md` on Node. akmon's own JS moved to oxlint and
+oxlint dev-install command. The AGENTS block's profile example was `js.md` on Node; since C127 the block
+imports the detected profiles instead ([ADR-0014/D02](../decisions/0014-code-rules-catalog-and-language-profiles.md#d02--init-writes-the-language-profile-import-verify-warns-on-a-missing-or-unresolved-one)). akmon's own JS moved to oxlint and
 oxfmt (width 120, M131), and the size family is a shrinking per-file list checked by `meta/tests/test_oxlint_profile.py`.
 [Evidence](../reviews/c110-evidence.md).
 
@@ -366,6 +371,13 @@ implementations and, from C103 on, `npm pack --dry-run` against the wheel's file
 - **Mounted Python `init` in a Node repository** detects only the Python tools and, with none,
   offers ruff — ADR 0020 D02 keeps linter detection in each ecosystem's own implementation, so
   this conforms, but a Node project attached in a mounted mode gets a Python offer (C126).
+  Since C129 a project with `package.json` and no Python files (no Python marker file and no tracked `*.py`) defaults to an empty `[check]`
+  (no ruff unless `--checks akmon`), and `verify` warns (`check.ruff-without-python`) where
+  akmon's `ruff.toml` template already sits in such a project. The Python `init` also hands such
+  a repository's first mounted attach to the JavaScript implementation, which detects the Node
+  tools itself, so this point now concerns only a Python-run mount (an existing record, or one
+  kept with `--ecosystem python`)
+  ([ADR 0020 D02 amendment](../decisions/0020-node-consumers-js-implementation.md#amendment--d02-the-javascript-implementation-serves-mounted-node-repositories-c129)).
 - **Scoped fallback name** (`@akmon/cli`) if `akmon` on npm is taken before V5 (free at the time).
 - **`init` writing the dev-layer exclusion.** The consumer's eslint/tsconfig must ignore
   `_aitna/**` (§4, M116); today `init` detects those tools but leaves the exclusion to the

@@ -3,8 +3,12 @@
  * `common/markers.py` (ADR 0020 D01); `units/markers.toml` is the spec both must pass. A hook
  * is a fresh process per event, so "say this once per session" needs state outside the
  * process, and every such marker is claimed here: an atomic claim (`O_CREAT | O_EXCL`), a
- * hashed name with mode 0600, a repeat when the identity is unknown, and an age-out after a day.
- * A marker failure makes the diagnostic noisier, never invisible.
+ * hashed name with mode 0600, a repeat when the identity is unknown, and an age-out after a day
+ * (or when the mtime is ahead of the clock by more than `MARKER_FUTURE_SLACK_SECONDS`). Only a
+ * regular file this user owns, read with `lstat` and never followed, counts as a held claim: a
+ * symlink, a directory or another user's file makes the diagnostic speak and is left alone. A
+ * marker that vanishes between the refused create and its `lstat` is claimed again once. A
+ * marker failure makes the diagnostic noisier, never invisible.
  *
  * Data (the C102/C103 convention): this module never reads a file itself. `data` is the parsed
  * `common/markers.json` (name shape, kinds, the unidentified spelling, the delegation
@@ -34,6 +38,10 @@ import { sha256Hex } from "./sha256.mjs";
 /** A day: longer than a working session, short enough that a crashed or reused session id does
  * not suppress a diagnostic for long. */
 export const MARKER_MAX_AGE_SECONDS = 24 * 60 * 60;
+
+/** How far ahead of the clock a marker's mtime may be before it counts as stale: room for a
+ * coarse filesystem timestamp, never days of silence after a clock moved back. */
+export const MARKER_FUTURE_SLACK_SECONDS = 60;
 
 /**
  * The shape of `common/markers.json` — the data file is the owner of these keys.
@@ -195,16 +203,51 @@ export function delegationStateName(data, which, identity) {
   return fill(data.delegation_state_files[which], { identity });
 }
 
-/** Whether `marker` is older than a day; one that cannot be read is not stale. */
-function _isStale(/** @type {string} */ marker, /** @type {number} */ now) {
+/** Whether a marker is older than a day, or dated ahead of the clock by more than the slack. */
+function _isStale(/** @type {fs.Stats} */ status, /** @type {number} */ now) {
+  const mtime = status.mtimeMs / 1000;
+  return now - mtime > MARKER_MAX_AGE_SECONDS || mtime > now + MARKER_FUTURE_SLACK_SECONDS;
+}
+
+/**
+ * A regular file (not followed through a link) that this process's user owns. The owner is
+ * compared only where the platform has user ids (`process.getuid`); elsewhere a regular file is
+ * enough.
+ * @param {fs.Stats} status
+ * @returns {boolean}
+ */
+function _isOwnFile(status) {
+  if (!status.isFile()) {
+    return false;
+  }
+  return typeof process.getuid !== "function" || status.uid === process.getuid();
+}
+
+/**
+ * What holds `marker`'s name after a refused create, read with `lstat` (never followed):
+ * `vanished` — gone since the create; `unreadable` — `lstat` failed otherwise; `foreign` — not
+ * a regular file this user owns; `stale` / `held` — our marker, aged out or not.
+ * @param {string} marker
+ * @param {number} now
+ * @returns {"vanished" | "unreadable" | "foreign" | "stale" | "held"}
+ */
+function _existingClaim(marker, now) {
+  let status;
   try {
-    return now - fs.statSync(marker).mtimeMs / 1000 > MARKER_MAX_AGE_SECONDS;
+    status = fs.lstatSync(marker);
   } catch (error) {
+    if (/** @type {{code?: string}} */ (error).code === "ENOENT") {
+      return "vanished";
+    }
     if (_isOSError(error)) {
-      return false;
+      return "unreadable";
     }
     throw error;
   }
+  if (!_isOwnFile(status)) {
+    return "foreign";
+  }
+  return _isStale(status, now) ? "stale" : "held";
 }
 
 /** Remove `marker`, ignoring a filesystem failure (a vanished file, a directory, no right). */
@@ -242,11 +285,17 @@ export function claimDiagnosticMarker(data, kind, identity, { directory = null }
       descriptor = fs.openSync(marker, "wx", 0o600);
     } catch (error) {
       if (/** @type {{code?: string}} */ (error).code === "EEXIST") {
-        if (!_isStale(marker, Date.now() / 1000)) {
+        const holder = _existingClaim(marker, Date.now() / 1000);
+        if (holder === "held") {
           return false;
         }
-        _discard(marker);
-        continue;
+        if (holder === "unreadable" || holder === "foreign") {
+          return true; // unreadable, or not our marker: speak, and leave the path alone
+        }
+        if (holder === "stale") {
+          _discard(marker);
+        }
+        continue; // stale and removed, or vanished since the refused create: claim again
       }
       if (_isOSError(error)) {
         return true; // marker failure must make the diagnostic noisier, never invisible
@@ -263,7 +312,7 @@ export function claimDiagnosticMarker(data, kind, identity, { directory = null }
     }
     return true;
   }
-  return true; // lost the replace race twice: emit rather than stay silent
+  return true; // lost the replace (or vanish) race twice: emit rather than stay silent
 }
 
 /**

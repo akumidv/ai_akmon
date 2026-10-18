@@ -378,10 +378,33 @@ args_json = '[{"$registry": {}}, "x", ["x"], "nope"]'
 expected_json = '{"error": "KeyError", "message": "nope"}'
 
 [[case]]
+# The shipped quant-derivation floor is the corridor's boundary (C32): anthropic's named
+# orchestrator_floor, so a ladder without that alias records no floor at all.
 id = "bind/task-kind-floors"
 fn = "task_kind_floors"
 args_json = '[{"$registry": {}}, ["small", "medium", "large"]]'
+expected_json = '{}'
+
+[[case]]
+# On the real ladder the floor is opus — the rung a healthy orchestrator, and so the reasoner, sits on.
+id = "bind/task-kind-floors-corridor"
+fn = "task_kind_floors"
+args_json = '[{"$registry": {}}, ["haiku", "sonnet", "opus", "fable"]]'
+expected_json = '{"quant-derivation": "opus"}'
+
+[[case]]
+# openai keeps the relative "highest" corridor floor: the task-kind floor follows it to the top.
+id = "bind/task-kind-floors-corridor-openai"
+fn = "task_kind_floors"
+args_json = '[{"$registry": {}}, ["small", "medium", "large"], "openai"]'
 expected_json = '{"quant-derivation": "large"}'
+
+[[case]]
+# A vendor with no entry, or no orchestrator_floor, reads the corridor's "highest" default.
+id = "bind/task-kind-floors-corridor-default"
+fn = "task_kind_floors"
+args_json = '[{"task_kinds": {"k": {"floor": "orchestrator_floor"}}}, ["a", "b"], "nope"]'
+expected_json = '{"k": "b"}'
 
 [[case]]
 id = "bind/task-kind-floors-no-rungs"
@@ -817,10 +840,24 @@ tree = ""
 expected_json = '{"value": ["⚠ bad brief A"], "tree": {"akmon-suppressed-rebind-a3f7ce58a7c72a4f-e8bc163c82eee1873328": ""}}'
 
 [[case]]
+# The kind is the role and a digest of the counted material, not its count (C25 review).
 id = "mark/gate-kind"
 fn = "gate_audit_marker_kind"
-args_json = '[{"$call": "gate_rule_for", "args": ["architect"]}, 7]'
-expected_json = '"gate-audit-architect-7"'
+args_json = '["## Options\n\n- A\n- B\n", {"$call": "gate_rule_for", "args": ["architect"]}]'
+expected_json = '"gate-audit-architect-b939469b575affee"'
+
+[[case]]
+# Headings, blank lines and the prose around the sections stay out of the digest: same material, same kind.
+id = "mark/gate-kind-same-material"
+fn = "gate_audit_marker_kind"
+args_json = '["Intro.\n\n### 3 findings\n- a\n\n- b\n- c\n\n## Next\n- q\n", {"$call": "gate_rule_for", "args": ["review"]}]'
+expected_json = '"gate-audit-review-cdc81b42e33453e9"'
+
+[[case]]
+id = "mark/gate-section-text"
+fn = "gate_section_text"
+args_json = '["Intro.\n\n## Findings\n\n- a\n  - detail\n\n### Sub\n\n| x |\n\n## Next\n\n- q\n\n**Findings**\n- b\n", {"$call": "gate_rule_for", "args": ["review"]}]'
+expected_json = '"- a\n  - detail\n| x |\n- b"'
 
 [[case]]
 id = "mark/gate-once-claims"
@@ -830,26 +867,37 @@ kwargs_json = '{"marker_dir": {"$path": "{{dir}}/m"}}'
 files = { "m/.keep" = "" }
 tree = "m"
 tree_modes = true
-expected_json = '{"value": true, "tree": {".keep": {"text": "", "mode": "644"}, "akmon-gate-audit-review-3-e8bc163c82eee1873328": {"text": "", "mode": "600"}}}'
+expected_json = '{"value": true, "tree": {".keep": {"text": "", "mode": "644"}, "akmon-gate-audit-review-cdc81b42e33453e9-e8bc163c82eee1873328": {"text": "", "mode": "600"}}}'
 
 [[case]]
 id = "mark/gate-once-already"
 fn = "gate_audit_once"
 args_json = '["review", "## Findings\n\n- a\n- b\n- c\n", "s1"]'
 kwargs_json = '{"marker_dir": {"$path": "{{dir}}/m"}}'
-files = { "m/akmon-gate-audit-review-3-e8bc163c82eee1873328" = "" }
+files = { "m/akmon-gate-audit-review-cdc81b42e33453e9-e8bc163c82eee1873328" = "" }
 tree = "m"
-expected_json = '{"value": false, "tree": {"akmon-gate-audit-review-3-e8bc163c82eee1873328": ""}}'
+expected_json = '{"value": false, "tree": {"akmon-gate-audit-review-cdc81b42e33453e9-e8bc163c82eee1873328": ""}}'
 
 [[case]]
-# A changed count is a new gate: claimed, and the session's other gate markers released.
-id = "mark/gate-once-new-count"
+# Different material is a new gate and is claimed; the session's other markers are kept, so a
+# return to material already held (3 → 4 → 3) stays silent.
+id = "mark/gate-once-new-material"
 fn = "gate_audit_once"
 args_json = '["review", "## Findings\n\n- a\n- b\n- c\n- d\n", "s1"]'
 kwargs_json = '{"marker_dir": {"$path": "{{dir}}/m"}}'
-files = { "m/akmon-gate-audit-review-3-e8bc163c82eee1873328" = "", "m/akmon-gate-audit-architect-2-e8bc163c82eee1873328" = "", "m/akmon-suppressed-rebind-a3f7ce58a7c72a4f-e8bc163c82eee1873328" = "" }
+files = { "m/akmon-gate-audit-review-cdc81b42e33453e9-e8bc163c82eee1873328" = "", "m/akmon-gate-audit-architect-b939469b575affee-e8bc163c82eee1873328" = "", "m/akmon-suppressed-rebind-a3f7ce58a7c72a4f-e8bc163c82eee1873328" = "" }
 tree = "m"
-expected_json = '{"value": true, "tree": {"akmon-gate-audit-review-4-e8bc163c82eee1873328": "", "akmon-suppressed-rebind-a3f7ce58a7c72a4f-e8bc163c82eee1873328": ""}}'
+expected_json = '{"value": true, "tree": {"akmon-gate-audit-architect-b939469b575affee-e8bc163c82eee1873328": "", "akmon-gate-audit-review-03c305fe1d7cffc4-e8bc163c82eee1873328": "", "akmon-gate-audit-review-cdc81b42e33453e9-e8bc163c82eee1873328": "", "akmon-suppressed-rebind-a3f7ce58a7c72a4f-e8bc163c82eee1873328": ""}}'
+
+[[case]]
+# The same count over different material is a different gate: held again.
+id = "mark/gate-once-same-count-new-material"
+fn = "gate_audit_once"
+args_json = '["review", "## Findings\n\n- x\n- y\n- z\n", "s1"]'
+kwargs_json = '{"marker_dir": {"$path": "{{dir}}/m"}}'
+files = { "m/akmon-gate-audit-review-cdc81b42e33453e9-e8bc163c82eee1873328" = "" }
+tree = "m"
+expected_json = '{"value": true, "tree": {"akmon-gate-audit-review-34c59679a71a2495-e8bc163c82eee1873328": "", "akmon-gate-audit-review-cdc81b42e33453e9-e8bc163c82eee1873328": ""}}'
 
 [[case]]
 id = "mark/gate-once-no-session"
@@ -1470,7 +1518,7 @@ id = "art/local-config"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}, {"$registry": {}}]'
 kwargs_json = '{"second_opinion": true, "available": ["small", "medium", "large"]}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": true, "second_opinion_provider": "openai", "available": ["small", "medium", "large"], "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "large"}}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": true, "second_opinion_provider": "openai", "available": ["small", "medium", "large"], "registry_hash": "{{registry_hash}}", "task_kind_floors": {}}'
 
 [[case]]
 # A single vendor is its own provider, so the config records the same-vendor fallback model.
@@ -1478,7 +1526,7 @@ id = "art/local-config-single-vendor"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}, {"$registry": {"drop": ["openai"]}}]'
 kwargs_json = '{"second_opinion": false, "available": ["small", "medium", "large"]}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": false, "second_opinion_provider": "anthropic", "available": ["small", "medium", "large"], "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "large"}, "second_opinion_fallback_model": "medium"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": false, "second_opinion_provider": "anthropic", "available": ["small", "medium", "large"], "registry_hash": "{{registry_hash}}", "task_kind_floors": {}, "second_opinion_fallback_model": "medium"}'
 
 [[case]]
 id = "art/local-config-semantic-single-vendor"
@@ -1494,7 +1542,7 @@ fn = "binding_artifacts"
 args_json = '[{"$registry": {"set": {"note": "café"}}}, {"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}]'
 kwargs_json = '{"second_opinion": true, "available": ["small", "medium", "large"]}'
 ordered = true
-expected_json = '''[[".claude/agents/k_explorer.md", "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n"], [".claude/agents/k_mechanic.md", "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n"], [".claude/agents/k_validator.md", "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n"], [".claude/agents/k_implementer.md", "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n"], [".claude/agents/k_reasoner.md", "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n"], [".claude/agents/k_auditor.md", "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n"], [".claude/model-routing.local.json", "{\n  \"vendor\": \"anthropic\",\n  \"orchestrator\": \"large\",\n  \"binding\": {\n    \"reasoner\": \"large\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"second_opinion_provider\": \"openai\",\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {\n    \"quant-derivation\": \"large\"\n  }\n}\n"]]'''
+expected_json = '''[[".claude/agents/k_explorer.md", "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n"], [".claude/agents/k_mechanic.md", "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n"], [".claude/agents/k_validator.md", "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n"], [".claude/agents/k_implementer.md", "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n"], [".claude/agents/k_reasoner.md", "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n"], [".claude/agents/k_auditor.md", "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n"], [".claude/model-routing.local.json", "{\n  \"vendor\": \"anthropic\",\n  \"orchestrator\": \"large\",\n  \"binding\": {\n    \"reasoner\": \"large\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"second_opinion_provider\": \"openai\",\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {}\n}\n"]]'''
 
 [[case]]
 id = "art/staleness-fresh"
@@ -1774,14 +1822,26 @@ expected_json = '["⚠ task kind explore-search has a medium floor, but k_explor
 id = "stat/delegation-floor-warning"
 fn = "delegation_floor_warning"
 args_json = '[{"binding": {"worker": "small", "reasoner": "small"}, "available": ["small", "medium", "large"], "task_kind_floors": {"quant-derivation": "large", "debug-deep": "medium"}}, "k_reasoner", null]'
-expected_json = '"k_reasoner runs on small, below the floor of debug-deep (floor medium), quant-derivation (floor large) — if this delegation is one of those kinds, re-issue it with the floor model"'
+expected_json = '"k_reasoner runs on small, below the floor of debug-deep (floor medium), quant-derivation (floor large)"'
 
 [[case]]
 # An override at medium meets one floor and leaves the other open.
 id = "stat/delegation-floor-warning-partial"
 fn = "delegation_floor_warning"
 args_json = '[{"binding": {"worker": "small", "reasoner": "small"}, "available": ["small", "medium", "large"], "task_kind_floors": {"quant-derivation": "large", "debug-deep": "medium"}}, "k_reasoner", "medium"]'
-expected_json = '"k_reasoner runs on small, below the floor of quant-derivation (floor large) — if this delegation is one of those kinds, re-issue it with the floor model"'
+expected_json = '"k_reasoner runs on small, below the floor of quant-derivation (floor large)"'
+
+[[case]]
+id = "stat/delegation-floor-directive"
+fn = "delegation_floor_directive"
+args_json = '[{"binding": {"worker": "small", "reasoner": "small"}, "available": ["small", "medium", "large"], "task_kind_floors": {"quant-derivation": "large", "debug-deep": "medium"}}, "k_reasoner", null]'
+expected_json = '"k_reasoner is bound to small, below a task-kind floor — this call runs as issued; from the next call on, delegate debug-deep with model=medium; delegate quant-derivation with model=large"'
+
+[[case]]
+id = "stat/delegation-floor-directive-met"
+fn = "delegation_floor_directive"
+args_json = '[{"binding": {"reasoner": "small"}, "available": ["small", "medium", "large"], "task_kind_floors": {"quant-derivation": "large"}}, "k_reasoner", "large"]'
+expected_json = 'null'
 
 [[case]]
 id = "stat/delegation-floor-warning-met"
@@ -1853,7 +1913,19 @@ expected_json = 'null'
 id = "stat/role-matrix-warns"
 fn = "role_matrix_warning"
 args_json = '[{"$registry": {"set": {"cross_cutting_kinds": []}}}, "k_mechanic", "review"]'
-expected_json = '''"role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active role 'review' — it routes explore-search, summarize, debug-deep, plan-draft. Re-route or switch role."'''
+expected_json = '''"role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active role 'review' — it routes explore-search, summarize, debug-deep, plan-draft."'''
+
+[[case]]
+id = "stat/role-matrix-directive"
+fn = "role_matrix_directive"
+args_json = '[{"$registry": {"set": {"cross_cutting_kinds": []}}}, "k_mechanic", "review"]'
+expected_json = '''"role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active role 'review', which routes explore-search, summarize, debug-deep, plan-draft — re-route this work to an agent with an allowed kind, or declare the role switch before delegating it."'''
+
+[[case]]
+id = "stat/role-matrix-directive-one-overlap"
+fn = "role_matrix_directive"
+args_json = '[{"$registry": {"set": {"cross_cutting_kinds": []}}}, "k_reasoner", "review"]'
+expected_json = 'null'
 
 [[case]]
 # One allowed overlap silences a multi-kind agent.
@@ -1872,20 +1944,20 @@ expected_json = 'null'
 id = "stat/role-matrix-cross-cutting-removed"
 fn = "role_matrix_warning"
 args_json = '[{"$registry": {"set": {"cross_cutting_kinds": []}}}, "k_auditor", "engineer"]'
-expected_json = '''"role/task-kind: k_auditor (audit) is outside the active role 'engineer' — it routes explore-search, summarize, mech-edit, test-scaffold, doc-sync, validate-loop, implement-under-spec, debug-deep, quant-derivation, plan-draft. Re-route or switch role."'''
+expected_json = '''"role/task-kind: k_auditor (audit) is outside the active role 'engineer' — it routes explore-search, summarize, mech-edit, test-scaffold, doc-sync, validate-loop, implement-under-spec, debug-deep, quant-derivation, plan-draft."'''
 
 [[case]]
 id = "stat/role-matrix-empty-row"
 fn = "role_matrix_warning"
 args_json = '[{"role_task_kinds": {"review": []}, "cross_cutting_kinds": []}, "k_mechanic", "review"]'
-expected_json = '''"role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active role 'review' — it routes no task kinds. Re-route or switch role."'''
+expected_json = '''"role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active role 'review' — it routes no task kinds."'''
 
 [[case]]
 # The cross-cutting kinds join the allowed list after the row, without repeats.
 id = "stat/role-matrix-dedup"
 fn = "role_matrix_warning"
 args_json = '[{"role_task_kinds": {"r": ["audit", "summarize"]}, "cross_cutting_kinds": ["summarize", "audit", "independent-review"]}, "k_mechanic", "r"]'
-expected_json = '''"role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active role 'r' — it routes audit, summarize, independent-review. Re-route or switch role."'''
+expected_json = '''"role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active role 'r' — it routes audit, summarize, independent-review."'''
 
 [[case]]
 id = "stat/role-matrix-unknown-role"
@@ -1986,11 +2058,64 @@ args_json = '["mid-sentence zone:auth stays prose"]'
 expected_json = '[null, "mid-sentence zone:auth stays prose"]'
 
 [[case]]
-# The label stops at ASCII whitespace only: a no-break space stays inside it.
+# The token stops at ASCII whitespace only, so a no-break space stays inside it — and, being no
+# letter or digit, leaves it no label (C33 review); the marker still comes off.
 id = "log/zone-bare-nbsp"
 fn = "parse_zone"
 args_json = '["zone:a\u00a0b rest"]'
-expected_json = '["a\u00a0b", "rest"]'
+expected_json = '[null, "rest"]'
+
+[[case]]
+# C33 review: a label starts with a letter or digit; a lone `-` is no label.
+id = "log/zone-label-dash"
+fn = "parse_zone"
+args_json = '["[zone:-] rest"]'
+expected_json = '[null, "rest"]'
+
+[[case]]
+id = "log/zone-label-bracket-in-bare"
+fn = "parse_zone"
+args_json = '["zone:[auth] rest"]'
+expected_json = '[null, "rest"]'
+
+[[case]]
+id = "log/zone-label-bracket-inside"
+fn = "parse_zone"
+args_json = '["zone:auth]x rest"]'
+expected_json = '[null, "rest"]'
+
+[[case]]
+id = "log/zone-label-inner-space"
+fn = "parse_zone"
+args_json = '["[zone:a b] rest"]'
+expected_json = '[null, "rest"]'
+
+[[case]]
+id = "log/zone-label-underscore-first"
+fn = "parse_zone"
+args_json = '["[zone:_a] rest"]'
+expected_json = '[null, "rest"]'
+
+[[case]]
+# Letters, digits, `-`, `_` and `.` after the first; the case is kept as written.
+id = "log/zone-label-punctuated"
+fn = "parse_zone"
+args_json = '["zone:Hooks.Delegation-log_2 rest"]'
+expected_json = '["Hooks.Delegation-log_2", "rest"]'
+
+[[case]]
+# Letters and digits are Unicode's: a Cyrillic label and Arabic-Indic digits are labels.
+id = "log/zone-label-unicode"
+fn = "parse_zone"
+args_json = '["[zone:\u0430\u0443\u0442\u04281\u0662] rest"]'
+expected_json = '["\u0430\u0443\u0442\u04281\u0662", "rest"]'
+
+[[case]]
+# A combining mark is no letter: it cannot open a label.
+id = "log/zone-label-combining-first"
+fn = "parse_zone"
+args_json = '["[zone:\u0301a] rest"]'
+expected_json = '[null, "rest"]'
 
 [[case]]
 # Inside the brackets only ASCII whitespace is padding: a no-break space there is no marker.
@@ -2054,7 +2179,7 @@ expected_json = '[{"timestamp": "T0", "session_id": "sess-1", "subagent": "k_exp
 id = "log/unlabelled-warns"
 fn = "unlabelled_fanout_warning"
 args_json = '[[{"$new": "DelegationEntry", "fields": {"timestamp": "t", "session_id": "s1", "subagent": "k_explorer", "model": null, "zone": "io", "description": "d"}}, {"$new": "DelegationEntry", "fields": {"timestamp": "t", "session_id": "s1", "subagent": "k_explorer", "model": null, "zone": "auth", "description": "d"}}, {"$new": "DelegationEntry", "fields": {"timestamp": "t", "session_id": "s1", "subagent": "k_explorer", "model": null, "zone": "io", "description": "d"}}, {"$new": "DelegationEntry", "fields": {"timestamp": "t", "session_id": "s2", "subagent": "k_explorer", "model": null, "zone": "x", "description": "d"}}], "s1", "k_mechanic", null]'
-expected_json = '''"this k_mechanic delegation carries no zone label while this session's fan-out is zoned (auth, io) — the coverage map will count it as unlabelled; start the description with [zone:<label>]"'''
+expected_json = '''"this k_mechanic delegation carries no zone label while this session's fan-out is zoned (auth, io) — the coverage map will count it as unlabelled"'''
 
 [[case]]
 id = "log/unlabelled-other-session"
@@ -2084,6 +2209,18 @@ expected_json = 'null'
 id = "log/unlabelled-no-session"
 fn = "unlabelled_fanout_warning"
 args_json = '[[{"$new": "DelegationEntry", "fields": {"timestamp": "t", "session_id": "s1", "subagent": "k_explorer", "model": null, "zone": "auth", "description": "d"}}], null, "k_explorer", null]'
+expected_json = 'null'
+
+[[case]]
+id = "log/unlabelled-directive"
+fn = "unlabelled_fanout_directive"
+args_json = '[[{"$new": "DelegationEntry", "fields": {"timestamp": "t", "session_id": "s1", "subagent": "k_explorer", "model": null, "zone": "io", "description": "d"}}, {"$new": "DelegationEntry", "fields": {"timestamp": "t", "session_id": "s1", "subagent": "k_explorer", "model": null, "zone": "auth", "description": "d"}}], "s1", "k_mechanic", null]'
+expected_json = '''"this k_mechanic call carries no zone label while this session's fan-out is zoned (auth, io) — label fan-out calls with [zone:<label>] at the start of the description"'''
+
+[[case]]
+id = "log/unlabelled-directive-auditor"
+fn = "unlabelled_fanout_directive"
+args_json = '[[{"$new": "DelegationEntry", "fields": {"timestamp": "t", "session_id": "s1", "subagent": "k_explorer", "model": null, "zone": "auth", "description": "d"}}], "s1", "k_auditor", null]'
 expected_json = 'null'
 
 # --- gate: the C25 count, floor and request ------------------------------------------------------

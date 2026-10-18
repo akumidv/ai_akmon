@@ -7,6 +7,7 @@ surface a harness invokes — against the Python implementation by default; the 
 implementation joins here as ``--impl node``: the unit tables through ``probe.mjs`` (C103) and
 the hooks, run as ``node node_modules/akmon/js/hooks/<name>.mjs`` in a Node-package project
 (C104), and the CLI commands whose port has landed (C105), run as ``node node_modules/akmon/js/akmon/cli.mjs``;
+in a mounted project (C129) the same files run from the mount, ``node _aitna/akmon/js/...``;
 a scenario of a command or tool whose Python file is still unpaired in ``pairing.toml`` is *pending* on node
 (a skip that names the file), so the pairing list stays the one honest record of what is outstanding.
 
@@ -322,6 +323,19 @@ def _python_path(tree: Path, ctx: Ctx) -> str:
     return os.pathsep.join([str(tree / "src"), str(python_metadata(Path(ctx.tmp).parent, ctx.version))])
 
 
+def _node_carrier_dir(proj_dir: Path, attach: str) -> Path | None:
+    """Where a Node consumer's akmon tree sits: ``node_modules/akmon`` (package), the mount, or none.
+
+    Both are links to the tree under test, spelled unresolved the way the consumer's wiring and
+    CLI calls name them (ADR 0020 D05; the C129 amendment of D02 for the mount).
+    """
+    if attach == "native":
+        return proj_dir / "node_modules" / "akmon"
+    if attach == "mount":
+        return proj_dir / "_aitna" / "akmon"
+    return None
+
+
 def _command_for(
     scenario: Scenario, tree: Path, proj_dir: Path, ctx: Ctx, impl: str = "python"
 ) -> tuple[list[str], str, dict]:
@@ -332,9 +346,9 @@ def _command_for(
     args = tuple(_materialize_tokens(a, ctx) for a in run_spec.args)
     if scenario.kind == "hook":
         # The harness's own entry: package wiring calls the launcher (Python) or the script inside
-        # node_modules/akmon (Node, ADR 0020 D05); mounted wiring the script.
-        if fixture.attach == "native" and impl == "node":
-            script = proj_dir / "node_modules" / "akmon" / "js" / "hooks" / f"{run_spec.script}.mjs"
+        # node_modules/akmon (Node, ADR 0020 D05); mounted wiring the script inside the mount.
+        if impl == "node" and fixture.attach in ("native", "mount"):
+            script = _node_carrier_dir(proj_dir, fixture.attach) / "js" / "hooks" / f"{run_spec.script}.mjs"
             command = ["node", str(script), *args]
         elif fixture.attach == "native":
             command = [str(proj_dir / ".venv" / "bin" / "akmon"), "hook", run_spec.script, *args]
@@ -344,15 +358,15 @@ def _command_for(
         return command, payload, {}
     if scenario.kind == "cli":
         if impl == "node":
-            # A consumer runs the package it installed; the carrier link makes that the tree.
-            cli = proj_dir / "node_modules" / "akmon" if fixture.attach == "native" else tree
+            # A consumer runs the package it installed, or its mount; the carrier link makes that the tree.
+            cli = _node_carrier_dir(proj_dir, fixture.attach) or tree
             return ["node", str(cli / "js" / "akmon" / "cli.mjs"), *argv], "", {}
         command = [sys.executable, str(tree / "src" / "akmon" / "cli.py"), *argv]
         return command, "", {"PYTHONPATH": _python_path(tree, ctx)}
     if scenario.kind == "tool":
         if impl == "node":
             # The tool inside the package the consumer installed, as `akmon tool` will run it (C108).
-            carrier = proj_dir / "node_modules" / "akmon" if fixture.attach == "native" else tree
+            carrier = _node_carrier_dir(proj_dir, fixture.attach) or tree
             return ["node", str(carrier / "js" / "tools" / f"{run_spec.tool}.mjs"), *argv], "", {}
         return [sys.executable, str(tree / "tools" / f"{run_spec.tool}.py"), *argv], "", {}
     # unit: the table is the expectation; the probe is only the implementation's mouth.
@@ -391,8 +405,8 @@ def warmup_sync(scenario: Scenario, run: RunCtx, env: dict[str, str]) -> Callabl
 
     def warmup(proj: Path, tree: Path) -> None:
         if run.impl == "node":
-            cli = proj / "node_modules" / "akmon" / "js" / "akmon" / "cli.mjs"
-            warm = ["node", str(cli), "sync", "--project-root", str(proj)]
+            carrier = _node_carrier_dir(proj, scenario.fixture.attach) or tree
+            warm = ["node", str(carrier / "js" / "akmon" / "cli.mjs"), "sync", "--project-root", str(proj)]
         elif scenario.fixture.attach == "mount":
             warm = [sys.executable, str(proj / "_aitna" / "akmon" / "bin" / "sync.py"), "--project-root", str(proj)]
         else:
@@ -606,30 +620,36 @@ def _records_findings(scenario: Scenario, stdout: str) -> bool:
 
 
 def _record_block(scenario: Scenario, exit_code: int, stdout: str, stderr: str, ctx: Ctx) -> str:
-    """The [expected] section a --record run writes back into the scenario file."""
+    """The [expected] section a --record run writes back into the scenario file.
+
+    A key after a ``[expected.<sub>]`` header belongs to that sub-table (C128), so every
+    top-level ``expected`` key is written first and the sub-tables (``stdout_json``, ``files``)
+    after them.
+    """
     proj = Path(ctx.root)
     expected = scenario.expected
     lines = ["[expected]", f"exit = {exit_code}"]
+    tables: list[str] = []
     if expected.stderr_contains:  # hand-written, never recorded: keep it as the author left it
         lines.append(f"stderr_contains = [{', '.join(_toml_string(item) for item in expected.stderr_contains)}]")
     else:
         lines.append(f"stderr = {_toml_string(normalize(stderr, ctx))}")
     if expected.stdout_json is not None:
-        lines.append(_toml_tables(_normalize_leaves(json.loads(stdout), ctx), "expected.stdout_json"))
+        tables.append(_toml_tables(_normalize_leaves(json.loads(stdout), ctx), "expected.stdout_json"))
     elif _records_findings(scenario, normalize(stdout, ctx)):
         recorded = finding_lines(normalize(stdout, ctx), owned_codes())
         lines.append("findings = [" + "".join(f"\n  {_toml_string(line)}," for line in recorded) + "\n]")
     else:
         lines.append(f"stdout = {_toml_string(normalize(stdout, ctx))}")
-    if scenario.expected.files:
-        lines.append("[expected.files]")
-        for relative in scenario.expected.files:
+    if expected.file_absent:
+        lines.append(f"file_absent = [{', '.join(_toml_string(item) for item in expected.file_absent)}]")
+    if expected.files:
+        tables.append("[expected.files]")
+        for relative in expected.files:
             target = proj / relative
             actual = normalize(target.read_text(encoding="utf-8"), ctx) if target.is_file() else "<missing>"
-            lines.append(f"{_toml_string(relative)} = {_toml_string(actual)}")
-    if scenario.expected.file_absent:
-        lines.append(f"file_absent = [{', '.join(_toml_string(item) for item in scenario.expected.file_absent)}]")
-    return "\n".join(lines)
+            tables.append(f"{_toml_string(relative)} = {_toml_string(actual)}")
+    return "\n".join(lines + tables)
 
 
 def _apply_record(path: Path, block: str) -> None:

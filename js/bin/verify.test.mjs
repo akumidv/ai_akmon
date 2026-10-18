@@ -26,7 +26,7 @@ const VERSION = /** @type {{version: string}} */ (
 ).version;
 const NODE_RECORD = `mount = "package"\necosystem = "node"\nakmon_version = "${VERSION}"\nattached_archetype = "unclassified"\nlast_realign = "${VERSION}"\n`;
 const AGENTS =
-  "# AGENTS.md\n\n## Dev layer — akmon\n\n@_aitna/.akmon/guardrails/_common.md\n\n" +
+  "# AGENTS.md\n\n## Dev layer — akmon\n\n@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/profiles/js.md\n\n" +
   "Run `akmon path` to find the standard. Archetype: `ARCHETYPES.md`. Read `_aitna/memory` at session start.\n\n" +
   "The owner verifies consequential decisions. D5 is always-on. Secrets come from `.env`.\n\n" +
   "Skills live in root `skills/`; generated vendor skill stubs are pointers only.\n\n**Delegation is the default.** Delegate.\n";
@@ -110,6 +110,36 @@ function project(scratch, { pin = VERSION, link = true } = {}) {
   if (link) {
     fs.mkdirSync(posix.join(root, "node_modules"));
     fs.symlinkSync(TREE, posix.join(root, "node_modules", "akmon"));
+  }
+  return root;
+}
+
+const MOUNTED_RECORD = `mount = "submodule"\necosystem = "node"\nakmon_version = "${VERSION}"\nattached_archetype = "unclassified"\nlast_realign = "${VERSION}"\n`;
+const MOUNTED_AGENTS =
+  "# AGENTS.md\n\n## Dev layer — akmon\n\n@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/js.md\n\n" +
+  "Model: `_aitna/akmon/README.md`. Archetype: `ARCHETYPES.md`. Roles: `_aitna/akmon/roles/`. " +
+  "Read `_aitna/memory` at session start.\n\n" +
+  "The owner verifies consequential decisions. D5 is always-on. Secrets come from `.env`.\n\n" +
+  "Skills live in root `skills/`; generated vendor skill stubs are pointers only.\n\n**Delegation is the default.** Delegate.\n";
+const MOUNTED_CI =
+  "steps:\n  - run: node _aitna/akmon/js/akmon/cli.mjs sync --check\n  - run: node _aitna/akmon/js/akmon/cli.mjs verify --strict\n";
+
+/**
+ * A Node project under `scratch` attached in a mounted mode (C129) that `verify` finds healthy once
+ * synced: the package project's dev layer, a mounted record, AGENTS.md and CI, a `package.json` with
+ * no akmon pin, and `<AITNA_ROOT>/akmon` linked to this tree (`mount: null` leaves the link out).
+ * @param {string} scratch
+ * @param {{record?: string, mount?: string | null}} [options]
+ * @returns {string} the project root
+ */
+function mountedProject(scratch, { record = MOUNTED_RECORD, mount = TREE } = {}) {
+  const root = project(scratch, { pin: null, link: false });
+  put(root, "_aitna/.akmon.toml", record);
+  put(root, "AGENTS.md", MOUNTED_AGENTS);
+  put(root, ".github/workflows/ci.yml", MOUNTED_CI);
+  put(root, "package.json", '{"name": "c", "private": true}\n');
+  if (mount !== null) {
+    fs.symlinkSync(mount, posix.join(root, "_aitna", "akmon"));
   }
   return root;
 }
@@ -219,6 +249,7 @@ test("hooks.launcher: akmon only in an ancestor's node_modules is an error namin
     const root = project(scratch, { link: false });
     const nested = posix.join(root, "packages", "app");
     put(nested, "package.json", "{}");
+    put(nested, "_aitna/.akmon.toml", NODE_RECORD);
     const verifier = new Verifier(nested);
     verifier.checkHookLauncher();
     const [[severity, target, message, fix]] = of(verifier, "hooks.launcher");
@@ -238,7 +269,7 @@ test("hooks.launcher: the nearest ancestor holding node_modules/akmon is the one
     put(scratch, "node_modules/akmon/package.json", "{}");
     put(scratch, "ws/node_modules/akmon/package.json", "{}");
     const nested = posix.join(scratch, "ws", "pkg");
-    fs.mkdirSync(nested, { recursive: true });
+    put(nested, "_aitna/.akmon.toml", NODE_RECORD);
     const verifier = new Verifier(nested);
     verifier.checkHookLauncher();
     const [[, , message]] = of(verifier, "hooks.launcher");
@@ -480,6 +511,97 @@ test("package.dev-pin exactness: only the devDependencies class is judged for ex
 
 // -- layout.standard-path (node) ---------------------------------------------------------------
 
+// -- check.ruff-without-python (C129) ---------------------------------------------------------
+
+/**
+ * The ruff.toml `akmon init` writes, for the `.akmon` (package) or `akmon` (mounted) rules path.
+ * @param {string} mount
+ */
+function initRuffToml(mount) {
+  return (
+    "# ruff with akmon's Python rules; adjust them here with extend-select, extend-ignore and\n" +
+    `# per-file-ignores.\nextend = "_aitna/${mount}/profiles/ruff.toml"\n`
+  );
+}
+
+/**
+ * The `check.ruff-without-python` findings of a Node project holding `ruffToml` and `extra` files.
+ * @param {string | null} ruffToml
+ * @param {string[]} [extra]
+ */
+async function ruffFindings(ruffToml, extra = []) {
+  /** @type {unknown[]} */
+  let found = [];
+  await withScratch((scratch) => {
+    const root = project(scratch, { link: false });
+    if (ruffToml !== null) {
+      put(root, "ruff.toml", ruffToml);
+    }
+    for (const name of extra) {
+      put(root, name, "");
+    }
+    const verifier = new Verifier(root);
+    verifier.checkRuffWithoutPython();
+    found = of(verifier, "check.ruff-without-python");
+  });
+  return found;
+}
+
+test("check.ruff-without-python: init's ruff.toml in a Node project with no Python files warns", async () => {
+  for (const mount of [".akmon", "akmon"]) {
+    assert.deepEqual(await ruffFindings(initRuffToml(mount)), [
+      [
+        "warn",
+        "ruff.toml",
+        "ruff.toml is the one akmon init writes for ruff, but this project has package.json and no Python " +
+          "files (pyproject.toml, setup.py, setup.cfg, requirements*.txt, Pipfile, uv.lock, poetry.lock, or a " +
+          "*.py file outside <AITNA_ROOT> and node_modules (git-tracked in a work tree)): ruff has nothing to lint here",
+        "Remove ruff.toml, and name the project's own checks under [check] in _aitna/.akmon.toml.",
+      ],
+    ]);
+  }
+});
+
+test("check.ruff-without-python: Python files, an edited or foreign ruff.toml, or none is never named", async () => {
+  for (const marker of [
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "requirements.txt",
+    "requirements-dev.txt",
+    "Pipfile",
+    "uv.lock",
+    "poetry.lock",
+    "app/x.py",
+  ]) {
+    assert.deepEqual(await ruffFindings(initRuffToml(".akmon"), [marker]), [], marker);
+  }
+  // Python under the dev layer, node_modules or a dot-directory is no project code
+  for (const elsewhere of ["_aitna/akmon/bin/sync.py", "node_modules/x/y.py", ".venv/z.py"]) {
+    assert.equal((await ruffFindings(initRuffToml(".akmon"), [elsewhere])).length, 1, elsewhere);
+  }
+  assert.deepEqual(await ruffFindings(null), []);
+  assert.deepEqual(await ruffFindings(`${initRuffToml(".akmon")}line-length = 100\n`), []);
+  assert.deepEqual(await ruffFindings(initRuffToml(".akmon").replaceAll("\n", "\r\n")), []);
+  assert.deepEqual(await ruffFindings(initRuffToml("other")), []);
+});
+
+test("check.ruff-without-python: the template is sync.json's, the one the Python init writes", () => {
+  assert.equal(
+    syncData.sync.ruff_toml_template.replace("{{rules_path}}", "_aitna/.akmon/profiles/ruff.toml"),
+    initRuffToml(".akmon"),
+  );
+  assert.deepEqual(syncData.sync.python_markers.files, [
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "requirements*.txt",
+    "Pipfile",
+    "uv.lock",
+    "poetry.lock",
+  ]);
+});
+
 test("node_wired_hook_scripts: the entry points and every module they import, and nothing else", () => {
   const listed = data.node_wired_hook_scripts;
   const hooksDir = posix.join(TREE, "js", "hooks");
@@ -519,7 +641,7 @@ test("node_wired_hook_scripts: the entry points and every module they import, an
 
 test("node_wired_hook_scripts: every hook script the generated wiring runs is on the list", () => {
   const wiring = JSON.stringify([
-    codexHooksText(syncData),
+    codexHooksText(syncData, posix.join(TREE, "no-such-project")),
     JSON.stringify([...Object.values(syncData.sync.claude_hooks)]),
   ]);
   const named = [...new Set([...wiring.matchAll(/js\/hooks\/([A-Za-z-]+)\.mjs/g)].map((m) => `${m[1]}.mjs`))];
@@ -579,8 +701,8 @@ async function refusal(record, found) {
       code: 2,
       stdout: "",
       stderr:
-        'akmon verify: the JavaScript implementation serves Node package mode only (mount = "package" and ecosystem = ' +
-        `"node" in <AITNA_ROOT>/.akmon.toml), but this project has ${found}; run the Python implementation of akmon for it.\n`,
+        'akmon verify: the JavaScript implementation serves Node projects only (ecosystem = "node" in ' +
+        `<AITNA_ROOT>/.akmon.toml), but this project has ${found}; run the Python implementation of akmon for it.\n`,
     });
   });
 }
@@ -589,10 +711,10 @@ test("a project with no record is refused, exit 2, nothing on stdout", async () 
   await refusal(null, "no integration record (_aitna/.akmon.toml)");
 });
 
-test("a mounted record is refused, the recorded mount named (submodule when it names none)", async () => {
-  await refusal('mount = "vendored"\necosystem = "node"\n', 'mount = "vendored"');
-  await refusal('akmon_version = "1"\n', 'mount = "submodule"');
-  await refusal('mount = "subtree"\n', 'mount = "subtree"');
+test("a Python mounted record is refused, its ecosystem named (python when it names none)", async () => {
+  await refusal('mount = "vendored"\necosystem = "python"\n', 'ecosystem = "python"');
+  await refusal('akmon_version = "1"\n', 'ecosystem = "python"');
+  await refusal('mount = "subtree"\n', 'ecosystem = "python"');
 });
 
 test("a Python package record is refused: no ecosystem, a python one, or one this implementation does not know", async () => {
@@ -884,7 +1006,7 @@ test("codex.host-trust: stale or invalid wiring stops the check before any host 
         const runner = () => {
           throw new Error("must not be called");
         };
-        for (const text of ["{nope", "[]", `${codexHooksText(syncData)} `, ""]) {
+        for (const text of ["{nope", "[]", `${codexHooksText(syncData, root)} `, ""]) {
           put(root, ".codex/hooks.json", text);
           const result = await run(["--project-root", root, "--quiet"], { codexHooksRunner: runner });
           assert.ok(!result.stdout.includes("codex.host-trust"), JSON.stringify(text));
@@ -1459,7 +1581,12 @@ test("changelog: package mode answers one ok finding with no target", async () =
 
 test("the node texts of verify.json build valid findings: one line, a one-sentence fix", () => {
   const texts = data.node;
-  const values = { found: ".pnp.cjs", relative: "node_modules/akmon/js/hooks", value: "'^1.2.3'" };
+  const values = {
+    found: ".pnp.cjs",
+    relative: "node_modules/akmon/js/hooks",
+    value: "'^1.2.3'",
+    mount: "_aitna/akmon",
+  };
   for (const [key, text] of Object.entries(texts)) {
     if (typeof text !== "string") {
       continue;
@@ -1508,4 +1635,316 @@ test("the text patterns have the ASCII meaning of the Python's", () => {
     const pattern = new RegExp(TEXT_PATTERNS[name].source, TEXT_PATTERNS[name].flags.replace("g", ""));
     assert.equal(pattern.test(text), found, `${name} ${JSON.stringify(text)}`);
   }
+});
+
+// -- agents.profile-import / agents.language-profile (C127) ------------------------------------
+
+/**
+ * The profile findings of a node project whose AGENTS.md has `imports` in place of its js.md import.
+ * @param {string} scratch
+ * @param {string} imports
+ * @param {Record<string, string>} [files]
+ */
+function profileFindings(scratch, imports, files = {}) {
+  const root = project(scratch);
+  put(root, "AGENTS.md", AGENTS.replace("@_aitna/.akmon/profiles/js.md\n", imports));
+  for (const [relative, body] of Object.entries(files)) {
+    put(root, relative, body);
+  }
+  const verifier = new Verifier(root);
+  verifier.checkProfileImports();
+  return verifier;
+}
+
+test("profile imports: the js.md import of a package.json project resolves and covers it", async () => {
+  await withScratch((scratch) => {
+    const verifier = profileFindings(scratch, "@_aitna/.akmon/profiles/js.md\n");
+    assert.deepEqual(
+      verifier.findings.map((finding) => [finding.severity, finding.code]),
+      [
+        ["ok", "agents.profile-import"],
+        ["ok", "agents.language-profile"],
+      ],
+    );
+  });
+});
+
+test("profile imports: the vendored prefix in a package attach warns with the line to write", async () => {
+  await withScratch((scratch) => {
+    const verifier = profileFindings(scratch, "@_aitna/akmon/profiles/js.md\n");
+    assert.deepEqual(of(verifier, "agents.profile-import"), [
+      [
+        "warn",
+        "AGENTS.md",
+        "AGENTS.md imports @_aitna/akmon/profiles/js.md, which resolves to nothing: a package attach imports the standard's files from @_aitna/.akmon/",
+        "Replace the line @_aitna/akmon/profiles/js.md with @_aitna/.akmon/profiles/js.md in AGENTS.md.",
+      ],
+    ]);
+    assert.equal(of(verifier, "agents.language-profile")[0][0], "ok");
+  });
+});
+
+test("profile imports: a profile the standard does not ship warns, naming what it ships", async () => {
+  await withScratch((scratch) => {
+    const verifier = profileFindings(scratch, "@_aitna/.akmon/profiles/rust.md\n");
+    assert.deepEqual(of(verifier, "agents.profile-import"), [
+      [
+        "warn",
+        "AGENTS.md",
+        "AGENTS.md imports @_aitna/.akmon/profiles/rust.md, a profile the standard does not ship, so it loads nothing",
+        "Remove the line @_aitna/.akmon/profiles/rust.md from AGENTS.md, or import a profile the standard ships (js.md, python-stdlib.md, python.md, quant.md).",
+      ],
+    ]);
+  });
+});
+
+test("profile imports: a project file the standard does not ship is left alone (ADR-0014/D02)", async () => {
+  await withScratch((scratch) => {
+    const verifier = profileFindings(scratch, "@docs/profiles/house.md\n", { "docs/profiles/house.md": "" });
+    assert.deepEqual(
+      of(verifier, "agents.profile-import").map(([severity]) => severity),
+      ["ok"],
+    );
+  });
+});
+
+test("profile imports: a missing project file the standard does not ship warns", async () => {
+  await withScratch((scratch) => {
+    const verifier = profileFindings(scratch, "@docs/profiles/house.md\n");
+    assert.deepEqual(
+      of(verifier, "agents.profile-import").map(([severity, , message]) => [severity, message]),
+      [
+        [
+          "warn",
+          "AGENTS.md imports @docs/profiles/house.md, a profile the standard does not ship, so it loads nothing",
+        ],
+      ],
+    );
+  });
+});
+
+test("language profile: a package.json project with no js.md import warns with the exact line", async () => {
+  await withScratch((scratch) => {
+    const verifier = profileFindings(scratch, "Add one (`@_aitna/.akmon/profiles/<name>.md`).\n");
+    assert.deepEqual(of(verifier, "agents.language-profile"), [
+      [
+        "warn",
+        "AGENTS.md",
+        "AGENTS.md imports no js.md language profile, though package.json names the project's language",
+        "Add the line @_aitna/.akmon/profiles/js.md to the AGENTS.md akmon block, right after the _common.md import.",
+      ],
+    ]);
+  });
+});
+
+test("language profile: both manifests want both profiles, python first", async () => {
+  await withScratch((scratch) => {
+    const verifier = profileFindings(scratch, "", { "pyproject.toml": "[project]\n" });
+    assert.deepEqual(
+      of(verifier, "agents.language-profile").map(([severity, , message]) => [severity, message]),
+      [
+        ["warn", "AGENTS.md imports no python.md language profile, though pyproject.toml names the project's language"],
+        ["warn", "AGENTS.md imports no js.md language profile, though package.json names the project's language"],
+      ],
+    );
+  });
+});
+
+// -- a mounted Node project (C129) -------------------------------------------------------------
+
+/**
+ * A mount under `scratch` that is this tree, entry by entry, with a changelog of its own: the
+ * repository's `CHANGELOG.md` loses its `## Unreleased` heading at every release.
+ * @param {string} scratch
+ * @returns {string}
+ */
+function treeMount(scratch) {
+  const mount = posix.join(scratch, "tree-mount");
+  fs.mkdirSync(mount);
+  for (const entry of fs.readdirSync(TREE)) {
+    if (entry !== "CHANGELOG.md") {
+      fs.symlinkSync(posix.join(TREE, entry), posix.join(mount, entry));
+    }
+  }
+  put(mount, "CHANGELOG.md", "# Changelog\n\n## Unreleased\n");
+  return mount;
+}
+
+test("a synced mounted Node project is healthy: the mounted anchors, the mount's launcher and CI, no pin check", async () => {
+  await withScratch(async (scratch) => {
+    const root = mountedProject(scratch, { mount: treeMount(scratch) });
+    await withoutAitnaRoot(async () => {
+      syncWrite(root);
+      const empty = posix.join(scratch, "empty-path");
+      fs.mkdirSync(empty);
+      await withPath(empty, async () => {
+        const result = await run(["--project-root", root, "--strict"]);
+        assert.equal(result.stderr, "");
+        assert.equal(result.code, 0, result.stdout);
+        const lines = result.stdout.trimEnd().split("\n");
+        assert.ok(
+          lines.every((line) => line.startsWith("OK ")),
+          result.stdout,
+        );
+        assert.ok(
+          lines.includes(
+            "OK layout.standard-path _aitna/akmon/README.md: _aitna/akmon/README.md exists → Keep _aitna/akmon/README.md in the standard tree.",
+          ),
+        );
+        assert.ok(
+          lines.includes(
+            "OK hooks.launcher _aitna/akmon/js/hooks: generated hook wiring runs node on _aitna/akmon/js/hooks, which is present → Keep the akmon mount at _aitna/akmon in place.",
+          ),
+          result.stdout,
+        );
+        assert.ok(
+          lines.includes(
+            "OK changelog.unreleased _aitna/akmon/CHANGELOG.md: CHANGELOG.md has an Unreleased section → Keep an `## Unreleased` heading for pending changes.",
+          ),
+          result.stdout,
+        );
+        const codes = lines.map((line) => line.split(" ")[1].replace(/:$/, ""));
+        for (const code of ["agents.block-anchors", "ci.akmon-checks", "attach.record", "attach.realign"]) {
+          assert.ok(codes.includes(code), code);
+        }
+        // no pin to read in a mount, no Python cache to guard, no package-mode changelog answer
+        for (const code of ["package.dev-pin", "gitignore.akmon-pycache", "changelog.package-mode"]) {
+          assert.ok(!codes.includes(code), code);
+        }
+        assert.ok(!result.stdout.includes("standard tree:"), result.stdout);
+      });
+    });
+  });
+});
+
+test("hooks.launcher of a mount: a mount without js/hooks is an error with the restore fix, and ignores Plug'n'Play", async () => {
+  await withScratch(async (scratch) => {
+    const bare = posix.join(scratch, "bare-mount");
+    put(bare, "README.md", "# a mount without js/\n");
+    const root = mountedProject(scratch, { mount: bare });
+    put(root, ".pnp.cjs", "");
+    await withoutAitnaRoot(async () => {
+      const verifier = new Verifier(root);
+      verifier.checkHookLauncher();
+      assert.deepEqual(of(verifier, "hooks.launcher"), [
+        [
+          "error",
+          "_aitna/akmon/js/hooks",
+          "generated hook wiring runs node on _aitna/akmon/js/hooks, which is missing — every akmon hook command fails silently (an unavailable script produces no session-visible error), so the guardrails are off",
+          "Restore the akmon mount at _aitna/akmon (for a submodule, `git submodule update --init`), then re-run `node _aitna/akmon/js/akmon/cli.mjs sync`.",
+        ],
+      ]);
+    });
+  });
+});
+
+test("CI of a mount: the mounted JavaScript CLI's commands are required, the package spelling is not enough", async () => {
+  await withScratch(async (scratch) => {
+    const root = mountedProject(scratch);
+    put(root, ".github/workflows/ci.yml", CI);
+    await withoutAitnaRoot(async () => {
+      const verifier = new Verifier(root);
+      verifier.checkCi();
+      assert.deepEqual(of(verifier, "ci.akmon-checks")[0].slice(0, 3), [
+        "warn",
+        ".github/workflows",
+        "CI should run: node _aitna/akmon/js/akmon/cli.mjs sync --check, node _aitna/akmon/js/akmon/cli.mjs verify --strict",
+      ]);
+    });
+  });
+});
+
+test("changelog of a mount: no `## Unreleased` heading warns, any case; no CHANGELOG.md is no finding", async () => {
+  await withScratch(async (scratch) => {
+    const mount = posix.join(scratch, "mount");
+    const root = mountedProject(scratch, { mount });
+    await withoutAitnaRoot(async () => {
+      const findings = (/** @type {string} */ text) => {
+        put(mount, "CHANGELOG.md", text);
+        const verifier = new Verifier(root);
+        verifier.checkChangelog();
+        return of(verifier, "changelog.unreleased");
+      };
+      assert.deepEqual(findings("# Changelog\n\n## 1.0.0\n"), [
+        [
+          "warn",
+          "_aitna/akmon/CHANGELOG.md",
+          "CHANGELOG.md has no `## Unreleased` section; add one for pending changes",
+          "Add an `## Unreleased` heading above the latest release.",
+        ],
+      ]);
+      assert.equal(findings("# Changelog\n\n##\tunreleased\n")[0][0], "ok");
+      // `^` is a line start after `\n` only, and the word ends at an ASCII boundary
+      assert.equal(findings("# Changelog ## Unreleased\n")[0][0], "warn");
+      assert.equal(findings("## Unreleasedx\n")[0][0], "warn");
+      fs.rmSync(posix.join(mount, "CHANGELOG.md"));
+      const verifier = new Verifier(root);
+      verifier.checkChangelog();
+      assert.deepEqual(verifier.findings, []);
+    });
+  });
+});
+
+test("vendored leftovers: each top-level entry a Node copy does not carry warns, in code point order; only vendored", async () => {
+  await withScratch(async (scratch) => {
+    const mount = posix.join(scratch, "mount");
+    for (const entry of ["README.md", "js/x.mjs", ".gitignore", "meta/TASKS.md", "src/a.py", "Zed", "package.json"]) {
+      put(mount, entry, "x\n");
+    }
+    const root = mountedProject(scratch, { mount, record: MOUNTED_RECORD.replace("submodule", "vendored") });
+    await withoutAitnaRoot(async () => {
+      const verifier = new Verifier(root);
+      verifier.checkVendoredLeftovers();
+      const found = of(verifier, "layout.vendored-leftover");
+      assert.deepEqual(
+        found.map(([severity, target]) => [severity, target]),
+        // a Node record's copy carries src/ (the CLI data) and package.json (the CLI's version), C129
+        [
+          ["warn", "_aitna/akmon/Zed"],
+          ["warn", "_aitna/akmon/meta"],
+        ],
+      );
+      assert.equal(
+        found[1][2],
+        // a Node copy is re-made by the JavaScript init through npx, not by `akmon init` (C129)
+        "_aitna/akmon/meta is no longer shipped by the akmon carrier; a vendored re-copy (`npx github:akumidv/ai_akmon#<tag> init --mode vendored`, the command `node _aitna/akmon/js/akmon/cli.mjs update` prints) replaces only the standard's members and leaves it in place",
+      );
+      assert.equal(found[1][3], "Remove _aitna/akmon/meta by hand if the mount should match the carrier.");
+      put(
+        root,
+        "_aitna/.akmon.toml",
+        MOUNTED_RECORD.replace("submodule", "vendored").replace('ecosystem = "node"', 'ecosystem = "python"'),
+      );
+      const python = new Verifier(root);
+      python.checkVendoredLeftovers();
+      assert.deepEqual(
+        of(python, "layout.vendored-leftover").map(([, target]) => target),
+        ["_aitna/akmon/Zed", "_aitna/akmon/meta", "_aitna/akmon/package.json", "_aitna/akmon/src"],
+      );
+      assert.ok(of(python, "layout.vendored-leftover")[0][2].includes("`akmon init --mode vendored` copies only"));
+      put(root, "_aitna/.akmon.toml", MOUNTED_RECORD);
+      const submodule = new Verifier(root);
+      submodule.checkVendoredLeftovers();
+      assert.deepEqual(submodule.findings, []);
+    });
+  });
+});
+
+test("a mounted record's standard paths read relative to the root; a missing mount falls back to the running tree", async () => {
+  await withScratch(async (scratch) => {
+    const root = mountedProject(scratch);
+    await withoutAitnaRoot(async () => {
+      const verifier = new Verifier(root);
+      assert.equal(verifier.standardRoot, posix.join(root, "_aitna", "akmon"));
+      verifier.checkHooks();
+      assert.deepEqual(of(verifier, "layout.standard-path")[0].slice(0, 2), [
+        "ok",
+        "_aitna/akmon/js/hooks/hook_core.mjs",
+      ]);
+      fs.unlinkSync(posix.join(root, "_aitna", "akmon"));
+      const unmounted = new Verifier(root);
+      assert.equal(unmounted.standardRoot, TREE);
+      assert.equal(unmounted.displayPath(posix.join(TREE, "README.md")), "standard tree:README.md");
+    });
+  });
 });

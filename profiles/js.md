@@ -1,7 +1,8 @@
 # Profile: JavaScript and TypeScript (language)
 
-The **language** profile for JavaScript and TypeScript — attached to a project with a
-`package.json`, and `@`-imported from `AGENTS.md` so it loads at session start. It layers on the
+The **language** profile for JavaScript and TypeScript — `akmon init` imports it from `AGENTS.md`
+for a project with a `package.json` or a declared JavaScript or TypeScript language, so it loads
+at session start. It layers on the
 [common guardrails](../guardrails/_common.md): their § Code design states the principles for any
 language; this file says how they read in JavaScript, and only what no checker can see.
 

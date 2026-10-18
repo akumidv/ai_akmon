@@ -14,9 +14,11 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
 
@@ -85,6 +87,90 @@ def is_package_mode(project_root: Path) -> bool:
     mount exists yet — see ``read_mount_mode``'s backward-compatible default).
     """
     return read_mount_mode(project_root) == "package"
+
+
+def node_cli(project_root: Path, data: Mapping[str, Any]) -> str:
+    """How the JavaScript implementation is run for ``project_root``'s record (``sync.json`` ``node_cli``).
+
+    ``npx akmon`` in mode ``package``, the mount's own ``cli.mjs`` in a mounted mode (the C129
+    amendment of ADR 0020 D02): the command a refusal of a Node record names.
+    """
+    variant = "package" if is_package_mode(project_root) else "mounted"
+    return jsondata.fill(data["node_cli"][variant], {"aitna": aitna_root_name()})
+
+
+def has_python(project_root: Path, data: Mapping[str, Any], aitna: str) -> bool:
+    """Whether ``project_root`` holds Python (``sync.json`` ``python_markers``) — the one answer (C129).
+
+    A marker file at the root (a manifest, a requirements file, a lockfile, by glob), else a
+    Python source outside the dev layer ``aitna`` and ``node_modules``: the files git tracks in a
+    work tree, otherwise a walk that also skips dot-directories and stops after ``walk_limit``
+    entries. ``init``'s ecosystem inference and check default and ``verify``'s
+    ``check.ruff-without-python`` and ``attach.mount-ecosystem`` all ask this function; the
+    JavaScript twin is ``hasPython`` in ``js/bin/sync.mjs``.
+    """
+    markers = data["python_markers"]
+    try:
+        names = [entry.name for entry in os.scandir(project_root) if entry.is_file()]
+    except OSError:
+        return False
+    if any(fnmatchcase(name, pattern) for name in names for pattern in markers["files"]):
+        return True
+    sources = _tracked_files(project_root, markers["sources"])
+    if sources is None:
+        sources = _walked_files(project_root, markers["sources"], aitna, markers["walk_limit"])
+    return any(not _outside_project_code(path, aitna) for path in sources)
+
+
+def _outside_project_code(relative: str, aitna: str) -> bool:
+    """Whether a root-relative path sits in the dev layer or a ``node_modules`` directory."""
+    parts = relative.split("/")
+    return relative == aitna or relative.startswith(f"{aitna}/") or "node_modules" in parts
+
+
+def _tracked_files(project_root: Path, pattern: str) -> list[str] | None:
+    """The files git tracks under ``project_root`` matching ``pattern``; ``None`` outside a work tree."""
+    try:
+        listed = subprocess.run(
+            ["git", "ls-files", "-z", "--", pattern],
+            cwd=project_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if listed.returncode != 0:
+        return None
+    return [name for name in listed.stdout.decode("utf-8", "surrogateescape").split("\0") if name]
+
+
+def _walked_files(project_root: Path, pattern: str, aitna: str, limit: int) -> list[str]:
+    """Root-relative files matching ``pattern``, skipping the dev layer, ``node_modules`` and dot-directories.
+
+    Breadth first, in directory order, as the JavaScript twin walks; it stops after ``limit``
+    directory entries — a project too large to walk counts only what was seen by then.
+    """
+    found: list[str] = []
+    seen = 0
+    pending = [""]
+    while pending:
+        relative = pending.pop(0)
+        try:
+            with os.scandir(project_root / relative if relative else project_root) as listing:
+                entries = list(listing)
+        except OSError:
+            continue
+        seen += len(entries)
+        if seen > limit:
+            return found
+        for entry in entries:
+            path = f"{relative}/{entry.name}" if relative else entry.name
+            if entry.is_dir(follow_symlinks=False):
+                if not entry.name.startswith(".") and entry.name != "node_modules" and path != aitna:
+                    pending.append(path)
+            elif fnmatchcase(entry.name, pattern):
+                found.append(path)
+    return found
 
 
 # A requirement string *naming* akmon. PEP 508 puts the distribution name first, so it is matched
@@ -375,7 +461,7 @@ def _claude_hooks(root: Path, data: Mapping[str, Any] | None = None) -> dict:
     # because _merge_hook_entries dedups by command; it includes Read|Grep|Glob so the
     # nudge/ask also see read/sweep drift. UserPromptSubmit is per-turn (a mid-session
     # /model switch rebinds silently); Stop holds a turn at or above the gate's count floors
-    # (C25) — Claude only, Codex 0.155.1 has no main-agent stop event.
+    # (C25) — Claude only; not wired on Codex until a live probe confirms its main-agent Stop (M151).
     hooks = {}
     for event, entries in data["claude_hooks"].items():
         built = []
@@ -560,11 +646,10 @@ def _skill_stubs(root: Path, source: Path, data: Mapping[str, Any] | None = None
 
 
 # Fenced blocks first, then inline code spans: the akmon block in AGENTS.md *documents* the
-# import as well as making it ("import this project's language profile on its own line
-# (e.g. `@_aitna/.akmon/profiles/python.md`)"), and read literally the example is
-# indistinguishable from the real thing. Code spans are exactly where prose quotes a path it
-# does not mean, so stripping them separates the two without requiring a real import to sit in
-# any particular column.
+# import as well as making it ("add any other (`@_aitna/.akmon/profiles/<name>.md`)"), and read
+# literally the quoted form is indistinguishable from the real thing. Code spans are exactly
+# where prose quotes a path it does not mean, so stripping them separates the two without
+# requiring a real import to sit in any particular column.
 _FENCED_BLOCK_RE = re.compile(r"^(?P<fence>```|~~~).*?(?:^(?P=fence)[^\n]*$|\Z)", re.MULTILINE | re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 
@@ -595,6 +680,74 @@ def import_prefix(root: Path) -> str:
     The materialized copy in package mode, the mount otherwise.
     """
     return f"@{aitna_root_name()}/.akmon/" if is_package_mode(root) else f"@{aitna_root_name()}/akmon/"
+
+
+@dataclass(frozen=True)
+class LanguageProfile:
+    """A language profile a project calls for, and what named its language.
+
+    ``source`` is the manifest that named it (``pyproject.toml``) or, when no manifest did, the
+    language value that matched, spelled as the caller passed it.
+    """
+
+    profile: str
+    source: str
+
+
+def language_profiles(
+    root: Path, languages: Sequence[str], data: Mapping[str, Any] | None = None
+) -> list[LanguageProfile]:
+    """The language profiles ``root`` calls for, in the table's order (``sync.json``).
+
+    A profile is called for when one of ``languages`` names its language — a value is split on
+    ``/`` and compared without case, so a recorded ``package/python`` names ``python`` — or when
+    one of its manifests is a file at ``root``. An unknown or unclassified language calls for
+    none. ``init`` writes one import per answer; ``verify`` warns on an answer with no import.
+    """
+    found = []
+    for entry in _or_read(data)["language_profiles"]:
+        manifest = next((name for name in entry["manifests"] if (root / name).is_file()), None)
+        named = next(
+            (
+                value
+                for value in languages
+                if any(part.strip().lower() in entry["languages"] for part in value.split("/"))
+            ),
+            None,
+        )
+        source = manifest or named
+        if source is not None:
+            found.append(LanguageProfile(entry["profile"], source))
+    return found
+
+
+@dataclass(frozen=True)
+class ProfileImport:
+    """One ``@``-import of a file under a ``profiles/`` directory."""
+
+    prefix: str
+    """Everything between ``@`` and ``profiles/`` (``_aitna/.akmon/``; empty when relative)."""
+    name: str
+    """The profile's file name (``python.md``)."""
+
+    @property
+    def line(self) -> str:
+        """The import as ``AGENTS.md`` spells it."""
+        return f"@{self.prefix}profiles/{self.name}"
+
+
+# A profile import as the harness reads it: a token starting a line or following whitespace.
+_PROFILE_IMPORT_RE = re.compile(r"(?:^|(?<=\s))@([^\s`]*?)profiles/([A-Za-z0-9._-]+\.md)(?=\s|$)", re.ASCII)
+
+
+def profile_imports(text: str) -> list[ProfileImport]:
+    """Every profile ``@``-import ``text`` makes, in order.
+
+    Code spans and fenced blocks are skipped as the materialization scan skips them: there the
+    block quotes the form (``@<prefix>profiles/<name>.md``) without making the import.
+    """
+    visible = _INLINE_CODE_RE.sub(" ", _FENCED_BLOCK_RE.sub("\n", text))
+    return [ProfileImport(match.group(1), match.group(2)) for match in _PROFILE_IMPORT_RE.finditer(visible)]
 
 
 def _ruff_configs(data: Mapping[str, Any]) -> list[tuple[str, tuple[str, ...]]]:
@@ -640,10 +793,11 @@ def imported_standard_files(root: Path, data: Mapping[str, Any] | None = None) -
     ``AGENTS.md`` ``@``-imports, and the ruff rules a ruff configuration of the project
     ``extend``s.
 
-    Read from the documents rather than derived from the recorded archetype: the language
-    profile is a line a human adds by hand (``init`` says so in as many words), an
-    archetype-driven list would miss it, and it would ship files to a project whose archetype
-    is still ``<archetype>``.
+    Read from the documents rather than derived from the recorded archetype: ``init`` writes a
+    fresh block's language-profile imports from :func:`language_profiles`, but the block is
+    hand-owned from then on — a human adds the profile of a language ``init`` did not detect,
+    or an environment profile, and removes one — so the document, not a derivation, is what
+    the harness loads.
 
     Checked in every mode, against the tree the project runs: an import whose target the
     standard does not ship resolves to nothing, silently, whether it names the materialized copy
@@ -1027,7 +1181,8 @@ def main(argv: list[str] | None = None) -> int:
     # Python launcher, and a wrong-spelling write is worse than a refusal.
     ecosystem = recorded_ecosystem(root)
     if ecosystem != "python":
-        print(jsondata.fill(data["python_refuses_ecosystem"], {"value": line_safe(ecosystem)}), file=sys.stderr)
+        refusal = {"value": line_safe(ecosystem), "cli": node_cli(root, data)}
+        print(jsondata.fill(data["python_refuses_ecosystem"], refusal), file=sys.stderr)
         return 2
     files, errors = _planned_files(root, data)
     write = not args.check and not args.dry_run

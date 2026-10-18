@@ -1,0 +1,18 @@
+# C129: update of a Node vendored record to a release this CLI is not: the mount copies the tree of
+# the CLI that runs init, so the npx command that fetches that release's CLI is printed, never run.
+id = "cli/update-node-vendored-printed"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:update"]
+
+[fixture]
+attach = "mount"
+files = { "_aitna/.akmon.toml" = "mount = \"vendored\"\necosystem = \"node\"\nakmon_version = \"0.1.0\"\nlast_realign = \"0.1.0\"\nattached_archetype = \"demo\"\n" }
+
+[run]
+argv = ["update", "--ref", "v9.9.9", "--project-root", "{{root}}"]
+
+[expected]
+exit = 2
+stderr = "akmon update: mode 'vendored' copies the tree of the akmon CLI that runs init, so v9.9.9 needs its own CLI, and fetching it is a download update does not make for you. Run that version's init:\n    npx github:akumidv/ai_akmon#v9.9.9 init --mode vendored --project-root {{root}} --yes\n"
+stdout = "akmon update: {{root}} · mount mode vendored · 0.1.0 → v9.9.9\n"

@@ -1,0 +1,78 @@
+{
+  "account_id_sha256": "dc17f02443f35278c2d94b94ee471ee5dc9f10e499726ea3d92d591eecdab320",
+  "codex_cli_version": "codex-cli 0.162.1",
+  "codex_effort": "medium",
+  "codex_executable": "/home/ai/.codex/packages/standalone/releases/0.162.1-x86_64-unknown-linux-musl/bin/codex",
+  "codex_executable_sha256": "628e35487d888a28f0427fc37501da529dd3d81fcbad7a2c3421c1e8670d92e1",
+  "codex_limit_tokens": 5000000,
+  "codex_route_approval_sha256": "1dc8594178007af04ea92051992575f5afe764f77f2130070192d366408f5ccd",
+  "codex_route_evidence_sha256": {
+    "manifest.json": "d78d8d45774e035bd549e363cfc5fbf21baf084c9431b407c1197c56c3f99a9e",
+    "outcome.json": "3ed5fc48a5e21ec4cc8db9ad75ec838b238c8d3cff8d80fcbe712a089f565c7b",
+    "reply.tsv": "db18769fd94438cc9f1a4b8316ba7a5d1f97cefb4f6c9686d5791e19f15e9a25",
+    "rollout.jsonl": "5207e9e4c66f91aeb58bbaf1db4a39febed6da91cf819604566fc8912be304cc",
+    "route-events.jsonl": "cfd1a675322ffa4b0531894d70c760a0c2a786a156edbd5c5bba868efdd60867"
+  },
+  "codex_route_seal_sha256": "b99e1a1c18868aa7a491f893e0fedabdbbeae574f8ea42013cdb70662e1f05fc",
+  "codex_scorer_model": "gpt-6-astra",
+  "codex_subject_models": {
+    "mid": "gpt-5.6-luna",
+    "strongest": "gpt-6-astra"
+  },
+  "controls_approval_sha256": "b5ef9b5604719ed4edf8c1862eda2309ed8be4836d0025a2b87c2b6a784034fc",
+  "controls_ledger_sha256": "79ad8ab7ff6e9b17daf094d4b4031295fca39a752bc913e9ae0bcf33a1476f1c",
+  "controls_manifest_sha256": "601f5b1d29435d955c01771a9e4c3c07ea34b5c349a30bbf5f4a4032c302c6ef",
+  "controls_seal_sha256": "d3d513feead984a755167e446eee9a9d84f6ba32f9cfd4c8cad0b96c5ecd2103",
+  "five_hour_stop_percent": 80,
+  "historical_receipt_sha256": "722350657d7bb18d04d8356c7d223460fe4723d1a3555192a252e378ae5869e0",
+  "opening_codex_tokens": 214673,
+  "packet_seal_sha256": "62ace0ce353ce059acd2ee442589d81912ffa61d6442787dc17aebd34728dd93",
+  "planned_calls": 128,
+  "proposal_sha256": "5050b01694f9e16c40040bb7abd30b13bdccae293992821ba241fa417d470c16",
+  "provider_calls_started": 0,
+  "qwen_cli_version": "0.24.7",
+  "qwen_model": "qwen3.8-27b",
+  "qwen_route_approval_sha256": "477d089da9aad0eef0d5bb4346ce2de114ae549e4cc9a2dc67296fadd591ec65",
+  "qwen_route_evidence_sha256": {
+    "outcome.json": "a49eba2fe84ad8b33255be7f8ac96bcbf47b7e8a28e2f60b063cf68cbe08c0d7",
+    "reply.tsv": "0d45e713dfb25b545b89ee935f34999c7a7dce9f3b1b67b1d3479248b5a92713",
+    "stderr.raw": "60a24b00d2c8ab71c99f8d42b2204305b300dca99ccc9a5d018a4ad55d39d625",
+    "stdout.raw": "ab94e350f1003429031cb94e7cb05d14cff4416fe8666fc041006f6a5a8079b0"
+  },
+  "qwen_route_ledger_sha256": "d9ebefd4d0481af6307e3f3300dcbcc0c9716d0af0bae8b964b4bf7c20817da5",
+  "qwen_route_seal_sha256": "b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79",
+  "qwen_thinking": "provider default retained",
+  "record_type": "p3_v3_qualification_operational_seal",
+  "regression_sha256": {
+    "test_a22_p3_v3_qualification_dispatch.py": "a89dcea206ca30b0b010e737f51047a58749f2cc5076ef9570528512e8547e1d",
+    "test_a22_p3_v3_qualification_packet.py": "cd0b1d1eaf8d1e7b6548f007a758897aa314f4ca34a45b677c343a4015cf46f4",
+    "test_a22_p3_v3_qualification_reduce.py": "08d0cb5f6c14dc64143c273fb673434838c62a7ade7ff68b7ca05af2ac5ce5af",
+    "test_a22_p3_v3_qualification_schedule.py": "877546ff26a1f773eac59ce52f219c72f7fd7fbd5837ab5c0db9ebc1990c732f"
+  },
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "runtime_root": "/tmp/a22-p3-v3-qualification-runtime",
+  "schedule_sha256": "fd1df6f7366079741713bf4812b4af8246da46de8489e60b80303efb5f71a93c",
+  "schema": 1,
+  "scope": [
+    "qualification"
+  ],
+  "scorer_input_cap": 20000,
+  "scorer_output_settings": {
+    "codex": 1000,
+    "qwen": 2000
+  },
+  "source_sha256": {
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "scorer_route_check.py": "5947219962ce3d7f8defefafb1f705acc414bf274c89cff1de8f872ddbc604d5",
+    "v3_codex_scorer_route_consent_v2.py": "ee43ec84f8a3621ac7323c4df2acc2f55edffea404ed73356f5501dfad2fd9a2",
+    "v3_controls_successor.py": "93d085b9f9332941e949773fbc6e35cf0a952ad78741b27b1ccc9b29eb33da43",
+    "v3_qualification_dispatch.py": "098f6f5e0477552417238fc8ac1df70ee6ba64edccd66d5fa654b8caea47b908",
+    "v3_qualification_packet.py": "b9ff4691c7ba1f93d6d472651e51ee0e1b90deb769e1fdc9b654a9c84b25495d",
+    "v3_qualification_reduce.py": "e291f47e9144d0e090ad8410670465ea4b826a6cee438fd779d6ab5e8d2629ac",
+    "v3_qualification_schedule.py": "3150836780dd914e2037df42ff407747439b1cfdf73816ff85686bf96942ffbc",
+    "v3_runner_version_successor.py": "a059553c4ce0a5447aa09254fbb9d2a6bd3d0c75f58f9feb50a5675313fd9b67"
+  },
+  "status": "offline_candidate_pending_owner_acceptance",
+  "subject_input_cap": 40000,
+  "weekly_stop_percent": 90
+}

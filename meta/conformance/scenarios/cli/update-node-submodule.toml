@@ -1,0 +1,25 @@
+# C129: update of a Node submodule record fetches the release tags into the mount from --repo
+# before init moves the pin, as the Python does. The corpus mount is a link to the tree, not a git
+# work tree, so the fetch fails and update stops before init; the move itself is pinned by
+# js/akmon/_update.test.mjs. GIT_DIR names no repository, so the fetch can never reach a work tree
+# that happens to enclose the corpus's temporary directory.
+id = "cli/update-node-submodule"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:update"]
+
+[fixture]
+attach = "mount"
+repo = true
+files = { "_aitna/.akmon.toml" = "mount = \"submodule\"\necosystem = \"node\"\nakmon_version = \"0.1.0\"\nlast_realign = \"0.1.0\"\nattached_archetype = \"demo\"\n" }
+
+[env]
+GIT_DIR = "/nonexistent-akmon-corpus"
+
+[run]
+argv = ["update", "--ref", "v{{version}}", "--repo", "{{repo}}", "--project-root", "{{root}}"]
+
+[expected]
+exit = 2
+stderr = "fatal: not a git repository: '/nonexistent-akmon-corpus'\nakmon update: `git fetch --tags` failed in _aitna/akmon — it needs git and network access to {{repo}}\n"
+stdout = "akmon update: {{root}} · mount mode submodule · 0.1.0 → v{{version}}\nakmon update: fetching release tags into _aitna/akmon\n"

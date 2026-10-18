@@ -110,12 +110,33 @@ def test_init_data_pins_its_structure():
     """The data file is the single owner of the init text: pin the key set and a few
     characteristic exact values so a transcription drift is caught here, not in the corpus."""
     assert set(_INIT_DATA) == {
-        # the Python init's refusal of a record the JavaScript implementation wrote (C105)
+        # the Python init's refusal of a record the JavaScript implementation wrote (C105), and the
+        # package-mode spelling of the CLI it names (`node_mounted_cli` the mounted one, C129)
         "python_refuses_ecosystem",
-        # the JavaScript init's own keys (C105); this file never reads them
-        "node_refuses_mode",
+        "node_package_cli",
+        # the Python init's hand-over of a Node attach to the JavaScript implementation (C129)
+        "python_hands_over_node",
+        "python_hands_over_why",
+        "python_switch_hands_over",
+        # the JavaScript init's own keys (C105, C129); this file never reads them
         "node_refuses_record",
+        "node_refuses_python_ecosystem",
+        "node_refuses_python_why",
+        "node_refuses_reverse",
+        # the JavaScript init's move of a Python-mounted record to Node (C129 step 8)
+        "node_refuses_record_switch",
+        "node_switch_mounted_only",
+        "node_switch_log",
+        "node_switch_checks_redecided",
+        "node_switch_codex_step",
+        "node_switch_ruff_step",
+        # the refusal of a mount that predates the switch, and the data that says so (C129)
+        "node_switch_requires",
+        "node_switch_mount_predates",
+        "node_switch_mount_update",
+        "node_mounted_cli",
         "node_oxlint_rules",
+        "node_oxlint_rules_mounted",
         "node_oxlintrc_text",
         "node_oxlintrc_wrote",
         "node_oxlintrc_env_step",
@@ -127,13 +148,17 @@ def test_init_data_pins_its_structure():
         "gitignore_lines_node",
         "node_managers",
         "ci_workflow_steps_node",
+        "ci_workflow_steps_node_mounted",
         "record_fresh_node",
         "pin_step_node",
         "report_missing_node",
         "akmon_repo",
         "tree_members",
+        "tree_members_node",
         "tree_markers",
+        "copy_ignore",
         "mount_gitignore",
+        "mount_text",
         "agents_header",
         "agents_block",
         "agents_roles_hint_package",
@@ -159,6 +184,8 @@ def test_init_data_pins_its_structure():
         "mode_switch_remove_mount",
         "pin_step",
         "ruff_step",
+        # an explicit --checks deciding an empty [check] table again (C129 audit F4)
+        "checks_redecided_empty",
         "run_prefix",
         "write_ci_commands",
         "report",
@@ -216,7 +243,7 @@ def test_init_data_file_error_propagates_uncaught(monkeypatch):
 
     monkeypatch.setattr(jsondata, "read", broken_read)
     with pytest.raises(jsondata.DataFileError):
-        _init._agents_block("_aitna", "v0.1.0", "backend", "python", package_mode=True)
+        _init._agents_block("_aitna", "v0.1.0", _init._Classification("backend", "python"), package_mode=True)
     with pytest.raises(jsondata.DataFileError):
         _init._tasks_skeleton("_aitna")
 
@@ -338,6 +365,57 @@ def test_init_writes_agents_md_when_absent(tmp_path):
     assert _init.block_heading() in text
     assert "@_aitna/akmon/guardrails/_common.md" in text
     assert "delegation is the default" in text.lower()
+
+
+# The fresh block's language-profile imports (C127): one per detected language, right after the
+# common guardrail, under the attach's prefix; none for an unknown language, which keeps `classify`.
+
+
+def test_init_imports_the_profile_the_language_flag_names(tmp_path, capsys):
+    assert _init_vendored(tmp_path, "--archetype", "package", "--language", "python") == 0
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/python.md\n" in text
+    assert "classify the project" not in capsys.readouterr().out
+
+
+def test_init_imports_the_profile_the_manifest_names_and_keeps_classify(tmp_path, capsys):
+    _write(tmp_path / "pyproject.toml", '[project]\nname = "demo"\n')
+    assert _init_vendored(tmp_path, "--checks", "none") == 0
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/python.md\n" in text
+    out = capsys.readouterr().out
+    assert "classify the project's archetype against ARCHETYPES.md" in out  # the archetype is still unclassified
+    assert "import the language profile" not in out  # init already imported it (C127)
+
+
+def test_init_imports_both_profiles_python_first(tmp_path):
+    _write(tmp_path / "pyproject.toml", '[project]\nname = "demo"\n')
+    _write(tmp_path / "package.json", "{}\n")
+    assert _init_vendored(tmp_path, "--checks", "none") == 0
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert (
+        "@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/python.md\n@_aitna/akmon/profiles/js.md\n"
+    ) in text
+
+
+def test_init_imports_no_profile_for_an_unknown_language(tmp_path, capsys):
+    assert _init_vendored(tmp_path, "--archetype", "custom", "--language", "rust") == 0
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
+    assert sync_mod.profile_imports(text) == []
+    assert "@_aitna/akmon/guardrails/_common.md\n\n" in text
+    out = capsys.readouterr().out
+    assert "classify the project (archetype + language)" in out
+    assert "import the language profile in AGENTS.md" in out
+
+
+def test_package_block_imports_profiles_under_the_materialized_prefix():
+    block = _init._agents_block(
+        "_aitna", "v0.1.0", _init._Classification("package", "python", ("python.md",)), package_mode=True
+    )
+    assert "@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/profiles/python.md\n" in block
+    # the quoted form names no profile: the example is a placeholder, not a value to copy
+    assert "`@_aitna/.akmon/profiles/<name>.md`" in block
 
 
 def test_init_appends_the_block_and_preserves_existing_content(tmp_path):
@@ -579,8 +657,13 @@ def test_package_attach_verifies_strict_green(tmp_path, monkeypatch):
         path.relative_to(tmp_path).as_posix() for path in (tmp_path / "_aitna" / ".akmon").rglob("*") if path.is_file()
     )
     # No linter of its own, so init set up ruff with akmon's rules — the standard `extend` — and
-    # sync materialized them beside the imported guardrail.
-    assert materialized == ["_aitna/.akmon/guardrails/_common.md", "_aitna/.akmon/profiles/ruff.toml"]
+    # sync materialized them beside the imported guardrail and the Python profile, which the
+    # fresh block imports because the project has a pyproject.toml (C127).
+    assert materialized == [
+        "_aitna/.akmon/guardrails/_common.md",
+        "_aitna/.akmon/profiles/python.md",
+        "_aitna/.akmon/profiles/ruff.toml",
+    ]
     configs = [
         p.read_text(encoding="utf-8") for p in (tmp_path / "pyproject.toml", tmp_path / "ruff.toml") if p.is_file()
     ]
@@ -869,7 +952,12 @@ def test_a_foreign_ecosystem_record_is_refused_before_the_mode_switch(tmp_path, 
     would be refused here anyway (C119)."""
     record = 'mount = "package"\necosystem = "node"\n'
     _write(tmp_path / "_aitna" / ".akmon.toml", record)
-    expected = _INIT_DATA["python_refuses_ecosystem"].replace("{{value}}", "node").replace("{{aitna}}", "_aitna")
+    expected = (
+        _INIT_DATA["python_refuses_ecosystem"]
+        .replace("{{value}}", "node")
+        .replace("{{aitna}}", "_aitna")
+        .replace("{{cli}}", "npx akmon")
+    )
     for flags in ([], ["--switch-mode"]):
         assert _init.main(["--mode", "vendored", *flags, "--project-root", str(tmp_path), "--yes"]) == 2
         assert capsys.readouterr().err == f"akmon init: {expected}\n"
@@ -1192,3 +1280,158 @@ def test_moving_an_existing_pin_leaves_the_bump_unstaged(tmp_path, capsys, local
     moved = _sha(["rev-parse", "HEAD"], cwd=consumer / "_aitna" / "akmon")
     assert moved != staged
     assert moved == _sha(["rev-parse", "main^{commit}"], cwd=_AKMON)
+
+
+# --------------------------------------------------------------------------------------
+# a Node repository is the JavaScript implementation's (C129, ADR 0020 D02 as amended)
+# --------------------------------------------------------------------------------------
+
+
+def _hand_over(why: str, command: str) -> str:
+    text = _INIT_DATA["python_hands_over_node"]
+    return "akmon init: " + text.replace("{{why}}", why).replace("{{command}}", command) + "\n"
+
+
+def test_a_mounted_first_attach_of_a_node_repository_is_handed_over(tmp_path, capsys):
+    """package.json and no Python files: the Python init sets up no Python-run mount and runs no
+    JavaScript either — it prints the exact command, exit 2, and the project is untouched."""
+    _write(tmp_path / "package.json", "{}\n")
+    assert _init_vendored(tmp_path) == 2
+    captured = capsys.readouterr()
+    tag = _init._tag_for_version(__version__)
+    assert captured.err == _hand_over(
+        "package.json and no Python files", f"npx github:akumidv/ai_akmon#{tag} init --mode vendored"
+    )
+    assert captured.out == ""
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["package.json"]
+
+
+@pytest.mark.parametrize("python", ["requirements.txt", "app/x.py"])
+def test_a_node_repository_with_python_files_is_attached_here(tmp_path, capsys, python):
+    """C129 (owner accepted (a)): a requirements file or a git-tracked Python source makes the
+    repository a Python one beside package.json — no hand-over, and ruff is set up."""
+    _write(tmp_path / "package.json", "{}\n")
+    _write(tmp_path / python, "")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "--", python], cwd=tmp_path, check=True)
+    assert _init_vendored(tmp_path) == 0
+    assert "JavaScript implementation" not in capsys.readouterr().err
+    assert (tmp_path / "ruff.toml").is_file()
+    assert 'ruff = "' in (tmp_path / "_aitna" / ".akmon.toml").read_text(encoding="utf-8")
+
+
+def test_the_hand_over_carries_the_flags_and_names_the_mount_cli_when_one_is_there(tmp_path, capsys):
+    _write(tmp_path / "package.json", "{}\n")
+    _write(tmp_path / "pyproject.toml", '[project]\nname = "demo"\n')
+    _write(tmp_path / "_aitna" / "akmon" / "js" / "akmon" / "cli.mjs", "")
+    argv = ["--ecosystem", "node", "--ref", "v1.2.3", "--repo", "/srv/akmon", "--aitna-root", "_aitna"]
+    assert _init.main(["--mode", "submodule", "--project-root", str(tmp_path), "--yes", *argv]) == 2
+    assert capsys.readouterr().err == _hand_over(
+        "--ecosystem node",
+        "node _aitna/akmon/js/akmon/cli.mjs init --mode submodule --ecosystem node --ref v1.2.3 "
+        "--aitna-root _aitna --repo /srv/akmon",
+    )
+
+
+def test_the_hand_over_of_a_vendored_mount_names_npx_whatever_is_on_disk(tmp_path, capsys):
+    """A Python-vendored copy carries `tree_members` only, not the data the JavaScript CLI reads, so
+    its `cli.mjs` is never the command: `npx` re-vendors the mount whole (C129 step 8)."""
+    _write(tmp_path / "package.json", "{}\n")
+    _write(tmp_path / "_aitna" / "akmon" / "js" / "akmon" / "cli.mjs", "")
+    assert _init_vendored(tmp_path, "--ecosystem", "node") == 2
+    tag = _init._tag_for_version(__version__)
+    assert capsys.readouterr().err == _hand_over(
+        "--ecosystem node", f"npx github:akumidv/ai_akmon#{tag} init --mode vendored --ecosystem node"
+    )
+
+
+@pytest.mark.parametrize(
+    ("recorded", "tag"),
+    [
+        pytest.param("9.0.0", "v9.0.0", id="the record is newer"),
+        pytest.param("0.1.0", None, id="this implementation is newer"),
+    ],
+)
+def test_the_vendored_switch_hand_over_names_the_newer_release(tmp_path, capsys, recorded, tag):
+    """A printed vendored switch names the release that has it: the newer of the record's and this
+    implementation's (``common/versions.py::switch_tag``, the one rule; C129)."""
+    _write(tmp_path / "package.json", "{}\n")
+    _write(tmp_path / "_aitna" / ".akmon.toml", f'mount = "vendored"\nakmon_version = "{recorded}"\n')
+    assert _init_vendored(tmp_path, "--ecosystem", "node") == 2
+    ref = tag or _init._tag_for_version(__version__)
+    command = f"npx github:akumidv/ai_akmon#{ref} init --mode vendored --ecosystem node"
+    expected = _INIT_DATA["python_switch_hands_over"].replace("{{aitna}}", "_aitna").replace("{{command}}", command)
+    assert capsys.readouterr().err == f"akmon init: {expected}\n"
+
+
+def test_a_package_mode_node_attach_hands_over_to_the_npm_package(tmp_path, capsys):
+    assert _init.main(["--mode", "package", "--ecosystem", "node", "--project-root", str(tmp_path), "--yes"]) == 2
+    assert capsys.readouterr().err == _hand_over("--ecosystem node", "npx akmon init --mode package --ecosystem node")
+
+
+def test_a_mixed_repository_stays_python_unless_the_flag_says_node(tmp_path):
+    _write(tmp_path / "package.json", "{}\n")
+    _write(tmp_path / "pyproject.toml", '[project]\nname = "demo"\n')
+    assert _init_vendored(tmp_path, "--checks", "none") == 0
+    assert "ecosystem" not in tomllib.loads((tmp_path / "_aitna" / ".akmon.toml").read_text(encoding="utf-8"))
+
+
+def test_ecosystem_python_attaches_a_node_repository_with_the_python_implementation(tmp_path):
+    _write(tmp_path / "package.json", "{}\n")
+    assert _init_vendored(tmp_path, "--ecosystem", "python") == 0
+    assert (tmp_path / "_aitna" / "akmon" / "bin" / "sync.py").is_file()
+
+
+def test_package_mode_keeps_the_carrier_ecosystem_in_a_node_repository(tmp_path):
+    """Mode package is the wheel's own: no inference, no hand-over (the pin gate answers instead)."""
+    _write(tmp_path / "package.json", "{}\n")
+    assert _init.main(["--mode", "package", "--project-root", str(tmp_path), "--yes", "--ref", "v0.3.0"]) == 1
+
+
+def test_a_recorded_python_attach_hands_the_node_switch_over(tmp_path, capsys):
+    """The record decides once it exists; `--ecosystem node` on a Python record is the JavaScript
+    implementation's switch (C129 step 8), so this init names it and changes nothing."""
+    assert _init_vendored(tmp_path) == 0
+    record = (tmp_path / "_aitna" / ".akmon.toml").read_text(encoding="utf-8")
+    capsys.readouterr()
+    assert _init_vendored(tmp_path, "--ecosystem", "node") == 2
+    tag = _init._tag_for_version(__version__)
+    expected = (
+        _INIT_DATA["python_switch_hands_over"]
+        .replace("{{aitna}}", "_aitna")
+        .replace("{{command}}", f"npx github:akumidv/ai_akmon#{tag} init --mode vendored --ecosystem node")
+    )
+    assert capsys.readouterr().err == f"akmon init: {expected}\n"
+    assert (tmp_path / "_aitna" / ".akmon.toml").read_text(encoding="utf-8") == record
+
+
+@pytest.mark.parametrize(
+    ("mode", "ref", "command"),
+    [
+        ("submodule", "v1.0.0", "node _aitna/akmon/js/akmon/cli.mjs init --ecosystem node"),
+        ("subtree", "v1.0.0", "node _aitna/akmon/js/akmon/cli.mjs init --ecosystem node"),
+        ("vendored", "v1.0.0", "npx github:akumidv/ai_akmon#v1.0.0 init --ecosystem node"),
+    ],
+)
+def test_the_node_switch_command_is_the_mount_cli_except_for_a_vendored_copy(mode, ref, command):
+    assert _init.node_switch_command("_aitna", mode, ref) == command
+
+
+@pytest.mark.parametrize(("mode", "cli"), [("package", "npx akmon"), ("vendored", "node _x/akmon/js/akmon/cli.mjs")])
+def test_a_node_record_is_refused_naming_the_cli_of_its_mode(tmp_path, capsys, mode, cli):
+    _write(tmp_path / "_x" / ".akmon.toml", f'mount = "{mode}"\necosystem = "node"\n')
+    assert _init.main(["--aitna-root", "_x", "--project-root", str(tmp_path), "--yes"]) == 2
+    assert capsys.readouterr().err.endswith(f"run the JavaScript implementation for it: {cli} init\n")
+
+
+@pytest.mark.parametrize(
+    ("repo", "spec"),
+    [
+        ("https://github.com/akumidv/ai_akmon", "github:akumidv/ai_akmon#v1.0.0"),
+        ("https://github.com/akumidv/ai_akmon.git", "github:akumidv/ai_akmon#v1.0.0"),
+        ("/srv/akmon", "git+file:///srv/akmon#v1.0.0"),
+        ("ssh://git@example.org/akmon.git", "git+ssh://git@example.org/akmon.git#v1.0.0"),
+    ],
+)
+def test_npx_spec_names_a_github_repository_by_its_shorthand(repo, spec):
+    assert _init.npx_spec(repo, "v1.0.0") == spec

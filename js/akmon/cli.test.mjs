@@ -397,3 +397,141 @@ test("a hook module without an entry runs as an empty script does: exit 0, no ou
   assert.deepEqual(await inProcess(["hook", "hook_core"]), { status: 0, stdout: "", stderr: "" });
   assert.deepEqual(akmon(["hook", "claude_adapter"]), { status: 0, stdout: "", stderr: "" });
 });
+
+// -- the mount's own CLI governs a mounted Node record (C129, ADR 0009 decision 5) -------------
+
+/**
+ * A project with a Node mount whose `cli.mjs` only reports how it was called (exit 7).
+ * @param {string} record
+ * @returns {string}
+ */
+function mountedProject(record) {
+  const root = fs.realpathSync(tmpdir());
+  fs.writeFileSync(posix.join(root, "AGENTS.md"), "# project\n");
+  fs.mkdirSync(posix.join(root, "_aitna", "akmon", "js", "akmon"), { recursive: true });
+  fs.writeFileSync(posix.join(root, "_aitna", ".akmon.toml"), record);
+  fs.writeFileSync(
+    posix.join(root, "_aitna", "akmon", "js", "akmon", "cli.mjs"),
+    "process.stdout.write(`mount cli: ${JSON.stringify(process.argv.slice(2))}\\n`);\nprocess.exitCode = 7;\n",
+  );
+  return root;
+}
+
+const nodeMount = (/** @type {string} */ version) =>
+  `mount = "submodule"\necosystem = "node"\nakmon_version = "${version}"\n`;
+
+test("a CLI that is not the mount's own hands the command over, with the skew notice for sync/verify/check", () => {
+  const root = mountedProject(nodeMount("0.0.1"));
+  const sync = akmon(["sync", "--check"], { cwd: root });
+  assert.deepEqual(sync, {
+    status: 7,
+    stdout: 'mount cli: ["sync","--check"]\n',
+    stderr: `akmon: CLI is ${manifest.version}, mounted/pinned standard is 0.0.1 — the mounted tree governs.\n`,
+  });
+  for (const argv of [["path"], ["tool", "tasks/archive"], ["hook", "role-on-code"]]) {
+    assert.deepEqual(akmon(argv, { cwd: posix.join(root, "_aitna") }), {
+      status: 7,
+      stdout: `mount cli: ${JSON.stringify(argv)}\n`,
+      stderr: "",
+    });
+  }
+  assert.equal(akmon(["version"], { cwd: root }).stdout, `${manifest.version}\n`, "version is the CLI's own");
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("the same version hands over without a notice; a describe distance is its own notice", () => {
+  const root = mountedProject(nodeMount(`v${manifest.version}`));
+  assert.equal(akmon(["verify"], { cwd: root }).stderr, "");
+  fs.writeFileSync(posix.join(root, "_aitna", ".akmon.toml"), nodeMount(`v${manifest.version}-2-gabc1234`));
+  assert.equal(
+    akmon(["check"], { cwd: root }).stderr,
+    `akmon: mounted/pinned standard is v${manifest.version}-2-gabc1234, 2 commits past the tag this CLI matches — the mounted tree governs.\n`,
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a Python record's mount and a package record are not handed over: this CLI answers", () => {
+  for (const record of ['mount = "submodule"\nakmon_version = "0.0.1"\n', 'mount = "package"\necosystem = "node"\n']) {
+    const root = mountedProject(record);
+    assert.deepEqual(akmon(["path"], { cwd: root }), { status: 0, stdout: `${fs.realpathSync(TREE)}\n`, stderr: "" });
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A project whose `_aitna/akmon` holds what the Python init vendors that this CLI needs to start
+ * (no `src/akmon`, no `package.json`), with `record` as its `.akmon.toml` when given.
+ * @param {string | null} record
+ * @param {{ manifest?: string, dropReader?: boolean }} [options]
+ * @returns {string}
+ */
+function vendoredWithoutData(record, { manifest: treeManifest, dropReader = false } = {}) {
+  const root = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-cli-nodata-")));
+  for (const member of ["common", "bin", "js"]) {
+    fs.cpSync(posix.join(TREE, member), posix.join(root, "_aitna/akmon", member), {
+      recursive: true,
+      filter: (source) => !/(?:^|\/)(?:__pycache__|node_modules)(?:\/|$)/.test(source),
+    });
+  }
+  if (dropReader) {
+    // the record reader cannot load: its TOML parser is gone from the tree
+    fs.rmSync(posix.join(root, "_aitna/akmon/js/vendor/smol-toml"), { recursive: true, force: true });
+  }
+  if (record !== null) {
+    fs.writeFileSync(posix.join(root, "_aitna/.akmon.toml"), record);
+  }
+  if (treeManifest !== undefined) {
+    fs.writeFileSync(posix.join(root, "_aitna/akmon/package.json"), treeManifest);
+  }
+  fs.writeFileSync(posix.join(root, "AGENTS.md"), "");
+  return root;
+}
+
+/**
+ * The one line a tree without its data answers with, at `tag`.
+ * @param {string} root
+ * @param {string} tag
+ * @returns {string}
+ */
+function missingDataLine(root, tag) {
+  return (
+    `akmon: akmon data file missing: ${root}/_aitna/akmon/src/akmon/cli.json — this tree lacks the data the ` +
+    "JavaScript implementation reads (a mount the Python implementation vendored?); move the mount to it with " +
+    `\`npx github:akumidv/ai_akmon#${tag} init --ecosystem node\`\n`
+  );
+}
+
+test("a tree without the CLI data (a Python-vendored mount) answers one line naming the file and the switch", () => {
+  const root = vendoredWithoutData('mount = "vendored"\nakmon_version = "0.3.0"\n');
+  try {
+    const mountCli = posix.join(root, "_aitna/akmon/js/akmon/cli.mjs");
+    const result = spawnSync(process.execPath, [mountCli, "verify"], { cwd: root, encoding: "utf8" });
+    assert.deepEqual(
+      { status: result.status, stdout: result.stdout, stderr: result.stderr },
+      { status: 2, stdout: "", stderr: missingDataLine(root, "v0.3.0") },
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a tree without its data and with no readable record still answers one line", () => {
+  const cases = [
+    // no record: the tree's own version names the tag
+    { root: vendoredWithoutData(null, { manifest: '{"version": "0.4.0"}' }), tag: "v0.4.0" },
+    // a record the reader cannot load, and no tree version: the tag falls back to main
+    { root: vendoredWithoutData('mount = "vendored"\nakmon_version = "0.3.0"\n', { dropReader: true }), tag: "main" },
+  ];
+  for (const { root, tag } of cases) {
+    try {
+      const mountCli = posix.join(root, "_aitna/akmon/js/akmon/cli.mjs");
+      const result = spawnSync(process.execPath, [mountCli, "verify"], { cwd: root, encoding: "utf8" });
+      assert.deepEqual(
+        { status: result.status, stdout: result.stdout, stderr: result.stderr },
+        { status: 2, stdout: "", stderr: missingDataLine(root, tag) },
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }
+});

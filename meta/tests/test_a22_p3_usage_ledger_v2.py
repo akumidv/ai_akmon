@@ -28,45 +28,59 @@ def _fixture(tmp_path: Path, *, qualified: bool = True) -> ledger.LedgerPaths:
     packet_seal.write_text('{"packet":"sealed"}\n', encoding="utf-8")
     plan_seal = tmp_path / ledger.ACCEPTED_SEAL_NAME
     seal_value = {
-        "schema": 1, "record_type": "p3_v2_plan_seal", "proposal_sha256": _sha(plan),
+        "schema": 1,
+        "record_type": "p3_v2_plan_seal",
+        "proposal_sha256": _sha(plan),
         "packet_seal_sha256": _sha(packet_seal),
     }
     plan_seal.write_text(json.dumps(seal_value), encoding="utf-8")
     approval = tmp_path / "approval.json"
-    approval.write_text(json.dumps({
-        "schema": 2,
-        "record_type": "p3_v2_owner_approval",
-        "proposal_sha256": _sha(plan),
-        "accepted_v2_seal_sha256": _sha(plan_seal),
-        "owner_accepted": True,
-        "owner_acceptance_provenance": "TRANSCRIPT_EVIDENCE_NONCRYPTOGRAPHIC",
-        "retry_evidence_policy": "OBSERVED_NO_RETRY",
-        "acceptance_evidence": {
-            "record_type": "p3_owner_acceptance_transcript_evidence",
-            "accepted_utc": "2026-10-11T00:00:00Z", "transcript_ref": "test-only fixture",
-            "transcript_sha256": "a" * 64,
-            "exact_quote": "I accept OBSERVED_NO_RETRY for the test-only fixture.",
-            "decision_ref": "test-only fixture decision", "proposal_sha256": _sha(plan),
-            "accepted_v2_seal_sha256": _sha(plan_seal),
-        },
-        "authorized_phases": ["route_check", "qualification"],
-        "selected_resource_option": "token_only",
-        "options": {"usd25": {
-            "route_rates_usd_per_million": None, "estimated_total_usd": None,
-            "named_operator": None, "exploratory_calls_counted": None,
-        }, "token_only": {
-            "codex_aggregate_limit_tokens": 5_000_000,
-            "known_prior_codex_usage_tokens": 153_614,
-            "remaining_codex_tokens_at_approval": 4_846_386,
-            "qwen_aggregate_limit_tokens": None,
-            "accepted_scorer_readings_per_route": 120,
-            "named_operator": "Test Fixture Operator",
-            "exploratory_calls_counted": True,
-        }},
-        "preflight_status": "PASSED",
-        "dispatch_allowed": True,
-        "test_only_fixture": True,
-    }), encoding="utf-8")
+    approval.write_text(
+        json.dumps(
+            {
+                "schema": 2,
+                "record_type": "p3_v2_owner_approval",
+                "proposal_sha256": _sha(plan),
+                "accepted_v2_seal_sha256": _sha(plan_seal),
+                "owner_accepted": True,
+                "owner_acceptance_provenance": "TRANSCRIPT_EVIDENCE_NONCRYPTOGRAPHIC",
+                "retry_evidence_policy": "OBSERVED_NO_RETRY",
+                "acceptance_evidence": {
+                    "record_type": "p3_owner_acceptance_transcript_evidence",
+                    "accepted_utc": "2026-10-11T00:00:00Z",
+                    "transcript_ref": "test-only fixture",
+                    "transcript_sha256": "a" * 64,
+                    "exact_quote": "I accept OBSERVED_NO_RETRY for the test-only fixture.",
+                    "decision_ref": "test-only fixture decision",
+                    "proposal_sha256": _sha(plan),
+                    "accepted_v2_seal_sha256": _sha(plan_seal),
+                },
+                "authorized_phases": ["route_check", "qualification"],
+                "selected_resource_option": "token_only",
+                "options": {
+                    "usd25": {
+                        "route_rates_usd_per_million": None,
+                        "estimated_total_usd": None,
+                        "named_operator": None,
+                        "exploratory_calls_counted": None,
+                    },
+                    "token_only": {
+                        "codex_aggregate_limit_tokens": 5_000_000,
+                        "known_prior_codex_usage_tokens": 153_614,
+                        "remaining_codex_tokens_at_approval": 4_846_386,
+                        "qwen_aggregate_limit_tokens": None,
+                        "accepted_scorer_readings_per_route": 120,
+                        "named_operator": "Test Fixture Operator",
+                        "exploratory_calls_counted": True,
+                    },
+                },
+                "preflight_status": "PASSED",
+                "dispatch_allowed": True,
+                "test_only_fixture": True,
+            }
+        ),
+        encoding="utf-8",
+    )
     path = tmp_path / "attempt-ledger.jsonl"
     paths = (path, plan, packet_seal, approval)
     ledger.initialize(paths)
@@ -75,18 +89,33 @@ def _fixture(tmp_path: Path, *, qualified: bool = True) -> ledger.LedgerPaths:
     return paths
 
 
-def _artifact(paths: ledger.LedgerPaths, attempt_id: str, usage: dict[str, int], *,
-              subject_attempt_id: str | None = None, turn_id: str | None = None) -> dict[str, str]:
+def _artifact(
+    paths: ledger.LedgerPaths,
+    attempt_id: str,
+    usage: dict[str, int],
+    *,
+    subject_attempt_id: str | None = None,
+    turn_id: str | None = None,
+) -> dict[str, str]:
     artifact_path = paths[0].parent / f"{attempt_id}.usage.json"
-    artifact_path.write_text(json.dumps({
-        "request_id": f"request-{attempt_id}",
-        "session_id": f"session-{attempt_id}",
-        "model_id": "pinned-model-test-fixture",
-        "call_id": attempt_id,
-        "usage": usage,
-        **({"subject_attempt_id": subject_attempt_id, "turn_id": turn_id}
-           if subject_attempt_id is not None else {}),
-    }, sort_keys=True), encoding="utf-8")
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "request_id": f"request-{attempt_id}",
+                "session_id": f"session-{attempt_id}",
+                "model_id": "pinned-model-test-fixture",
+                "call_id": attempt_id,
+                "usage": usage,
+                **(
+                    {"subject_attempt_id": subject_attempt_id, "turn_id": turn_id}
+                    if subject_attempt_id is not None
+                    else {}
+                ),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
     artifact = {
         "artifact_path": artifact_path.name,
         "artifact_sha256": _sha(artifact_path),
@@ -100,27 +129,37 @@ def _artifact(paths: ledger.LedgerPaths, attempt_id: str, usage: dict[str, int],
     return artifact
 
 
-def _accept(paths: ledger.LedgerPaths, attempt_id: str,  # noqa: PLR0913
-            input_tokens: int = 10, output_tokens: int = 5,
-            subject_attempt_id: str | None = None, turn_id: str | None = None) -> None:
+def _accept(
+    paths: ledger.LedgerPaths,
+    attempt_id: str,  # noqa: PLR0913
+    input_tokens: int = 10,
+    output_tokens: int = 5,
+    subject_attempt_id: str | None = None,
+    turn_id: str | None = None,
+) -> None:
     usage = {"input_tokens": input_tokens, "output_tokens": output_tokens}
     ledger.complete_attempt(
         attempt_id,
         outcome="accepted",
         actual_usage=usage,
-        usage_artifact=_artifact(paths, attempt_id, usage, subject_attempt_id=subject_attempt_id,
-                                 turn_id=turn_id),
+        usage_artifact=_artifact(paths, attempt_id, usage, subject_attempt_id=subject_attempt_id, turn_id=turn_id),
         paths=paths,
     )
 
 
-def _reserve_reading(paths: ledger.LedgerPaths, route: str = "codex", *,
-                    opaque_packet_id: str | None = None, packet_sha256: str | None = None,
-                    attempt_id: str | None = None) -> str:
+def _reserve_reading(
+    paths: ledger.LedgerPaths,
+    route: str = "codex",
+    *,
+    opaque_packet_id: str | None = None,
+    packet_sha256: str | None = None,
+    attempt_id: str | None = None,
+) -> str:
     packet_id = opaque_packet_id or f"g{secrets.token_hex(8)}"
     packet_hash = packet_sha256 or hashlib.sha256(packet_id.encode()).hexdigest()
-    return ledger.reserve_attempt(route, "scored_reading", paths, attempt_id,
-                                  opaque_packet_id=packet_id, packet_sha256=packet_hash)
+    return ledger.reserve_attempt(
+        route, "scored_reading", paths, attempt_id, opaque_packet_id=packet_id, packet_sha256=packet_hash
+    )
 
 
 def _complete_route_checks(paths: ledger.LedgerPaths) -> None:
@@ -190,12 +229,14 @@ def test_usage_artifact_cannot_be_reused_for_another_reserved_call(tmp_path):
     first_id = _reserve_reading(paths, "codex")
     usage = {"input_tokens": 10, "output_tokens": 5}
     first_artifact = _artifact(paths, first_id, usage)
-    ledger.complete_attempt(first_id, outcome="accepted", actual_usage=usage,
-                            usage_artifact=first_artifact, paths=paths)
+    ledger.complete_attempt(
+        first_id, outcome="accepted", actual_usage=usage, usage_artifact=first_artifact, paths=paths
+    )
     second_id = _reserve_reading(paths, "codex")
     with pytest.raises(ledger.LedgerError, match=r"reused|different provider call"):
-        ledger.complete_attempt(second_id, outcome="accepted", actual_usage=usage,
-                                usage_artifact=first_artifact, paths=paths)
+        ledger.complete_attempt(
+            second_id, outcome="accepted", actual_usage=usage, usage_artifact=first_artifact, paths=paths
+        )
     assert ledger.summary(paths)["unresolved_attempts"] == 1
 
 
@@ -253,11 +294,14 @@ def test_denied_authorization_does_not_create_lock_file(tmp_path):
     assert not lock_path.exists()
 
 
-@pytest.mark.parametrize("policy,match", [
-    ("UNSELECTED", "retry evidence policy is unselected"),
-    ("PROVIDER_ZERO_RETRIES", "retry evidence policy is unknown"),
-    ([], "retry evidence policy is unknown"),
-])
+@pytest.mark.parametrize(
+    "policy,match",
+    [
+        ("UNSELECTED", "retry evidence policy is unselected"),
+        ("PROVIDER_ZERO_RETRIES", "retry evidence policy is unknown"),
+        ([], "retry evidence policy is unknown"),
+    ],
+)
 def test_dispatch_gate_requires_supported_owner_selected_retry_policy(tmp_path, policy, match):
     paths = _fixture(tmp_path, qualified=False)
     approval = paths[3]
@@ -292,8 +336,7 @@ def test_reserved_call_can_be_accounted_after_approval_changes(tmp_path):
     usage = {"input_tokens": 10, "output_tokens": 5}
     artifact = _artifact(paths, attempt_id, usage)
 
-    ledger.complete_attempt(attempt_id, outcome="accepted", actual_usage=usage,
-                            usage_artifact=artifact, paths=paths)
+    ledger.complete_attempt(attempt_id, outcome="accepted", actual_usage=usage, usage_artifact=artifact, paths=paths)
 
     with pytest.raises(ledger.LedgerError, match=r"stale|approval schema"):
         _reserve_reading(paths, "qwen")
@@ -342,15 +385,22 @@ def test_accepted_completion_with_failure_code_is_rejected_before_append(tmp_pat
 
     with pytest.raises(ledger.LedgerError, match="accepted completion has a failure code"):
         ledger.complete_attempt(
-            attempt_id, outcome="accepted", actual_usage=usage,
-            usage_artifact=artifact, failure_code="attempt_failed", paths=paths,
+            attempt_id,
+            outcome="accepted",
+            actual_usage=usage,
+            usage_artifact=artifact,
+            failure_code="attempt_failed",
+            paths=paths,
         )
 
     assert paths[0].read_bytes() == before
     assert ledger.summary(paths)["unresolved_attempts"] == 1
     ledger.complete_attempt(
-        attempt_id, outcome="accepted", actual_usage=usage,
-        usage_artifact=artifact, paths=paths,
+        attempt_id,
+        outcome="accepted",
+        actual_usage=usage,
+        usage_artifact=artifact,
+        paths=paths,
     )
     assert ledger.summary(paths)["accepted_attempts"] == 3
 
@@ -399,15 +449,12 @@ def test_accepted_packet_cannot_be_reserved_again_on_same_route(tmp_path):
     paths = _fixture(tmp_path)
     packet_id = "g0123456789abcdef"
     packet_hash = "b" * 64
-    attempt_id = _reserve_reading(paths, "codex", opaque_packet_id=packet_id,
-                                 packet_sha256=packet_hash)
+    attempt_id = _reserve_reading(paths, "codex", opaque_packet_id=packet_id, packet_sha256=packet_hash)
     _accept(paths, attempt_id)
     with pytest.raises(ledger.LedgerError, match="packet was already reserved"):
-        _reserve_reading(paths, "codex", opaque_packet_id=packet_id,
-                         packet_sha256=packet_hash)
+        _reserve_reading(paths, "codex", opaque_packet_id=packet_id, packet_sha256=packet_hash)
     # The other scorer route may read the same blinded packet once.
-    assert _reserve_reading(paths, "qwen", opaque_packet_id=packet_id,
-                            packet_sha256=packet_hash)
+    assert _reserve_reading(paths, "qwen", opaque_packet_id=packet_id, packet_sha256=packet_hash)
 
 
 def test_unresolved_packet_cannot_be_reserved_again_on_same_route(tmp_path):
@@ -463,8 +510,11 @@ def test_qwen_usage_has_no_aggregate_token_limit(tmp_path):
 def test_codex_limit_includes_known_prior_usage_and_stops_at_reached_total(tmp_path):
     paths = _fixture(tmp_path)
     last_subject = None
-    for index in range(ledger.MAX_SCORED_SUBJECT_ATTEMPTS + ledger.MAX_TECHNICAL_DEFECT_ATTEMPTS -
-                      len(ledger.HISTORICAL_SUBJECT_MARKERS)):
+    for index in range(
+        ledger.MAX_SCORED_SUBJECT_ATTEMPTS
+        + ledger.MAX_TECHNICAL_DEFECT_ATTEMPTS
+        - len(ledger.HISTORICAL_SUBJECT_MARKERS)
+    ):
         attempt_class = "scored" if index < ledger.MAX_SCORED_SUBJECT_ATTEMPTS else "technical"
         try:
             subject_id = ledger.register_subject_attempt(f"{index + 1:032x}", attempt_class, paths=paths)
@@ -474,10 +524,13 @@ def test_codex_limit_includes_known_prior_usage_and_stops_at_reached_total(tmp_p
             assert "reached the 5,000,000-token limit" in str(exc)
             break
         usage = {"input_tokens": 45_000, "output_tokens": 3_500}
-        ledger.complete_subject_call(call_id, outcome="accepted", actual_usage=usage,
-                                     usage_artifact=_artifact(paths, call_id, usage,
-                                                              subject_attempt_id=subject_id,
-                                                              turn_id="turn-1"), paths=paths)
+        ledger.complete_subject_call(
+            call_id,
+            outcome="accepted",
+            actual_usage=usage,
+            usage_artifact=_artifact(paths, call_id, usage, subject_attempt_id=subject_id, turn_id="turn-1"),
+            paths=paths,
+        )
     summary = ledger.summary(paths)
     assert summary["codex_observed_aggregate_tokens"] > ledger.CODEX_AGGREGATE_LIMIT_TOKENS
     assert summary["codex_remaining_tokens"] == 0
@@ -493,19 +546,25 @@ def test_reservation_requires_explicit_attempt_class(tmp_path):
         ledger.reserve_attempt("codex", paths=paths)
 
 
-@pytest.mark.parametrize(("route", "usage"), [
-    ("codex", {"input_tokens": 20_001, "output_tokens": 1_000}),
-    ("codex", {"input_tokens": 20_000, "output_tokens": 1_001}),
-    ("qwen", {"input_tokens": 20_001, "output_tokens": 2_000}),
-    ("qwen", {"input_tokens": 20_000, "output_tokens": 2_001}),
-])
+@pytest.mark.parametrize(
+    ("route", "usage"),
+    [
+        ("codex", {"input_tokens": 20_001, "output_tokens": 1_000}),
+        ("codex", {"input_tokens": 20_000, "output_tokens": 1_001}),
+        ("qwen", {"input_tokens": 20_001, "output_tokens": 2_000}),
+        ("qwen", {"input_tokens": 20_000, "output_tokens": 2_001}),
+    ],
+)
 def test_per_call_breach_is_recorded_and_stops_only_that_route(tmp_path, route, usage):
     paths = _fixture(tmp_path, qualified=False)
     attempt_id = ledger.reserve_attempt(route, "route_check", paths)
     with pytest.raises(ledger.LedgerError, match="per-call token allowance breached"):
         ledger.complete_attempt(
-            attempt_id, outcome="accepted", actual_usage=usage,
-            usage_artifact=_artifact(paths, attempt_id, usage), paths=paths,
+            attempt_id,
+            outcome="accepted",
+            actual_usage=usage,
+            usage_artifact=_artifact(paths, attempt_id, usage),
+            paths=paths,
         )
     summary = ledger.summary(paths)
     assert summary["failed_attempts"] == 1
@@ -535,14 +594,22 @@ def test_usage_artifact_must_match_recorded_tokens_and_correlation(tmp_path):
     usage = {"input_tokens": 10, "output_tokens": 5}
     artifact = _artifact(paths, attempt_id, usage)
     artifact_path = paths[0].parent / artifact["artifact_path"]
-    artifact_path.write_text(json.dumps({"request_id": artifact["request_id"],
-                                         "session_id": artifact["session_id"],
-                                         "model_id": artifact["model_id"],
-                                         "usage": {"input_tokens": 999, "output_tokens": 5}}), encoding="utf-8")
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "request_id": artifact["request_id"],
+                "session_id": artifact["session_id"],
+                "model_id": artifact["model_id"],
+                "usage": {"input_tokens": 999, "output_tokens": 5},
+            }
+        ),
+        encoding="utf-8",
+    )
     artifact["artifact_sha256"] = _sha(artifact_path)
     with pytest.raises(ledger.LedgerError, match="does not match"):
-        ledger.complete_attempt(attempt_id, outcome="accepted", actual_usage=usage,
-                                usage_artifact=artifact, paths=paths)
+        ledger.complete_attempt(
+            attempt_id, outcome="accepted", actual_usage=usage, usage_artifact=artifact, paths=paths
+        )
     assert ledger.summary(paths)["unresolved_attempts"] == 1
 
 
@@ -565,8 +632,7 @@ def test_subject_attempts_are_classed_linked_and_share_codex_usage_budget(tmp_pa
     call_id = ledger.reserve_subject_call(parent, "turn-1", paths=paths)
     usage = {"input_tokens": 200, "output_tokens": 50}
     artifact = _artifact(paths, call_id, usage, subject_attempt_id=parent, turn_id="turn-1")
-    ledger.complete_subject_call(call_id, outcome="accepted", actual_usage=usage,
-                                 usage_artifact=artifact, paths=paths)
+    ledger.complete_subject_call(call_id, outcome="accepted", actual_usage=usage, usage_artifact=artifact, paths=paths)
     summary = ledger.summary(paths)
     assert summary["registered_subject_attempts"] == 6  # five provenance-limited legacy markers
     assert summary["scored_subject_attempts"] == 1
@@ -574,8 +640,11 @@ def test_subject_attempts_are_classed_linked_and_share_codex_usage_budget(tmp_pa
     assert summary["codex_observed_aggregate_tokens"] == 153_864
     events = [json.loads(line) for line in paths[0].read_text(encoding="utf-8").splitlines()][1:]
     reserved = next(event for event in events if event.get("attempt_class") == "subject_call")
-    assert (reserved["subject_attempt_id"], reserved["turn_id"],
-            reserved["continuation_id"]) == (parent, "turn-1", None)
+    assert (reserved["subject_attempt_id"], reserved["turn_id"], reserved["continuation_id"]) == (
+        parent,
+        "turn-1",
+        None,
+    )
 
 
 def test_subject_call_uses_full_observed_usage_without_scorer_per_call_ceilings(tmp_path):
@@ -583,10 +652,13 @@ def test_subject_call_uses_full_observed_usage_without_scorer_per_call_ceilings(
     parent = ledger.register_subject_attempt("9" * 32, "scored", paths=paths)
     call_id = ledger.reserve_subject_call(parent, "turn-1", paths=paths)
     usage = {"input_tokens": 45_000, "output_tokens": 3_500}
-    ledger.complete_subject_call(call_id, outcome="accepted", actual_usage=usage,
-                                 usage_artifact=_artifact(paths, call_id, usage,
-                                                          subject_attempt_id=parent,
-                                                          turn_id="turn-1"), paths=paths)
+    ledger.complete_subject_call(
+        call_id,
+        outcome="accepted",
+        actual_usage=usage,
+        usage_artifact=_artifact(paths, call_id, usage, subject_attempt_id=parent, turn_id="turn-1"),
+        paths=paths,
+    )
     assert ledger.summary(paths)["codex_observed_subject_tokens"] == 48_500
 
 

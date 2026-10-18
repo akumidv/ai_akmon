@@ -13,26 +13,30 @@
  *     akmon verify --strict    warnings fail too
  *     akmon verify --quiet     only warnings and errors
  *
- * This implementation serves Node package mode only (ADR 0020 D02), exactly as `sync` does: the
- * record says `mount = "package"` and `ecosystem = "node"`. Any other record (none, mounted, a
- * Python package attach) is refused with exit 2 and the `unsupported_record` text of
+ * This implementation serves Node projects (ADR 0020 D02 as amended by C129), exactly as `sync`
+ * does: the record says `ecosystem = "node"`, in package mode or a mounted one. Any other record
+ * (none, a Python attach in any mode) is refused with exit 2 and the `unsupported_record` text of
  * `bin/verify.json` — a report on a carrier this file does not read would be wrong, not partial.
  *
  * What is Node's own (ADR 0020 D05), each a finding with a `node` entry in `bin/verify.json`:
- * - `hooks.launcher`: the wiring runs `node "<anchor>/node_modules/akmon/js/hooks/<name>.mjs"`, so
- *   the check is that `<root>/node_modules/akmon/js/hooks` is a directory — with the two ways it
- *   fails named apart (Yarn Plug'n'Play installs no `node_modules`; a hoisted install sits in an
- *   ancestor directory that the committed wiring cannot reach);
- * - `package.dev-pin` reads `package.json` through `packagePinStatus`; the same
+ * - `hooks.launcher`: the wiring runs `node "<anchor>/<hooks dir>/<name>.mjs"` (`nodeHooksDir`), so
+ *   the check is that the hooks directory exists. In package mode it is
+ *   `<root>/node_modules/akmon/js/hooks`, with the two ways it fails named apart (Yarn Plug'n'Play
+ *   installs no `node_modules`; a hoisted install sits in an ancestor directory that the committed
+ *   wiring cannot reach); in a mounted mode it is `<AITNA_ROOT>/akmon/js/hooks`;
+ * - `package.dev-pin` (package mode) reads `package.json` through `packagePinStatus`; the same
  *   finding is a warning when the `devDependencies` pin is not an exact version (no Python twin);
  * - `layout.standard-path` checks the `js/hooks/*.mjs` files the Node wiring runs
- *   (`node_wired_hook_scripts`).
+ *   (`node_wired_hook_scripts`);
+ * - `ci.akmon-checks` of a mounted record asks for the mounted JavaScript CLI,
+ *   `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs` (`ci_required_commands.mounted_node`).
  *
- * The Python's mounted-only checks are unreachable here and have no port: `gitignore.akmon-pycache`
- * (`check_akmon_gitignore`), `layout.vendored-leftover` (`check_vendored_leftovers`, a vendored
- * mount's members the carrier no longer ships, C117), `changelog.unreleased` (the mounted half of `check_changelog`; package
- * mode answers `changelog.package-mode`) and the mount-relative paths of `check_standard_path`
- * (the standard tree of a Node project is `<root>/node_modules/akmon`, `standardTreeRoot`).
+ * The Python's mounted checks are ported for a Node mount: the mount-relative paths of
+ * `check_standard_path` (`displayPath`), `layout.vendored-leftover` (`check_vendored_leftovers`, a
+ * vendored mount's members the carrier no longer ships, C117) and `changelog.unreleased` (the mounted
+ * half of `check_changelog`; package mode answers `changelog.package-mode`). One is not:
+ * `gitignore.akmon-pycache` (`check_akmon_gitignore`) guards the `__pycache__` the Python tree writes
+ * when it runs in place, and a Node mount runs no Python, so nothing produces the cache it guards.
  *
  * Data (the C102 convention): `main` builds a `Verifier`, which reads `bin/verify.json`, the sync
  * bundle and `common/findings.json` once and passes each down as the first parameter, `data`, of
@@ -62,10 +66,18 @@ import { TextDecoder, parseArgs } from "node:util";
 import {
   apply,
   codexHooksText,
+  importPrefix,
+  hasPython,
+  isPackageMode,
+  languageProfiles,
+  nodeHooksDir,
   packagePinStatus,
   plannedFiles,
+  profileImports,
   readJson,
+  readMountMode,
   readSyncData,
+  ruffTomlTemplates,
   skillSources,
   standardTreeRoot,
   unsupportedFound,
@@ -105,7 +117,7 @@ import {
   strRepr,
   truthy,
 } from "../common/pyvalue.mjs";
-import { RecordError, readAkmonToml, readAkmonTomlStrict } from "../common/record.mjs";
+import { RecordError, readAkmonToml, readAkmonTomlStrict, recordedEcosystem } from "../common/record.mjs";
 import { codexHooksListCommand } from "../common/runtime.mjs";
 import { codePointCompare, codePointSort } from "../common/sort.mjs";
 import { splitVersion } from "../common/versions.mjs";
@@ -144,7 +156,15 @@ import { splitVersion } from "../common/versions.mjs";
  * @property {number} tasks_max_lines
  * @property {string} changelog_package_mode
  * @property {string} changelog_package_mode_fix
+ * @property {string[]} vendored_tree_members
+ * @property {string[]} vendored_mount_own_files
+ * @property {string[]} vendored_node_members
+ * @property {string} vendored_leftover
+ * @property {string} vendored_leftover_node the same for a Node record's copy, made through npx (C129)
+ * @property {string} vendored_leftover_fix
  * @property {string} unsupported_record
+ * @property {string} ruff_without_python
+ * @property {string} ruff_without_python_fix
  * @property {Record<string, any>} node the Node-only texts
  */
 
@@ -169,6 +189,8 @@ const _DEV_NAME_RE = new RegExp(`(?<![${_WORD}])self_ci(?![${_WORD}])|(?<![${_WO
 const _LINK_RE = /\]\(([^)]+)\)/gu;
 const _INLINE_CODE_RE = /`([^`]+)`/gu;
 const _LEGACY_OWNER_ANCHOR_RE = new RegExp(`\\*\\*D2\\*\\*[${_SPACE}]+—[${_SPACE}]+the owner[${_SPACE}]+verifies`);
+// `^##\s+Unreleased\b` under MULTILINE | IGNORECASE | ASCII: `^` after a `\n` only, `i` without `u`.
+const _UNRELEASED_RE = new RegExp(`(?<![^\\n])##[${_SPACE}]+Unreleased(?![${_WORD}])`, "i");
 /** The text patterns, exported for the twin test that pins their ASCII meaning against the Python's. */
 export const TEXT_PATTERNS = {
   date: _DATE_RE,
@@ -194,8 +216,6 @@ const _GIT_TAG_PIN_RE = new RegExp(
 
 /** The standard files the Node project's wiring runs, relative to the standard tree. */
 const _NODE_HOOKS_DIR = "js/hooks";
-/** Where the wiring finds akmon, relative to the project root. */
-const _NODE_LAUNCHER_DIR = "node_modules/akmon/js/hooks";
 
 /**
  * The shared verify text and tables (`verify.json`, beside the Python launcher).
@@ -457,9 +477,12 @@ export class Verifier {
     // `node_modules`. Every path below derives from these so a relocated layer still verifies.
     this.aitna = aitnaRootName();
     this.akmon = `${this.aitna}/akmon`;
-    // The standard tree this project operates against: `<root>/node_modules/akmon`, spelled
-    // unresolved — may live outside the root entirely when this tree is not the installed one.
+    // The standard tree this project operates against: the mount for a mounted record,
+    // `<root>/node_modules/akmon` (spelled unresolved) in package mode — which may live outside the
+    // root entirely when this tree is not the installed one.
     this.standardRoot = standardTreeRoot(root);
+    /** Whether the record is a mounted one (`submodule`, `vendored`, `subtree`): read once, as `sync` reads it. */
+    this.mounted = !isPackageMode(root);
     this._codexHooksRunner = codexHooksRunner;
     /** @type {VerifyData} */
     this.data = readVerifyData();
@@ -573,14 +596,26 @@ export class Verifier {
   }
 
   /**
-   * `path` rendered as the Python renders it for an embedded tree: a path inside the standard
-   * tree reads `standard tree:`-prefixed and relative to it (the shared findings then agree
-   * across implementations — `node_modules/akmon` is where the Node tree lives, not what a
-   * finding names), any other path relative to the consumer root.
+   * `path` rendered as the Python renders it. A mounted record's tree sits inside the root, so a path
+   * reads relative to the root first (`_aitna/akmon/README.md`, the Python's mounted wording) and
+   * `standard tree:`-prefixed only outside it. In package mode a path inside the standard tree reads
+   * `standard tree:`-prefixed and relative to it (the shared findings then agree across
+   * implementations — `node_modules/akmon` is where the Node tree lives, not what a finding names),
+   * any other path relative to the consumer root.
    * @param {string} path
    * @returns {string}
    */
   displayPath(path) {
+    if (this.mounted) {
+      try {
+        return _relativeTo(path, this.root);
+      } catch (error) {
+        if (!(error instanceof Error) || error.name !== "ValueError") {
+          throw error;
+        }
+        return `standard tree:${_relativeTo(path, this.standardRoot)}`;
+      }
+    }
     try {
       return `standard tree:${_relativeTo(path, this.standardRoot)}`;
     } catch (error) {
@@ -714,9 +749,10 @@ export class Verifier {
         },
       );
     }
-    // Node is package mode by construction (the refusal in `main`): the package table applies. The
-    // block heading is filled from its single owner (`common/always_loaded`), not from a copy here.
-    const variant = "package";
+    // The record's mode picks the table, as in the Python: a mounted block links the mount, a
+    // package one imports the materialized guardrails. The block heading is filled from its single
+    // owner (`common/always_loaded`), not from a copy here.
+    const variant = this.mounted ? "mounted" : "package";
     const heading = alwaysLoaded.blockHeading(this.alwaysLoadedData);
     const required = Object.entries(this.data.agents_anchors[variant]).map(
       ([name, snippet]) =>
@@ -741,6 +777,97 @@ export class Verifier {
         target: "AGENTS.md",
         fix: "Keep every required anchor in the AGENTS.md akmon block.",
       });
+    }
+  }
+
+  /**
+   * Every profile import in AGENTS.md resolves, and each known language has one (C127). Both are
+   * `warn`: the import is hand-owned text, and an unresolved `@`-import fails silently in the
+   * harness, so this finding is the only place a consumer hears of it. A profile import resolves
+   * when it names a profile the standard ships under the prefix the record's mount reads
+   * (`importPrefix`); one that is a file in the project is the project's own and is left alone,
+   * whatever its name. A language is known from the record's `attached_archetype` and from the
+   * manifests (`languageProfiles`) — the same mapping `init` writes a fresh block from.
+   */
+  checkProfileImports() {
+    const path = pyPath(this.root, "AGENTS.md");
+    if (!isFile(path)) {
+      return;
+    }
+    const imports = profileImports(readText(path));
+    const prefix = importPrefix(this.root);
+    const profilesDir = pyPath(this.standardRoot, "profiles");
+    const shipped = isDir(profilesDir)
+      ? codePointSort(
+          fs.readdirSync(profilesDir).filter((name) => name.endsWith(".md") && isFile(pyPath(profilesDir, name))),
+        )
+      : [];
+    let unresolved = false;
+    for (const found of imports) {
+      if (isFile(pyPath(this.root, found.prefix, "profiles", found.name))) {
+        continue; // a file of the project loads, whatever its name (ADR-0014/D02)
+      }
+      if (!shipped.includes(found.name)) {
+        unresolved = true;
+        this.warn(
+          "agents.profile-import",
+          `AGENTS.md imports ${found.line}, a profile the standard does not ship, so it loads nothing`,
+          {
+            target: "AGENTS.md",
+            fix: `Remove the line ${found.line} from AGENTS.md, or import a profile the standard ships (${shipped.join(", ")}).`,
+          },
+        );
+      } else if (`@${found.prefix}` !== prefix) {
+        unresolved = true;
+        this.warn(
+          "agents.profile-import",
+          `AGENTS.md imports ${found.line}, which resolves to nothing: a ${readMountMode(this.root)} attach imports the standard's files from ${prefix}`,
+          {
+            target: "AGENTS.md",
+            fix: `Replace the line ${found.line} with ${prefix}profiles/${found.name} in AGENTS.md.`,
+          },
+        );
+      }
+    }
+    if (!unresolved) {
+      this.ok("agents.profile-import", "every profile import in AGENTS.md resolves", {
+        target: "AGENTS.md",
+        fix: `Keep each profile import under ${prefix}profiles/.`,
+      });
+    }
+    this._checkLanguageProfiles(new Set(imports.map((found) => found.name)), prefix);
+  }
+
+  /**
+   * A `warn` per language profile the record or a manifest calls for and AGENTS.md lacks.
+   * @param {Set<string>} imported
+   * @param {string} prefix
+   */
+  _checkLanguageProfiles(imported, prefix) {
+    const record = `${this.aitna}/.akmon.toml`;
+    const archetype = readAkmonToml(pyPath(this.root, record))["attached_archetype"];
+    const named = typeof archetype === "string" ? [archetype] : [];
+    const missing = languageProfiles(this.syncData, this.root, named).filter((found) => !imported.has(found.profile));
+    for (const found of missing) {
+      const source = named.includes(found.source) ? `${record} attached_archetype "${found.source}"` : found.source;
+      this.warn(
+        "agents.language-profile",
+        `AGENTS.md imports no ${found.profile} language profile, though ${source} names the project's language`,
+        {
+          target: "AGENTS.md",
+          fix: `Add the line ${prefix}profiles/${found.profile} to the AGENTS.md akmon block, right after the _common.md import.`,
+        },
+      );
+    }
+    if (missing.length === 0) {
+      this.ok(
+        "agents.language-profile",
+        "AGENTS.md imports a profile for every language the record and the manifests name",
+        {
+          target: "AGENTS.md",
+          fix: "Keep one profile import per project language in AGENTS.md.",
+        },
+      );
     }
   }
 
@@ -1262,10 +1389,16 @@ export class Verifier {
    * `node_modules` at all); a hoisted install in an ancestor directory (the committed wiring and
    * the generated pointers cannot reach it, `sync` spelled the tree absolute); missing; present.
    * A linked `node_modules/akmon` (pnpm) is present — the link is not resolved for the message.
+   *
+   * A mounted record's wiring runs node on `<AITNA_ROOT>/akmon/js/hooks` ({@link checkMountedHookLauncher}).
    */
   checkHookLauncher() {
+    if (this.mounted) {
+      this.checkMountedHookLauncher();
+      return;
+    }
     const texts = this.data.node;
-    const relative = _NODE_LAUNCHER_DIR;
+    const relative = nodeHooksDir(this.root);
     const pnp = /** @type {string[]} */ (texts.pnp_markers).find((marker) => isFile(pyPath(this.root, marker)));
     if (pnp !== undefined) {
       this.error("hooks.launcher", fill(texts.launcher_pnp, { found: pnp }), {
@@ -1308,6 +1441,27 @@ export class Verifier {
   }
 
   /**
+   * A mounted record: the hooks directory of the mount the wiring runs node on must exist. Neither
+   * Plug'n'Play nor a hoisted install reaches a mount, so present or missing is the whole answer; a
+   * missing one fails every hook silently, as in package mode.
+   */
+  checkMountedHookLauncher() {
+    const texts = this.data.node;
+    const relative = nodeHooksDir(this.root);
+    if (isDir(pyPath(this.root, relative))) {
+      this.ok("hooks.launcher", fill(texts.launcher_ok, { relative }), {
+        target: relative,
+        fix: fill(texts.launcher_mount_ok_fix, { mount: this.akmon }),
+      });
+      return;
+    }
+    this.error("hooks.launcher", fill(texts.launcher_missing, { relative }), {
+      target: relative,
+      fix: fill(texts.launcher_mount_missing_fix, { mount: this.akmon }),
+    });
+  }
+
+  /**
    * C70 — the live host-trust gap N7 measured (design §7, ADR-0012/D03). Generated wiring is
    * structural proof only: a discovered `hooks/list` entry can stay `enabled: true` while its
    * persisted trust is absent or stale, and the handler simply never fires. This asks the
@@ -1330,7 +1484,7 @@ export class Verifier {
       }
       throw error;
     }
-    if (text !== codexHooksText(this.syncData)) {
+    if (text !== codexHooksText(this.syncData, this.root)) {
       return;
     }
     const data = this.codexHooksData;
@@ -1563,6 +1717,43 @@ export class Verifier {
     }
   }
 
+  /**
+   * Warn about each top-level entry of a `vendored` mount that the carrier does not ship (the Python
+   * `check_vendored_leftovers`). A re-run of `init --mode vendored` replaces the standard's members
+   * and touches nothing else, so a member a later carrier dropped stays in the mount; akmon deletes
+   * nothing in the consumer's tree, the owner removes it (ADR 0009, C118 amendment). Only `vendored`
+   * is a copy: a submodule or subtree mount is the git tree, and package mode mounts nothing.
+   */
+  checkVendoredLeftovers() {
+    if (readMountMode(this.root) !== "vendored") {
+      return;
+    }
+    const mount = pyPath(this.root, this.akmon);
+    if (!isDir(mount)) {
+      return;
+    }
+    // A Node record's copy also carries the CLI data and the `package.json` its CLI reads its version
+    // from (`init.json` `tree_members_node`, C129).
+    const node = recordedEcosystem(this.root) === "node";
+    const shipped = new Set([
+      ...this.data.vendored_tree_members,
+      ...this.data.vendored_mount_own_files,
+      ...(node ? this.data.vendored_node_members : []),
+    ]);
+    for (const entry of codePointSort(_names(mount))) {
+      if (shipped.has(entry)) {
+        continue;
+      }
+      const path = `${this.akmon}/${entry}`;
+      // A Node record's copy is made by the JavaScript init through npx (C129), not by `akmon init`.
+      const text = node ? this.data.vendored_leftover_node : this.data.vendored_leftover;
+      this.warn("layout.vendored-leftover", fill(text, { path, akmon: this.akmon }), {
+        target: path,
+        fix: fill(this.data.vendored_leftover_fix, { path }),
+      });
+    }
+  }
+
   /** A GitHub Actions workflow runs akmon's sync and verify commands. */
   checkCi() {
     const workflowDir = pyPath(this.root, ".github", "workflows");
@@ -1579,9 +1770,11 @@ export class Verifier {
       return;
     }
     const workflowText = workflows.map((name) => readText(pyPath(workflowDir, name))).join("\n");
-    // Pinned package-mode contract: the CLI, not a path into a mount that doesn't exist (ADR 0009
-    // §4). Substring match so `npx akmon sync --check` etc. pass.
-    const required = this.data.ci_required_commands["package"].map((command) => fill(command, { akmon: this.akmon }));
+    // Package mode: the CLI, not a path into a mount that doesn't exist (ADR 0009 §4). A mounted
+    // record: the mount's own JavaScript CLI (the C129 amendment of ADR 0020 D02), not the Python
+    // launchers the Python's mounted table names. Substring match so `npx akmon sync --check` etc. pass.
+    const variant = this.mounted ? "mounted_node" : "package";
+    const required = this.data.ci_required_commands[variant].map((command) => fill(command, { akmon: this.akmon }));
     const missing = required.filter((command) => !workflowText.includes(command));
     if (missing.length > 0) {
       this.warn("ci.akmon-checks", `CI should run: ${missing.join(", ")}`, {
@@ -1597,11 +1790,34 @@ export class Verifier {
   }
 
   /**
-   * Package mode: the standard's changelog discipline is owned by the akmon repository, not by
-   * this consumer's integration surface (the mounted half, `changelog.unreleased`, is unreachable).
+   * Warn when the mount's `CHANGELOG.md` exists without an `Unreleased` section (the Python
+   * `check_changelog`): it keeps "consumer-visible change ⇒ changelog entry" mechanical (ADR 0001 §9).
+   * A missing file is not a finding. Package mode: the standard's changelog discipline is owned by
+   * the akmon repository, not by this consumer's integration surface (`changelog.package-mode`).
    */
   checkChangelog() {
-    this.ok("changelog.package-mode", this.data.changelog_package_mode, { fix: this.data.changelog_package_mode_fix });
+    if (!this.mounted) {
+      this.ok("changelog.package-mode", this.data.changelog_package_mode, {
+        fix: this.data.changelog_package_mode_fix,
+      });
+      return;
+    }
+    const path = pyPath(this.root, this.akmon, "CHANGELOG.md");
+    if (!isFile(path)) {
+      return;
+    }
+    const target = `${this.akmon}/CHANGELOG.md`;
+    if (_UNRELEASED_RE.test(readText(path))) {
+      this.ok("changelog.unreleased", "CHANGELOG.md has an Unreleased section", {
+        target,
+        fix: "Keep an `## Unreleased` heading for pending changes.",
+      });
+    } else {
+      this.warn("changelog.unreleased", "CHANGELOG.md has no `## Unreleased` section; add one for pending changes", {
+        target,
+        fix: "Add an `## Unreleased` heading above the latest release.",
+      });
+    }
   }
 
   /**
@@ -1611,10 +1827,11 @@ export class Verifier {
    * dev tooling onto the consumer's own users, so it is an error rather than a warning. Exact,
    * because the record and the generated wiring are written per akmon version: a range lets two
    * installs resolve different ones. A git dependency at a release tag is exact too: the tag names
-   * one release. Only checked when a `package.json` exists.
+   * one release. Only checked in package mode, and when a `package.json` exists: a mounted record's
+   * pin is the mount itself.
    */
   checkPackagePin() {
-    if (!isFile(pyPath(this.root, "package.json"))) {
+    if (this.mounted || !isFile(pyPath(this.root, "package.json"))) {
       return;
     }
     const texts = this.data.node;
@@ -1747,6 +1964,38 @@ export class Verifier {
   }
 
   /**
+   * Warn when the `ruff.toml` `akmon init` writes sits in a Node project with no Python (the Python
+   * `check_ruff_without_python`). Matched byte for byte against the template, for either mode's
+   * rules path, so a ruff configuration the owner has edited or written is never named.
+   */
+  checkRuffWithoutPython() {
+    const path = pyPath(this.root, "ruff.toml");
+    if (!isFile(path) || !isFile(pyPath(this.root, "package.json"))) {
+      return;
+    }
+    if (hasPython(this.syncData, this.root, this.aitna)) {
+      return;
+    }
+    const markers = this.syncData.sync.python_markers.files.join(", ");
+    const written = ruffTomlTemplates(this.syncData, this.aitna);
+    let content;
+    try {
+      content = fs.readFileSync(path);
+    } catch (error) {
+      if (!isOSError(error)) {
+        throw error;
+      }
+      return;
+    }
+    if (written.some((text) => text.equals(content))) {
+      this.warn("check.ruff-without-python", fill(this.data.ruff_without_python, { markers }), {
+        target: "ruff.toml",
+        fix: fill(this.data.ruff_without_python_fix, { record: `${this.aitna}/.akmon.toml` }),
+      });
+    }
+  }
+
+  /**
    * Run every check in order, accumulating findings.
    * @returns {Promise<void>}
    */
@@ -1754,6 +2003,7 @@ export class Verifier {
     this.checkBasicLayout();
     this.checkUseSurfaceIsolation();
     this.checkAgentsMd();
+    this.checkProfileImports();
     this.checkCrossAgentContract();
     this.checkAgentCharters();
     this.checkMemory();
@@ -1765,11 +2015,13 @@ export class Verifier {
     await this.checkCodexHostTrust();
     this.checkModelRouting();
     this.checkGitignore();
+    this.checkVendoredLeftovers();
     this.checkCi();
     this.checkChangelog();
     this.checkPackagePin();
     this.checkAttachRecord();
     this.checkCheckConfig();
+    this.checkRuffWithoutPython();
   }
 }
 

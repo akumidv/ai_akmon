@@ -1,4 +1,5 @@
 """Prospective lean source protocol remains exact and default deny."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -10,14 +11,12 @@ import pytest
 
 EXPERIMENT = Path(__file__).resolve().parents[1] / "experiments" / "a22-p3"
 sys.path.insert(0, str(EXPERIMENT))
-spec = importlib.util.spec_from_file_location(
-    "lean_source_protocol_v3", EXPERIMENT / "lean_source_protocol_v3.py")
+spec = importlib.util.spec_from_file_location("lean_source_protocol_v3", EXPERIMENT / "lean_source_protocol_v3.py")
 assert spec and spec.loader
 protocol = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = protocol
 spec.loader.exec_module(protocol)
-ledger_spec = importlib.util.spec_from_file_location(
-    "lean_usage_ledger_v3", EXPERIMENT / "usage_ledger_v3.py")
+ledger_spec = importlib.util.spec_from_file_location("lean_usage_ledger_v3", EXPERIMENT / "usage_ledger_v3.py")
 assert ledger_spec and ledger_spec.loader
 ledger = importlib.util.module_from_spec(ledger_spec)
 sys.modules[ledger_spec.name] = ledger
@@ -38,23 +37,42 @@ def test_prior_proposal_seal_remains_unchanged_but_no_longer_seals_adopted_code(
 
 
 def test_lean_reservation_denies_when_input_cap_exceeds_remaining_ceiling(tmp_path: Path):
-    proposal, packet, approval = (tmp_path / "proposal.md", tmp_path / "packet.json",
-                                  tmp_path / "approval.json")
+    proposal, packet, approval = (tmp_path / "proposal.md", tmp_path / "packet.json", tmp_path / "approval.json")
     proposal.write_text("q1461 remains terminal\n", encoding="utf-8")
     packet.write_text("{}\n", encoding="utf-8")
-    approval.write_text(json.dumps({
-        "schema": 1, "record_type": "p3_v3_owner_approval", "owner_accepted": False,
-        "dispatch_allowed": False, "authorized_phases": [], "preflight_status": "NOT_RUN",
-    }), encoding="utf-8")
+    approval.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "record_type": "p3_v3_owner_approval",
+                "owner_accepted": False,
+                "dispatch_allowed": False,
+                "authorized_phases": [],
+                "preflight_status": "NOT_RUN",
+            }
+        ),
+        encoding="utf-8",
+    )
     path = tmp_path / "ledger.jsonl"
     ledger.initialize(path, plan=proposal, packet_seal=packet, approval=approval)
     with pytest.raises(ledger.LedgerError, match="token ceiling"):
-        ledger.reserve("codex", "technical", quota_snapshot={
-            "captured_utc": "stable", "source": "fixture", "source_version": "v1",
-            "freshness_seconds": 0, "five_hour_used_percent": 1,
-            "five_hour_reset_utc": "stable", "weekly_used_percent": 1,
-            "weekly_reset_utc": "stable", "raw_redacted_sha256": "a" * 64,
-        }, path=path, token_reservation=ledger.CODEX_LIMIT + 1)
+        ledger.reserve(
+            "codex",
+            "technical",
+            quota_snapshot={
+                "captured_utc": "stable",
+                "source": "fixture",
+                "source_version": "v1",
+                "freshness_seconds": 0,
+                "five_hour_used_percent": 1,
+                "five_hour_reset_utc": "stable",
+                "weekly_used_percent": 1,
+                "weekly_reset_utc": "stable",
+                "raw_redacted_sha256": "a" * 64,
+            },
+            path=path,
+            token_reservation=ledger.CODEX_LIMIT + 1,
+        )
 
 
 def test_operational_adoption_keeps_proposal_approval_separate_from_code_hash(tmp_path: Path):
@@ -104,6 +122,9 @@ def test_checked_operational_seal_and_report_bind_the_current_candidate():
 def test_runner_rejects_prospective_default_deny_before_provider_lookup(tmp_path: Path):
     with pytest.raises(runner.RunnerError, match="successor seal is stale"):
         runner.run_technical_source(
-            output_dir=tmp_path / "output", scratch=tmp_path / "scratch",
-            rollout_root=tmp_path / "rollouts", approval=protocol.APPROVAL)
+            output_dir=tmp_path / "output",
+            scratch=tmp_path / "scratch",
+            rollout_root=tmp_path / "rollouts",
+            approval=protocol.APPROVAL,
+        )
     assert not (tmp_path / "output").exists()

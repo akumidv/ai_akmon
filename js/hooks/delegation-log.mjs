@@ -6,10 +6,12 @@
  *
  * Appends one TSV line (timestamp, session_id, subagent, model, zone, description) to
  * `.claude/model-routing.log` whenever the session calls the subagent tool (`Agent`/`Task`).
- * Nothing is injected into context and nothing is blocked; a system message makes each
- * delegation — and its declared model — visible in the console, with an advisory line when the
- * agent has no kind in the active role's allowed set (C20), is bound below the rung floor of
- * one of its task kinds (C32), or is an unlabelled delegation in a zoned fan-out (C33).
+ * Nothing is blocked and the delegation itself is not narrated into context; a system message
+ * makes each delegation — and its declared model — visible in the console, with an advisory line
+ * when the agent has no kind in the active role's allowed set (C20), is bound below the rung floor
+ * of one of its task kinds (C32), or is an unlabelled delegation in a zoned fan-out (C33). Each
+ * such warning also reaches the model as `additionalContext`, addressed to the orchestrator
+ * (ADR 0006 item 4, M149); with no warning there is no `additionalContext`.
  *
  * Data (the C104 convention): `hooks/delegation_log.json` is `data.delegationLog`, read when the
  * first message is formatted, as the Python reads it; the routing calls get `data.agents`.
@@ -53,13 +55,16 @@ import {
 import {
   activeRole,
   boundModelFor,
+  delegationFloorDirective,
   delegationFloorWarning,
   delegationLogLine,
   delegationLogRel,
   loadRegistry,
   parseDelegationEntries,
   readLocalConfig,
+  roleMatrixDirective,
   roleMatrixWarning,
+  unlabelledFanoutDirective,
   unlabelledFanoutWarning,
 } from "../tools/model_routing/routing.mjs";
 import { loadPayload, runAsEntryPoint, runGuarded } from "./claude_adapter.mjs";
@@ -165,6 +170,26 @@ function _projectRoot(payload) {
 }
 
 /**
+ * The owner's and the model's warning lines, each pair silent together (ADR 0006 item 4).
+ * @param {Array<Array<string | null>>} warnings (owner text, model text) pairs
+ * @param {string} warnPrefix
+ * @returns {[string[], string[]]}
+ */
+function _warningChannels(warnings, warnPrefix) {
+  /** @type {string[]} */ const owner = [];
+  /** @type {string[]} */ const model = [];
+  for (const [ownerText, modelText] of warnings) {
+    if (ownerText) {
+      owner.push(fill(warnPrefix, { warning: ownerText }));
+    }
+    if (modelText) {
+      model.push(fill(warnPrefix, { warning: modelText }));
+    }
+  }
+  return [owner, model];
+}
+
+/**
  * @param {HookData} data
  * @returns {HookResult | null}
  */
@@ -199,28 +224,37 @@ function _decide(data) {
   const earlier = isFile(logPath) ? parseDelegationEntries(pySplitlines(readText(logPath))) : [];
   // The line always carries the six columns, so it parses to exactly one entry.
   const [thisCall] = parseDelegationEntries([line]);
-  const zoneWarning = unlabelledFanoutWarning(data.agents, earlier, thisCall.sessionId, subagentType, thisCall.zone);
+  // C33 — an unlabelled call in a zoned fan-out.
+  const zoneWarnings = [
+    unlabelledFanoutWarning(data.agents, earlier, thisCall.sessionId, subagentType, thisCall.zone),
+    unlabelledFanoutDirective(data.agents, earlier, thisCall.sessionId, subagentType, thisCall.zone),
+  ];
   fs.mkdirSync(posix.dirname(logPath), { recursive: true });
   _append(logPath, `${line}\n`);
-  // Emit a UI-visible system message without injecting it into model context.
+  // The console line and the owner's warnings go to the UI only (`systemMessage`); each warning
+  // also reaches the model as `additionalContext`, addressed to the orchestrator (ADR 0006
+  // item 4). On PreToolUse both are delivered and the call still runs (M149).
   const messages = [_formatSystemMessage(data, line)];
   // C20 — advise when the agent has no overlap with the role's effective allowed set.
   const registry = loadRegistry(data.agents, akmonRuntimeRoot(root), root);
   const role = activeRole(dictGet(payload, "transcript_path"));
-  const warning = roleMatrixWarning(data.agents, registry, subagentType, role);
+  const roleWarnings = [
+    roleMatrixWarning(data.agents, registry, subagentType, role),
+    roleMatrixDirective(data.agents, registry, subagentType, role),
+  ];
   const warnPrefix = dictItem(data.delegationLog, "warning_prefix");
-  if (warning) {
-    messages.push(fill(warnPrefix, { warning }));
-  }
   // C32 — the recorded task-kind floors are otherwise read by nothing at delegation time.
-  const floorWarning = delegationFloorWarning(data.agents, config, subagentType, dictGet(toolInput, "model"));
-  if (floorWarning) {
-    messages.push(fill(warnPrefix, { warning: floorWarning }));
-  }
-  if (zoneWarning) {
-    messages.push(fill(warnPrefix, { warning: zoneWarning }));
-  }
-  return new HookResult({ eventName: "PreToolUse", systemMessage: messages.join("\n") });
+  const callModel = dictGet(toolInput, "model");
+  const floorWarnings = [
+    delegationFloorWarning(data.agents, config, subagentType, callModel),
+    delegationFloorDirective(data.agents, config, subagentType, callModel),
+  ];
+  const [owner, model] = _warningChannels([roleWarnings, floorWarnings, zoneWarnings], warnPrefix);
+  return new HookResult({
+    eventName: "PreToolUse",
+    additionalContext: model.join("\n") || null,
+    systemMessage: [...messages, ...owner].join("\n"),
+  });
 }
 
 /**

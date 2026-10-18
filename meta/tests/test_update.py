@@ -60,8 +60,9 @@ def test_update_data_pins_its_structure():
         "closing_bump",
         "closing_codex",
         "python_refuses_ecosystem",
-        # Read by the JavaScript update only (C107, Node package mode).
+        # Read by the JavaScript update only (C107, Node package mode; C129, the mounted modes).
         "node_refuses_record",
+        "node_vendored_command",
         "node_pin_not_dev",
         "node_registry_unreachable",
         "node_registry_no_release",
@@ -85,7 +86,7 @@ def test_update_data_pins_its_structure():
     assert _UPDATE_DATA["checks_running"] == "running {{script}} {{flag}}"
     assert _UPDATE_DATA["closing_left_to_you"] == "left to you:"
     assert _UPDATE_DATA["closing_step"] == "  {{index}}. {{step}}"
-    assert _UPDATE_DATA["subtree_realign_command"] == "    akmon init --ref {{target}}"
+    assert _UPDATE_DATA["subtree_realign_command"] == "    {{cli}} init --ref {{target}}"
     assert _UPDATE_DATA["init_failed"] == "akmon update: init failed ({{code}}); see its output above"
     assert _UPDATE_DATA["package_launcher_missing"].startswith("{{launcher}} does not exist")
     assert "{{recorded}}" in _UPDATE_DATA["vendored_not_fetchable"]
@@ -233,6 +234,19 @@ def test_a_project_that_is_not_attached_is_refused(tmp_path, capsys):
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
     assert _update.main(["--project-root", str(tmp_path), "--ref", "v0.4.0"]) == 2
     assert "akmon init" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("mount", "cli"), [("package", "npx akmon"), ("submodule", "node _aitna/akmon/js/akmon/cli.mjs")]
+)
+def test_a_node_record_is_refused_naming_the_cli_of_its_mode(tmp_path, capsys, mount, cli):
+    """The refusal names how the JavaScript implementation runs here: the package's npx, or the mount's own
+    CLI for a mounted Node record (the C129 amendment of ADR 0020 D02)."""
+    record = tmp_path / "_aitna" / ".akmon.toml"
+    record.parent.mkdir(parents=True)
+    record.write_text(f'mount = "{mount}"\necosystem = "node"\nakmon_version = "0.3.0"\n', encoding="utf-8")
+    assert _update.main(["--project-root", str(tmp_path), "--ref", "v0.4.0"]) == 2
+    assert capsys.readouterr().err.endswith(f"run the JavaScript implementation for it: {cli} update\n")
 
 
 # --------------------------------------------------------------------------------------

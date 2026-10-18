@@ -224,7 +224,7 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   akmon's own and replaces it on a mode switch instead of leaving it running beside the new one.
 - **A Node project attaches and is kept in line by `npx akmon` alone (C105; ADR 0020 D05).** The
   `bin.akmon` stub is gone: `init`, `sync`, `verify`, `check`, `path`, `hook` and `version` run on
-  node, in package mode only. `npx akmon init` attaches without a repository probe, records
+  node, in package mode (the mounted modes follow in C129, below). `npx akmon init` attaches without a repository probe, records
   `mount = "package"` and `ecosystem = "node"`, writes the Node variants of the akmon block and
   `.gitignore` (`node_modules/`, no dev-layer venv), detects the package manager (`packageManager`,
   else the lockfile, else npm) and writes a CI workflow with no Python in it (`setup-node` or
@@ -236,8 +236,8 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   `npm install -D -E akmon@<version>`). The `ecosystem` key is new in `.akmon.toml`; absent, it
   means `python`, so no existing record changes. Each implementation refuses the other's record
   with exit 2 and one line naming the command to run instead: the Python `init`, `sync`, `verify`
-  and `update` on `ecosystem = "node"` (`npx akmon …`), the JS commands on a mounted or Python
-  record. Where the two twins knowingly differ is listed in
+  and `update` on `ecosystem = "node"` (`npx akmon …`), the JS commands on a record that does not
+  name `ecosystem = "node"`. Where the two twins knowingly differ is listed in
   [`DIVERGENCES.md`](https://github.com/akumidv/ai_akmon/blob/main/meta/conformance/DIVERGENCES.md).
 - **`npx akmon init` records the Node project's own linters and analyzers for `akmon check`
   (C109; ADR 0020 D07).** It reads ESLint (`eslint.config.*`, `.eslintrc*`,
@@ -259,8 +259,89 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   never edited; a step names the `extends` line it lacks. A project with ESLint, Biome or oxlint of
   its own still defaults to `own`. akmon's own JavaScript moved from ESLint to oxlint and oxfmt
   (internal; nothing for a consumer to do).
+- **`akmon init` writes the language-profile import (C127).** A fresh `AGENTS.md` akmon block
+  now carries `@<AITNA_ROOT>/.akmon/profiles/python.md` (mounted: `@<AITNA_ROOT>/akmon/profiles/…`)
+  for a `pyproject.toml` or `--language python`, and `js.md` for a `package.json` or
+  `--language javascript|typescript`; a mixed project gets both, Python first. An unknown language
+  writes none and keeps the classify step, which now names only what is still missing.
+- **`akmon verify` checks the language-profile import (C127).** `agents.profile-import` warns on
+  an import that resolves to nothing (a prefix wrong for the record's mount, or a profile the
+  standard does not ship); `agents.language-profile` warns when the record or a manifest names a
+  language whose profile `AGENTS.md` does not import. Each finding names the exact line.
+- **A Node repository attached in a mounted mode runs akmon's JavaScript implementation, with no
+  Python (C129; ADR 0020 D02 as amended).** A `submodule`, `vendored` or `subtree` record that
+  names `ecosystem = "node"` is served from the mount: the CLI runs as
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs`, the hooks as
+  `node "<anchor>/<AITNA_ROOT>/akmon/js/hooks/<script>.mjs"`. The first attach needs no Python
+  either: `npx github:akumidv/ai_akmon#vX.Y.Z init --mode submodule` (`--mode vendored` likewise;
+  `--mode subtree` prints the `git subtree add` to run, as the Python does). `init` records
+  `ecosystem = "node"`, writes the Node variant of the mounted akmon block and a CI workflow that
+  runs the mount's CLI after `setup-node`, records the project's own JavaScript checks (oxlint
+  extending `./<AITNA_ROOT>/akmon/profiles/oxlint.json` when it has none), and offers — never
+  writes — a `package.json` script `"akmon": "node <AITNA_ROOT>/akmon/js/akmon/cli.mjs"`. A
+  vendored Node mount also carries `src/akmon` and `package.json`. `update` follows the Python per
+  mode: `submodule` fetches the release tags into the mount and runs `init --ref`; `subtree` and
+  `vendored` print the commands (a vendored move to another release prints that release's `npx`
+  init). A JavaScript CLI that is not the mount's own (an `npx` copy, a global install) hands
+  `sync`, `verify`, `check`, `path`, `hook` and `tool` over to the mount's `cli.mjs`, with the
+  version-skew notice.
+- **Both CLIs take `--ecosystem {python,node}` (C129).** The record's `ecosystem` decides which
+  implementation serves a project. A first mounted attach infers it from the files: `package.json`
+  with no Python files is `node` — Python files being a `pyproject.toml`, `setup.py`, `setup.cfg`,
+  `requirements*.txt`, `Pipfile`, `uv.lock` or `poetry.lock` at the root, or a `*.py` file git
+  tracks outside `<AITNA_ROOT>` and `node_modules` (a walk that skips dot-directories when the
+  project is no git work tree); a repository with both stays `python` unless `--ecosystem node` is
+  given. A record never moves back from `node` to
+  `python`.
+- **`init --ecosystem node` moves a Python-mounted record to the JavaScript implementation
+  (C129).** The JavaScript `init` rewrites the record (`ecosystem = "node"`) and the hook wiring
+  (node on the mount's `js/hooks` instead of python3 on its `hooks`), decides `[check]` again only
+  when it holds exactly akmon's ruff default, names a `ruff.toml` that is byte for byte akmon's
+  template for removal (it never deletes it), and its closing steps say the Codex `/hooks`
+  approval of the rewritten entries is voided. A submodule or subtree mount runs it from the mount
+  (`node <AITNA_ROOT>/akmon/js/akmon/cli.mjs init --ecosystem node`) at this release or later: a
+  mount that predates the switch is refused before anything is written, naming the update to run
+  first. A vendored one switches through `npx` at a release that has the switch — the newer of the
+  recorded and the running release, network access required — because a Python-vendored copy
+  lacks the JavaScript CLI's data; run directly, that copy's `cli.mjs` answers one line naming the
+  missing file and that command. The Python `init --ecosystem node` on a Python record prints that
+  command and exits 2.
+- **`akmon verify` names a Python-only setup in a project with no Python (C129).**
+  `check.ruff-without-python` (both implementations) warns when the `ruff.toml` `akmon init`
+  writes sits, unchanged, in a project with `package.json` and no Python files; an edited ruff
+  configuration is never named. `attach.mount-ecosystem` (the Python `verify`) warns when a mount
+  runs on the Python implementation in such a repository, and its fix is the switch above.
 
 ### Changed
+- **The Python `init` no longer sets up ruff in a project with `package.json` and no Python
+  files (C129).** With no linter found and no `--checks`, it records an empty `[check]` and
+  names the project's own JavaScript checks as a next step, without a prompt; `--checks akmon`
+  still sets up ruff.
+- **An explicit `--checks` decides an empty `[check]` again (C129, both implementations).** A
+  realign keeps a `[check]` table as it is, but a table that records nothing is decided once more
+  when `--checks` is given — so after the move to the JavaScript implementation,
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs init --checks own` detects the project's JavaScript
+  checks. A table that names checks is still kept.
+- **A refusal of a Node record names the command that serves it (C129).** The Python `init`,
+  `sync`, `verify` and `update` refusing a mounted `ecosystem = "node"` record name
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs` instead of `npx akmon`. The JavaScript commands no
+  longer refuse a mounted record as such, only one that does not name `ecosystem = "node"`; the
+  JavaScript `init` refusing a Python mount in a repository with `package.json` and no Python
+  files names the switch (`init --ecosystem node`).
+- **The gate-audit hold is keyed by the counted material (C25).** The Stop hook holds a review or
+  architect turn once per distinct Findings/Options content in a session; it used to key on role
+  and count.
+- **The `quant-derivation` floor is the corridor's boundary (C32).** The registry's new
+  `"floor": "orchestrator_floor"` resolves to the vendor's `selection_policy.orchestrator_floor`,
+  so a healthy binding no longer shows a permanent ⚠. Check: re-run
+  `akmon tool model_routing/init` (the registry hash moved).
+- **delegation-log's per-call warnings reach the model as well as the owner (C32, C33).** The
+  role/task-kind, task-kind floor and unlabelled-zone warnings keep the owner's text in
+  `systemMessage` and add a directive for the orchestrator in
+  `hookSpecificOutput.additionalContext`. A call with no warning is unchanged.
+- **`coverage_map` matches zone labels case-insensitively and refuses a plan with no labels
+  (C33).** It exits 2 when `--zone-plan` is given but no delegation in scope carries a label. A
+  zone label starts with a letter or digit and holds only letters, digits, `-`, `_` or `.`.
 - **A Node project may pin akmon to a release tag of the git repository (C120).** `verify`'s
   `package.dev-pin` accepts a git dependency whose ref is an exact release tag —
   `github:akumidv/ai_akmon#vX.Y.Z`, the `gitlab:`/`bitbucket:`/`<owner>/<repo>` shorthands and
@@ -491,6 +572,19 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   inspect that host state ([N7 evidence](https://github.com/akumidv/ai_akmon/blob/main/meta/reviews/n7-codex-hook-delivery.md)).
 
 ### Breaking
+- **The Python `init` no longer attaches a Node repository in a mounted mode (C129).** A first
+  mounted attach (no `<AITNA_ROOT>/.akmon.toml` yet) of a repository with `package.json` and no
+  Python files exits 2 before touching anything and prints the JavaScript command to run
+  instead — `npx github:akumidv/ai_akmon#<tag> init --mode <mode>`, or the mount's own
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs init …` when a submodule or subtree mount is already on
+  disk. An existing record and its realign are unchanged. See Migration ("A script that attaches
+  a Node repository through the Python CLI").
+- **`verify` warns on a missing language-profile import (C127).** An existing consumer whose
+  `AGENTS.md` predates this release gets `WARN agents.language-profile`, and
+  `akmon verify --strict` exits 1 until the profile import line the finding names is added; a
+  package attach that spells the import `@_aitna/akmon/profiles/<name>.md` also gets
+  `agents.profile-import`. See Migration ("Every project: add the language-profile import
+  `verify` names").
 - **The Python language rules moved from `guardrails/python.md` to `profiles/python.md`
   (C89/D2-48).** An `AGENTS.md` that still imports `guardrails/python.md` fails `akmon sync`
   (exit 2) and `akmon verify` (`pointers.generated-plan`) with a message naming the replacement
@@ -510,6 +604,26 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   `akmon verify --strict`. This requires a pre-1.0 `x` bump.
 
 ### Migration
+- **A Node repository on a Python-run mount: move it to the JavaScript implementation (C129,
+  optional).** `akmon verify` names it (`attach.mount-ecosystem`). The switch needs a mount or CLI
+  at this release or later. A submodule or subtree mount is updated to this release first (a
+  submodule: `git -C <AITNA_ROOT>/akmon fetch --tags && git -C <AITNA_ROOT>/akmon checkout <tag>`;
+  a subtree: `git subtree pull`), then runs
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs init --ecosystem node`; a vendored mount runs
+  `npx github:akumidv/ai_akmon#<tag> init --ecosystem node` with `<tag>` this release or later
+  (network access required). Then re-approve the Codex hooks with `/hooks`, have the JavaScript
+  implementation detect the project's checks with
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs init --checks own` when `[check]` is empty, and remove
+  `ruff.toml` if a closing step names it. Check:
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs verify --strict`.
+- **A script that attaches a Node repository through the Python CLI in a mounted mode: add
+  `--ecosystem python` to keep a Python-run mount (C129).** Without it the Python `init` exits 2
+  and names the JavaScript command (see Breaking).
+- **Every project: add the language-profile import `verify` names (C127).** An `AGENTS.md`
+  written before this release gets `WARN agents.language-profile`, and `akmon verify --strict`
+  exits 1 until the line the finding names is added after the `_common.md` import. In a package
+  attach, an import spelled `@_aitna/akmon/profiles/<name>.md` must become
+  `@_aitna/.akmon/profiles/<name>.md`. Check: `akmon verify --strict`.
 - **Every Python project: re-point the language import, then sync (C89/D2-48).** In the
   `AGENTS.md` akmon block replace `@_aitna/.akmon/guardrails/python.md` with
   `@_aitna/.akmon/profiles/python.md` (mounted: `@_aitna/akmon/guardrails/python.md` with
@@ -564,6 +678,13 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **Diagnostic markers no longer stay silent on a planted or skewed path (C36).** A marker dated
+  more than 60 s ahead of the clock is stale; only a regular file the current user owns, read with
+  `lstat`, counts as a claim; a marker that vanishes mid-claim is claimed again; an unreadable
+  existing marker emits.
+- **The conformance recorder writes `[expected]` keys before its sub-tables (C128).**
+  `meta/conformance/runner.py --record` writes `file_absent` ahead of the `[expected.*]` tables
+  (development tooling; nothing ships).
 - **A realign keeps `--checks none` and `--checks own` with nothing found (C123).**
   `akmon init --checks none` — or the same answer at the prompt — and `--checks own` when no
   linter configuration is found now record an empty `[check]` table in

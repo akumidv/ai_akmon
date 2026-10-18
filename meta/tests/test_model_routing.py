@@ -154,9 +154,28 @@ def test_binding_without_available_uses_semantic_fallback_and_omits_agent_models
     assert "model:" not in files[".claude/agents/k_explorer.md"]
 
 
+def test_task_kind_floors_resolve_the_corridor_boundary():
+    """C32 review: the shipped quant-derivation floor is the vendor's orchestration floor."""
+    assert routing.task_kind_floors(REGISTRY, ["haiku", "sonnet", "opus", "fable"]) == {"quant-derivation": "opus"}
+    # openai keeps the relative "highest" corridor floor, so the task-kind floor is its top rung.
+    assert routing.task_kind_floors(REGISTRY, ["small", "medium", "large"], "openai") == {"quant-derivation": "large"}
+    # A ladder without the named floor alias disables the corridor, and the kind floor with it.
+    assert routing.task_kind_floors(REGISTRY, ["small", "medium", "large"]) == {}
+
+
 def test_task_kind_floors_resolves_highest():
-    floors = routing.task_kind_floors(REGISTRY, ["small", "medium", "large"])
-    assert floors == {"quant-derivation": "large"}
+    registry = {"task_kinds": {"k": {"floor": "highest"}}}
+    assert routing.task_kind_floors(registry, ["small", "medium", "large"]) == {"k": "large"}
+
+
+def test_a_healthy_binding_opens_no_floor_gap():
+    """C32 review: haiku/sonnet/opus/fable with the orchestrator on opus is the corridor's centre."""
+    ladder = ["haiku", "sonnet", "opus", "fable"]
+    binding = routing.compute_binding(REGISTRY, "opus", available=ladder)
+    config = routing.local_config(binding, REGISTRY, second_opinion=False, available=ladder)
+    assert binding.warning is None
+    assert routing.floor_gaps(config) == []
+    assert routing.delegation_floor_warning(config, "k_reasoner", None) is None
 
 
 def test_task_kind_floors_empty_without_rungs():
@@ -477,7 +496,11 @@ def test_a_retired_key_overlay_refuses_the_status_block_rather_than_degrading_it
 def test_local_config_carries_auditor_and_task_kind_floors():
     config = _fresh_config()
     assert config["binding"]["auditor"] == "large"
-    assert config["task_kind_floors"] == {"quant-derivation": "large"}
+    assert config["task_kind_floors"] == {}  # no `opus` on the abstract ladder: no corridor floor
+    ladder = ["haiku", "sonnet", "opus", "fable"]
+    binding = routing.compute_binding(REGISTRY, "opus", available=ladder)
+    real = routing.local_config(binding, REGISTRY, second_opinion=False, available=ladder)
+    assert real["task_kind_floors"] == {"quant-derivation": "opus"}
 
 
 def test_local_config_no_task_kind_floors_without_available():
@@ -645,9 +668,18 @@ def test_role_matrix_warning_renders_effective_allowed_in_registry_order():
     base_registry = {**registry, "cross_cutting_kinds": []}
     assert routing.role_matrix_warning(base_registry, "k_mechanic", "review") == (
         "role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active "
-        "role 'review' — it routes explore-search, summarize, debug-deep, plan-draft. "
-        "Re-route or switch role."
+        "role 'review' — it routes explore-search, summarize, debug-deep, plan-draft."
     )
+
+
+def test_role_matrix_directive_shares_the_warning_predicate():
+    """ADR 0006 item 4: the model's copy says re-route or switch role, silent with the owner's (M149)."""
+    base_registry = {**routing.load_registry(_AKMON), "cross_cutting_kinds": []}
+    directive = routing.role_matrix_directive(base_registry, "k_mechanic", "review")
+    assert directive is not None and "re-route this work" in directive and "role switch" in directive
+    for agent, role in [("k_reasoner", "review"), ("k_mechanic", None), ("general-purpose", "review")]:
+        assert routing.role_matrix_directive(base_registry, agent, role) is None
+        assert routing.role_matrix_warning(base_registry, agent, role) is None
 
 
 def test_role_matrix_warning_d2_6_cross_cutting_extension():
@@ -1565,9 +1597,12 @@ def _ladder_config(orchestrator: str, ladder: list[str]) -> dict:
     return routing.local_config(binding, REGISTRY, second_opinion=False, available=ladder)
 
 
-def test_floor_gap_when_the_reasoner_follows_an_orchestrator_below_the_top():
-    gaps = routing.floor_gaps(_ladder_config("medium", ["small", "medium", "large"]))
-    assert gaps == [routing.FloorGap(kind="quant-derivation", agent="k_reasoner", floor="large", bound="medium")]
+_LADDER = ["haiku", "sonnet", "opus", "fable"]
+
+
+def test_floor_gap_when_the_reasoner_follows_an_orchestrator_below_the_corridor():
+    gaps = routing.floor_gaps(_ladder_config("sonnet", _LADDER))
+    assert gaps == [routing.FloorGap(kind="quant-derivation", agent="k_reasoner", floor="opus", bound="sonnet")]
 
 
 def test_no_floor_gap_with_the_orchestrator_on_the_top_rung():
@@ -1581,15 +1616,15 @@ def test_no_floor_gap_under_semantic_fallback():
 
 
 def test_status_lines_name_the_floor_gap_and_the_override():
-    config = _ladder_config("medium", ["small", "medium", "large"])
+    config = _ladder_config("sonnet", _LADDER)
     joined = "\n".join(routing.status_lines(config, REGISTRY, "x"))
-    assert "⚠ task kind quant-derivation has a large floor, but k_reasoner is bound to medium" in joined
-    assert "with model=large" in joined
+    assert "⚠ task kind quant-derivation has a opus floor, but k_reasoner is bound to sonnet" in joined
+    assert "with model=opus" in joined
 
 
 def test_rebind_notice_carries_the_floor_gap():
-    config = _ladder_config("medium", ["small", "medium", "large"])
-    assert "quant-derivation has a large floor" in "\n".join(routing.rebind_notice(config, REGISTRY))
+    config = _ladder_config("sonnet", _LADDER)
+    assert "quant-derivation has a opus floor" in "\n".join(routing.rebind_notice(config, REGISTRY))
 
 
 def test_status_lines_name_the_escalation_path_only_with_a_bound_ladder():
@@ -1601,14 +1636,39 @@ def test_status_lines_name_the_escalation_path_only_with_a_bound_ladder():
 
 
 def test_delegation_floor_warning_is_conditional_on_the_kind_and_silenced_by_an_override():
-    config = _ladder_config("medium", ["small", "medium", "large"])
+    config = _ladder_config("sonnet", _LADDER)
     warning = routing.delegation_floor_warning(config, "k_reasoner", None)
     assert warning is not None
-    assert "quant-derivation (floor large)" in warning
-    assert "if this delegation is one of those kinds" in warning
-    assert routing.delegation_floor_warning(config, "k_reasoner", "large") is None
-    assert routing.delegation_floor_warning(config, "k_reasoner", "medium") is not None
+    assert "quant-derivation (floor opus)" in warning
+    assert routing.delegation_floor_warning(config, "k_reasoner", "opus") is None
+    assert routing.delegation_floor_warning(config, "k_reasoner", "fable") is None
+    assert routing.delegation_floor_warning(config, "k_reasoner", "sonnet") is not None
     assert routing.delegation_floor_warning(config, "k_explorer", None) is None
+
+
+def test_the_delegation_floor_warning_speaks_to_the_owner():
+    """C32 review: its reader is the owner (systemMessage), so it states the fact and carries no
+    advice addressed to the agent."""
+    warning = routing.delegation_floor_warning(_ladder_config("sonnet", _LADDER), "k_reasoner", None)
+    assert warning == "k_reasoner runs on sonnet, below the floor of quant-derivation (floor opus)"
+
+
+def test_the_delegation_floor_directive_speaks_to_the_orchestrator():
+    """ADR 0006 item 4: the model's copy names the override per open kind, silent with the owner's (M149).
+
+    The hook is PreToolUse and does not block, so the call already runs: the directive applies from
+    the next call on and never asks for a re-issue, which would run the subagent twice.
+    """
+    config = _ladder_config("sonnet", _LADDER)
+    directive = routing.delegation_floor_directive(config, "k_reasoner", None)
+    assert directive.startswith("k_reasoner is bound to sonnet, below a task-kind floor")
+    assert "from the next call on" in directive
+    assert "re-issue" not in directive
+    assert directive.endswith("delegate quant-derivation with model=opus")
+    for model in ("opus", "fable", "sonnet", None):
+        warned = routing.delegation_floor_warning(config, "k_reasoner", model) is not None
+        assert (routing.delegation_floor_directive(config, "k_reasoner", model) is not None) == warned
+    assert routing.delegation_floor_directive(config, "k_explorer", None) is None
 
 
 # --------------------------------------------------------------------------------------
@@ -1626,10 +1686,21 @@ def test_delegation_floor_warning_is_conditional_on_the_kind_and_silenced_by_an_
         ("zone:auth", ("auth", "")),
         ("zone: the auth module", (None, "zone: the auth module")),
         ("mid-sentence zone:auth stays prose", (None, "mid-sentence zone:auth stays prose")),
+        ("[zone:Auth] check", ("Auth", "check")),
+        ("zone:hooks.delegation-log_2 check", ("hooks.delegation-log_2", "check")),
     ],
 )
 def test_parse_zone_tolerates_the_observed_spellings(description, expected):
     assert routing.parse_zone(description) == expected
+
+
+@pytest.mark.parametrize(
+    "description",
+    ["[zone:-] check", "zone:[auth] check", "zone:auth]x check", "[zone:_auth] check", "[zone:a b] check"],
+)
+def test_an_odd_label_is_no_label(description):
+    """C33 review: a label starts with a letter or digit and holds only letters, digits, - _ ."""
+    assert routing.parse_zone(description) == (None, "check")
 
 
 def _entry(session: str, zone: str | None, subagent: str = "k_explorer") -> routing.DelegationEntry:
@@ -1639,9 +1710,22 @@ def _entry(session: str, zone: str | None, subagent: str = "k_explorer") -> rout
 def test_unlabelled_fanout_warns_only_in_a_zoned_session():
     earlier = [_entry("s1", "auth"), _entry("s1", "io"), _entry("s2", None)]
     warning = routing.unlabelled_fanout_warning(earlier, "s1", "k_explorer", None)
-    assert warning is not None and "(auth, io)" in warning and "[zone:<label>]" in warning
+    assert warning is not None and "(auth, io)" in warning
+    assert "[zone:<label>]" not in warning  # the owner's copy states the fact, no advice to the agent
     assert routing.unlabelled_fanout_warning(earlier, "s2", "k_explorer", None) is None
     assert routing.unlabelled_fanout_warning(earlier, "s1", "k_explorer", "auth") is None
+
+
+def test_unlabelled_fanout_directive_tells_the_orchestrator_to_label():
+    """ADR 0006 item 4: the model's copy, silent exactly where the owner's warning is (M149)."""
+    earlier = [_entry("s1", "auth"), _entry("s1", "io")]
+    directive = routing.unlabelled_fanout_directive(earlier, "s1", "k_explorer", None)
+    assert directive is not None and "(auth, io)" in directive
+    assert "label fan-out calls with [zone:<label>]" in directive
+    assert "re-issue" not in directive
+    assert routing.unlabelled_fanout_directive(earlier, "s1", "k_explorer", "auth") is None
+    assert routing.unlabelled_fanout_directive(earlier, "s1", "k_auditor", None) is None
+    assert routing.unlabelled_fanout_directive(earlier, None, "k_explorer", None) is None
 
 
 def test_unlabelled_fanout_exempts_the_auditor_host_agents_and_missing_sessions():
@@ -1765,16 +1849,34 @@ def test_the_request_names_the_count_the_floor_and_the_routed_auditor():
     assert "(model=" not in routing.gate_audit_request(registry, {}, "review", _FINDINGS_TURN, "GP")
 
 
-def test_one_hold_per_gate_and_a_changed_count_is_a_new_gate(tmp_path):
+def test_one_hold_per_gate_keyed_by_the_counted_material(tmp_path):
     more = _FINDINGS_TURN.replace("- F3 · and this\n", "- F3 · and this\n- F4 · one more\n")
+    other = _FINDINGS_TURN.replace("the thing is wrong", "a different defect")
     assert routing.gate_audit_once("review", _FINDINGS_TURN, "s1", marker_dir=tmp_path) is True
     assert routing.gate_audit_once("review", _FINDINGS_TURN, "s1", marker_dir=tmp_path) is False
     assert routing.gate_audit_once("review", more, "s1", marker_dir=tmp_path) is True
+    # C25 review: 3 → 4 → 3 over the same material does not hold the first material again,
+    assert routing.gate_audit_once("review", _FINDINGS_TURN, "s1", marker_dir=tmp_path) is False
+    # and the same count over different material is a different gate.
+    assert routing.count_gate_items(other, _REVIEW_RULE) == routing.count_gate_items(_FINDINGS_TURN, _REVIEW_RULE)
+    assert routing.gate_audit_once("review", other, "s1", marker_dir=tmp_path) is True
     assert routing.gate_audit_once("review", _FINDINGS_TURN, "s2", marker_dir=tmp_path) is True
     # An unidentified session never claims a shared marker (C36): it asks every time.
     assert routing.gate_audit_once("review", _FINDINGS_TURN, None, marker_dir=tmp_path) is True
     assert routing.gate_audit_once("review", _FINDINGS_TURN, None, marker_dir=tmp_path) is True
     assert routing.gate_audit_once("engineer", _FINDINGS_TURN, "s3", marker_dir=tmp_path) is False
+
+
+def test_the_gate_marker_ignores_what_lies_outside_the_counted_sections():
+    reworded = "A new preamble.\n\n" + _FINDINGS_TURN.replace(
+        "## Next steps\n\n- not a finding\n", "## Later\n\n- else\n"
+    )
+    assert routing.gate_audit_marker_kind(reworded, _REVIEW_RULE) == routing.gate_audit_marker_kind(
+        _FINDINGS_TURN, _REVIEW_RULE
+    )
+    assert routing.gate_section_text(_FINDINGS_TURN, _REVIEW_RULE) == (
+        "- F1 · the thing is wrong\n  - a nested detail, part of F1\n- F2 · the other thing\n- F3 · and this"
+    )
 
 
 def test_the_local_config_reader_tolerates_absence_and_damage(tmp_path):
@@ -1827,12 +1929,15 @@ def test_agents_data_pins_the_structure_and_characteristic_texts():
         "init_instruction",
         "rebind_notice",
         "unlabelled_fanout_warning",
+        "unlabelled_fanout_directive",
         "second_opinion_unavailability",
         "unpinnable_model",
         "compute_binding_warnings",
         "role_matrix_warning",
+        "role_matrix_directive",
         "floor_gap_line",
         "delegation_floor_warning",
+        "delegation_floor_directive",
         "context_pressure",
         "staleness",
         "second_opinion_spec_errors",

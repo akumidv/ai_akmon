@@ -1,0 +1,13 @@
+{
+  "acceptance_basis": "owner direction: thinking model cannot disable reasoning; account for that and continue",
+  "authorized_phases": [
+    "qwen_5000_format_route_check"
+  ],
+  "dispatch_allowed": true,
+  "operational_seal_sha256": "8bf88df9a4b6d1d7073284ef31fd946a15efdd79d32ad471368fe16dad09ae93",
+  "owner_accepted": true,
+  "preflight_sha256": "330c9e487c1104576c5b733692f54ff1cfe31c3ce3e3134e20fce3be4a5af5fb",
+  "record_type": "p3_v3_qwen_5000_format_route_v1_approval",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "schema": 1
+}

@@ -100,7 +100,8 @@
     "Then ask the owner to (a) confirm the proposed tier→model binding and (b) enable or decline second-opinion review, and re-run the tool with their answers."
   ],
   "rebind_notice": "[akmon] orchestrator model changed → {{orchestrator}}; subagent binding updated: reasoner={{reasoner}} · auditor={{auditor}} · worker={{worker}} · mid={{mid}}. Regenerated k_* agents follow the new model.",
-  "unlabelled_fanout_warning": "this {{subagent}} delegation carries no zone label while this session's fan-out is zoned ({{labelled}}) — the coverage map will count it as unlabelled; start the description with [zone:<label>]",
+  "unlabelled_fanout_warning": "this {{subagent}} delegation carries no zone label while this session's fan-out is zoned ({{labelled}}) — the coverage map will count it as unlabelled",
+  "unlabelled_fanout_directive": "this {{subagent}} call carries no zone label while this session's fan-out is zoned ({{labelled}}) — label fan-out calls with [zone:<label>] at the start of the description",
   "second_opinion_unavailability": {
     "other_vendor_absent": "other-vendor: not attempted, it is absent from the configured ladder",
     "other_vendor_none": "other-vendor: no other vendor is configured with a usable second-opinion spec",
@@ -117,9 +118,14 @@
     "below_floor": "orchestrator={{orchestrator}} is below the orchestration floor ({{floor}}) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check",
     "reserved_top": "orchestrator={{orchestrator}} runs on the auditor's reserved top rung — orchestration does not need it; consider /model down to {{floor}}"
   },
-  "role_matrix_warning": "role/task-kind: {{subagent}} ({{kinds}}) is outside the active role '{{role}}' — it routes {{allowed}}. Re-route or switch role.",
+  "role_matrix_warning": "role/task-kind: {{subagent}} ({{kinds}}) is outside the active role '{{role}}' — it routes {{allowed}}.",
+  "role_matrix_directive": "role/task-kind: {{subagent}} ({{kinds}}) is outside the active role '{{role}}', which routes {{allowed}} — re-route this work to an agent with an allowed kind, or declare the role switch before delegating it.",
   "floor_gap_line": "⚠ task kind {{kind}} has a {{floor}} floor, but {{agent}} is bound to {{bound}} — delegate {{kind}} with model={{floor}}.",
-  "delegation_floor_warning": "{{subagent}} runs on {{bound}}, below the floor of {{kinds}} — if this delegation is one of those kinds, re-issue it with the floor model",
+  "delegation_floor_warning": "{{subagent}} runs on {{bound}}, below the floor of {{kinds}}",
+  "delegation_floor_directive": {
+    "text": "{{subagent}} is bound to {{bound}}, below a task-kind floor — this call runs as issued; from the next call on, {{overrides}}",
+    "override": "delegate {{kind}} with model={{floor}}"
+  },
   "context_pressure": {
     "warn": "⚠ context pressure: {{share}} — /compact; new task: /new",
     "info": "ℹ context pressure: {{share}} — /compact"

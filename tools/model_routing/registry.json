@@ -81,7 +81,7 @@
     },
     "quant-derivation": {
       "tier": "reasoner",
-      "floor": "highest"
+      "floor": "orchestrator_floor"
     },
     "plan-draft": {
       "tier": "reasoner"

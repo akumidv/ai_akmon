@@ -49,7 +49,7 @@ from common.findings import Finding, exit_code, line_safe, print_findings, read_
 from common.project_root import resolve_project_root
 from common.record import RecordError, read_akmon_toml_strict, recorded_ecosystem
 from common.runtime import codex_hooks_list_command
-from common.versions import split_version
+from common.versions import split_version, switch_tag
 
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b", re.ASCII)
 # A backlog entry's ``·``-separated fields (pipelines/tasks.md): id, title, status, goal,
@@ -414,6 +414,81 @@ class Verifier:
                 "AGENTS.md akmon block contains required anchors",
                 target="AGENTS.md",
                 fix="Keep every required anchor in the AGENTS.md akmon block.",
+            )
+
+    def check_profile_imports(self) -> None:
+        """Every profile import in AGENTS.md resolves, and each known language has one (C127).
+
+        Both are ``warn``: the import is hand-owned text, and an unresolved ``@``-import fails
+        silently in the harness, so this finding is the only place a consumer hears of it. A
+        profile import resolves when it names a profile the standard ships under the prefix the
+        record's mount reads (``sync.import_prefix``); one that is a file in the project is the
+        project's own and is left alone, whatever its name. A language is known from the
+        record's ``attached_archetype`` and from the manifests (``sync.language_profiles``) — the
+        same mapping ``init`` writes a fresh block from.
+        """
+        path = self.root / "AGENTS.md"
+        if not path.is_file():
+            return
+        imports = sync_tool.profile_imports(path.read_text(encoding="utf-8"))
+        prefix = sync_tool.import_prefix(self.root)
+        shipped = sorted(entry.name for entry in (self.standard_root / "profiles").glob("*.md"))
+        unresolved = False
+        for found in imports:
+            if (self.root / found.prefix / "profiles" / found.name).is_file():
+                continue  # a file of the project loads, whatever its name (ADR-0014/D02)
+            if found.name not in shipped:
+                unresolved = True
+                self.warn(
+                    "agents.profile-import",
+                    f"AGENTS.md imports {found.line}, a profile the standard does not ship, so it loads nothing",
+                    target="AGENTS.md",
+                    fix=f"Remove the line {found.line} from AGENTS.md, or import a profile the standard ships "
+                    f"({', '.join(shipped)}).",
+                )
+            elif f"@{found.prefix}" != prefix:
+                unresolved = True
+                self.warn(
+                    "agents.profile-import",
+                    f"AGENTS.md imports {found.line}, which resolves to nothing: a "
+                    f"{sync_tool.read_mount_mode(self.root)} attach imports the standard's files from {prefix}",
+                    target="AGENTS.md",
+                    fix=f"Replace the line {found.line} with {prefix}profiles/{found.name} in AGENTS.md.",
+                )
+        if not unresolved:
+            self.ok(
+                "agents.profile-import",
+                "every profile import in AGENTS.md resolves",
+                target="AGENTS.md",
+                fix=f"Keep each profile import under {prefix}profiles/.",
+            )
+        self._check_language_profiles({found.name for found in imports}, prefix)
+
+    def _check_language_profiles(self, imported: set[str], prefix: str) -> None:
+        """A ``warn`` per language profile the record or a manifest calls for and AGENTS.md lacks."""
+        record = f"{self.aitna}/.akmon.toml"
+        archetype = sync_tool.read_akmon_toml(self.root / record).get("attached_archetype")
+        named = [archetype] if isinstance(archetype, str) else []
+        missing = [
+            found
+            for found in sync_tool.language_profiles(self.root, named, self.sync_data)
+            if found.profile not in imported
+        ]
+        for found in missing:
+            source = f'{record} attached_archetype "{found.source}"' if found.source in named else found.source
+            self.warn(
+                "agents.language-profile",
+                f"AGENTS.md imports no {found.profile} language profile, though {source} names the project's language",
+                target="AGENTS.md",
+                fix=f"Add the line {prefix}profiles/{found.profile} to the AGENTS.md akmon block, right after the "
+                "_common.md import.",
+            )
+        if not missing:
+            self.ok(
+                "agents.language-profile",
+                "AGENTS.md imports a profile for every language the record and the manifests name",
+                target="AGENTS.md",
+                fix="Keep one profile import per project language in AGENTS.md.",
             )
 
     def check_cross_agent_contract(self) -> None:
@@ -1204,7 +1279,10 @@ class Verifier:
         amendment). Only ``vendored`` is a copy: a submodule or subtree mount is the git tree and
         carries ``meta/`` on purpose, and package mode mounts nothing. The members are
         ``verify.json::vendored_tree_members``, pinned equal to ``init.json::tree_members`` (that
-        file is not in the mount), plus the files ``init`` itself writes there.
+        file is not in the mount), plus the files ``init`` itself writes there. A Node record's copy also
+        carries ``vendored_node_members`` — the CLI data and the ``package.json`` its CLI reads its version
+        from (C129); ``main`` refuses such a record before any check, so this branch serves the
+        JavaScript twin's shape for a caller that builds the verifier directly.
         """
         if sync_tool.read_mount_mode(self.root) != "vendored":
             return
@@ -1212,6 +1290,8 @@ class Verifier:
         if not mount.is_dir():
             return
         shipped = {*self.data["vendored_tree_members"], *self.data["vendored_mount_own_files"]}
+        if recorded_ecosystem(self.root) == "node":
+            shipped.update(self.data["vendored_node_members"])
         for entry in sorted(path.name for path in mount.iterdir()):
             if entry in shipped:
                 continue
@@ -1449,6 +1529,7 @@ class Verifier:
         self.check_basic_layout()
         self.check_use_surface_isolation()
         self.check_agents_md()
+        self.check_profile_imports()
         self.check_cross_agent_contract()
         self.check_agent_charters()
         self.check_memory()
@@ -1467,6 +1548,8 @@ class Verifier:
         self.check_package_pin()
         self.check_attach_record()
         self.check_check_config()
+        self.check_ruff_without_python()
+        self.check_python_mount_without_python()
 
     def check_check_config(self) -> None:
         """The ``[check]`` table of the integration record — validated here, run by ``akmon check``.
@@ -1496,6 +1579,76 @@ class Verifier:
                 fix=fix,
             )
 
+    def check_ruff_without_python(self) -> None:
+        """Warn when the ``ruff.toml`` ``akmon init`` writes sits in a Node project with no Python.
+
+        C129: an init that found no linter set ruff up even where ``package.json`` is the only
+        manifest. The file is matched byte for byte against the template, for either mode's
+        rules path, so a ruff configuration the owner has edited or written is never named.
+        """
+        path = self.root / "ruff.toml"
+        if not path.is_file() or not (self.root / "package.json").is_file():
+            return
+        if sync_tool.has_python(self.root, self.sync_data, self.aitna):
+            return
+        markers = ", ".join(self.sync_data["python_markers"]["files"])
+        template = self.sync_data["ruff_toml_template"]
+        written = {
+            jsondata.fill(template, {"rules_path": f"{self.aitna}/{mount}/profiles/ruff.toml"}).encode("utf-8")
+            for mount in (".akmon", "akmon")
+        }
+        try:
+            content = path.read_bytes()
+        except OSError:
+            return
+        if content in written:
+            self.warn(
+                "check.ruff-without-python",
+                jsondata.fill(self.data["ruff_without_python"], {"markers": markers}),
+                target="ruff.toml",
+                fix=jsondata.fill(self.data["ruff_without_python_fix"], {"record": f"{self.aitna}/.akmon.toml"}),
+            )
+
+    def check_python_mount_without_python(self) -> None:
+        """Warn when a mount runs on the Python implementation in a project with no Python (C129).
+
+        ADR 0020 D02 as amended by C129: a mounted record that names ``ecosystem = "node"`` runs the
+        JavaScript implementation from the mount and needs no Python. A record that names
+        ``python``, or no ecosystem, keeps this implementation — so in a repository whose only
+        manifest is ``package.json`` every machine that runs the hooks and checks still needs
+        Python. The record decides; this only names the switch. The JavaScript verify serves no
+        Python record, so this finding is this file's alone.
+        """
+        if sync_tool.is_package_mode(self.root) or not (self.root / self.akmon).is_dir():
+            return
+        if not (self.root / "package.json").is_file() or sync_tool.has_python(self.root, self.sync_data, self.aitna):
+            return
+        markers = ", ".join(self.sync_data["python_markers"]["files"])
+        record = f"{self.aitna}/.akmon.toml"
+        self.warn(
+            "attach.mount-ecosystem",
+            jsondata.fill(
+                self.data["python_mount_without_python"],
+                {"akmon": self.akmon, "record": record, "markers": markers},
+            ),
+            target=record,
+            fix=jsondata.fill(self.data["python_mount_without_python_fix"], {"command": self._node_switch_command()}),
+        )
+
+    def _node_switch_command(self) -> str:
+        """The switch to the JavaScript implementation (``init.json``'s twin, ``_init.node_switch_command``).
+
+        The mount's own ``cli.mjs`` for a submodule or a subtree; for a vendored copy, which a Python
+        attach made without the data that CLI reads, ``npx`` at the release ``switch_tag`` names: the
+        newer of the record's and the installed package's, ``main`` for a version that is not one.
+        """
+        switch = self.data["python_mount_switch"]
+        if sync_tool.read_mount_mode(self.root) != "vendored":
+            return jsondata.fill(switch["mounted"], {"akmon": self.akmon})
+        recorded = sync_tool.read_akmon_toml(self.root / self.aitna / ".akmon.toml").get("akmon_version")
+        tag = switch_tag(recorded if isinstance(recorded, str) else None, sync_tool._installed_akmon_version())
+        return jsondata.fill(switch["vendored"], {"tag": tag})
+
 
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments, run every check against the project, and print findings."""
@@ -1513,7 +1666,8 @@ def main(argv: list[str] | None = None) -> int:
     ecosystem = recorded_ecosystem(root)
     if ecosystem != "python":
         text = read_verify_data()["python_refuses_ecosystem"]
-        print(jsondata.fill(text, {"value": line_safe(ecosystem)}), file=sys.stderr)
+        cli = sync_tool.node_cli(root, sync_tool.read_sync_data())
+        print(jsondata.fill(text, {"value": line_safe(ecosystem), "cli": cli}), file=sys.stderr)
         return 2
     verify = Verifier(root)
     verify.run()

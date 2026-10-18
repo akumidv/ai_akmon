@@ -925,6 +925,12 @@ function markerStep(module, sort, data, world, step) {
     case "plant_dir":
       fs.mkdirSync(path.join(folder, `${data.name_prefix}${step.kind}-${markerDigest(data, step.identity)}`));
       return [];
+    case "plant_link":
+      fs.symlinkSync(
+        step.target,
+        path.join(folder, `${data.name_prefix}${step.kind}-${markerDigest(data, step.identity)}`),
+      );
+      return [];
     case "age": {
       const names = markerListing(sort, folder);
       const labelled = markerLabelled(data, names, identities);
@@ -1259,6 +1265,7 @@ const ROUTING_DATA_PARAMS = {
       "subagentKinds",
       "boundModelFor",
       "roleMatrixWarning",
+      "roleMatrixDirective",
       "contextPressureNotice",
       "bindingArtifacts",
       "obsoleteAgentFiles",
@@ -1269,11 +1276,13 @@ const ROUTING_DATA_PARAMS = {
       "floorGaps",
       "floorGapLines",
       "delegationFloorWarning",
+      "delegationFloorDirective",
       "statusLines",
       "rebindNotice",
       "initInstruction",
       "zoneConvention",
       "unlabelledFanoutWarning",
+      "unlabelledFanoutDirective",
       "readLocalConfig",
     ].map((name) => [name, /** @type {Array<keyof typeof ROUTING_DATA_FILES>} */ (["agents"])]),
   ),

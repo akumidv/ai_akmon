@@ -82,16 +82,30 @@ project-local hook surface.
   `decision: block`: run the `audit` pass (`k_auditor` over a gate-pack) or state the skip. The
   floor stays advisory in substance — review-flow step 4 and design-flow step 7 allow the skip —
   what it removes is the silent pass. It never holds a turn twice: `stop_hook_active` marks the
-  turn that runs *because* of the hold, and a C36 marker keyed by role and count keeps one hold
-  per gate. Claude-only: Codex 0.155.1 has no main-agent stop event (M88). Logic in
+  turn that runs *because* of the hold, and a C36 marker keyed by role and a digest of the
+  counted section text keeps one hold per gate — the same material holds once in a session,
+  different material holds again even at the same count. Claude-only: not wired on Codex — M151
+  (codex 0.162.1) suggests a main-agent `Stop` exists, live probe pending (C128). Logic in
   [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).
 - [`delegation-log.py`](delegation-log.py) — Claude PreToolUse wrapper that appends one TSV
   line (timestamp, session id, subagent, model, zone, description) to
   `.claude/model-routing.log` per subagent delegation. It emits a UI system message without
   injecting routing narration into model context. The same message carries C20's conservative
   role/agent advisory when the agent has no kind overlapping the active role's effective allowed
-  set; a mixed agent's silence does not prove its intended kind. Runs as a
-  **PreToolUse → Task|Agent** hook; ordinary runtime failures remain advisory and return 0.
+  set; a mixed agent's silence does not prove its intended kind. It also names a `k_*` call whose
+  agent is bound below the rung floor of one of its task kinds (C32 — conditional on the kind,
+  which the call does not name, and silenced by a `model` override that meets the floor) and an
+  unlabelled fan-out call in a session whose earlier delegations carried zone labels (C33). Each
+  of these three warnings goes out on **two channels** (ADR 0006 item 4): the owner's text in
+  `systemMessage`, which the model does not see (M77), and a text addressed to the orchestrator
+  in `hookSpecificOutput.additionalContext` — re-route or switch role (C20), re-issue with
+  `model=<floor>` (C32), label fan-out calls with `[zone:<label>]` (C33). On PreToolUse both
+  reach their reader and the call runs with no permission decision (M149). A call with no
+  warning carries no `additionalContext`. The
+  per-call floor check is **Claude-only**: a Codex delegation is a `collaborationspawn_agent`
+  call that names neither an agent nor a model, and the `Task`/`Agent` matchers do not fire on
+  it (M62), so this hook has no Codex route. Runs as a **PreToolUse → Task|Agent** hook;
+  ordinary runtime failures remain advisory and return 0.
 - [`delegation-nudge.py`](delegation-nudge.py) — Claude PreToolUse wrapper for the
   **delegation nudge**: scores orchestrator edit/shell/read calls (Read/Grep/Glob normalize to
   the same read kind) since session start or the last subagent delegation (`Task`/`Agent`

@@ -3,14 +3,17 @@
 
 Appends one TSV line (timestamp, session_id, subagent, model, zone, description) to
 ``.claude/model-routing.log`` whenever the session calls the subagent tool
-(``Agent``/``Task``). Nothing is injected into context and nothing is blocked — declared
-routing selections are visible in the log, so the model never has to narrate them. A system message
-is emitted to the user interface (not model context) to make each delegation — and its
-declared model selection, when present — visible in the console. When the routed agent has
-no kind overlapping the active role's effective allowed set (§10.2, C20), an advisory line
-is appended; likewise when the agent is bound below the rung floor of one of its task kinds
-and the call does not override the model to meet it (C32); and when a fan-out delegation
-carries no zone label while earlier delegations of the session did (C33).
+(``Agent``/``Task``). Nothing is blocked, and the delegation itself is not narrated into
+context — declared routing selections are visible in the log, so the model never has to
+narrate them. A system message is emitted to the user interface (not model context) to make
+each delegation — and its declared model selection, when present — visible in the console.
+When the routed agent has no kind overlapping the active role's effective allowed set (§10.2,
+C20), an advisory line is appended; likewise when the agent is bound below the rung floor of
+one of its task kinds and the call does not override the model to meet it (C32); and when a
+fan-out delegation carries no zone label while earlier delegations of the session did (C33).
+Each such warning goes out on two channels (ADR 0006 item 4): the owner's text in the system
+message, and a text addressed to the orchestrator — what to do from the next call on — as
+``additionalContext`` (M149). With no warning there is no ``additionalContext``.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +67,20 @@ def _format_system_message(line: str) -> str:
     return msg
 
 
+def _warning_channels(
+    warnings: Iterable[tuple[str | None, str | None]], warn_prefix: str
+) -> tuple[list[str], list[str]]:
+    """The owner's and the model's warning lines, each pair silent together (ADR 0006 item 4)."""
+    owner: list[str] = []
+    model: list[str] = []
+    for owner_text, model_text in warnings:
+        if owner_text:
+            owner.append(jsondata.fill(warn_prefix, {"warning": owner_text}))
+        if model_text:
+            model.append(jsondata.fill(warn_prefix, {"warning": model_text}))
+    return owner, model
+
+
 def _decide() -> HookResult | None:
     payload = load_payload()
     tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
@@ -95,26 +113,38 @@ def _decide() -> HookResult | None:
         else []
     )
     this_call = routing.parse_delegation_entries([line])[0]
-    zone_warning = routing.unlabelled_fanout_warning(earlier, this_call.session_id, subagent_type, this_call.zone)
+    # C33 — an unlabelled call in a zoned fan-out.
+    zone_warnings = (
+        routing.unlabelled_fanout_warning(earlier, this_call.session_id, subagent_type, this_call.zone),
+        routing.unlabelled_fanout_directive(earlier, this_call.session_id, subagent_type, this_call.zone),
+    )
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(line + "\n")
-    # Emit a UI-visible system message without injecting it into model context.
+    # The console line and the owner's warnings go to the UI only (`systemMessage`); each warning
+    # also reaches the model as `additionalContext`, addressed to the orchestrator (ADR 0006
+    # item 4). On PreToolUse both are delivered and the call still runs (M149).
     messages = [_format_system_message(line)]
     # C20 — advise when the agent has no overlap with the role's effective allowed set.
     registry = routing.load_registry(akmon_runtime_root(root), root)
     role = routing.active_role(payload.get("transcript_path"))
-    warning = routing.role_matrix_warning(registry, subagent_type, role)
+    role_warnings = (
+        routing.role_matrix_warning(registry, subagent_type, role),
+        routing.role_matrix_directive(registry, subagent_type, role),
+    )
     warn_prefix = _log_data()["warning_prefix"]
-    if warning:
-        messages.append(jsondata.fill(warn_prefix, {"warning": warning}))
     # C32 — the recorded task-kind floors are otherwise read by nothing at delegation time.
-    floor_warning = routing.delegation_floor_warning(config, subagent_type, tool_input.get("model"))
-    if floor_warning:
-        messages.append(jsondata.fill(warn_prefix, {"warning": floor_warning}))
-    if zone_warning:
-        messages.append(jsondata.fill(warn_prefix, {"warning": zone_warning}))
-    return HookResult(event_name="PreToolUse", system_message="\n".join(messages))
+    call_model = tool_input.get("model")
+    floor_warnings = (
+        routing.delegation_floor_warning(config, subagent_type, call_model),
+        routing.delegation_floor_directive(config, subagent_type, call_model),
+    )
+    owner, model = _warning_channels((role_warnings, floor_warnings, zone_warnings), warn_prefix)
+    return HookResult(
+        event_name="PreToolUse",
+        additional_context="\n".join(model) or None,
+        system_message="\n".join([*messages, *owner]),
+    )
 
 
 def main() -> int:

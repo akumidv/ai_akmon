@@ -1,0 +1,30 @@
+id = "tools/coverage-map-case-insensitive"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/coverage_map"]
+
+# C33 review: a label matches its planned zone case-insensitively — `Auth` covers the planned
+# `auth`, `API` the planned `Api` — and both keep their spelling in the map. One unlabelled row
+# beside labelled ones is a note, not a failure.
+
+[fixture.files]
+".claude/model-routing.log" = "2026-05-01T10:00:00\tsess-1\tk_explorer\thaiku\tAuth\tcheck token expiry\n2026-05-01T10:05:00\tsess-1\tk_mechanic\t-\tAPI\trename sweep\n2026-05-01T10:10:00\tsess-1\tk_validator\t-\t-\trun the gates\n"
+"docs/zone-plan.md" = "- auth\n- Api\n- billing\n"
+
+[run]
+tool = "model_routing/coverage_map"
+argv = [
+  "--session",
+  "sess-1",
+  "--zone-plan",
+  "docs/zone-plan.md",
+  "--out",
+  "_aitna/artifacts/gates/coverage-case.md",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "coverage-map entries=3 zones=3\nscope: session sess-1\nmap: _aitna/artifacts/gates/coverage-case.md\n"
+[expected.files]
+"_aitna/artifacts/gates/coverage-case.md" = "| zone | workers | count |\n|------|---------|-------|\n| Auth | k_explorer/haiku | 1 |\n| API | k_mechanic | 1 |\n| (unlabelled) | k_validator | 1 |\n\n### Uncovered zones (planned, no worker)\n- billing\n\n_1 delegation(s) carried no `[zone:…]` marker — unattributable._\n"

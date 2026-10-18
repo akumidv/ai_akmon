@@ -1,7 +1,7 @@
 # Profile: Python (language)
 
-The **language** profile for Python — attached automatically to any project written in Python,
-and `@`-imported from `AGENTS.md` so it loads at session start. It layers on the
+The **language** profile for Python — `akmon init` imports it from `AGENTS.md` for a project with
+a `pyproject.toml` or a declared Python language, so it loads at session start. It layers on the
 [common guardrails](../guardrails/_common.md): their § Code design states the principles for any
 language; this file says how they read in Python, and only what no checker can see.
 

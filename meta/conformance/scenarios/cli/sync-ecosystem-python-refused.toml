@@ -3,7 +3,7 @@ ecosystem = "node"
 kind = "cli"
 covers = ["command:sync"]
 
-# A record without `ecosystem` is a Python project: the JavaScript sync serves Node package mode only
+# A record without `ecosystem` is a Python project: the JavaScript sync serves Node records only
 # and refuses rather than write the Node spelling into it (C105).
 [fixture]
 attach = "native"
@@ -16,5 +16,5 @@ argv = ["sync"]
 
 [expected]
 exit = 2
+stderr = "akmon sync: the JavaScript implementation serves Node projects only (ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has ecosystem = \"python\"; run the Python implementation of akmon for it.\n"
 stdout = ""
-stderr = "akmon sync: the JavaScript implementation serves Node package mode only (mount = \"package\" and ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has ecosystem = \"python\"; run the Python implementation of akmon for it.\n"

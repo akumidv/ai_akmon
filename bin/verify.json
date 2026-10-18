@@ -147,6 +147,10 @@
     "mounted": [
       "python3 {{akmon}}/bin/sync.py --check",
       "python3 {{akmon}}/bin/verify.py --strict"
+    ],
+    "mounted_node": [
+      "node {{akmon}}/js/akmon/cli.mjs sync --check",
+      "node {{akmon}}/js/akmon/cli.mjs verify --strict"
     ]
   },
   "record_required_keys": [
@@ -163,7 +167,7 @@
   "tasks_max_lines": 200,
   "hook_launcher_error": "generated hook wiring calls {{relative}}, which is missing or not executable — every akmon hook command fails silently (an unavailable executable produces no session-visible error), so the guardrails are off",
   "hook_launcher_error_fix": "Install the akmon dev pin into a project-local virtualenv, then re-run akmon sync.",
-  "python_refuses_ecosystem": "akmon verify: this project's integration record names ecosystem = \"{{value}}\" (<AITNA_ROOT>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon verify",
+  "python_refuses_ecosystem": "akmon verify: this project's integration record names ecosystem = \"{{value}}\" (<AITNA_ROOT>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: {{cli}} verify",
   "changelog_package_mode": "package mode: changelog discipline is owned by the akmon repository",
   "changelog_package_mode_fix": "Track the standard's changelog discipline in the akmon repository itself.",
   "vendored_tree_members": [
@@ -186,12 +190,25 @@
     "tools",
     "js"
   ],
+  "vendored_node_members": [
+    "src",
+    "package.json"
+  ],
   "vendored_mount_own_files": [
     ".gitignore"
   ],
   "vendored_leftover": "{{path}} is no longer shipped by the akmon carrier; `akmon init --mode vendored` copies only the standard's members and leaves it in place",
+  "vendored_leftover_node": "{{path}} is no longer shipped by the akmon carrier; a vendored re-copy (`npx github:akumidv/ai_akmon#<tag> init --mode vendored`, the command `node {{akmon}}/js/akmon/cli.mjs update` prints) replaces only the standard's members and leaves it in place",
   "vendored_leftover_fix": "Remove {{path}} by hand if the mount should match the carrier.",
-  "unsupported_record": "akmon verify: the JavaScript implementation serves Node package mode only (mount = \"package\" and ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has {{found}}; run the Python implementation of akmon for it.",
+  "ruff_without_python": "ruff.toml is the one akmon init writes for ruff, but this project has package.json and no Python files ({{markers}}, or a *.py file outside <AITNA_ROOT> and node_modules (git-tracked in a work tree)): ruff has nothing to lint here",
+  "ruff_without_python_fix": "Remove ruff.toml, and name the project's own checks under [check] in {{record}}.",
+  "python_mount_without_python": "the mount at {{akmon}} runs on the Python implementation ({{record}} does not say ecosystem = \"node\"), but this project has package.json and no Python files ({{markers}}, or a *.py file outside <AITNA_ROOT> and node_modules (git-tracked in a work tree)): every machine that runs its hooks and checks needs Python",
+  "python_mount_without_python_fix": "Switch the mount to the JavaScript implementation with `{{command}}`.",
+  "python_mount_switch": {
+    "mounted": "node {{akmon}}/js/akmon/cli.mjs init --ecosystem node",
+    "vendored": "npx github:akumidv/ai_akmon#{{tag}} init --ecosystem node"
+  },
+  "unsupported_record": "akmon verify: the JavaScript implementation serves Node projects only (ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has {{found}}; run the Python implementation of akmon for it.",
   "node_wired_hook_scripts": [
     "hook_core.mjs",
     "claude_adapter.mjs",
@@ -220,6 +237,8 @@
     "launcher_missing_fix": "Install the project's dependencies so node_modules/akmon exists, then re-run akmon sync.",
     "launcher_ok": "generated hook wiring runs node on {{relative}}, which is present",
     "launcher_ok_fix": "Keep akmon installed in the project's own node_modules.",
+    "launcher_mount_ok_fix": "Keep the akmon mount at {{mount}} in place.",
+    "launcher_mount_missing_fix": "Restore the akmon mount at {{mount}} (for a submodule, `git submodule update --init`), then re-run `node {{mount}}/js/akmon/cli.mjs sync`.",
     "pin_runtime": "package.json pins akmon as a runtime dependency (dependencies, optionalDependencies or peerDependencies); it is dev tooling and belongs in devDependencies",
     "pin_runtime_fix": "Move the akmon requirement into devDependencies.",
     "pin_unreadable": "package mode: package.json is not a valid JSON object — no akmon pin can be read from it, and npm cannot resolve `akmon` from it either",

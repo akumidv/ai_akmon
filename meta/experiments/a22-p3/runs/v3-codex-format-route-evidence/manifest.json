@@ -1,0 +1,56 @@
+{
+  "attempt_id": "0d2a6874936541c3a670662ecd804611",
+  "excludes": [
+    "auth.json",
+    "Codex home state"
+  ],
+  "files": [
+    {
+      "bytes": 645,
+      "path": "route-events.jsonl",
+      "sha256": "51c9128f47942062016bec24e9ae4d55cb05e0fe17a4d1d006cfabb374d8462d"
+    },
+    {
+      "bytes": 912,
+      "path": "quota-before.json",
+      "sha256": "234f33973e895c8980fbf33d3f9f2a6167cd66deac623c1ae22eb586b46ac799"
+    },
+    {
+      "bytes": 455,
+      "path": "prepared.json",
+      "sha256": "1f10042f8ea578439114affc18b8de1dd7c3790905dbab56fef82df86b4ec7fb"
+    },
+    {
+      "bytes": 954,
+      "path": "stdout.raw",
+      "sha256": "da455a73ffa7ca2f0eb1bf963281b200ef262fef6372b13a9a03f8336fb4e7b9"
+    },
+    {
+      "bytes": 215,
+      "path": "stderr.raw",
+      "sha256": "73528315e8ddb340210147cfaad4d631932b0d8c8dd621d223d5b03f7908bae3"
+    },
+    {
+      "bytes": 1100,
+      "path": "events.json",
+      "sha256": "c9b226ac22c822a58dc26098f4b34d730680fefd6a503938716e8d8e9969e6e5"
+    },
+    {
+      "bytes": 51742,
+      "path": "rollout.jsonl",
+      "sha256": "6c735e1a398f34534d6fd0ebfc3c1f726275fa5281281c061bd3409bad187f13"
+    },
+    {
+      "bytes": 590,
+      "path": "reply.tsv",
+      "sha256": "ba6e6d6e2fb70cfbdac95cc0d9d5ecf53617961a2e38238b51b155363ffb1eb4"
+    },
+    {
+      "bytes": 148,
+      "path": "outcome.json",
+      "sha256": "c82e19435fe36cad700734f98bc8ae4449e08322d794a196d4f3e24a8bad6f39"
+    }
+  ],
+  "record_type": "p3_v3_codex_format_route_evidence",
+  "scope": "unscored_mechanics_only"
+}

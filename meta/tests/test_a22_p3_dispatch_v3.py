@@ -1,4 +1,5 @@
 """The proposed V3 dispatch boundary remains fail-closed without live gates."""
+
 from __future__ import annotations
 
 import importlib.util

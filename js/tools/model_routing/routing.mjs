@@ -125,12 +125,15 @@ import { codePointCompare, codePointSort } from "../../common/sort.mjs";
  * @property {string[]} init_instruction
  * @property {string} rebind_notice
  * @property {string} unlabelled_fanout_warning
+ * @property {string} unlabelled_fanout_directive
  * @property {Record<string, string>} second_opinion_unavailability
  * @property {string} unpinnable_model
  * @property {{semantic: string, not_in_list: string, below_floor: string, reserved_top: string}} compute_binding_warnings
  * @property {string} role_matrix_warning
+ * @property {string} role_matrix_directive
  * @property {string} floor_gap_line
  * @property {string} delegation_floor_warning
+ * @property {{text: string, override: string}} delegation_floor_directive
  * @property {{warn: string, info: string}} context_pressure
  * @property {{no_config: string, registry_changed: string, model_mismatch: string}} staleness
  * @property {{retired_keys: string, no_usable_spec: string}} second_opinion_spec_errors
@@ -533,8 +536,7 @@ export function computeBinding(data, registry, orchestrator, available = null, v
   if (semantic) {
     warning = warnings.semantic;
   } else {
-    const floor = _get(policy, "orchestrator_floor", "highest");
-    const floorRung = _pyEq(floor, "highest") ? rungs[rungs.length - 1] : _pyStr(floor);
+    const floorRung = _corridorFloor(policy, rungs);
     if (!_contains(rungs, orchestrator)) {
       warning = fill(warnings.not_in_list, { orchestrator: _pyStr(orchestrator) });
     } else if (_contains(rungs, floorRung)) {
@@ -570,16 +572,33 @@ export function computeBinding(data, registry, orchestrator, available = null, v
 }
 
 /**
+ * The corridor's lower bound on `rungs`: `orchestrator_floor`, `"highest"` the top rung.
+ *
+ * Not necessarily on the ladder — an alias the local ladder lacks disables the corridor.
+ * @param {Json} policy
+ * @param {Json} rungs
+ * @returns {Json}
+ */
+function _corridorFloor(policy, rungs) {
+  const floor = _get(policy, "orchestrator_floor", "highest");
+  return _pyEq(floor, "highest") ? _last(rungs) : _pyStr(floor);
+}
+
+/**
  * Per-task-kind rung floors, resolved to concrete aliases from `rungs`.
  *
  * Only task kinds carrying a `"floor"` key are included. `"highest"` resolves to
- * `rungs[-1]`; a literal alias passes through only when present in `rungs`. A kind
+ * `rungs[-1]`; `"orchestrator_floor"` resolves to `vendor`'s corridor floor
+ * (`selection_policy.orchestrator_floor`, itself `"highest"` or an alias) — the lowest rung the
+ * corridor accepts for the orchestrator, and so for the reasoner that follows it (C32: a healthy
+ * binding opens no gap); a literal alias passes through only when present in `rungs`. A kind
  * whose floor cannot be resolved (empty `rungs`, or an alias absent from it) is skipped.
  * @param {Json} registry
  * @param {Json} rungs
+ * @param {string} [vendor]
  * @returns {Record<string, Json>}
  */
-export function taskKindFloors(registry, rungs) {
+export function taskKindFloors(registry, rungs, vendor = "anthropic") {
   /** @type {Record<string, Json>} */ const floors = {};
   if (!_truthy(rungs)) {
     return floors;
@@ -589,9 +608,12 @@ export function taskKindFloors(registry, rungs) {
     throw _pyError("AttributeError", `'${_pyTypeName(kinds)}' object has no attribute 'items'`);
   }
   for (const [kind, spec] of Object.entries(kinds)) {
-    const floor = _get(spec, "floor");
+    let floor = _get(spec, "floor");
     if (!_truthy(floor)) {
       continue;
+    }
+    if (_pyEq(floor, "orchestrator_floor")) {
+      floor = _corridorFloor(_get(_get(registry, vendor, {}), "selection_policy", {}), rungs);
     }
     if (_pyEq(floor, "highest")) {
       _set(floors, kind, _last(rungs));
@@ -1471,6 +1493,35 @@ export function activeRole(transcriptPath) {
  * @returns {string | null}
  */
 export function roleMatrixWarning(data, registry, subagentType, role) {
+  const fields = _roleMatrixFields(data, registry, subagentType, role);
+  return fields === null ? null : fill(data.role_matrix_warning, fields);
+}
+
+/**
+ * The model-addressed form of `roleMatrixWarning`: re-route or switch role.
+ *
+ * Same predicate, same silence; the delegation log sends it as `additionalContext` beside the
+ * owner's `systemMessage` (ADR 0006 item 4, M149).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {Json} subagentType
+ * @param {string | null} role
+ * @returns {string | null}
+ */
+export function roleMatrixDirective(data, registry, subagentType, role) {
+  const fields = _roleMatrixFields(data, registry, subagentType, role);
+  return fields === null ? null : fill(data.role_matrix_directive, fields);
+}
+
+/**
+ * The role-matrix advisory's template fields, or null when it stays silent (§10.2).
+ * @param {AgentsData} data
+ * @param {Json} registry
+ * @param {Json} subagentType
+ * @param {string | null} role
+ * @returns {Record<string, string> | null}
+ */
+function _roleMatrixFields(data, registry, subagentType, role) {
   if (!role) {
     return null;
   }
@@ -1496,12 +1547,12 @@ export function roleMatrixWarning(data, registry, subagentType, role) {
     return null;
   }
   const allowedText = _join(", ", effectiveAllowed) || "no task kinds";
-  return fill(data.role_matrix_warning, {
+  return {
     subagent: _pyStr(subagentType),
     kinds: kinds.join(", "),
     role,
     allowed: allowedText,
-  });
+  };
 }
 
 // --------------------------------------------------------------------------------------
@@ -1933,7 +1984,7 @@ export function localConfig(data, binding, registry, { secondOpinion, available 
     second_opinion_provider: oppositeVendor(data, registry, binding.vendor),
     available: available ?? null,
     registry_hash: registryHash(registry),
-    task_kind_floors: taskKindFloors(registry, _or(available, [])),
+    task_kind_floors: taskKindFloors(registry, _or(available, []), binding.vendor),
   };
   if (config.second_opinion_provider === binding.vendor) {
     const rungs = _truthy(available) ? [..._iterate(available)] : _semanticRungs(_get(registry, binding.vendor, {}));
@@ -2079,18 +2130,52 @@ export function floorGapLines(data, config) {
  * @returns {string | null}
  */
 export function delegationFloorWarning(data, config, subagentType, callModel) {
-  const ladder = _isDict(config) ? _get(config, "available") : null;
-  const gaps = floorGaps(data, config).filter((gap) => gap.agent === subagentType);
-  if (gaps.length === 0 || !Array.isArray(ladder)) {
-    return null;
-  }
-  const callRank = _rank(ladder, callModel);
-  const openGaps = gaps.filter((gap) => callRank === null || callRank < _index(ladder, gap.floor));
+  const openGaps = _openFloorGaps(data, config, subagentType, callModel);
   if (openGaps.length === 0) {
     return null;
   }
   const kinds = openGaps.map((gap) => `${gap.kind} (floor ${_pyStr(gap.floor)})`).join(", ");
   return fill(data.delegation_floor_warning, { subagent: _pyStr(subagentType), bound: openGaps[0].bound, kinds });
+}
+
+/**
+ * The model-addressed form of `delegationFloorWarning`: from the next call on, the floor's model.
+ *
+ * Same predicate, same silence; the delegation log sends it as `additionalContext` beside the
+ * owner's `systemMessage` (ADR 0006 item 4, M149).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} config
+ * @param {Json} subagentType
+ * @param {Json} callModel
+ * @returns {string | null}
+ */
+export function delegationFloorDirective(data, config, subagentType, callModel) {
+  const openGaps = _openFloorGaps(data, config, subagentType, callModel);
+  if (openGaps.length === 0) {
+    return null;
+  }
+  const texts = data.delegation_floor_directive;
+  const overrides = openGaps
+    .map((gap) => fill(texts.override, { kind: gap.kind, floor: _pyStr(gap.floor) }))
+    .join("; ");
+  return fill(texts.text, { subagent: _pyStr(subagentType), bound: openGaps[0].bound, overrides });
+}
+
+/**
+ * The agent's floor gaps the call's `model` override leaves open (C32).
+ * @param {AgentsData} data
+ * @param {Json} config
+ * @param {Json} subagentType
+ * @param {Json} callModel
+ */
+function _openFloorGaps(data, config, subagentType, callModel) {
+  const ladder = _isDict(config) ? _get(config, "available") : null;
+  const gaps = floorGaps(data, config).filter((gap) => gap.agent === subagentType);
+  if (gaps.length === 0 || !Array.isArray(ladder)) {
+    return [];
+  }
+  const callRank = _rank(ladder, callModel);
+  return gaps.filter((gap) => callRank === null || callRank < _index(ladder, gap.floor));
 }
 
 /**
@@ -2204,6 +2289,10 @@ const _ZONE_BRACKETED = /^\[[ \t\n\r\f\v]*zone[ \t\n\r\f\v]*:[ \t\n\r\f\v]*([^\]
 // Unbracketed only as one token (`zone:auth`): with a space after the colon, prose such as
 // "zone: the auth module" would otherwise yield the label "the".
 const _ZONE_BARE = /^zone:([^ \t\n\r\f\v]+)[ \t\n\r\f\v]*(.*)/is;
+// A zone label (C33 review): a letter or digit first, then letters, digits, `-`, `_` or `.`.
+// Python's Unicode `[^\W_][\w.-]*`: `\w` is `str.isalnum()` plus `_`, read here as the letter and
+// number categories.
+const _ZONE_LABEL = /^[\p{L}\p{N}][\p{L}\p{N}_.-]*$/u;
 
 /**
  * The zone-label convention as the orchestrator reads it — on the generated fan-out agents
@@ -2226,7 +2315,10 @@ const _LEGACY_SCHEMA_COLUMNS = 4;
  *
  * A marker only counts at the very start: `[zone:auth] check tokens` -> `["auth", "check
  * tokens"]`; tolerated alike (C33): any case, spaces inside the brackets, and the bare
- * one-token `zone:auth check tokens`. No marker -> `[null, <description stripped>]`.
+ * one-token `zone:auth check tokens`. No marker -> `[null, <description stripped>]`. A marker
+ * whose label is not a label — empty, or breaking `_ZONE_LABEL` (`[zone:-]`, `zone:[auth]`,
+ * `zone:auth]x`) — is still taken off the description but yields no label. The label keeps its
+ * case as written; the coverage map matches it case-insensitively.
  * @param {string} description
  * @returns {[string | null, string]}
  */
@@ -2234,15 +2326,24 @@ export function parseZone(description) {
   const text = _strip(description);
   const bracketed = _ZONE_BRACKETED.exec(text);
   if (bracketed) {
-    return [_strip(bracketed[1]) || null, _strip(bracketed[2])];
+    return [_zoneLabel(_strip(bracketed[1])), _strip(bracketed[2])];
   }
   const bare = _ZONE_BARE.exec(text);
   if (bare) {
     // C33: the unbracketed `zone:X …` spelling was observed live and used to leave the
     // whole fan-out unlabelled — an all-uncovered coverage map.
-    return [_rstripChars(bare[1], ",;:") || null, _strip(bare[2])];
+    return [_zoneLabel(_rstripChars(bare[1], ",;:")), _strip(bare[2])];
   }
   return [null, text];
+}
+
+/**
+ * `candidate` when it is a well-formed zone label, else null.
+ * @param {string} candidate
+ * @returns {string | null}
+ */
+function _zoneLabel(candidate) {
+  return _ZONE_LABEL.test(candidate) ? candidate : null;
 }
 
 /**
@@ -2258,8 +2359,45 @@ export function parseZone(description) {
  * @returns {string | null}
  */
 export function unlabelledFanoutWarning(data, entries, sessionId, subagent, zone) {
-  if (zone || !sessionId || !_agentByName(data).has(subagent) || subagent === "k_auditor") {
+  const labelled = _zonedLabels(data, entries, sessionId, subagent, zone);
+  if (labelled.length === 0) {
     return null;
+  }
+  return fill(data.unlabelled_fanout_warning, { subagent, labelled: labelled.join(", ") });
+}
+
+/**
+ * The model-addressed form of `unlabelledFanoutWarning`: label the fan-out calls.
+ *
+ * Same predicate, same silence; the delegation log sends it as `additionalContext` beside the
+ * owner's `systemMessage` (ADR 0006 item 4, M149).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Iterable<DelegationEntry>} entries
+ * @param {string | null} sessionId
+ * @param {string} subagent
+ * @param {string | null} zone
+ * @returns {string | null}
+ */
+export function unlabelledFanoutDirective(data, entries, sessionId, subagent, zone) {
+  const labelled = _zonedLabels(data, entries, sessionId, subagent, zone);
+  if (labelled.length === 0) {
+    return null;
+  }
+  return fill(data.unlabelled_fanout_directive, { subagent, labelled: labelled.join(", ") });
+}
+
+/**
+ * The session's earlier zone labels when this call should carry one too, else `[]` (C33).
+ * @param {AgentsData} data
+ * @param {Iterable<DelegationEntry>} entries
+ * @param {string | null} sessionId
+ * @param {string} subagent
+ * @param {string | null} zone
+ * @returns {string[]}
+ */
+function _zonedLabels(data, entries, sessionId, subagent, zone) {
+  if (zone || !sessionId || !_agentByName(data).has(subagent) || subagent === "k_auditor") {
+    return [];
   }
   /** @type {Set<string>} */ const zones = new Set();
   for (const entry of entries) {
@@ -2267,11 +2405,7 @@ export function unlabelledFanoutWarning(data, entries, sessionId, subagent, zone
       zones.add(entry.zone);
     }
   }
-  const labelled = codePointSort([...zones]);
-  if (labelled.length === 0) {
-    return null;
-  }
-  return fill(data.unlabelled_fanout_warning, { subagent, labelled: labelled.join(", ") });
+  return codePointSort([...zones]);
 }
 
 /**
@@ -2474,6 +2608,39 @@ function _opensSection(text, headings) {
 }
 
 /**
+ * `[section ordinal, line]` for every body line under a `rule` section of `message`.
+ *
+ * A section opens at a heading that names the counted material and closes at the next heading
+ * of the same or a higher level; a deeper heading inside it is neither yielded nor a closer.
+ * The ordinal tells a caller where one section's body ends and the next one's begins.
+ * @param {string} message
+ * @param {GateRule} rule
+ * @returns {Array<[number, string]>}
+ */
+function _gateSectionLines(message, rule) {
+  /** @type {Array<[number, string]>} */ const lines = [];
+  /** @type {number | null} */ let level = null;
+  let ordinal = 0;
+  for (const line of _splitlines(message)) {
+    const heading = _heading(line);
+    if (heading !== null) {
+      const [opened, text] = heading;
+      if (level !== null && opened <= level) {
+        level = null;
+      }
+      if (level === null && _opensSection(text, rule.headings)) {
+        [level, ordinal] = [opened, ordinal + 1];
+      }
+      continue;
+    }
+    if (level !== null) {
+      lines.push([ordinal, line]);
+    }
+  }
+  return lines;
+}
+
+/**
  * Structural items under every `rule` section of `message` (C25's counting rule).
  *
  * Counted: the section's outermost bullets and numbered items, and table rows with content.
@@ -2486,23 +2653,12 @@ function _opensSection(text, headings) {
  */
 export function countGateItems(message, rule) {
   let total = 0;
-  /** @type {number | null} */ let level = null;
+  let section = 0;
   let inTable = false;
   /** @type {number | null} */ let base = null;
-  for (const line of _splitlines(message)) {
-    const heading = _heading(line);
-    if (heading !== null) {
-      const [opened, text] = heading;
-      if (level !== null && opened <= level) {
-        [level, inTable, base] = [null, false, null];
-      }
-      if (level === null && _opensSection(text, rule.headings)) {
-        [level, base] = [opened, null];
-      }
-      continue;
-    }
-    if (level === null) {
-      continue;
+  for (const [ordinal, line] of _gateSectionLines(message, rule)) {
+    if (ordinal !== section) {
+      [section, inTable, base] = [ordinal, false, null];
     }
     if (_lstrip(line).startsWith("|")) {
       if (_TABLE_SEPARATOR_RE.test(line)) {
@@ -2524,6 +2680,23 @@ export function countGateItems(message, rule) {
     }
   }
   return total;
+}
+
+/**
+ * The body of every `rule` section of `message`, one line each — the material a gate counts.
+ *
+ * The headings are left out (a renamed heading over the same items is the same gate), and so are
+ * blank lines and every line outside the sections (the summary around them moves from turn to
+ * turn).
+ * @param {string} message
+ * @param {GateRule} rule
+ * @returns {string}
+ */
+export function gateSectionText(message, rule) {
+  return _gateSectionLines(message, rule)
+    .map(([, line]) => line)
+    .filter((line) => _strip(line) !== "")
+    .join("\n");
 }
 
 /**
@@ -2586,20 +2759,27 @@ export function gateAuditRequest(gateData, agentsData, registry, config, role, m
 }
 
 /**
- * The marker kind for one gate episode: role and count, so a changed count asks again.
+ * The marker kind for one gate episode: the role and a digest of the counted material.
+ *
+ * Keyed by content, not count (C25 review): two different gates with the same count are two
+ * gates, and the same material is one gate however the count moved in between.
+ * @param {string} message
  * @param {GateRule} rule
- * @param {number} count
  * @returns {string}
  */
-export function gateAuditMarkerKind(rule, count) {
-  return `${_GATE_MARKER_PREFIX}-${rule.role}-${count}`;
+export function gateAuditMarkerKind(message, rule) {
+  const material = gateSectionText(message, rule);
+  _utf8(material); // refuses a lone surrogate, as str.encode() does
+  return `${_GATE_MARKER_PREFIX}-${rule.role}-${sha256Hex(material).slice(0, 16)}`;
 }
 
 /**
  * Claim this gate episode for `sessionId`; false when it was already asked for.
  *
- * Keyed by role and count (C36 markers): the same material never blocks twice, while a later
- * turn that carries a different count is a new gate and is asked about again.
+ * Keyed by role and the counted material (C36 markers): the same Findings/Options never block
+ * twice in a session, while different material — even with the same count — is a new gate and
+ * is asked about again. Markers are not released on a new gate, so returning to material
+ * already held (3 → 4 → 3) does not hold it a second time; they age out with the C36 throttle.
  * @param {GateData} gateData the parsed `tools/model_routing/gate.json`
  * @param {MarkersData} markersData the parsed `common/markers.json`
  * @param {string | null} role
@@ -2613,8 +2793,5 @@ export function gateAuditOnce(gateData, markersData, role, message, sessionId, {
   if (rule === null) {
     return false;
   }
-  const kind = gateAuditMarkerKind(rule, countGateItems(message, rule));
-  const claimed = claimDiagnosticMarker(markersData, kind, sessionId, { directory: markerDir });
-  releaseDiagnosticMarkers(markersData, _GATE_MARKER_PREFIX, sessionId, { keepKind: kind, directory: markerDir });
-  return claimed;
+  return claimDiagnosticMarker(markersData, gateAuditMarkerKind(message, rule), sessionId, { directory: markerDir });
 }

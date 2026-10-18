@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import { parse as parseToml } from "../vendor/smol-toml/dist/index.js";
-import { semverSpelling } from "./versions.mjs";
+import { semverSpelling, switchTag } from "./versions.mjs";
 
 const _UNITS = new URL("../../meta/conformance/units/versions.toml", import.meta.url);
 
@@ -82,4 +82,23 @@ test("the npm carrier spells a final release and its own development version", (
   assert.equal(semverSpelling("1.2.3"), "1.2.3");
   assert.equal(semverSpelling("v1.2.3"), "1.2.3");
   assert.equal(semverSpelling("1.2.3.dev0"), "1.2.3-dev.0");
+});
+
+test("switchTag names the newer of the recorded and the running release (the Python test_versions cases)", () => {
+  /** @type {Array<[string | null, string | null, string]>} */
+  const cases = [
+    ["0.3.0", "0.5.0", "v0.5.0"],
+    ["0.6.0", "0.5.0", "v0.6.0"],
+    ["v0.5.0", "0.5.0", "v0.5.0"],
+    ["0.3.0", null, "v0.3.0"],
+    [null, "0.5.0", "v0.5.0"],
+    ["0.3.0", "0.5.0.dev0", "main"],
+    ["0.6.0", "0.5.0.dev0", "v0.6.0"],
+    ["v0.5.0-3-gabc1234", "0.5.0", "main"],
+    ["", "not-a-version", "main"],
+    [null, null, "main"],
+  ];
+  for (const [recorded, running, tag] of cases) {
+    assert.equal(switchTag(recorded, running), tag, `${recorded} / ${running}`);
+  }
 });

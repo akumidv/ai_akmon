@@ -1,0 +1,13 @@
+{
+  "acceptance_basis": "owner confirmed launch in this chat: Подтверждаю. Запускай.",
+  "authorized_phases": [
+    "qualification"
+  ],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "7a6b4ee73eb41b105222e866bedd1723d0f701b50f89145555337121363e29b4",
+  "owner_accepted": true,
+  "preflight_sha256": "25e89a9a5bffecb7a046399f0c0088ef6bf42f9aeb55ce5f3150250b8ddd53e3",
+  "record_type": "p3_v3_qualification_owner_approval",
+  "schema": 1
+}

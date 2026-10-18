@@ -46,7 +46,9 @@ generated or materialized files stay derived.
 
 A Node project running mode `package` from npm needs Node and no Python. The mounted modes
 (`submodule`, `vendored`, `subtree`) keep running the Python implementation in every repository,
-Node or not, and keep the `python3` requirement. The JavaScript implementation covers everything
+Node or not, and keep the `python3` requirement *(narrowed by
+[the D02 amendment](#amendment--d02-the-javascript-implementation-serves-mounted-node-repositories-c129)
+below: a mounted record naming `node` runs the JavaScript implementation)*. The JavaScript implementation covers everything
 a consumer executes: the CLI (`init`, `update`, `sync`, `verify`, `check`, `path`, `hook`,
 `version`, `tool`), the hooks, the shared `common` code, and every tool under `tools/`. akmon's
 own development tooling under `meta/` stays Python.
@@ -286,3 +288,49 @@ tables. It is not a precedent for writing a new mirror for input outside normal 
 - Harness parity for Node consumers is claimed only after a live probe on Claude and Codex in an
   environment without Python.
 - The Python consumer's experience does not change, except that tools gain `akmon tool`.
+
+## Amendment — D02: the JavaScript implementation serves mounted Node repositories (C129)
+
+Accepted by the owner (C129), with each design question below taken as recommended.
+
+D02's sentence "the mounted modes keep running the Python implementation in every repository" is
+narrowed. A mounted attach (`submodule`, `vendored`, `subtree`) whose record names
+`ecosystem = "node"` runs the JavaScript implementation from the mount: the CLI as
+`node <AITNA_ROOT>/akmon/js/akmon/cli.mjs`, the hooks as
+`node "<anchor>/<AITNA_ROOT>/akmon/js/hooks/<script>.mjs"`, and it needs Node (D04 floor) and no
+Python. The record's `ecosystem` selects the implementation; a first attach infers it from the
+files (`package.json` without Python files is `node`), and `--ecosystem` overrides it. A
+mounted record naming `python` (or none) keeps the Python implementation unchanged. `update` follows
+the Python per-mode rules for `submodule` (fetch) and `subtree` (printed commands); for `vendored`
+it prints the commands where the Python runs `uvx` (DV39). A
+Python-mounted record moves to `node` only by an explicit `init --ecosystem node`; the reverse stays
+deferred (D10, A37). Mounted scenarios may be `shared` or `node`-tagged.
+
+- **Which implementation.** The record's `ecosystem` decides. A first attach infers it from the
+  files: `package.json` without Python files is `node`; a repository with both stays `python`
+  unless `--ecosystem node` is given. Both CLIs accept `--ecosystem`. Python files are a
+  `pyproject.toml`, `setup.py`, `setup.cfg`, `requirements*.txt`, `Pipfile`, `uv.lock` or
+  `poetry.lock` at the root, or a `*.py` file git tracks outside `<AITNA_ROOT>` and
+  `node_modules` (a bounded walk outside a git work tree); owner accepted (C129 audit F1, option a).
+- **The CLI and the first attach.** The mounted CLI is spelled
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs`. akmon does not edit the project's `package.json`; a
+  script entry is offered as a next step only. A first attach without Python runs
+  `npx github:akumidv/ai_akmon#vX init --mode submodule`. A JavaScript CLI that is not the mount's
+  hands over to the mount's `cli.mjs`, the version-skew rule of
+  [ADR 0009](0009-packaging-package-carrier-and-mount-modes.md) decision 5.
+- **Update.** `update` mirrors Python for `submodule` (fetch, then `init --ref`) and `subtree`
+  (printed commands). For `vendored` the JavaScript `update` prints the commands; the Python one
+  runs that release's init through `uvx` (DV39).
+- **Python stays available.** A mount whose record says `python` keeps the Python implementation.
+  `verify` warns when a Python-ecosystem mount sits in a repository with no Python files.
+- **Migration.** A Python-mounted record moves to `node` only by an explicit
+  `init --ecosystem node`. The step tells the owner that the Codex `/hooks` approval is voided.
+  `[check]` is re-decided only when it is exactly akmon's ruff default. `ruff.toml` is never
+  deleted; a copy byte-identical to akmon's template is named for removal in a next step. There is
+  no reverse switch (D10, A37). A vendored mount switches through `npx` at a release that has the
+  switch (the newer of the recorded and the running release); network access is required. A
+  submodule or subtree mount is updated to such a release first.
+- **The ruff template.** `verify` warns when akmon's `ruff.toml` template sits in a project with
+  no Python files.
+- **Runtime and hooks.** The Node floor is D04's. The hooks keep one template, which takes the
+  mount's hooks directory.

@@ -1,0 +1,19 @@
+{
+  "dispatch_allowed": false,
+  "operational_seal_sha256": "8bf88df9a4b6d1d7073284ef31fd946a15efdd79d32ad471368fe16dad09ae93",
+  "provider_calls": 0,
+  "qwen_model": "qwen3.8-27b",
+  "qwen_settings": {
+    "auth_type_matches": true,
+    "credential_present": true,
+    "gateway_secure": true,
+    "maxRetries": 0,
+    "max_tokens": 5000,
+    "model_fallbacks": [],
+    "provider_group": "openai",
+    "thinking_override": "omitted; provider default retained"
+  },
+  "qwen_version": "0.24.7",
+  "schema": 1,
+  "status": "PASSED_OFFLINE_QWEN_5000_ROUTE_PREFLIGHT"
+}

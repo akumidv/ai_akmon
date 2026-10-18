@@ -22,6 +22,7 @@ findings = [
   "OK layout.consumer-path _aitna/memory: _aitna/memory exists → Keep _aitna/memory in place.",
   "OK isolation.use-surface: USE surface names no akmon development artifacts → Keep decision-record citations and dev-tree paths out of the USE surface.",
   "OK agents.block-anchors AGENTS.md: AGENTS.md akmon block contains required anchors → Keep every required anchor in the AGENTS.md akmon block.",
+  "OK agents.profile-import AGENTS.md: every profile import in AGENTS.md resolves → Keep each profile import under @_aitna/.akmon/profiles/.",
   "OK pointers.vendor-agents-link: vendor pointers point at AGENTS.md → Keep every vendor pointer aimed at AGENTS.md.",
   "OK agents.skill-roots AGENTS.md: AGENTS.md references source skill roots → Keep the source skill roots named in AGENTS.md.",
   "WARN caps.always-loaded AGENTS.md: consumer-total: lines=602/570 bytes=34448/34000 → Move on-demand material out of AGENTS.md and its imported guardrails, or link it instead",

@@ -20,6 +20,7 @@ import pytest
 import sync
 import verify
 
+from akmon import _init
 from common import always_loaded
 from common.codex_hooks import CodexProtocolError, expected_codex_hooks
 from common.findings import exit_code, render
@@ -841,10 +842,175 @@ def test_only_a_vendored_mount_is_a_copy_with_leftovers(tmp_path, mount):
     assert _leftovers(_make_project(tmp_path), mount) == []
 
 
+# --------------------------------------------------------------------------------------
+# akmon's ruff.toml in a Node project with no Python (C129)
+# --------------------------------------------------------------------------------------
+
+_INIT_RUFF_TOML = (
+    "# ruff with akmon's Python rules; adjust them here with extend-select, extend-ignore and\n"
+    '# per-file-ignores.\nextend = "_aitna/{mount}/profiles/ruff.toml"\n'
+)
+
+
+def _ruff_findings(root: Path, ruff_toml: str | None, *manifests: str) -> list:
+    for name in manifests:
+        _write(root / name, "{}\n" if name == "package.json" else "")
+    if ruff_toml is not None:
+        _write(root / "ruff.toml", ruff_toml)
+    verifier = verify.Verifier(root)
+    verifier.check_ruff_without_python()
+    return verifier.findings
+
+
+@pytest.mark.parametrize("mount", ["akmon", ".akmon"])
+def test_inits_ruff_toml_in_a_node_project_without_python_warns(tmp_path, mount):
+    [finding] = _ruff_findings(tmp_path, _INIT_RUFF_TOML.format(mount=mount), "package.json")
+    assert (finding.severity, finding.code, finding.target) == ("warn", "check.ruff-without-python", "ruff.toml")
+    assert finding.message == (
+        "ruff.toml is the one akmon init writes for ruff, but this project has package.json and no Python "
+        "files (pyproject.toml, setup.py, setup.cfg, requirements*.txt, Pipfile, uv.lock, poetry.lock, or a "
+        "*.py file outside <AITNA_ROOT> and node_modules (git-tracked in a work tree)): ruff has nothing to lint here"
+    )
+    assert finding.fix == "Remove ruff.toml, and name the project's own checks under [check] in _aitna/.akmon.toml."
+    assert (tmp_path / "ruff.toml").is_file()  # verify deletes nothing
+
+
+@pytest.mark.parametrize(
+    ("ruff_toml", "manifests"),
+    [
+        pytest.param(None, ("package.json",), id="no-ruff-toml"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="akmon"), (), id="no-package-json"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="akmon"), ("package.json", "pyproject.toml"), id="pyproject"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="akmon"), ("package.json", "setup.py"), id="setup-py"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="akmon"), ("package.json", "setup.cfg"), id="setup-cfg"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="akmon"), ("package.json", "requirements.txt"), id="requirements"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="akmon"), ("package.json", "Pipfile"), id="pipfile"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="akmon"), ("package.json", "app/x.py"), id="python-source"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="akmon") + "line-length = 100\n", ("package.json",), id="edited"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="akmon").replace("\n", "\r\n"), ("package.json",), id="crlf"),
+        pytest.param(_INIT_RUFF_TOML.format(mount="other"), ("package.json",), id="other-path"),
+    ],
+)
+def test_a_ruff_toml_akmon_did_not_write_or_a_python_project_is_never_named(tmp_path, ruff_toml, manifests):
+    assert _ruff_findings(tmp_path, ruff_toml, *manifests) == []
+
+
+def test_the_ruff_toml_verify_matches_is_the_one_init_writes(tmp_path):
+    """One template (``bin/sync.json``) for both: init's output is what the check recognizes."""
+    _write(tmp_path / "package.json", "{}\n")
+    record = tmp_path / "_aitna" / ".akmon.toml"
+    _write(record, 'mount = "submodule"\n')
+    attach = _init._Attach(tmp_path, "_aitna", "submodule", previous=None)
+    _init._setup_checks(attach, record, "akmon", ask=False, log=lambda message: None)
+    [finding] = _ruff_findings(tmp_path, None)
+    assert finding.code == "check.ruff-without-python"
+
+
+# --------------------------------------------------------------------------------------
+# a Python-ecosystem mount in a project with no Python (C129, ADR 0020 D02 amendment)
+# --------------------------------------------------------------------------------------
+
+
+def _mount_ecosystem_findings(root: Path, record: str | None, *manifests: str) -> list:
+    for name in manifests:
+        _write(root / name, "{}\n" if name == "package.json" else "")
+    if record is not None:
+        _write(root / "_aitna" / ".akmon.toml", record)
+    verifier = verify.Verifier(root)
+    verifier.check_python_mount_without_python()
+    return verifier.findings
+
+
+_MOUNT_SWITCH = "node _aitna/akmon/js/akmon/cli.mjs init --ecosystem node"
+
+
+@pytest.mark.parametrize(
+    ("record", "switch"),
+    [
+        pytest.param(None, _MOUNT_SWITCH, id="no-record"),
+        pytest.param('mount = "submodule"\n', _MOUNT_SWITCH, id="no-ecosystem"),
+        # a Python-vendored copy lacks the data the JavaScript CLI reads: npx at the newer of the
+        # recorded and the installed release (`switch_tag`; the installed one is 0.5.0 here)
+        pytest.param(
+            'mount = "vendored"\necosystem = "python"\nakmon_version = "0.3.0"\n',
+            "npx github:akumidv/ai_akmon#v0.5.0 init --ecosystem node",
+            id="python-vendored-older-record",
+        ),
+        pytest.param(
+            'mount = "vendored"\necosystem = "python"\nakmon_version = "0.6.0"\n',
+            "npx github:akumidv/ai_akmon#v0.6.0 init --ecosystem node",
+            id="python-vendored-newer-record",
+        ),
+        pytest.param(
+            'mount = "vendored"\nakmon_version = "0.6.0.dev0"\n',
+            "npx github:akumidv/ai_akmon#main init --ecosystem node",
+            id="vendored-development",
+        ),
+        pytest.param('mount = "subtree"\necosystem = ""\n', _MOUNT_SWITCH, id="empty"),
+    ],
+)
+def test_a_python_mount_in_a_project_with_only_package_json_warns_with_the_switch(
+    tmp_path, monkeypatch, record, switch
+):
+    monkeypatch.setattr(verify.sync_tool, "_installed_akmon_version", lambda: "0.5.0")
+    root = _make_project(tmp_path)
+    [finding] = _mount_ecosystem_findings(root, record, "package.json")
+    assert (finding.severity, finding.code, finding.target) == ("warn", "attach.mount-ecosystem", "_aitna/.akmon.toml")
+    assert finding.message == (
+        "the mount at _aitna/akmon runs on the Python implementation "
+        '(_aitna/.akmon.toml does not say ecosystem = "node"), '
+        "but this project has package.json and no Python files (pyproject.toml, setup.py, setup.cfg, "
+        "requirements*.txt, Pipfile, uv.lock, poetry.lock, or a *.py file outside <AITNA_ROOT> and "
+        "node_modules (git-tracked in a work tree)): every machine "
+        "that runs its hooks and checks needs Python"
+    )
+    assert finding.fix == f"Switch the mount to the JavaScript implementation with `{switch}`."
+
+
+@pytest.mark.parametrize(
+    ("record", "manifests"),
+    [
+        pytest.param('mount = "submodule"\n', (), id="no-package-json"),
+        pytest.param('mount = "submodule"\n', ("package.json", "pyproject.toml"), id="pyproject"),
+        pytest.param('mount = "submodule"\n', ("package.json", "setup.py"), id="setup-py"),
+        pytest.param('mount = "submodule"\n', ("package.json", "setup.cfg"), id="setup-cfg"),
+        pytest.param('mount = "submodule"\n', ("package.json", "requirements.txt"), id="requirements"),
+        pytest.param('mount = "submodule"\n', ("package.json", "uv.lock"), id="uv-lock"),
+        pytest.param('mount = "submodule"\n', ("package.json", "poetry.lock"), id="poetry-lock"),
+        pytest.param('mount = "submodule"\n', ("package.json", "app/x.py"), id="python-source"),
+        pytest.param('mount = "package"\n', ("package.json",), id="package-mode"),
+    ],
+)
+def test_a_python_project_or_package_mode_is_never_named_for_the_mount_ecosystem(tmp_path, record, manifests):
+    assert _mount_ecosystem_findings(_make_project(tmp_path), record, *manifests) == []
+
+
+def test_main_refuses_a_mounted_node_record(tmp_path, capsys):
+    """A mounted record naming ``ecosystem = "node"`` is the JavaScript implementation's (C129): this
+    verify refuses it, exit 2, before any check, as it refuses a Node package record."""
+    root = _make_project(tmp_path)
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "submodule"\necosystem = "node"\n')
+    assert verify.main(["--project-root", str(root)]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert 'names ecosystem = "node"' in captured.err
+    # the command it names is the mount's own CLI, not the package's npx (C129 step 8)
+    assert captured.err.endswith(
+        "run the JavaScript implementation for it: node _aitna/akmon/js/akmon/cli.mjs verify\n"
+    )
+
+
+def test_a_missing_mount_is_not_named_for_the_mount_ecosystem(tmp_path):
+    _write(tmp_path / "AGENTS.md", AGENTS_MD)
+    assert _mount_ecosystem_findings(tmp_path, 'mount = "submodule"\n', "package.json") == []
+
+
 def test_the_vendored_members_verify_reads_are_inits(tmp_path):
     """verify runs from the mount, where ``src/akmon/init.json`` is not: its copy is pinned equal."""
     init_data = json.loads((_AKMON_ROOT / "src" / "akmon" / "init.json").read_text(encoding="utf-8"))
     assert _VERIFY_DATA["vendored_tree_members"] == init_data["tree_members"]
+    # a Node copy's extra members, by the top-level name the check sees (C129)
+    assert _VERIFY_DATA["vendored_node_members"] == [member.split("/")[0] for member in init_data["tree_members_node"]]
 
 
 # --------------------------------------------------------------------------------------
@@ -1929,9 +2095,18 @@ def test_verify_data_pins_its_structure():
         "changelog_package_mode_fix",
         # a vendored mount's leftovers (C117, the C118 amendment of ADR 0009)
         "vendored_tree_members",
+        "vendored_node_members",
         "vendored_mount_own_files",
         "vendored_leftover",
+        "vendored_leftover_node",
         "vendored_leftover_fix",
+        # akmon's ruff.toml in a Node project with no Python (C129)
+        "ruff_without_python",
+        "ruff_without_python_fix",
+        # a Python-ecosystem mount in a project with no Python files (C129)
+        "python_mount_without_python",
+        "python_mount_without_python_fix",
+        "python_mount_switch",
         # the JavaScript verify's own keys (C105); this file never reads them
         "unsupported_record",
         "node_wired_hook_scripts",
@@ -2036,3 +2211,136 @@ def test_verify_data_file_error_propagates_uncaught(monkeypatch, tmp_path):
 )
 def test_verify_text_patterns_are_ascii(name, text, found):
     assert bool(getattr(verify, name).search(text)) is found
+
+
+# --------------------------------------------------------------------------------------
+# profile imports (C127): agents.profile-import, agents.language-profile
+# --------------------------------------------------------------------------------------
+
+
+def _profile_findings(root: Path) -> list:
+    verifier = verify.Verifier(root)
+    verifier.check_profile_imports()
+    return verifier.findings
+
+
+def _mounted_with_profiles(tmp_path: Path, imports: str) -> Path:
+    root = _make_project(tmp_path)
+    for name in ("python.md", "js.md"):
+        _write(root / "_aitna" / "akmon" / "profiles" / name)
+    _write(root / "AGENTS.md", AGENTS_MD + "\n@_aitna/akmon/guardrails/_common.md\n" + imports)
+    return root
+
+
+def _package_root(tmp_path: Path, imports: str, *, archetype: str = "unclassified") -> Path:
+    _write(tmp_path / "AGENTS.md", AGENTS_MD + "\n@_aitna/.akmon/guardrails/_common.md\n" + imports)
+    _write(tmp_path / "_aitna" / ".akmon.toml", f'mount = "package"\nattached_archetype = "{archetype}"\n')
+    return tmp_path
+
+
+def test_profile_imports_resolve_and_cover_the_language(tmp_path):
+    root = _mounted_with_profiles(tmp_path, "@_aitna/akmon/profiles/python.md\n")
+    _write(root / "pyproject.toml", "[project]\n")
+    findings = _profile_findings(root)
+    assert [(finding.severity, finding.code) for finding in findings] == [
+        ("ok", "agents.profile-import"),
+        ("ok", "agents.language-profile"),
+    ]
+
+
+def test_profile_import_under_the_vendored_prefix_in_a_package_attach_warns(tmp_path):
+    """The consumer's case: the mounted spelling in a package attach loads nothing."""
+    root = _package_root(tmp_path, "@_aitna/akmon/profiles/js.md\n")
+    (root / "package.json").write_text("{}\n", encoding="utf-8")
+    findings = [finding for finding in _profile_findings(root) if finding.code == "agents.profile-import"]
+    assert [finding.severity for finding in findings] == ["warn"]
+    assert findings[0].message == (
+        "AGENTS.md imports @_aitna/akmon/profiles/js.md, which resolves to nothing: "
+        "a package attach imports the standard's files from @_aitna/.akmon/"
+    )
+    assert (
+        findings[0].fix
+        == "Replace the line @_aitna/akmon/profiles/js.md with @_aitna/.akmon/profiles/js.md in AGENTS.md."
+    )
+    # the language check counts the import: the wrong spelling is this finding's, not a second one
+    assert ("ok", "agents.language-profile") in [(f.severity, f.code) for f in _profile_findings(root)]
+
+
+def test_profile_import_the_standard_does_not_ship_warns(tmp_path):
+    root = _mounted_with_profiles(tmp_path, "@_aitna/akmon/profiles/rust.md\n")
+    findings = _profile_findings(root)
+    assert findings[0].severity == "warn"
+    assert findings[0].message == (
+        "AGENTS.md imports @_aitna/akmon/profiles/rust.md, a profile the standard does not ship, so it loads nothing"
+    )
+    assert findings[0].fix == (
+        "Remove the line @_aitna/akmon/profiles/rust.md from AGENTS.md, or import a profile the standard ships "
+        "(js.md, python.md)."
+    )
+
+
+def test_profile_import_of_a_project_file_is_left_alone(tmp_path):
+    root = _mounted_with_profiles(tmp_path, "@docs/profiles/python.md\n")
+    _write(root / "docs" / "profiles" / "python.md")
+    first = _profile_findings(root)[0]
+    assert (first.severity, first.code) == ("ok", "agents.profile-import")
+
+
+def test_profile_import_of_a_project_file_the_standard_does_not_ship_is_left_alone(tmp_path):
+    """ADR-0014/D02: a project's own profile loads whatever its name, so neither warning fires."""
+    root = _mounted_with_profiles(tmp_path, "@docs/profiles/house.md\n")
+    _write(root / "docs" / "profiles" / "house.md")
+    findings = [finding for finding in _profile_findings(root) if finding.code == "agents.profile-import"]
+    assert [finding.severity for finding in findings] == ["ok"]
+
+
+def test_profile_import_of_a_missing_project_file_the_standard_does_not_ship_warns(tmp_path):
+    root = _mounted_with_profiles(tmp_path, "@docs/profiles/house.md\n")
+    findings = [finding for finding in _profile_findings(root) if finding.code == "agents.profile-import"]
+    assert [finding.severity for finding in findings] == ["warn"]
+    assert findings[0].message == (
+        "AGENTS.md imports @docs/profiles/house.md, a profile the standard does not ship, so it loads nothing"
+    )
+
+
+def test_quoted_profile_import_is_not_an_import(tmp_path):
+    root = _mounted_with_profiles(tmp_path, "Add one (`@_aitna/.akmon/profiles/<name>.md`).\n")
+    _write(root / "pyproject.toml", "[project]\n")
+    findings = _profile_findings(root)
+    assert [(f.severity, f.code) for f in findings] == [
+        ("ok", "agents.profile-import"),
+        ("warn", "agents.language-profile"),
+    ]
+    assert findings[1].message == (
+        "AGENTS.md imports no python.md language profile, though pyproject.toml names the project's language"
+    )
+    assert findings[1].fix == (
+        "Add the line @_aitna/akmon/profiles/python.md to the AGENTS.md akmon block, right after the _common.md import."
+    )
+
+
+def test_language_profile_from_the_record_warns_with_the_package_line(tmp_path):
+    root = _package_root(tmp_path, "", archetype="service/typescript")
+    findings = [finding for finding in _profile_findings(root) if finding.code == "agents.language-profile"]
+    assert [finding.severity for finding in findings] == ["warn"]
+    assert findings[0].message == (
+        "AGENTS.md imports no js.md language profile, though _aitna/.akmon.toml attached_archetype "
+        '"service/typescript" names the project\'s language'
+    )
+    assert "Add the line @_aitna/.akmon/profiles/js.md " in findings[0].fix
+
+
+def test_both_manifests_want_both_profiles(tmp_path):
+    root = _package_root(tmp_path, "@_aitna/.akmon/profiles/js.md\n")
+    _write(root / "pyproject.toml", "[project]\n")
+    _write(root / "package.json", "{}\n")
+    warned = [f.fix for f in _profile_findings(root) if f.severity == "warn"]
+    assert warned == [
+        "Add the line @_aitna/.akmon/profiles/python.md to the AGENTS.md akmon block, "
+        "right after the _common.md import."
+    ]
+
+
+def test_unknown_language_wants_no_profile(tmp_path):
+    root = _package_root(tmp_path, "", archetype="custom/rust")
+    assert {f.severity for f in _profile_findings(root)} == {"ok"}

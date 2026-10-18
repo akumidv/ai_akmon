@@ -54,6 +54,92 @@ def test_a_stale_marker_ages_out_and_speaks_again(tempdir):
     assert not markers.claim_diagnostic_marker("probe", "s1")
 
 
+def test_a_marker_dated_ahead_of_the_clock_is_stale_past_the_slack(tempdir):
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    [marker] = list(tempdir.glob("akmon-probe-*"))
+    _age(marker, -(markers.MARKER_FUTURE_SLACK_SECONDS / 2))  # a coarse timestamp: still held
+    assert not markers.claim_diagnostic_marker("probe", "s1")
+    _age(marker, -3600)  # a clock that moved back an hour: no longer suppresses for days
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    assert not markers.claim_diagnostic_marker("probe", "s1")
+
+
+def test_a_symlink_at_the_marker_path_is_not_followed_and_speaks(tempdir):
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    [marker] = list(tempdir.glob("akmon-probe-*"))
+    target = tempdir / "target.txt"
+    marker.rename(target)  # a fresh regular file of ours: followed, it would read as a held claim
+    marker.symlink_to(target)
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    assert marker.is_symlink() and target.is_file()  # the planted path is left alone
+
+
+def test_a_directory_at_the_marker_path_speaks_and_stays(tempdir):
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    [marker] = list(tempdir.glob("akmon-probe-*"))
+    marker.unlink()
+    marker.mkdir()
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    assert marker.is_dir()
+
+
+@pytest.mark.skipif(not hasattr(os, "getuid"), reason="the platform has no user ids")
+def test_a_marker_another_user_owns_is_not_our_claim(tempdir, monkeypatch):
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    [marker] = list(tempdir.glob("akmon-probe-*"))
+    real_uid = os.getuid()
+    monkeypatch.setattr(markers.os, "getuid", lambda: real_uid + 1)  # a chown needs privilege
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    assert marker.is_file()  # someone else's file is not ours to replace
+    monkeypatch.setattr(markers.os, "getuid", lambda: real_uid)
+    assert not markers.claim_diagnostic_marker("probe", "s1")
+
+
+def test_without_user_ids_a_regular_file_is_enough(tempdir, monkeypatch):
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    monkeypatch.delattr(markers.os, "getuid", raising=False)
+    assert not markers.claim_diagnostic_marker("probe", "s1")
+
+
+def test_a_marker_that_vanishes_before_its_lstat_is_claimed_again(tempdir, monkeypatch):
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    [marker] = list(tempdir.glob("akmon-probe-*"))
+    real_lstat = os.lstat
+
+    def vanishing(path, *args, **kwargs):
+        if Path(path) == marker:
+            marker.unlink()  # another process aged it out between the create and the lstat
+            monkeypatch.setattr(markers.os, "lstat", real_lstat)
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(markers.os, "lstat", vanishing)
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    assert marker.is_file()
+    assert not markers.claim_diagnostic_marker("probe", "s1")
+
+
+def test_a_marker_that_keeps_vanishing_still_emits(tempdir, monkeypatch):
+    assert markers.claim_diagnostic_marker("probe", "s1")
+
+    def gone(path, *args, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", str(path))
+
+    monkeypatch.setattr(markers.os, "lstat", gone)
+    assert markers.claim_diagnostic_marker("probe", "s1")
+
+
+def test_an_unreadable_existing_marker_is_noisier_never_silent(tempdir, monkeypatch):
+    assert markers.claim_diagnostic_marker("probe", "s1")
+
+    def denied(path, *args, **kwargs):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(markers.os, "lstat", denied)
+    assert markers.claim_diagnostic_marker("probe", "s1")
+    assert len(list(tempdir.glob("akmon-probe-*"))) == 1  # nothing removed
+
+
 def test_release_removes_one_identitys_markers_and_spares_the_kept_one(tempdir):
     for kind in ("cond-a", "cond-b"):
         assert markers.claim_diagnostic_marker(kind, "s1")

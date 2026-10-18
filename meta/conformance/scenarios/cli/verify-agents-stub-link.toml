@@ -22,6 +22,7 @@ findings = [
   "OK layout.consumer-path _aitna/memory: _aitna/memory exists → Keep _aitna/memory in place.",
   "OK isolation.use-surface: USE surface names no akmon development artifacts → Keep decision-record citations and dev-tree paths out of the USE surface.",
   "ERROR agents.block-anchors AGENTS.md: AGENTS.md akmon block is missing: guardrails import, akmon path pointer → Add the listed anchors to the akmon block in AGENTS.md.",
+  "OK agents.profile-import AGENTS.md: every profile import in AGENTS.md resolves → Keep each profile import under @_aitna/.akmon/profiles/.",
   "OK pointers.vendor-agents-link: vendor pointers point at AGENTS.md → Keep every vendor pointer aimed at AGENTS.md.",
   "WARN agents.skill-stub-link AGENTS.md: AGENTS.md should not point to generated .claude/skills or .agents/skills stubs; link source skill roots instead → Replace the generated stub path in AGENTS.md with the source skill root.",
   "OK agents.skill-roots AGENTS.md: AGENTS.md references source skill roots → Keep the source skill roots named in AGENTS.md.",

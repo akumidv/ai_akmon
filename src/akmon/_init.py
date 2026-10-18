@@ -32,10 +32,11 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -44,6 +45,7 @@ from typing import Any
 from akmon import __version__, _tree, cli
 
 MODES = ("submodule", "vendored", "subtree", "package")
+ECOSYSTEMS = ("python", "node")
 
 
 def _jsondata() -> ModuleType:
@@ -93,10 +95,16 @@ def tree_members() -> list[str]:
 # write. The same content under ``node_modules/akmon/js`` — mode ``package`` — reports 1 test and
 # 0 problems, because both tools skip that directory (M116). Tests are dev-only material, which is
 # the rule the member allowlist already applies to ``src/`` and ``tests/``; the JS tree simply
-# carried its tests past it.
-_COPY_IGNORE = shutil.ignore_patterns(
-    "__pycache__", "*.py[cod]", ".pytest_cache", ".ruff_cache", ".git", ".DS_Store", "*.test.mjs"
-)
+# carried its tests past it. The patterns are ``init.json``'s ``copy_ignore``, the JavaScript
+# init's vendored copy reads the same list.
+def _copy_ignore() -> Callable[[str, list[str]], set[str]]:
+    """The ``copytree`` filter of a vendored copy (``init.json``, ``copy_ignore``)."""
+    return shutil.ignore_patterns(*_data()["copy_ignore"])
+
+
+def _mount_text(key: str, values: Mapping[str, str] | None = None) -> str:
+    """One mount-mode message (``init.json``, ``mount_text``), filled — the JavaScript init reads the same."""
+    return _jsondata().fill(_data()["mount_text"][key], values or {})
 
 
 def _mount_gitignore() -> str:
@@ -212,10 +220,7 @@ def _package_default_ref(repo: str, root: Path) -> str:
     Read with ``git ls-remote``, so it needs git and network access to ``repo``; the failure says
     so and names ``--ref`` as the way around it.
     """
-    unreachable = (
-        f"cannot discover the latest release tag from {repo!r} (`git ls-remote` needs git and network access "
-        "to it); pass --ref explicitly"
-    )
+    unreachable = _mount_text("ref_unreachable", {"repo": repr(repo)})
     try:
         completed = _run(
             ["git", "ls-remote", "--tags", "--refs", repo, "refs/tags/v*"],
@@ -234,7 +239,7 @@ def _package_default_ref(repo: str, root: Path) -> str:
             tags.append(fields[1].removeprefix("refs/tags/"))
     newest = _newest_release(tags)
     if newest is None:
-        raise _InitError(f"repository {repo!r} advertises no release tags; pass --ref explicitly")
+        raise _InitError(_mount_text("ref_no_release", {"repo": repr(repo)}))
     return newest
 
 
@@ -428,30 +433,24 @@ def _mount_submodule(attach: _Attach, repo: str, ref: str | None, log: Callable[
     root, mount = attach.root, attach.mount
     relative = mount.relative_to(root).as_posix()
     if not _is_git_repo(root):
-        raise _InitError(
-            f"{root} is not a git repository — mode 'submodule' needs one. "
-            "Run `git init` first, or attach with `--mode vendored`."
-        )
+        raise _InitError(_mount_text("submodule_not_git", {"root": str(root)}))
     fresh = not _is_submodule(root, relative)
     if fresh:
         if mount.exists() and any(mount.iterdir()):
-            what = (
-                "an akmon tree mounted some other way (vendored or subtree)"
-                if _is_akmon_tree(mount)
-                else "not an akmon tree"
-            )
+            what = _mount_text("submodule_what_mounted" if _is_akmon_tree(mount) else "submodule_what_foreign")
             raise _InitError(
-                f"{relative} exists but git does not record it as a submodule — it is {what}. `init` will not "
-                f"delete a tree it did not create, and the removal is a commit of yours (D5). Remove it, then "
-                f"re-run:\n{_old_mount_removal('vendored', relative)}"
+                _mount_text(
+                    "submodule_not_recorded",
+                    {"relative": relative, "what": what, "removal": _old_mount_removal("vendored", relative)},
+                )
             )
-        log(f"git submodule add {repo} {relative}")
+        log(_mount_text("submodule_add", {"repo": repo, "relative": relative}))
         completed = _run(["git", "submodule", "add", "--name", relative, repo, relative], cwd=root)
         if completed.returncode != 0:
-            raise _InitError(f"git submodule add failed ({completed.returncode}); see the git output above")
+            raise _InitError(_mount_text("submodule_add_failed", {"code": str(completed.returncode)}))
         _run(["git", "submodule", "update", "--init", "--recursive", relative], cwd=root)
     else:
-        log(f"{relative} is already mounted — realigning")
+        log(_mount_text("submodule_realigning", {"relative": relative}))
 
     # A re-run realigns; it does not bump. Moving an existing mount to whatever tag is newest
     # would be a pin bump nobody asked for (that is `akmon update`, A23), so the
@@ -460,7 +459,7 @@ def _mount_submodule(attach: _Attach, repo: str, ref: str | None, log: Callable[
     if pin:
         completed = _run(["git", "checkout", "--quiet", pin], cwd=mount)
         if completed.returncode != 0:
-            raise _InitError(f"cannot check out {pin!r} in {relative}")
+            raise _InitError(_mount_text("submodule_checkout_failed", {"pin": repr(pin), "relative": relative}))
         if fresh:
             # `git submodule add` just staged the gitlink at the commit it happened to clone (the
             # remote's default branch). After checking out the pin, that staged entry names a
@@ -469,20 +468,17 @@ def _mount_submodule(attach: _Attach, repo: str, ref: str | None, log: Callable[
             # Restaging corrects the entry git itself created on this very run; no path enters the
             # index that git did not put there, and the commit stays the owner's (D5).
             _run(["git", "add", "--", relative], cwd=root)
-            log(f"pinned {relative} at {pin}")
+            log(_mount_text("submodule_pinned", {"relative": relative, "pin": pin}))
         else:
             # Moving an existing pin is a **bump**: a change to the consumer's committed state
             # that a human reviews. `init` checks it out so the tree matches what it records, and
             # leaves the index alone — staging it here would hand the owner a pre-made commit.
-            log(f"moved {relative} to {pin} — left unstaged")
-            attach.next_steps.append(
-                f"review the pin bump and stage it yourself — `git add -- {relative}` (D5: the pin bump and "
-                "its commit are the owner's; read the CHANGELOG window between the two versions first)"
-            )
+            log(_mount_text("submodule_moved", {"relative": relative, "pin": pin}))
+            attach.next_steps.append(_mount_text("submodule_bump_step", {"relative": relative}))
     elif fresh:
-        log(f"{relative} carries no release tag; left at the default branch")
+        log(_mount_text("submodule_no_release", {"relative": relative}))
     else:
-        log(f"{relative} left at its current pin (pass --ref to move it)")
+        log(_mount_text("submodule_left", {"relative": relative}))
     return _describe(mount) or pin
 
 
@@ -500,31 +496,24 @@ def _mount_subtree(attach: _Attach, repo: str, ref: str | None, log: Callable[[s
     root, mount = attach.root, attach.mount
     relative = mount.relative_to(root).as_posix()
     if not _is_git_repo(root):
-        raise _InitError(f"{root} is not a git repository — mode 'subtree' needs one (or use `--mode vendored`).")
+        raise _InitError(_mount_text("subtree_not_git", {"root": str(root)}))
     if _is_submodule(root, relative):
         raise _InitError(
-            f"git records {relative} as a submodule, not a subtree. Retire it first, then add the subtree:\n"
-            f"{_old_mount_removal('submodule', relative)}"
+            _mount_text(
+                "subtree_is_submodule", {"relative": relative, "removal": _old_mount_removal("submodule", relative)}
+            )
         )
     if _is_akmon_tree(mount):
         if not ref:
-            raise _InitError(
-                f"mode 'subtree': pass `--ref <tag>` naming the ref merged into {relative}. A subtree keeps no "
-                "git metadata of its own, so the recorded pin can only come from you."
-            )
-        log(f"{relative} is already mounted as a subtree — realigning at {ref} (bump it with `git subtree pull`)")
+            raise _InitError(_mount_text("subtree_needs_ref", {"relative": relative}))
+        log(_mount_text("subtree_realigning", {"relative": relative, "ref": ref}))
         return ref
     pin = ref
     if pin is None:
         listing = _git_output(["ls-remote", "--tags", "--refs", repo], cwd=root)
         tags = [line.split("refs/tags/")[-1] for line in (listing or "").splitlines() if "refs/tags/v" in line]
         pin = _newest_release(tags) or "main"
-    raise _InitError(
-        "mode 'subtree' needs one command `init` must not run for you — `git subtree add` creates commits, and "
-        "commits are the owner's (D5). Run it, then re-run init:\n"
-        f"    git subtree add --prefix {relative} {repo} {pin} --squash\n"
-        f"    akmon init --mode subtree --ref {pin}"
-    )
+    raise _InitError(_mount_text("subtree_refusal", {"relative": relative, "repo": repo, "pin": pin, "cli": "akmon"}))
 
 
 def _mount_vendored(attach: _Attach, ref: str | None, log: Callable[[str], None]) -> str:
@@ -541,11 +530,7 @@ def _mount_vendored(attach: _Attach, ref: str | None, log: Callable[[str], None]
     touched; anything else under the mount (the ``.gitignore`` below) is left alone.
     """
     if ref:
-        raise _InitError(
-            "mode 'vendored' copies the embedded tree of the installed akmon package, so its pin is that "
-            f"package's version ({__version__}) and `--ref {ref}` cannot change it. Pin a ref with "
-            "`--mode submodule`/`--mode subtree`, or install the akmon version you want to vendor."
-        )
+        raise _InitError(_mount_text("vendored_ref", {"version": __version__, "ref": ref}))
     root, mount = attach.root, attach.mount
     source = _tree.embedded_tree_root()
     relative = mount.relative_to(root).as_posix()
@@ -553,15 +538,12 @@ def _mount_vendored(attach: _Attach, ref: str | None, log: Callable[[str], None]
         # Copying into a submodule's working tree writes files into *another repository* that
         # the consumer's index still points at by gitlink — the mount would be neither mode.
         raise _InitError(
-            f"git records {relative} as a submodule; vendoring into it would leave the consumer with a gitlink "
-            f"over hand-copied files. Retire the submodule first, then re-run:\n"
-            f"{_old_mount_removal('submodule', relative)}"
+            _mount_text(
+                "vendored_into_submodule", {"relative": relative, "removal": _old_mount_removal("submodule", relative)}
+            )
         )
     if mount.exists() and any(mount.iterdir()) and not _is_akmon_tree(mount):
-        raise _InitError(
-            f"{relative} exists and is not an akmon tree — refusing to copy over it; remove it or pick another "
-            "--aitna-root"
-        )
+        raise _InitError(_mount_text("vendored_foreign", {"relative": relative}))
     mount.mkdir(parents=True, exist_ok=True)
     copied = 0
     for name in tree_members():
@@ -572,7 +554,7 @@ def _mount_vendored(attach: _Attach, ref: str | None, log: Callable[[str], None]
         if origin.is_dir():
             if target.is_dir():
                 shutil.rmtree(target)
-            shutil.copytree(origin, target, ignore=_COPY_IGNORE)
+            shutil.copytree(origin, target, ignore=_copy_ignore())
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(origin, target)
@@ -583,7 +565,7 @@ def _mount_vendored(attach: _Attach, ref: str | None, log: Callable[[str], None]
     gitignore = mount / ".gitignore"
     if not gitignore.is_file():
         gitignore.write_text(_mount_gitignore(), encoding="utf-8")
-    log(f"vendored {copied} standard-tree members into {relative} (pin: {__version__})")
+    log(_mount_text("vendored", {"count": str(copied), "relative": relative, "version": __version__}))
     return __version__
 
 
@@ -703,7 +685,20 @@ def _doc_link(name: str, aitna: str, ref: str, *, package_mode: bool) -> str:
     return f"{aitna}/akmon/{name}"
 
 
-def _agents_block(aitna: str, ref: str, archetype: str, language: str, *, package_mode: bool) -> str:
+@dataclass(frozen=True)
+class _Classification:
+    """What a fresh block says of the project: archetype and language as given, profiles found.
+
+    ``profiles`` are the language profiles the block imports (``python.md``), one line each
+    right after the common guardrail, under the attach's prefix.
+    """
+
+    archetype: str = "<archetype>"
+    language: str = "<language>"
+    profiles: tuple[str, ...] = ()
+
+
+def _agents_block(aitna: str, ref: str, classification: _Classification, *, package_mode: bool) -> str:
     """The AGENTS.md akmon block (``init.json``); links and fragments computed here.
 
     The mode-conditional fragments (``roles_hint``, ``shared_layer``) and every link value are
@@ -730,14 +725,14 @@ def _agents_block(aitna: str, ref: str, archetype: str, language: str, *, packag
             "bootstrap": link("BOOTSTRAP.md"),
             "readme": link("README.md"),
             "archetypes": link("ARCHETYPES.md"),
-            "archetype": archetype,
-            "language": language,
+            "archetype": classification.archetype,
+            "language": classification.language,
             "aitna": aitna,
             "shared_layer": shared_layer,
             "roles_hint": roles_hint,
             "guardrails_dir": guardrails_dir,
             "profiles_dir": profiles_dir,
-            "language_profile": "python.md",
+            "profile_imports": "".join(f"\n@{profiles_dir}/{profile}" for profile in classification.profiles),
             "pre_commit": link("pipelines/pre-commit.md"),
             "review_flow": link("pipelines/review-flow.md"),
             "design_flow": link("pipelines/design-flow.md"),
@@ -752,6 +747,17 @@ def _agents_block(aitna: str, ref: str, archetype: str, language: str, *, packag
 def _agents_header() -> str:
     """The ``# AGENTS.md`` header a fresh AGENTS.md gains the block under (``init.json``)."""
     return _data()["agents_header"]
+
+
+def _language_profiles(root: Path, archetype: str | None, language: str | None) -> tuple[str, ...]:
+    """The language profiles a fresh block imports: the ones the flags and manifests call for.
+
+    The mapping is the standard tree's (``bin/sync.json``, read through the embedded sync), so
+    ``init`` writes exactly the imports ``verify`` later expects.
+    """
+    sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
+    named = [value for value in (archetype, language) if value]
+    return tuple(found.profile for found in sync_mod.language_profiles(root, named))
 
 
 # --------------------------------------------------------------------------------------
@@ -900,11 +906,8 @@ def _extend_with_akmon_rules(
             path.write_text(f"{line}\n{path.read_text(encoding='utf-8')}", encoding="utf-8")
             log(f"{name}: extends akmon's Python rules ({rules_path})")
             return None
-    (root / "ruff.toml").write_text(
-        "# ruff with akmon's Python rules; adjust them here with extend-select, extend-ignore and\n"
-        f"# per-file-ignores.\n{line}\n",
-        encoding="utf-8",
-    )
+    template = sync_mod.read_sync_data()["ruff_toml_template"]
+    (root / "ruff.toml").write_text(_jsondata().fill(template, {"rules_path": rules_path}), encoding="utf-8")
     log(f"wrote ruff.toml extending akmon's Python rules ({rules_path})")
     return None
 
@@ -923,23 +926,78 @@ def _ruff_step(root: Path) -> str | None:
     return ruff_step["none"]
 
 
+def _node_without_python(root: Path, aitna: str, sync_mod: ModuleType) -> bool:
+    """Whether the project has ``package.json`` and no Python (``sync.has_python``, the one answer)."""
+    return (root / "package.json").is_file() and not sync_mod.has_python(root, sync_mod.read_sync_data(), aitna)
+
+
+def _switch_ref(root: Path, aitna: str) -> str:
+    """The ref a printed vendored switch names: ``common/versions.py::switch_tag``, the one rule (C129).
+
+    The newer of the release the record names and this implementation's.
+    """
+    versions = cli._embedded_common_module(_tree.embedded_tree_root(), "versions")
+    recorded = _record_fields(root, aitna).get("akmon_version")
+    return versions.switch_tag(recorded if isinstance(recorded, str) else None, __version__)
+
+
+def node_switch_command(aitna: str, mode: str, ref: str) -> str:
+    """The command that moves a Python-mounted record to ``ecosystem = "node"`` (C129).
+
+    The mount's own ``cli.mjs`` for a submodule or a subtree, which are whole checkouts; ``npx``
+    from the repository at ``ref`` (``_switch_ref``) for a vendored copy, which a Python attach made
+    without the data the JavaScript CLI reads (``_node_command``). The JavaScript refusal of a
+    Python record and ``verify``'s ``attach.mount-ecosystem`` spell it the same way.
+    """
+    if mode == "vendored":
+        base = ["npx", npx_spec(akmon_repo(), ref)]
+    else:
+        base = _jsondata().fill(_data()["node_mounted_cli"], {"aitna": aitna}).split()
+    return " ".join(shell_word(part) for part in [*base, "init", "--ecosystem", "node"])
+
+
+def _node_no_ruff_step(attach: _Attach, record: Path) -> str:
+    """The next step of a Node repository that got no ruff: where its checks go, and, mounted, the switch."""
+    steps = _data()["closing_steps"]
+    if attach.package_mode:
+        return _jsondata().fill(steps["node_no_ruff"], {"record": record.name})
+    first_attach = ["npx", npx_spec(akmon_repo(), _tag_for_version(__version__)), "init", "--mode", attach.mode]
+    return _jsondata().fill(
+        steps["node_no_ruff_mounted"],
+        {
+            "record": record.name,
+            "switch": node_switch_command(attach.aitna, attach.mode, _switch_ref(attach.root, attach.aitna)),
+            "detect": f"{_jsondata().fill(_data()['node_mounted_cli'], {'aitna': attach.aitna})} init --checks own",
+            "attach": " ".join(shell_word(part) for part in first_attach),
+        },
+    )
+
+
 def _setup_checks(attach: _Attach, record: Path, choice: str | None, *, ask: bool, log: Callable[[str], None]) -> None:
     """Decide once what ``akmon check`` runs and record it as ``[check]``.
 
     The project's own linters when it has any; ruff with akmon's Python rules when it has none;
     or nothing — the owner's answer at the prompt, ``--checks``, or those defaults when nobody
-    is asked. Nothing — ``none``, or ``own`` when no tool is found — is recorded as an empty
+    is asked. A Node project with no Python files and no tool found defaults to nothing,
+    without a prompt: ruff would have nothing to lint there (C129); ``--checks akmon`` still
+    sets it up. Nothing — ``none``, or ``own`` when no tool is found — is recorded as an empty
     ``[check]`` table, so it is a choice like the others. A record that already has a
     ``[check]`` table is left alone: a realign never changes that choice. A record written
     before an empty table meant nothing has no table and is decided again.
     """
     root, next_steps = attach.root, attach.next_steps
     sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
+    _clear_empty_checks(record, choice, log)
     if re.search(r"^\[check\]", record.read_text(encoding="utf-8"), re.MULTILINE):
         log("[check] already names this project's checks — left untouched")
         return
     tools = _detect_tools(root, sync_mod)
     names = ", ".join(name for name, _ in tools)
+    if choice is None and not tools and _node_without_python(root, attach.aitna, sync_mod):
+        _record_checks({}, record)
+        log("akmon check: no checks recorded — no Python files, so no ruff")
+        next_steps.append(_node_no_ruff_step(attach, record))
+        return
     if choice is None and tools:
         choice = "own"
         if ask and not _confirm(f"akmon init: `akmon check` runs the project's own {names}?"):
@@ -968,6 +1026,39 @@ def _setup_checks(attach: _Attach, record: Path, choice: str | None, *, ask: boo
         next_steps.extend(item for item in (step, _ruff_step(root)) if item)
     _record_checks(commands, record)
     log(f"akmon check will run: {', '.join(commands)} (recorded as [check])")
+
+
+def _clear_empty_checks(record: Path, choice: str | None, log: Callable[[str], None]) -> None:
+    """Cut a ``[check]`` table that records nothing when ``--checks`` was given, so it is decided again.
+
+    The owner asks again (C129 audit F4); with no flag a realign keeps the table (C123).
+    """
+    if choice is None:
+        return
+    cleared = _without_empty_checks(record.read_text(encoding="utf-8"))
+    if cleared is not None:
+        record.write_text(cleared, encoding="utf-8")
+        log(_data()["checks_redecided_empty"])
+
+
+def _without_empty_checks(text: str) -> str | None:
+    """``text``, the record, with its ``[check]`` table cut out when the table records nothing, else ``None``.
+
+    Nothing is comment lines only, blank lines aside — what ``--checks none``, or ``own`` with
+    nothing found, writes, and any other table with no key. A sub-table or a second ``[check]`` table is the owner's (C123) and
+    stays. The JavaScript twin is ``withoutEmptyChecks``.
+    """
+    lines = text.split("\n")
+    headers = [line for line in lines if re.match(r"\s*\[\[?\s*check\s*[.\]]", line)]
+    starts = [index for index, line in enumerate(lines) if line.rstrip() == "[check]"]
+    if not starts or len(headers) != 1:
+        return None
+    start = starts[0]
+    end = next((index for index in range(start + 1, len(lines)) if re.match(r"\s*\[", lines[index])), len(lines))
+    body = [line.rstrip() for line in lines[start + 1 : end] if line.rstrip()]
+    if not all(line.startswith("#") for line in body):
+        return None
+    return "\n".join(lines[:start] + lines[end:])
 
 
 def _record_checks(commands: Mapping[str, str], record: Path) -> None:
@@ -1012,6 +1103,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--language", help="Primary language per ARCHETYPES.md (default: left unclassified).")
     parser.add_argument("--no-ci", action="store_true", help="Do not write a CI workflow running sync/verify.")
     parser.add_argument(
+        "--ecosystem",
+        choices=ECOSYSTEMS,
+        help="The implementation that serves the project. Default on a first attach: node for a mounted mode in "
+        "a repository with package.json and no Python files, else python; a recorded attach keeps its own. "
+        "node is served by the JavaScript implementation, which this command hands over to.",
+    )
+    parser.add_argument(
         "--checks",
         choices=CHECK_CHOICES,
         help="What `akmon check` runs: the project's own linters (default when it has any), ruff with "
@@ -1049,17 +1147,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     archetype = "/".join(part for part in (args.archetype, args.language) if part) or "unclassified"
+    profiles = _language_profiles(root, args.archetype, args.language)
     # --- local layout (LOCAL layer) --------------------------------------------------
     _write_local_layout(attach)
 
     # --- hand-owned documents: written when absent, never rewritten ------------------
-    block = _agents_block(
-        attach.aitna,
-        ref,
-        args.archetype or "<archetype>",
-        args.language or "<language>",
-        package_mode=attach.package_mode,
-    )
+    classification = _Classification(args.archetype or "<archetype>", args.language or "<language>", profiles)
+    block = _agents_block(attach.aitna, ref, classification, package_mode=attach.package_mode)
     _write_agents_block(attach, block)
     if attach.switching:
         attach.next_steps.extend(_mode_switch_steps(attach.previous, attach.mode, attach.aitna))
@@ -1076,7 +1170,7 @@ def main(argv: list[str] | None = None) -> int:
         return code
 
     # --- the judgment steps init deliberately did not do -----------------------------
-    _add_closing_steps(attach, archetype=archetype, pin_status=pin_status, ref=ref)
+    _add_closing_steps(attach, archetype=archetype, profiles=profiles, pin_status=pin_status, ref=ref)
     return _report(attach, pin_status, record, version)
 
 
@@ -1100,7 +1194,8 @@ def _plan(args: argparse.Namespace, root: Path) -> tuple[_Attach, str]:
     # before the unready-switch refusal: the re-run that one advises would land here anyway.
     ecosystem = _record_fields(root, aitna).get("ecosystem")
     if isinstance(ecosystem, str) and ecosystem and ecosystem != "python":
-        raise _InitError(_jsondata().fill(_data()["python_refuses_ecosystem"], {"value": ecosystem, "aitna": aitna}))
+        refusal = {"value": ecosystem, "aitna": aitna, "cli": node_cli(root, aitna)}
+        raise _InitError(_jsondata().fill(_data()["python_refuses_ecosystem"], refusal))
     previous = _recorded_mount(root, aitna)
     if args.mode:
         mode, reason = args.mode, "requested"
@@ -1108,9 +1203,114 @@ def _plan(args: argparse.Namespace, root: Path) -> tuple[_Attach, str]:
         mode, reason = previous, "recorded"
     else:
         mode, reason = _default_mode(root, args.repo)
+    _refuse_node_attach(args, root, aitna, mode)
     attach = _Attach(root, aitna, mode, previous)
     _refuse_unready_switch(attach, switch_mode=args.switch_mode)
     return attach, reason
+
+
+def node_cli(root: Path, aitna: str) -> str:
+    """How the JavaScript implementation is run for the project's record (``init.json``).
+
+    ``npx akmon`` in mode ``package``, the mount's own ``cli.mjs`` in a mounted mode (the C129
+    amendment of ADR 0020 D02): the command a refusal of a Node record names. ``update`` names it too.
+    """
+    data = _data()
+    if _recorded_mount(root, aitna) == "package":
+        return data["node_package_cli"]
+    return _jsondata().fill(data["node_mounted_cli"], {"aitna": aitna})
+
+
+def _first_attach_ecosystem(root: Path, flag: str | None, mode: str, aitna: str) -> tuple[str, str | None]:
+    """The ecosystem a first attach serves, and the ``python_hands_over_why`` key that says why it is node.
+
+    ``--ecosystem`` when given. Otherwise mode ``package`` is the carrier's own — this wheel serves
+    Python — and a mounted mode follows the files: ``package.json`` with no Python files is a Node
+    repository, anything else stays Python (the C129 amendment of ADR 0020 D02).
+    """
+    if flag:
+        return flag, "flag"
+    if mode != "package" and _node_without_python(root, aitna, cli._load_embedded_sync(_tree.embedded_tree_root())):
+        return "node", "inferred"
+    return "python", None
+
+
+def npx_spec(repo: str, ref: str) -> str:
+    """How ``npx`` names the akmon repository at ``ref``: ``github:<owner>/<name>#<ref>`` for a GitHub URL.
+
+    Anything else is a git URL npm resolves as written (``git+<repo>#<ref>``); a local path becomes a
+    ``file://`` one. The JavaScript init and update spell it the same way.
+    """
+    match = re.fullmatch(r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?", repo)
+    if match:
+        return f"github:{match.group(1)}/{match.group(2)}#{ref}"
+    return f"git+{'file://' + repo if repo.startswith('/') else repo}#{ref}"
+
+
+def _node_command(args: argparse.Namespace, root: Path, aitna: str, mode: str) -> str:
+    """The JavaScript init command a Node attach hands over to, with the flags this run was given.
+
+    The mount's own CLI when one is on disk, else ``npx`` from the repository at the run's ref (no
+    Python needed); mode ``package`` installs the package from the registry, so ``npx akmon``. A
+    vendored mount is never the CLI: a Python-vendored copy carries ``tree_members`` only, not the
+    data the JavaScript CLI reads (``tree_members_node``), and the ``npx`` init re-vendors it whole.
+    """
+    if mode == "package":
+        command = ["npx", "akmon", "init"]
+    elif mode != "vendored" and (root / aitna / "akmon" / "js" / "akmon" / "cli.mjs").is_file():
+        command = [*_jsondata().fill(_data()["node_mounted_cli"], {"aitna": aitna}).split(), "init"]
+    else:
+        # a vendored switch names the release that has it (``_switch_ref``); a first attach has no
+        # record, so that is this implementation's own
+        command = ["npx", npx_spec(akmon_repo(), args.ref or _switch_ref(root, aitna)), "init"]
+    command += ["--mode", mode]
+    if args.ecosystem == "node":
+        command += ["--ecosystem", "node"]
+    for flag, value in (("--ref", args.ref), ("--aitna-root", args.aitna_root)):
+        if value:
+            command += [flag, value]
+    if args.repo != akmon_repo():
+        command += ["--repo", args.repo]
+    return " ".join(shell_word(part) for part in command)
+
+
+def shell_word(text: str) -> str:
+    """``text`` as one shell word: as written when it holds only safe characters, else ``shlex.quote``d.
+
+    ``shlex.join`` quotes a ``#`` too, which in mid-word is no comment, and the printed ``npx
+    github:<owner>/<name>#<ref>`` reads as the npm documentation spells it. The JavaScript twin
+    applies the same rule.
+    """
+    return text if re.fullmatch(r"[A-Za-z0-9_@%+=:,./#-]+", text) else shlex.quote(text)
+
+
+def _refuse_node_attach(args: argparse.Namespace, root: Path, aitna: str, mode: str) -> None:
+    """Hand a Node attach over to the JavaScript implementation, before anything is touched.
+
+    The record decides once it exists (a Node record is refused earlier, ``python_refuses_ecosystem``); a
+    first attach decides by ``--ecosystem`` or the manifests. The Python implementation does not set up a
+    Python-run mount in a Node repository, and it does not run the JavaScript one either: the run stops
+    with the exact command, the way a mounted launcher defers to the tree the pin names (ADR 0009 §5).
+    """
+    data = _data()
+    jsondata = _jsondata()
+    if (root / aitna / ".akmon.toml").is_file():
+        if args.ecosystem == "node":
+            raise _InitError(
+                jsondata.fill(
+                    data["python_switch_hands_over"],
+                    {"aitna": aitna, "command": _node_command(args, root, aitna, mode)},
+                )
+            )
+        return
+    ecosystem, why = _first_attach_ecosystem(root, args.ecosystem, mode, aitna)
+    if ecosystem == "node" and why is not None:
+        raise _InitError(
+            jsondata.fill(
+                data["python_hands_over_node"],
+                {"why": data["python_hands_over_why"][why], "command": _node_command(args, root, aitna, mode)},
+            )
+        )
 
 
 def _refuse_unready_switch(attach: _Attach, *, switch_mode: bool) -> None:
@@ -1127,17 +1327,21 @@ def _refuse_unready_switch(attach: _Attach, *, switch_mode: bool) -> None:
         # record, leaving a project that claimed one mode and carried another.
         relative = mount.relative_to(attach.root).as_posix()
         raise _InitError(
-            f"switching mount mode {previous!r} → {mode!r} needs the old mount gone first — `init` does not "
-            f"delete a tree it did not create, and the removal is your commit (D5). Retire {relative}, then "
-            f"re-run:\n{_old_mount_removal(previous, relative)}\n"
-            f"    akmon init --mode {mode} --switch-mode"
+            _mount_text(
+                "switch_old_mount",
+                {
+                    "previous": repr(previous),
+                    "mode": repr(mode),
+                    "relative": relative,
+                    "removal": _old_mount_removal(previous, relative),
+                    "cli": "akmon",
+                    "target": mode,
+                },
+            )
         )
     if not switch_mode:
         raise _InitError(
-            f"this project is attached in mount mode {previous!r}; {mode!r} is a **migration**, not a realign — "
-            "the AGENTS.md akmon block still points at the old layout and the old mount is still on disk, so "
-            "finishing silently would leave `akmon verify --strict` red. Re-run with `--switch-mode` and init "
-            "will attach in the new mode and print the edits it must not make for you."
+            _mount_text("switch_needs_flag", {"previous": repr(previous), "mode": repr(mode), "cli": "akmon"})
         )
 
 
@@ -1256,13 +1460,19 @@ def _generate(root: Path) -> int:
     return 0
 
 
-def _add_closing_steps(attach: _Attach, *, archetype: str, pin_status: str, ref: str) -> None:
-    """The judgment steps ``init`` deliberately did not take, a missing pin first (``init.json``)."""
+def _add_closing_steps(attach: _Attach, *, archetype: str, profiles: Sequence[str], pin_status: str, ref: str) -> None:
+    """The judgment steps ``init`` deliberately did not take, a missing pin first (``init.json``).
+
+    Classifying stays a step while the archetype is unclassified or no language profile was
+    detected — the block then imports none, and only a person can say which one it needs. With a
+    profile already imported the step asks for the archetype alone (C127).
+    """
     aitna = attach.aitna
     jsondata = _jsondata()
     steps = _data()["closing_steps"]
-    if archetype == "unclassified":
-        attach.next_steps.insert(0, jsondata.fill(steps["classify"], {"aitna": aitna}))
+    if archetype == "unclassified" or not profiles:
+        classify = steps["classify_archetype"] if profiles else steps["classify"]
+        attach.next_steps.insert(0, jsondata.fill(classify, {"aitna": aitna}))
     attach.next_steps.append(jsondata.fill(steps["pin_test"], {"aitna": aitna}))
     pin_step = _pin_step(pin_status, ref) if attach.package_mode else None
     if pin_step:

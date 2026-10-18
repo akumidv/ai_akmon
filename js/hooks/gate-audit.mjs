@@ -8,7 +8,8 @@
  * (`last_assistant_message`, M87), counts the structural items under the role's
  * Findings/Options sections, and — at or above the registry's count floor — holds the turn once
  * with the one request the flows make there: run the `audit` pass, or say the skip out loud.
- * It holds a turn once per gate (the C36 marker is keyed by role and count) and never a turn
+ * It holds a turn once per gate (the C36 marker is keyed by role and a digest of the counted
+ * section text) and never a turn
  * that already is the answer to a held one (`stop_hook_active`). The counting and the request
  * live in `tools/model_routing/routing.mjs`.
  *

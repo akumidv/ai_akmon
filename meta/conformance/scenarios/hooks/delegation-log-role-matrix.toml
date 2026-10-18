@@ -1,0 +1,36 @@
+# C20: under the review role (read from the transcript's 🧭 declaration) a k_mechanic call has
+# no kind in the role's effective allowed set. The owner gets the advisory ⚠ line in the
+# systemMessage; the orchestrator gets its own — re-route or switch role — in additionalContext
+# (ADR 0006 item 4, M149). No permission decision: the call runs.
+id = "hooks/delegation-log-role-matrix"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:delegation-log"]
+
+[fixture]
+attach = "native"
+files = { "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 agent: review — conformance"}]}}
+"""}
+
+[run]
+script = "delegation-log"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Agent"
+session_id = "sess-dl-role"
+permission_mode = "default"
+cwd = "{{root}}"
+transcript_path = "{{root}}/transcript.jsonl"
+tool_input = { subagent_type = "k_mechanic", description = "rename the helper" }
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+systemMessage = "[akmon] → k_mechanic: rename the helper\n[akmon] ⚠ role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active role 'review' — it routes explore-search, summarize, debug-deep, plan-draft, independent-review, audit."
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+additionalContext = "[akmon] ⚠ role/task-kind: k_mechanic (mech-edit, test-scaffold, doc-sync) is outside the active role 'review', which routes explore-search, summarize, debug-deep, plan-draft, independent-review, audit — re-route this work to an agent with an allowed kind, or declare the role switch before delegating it."
+[expected.files]
+".claude/model-routing.log" = "{{ts}}\tsess-dl-role\tk_mechanic\t-\t-\trename the helper\n"

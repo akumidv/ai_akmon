@@ -13,7 +13,7 @@ is silent, the Python implementation is the reference, and the resolution become
 |---|---|
 | `scenarios/<area>/*.toml` | one scenario per file; areas: `hooks`, `cli`, `tools`, `units` |
 | `fixtures/<name>/` | static consumer-project files a scenario's project is copied from (`base`) |
-| `fixtures/attach/<layer>/` | the files a `native` attach lays over the base: `package` (both package modes), `python` (the Python carrier), `node` (C104: the record, with `ecosystem = "node"`, and the `package.json` dev pin) |
+| `fixtures/attach/<layer>/` | the files a `native` attach lays over the base: `package` (both package modes), `python` (the Python carrier), `node` (C104: the record, with `ecosystem = "node"`, and the `package.json` dev pin); and a node `mount` attach: `node-mount` (C129: the record with `mount = "submodule"` and `ecosystem = "node"`, a `package.json` without an akmon pin, the `AGENTS.md` profile imports and the CI that runs the mount's JavaScript CLI) |
 | `fixtures/tree/` | corpus-owned stand-ins for the standard tree's prose documents (see the snapshot) |
 | `units/<name>.toml` | shared unit tables (inputs + expected answers) for a function whose answer a JS port cannot get for free: either a **stdlib gap** (`shlex`, `fnmatch`, `json.dumps`, float spelling) or a **shared data-driven module** whose answers are values (`runtime`, `check_runner`), or a **module that acts on files and the environment** (`markers`, `materialization`), whose table describes a world — a scratch directory, environment variables — that the probe builds, replays against and removes; `routing` (C104) is both kinds at once and too large for per-family mouths, so its table is **generic**: a row names a public function, its JSON arguments and the world it runs in, and pins the whole answer plus the files the call leaves (the row format is the block comment above `probe_routing` in `probe.py`); the three hook tables (`hook_core`, `claude_adapter`, `codex_adapter`, C104 pass 2) use that same mouth over `hooks/*.py` and `js/hooks/*.mjs` — on the JS side the module's `data` (the lazy bundle of `hook_data.mjs`) is handed over as the first argument of the exports that read a data file or a marker — and add the `{{tree}}` and `{{core:<key>}}` tokens, sequences (`steps_json`), links and a working directory to the world |
 | `coverage.toml` | the coverage gate's **exceptions**: ecosystem ownership, exemptions, reviewed dynamic sites |
@@ -32,9 +32,10 @@ is silent, the Python implementation is the reference, and the resolution become
 
 ## Ecosystems and attaches
 
-ADR 0020 D02: the mounted modes (`submodule`, `vendored`, `subtree`) run the Python
-implementation only; the JavaScript implementation covers Node **package** mode. A scenario
-says both what it is spec for and how its consumer is connected:
+ADR 0020 D02, as its C129 amendment narrows it: the mounted modes (`submodule`, `vendored`,
+`subtree`) run the Python implementation unless the record names `ecosystem = "node"`, and the
+JavaScript implementation covers Node package mode and those Node mounts. A scenario says both
+what it is spec for and how its consumer is connected:
 
 - `ecosystem = "shared"` — spec for both implementations; `"python"` / `"node"` — one only.
 - `[fixture] attach = "native"` (default) — the implementation's own package mode: the base
@@ -47,8 +48,12 @@ says both what it is spec for and how its consumer is connected:
   (ADR 0020 D05). The node project is synced by the JS `sync` itself (C105), so the hooks and the
   CLI commands under test read a project the implementation wrote, as a consumer's does; its
   record names `ecosystem = "node"`.
-- `attach = "mount"` — `<AITNA_ROOT>/akmon` links the snapshot. **Python only**: the loader
-  refuses it on a `shared` or `node` scenario. Hooks run as `python3 <tree>/hooks/<name>.py`.
+- `attach = "mount"` — `<AITNA_ROOT>/akmon` links the snapshot, in either ecosystem (C129), so a
+  mounted scenario may be `shared`, `python` or `node`. Python: the base fixture is a
+  Python-mounted consumer already, and hooks run as `python3 <tree>/hooks/<name>.py`. Node: the
+  `node-mount` layer is laid over the base, the CLI runs from the mount as
+  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs` and hooks as `node <AITNA_ROOT>/akmon/js/hooks/<name>.mjs`
+  (the link read unresolved, as the consumer's wiring names it).
 - `attach = "none"` — nothing connected (usage errors, `init` onto a bare project).
 
 A shared scenario whose output carries lines of a code an ecosystem owns (the standard-tree

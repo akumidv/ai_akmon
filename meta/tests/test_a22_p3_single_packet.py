@@ -29,14 +29,30 @@ def _write(path: Path, content: bytes) -> None:
 def _fixture(root: Path) -> tuple[str, Path]:
     run_id = "q1234"
     files = {
-        "runs/qual-sealed-map.json": json.dumps({run_id: {
-            "case": "P3-01", "arm": "A", "tier": "tier-secret-max",
-            "repeat": 1, "qualification_label": "qualification-secret",
-            "subject_model": "model-secret-name",
-        }}, sort_keys=True).encode(),
-        "cases/P3-01.json": json.dumps({"scoring": [
-            "E1: first criterion", "E2: second criterion", "E3: third criterion", "E4: fourth criterion",
-        ]}, sort_keys=True).encode(),
+        "runs/qual-sealed-map.json": json.dumps(
+            {
+                run_id: {
+                    "case": "P3-01",
+                    "arm": "A",
+                    "tier": "tier-secret-max",
+                    "repeat": 1,
+                    "qualification_label": "qualification-secret",
+                    "subject_model": "model-secret-name",
+                }
+            },
+            sort_keys=True,
+        ).encode(),
+        "cases/P3-01.json": json.dumps(
+            {
+                "scoring": [
+                    "E1: first criterion",
+                    "E2: second criterion",
+                    "E3: third criterion",
+                    "E4: fourth criterion",
+                ]
+            },
+            sort_keys=True,
+        ).encode(),
         "scoring/scorer-prompt.txt": b"Frozen scorer instructions.\n",
         "score_packets.py": b"# sealed production renderer\n",
         "arms/A.architect.system.txt": b"frozen arm A\n",
@@ -47,19 +63,31 @@ def _fixture(root: Path) -> tuple[str, Path]:
     event_hashes = ["event-hash-1", "event-hash-2"]
     exchange = {
         "turns": [
-            {"user": "First packet question.", "assistant": "First subject response.",
-             "events_sha256": event_hashes[0]},
-            {"user": "Follow-up packet question.", "assistant": "Final subject response.",
-             "events_sha256": event_hashes[1]},
+            {
+                "user": "First packet question.",
+                "assistant": "First subject response.",
+                "events_sha256": event_hashes[0],
+            },
+            {
+                "user": "Follow-up packet question.",
+                "assistant": "Final subject response.",
+                "events_sha256": event_hashes[1],
+            },
         ],
         "run_id": run_id,
-        "arm": "arm-secret-A", "tier": "tier-secret-max", "qualification_label": "qualification-secret",
+        "arm": "arm-secret-A",
+        "tier": "tier-secret-max",
+        "qualification_label": "qualification-secret",
         "subject_model": "model-secret-name",
     }
     exchange_bytes = json.dumps(exchange, sort_keys=True).encode()
     _write(root / "runs" / f"{run_id}.exchange.json", exchange_bytes)
     record = {
-        "run_id": run_id, "case": "P3-01", "arm": "A", "tier": "tier-secret-max", "repeat": 1,
+        "run_id": run_id,
+        "case": "P3-01",
+        "arm": "A",
+        "tier": "tier-secret-max",
+        "repeat": 1,
         "verified": True,
         "case_sha256": hashlib.sha256(files["cases/P3-01.json"]).hexdigest(),
         "arm_sha256": hashlib.sha256(files["arms/A.architect.system.txt"]).hexdigest(),
@@ -180,9 +208,18 @@ def test_bundle_verification_detects_packet_tampering(tmp_path, monkeypatch):
         packet_builder.verify_bundle(out_dir, out_dir.with_name(out_dir.name + ".evaluator"))
 
 
-@pytest.mark.parametrize("mutation", ["record_missing", "record_run_id", "record_exchange_hash",
-                                       "record_event_hash", "exchange_run_id", "exchange_event_hash",
-                                       "rollout_unverified"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "record_missing",
+        "record_run_id",
+        "record_exchange_hash",
+        "record_event_hash",
+        "exchange_run_id",
+        "exchange_event_hash",
+        "rollout_unverified",
+    ],
+)
 def test_unverified_source_provenance_fails_closed(tmp_path, monkeypatch, mutation):  # noqa: C901
     root = tmp_path / "project"
     run_id, out_dir = _fixture(root)
@@ -207,9 +244,7 @@ def test_unverified_source_provenance_fails_closed(tmp_path, monkeypatch, mutati
         record["rollout"]["verified"] = False
     if mutation != "record_missing":
         if mutation in {"exchange_run_id", "exchange_event_hash"}:
-            record["exchange_sha256"] = hashlib.sha256(
-                json.dumps(exchange, sort_keys=True).encode()
-            ).hexdigest()
+            record["exchange_sha256"] = hashlib.sha256(json.dumps(exchange, sort_keys=True).encode()).hexdigest()
         record_path.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
     if mutation in {"exchange_run_id", "exchange_event_hash"}:
         exchange_path.write_text(json.dumps(exchange, sort_keys=True), encoding="utf-8")
@@ -251,11 +286,14 @@ def test_reducer_rejects_unreceipted_blind_pair(tmp_path, monkeypatch):
     assert not out_dir.exists()
 
 
-@pytest.mark.parametrize("bad_rows", [
-    "g0123456789abcdef\tE1\tFAIL\tone\ng0123456789abcdef\tE1\tFAIL\tduplicate\n",
-    "g0123456789abcdef\tE1\tFAIL\tone\n",
-    "gffffffffffffffff\tE1\tFAIL\tunknown ID\n",
-])
+@pytest.mark.parametrize(
+    "bad_rows",
+    [
+        "g0123456789abcdef\tE1\tFAIL\tone\ng0123456789abcdef\tE1\tFAIL\tduplicate\n",
+        "g0123456789abcdef\tE1\tFAIL\tone\n",
+        "gffffffffffffffff\tE1\tFAIL\tunknown ID\n",
+    ],
+)
 def test_reducer_rejects_duplicate_partial_or_mismatched_pair_before_output(tmp_path, monkeypatch, bad_rows):
     root = tmp_path / "project"
     run_id, packet_dir = _fixture(root)
@@ -281,6 +319,7 @@ def test_grid_packet_requires_rederivation_inputs(tmp_path, monkeypatch):
     run_id, out_dir = _fixture(root)
     _fixed_id(monkeypatch)
     with pytest.raises(ValueError, match="both original qualification TSVs"):
-        packet_builder.build_single_packet(run_id, out_dir, project_root=root,
-                                           map_kind="grid", map_path=root / "runs" / "grid-sealed-map.json")
+        packet_builder.build_single_packet(
+            run_id, out_dir, project_root=root, map_kind="grid", map_path=root / "runs" / "grid-sealed-map.json"
+        )
     assert not out_dir.exists()

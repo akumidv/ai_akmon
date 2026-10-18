@@ -14,12 +14,20 @@ to disagree on:
 - **age-out** — a marker older than ``MARKER_MAX_AGE_SECONDS`` is stale (a crashed session, a
   session id reused days later) and is replaced, so the diagnostic speaks again rather than
   staying suppressed. A long session may therefore hear it once more per day; that is the
-  accepted direction.
+  accepted direction. A marker dated more than ``MARKER_FUTURE_SLACK_SECONDS`` ahead of the
+  clock (a clock that moved back) is stale too: its age would be negative, and it would
+  otherwise suppress the diagnostic until the clock caught up;
+- **only our own regular file is a claim** — the path that blocks the exclusive create is read
+  with ``lstat``, never followed: a symlink, a directory or any other non-regular file, or a file
+  another user owns (where the platform has user ids), is not our marker. The diagnostic is
+  emitted and the path is left alone — a planted path cannot silence it.
 
 Two processes that find the same stale marker may both replace it and both emit — the loud
-direction again, never a silent one.
+direction again, never a silent one. A marker that vanishes between the refused create and its
+``lstat`` (another process aged it out) is claimed again once.
 
-A marker failure (unwritable tempdir) makes the diagnostic noisier, never invisible.
+A marker failure (unwritable tempdir, an unreadable existing path) makes the diagnostic noisier,
+never invisible.
 """
 
 from __future__ import annotations
@@ -27,16 +35,24 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import os
+import stat
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from common import jsondata
 
 #: A day: longer than a working session, short enough that a crashed or reused session id does
 #: not suppress a diagnostic for long.
 MARKER_MAX_AGE_SECONDS = 24 * 60 * 60
+
+#: How far ahead of the clock a marker's mtime may be before it counts as stale: room for a
+#: coarse filesystem timestamp, never days of silence after a clock moved back.
+MARKER_FUTURE_SLACK_SECONDS = 60
+
+#: What holds a marker's name when the exclusive create is refused (``_existing_claim``).
+_Holder = Literal["vanished", "unreadable", "foreign", "stale", "held"]
 
 
 def _data() -> dict[str, Any]:
@@ -69,11 +85,38 @@ def delegation_state_name(which: str, identity: str) -> str:
     return jsondata.fill(_data()["delegation_state_files"][which], {"identity": identity})
 
 
-def _is_stale(marker: Path, now: float) -> bool:
-    try:
-        return now - marker.stat().st_mtime > MARKER_MAX_AGE_SECONDS
-    except OSError:
+def _is_stale(status: os.stat_result, now: float) -> bool:
+    """Older than a day, or dated ahead of the clock by more than the slack."""
+    return now - status.st_mtime > MARKER_MAX_AGE_SECONDS or status.st_mtime > now + MARKER_FUTURE_SLACK_SECONDS
+
+
+def _is_own_file(status: os.stat_result) -> bool:
+    """A regular file (not followed through a link) that this process's user owns.
+
+    The owner is compared only where the platform has user ids (``os.getuid``); elsewhere a
+    regular file is enough.
+    """
+    if not stat.S_ISREG(status.st_mode):
         return False
+    own_uid = getattr(os, "getuid", None)
+    return own_uid is None or status.st_uid == own_uid()
+
+
+def _existing_claim(marker: Path, now: float) -> _Holder:
+    """What holds ``marker``'s name after a refused create, read with ``lstat`` (never followed).
+
+    ``vanished`` — gone since the create; ``unreadable`` — ``lstat`` failed otherwise; ``foreign``
+    — not a regular file this user owns; ``stale`` / ``held`` — our marker, aged out or not.
+    """
+    try:
+        status = os.lstat(marker)
+    except FileNotFoundError:
+        return "vanished"
+    except OSError:
+        return "unreadable"
+    if not _is_own_file(status):
+        return "foreign"
+    return "stale" if _is_stale(status, now) else "held"
 
 
 def claim_diagnostic_marker(kind: str, identity: str | None, *, directory: Path | None = None) -> bool:
@@ -94,11 +137,15 @@ def claim_diagnostic_marker(kind: str, identity: str | None, *, directory: Path 
         try:
             descriptor = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         except FileExistsError:
-            if not _is_stale(marker, time.time()):
+            holder = _existing_claim(marker, time.time())
+            if holder == "held":
                 return False
-            with contextlib.suppress(OSError):
-                marker.unlink()
-            continue
+            if holder in ("unreadable", "foreign"):
+                return True  # unreadable, or not our marker: speak, and leave the path alone
+            if holder == "stale":
+                with contextlib.suppress(OSError):
+                    marker.unlink()
+            continue  # stale and removed, or vanished since the refused create: claim again
         except OSError:
             return True  # marker failure must make the diagnostic noisier, never invisible
         try:
@@ -107,7 +154,7 @@ def claim_diagnostic_marker(kind: str, identity: str | None, *, directory: Path 
             with contextlib.suppress(OSError):
                 marker.unlink(missing_ok=True)
         return True
-    return True  # lost the replace race twice: emit rather than stay silent
+    return True  # lost the replace (or vanish) race twice: emit rather than stay silent
 
 
 def release_diagnostic_markers(

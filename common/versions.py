@@ -11,7 +11,7 @@ release-time version join (C54, F9/6) — so the rule has one owner rather than 
 Stdlib-only and dependency-free by contract: it ships in ``bin/`` beside ``findings.py`` and
 must import on the declared Python floor with no venv.
 
-Five questions are answered here and nowhere else:
+Six questions are answered here and nowhere else:
 
 :func:`split_version`
     What part of a recorded string names the version, and how far past it the tree is. A
@@ -45,6 +45,9 @@ Five questions are answered here and nowhere else:
     ``bN``, ``rcN``, alone or with a ``.devN`` of its own) — raises rather than guesses: the
     spelling SemVer would form for those sorts ``alpha < beta < dev < rc`` where PEP 440 sorts
     ``dev < a < b < rc``.
+:func:`switch_tag`
+    Which release a printed switch to the JavaScript implementation names (C129): the tag of the
+    newer of the recorded and the running version, ``main`` when that one is no release.
 """
 
 from __future__ import annotations
@@ -192,6 +195,25 @@ def compare_versions(a: str, b: str) -> int:
     if key_a < key_b:
         return -1
     return 0 if key_a == key_b else 1
+
+
+def switch_tag(recorded: str | None, running: str | None) -> str:
+    """The ref a printed switch to the JavaScript implementation names: the newer release's tag (C129).
+
+    The newer of the version the record names and the running implementation's, as
+    :func:`compare_versions` orders them — the switch exists from one release on, so neither an
+    older record nor an older CLI may name a tag before it. ``v<X.Y.Z>`` when that version is
+    final, else ``main`` (no tag exists for it); ``main`` too when neither can be placed. Every
+    printed vendored switch command of both implementations takes its ref from here.
+    """
+    placed = [version for version in (recorded, running) if version and order_key(version) is not None]
+    if not placed:
+        return "main"
+    newest = placed[0]
+    for version in placed[1:]:
+        if compare_versions(version, newest) > 0:
+            newest = version
+    return f"v{split_version(newest)[0]}" if is_final(newest) else "main"
 
 
 def _without_leading_zeros(release: str) -> str:

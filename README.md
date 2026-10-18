@@ -14,8 +14,9 @@ JavaScript implementation lets a Node project run akmon with no Python at all
 The standard is **LLM-agnostic** at the policy layer: plain Markdown/JSON that any assistant
 or human can read. Enforcement depth remains vendor-specific, and the single entry point in
 a consuming project is its root `AGENTS.md`. `akmon init`, `sync`, `verify`, `check`, `path`,
-`hook` and `tool` are implemented for all four mount modes on Python, and in package mode on
-Node; public PyPI and npm publication are still pending (pin by git tag until then).
+`hook` and `tool` are implemented for all four mount modes on Python, and on Node in package
+mode and in the mounted modes of a record that names `ecosystem = "node"`; public PyPI and npm
+publication are still pending (pin by git tag until then).
 
 **New consumer? Run `akmon init`** (Quick start below) — it attaches akmon to a project.
 Already attached? **[MODEL.md](MODEL.md)** is the operative rulebook.

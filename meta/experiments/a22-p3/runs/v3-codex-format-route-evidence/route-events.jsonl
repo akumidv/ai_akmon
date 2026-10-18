@@ -1,0 +1,3 @@
+{"approval_sha256": "1612de967bdbef13395bbe1fe8f793d7c5c9f9370d64411cb0048f099c3396da", "opening_codex_tokens": 273286, "record_type": "p3_v3_codex_scorer_route_ledger", "seal_sha256": "080abfb3f45d52a1057b274fc8ab9d2652dba02d983464c5c3661bd905831ea1"}
+{"event": "reserved", "attempt_id": "0d2a6874936541c3a670662ecd804611", "packet_sha256": "5cce39ac1d12dcb99ab5623e0c44e541df4f471e07f8c972626d574adfcf450c", "request_sha256": "05f1bed983eb8503e10814b1e0ba707105fa72d05d8967b7d106ce12e895ba64"}
+{"attempt_id": "0d2a6874936541c3a670662ecd804611", "event": "completed", "status": "passed", "usage": {"input_tokens": 12316, "output_tokens": 180}}

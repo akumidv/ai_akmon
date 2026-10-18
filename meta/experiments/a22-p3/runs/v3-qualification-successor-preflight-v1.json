@@ -1,0 +1,8 @@
+{
+  "dispatch_allowed": false,
+  "opening_codex_tokens": 285782,
+  "operational_seal_sha256": "0966558a7fcc575ed2d24400f802f02481003d821f2970d8ebac8531fe6d3206",
+  "planned_calls": 128,
+  "provider_calls": 0,
+  "status": "PASSED_OFFLINE_QUALIFICATION_SUCCESSOR_PREFLIGHT"
+}

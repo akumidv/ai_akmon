@@ -3,8 +3,9 @@ ecosystem = "node"
 kind = "cli"
 covers = ["command:update"]
 
-# A mounted record belongs to the Python implementation: the JavaScript update refuses before the
-# plan, naming what the record holds (C107).
+# A mounted record that does not name ecosystem = "node" belongs to the Python implementation: the
+# JavaScript update refuses before the plan, naming what the record holds (C107; C129 serves a
+# mounted Node record).
 [fixture]
 attach = "native"
 warmup = false
@@ -15,5 +16,5 @@ argv = ["update", "--ref", "v{{version}}", "--project-root", "{{root}}"]
 
 [expected]
 exit = 2
+stderr = "akmon update: this project's integration record is not a Node attach (ecosystem = \"python\"); the JavaScript implementation updates records that name ecosystem = \"node\", and the Python implementation of akmon serves the other records\n"
 stdout = ""
-stderr = "akmon update: this project's integration record is not a Node package attach (mount = \"submodule\"); the JavaScript implementation updates Node projects in package mode only, and the Python implementation of akmon serves the other records\n"

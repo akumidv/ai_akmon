@@ -1,0 +1,13 @@
+{
+  "acceptance_basis": "owner direction after DNS-stop review: \u043f\u0440\u0438\u043d\u044f\u043b. \u0437\u0430\u043f\u0443\u0441\u043a\u0430\u0439",
+  "authorized_phases": [
+    "qwen_5000_route_check"
+  ],
+  "dispatch_allowed": true,
+  "operational_seal_sha256": "4264c87b2003316bf7bb8981b00df5ad0e4826c889e696eeab353c4455036bc0",
+  "owner_accepted": true,
+  "preflight_sha256": "246e6ffafb31a0d7e2de3e8ff452aad86b8c58b0347e46a931af8fc592dae391",
+  "record_type": "p3_v3_qwen_5000_route_v2_approval",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "schema": 1
+}

@@ -129,6 +129,10 @@ def test_the_javascript_wiring_of_the_real_tree_matches_the_node_declaration():
         == []
     )
     assert all(command.startswith("node ") for commands in wiring.values() for command in commands)
+    # both hooks directories are read (C129): the package one and a mount's
+    for vendor, commands in wiring.items():
+        assert any("/node_modules/akmon/js/hooks/" in command for command in commands), vendor
+        assert any("/_aitna/akmon/js/hooks/" in command for command in commands), vendor
 
 
 def test_a_node_declaration_missing_node_is_an_undeclared_binary():

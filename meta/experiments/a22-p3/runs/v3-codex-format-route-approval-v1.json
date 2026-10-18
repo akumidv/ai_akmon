@@ -1,0 +1,14 @@
+{
+  "acceptance_basis": "owner direction: account for Qwen thinking and continue with the scorer-format route",
+  "authorized_phases": [
+    "codex_format_route_check"
+  ],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "080abfb3f45d52a1057b274fc8ab9d2652dba02d983464c5c3661bd905831ea1",
+  "owner_accepted": true,
+  "preflight_report_sha256": "53f8dc286dc5dfe314d399d739a2f92b554c9e8be36e0ed954e7f3bc7e2df0cd",
+  "record_type": "p3_v3_codex_format_route_v1_approval",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "schema": 1
+}

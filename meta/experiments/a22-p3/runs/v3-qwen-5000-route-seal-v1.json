@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.24.7",
+  "codex_v3_ceiling": 5000000,
+  "input_observed_limit": 20000,
+  "manifest_sha256": "d0a01c0dc38e63507ff47dd713cd679e5c6688f04ead06156903106f8b0f9d7a",
+  "model": "qwen3.8-27b",
+  "old_qualification_approval_sha256": "7b129c95d76ec9321a35a7d51b85ac0a03b3803c8546af7c5d102aab843fc923",
+  "old_qualification_ledger_sha256": "ab0408ec2b373839b94fcb0fab5b2c08185032f97ac2ca71fa09237e76945b8e",
+  "old_qualification_seal_sha256": "7a6b4ee73eb41b105222e866bedd1723d0f701b50f89145555337121363e29b4",
+  "output_setting_and_observed_limit": 5000,
+  "packet_builder_sha256": "dc527df38e8d7fd95579d8d4f23be0a59bb7514cc6d88af4b02e9a97246b2ee8",
+  "packet_sha256": "5cce39ac1d12dcb99ab5623e0c44e541df4f471e07f8c972626d574adfcf450c",
+  "prior_codex_v3_charge": 273286,
+  "prior_qwen_route_seal_sha256": "b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79",
+  "prompt_sha256": "7d875d7eb91f2f06d2c0b869f6f6f21b23d5240d4de00bb96aa3dba89c583ce5",
+  "proposal_sha256": "669e4201a654355d23efe741405780a54728ef8b209b67846e38fad01ef30d36",
+  "provider_calls_started": 0,
+  "qwen_executable_sha256": "06c2be3fcb1b451931d3e100acc7edd3ff748c74189f6fcc70300b5cd758f8e6",
+  "record_type": "p3_v3_qwen_5000_route_seal",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "runner_sha256": "1bd21432ed769a76af139ee29ddc622dfbbdb572963f879304096fd06a0bacb8",
+  "runtime_root": "/tmp/a22-p3-v3-qwen-5000-route-runtime",
+  "schema": 1,
+  "scope": [
+    "qwen_5000_route_check"
+  ],
+  "scorer_helper_sha256": "5947219962ce3d7f8defefafb1f705acc414bf274c89cff1de8f872ddbc604d5",
+  "status": "offline_candidate_pending_owner_acceptance",
+  "thinking": "provider default retained"
+}

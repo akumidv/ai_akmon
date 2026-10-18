@@ -1,0 +1,30 @@
+id = "tools/coverage-map-unlabelled-plan"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/coverage_map"]
+
+# C33 review: a zone plan against a round whose every delegation is unlabelled would list every
+# planned zone as uncovered — the labels were never written, not the zones missed. The run fails
+# loudly instead (exit 2, the sentence on stderr) and writes no map. The usage banner around the
+# sentence is the argument parser's own text, so the shared contract is the sentence.
+
+[fixture.files]
+".claude/model-routing.log" = "2026-05-01T10:00:00\tsess-1\tk_explorer\thaiku\t-\tcheck token expiry\n2026-05-01T10:05:00\tsess-1\tk_mechanic\t-\t-\trename sweep\n2026-05-01T11:00:00\tsess-2\tk_reasoner\topus\tauth\tdebug the failure\n"
+"docs/zone-plan.md" = "- auth\n- api\n"
+
+[run]
+tool = "model_routing/coverage_map"
+argv = [
+  "--session",
+  "sess-1",
+  "--zone-plan",
+  "docs/zone-plan.md",
+  "--out",
+  "_aitna/artifacts/gates/coverage-unlabelled.md",
+]
+
+[expected]
+exit = 2
+stdout = ""
+stderr_contains = ["error: --zone-plan given, but none of the 2 delegation(s) in scope carries a zone label — every planned zone would read as uncovered; label the fan-out calls with [zone:<label>] or drop --zone-plan; no map written"]
+file_absent = ["_aitna/artifacts/gates/coverage-unlabelled.md"]

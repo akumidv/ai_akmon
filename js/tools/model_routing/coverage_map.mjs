@@ -63,6 +63,7 @@ import { delegationLogRel, parseDelegationEntries } from "./routing.mjs";
  * @property {string} all_covered_sentinel
  * @property {string} unlabelled_marker
  * @property {string} unlabelled_note
+ * @property {string} all_unlabelled_error
  * @property {string} summary_entries
  * @property {string} scope_session
  * @property {string} scope_all
@@ -139,6 +140,34 @@ export function parseZonePlan(text) {
 }
 
 /**
+ * Python's `str.casefold()` as an equality key: lower, upper, lower again folds `ß`/`ẞ` to `ss`
+ * and both sigmas together, the cases a single `toLowerCase()` leaves apart.
+ * @param {string} text
+ * @returns {string}
+ */
+function _casefold(text) {
+  return text.toLowerCase().toUpperCase().toLowerCase();
+}
+
+/**
+ * The refusal for a zone plan no delegation is labelled against, else null (C33 review).
+ *
+ * With a plan and in-scope delegations that all lack a zone label, every planned zone would read
+ * as uncovered — a map that says the fan-out missed everything because nobody wrote the label.
+ * That is a broken input, not a finding about coverage, so the run fails instead of writing it.
+ * @param {Iterable<DelegationEntry>} entries
+ * @param {string[] | null} zonePlan
+ * @returns {string | null}
+ */
+export function unlabelledPlanError(entries, zonePlan) {
+  const all = [...entries];
+  if (zonePlan === null || all.length === 0 || all.some((entry) => entry.zone)) {
+    return null;
+  }
+  return fill(_gateData().all_unlabelled_error, { count: String(all.length) });
+}
+
+/**
  * @param {DelegationEntry} entry
  * @returns {string}
  */
@@ -151,7 +180,7 @@ function _worker(entry) {
  *
  * `entries` are already scoped to the fan-out round (the CLI does the filtering). With a
  * `zonePlan`, planned zones with no worker surface as *uncovered seams* and worked zones absent
- * from the plan as *off-plan*.
+ * from the plan as *off-plan*; a label matches a planned zone case-insensitively.
  * @param {Iterable<DelegationEntry>} entries
  * @param {string[] | null} [zonePlan]
  * @returns {string}
@@ -191,9 +220,12 @@ export function buildCoverageMap(entries, zonePlan = null) {
   }
 
   if (zonePlan !== null) {
-    const labelled = new Set(order.filter((z) => z !== unlabelled));
-    const uncovered = zonePlan.filter((z) => !labelled.has(z));
-    const offPlan = order.filter((z) => z !== unlabelled && !zonePlan.includes(z));
+    // Matched case-insensitively (C33 review): `[zone:Auth]` covers a planned `auth`. Both sides
+    // keep their spelling in the output; only the comparison folds.
+    const labelled = new Set(order.filter((z) => z !== unlabelled).map(_casefold));
+    const planned = new Set(zonePlan.map(_casefold));
+    const uncovered = zonePlan.filter((z) => !labelled.has(_casefold(z)));
+    const offPlan = order.filter((z) => z !== unlabelled && !planned.has(_casefold(z)));
 
     lines.push("", data.uncovered_heading);
     if (uncovered.length > 0) {
@@ -438,6 +470,16 @@ function _parse(argv) {
 }
 
 /**
+ * A usage refusal: the one `error:` line on stderr, exit 2 (`argparse`'s `parser.error`).
+ * @param {string} message
+ * @returns {number}
+ */
+function _usageError(message) {
+  process.stderr.write(`${PROG}: error: ${message}\n`);
+  return 2;
+}
+
+/**
  * CLI entry point: assemble the scoped coverage map and write it under `artifacts/gates/`.
  * @param {string[]} [argv] the arguments (default: the process's)
  * @returns {number} The process exit code: 0, or 2 on a usage error.
@@ -476,8 +518,7 @@ export function main(argv = process.argv.slice(2)) {
   const data = /** @type {AgentsData} */ (read(posix.join(TREE_ROOT, "tools", "model_routing", "agents.json")));
   const logPath = options.log !== null ? pyPath(options.log) : pyPath(root, delegationLogRel(data));
   if (!isFile(logPath)) {
-    process.stderr.write(`${PROG}: error: delegation log not found: ${logPath}\n`);
-    return 2;
+    return _usageError(`delegation log not found: ${logPath}`);
   }
 
   /** @type {DelegationEntry[]} */ let entries;
@@ -489,12 +530,13 @@ export function main(argv = process.argv.slice(2)) {
     if (!(exc instanceof IsoError)) {
       throw exc;
     }
-    process.stderr.write(
-      `${PROG}: error: a delegation-log row cannot be placed inside --since/--until (${exc.message}); no map written\n`,
-    );
-    return 2;
+    return _usageError(`a delegation-log row cannot be placed inside --since/--until (${exc.message}); no map written`);
   }
   const zonePlan = options.zonePlan !== null ? parseZonePlan(readText(options.zonePlan)) : null;
+  const unlabelled = unlabelledPlanError(entries, zonePlan);
+  if (unlabelled !== null) {
+    return _usageError(unlabelled);
+  }
   const coverage = buildCoverageMap(entries, zonePlan);
 
   // The default lands under the *configured* dev layer, like every other generated artifact,

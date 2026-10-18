@@ -14,16 +14,27 @@ import os from "node:os";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { fill } from "../common/jsondata.mjs";
+import { readSyncData } from "../bin/sync.mjs";
+import { switchTag } from "../common/versions.mjs";
 import {
   ciInstall,
   detectManager,
+  detectedProfiles,
   detectNodeTools,
   effectiveAitnaRoot,
+  firstAttachEcosystem,
   main,
   mergeGitignore,
+  newestReleaseTag,
+  nodeSwitchCommand,
+  npxSpec,
   readInitData,
+  shellWord,
   tagForVersion,
   validatedAitnaRoot,
+  withoutEmptyChecks,
+  withoutRuffDefault,
 } from "./_init.mjs";
 
 const TREE = posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -283,34 +294,178 @@ test("an existing workflow is left alone and the step names the manager's comman
 
 // -- the refusals ------------------------------------------------------------------------------
 
-test("a mode other than package is refused with exit 2 and one line, before anything is written", async () => {
+/**
+ * The refusal of a first attach the Python implementation serves (C129).
+ * @param {string} why a key of `node_refuses_python_why`
+ * @param {string} mode
+ * @returns {string}
+ */
+function pythonRefusal(why, mode) {
+  const command = `uvx --from git+${data.akmon_repo}@${tagForVersion(VERSION)} akmon init --mode ${mode}`;
+  return `akmon init: ${data.node_refuses_python_ecosystem
+    .replace("{{why}}", data.node_refuses_python_why[why])
+    .replace("{{command}}", command)}\n`;
+}
+
+test("a mounted first attach of a repository that is not package.json-only is the Python implementation's", async () => {
   for (const mode of ["submodule", "vendored", "subtree"]) {
-    const root = project({ "package.json": PINNED }, { linked: true });
-    const result = await run(["--mode", mode, "--yes", "--project-root", root]);
-    assert.deepEqual(
-      { status: result.status, stdout: result.stdout, stderr: result.stderr },
-      { status: 2, stdout: "", stderr: `akmon init: ${data["node_refuses_mode"].replace("{{mode}}", mode)}\n` },
-    );
-    assert.deepEqual(Object.keys(snapshot(root)), ["package.json"]);
+    /** @type {Record<string, string>[]} */
+    const cases = [
+      { "package.json": PINNED, "pyproject.toml": "[project]\n" },
+      { "setup.py": "" },
+      // C129, owner accepted (a): a requirements file or a Python source beside package.json is Python
+      { "package.json": PINNED, "requirements.txt": "" },
+      { "package.json": PINNED, "app/x.py": "" },
+    ];
+    for (const files of cases) {
+      const root = project(files, { linked: true });
+      const result = await run(["--mode", mode, "--yes", "--project-root", root]);
+      assert.deepEqual(
+        { status: result.status, stdout: result.stdout, stderr: result.stderr },
+        { status: 2, stdout: "", stderr: pythonRefusal("inferred", mode) },
+      );
+      assert.deepEqual(Object.keys(snapshot(root)).sort(), Object.keys(files).sort());
+    }
   }
 });
 
-test("a record that is not Node package mode is refused, naming what it holds", async () => {
+test("a git-tracked Python source makes the repository Python, an untracked one does not", async () => {
+  const root = project({ "package.json": PINNED, "app/x.py": "" }, { linked: true });
+  git(["init", "-q", "-b", "main"], root);
+  assert.equal(firstAttachEcosystem(root, undefined, "vendored", "_aitna").ecosystem, "node", "untracked");
+  git(["add", "--", "app/x.py"], root);
+  assert.equal(firstAttachEcosystem(root, undefined, "vendored", "_aitna").ecosystem, "python", "tracked");
+  assert.equal(
+    firstAttachEcosystem(project({ "package.json": PINNED }), undefined, "vendored", "_aitna").ecosystem,
+    "node",
+  );
+});
+
+test("--ecosystem python is the Python implementation's in package mode too; --ecosystem node overrides the manifests", async () => {
+  const root = project({ "package.json": PINNED }, { linked: true });
+  const python = await run(["--ecosystem", "python", "--yes", "--project-root", root]);
+  assert.deepEqual(python, { status: 2, stdout: "", stderr: pythonRefusal("flag", "package") });
+  const mixed = project({ "package.json": "{}", "pyproject.toml": "[project]\n" });
+  const node = mountedCli([
+    "--mode",
+    "vendored",
+    "--ecosystem",
+    "node",
+    "--checks",
+    "none",
+    "--yes",
+    "--project-root",
+    mixed,
+  ]);
+  assert.equal(node.status, 0, node.stdout + node.stderr);
+  assert.ok(text(mixed, "_aitna/.akmon.toml").includes('mount = "vendored"\necosystem = "node"\n'));
+  const bad = await run(["--ecosystem", "ruby", "--project-root", root]);
+  assert.equal(bad.status, 2);
+  assert.equal(
+    bad.stderr,
+    "akmon init: error: argument --ecosystem: invalid choice: 'ruby' (choose from 'python', 'node')\n",
+  );
+});
+
+test("a Node record does not move back: --ecosystem python on it is refused", async () => {
+  const record = 'mount = "package"\necosystem = "node"\n';
+  const root = project({ "package.json": PINNED, "_aitna/.akmon.toml": record }, { linked: true });
+  const result = await run(["--ecosystem", "python", "--yes", "--project-root", root]);
+  assert.deepEqual(result, {
+    status: 2,
+    stdout: "",
+    stderr: `akmon init: ${data.node_refuses_reverse.replace("{{aitna}}", "_aitna")}\n`,
+  });
+  assert.equal(text(root, "_aitna/.akmon.toml"), record);
+});
+
+test("a record that does not name ecosystem node is refused, naming what it holds and, for a Python mount in a Node repository, the switch", async () => {
+  const mountSwitch = "node _aitna/akmon/js/akmon/cli.mjs init --ecosystem node";
+  /** @type {Array<[string, string, Record<string, string>, string | null]>} */
   const cases = [
-    ['mount = "submodule"\n', 'mount = "submodule"'],
-    ['mount = "vendored"\necosystem = "node"\n', 'mount = "vendored"'],
-    ['mount = "package"\n', 'ecosystem = "python"'],
-    ['mount = "package"\necosystem = "python"\n', 'ecosystem = "python"'],
-    ['ecosystem = "node"\n', 'mount = "submodule"'],
+    ['mount = "submodule"\n', 'ecosystem = "python"', {}, mountSwitch],
+    // a vendored copy switches through npx at the newer of the recorded and the running release
+    [
+      'mount = "vendored"\necosystem = "python"\nakmon_version = "0.3.0"\n',
+      'ecosystem = "python"',
+      {},
+      `npx github:akumidv/ai_akmon#${switchTag("0.3.0", VERSION)} init --ecosystem node`,
+    ],
+    [
+      'mount = "vendored"\necosystem = "python"\nakmon_version = "99.0.0"\n',
+      'ecosystem = "python"',
+      {},
+      "npx github:akumidv/ai_akmon#v99.0.0 init --ecosystem node",
+    ],
+    ['mount = "subtree"\n', 'ecosystem = "python"', { "pyproject.toml": "" }, null],
+    ['mount = "package"\n', 'ecosystem = "python"', {}, null],
+    ['mount = "package"\necosystem = "python"\n', 'ecosystem = "python"', {}, null],
+    ['mount = "submodule"\necosystem = "rust"\n', 'ecosystem = "rust"', {}, null],
   ];
-  for (const [record, found] of cases) {
-    const root = project({ "package.json": PINNED, "_aitna/.akmon.toml": record }, { linked: true });
+  for (const [record, found, files, command] of cases) {
+    const root = project({ "package.json": PINNED, "_aitna/.akmon.toml": record, ...files }, { linked: true });
     const result = await run(["--yes", "--project-root", root]);
+    const suffix = command === null ? "" : data.node_refuses_record_switch.replace("{{command}}", command);
     assert.equal(result.status, 2, record);
     assert.equal(result.stdout, "");
-    assert.equal(result.stderr, `akmon init: ${data["node_refuses_record"].replace("{{found}}", found)}\n`);
+    assert.equal(result.stderr, `akmon init: ${data["node_refuses_record"].replace("{{found}}", found)}${suffix}\n`);
     assert.equal(text(root, "_aitna/.akmon.toml"), record);
     assert.ok(!fs.existsSync(posix.join(root, "AGENTS.md")));
+  }
+});
+
+test("--ecosystem node moves a mounted Python record only, between two mounted modes", async () => {
+  /** @type {Array<[string, string[], string, string]>} */
+  const cases = [
+    ['mount = "package"\n', [], "package", "package"],
+    ['mount = "vendored"\n', ["--mode", "package", "--switch-mode"], "vendored", "package"],
+  ];
+  for (const [record, flags, previous, mode] of cases) {
+    const root = project({ "package.json": PINNED, "_aitna/.akmon.toml": record }, { linked: true });
+    const result = await run(["--ecosystem", "node", ...flags, "--yes", "--project-root", root]);
+    const refusal = data.node_switch_mounted_only.replace("{{previous}}", previous).replace("{{mode}}", mode);
+    assert.deepEqual(result, { status: 2, stdout: "", stderr: `akmon init: ${refusal}\n` });
+    assert.equal(text(root, "_aitna/.akmon.toml"), record);
+  }
+});
+
+test("nodeSwitchCommand: the mount's CLI for a submodule or a subtree, npx at the ref for a vendored copy", () => {
+  assert.equal(
+    nodeSwitchCommand(data, "_aitna", "submodule", "v1.0.0"),
+    "node _aitna/akmon/js/akmon/cli.mjs init --ecosystem node",
+  );
+  assert.equal(
+    nodeSwitchCommand(data, "dev", "subtree", "main"),
+    "node dev/akmon/js/akmon/cli.mjs init --ecosystem node",
+  );
+  assert.equal(
+    nodeSwitchCommand(data, "_aitna", "vendored", "v1.0.0"),
+    "npx github:akumidv/ai_akmon#v1.0.0 init --ecosystem node",
+  );
+});
+
+test("withoutRuffDefault cuts exactly the Python's ruff default out of a record, any run prefix, and nothing else", () => {
+  const head = 'mount = "vendored"\n[test]\n# runner = "uv run pytest"\n\n';
+  const table = (/** @type {string} */ entry) => `[check]\n${CHECK_HEADER.split("\n")[1]}\n${entry}\n`;
+  for (const prefix of ["", "uv run ", "poetry run "]) {
+    // the blank line before the table stays; `_recordChecks` trims the end before it appends
+    assert.equal(withoutRuffDefault(data, head + table(`ruff = "${prefix}ruff check {files}"`)), head.slice(0, -1));
+  }
+  // a table followed by another one: only the table goes
+  assert.equal(
+    withoutRuffDefault(data, `${head}${table('ruff = "ruff check {files}"')}\n[extra]\nx = "1"\n`),
+    `${head}[extra]\nx = "1"\n`,
+  );
+  for (const kept of [
+    head,
+    head + table('ruff = "ruff check --fix {files}"'),
+    head + table('ruff = "pdm run ruff check {files}"'),
+    `${head + table('ruff = "ruff check {files}"')}mypy = "mypy {files}"\n`,
+    `${head}[check]\nruff = "ruff check {files}"\n`,
+    `${head}[check]\n${CHECK_HEADER.split("\n")[1]}\n`,
+    `${head + table('ruff = "ruff check {files}"')}[check.ruff]\nfiles = ["*.py"]\n`,
+  ]) {
+    assert.equal(withoutRuffDefault(data, kept), null, kept);
   }
 });
 
@@ -325,7 +480,7 @@ test("a foreign record plus a mount-mode change is refused for the record, --swi
       {
         status: 2,
         stdout: "",
-        stderr: `akmon init: ${data["node_refuses_record"].replace("{{found}}", 'mount = "submodule"')}\n`,
+        stderr: `akmon init: ${data["node_refuses_record"].replace("{{found}}", 'ecosystem = "python"')}${data.node_refuses_record_switch.replace("{{command}}", "node _aitna/akmon/js/akmon/cli.mjs init --ecosystem node")}\n`,
       },
     );
     assert.equal(text(root, "_aitna/.akmon.toml"), record);
@@ -374,6 +529,30 @@ test("--checks own with nothing found records an empty [check] table, and a real
 });
 
 // -- [check]: the project's own JS/TS tools ----------------------------------------------------
+
+test("an explicit --checks decides an empty [check] table again; a table that names checks stays", async () => {
+  const root = project({ "package.json": PINNED }, { linked: true });
+  assert.equal((await run(["--checks", "none", "--yes", "--project-root", root])).status, 0);
+  fs.writeFileSync(posix.join(root, "eslint.config.js"), "");
+  const own = await run(["--checks", "own", "--yes", "--project-root", root]);
+  assert.equal(own.status, 0, own.stderr);
+  assert.ok(own.stdout.includes(`akmon init: ${data.checks_redecided_empty}\n`), own.stdout);
+  const record = text(root, "_aitna/.akmon.toml");
+  assert.equal(record.split("[check]").length, 2, "one table");
+  assert.ok(record.includes('eslint = { command = "npx --no-install eslint {files}"'), record);
+  const again = await run(["--checks", "none", "--yes", "--project-root", root]);
+  assert.equal(again.status, 0);
+  assert.ok(again.stdout.includes("[check] already names this project's checks — left untouched\n"));
+  assert.equal(text(root, "_aitna/.akmon.toml"), record);
+});
+
+test("withoutEmptyChecks cuts only an empty single [check] table (the Python _without_empty_checks)", () => {
+  const empty = `mount = "submodule"\n\n${CHECK_HEADER}`;
+  assert.equal(withoutEmptyChecks(empty), 'mount = "submodule"\n');
+  assert.equal(withoutEmptyChecks(`${empty}x = "y"\n`), null);
+  assert.equal(withoutEmptyChecks(`${empty}[check.sub]\n`), null);
+  assert.equal(withoutEmptyChecks('mount = "submodule"\n'), null);
+});
 
 const JS_TS = ["*.js", "*.mjs", "*.cjs", "*.jsx", "*.ts", "*.mts", "*.cts", "*.tsx"];
 
@@ -1021,4 +1200,435 @@ test("run as a process the stdout is the in-process stdout, and sync's lines com
   const routing = lines.indexOf("akmon init: running model-routing init (subagent definitions + local routing config)");
   assert.ok(sync > 0 && routing > sync + 1);
   assert.ok(lines[sync + 1].startsWith("updated: ") || lines[sync + 1].startsWith("ok: "));
+});
+
+// -- the language-profile imports (C127) -------------------------------------------------------
+
+test("the detected profiles follow the flags and the manifests, python first, none for an unknown language", () => {
+  assert.deepEqual(detectedProfiles(project(), undefined, undefined), []);
+  assert.deepEqual(detectedProfiles(project(), "custom", "rust"), []);
+  assert.deepEqual(detectedProfiles(project(), "package", "python"), ["python.md"]);
+  assert.deepEqual(detectedProfiles(project(), undefined, "TypeScript"), ["js.md"]);
+  assert.deepEqual(detectedProfiles(project({ "package.json": "{}" }), undefined, undefined), ["js.md"]);
+  assert.deepEqual(detectedProfiles(project({ "package.json": "{}", "pyproject.toml": "[project]\n" }), "", ""), [
+    "python.md",
+    "js.md",
+  ]);
+});
+
+test("a fresh block imports js.md after the common guardrail and keeps no classify step once classified", async () => {
+  const root = project({ "package.json": PINNED }, { linked: true });
+  const result = await run(["--yes", "--archetype", "library", "--project-root", root]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(text(root, "AGENTS.md").includes("@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/profiles/js.md\n"));
+  assert.ok(text(root, "AGENTS.md").includes("`@_aitna/.akmon/profiles/<name>.md`"));
+  assert.ok(!result.stdout.includes("classify the project"));
+  assert.ok(fs.existsSync(posix.join(root, "_aitna/.akmon/profiles/js.md")), "sync materialized the import");
+});
+
+test("a fresh block imports both profiles when both manifests are present, python first", async () => {
+  const root = project({ "package.json": PINNED, "pyproject.toml": '[project]\nname = "demo"\n' }, { linked: true });
+  const result = await run(["--yes", "--checks", "none", "--project-root", root]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(
+    text(root, "AGENTS.md").includes(
+      "@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/profiles/python.md\n@_aitna/.akmon/profiles/js.md\n",
+    ),
+  );
+  assert.ok(result.stdout.includes("classify the project's archetype against ARCHETYPES.md"), "still unclassified");
+  assert.ok(!result.stdout.includes("import the language profile"), "init already imported it (C127)");
+});
+
+test("a bare directory gets no profile import and keeps the classify step", async () => {
+  const root = project();
+  const result = await run(["--yes", "--project-root", root]);
+  assert.ok(text(root, "AGENTS.md").includes("@_aitna/.akmon/guardrails/_common.md\n\n"));
+  assert.ok(!/^@\S*profiles\//m.test(text(root, "AGENTS.md")));
+  assert.ok(result.stdout.includes("classify the project (archetype + language)"));
+  assert.ok(result.stdout.includes("import the language profile in AGENTS.md"));
+});
+
+// -- the mounted modes (C129) ------------------------------------------------------------------
+
+/**
+ * `init` run as a process with git's `file://` transport allowed for submodules (refused since
+ * CVE-2022-39253 unless set) — in the test's own environment, never in the shipped code.
+ * @param {string[]} args
+ * @param {string} [cwd]
+ */
+function mountedCli(args, cwd = os.tmpdir()) {
+  /** @type {NodeJS.ProcessEnv} */
+  const env = {
+    ...process.env,
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "protocol.file.allow",
+    GIT_CONFIG_VALUE_0: "always",
+  };
+  delete env.AITNA_ROOT;
+  const result = spawnSync(process.execPath, [CLI, "init", ...args], { env, cwd, encoding: "utf8" });
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+/**
+ * @param {string[]} args
+ * @param {string} cwd
+ */
+function git(args, cwd) {
+  const result = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+/**
+ * A local standard repository: the running tree's members (what a vendored Node copy holds),
+ * recorded once per entry of `tags`, each under that tag, one revision apart; `edit` changes the
+ * tree before a tag is recorded.
+ * @param {string[]} tags
+ * @param {(repo: string, tag: string) => void} [edit]
+ * @returns {string}
+ */
+function standardRepo(tags, edit = () => {}) {
+  const repo = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-standard-")));
+  for (const name of [...data.tree_members, ...data.tree_members_node]) {
+    if (fs.existsSync(posix.join(TREE, name))) {
+      fs.cpSync(posix.join(TREE, name), posix.join(repo, name), {
+        recursive: true,
+        filter: (source) => !/(?:^|\/)(?:__pycache__|node_modules)(?:\/|$)/.test(source),
+      });
+    }
+  }
+  git(["init", "-q", "-b", "main"], repo);
+  tags.forEach((tag, index) => {
+    fs.appendFileSync(posix.join(repo, "CHANGELOG.md"), `\n<!-- ${index} -->\n`);
+    edit(repo, tag);
+    git(["add", "-A"], repo);
+    git(["commit", "-q", "-m", tag], repo);
+    git(["tag", tag], repo);
+  });
+  return repo;
+}
+
+/**
+ * A Node consumer that is a git repository: `package.json` and no Python files.
+ * @returns {string}
+ */
+function nodeRepository() {
+  const root = project({ "package.json": JSON.stringify({ name: "demo", private: true }) });
+  git(["init", "-q", "-b", "main"], root);
+  return root;
+}
+
+test("vendored: the mount carries the standard, the CLI data and package.json; the mount's CLI verifies it green", () => {
+  const root = nodeRepository();
+  const result = mountedCli(["--mode", "vendored", "--yes", "--project-root", root]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const count = [...data.tree_members, ...data.tree_members_node].filter((name) =>
+    fs.existsSync(posix.join(TREE, name)),
+  ).length;
+  assert.ok(result.stdout.includes(`vendored ${count} standard-tree members into _aitna/akmon (pin: ${VERSION})`));
+  for (const member of [
+    "package.json",
+    "src/akmon/init.json",
+    "src/akmon/cli.json",
+    "js/akmon/cli.mjs",
+    ".gitignore",
+  ]) {
+    assert.ok(fs.existsSync(posix.join(root, "_aitna/akmon", member)), member);
+  }
+  assert.ok(!fs.existsSync(posix.join(root, "_aitna/akmon/js/akmon/cli.test.mjs")), "tests stay out of the mount");
+  assert.ok(!fs.existsSync(posix.join(root, "_aitna/akmon/meta")));
+  assert.ok(
+    text(root, "_aitna/.akmon.toml").includes(`mount = "vendored"\necosystem = "node"\nakmon_version = "${VERSION}"\n`),
+  );
+  const agents = text(root, "AGENTS.md");
+  assert.ok(agents.includes("@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/js.md\n"));
+  assert.ok(agents.includes("[`MODEL.md`](_aitna/akmon/MODEL.md)") && agents.includes("SHARED = `_aitna/akmon/`"));
+  assert.ok(text(root, "_aitna/agents/review/README.md").includes("(_aitna/akmon/roles/review.md)"));
+  const workflow = text(root, ".github/workflows/akmon.yml");
+  assert.ok(workflow.includes("submodules: recursive\n      - uses: actions/setup-node@v4\n"));
+  assert.ok(workflow.includes("      - run: node _aitna/akmon/js/akmon/cli.mjs sync --check\n"));
+  assert.ok(workflow.includes("      - run: node _aitna/akmon/js/akmon/cli.mjs verify --strict"));
+  assert.ok(text(root, ".claude/settings.json").includes('_aitna/akmon/js/hooks/role-on-code.mjs\\"'));
+  assert.equal(JSON.parse(text(root, ".oxlintrc.json")).extends[0], "./_aitna/akmon/profiles/oxlint.json");
+  assert.ok(result.stdout.includes("run `node _aitna/akmon/js/akmon/cli.mjs verify --strict` and review the diff"));
+  assert.ok(result.stdout.includes('`"akmon": "node _aitna/akmon/js/akmon/cli.mjs"`'), "the script is offered");
+  assert.ok(!result.stdout.includes("devDependencies"), "a mounted attach needs no manifest pin");
+  assert.ok(!fs.existsSync(posix.join(root, "_aitna/.akmon")), "nothing is materialized");
+  const verify = spawnSync(
+    process.execPath,
+    [posix.join(root, "_aitna/akmon", "js/akmon/cli.mjs"), "verify", "--quiet"],
+    { cwd: root, encoding: "utf8" },
+  );
+  assert.equal(verify.status, 0, verify.stdout + verify.stderr);
+});
+
+test("vendored: the mount's own CLI realigns in place instead of copying over itself; --ref is refused", () => {
+  const root = nodeRepository();
+  assert.equal(mountedCli(["--mode", "vendored", "--yes", "--project-root", root]).status, 0);
+  const own = spawnSync(process.execPath, [posix.join(root, "_aitna/akmon", "js/akmon/cli.mjs"), "init", "--yes"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  assert.equal(own.status, 0, own.stdout + own.stderr);
+  assert.ok(own.stdout.includes(`_aitna/akmon is the tree this CLI runs from — nothing to copy (pin: ${VERSION})`));
+  assert.ok(fs.existsSync(posix.join(root, "_aitna/akmon/js/akmon/cli.mjs")), "the mount survived");
+  const ref = mountedCli(["--ref", "v1.0.0", "--yes", "--project-root", root]);
+  assert.equal(ref.status, 2);
+  assert.ok(
+    ref.stderr.includes(`its pin is that package's version (${VERSION}) and \`--ref v1.0.0\` cannot change it`),
+  );
+});
+
+test("submodule: added at the newest release tag, staged as checked out; the mount's CLI generates, with the skew notice", () => {
+  const repo = standardRepo(["v9.0.0", "v9.1.0rc1"]);
+  const root = nodeRepository();
+  const result = mountedCli([
+    "--mode",
+    "submodule",
+    "--repo",
+    repo,
+    "--checks",
+    "none",
+    "--yes",
+    "--project-root",
+    root,
+  ]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes(`akmon init: git submodule add ${repo} _aitna/akmon\n`));
+  assert.ok(result.stdout.includes("akmon init: pinned _aitna/akmon at v9.0.0\n"), "a release candidate is no release");
+  assert.ok(
+    result.stderr.includes(`akmon: CLI is ${VERSION}, mounted/pinned standard is v9.0.0 — the mounted tree governs.\n`),
+  );
+  assert.ok(
+    text(root, "_aitna/.akmon.toml").includes('mount = "submodule"\necosystem = "node"\nakmon_version = "v9.0.0"\n'),
+  );
+  assert.equal(
+    git(["ls-files", "--stage", "--", "_aitna/akmon"], root).split(/\s+/)[1],
+    git(["rev-parse", "v9.0.0^{commit}"], repo),
+  );
+  assert.ok(fs.existsSync(posix.join(root, ".gitmodules")));
+  const again = mountedCli(["--yes", "--project-root", root]);
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.ok(again.stdout.includes("akmon init: _aitna/akmon is already mounted — realigning\n"));
+  assert.ok(again.stdout.includes("akmon init: _aitna/akmon left at its current pin (pass --ref to move it)\n"));
+});
+
+test("submodule: a pin move by the mount's own CLI generates with the code of the new pin, not the loaded one", () => {
+  // The later tag's sync prints a line when it is loaded: only a process started after the
+  // checkout runs it — the CLI that moves the pin has the earlier tag's sync in memory.
+  const marker = "sync of the moved pin loaded";
+  const repo = standardRepo(["v9.0.0", "v9.1.0"], (tree, tag) => {
+    if (tag === "v9.1.0") {
+      fs.appendFileSync(posix.join(tree, "js/bin/sync.mjs"), `\nprocess.stdout.write("${marker}\\n");\n`);
+    }
+  });
+  const root = nodeRepository();
+  const first = mountedCli([
+    "--mode",
+    "submodule",
+    "--repo",
+    repo,
+    "--ref",
+    "v9.0.0",
+    "--checks",
+    "none",
+    "--yes",
+    "--project-root",
+    root,
+  ]);
+  assert.equal(first.status, 0, first.stdout + first.stderr);
+  assert.ok(!first.stdout.includes(marker));
+  const own = posix.join(root, "_aitna/akmon", "js/akmon/cli.mjs");
+  const moved = spawnSync(process.execPath, [own, "init", "--ref", "v9.1.0", "--yes"], { cwd: root, encoding: "utf8" });
+  assert.equal(moved.status, 0, moved.stdout + moved.stderr);
+  assert.ok(moved.stdout.includes("akmon init: moved _aitna/akmon to v9.1.0 — left unstaged\n"), moved.stdout);
+  assert.ok(moved.stdout.includes(`${marker}\n`), moved.stdout);
+  assert.ok(text(root, "_aitna/.akmon.toml").includes('akmon_version = "v9.1.0"\n'));
+});
+
+test("subtree: the command that records history is printed with the mount's CLI, and nothing is written", () => {
+  const repo = standardRepo(["v9.0.0"]);
+  const root = nodeRepository();
+  const result = mountedCli(["--mode", "subtree", "--repo", repo, "--yes", "--project-root", root]);
+  assert.equal(result.status, 2);
+  assert.ok(
+    result.stderr.endsWith(
+      `    git subtree add --prefix _aitna/akmon ${repo} v9.0.0 --squash\n` +
+        "    node _aitna/akmon/js/akmon/cli.mjs init --mode subtree --ref v9.0.0\n",
+    ),
+    result.stderr,
+  );
+  assert.deepEqual(fs.readdirSync(root).sort(), [".git", "package.json"]);
+});
+
+test("--ecosystem node moves a Python-vendored mount: the copy gains the CLI data, the record, [check] and the wiring change, ruff.toml stays", () => {
+  const root = nodeRepository();
+  // What the Python init vendors: `tree_members` only, so the mount's own cli.mjs cannot run.
+  for (const name of data.tree_members) {
+    if (fs.existsSync(posix.join(TREE, name))) {
+      fs.cpSync(posix.join(TREE, name), posix.join(root, "_aitna/akmon", name), { recursive: true });
+    }
+  }
+  const ruff = fill(readSyncData().sync.ruff_toml_template, { rules_path: "_aitna/akmon/profiles/ruff.toml" });
+  const record = `mount = "vendored"\nakmon_version = "0.3.0"\n\n[check]\n${CHECK_HEADER.split("\n")[1]}\nruff = "uv run ruff check {files}"\n`;
+  const python = 'python3 \\"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/git-commit-guard.py\\"';
+  fs.mkdirSync(posix.join(root, "_aitna"), { recursive: true });
+  fs.writeFileSync(posix.join(root, "_aitna/.akmon.toml"), record);
+  fs.writeFileSync(posix.join(root, "ruff.toml"), ruff);
+  fs.mkdirSync(posix.join(root, ".claude"));
+  fs.writeFileSync(
+    posix.join(root, ".claude/settings.json"),
+    `{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "${python}"}]}]}}\n`,
+  );
+  const result = mountedCli(["--ecosystem", "node", "--yes", "--project-root", root]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes(`${fill(data.node_switch_log, { aitna: "_aitna" })}\n`));
+  assert.ok(result.stdout.includes(`${data.node_switch_checks_redecided}\n`));
+  assert.ok(fs.existsSync(posix.join(root, "_aitna/akmon/src/akmon/init.json")), "the copy gained the CLI data");
+  const written = text(root, "_aitna/.akmon.toml");
+  assert.ok(written.includes('ecosystem = "node"\n') && !written.includes("ruff check"), written);
+  assert.ok(written.includes('oxlint = { command = "npx --no-install oxlint {files}"'), written);
+  assert.equal(text(root, "ruff.toml"), ruff, "ruff.toml is never deleted");
+  const settings = text(root, ".claude/settings.json");
+  assert.ok(!settings.includes("python3") && settings.includes("_aitna/akmon/js/hooks/git-commit-guard.mjs"), settings);
+  assert.ok(text(root, ".codex/hooks.json").includes("_aitna/akmon/js/hooks/codex-hook.mjs"));
+  assert.ok(result.stdout.includes(`. ${data.node_switch_codex_step}\n`));
+  assert.ok(result.stdout.includes(`. ${data.node_switch_ruff_step}\n`));
+  // a realign is no move: no switch line, no Codex or ruff step, [check] left alone
+  const again = mountedCli(["--yes", "--project-root", root]);
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.ok(!again.stdout.includes(data.node_switch_codex_step) && !again.stdout.includes(data.node_switch_ruff_step));
+  assert.ok(again.stdout.includes("[check] already names this project's checks — left untouched"));
+});
+
+/**
+ * Every file under `root` with its bytes, `.git` left out.
+ * @param {string} root
+ * @returns {Record<string, string>}
+ */
+function tree(root) {
+  /** @type {Record<string, string>} */
+  const files = {};
+  for (const entry of fs.readdirSync(root, { recursive: true, withFileTypes: true })) {
+    const path = posix.relative(root, posix.join(entry.parentPath, entry.name));
+    if (entry.isFile() && !path.split("/").includes(".git")) {
+      files[path] = fs.readFileSync(posix.join(root, path), "latin1");
+    }
+  }
+  return files;
+}
+
+test("--ecosystem node refuses a subtree mount that predates the switch, naming the update first, and writes nothing", () => {
+  const root = nodeRepository();
+  const record = 'mount = "subtree"\necosystem = "python"\nakmon_version = "99.0.0"\n';
+  fs.mkdirSync(posix.join(root, "_aitna/akmon/src/akmon"), { recursive: true });
+  fs.mkdirSync(posix.join(root, "_aitna/akmon/bin"), { recursive: true });
+  fs.writeFileSync(posix.join(root, "_aitna/.akmon.toml"), record);
+  fs.writeFileSync(posix.join(root, "_aitna/akmon/src/akmon/init.json"), "{}\n");
+  fs.writeFileSync(posix.join(root, "_aitna/akmon/bin/sync.json"), '{"node_cli": {}}\n');
+  const before = tree(root);
+  const result = mountedCli(["--ecosystem", "node", "--ref", "v99.0.0", "--yes", "--project-root", root]);
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  const refusal = fill(data.node_switch_mount_predates, {
+    relative: "_aitna/akmon",
+    file: "src/akmon/init.json",
+    key: "node_switch_log",
+    ref: "v99.0.0",
+    update: `git subtree pull --prefix _aitna/akmon ${data.akmon_repo} v99.0.0 --squash`,
+    command: "node _aitna/akmon/js/akmon/cli.mjs init --ecosystem node --ref v99.0.0",
+  });
+  assert.equal(result.stderr, `akmon init: ${refusal}\n`);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(tree(root), before, "no file changed");
+});
+
+test("--ecosystem node checks a submodule at the --ref it moves to: an older tag is refused before the checkout", () => {
+  const repo = standardRepo(["v9.0.0", "v9.1.0"], (standard, tag) => {
+    const init = posix.join(standard, "src/akmon/init.json");
+    const parsed = JSON.parse(fs.readFileSync(posix.join(TREE, "src/akmon/init.json"), "utf8"));
+    if (tag === "v9.0.0") {
+      delete parsed.node_switch_log;
+    }
+    fs.writeFileSync(init, `${JSON.stringify(parsed, null, 2)}\n`);
+  });
+  const root = nodeRepository();
+  const first = mountedCli([
+    "--mode",
+    "submodule",
+    "--repo",
+    repo,
+    "--ref",
+    "v9.1.0",
+    "--checks",
+    "none",
+    "--yes",
+    "--project-root",
+    root,
+  ]);
+  assert.equal(first.status, 0, first.stdout + first.stderr);
+  // what the Python implementation records for the same mount
+  fs.writeFileSync(
+    posix.join(root, "_aitna/.akmon.toml"),
+    'mount = "submodule"\necosystem = "python"\nakmon_version = "v9.1.0"\n',
+  );
+  const before = tree(root);
+  const head = git(["rev-parse", "HEAD"], posix.join(root, "_aitna/akmon"));
+  const result = mountedCli([
+    "--ecosystem",
+    "node",
+    "--ref",
+    "v9.0.0",
+    "--repo",
+    repo,
+    "--yes",
+    "--project-root",
+    root,
+  ]);
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.ok(
+    result.stderr.includes(
+      "_aitna/akmon predates the move to this implementation (src/akmon/init.json there has no `node_switch_log`)",
+    ),
+    result.stderr,
+  );
+  assert.ok(
+    result.stderr.includes("    git -C _aitna/akmon fetch --tags && git -C _aitna/akmon checkout v9.1.0\n"),
+    result.stderr,
+  );
+  assert.deepEqual(tree(root), before, "no file changed");
+  assert.equal(git(["rev-parse", "HEAD"], posix.join(root, "_aitna/akmon")), head, "the mount did not move");
+  // at a release that has the switch, it completes
+  const moved = mountedCli(["--ecosystem", "node", "--yes", "--project-root", root]);
+  assert.equal(moved.status, 0, moved.stdout + moved.stderr);
+  assert.ok(text(root, "_aitna/.akmon.toml").includes('ecosystem = "node"\n'));
+});
+
+test("a mount-mode migration needs --switch-mode, and the old mount gone between two mounted modes", () => {
+  const root = nodeRepository();
+  assert.equal(mountedCli(["--mode", "vendored", "--yes", "--project-root", root]).status, 0);
+  const plain = mountedCli(["--mode", "submodule", "--yes", "--project-root", root]);
+  assert.equal(plain.status, 2);
+  assert.ok(plain.stderr.includes("this project is attached in mount mode 'vendored'; 'submodule' is a **migration**"));
+  assert.ok(plain.stderr.includes("`node _aitna/akmon/js/akmon/cli.mjs verify --strict` red"));
+  const flagged = mountedCli(["--mode", "submodule", "--switch-mode", "--yes", "--project-root", root]);
+  assert.equal(flagged.status, 2);
+  assert.ok(
+    flagged.stderr.endsWith("    node _aitna/akmon/js/akmon/cli.mjs init --mode submodule --switch-mode\n"),
+    flagged.stderr,
+  );
+  assert.ok(text(root, "_aitna/.akmon.toml").includes('mount = "vendored"'), "unchanged");
+});
+
+test("npxSpec and shellWord spell the hand-over commands as the Python does", () => {
+  assert.equal(npxSpec("https://github.com/akumidv/ai_akmon", "v1.0.0"), "github:akumidv/ai_akmon#v1.0.0");
+  assert.equal(npxSpec("https://github.com/akumidv/ai_akmon.git", "v1.0.0"), "github:akumidv/ai_akmon#v1.0.0");
+  assert.equal(npxSpec("/srv/akmon", "v1.0.0"), "git+file:///srv/akmon#v1.0.0");
+  assert.equal(npxSpec("ssh://git@example.org/akmon.git", "v1.0.0"), "git+ssh://git@example.org/akmon.git#v1.0.0");
+  assert.equal(shellWord("github:akumidv/ai_akmon#v1.0.0"), "github:akumidv/ai_akmon#v1.0.0");
+  assert.equal(shellWord("a b"), "'a b'");
+});
+
+test("newestReleaseTag takes final v-tags only, ordered numerically", () => {
+  assert.equal(newestReleaseTag(["v0.9.0", "v0.10.0", "v1.0.0rc1", "1.2.0", "v0.10.0-3-gabc"]), "v0.10.0");
+  assert.equal(newestReleaseTag(["main", "v1.0.0.dev0"]), null);
 });

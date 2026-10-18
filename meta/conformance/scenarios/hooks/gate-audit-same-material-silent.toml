@@ -1,0 +1,30 @@
+# C25 review: the one-hold marker is keyed by the role and a digest of the counted Findings, not
+# by their count. This session already held this very material (its marker is seeded), and the
+# prose around the section changed — the turn ends unheld. Different material with the same count
+# would be a new gate (pinned by the routing table's mark/gate-once-* rows).
+id = "hooks/gate-audit-same-material-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:gate-audit"]
+
+[fixture]
+attach = "native"
+tmp_files = { "akmon-gate-audit-review-79e85c9688379ba3-a6672ed065e9bf4969d9" = "" }
+files = { "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 agent: review — conformance"}]}}
+"""}
+
+[run]
+script = "gate-audit"
+
+[run.payload]
+hook_event_name = "Stop"
+stop_hook_active = false
+session_id = "sess-ga-held"
+cwd = "{{root}}"
+transcript_path = "{{root}}/transcript.jsonl"
+last_assistant_message = "Second pass, same material.\n\n## Findings\n\n- The sync path drops the marker on a stale tree.\n- The verify gate passes on a mounted fixture.\n- The record mode reseeds expectations silently.\n\n**Recommendation**: fix the sync path first."
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

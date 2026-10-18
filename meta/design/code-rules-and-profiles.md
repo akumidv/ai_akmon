@@ -79,7 +79,8 @@ profiles/quant.md              domain profile, unchanged
 `guardrails/python.md` went. `bin/sync.py::imported_standard_files` and package-mode
 materialization cover `profiles/` (an imported profile is materialized at
 `<AITNA_ROOT>/.akmon/profiles/`, as a guardrail is); `common/materialization.py::stale_materialized`
-covers both directories and TOML; the `init` block's example import, `ARCHETYPES.md`'s map,
+covers both directories and TOML; the `init` block's profile imports (one per detected language
+since C127, [ADR-0014/D02](../decisions/0014-code-rules-catalog-and-language-profiles.md#d02--init-writes-the-language-profile-import-verify-warns-on-a-missing-or-unresolved-one)), `ARCHETYPES.md`'s map,
 `MODEL.md` §5, `meta/CONCEPT.md` §5, `README.md` and the role docs follow.
 
 **Migration.** A consumer that imports `guardrails/python.md` gets a plan error from `sync`
@@ -110,8 +111,8 @@ configuration in a subdirectory keeps that file's `**/test_*.py` and `conftest.p
 its own tests, and its `requires-python` still sets the target version.
 `meta/tests/test_ruff_profile.py` carries both.
 
-In package mode the path `extend` names must live in the repository — the same reason the
-guardrails are materialized — so `sync` reads the project's ruff configuration
+In package mode the path `extend` names must live in the repository — the same reason the imported
+guardrails and profiles are materialized — so `sync` reads the project's ruff configuration
 (`bin/sync.py::ruff_extends`) and materializes an extended `profiles/ruff.toml` at
 `<AITNA_ROOT>/.akmon/profiles/ruff.toml`, banner as a TOML comment, kept fresh like a profile.
 An `extend` of a file the standard does not ship is a plan error; an `extend` of the project's

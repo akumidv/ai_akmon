@@ -48,10 +48,12 @@ def test_legacy_partial_attempt_without_registered_id_is_blocked():
 
 def test_turn_usage_requires_input_and_output_and_rejects_bool():
     assert driver._turn_usage({"last_token_usage": {"input_tokens": 8, "output_tokens": 2}}) == {
-        "input_tokens": 8, "output_tokens": 2,
+        "input_tokens": 8,
+        "output_tokens": 2,
     }
     assert driver._turn_usage({"last_token_usage": {"input_tokens": 8, "output_tokens": 0}}) == {
-        "input_tokens": 8, "output_tokens": 0,
+        "input_tokens": 8,
+        "output_tokens": 0,
     }
     for usage in (
         {"input_tokens": 8},
@@ -65,8 +67,7 @@ def test_turn_usage_requires_input_and_output_and_rejects_bool():
 def test_each_turn_is_reserved_before_cli_and_completed_once(monkeypatch, tmp_path):
     order = []
     completions = []
-    args = SimpleNamespace(run_id="run-1", scratch=tmp_path, model="pinned-model",
-                           effort="medium")
+    args = SimpleNamespace(run_id="run-1", scratch=tmp_path, model="pinned-model", effort="medium")
     monkeypatch.setattr(driver, "LEDGER_PATHS", (tmp_path / "ledger",) * 4)
 
     def reserve(subject_id, turn_id, **kwargs):
@@ -78,9 +79,16 @@ def test_each_turn_is_reserved_before_cli_and_completed_once(monkeypatch, tmp_pa
         return ([{"type": "agent_message"}], f"raw-{turn}")
 
     def usage(args, events, **kwargs):
-        return ({"input_tokens": 100 + kwargs["turn_index"], "output_tokens": 20},
-                {"artifact_path": "usage.json", "artifact_sha256": "a" * 64,
-                 "request_id": "request", "session_id": "session", "model_id": "pinned-model"})
+        return (
+            {"input_tokens": 100 + kwargs["turn_index"], "output_tokens": 20},
+            {
+                "artifact_path": "usage.json",
+                "artifact_sha256": "a" * 64,
+                "request_id": "request",
+                "session_id": "session",
+                "model_id": "pinned-model",
+            },
+        )
 
     def complete(call_id, **kwargs):
         order.append(("complete", call_id))
@@ -93,14 +101,24 @@ def test_each_turn_is_reserved_before_cli_and_completed_once(monkeypatch, tmp_pa
 
     for turn in (1, 2):
         driver.run_accounted_codex(
-            args, ["codex"], subject_attempt_id="b" * 32, turn_id=f"turn-{turn}",
-            turn_index=turn - 1, expected_turns=turn, input_caps=(40_000,) * turn,
-            turn=turn, arm_text="arm",
+            args,
+            ["codex"],
+            subject_attempt_id="b" * 32,
+            turn_id=f"turn-{turn}",
+            turn_index=turn - 1,
+            expected_turns=turn,
+            input_caps=(40_000,) * turn,
+            turn=turn,
+            arm_text="arm",
         )
 
     assert order == [
-        ("reserve", "turn-1"), ("dispatch", 1), ("complete", f"{1:032x}"),
-        ("reserve", "turn-2"), ("dispatch", 2), ("complete", f"{2:032x}"),
+        ("reserve", "turn-1"),
+        ("dispatch", 1),
+        ("complete", f"{1:032x}"),
+        ("reserve", "turn-2"),
+        ("dispatch", 2),
+        ("complete", f"{2:032x}"),
     ]
     assert [completion["actual_usage"] for completion in completions] == [
         {"input_tokens": 100, "output_tokens": 20},
@@ -111,12 +129,12 @@ def test_each_turn_is_reserved_before_cli_and_completed_once(monkeypatch, tmp_pa
 
 def test_unverifiable_usage_closes_call_as_failed_and_stops_dispatch(monkeypatch, tmp_path):
     completions = []
-    args = SimpleNamespace(run_id="run-1", scratch=tmp_path, model="pinned-model",
-                           effort="medium")
+    args = SimpleNamespace(run_id="run-1", scratch=tmp_path, model="pinned-model", effort="medium")
     monkeypatch.setattr(driver, "LEDGER_PATHS", (tmp_path / "ledger",) * 4)
     monkeypatch.setattr(driver.usage_ledger, "reserve_subject_call", lambda *a, **k: "c" * 32)
-    monkeypatch.setattr(driver.usage_ledger, "complete_subject_call",
-                        lambda call_id, **kwargs: completions.append(kwargs))
+    monkeypatch.setattr(
+        driver.usage_ledger, "complete_subject_call", lambda call_id, **kwargs: completions.append(kwargs)
+    )
     monkeypatch.setattr(driver, "run_codex", lambda *a, **k: ([{"type": "agent_message"}], "raw"))
 
     def missing_usage(*_args, **_kwargs):
@@ -125,9 +143,15 @@ def test_unverifiable_usage_closes_call_as_failed_and_stops_dispatch(monkeypatch
     monkeypatch.setattr(driver, "_persisted_usage_evidence", missing_usage)
     with pytest.raises(ValueError, match="lacks token usage"):
         driver.run_accounted_codex(
-            args, ["codex"], subject_attempt_id="b" * 32, turn_id="turn-1",
-            turn_index=0, expected_turns=1, input_caps=(40_000,), turn=1, arm_text="arm",
+            args,
+            ["codex"],
+            subject_attempt_id="b" * 32,
+            turn_id="turn-1",
+            turn_index=0,
+            expected_turns=1,
+            input_caps=(40_000,),
+            turn=1,
+            arm_text="arm",
         )
 
-    assert completions == [{"outcome": "failed", "failure_code": "missing_usage",
-                            "paths": driver.LEDGER_PATHS}]
+    assert completions == [{"outcome": "failed", "failure_code": "missing_usage", "paths": driver.LEDGER_PATHS}]

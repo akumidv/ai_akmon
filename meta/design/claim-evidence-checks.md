@@ -25,8 +25,9 @@ shapes are CD1–CD5 in the [distortion register](agent-decision-distortions.md)
     a `block` reason reaches the model (M87).
   - C25 built a Stop hook on it. It counts findings and options, and C98 measured it firing on
     zero real turns.
-  - codex-cli has no main-agent stop event (M88). It does have `postToolUse` and a subagent stop
-    event (M62).
+  - Not wired on Codex: M151 (codex 0.162.1) suggests a main-agent `Stop` exists, contrary to
+    M88; a live probe is pending (C128). It does have `postToolUse` and a subagent stop event
+    (M62).
   - The qwen CLI's hooks are unmeasured.
 - **Audits exist, but they are heavy and manual.**
   - The `auditor` tier is pinned to the strongest model and is run by hand at gates (ADR 0005).
@@ -59,7 +60,8 @@ verification is incomplete" or "a cited row is superseded".
   a cited record, and puts CD4's provenance in view.
 - **Against.** It cannot read meaning, so CD1 and CD5 (configured or generated taken as running)
   and the wrong-check failure stay out of reach. It needs a transcript parser for each harness.
-  On Codex, with no main-agent stop event, it can run only at session end or from a command. It
+  On Codex, until a main-agent `Stop` is confirmed live (M151 suggests one; probe pending, C128),
+  it can run only at session end or from a command. It
   must not detect "a completion claim" by keywords. C98 shows how a text anchor fails silently
   across languages and phrasing, so the ledger is shown unconditionally, never triggered by a
   claim.

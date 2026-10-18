@@ -96,6 +96,35 @@ def test_zone_plan_notes_unlabelled_delegations():
     assert "2 delegation(s) carried no" in out
 
 
+def test_zone_plan_matches_labels_case_insensitively():
+    """C33 review: `Auth` covers the planned `auth`; both keep their spelling in the map."""
+    out = coverage_map.build_coverage_map([_entry("Auth"), _entry("STRASSE")], zone_plan=["auth", "straße", "io"])
+    assert "| Auth |" in out
+    assert "### Uncovered zones (planned, no worker)\n- io" in out
+    assert "- auth" not in out and "- straße" not in out
+    assert "Off-plan" not in out
+
+
+def test_an_all_unlabelled_round_against_a_plan_is_an_error():
+    """C33 review: with a plan, a round that wrote no label at all is a broken input."""
+    error = coverage_map.unlabelled_plan_error([_entry(None), _entry(None)], ["auth"])
+    assert error is not None and "none of the 2 delegation(s) in scope carries a zone label" in error
+    assert coverage_map.unlabelled_plan_error([_entry(None), _entry("auth")], ["auth"]) is None
+    assert coverage_map.unlabelled_plan_error([_entry(None)], None) is None
+    assert coverage_map.unlabelled_plan_error([], ["auth"]) is None
+
+
+def test_cli_fails_loudly_on_an_all_unlabelled_round_with_a_plan(tmp_path, capsys):
+    root = _log_project(tmp_path, ["T0\tsess-1\tk_explorer\tsmall\t-\tcheck tokens"])
+    plan = root / "plan.txt"
+    plan.write_text("auth\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        coverage_map.main(["--project-root", str(root), "--session", "sess-1", "--zone-plan", str(plan)])
+    assert exc.value.code == 2
+    assert "carries a zone label" in capsys.readouterr().err
+    assert not (root / "_aitna" / "artifacts").exists()
+
+
 # --------------------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------------------

@@ -12,19 +12,22 @@
  *     akmon sync --dry-run     print what would change
  *     akmon sync --check       write nothing; findings, exit 1 when a generated file is stale
  *
- * This implementation serves Node package mode only (ADR 0020 D02): the record says
- * `mount = "package"` and `ecosystem = "node"`. Any other record is refused with exit 2 and the
- * `unsupported_record` text of `bin/sync.json` — a wrong-spelling write is worse than a refusal.
+ * This implementation serves Node projects (ADR 0020 D02, its C129 amendment): the record says
+ * `ecosystem = "node"`, in package mode (`mount = "package"`) or a mounted one (`submodule`,
+ * `vendored`, `subtree`). Any other record is refused with exit 2 and the `unsupported_record` text
+ * of `bin/sync.json` — a wrong-spelling write is worse than a refusal.
  *
  * What is Node's own (ADR 0020 D05):
- * - the hook command is `node "<anchor>/node_modules/akmon/js/hooks/<script>.mjs"`; the spelling is
- *   data (`node_hook_command`, `node_codex_hook_command`). The wiring depends on nothing in the
- *   project but the anchor, so `claudeHooks`/`codexHooks` take no root;
- * - the standard tree of a Node project is `<root>/node_modules/akmon`, spelled **unresolved**
+ * - the hook command is `node "<anchor>/<hooks dir>/<script>.mjs"`, the hooks directory being
+ *   `node_modules/akmon/js/hooks` in package mode and `<AITNA_ROOT>/akmon/js/hooks` in a mounted one
+ *   (`nodeHooksDir`); the spelling is data (`node_hook_command`, `node_codex_hook_command`, one
+ *   `{{hooks_dir}}` placeholder each);
+ * - the standard tree of a Node package project is `<root>/node_modules/akmon`, spelled **unresolved**
  *   (pnpm makes it a link into `.pnpm/akmon@<version>/…`, a path that carries the version and must
  *   never reach a committed file). `standardTreeRoot` answers that spelling when its realpath is the
- *   running tree, the running tree's realpath otherwise. Inside the project root, a standard skill's
- *   stub points at it with a relative link, never through `$(akmon path)`;
+ *   running tree, the running tree's realpath otherwise; a mounted record reads the mount, as the
+ *   Python does. Inside the project root, a standard skill's stub points at it with a relative link,
+ *   never through `$(akmon path)`;
  * - `packagePinStatus` reads `package.json`, and the tree's own version (`installedAkmonVersion`) is
  *   the `version` of its `package.json`. The launcher (`launcher_relative`, `is_executable_file`,
  *   `_cli_name`) is the Python carrier's and has no twin.
@@ -53,6 +56,7 @@
  *   `argparse` prints its usage block with every error and abbreviates long options (`--dry`).
  */
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,6 +66,7 @@ import { TomlError, parse as parseToml } from "../vendor/smol-toml/dist/index.js
 import { Finding, lineSafe, printFindings, readFindingsData } from "../common/findings.mjs";
 import { fill, read } from "../common/jsondata.mjs";
 import { FloatValue, wiringForm } from "../common/json_writer.mjs";
+import { fnmatchCase } from "../common/glob.mjs";
 import { generatedBanner, generatedMarker, importedDirs, materializedText } from "../common/materialization.mjs";
 import { aitnaRoot, aitnaRootName, resolveProjectRoot } from "../common/project_root.mjs";
 import { recordedEcosystem, recordedMount } from "../common/record.mjs";
@@ -94,7 +99,7 @@ import { codePointCompare, codePointSort } from "../common/sort.mjs";
  * @property {string} node_hook_command
  * @property {string} node_codex_hook_command
  * @property {string} unsupported_record
- * @property {{no_record: string, mount: string, ecosystem: string}} unsupported_found
+ * @property {{no_record: string, ecosystem: string}} unsupported_found
  * @property {Record<string, Array<{matcher: string | null, commands: string[]}>>} claude_hooks
  * @property {Record<string, Array<{matcher: string, commands: Array<[string, string]>}>>} codex_hooks
  * @property {{claude_md: string, copilot_md: string, gemini_md: string, codex_readme: string}} vendor_pointers
@@ -103,7 +108,10 @@ import { codePointCompare, codePointSort } from "../common/sort.mjs";
  * @property {string[]} skill_stub_dirs
  * @property {string} always_materialized
  * @property {Record<string, string>} moved_imports
+ * @property {Array<{profile: string, languages: string[], manifests: string[]}>} language_profiles
  * @property {Array<[string, string[]]>} ruff_configs
+ * @property {string} ruff_toml_template
+ * @property {{files: string[], sources: string, walk_limit: number}} python_markers
  * @property {Record<string, {message: string, fix: string}>} check_findings
  * @property {{changed: {dry_run: string, write: string}, deleted: {dry_run: string, write: string}, ok: string, error: string, no_changes: string}} summary_verbs
  */
@@ -214,16 +222,143 @@ function _sameDirectory(path, other) {
 }
 
 /**
- * The standard-tree content this script operates against for `projectRoot`: `<root>/node_modules/akmon`
- * — spelled unresolved — when that path is the running tree, the running tree's realpath otherwise.
- * The installed package *is* the pin, so no mount is ever consulted (ADR 0020 D02: the mounted modes
- * run the Python implementation).
+ * The standard-tree content this script operates against for `projectRoot`. A mounted record reads
+ * the mount at `<AITNA_ROOT>/akmon` when it exists (`bin/sync.py::standard_tree_root`, ADR 0020 D02 as
+ * amended by C129). Package mode reads `<root>/node_modules/akmon` — spelled unresolved — when that
+ * path is the running tree, the running tree's realpath otherwise: the installed package *is* the
+ * pin, so a lingering mount directory from a prior mode does not shadow it.
  * @param {string} projectRoot
  * @returns {string}
  */
 export function standardTreeRoot(projectRoot) {
+  const mounted = pyPath(aitnaRoot(projectRoot), "akmon");
+  if (!isPackageMode(projectRoot) && _exists(mounted)) {
+    return mounted;
+  }
   const standard = pyPath(projectRoot, "node_modules", "akmon");
   return _sameDirectory(standard, TREE_ROOT) ? standard : TREE_ROOT;
+}
+
+/**
+ * The directory the Node hook wiring runs its scripts from, relative to the project root:
+ * `node_modules/akmon/js/hooks` in package mode (ADR 0020 D05), `<AITNA_ROOT>/akmon/js/hooks` in a
+ * mounted one (the C129 amendment of D02). The `{{hooks_dir}}` of both hook-command templates.
+ * @param {string} projectRoot
+ * @returns {string}
+ */
+export function nodeHooksDir(projectRoot) {
+  return isPackageMode(projectRoot) ? "node_modules/akmon/js/hooks" : `${aitnaRootName()}/akmon/js/hooks`;
+}
+
+/**
+ * The bytes of the `ruff.toml` the Python `init` writes (`ruff_toml_template`), one for each mode's
+ * rules path — `<aitna>/.akmon` in package mode, `<aitna>/akmon` mounted: what `verify`'s
+ * `check.ruff-without-python` and `init`'s move of a Python record to Node (C129) recognize, byte for
+ * byte, as akmon's own file rather than one the owner edited or wrote.
+ * @param {SyncData} data
+ * @param {string} aitna
+ * @returns {Buffer[]}
+ */
+export function ruffTomlTemplates(data, aitna) {
+  return [".akmon", "akmon"].map((mount) =>
+    Buffer.from(fill(data.sync.ruff_toml_template, { rules_path: `${aitna}/${mount}/profiles/ruff.toml` }), "utf8"),
+  );
+}
+
+/**
+ * Whether `root` holds Python (`python_markers`) — the one answer, the Python `has_python` (C129): a
+ * marker file at the root (a manifest, a requirements file, a lockfile, by glob), else a Python
+ * source outside the dev layer `aitna` and `node_modules` — the files git tracks in a work tree,
+ * otherwise a walk that also skips dot-directories and stops after `walk_limit` entries.
+ * @param {SyncData} data
+ * @param {string} root
+ * @param {string} aitna
+ * @returns {boolean}
+ */
+export function hasPython(data, root, aitna) {
+  const markers = data.sync.python_markers;
+  /** @type {string[]} */
+  let names;
+  try {
+    names = fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((entry) => isFile(posix.join(root, entry.name)))
+      .map((entry) => entry.name);
+  } catch {
+    return false;
+  }
+  if (names.some((name) => markers.files.some((pattern) => fnmatchCase(name, pattern)))) {
+    return true;
+  }
+  const sources =
+    _trackedFiles(root, markers.sources) ?? _walkedFiles(root, markers.sources, aitna, markers.walk_limit);
+  return sources.some((path) => !_outsideProjectCode(path, aitna));
+}
+
+/**
+ * Whether a root-relative path sits in the dev layer or a `node_modules` directory.
+ * @param {string} relative
+ * @param {string} aitna
+ * @returns {boolean}
+ */
+function _outsideProjectCode(relative, aitna) {
+  return relative === aitna || relative.startsWith(`${aitna}/`) || relative.split("/").includes("node_modules");
+}
+
+/**
+ * The files git tracks under `root` matching `pattern`; `null` outside a work tree (or without git).
+ * @param {string} root
+ * @param {string} pattern
+ * @returns {string[] | null}
+ */
+function _trackedFiles(root, pattern) {
+  const listed = spawnSync("git", ["ls-files", "-z", "--", pattern], { cwd: root, encoding: "utf8" });
+  if (listed.error !== undefined || listed.status !== 0) {
+    return null;
+  }
+  return listed.stdout.split("\0").filter((name) => name !== "");
+}
+
+/**
+ * Root-relative files matching `pattern`, skipping the dev layer, `node_modules` and dot-directories:
+ * breadth first, in directory order, as the Python twin walks; it stops after `limit` directory
+ * entries — a project too large to walk counts only what was seen by then.
+ * @param {string} root
+ * @param {string} pattern
+ * @param {string} aitna
+ * @param {number} limit
+ * @returns {string[]}
+ */
+function _walkedFiles(root, pattern, aitna, limit) {
+  /** @type {string[]} */
+  const found = [];
+  let seen = 0;
+  /** @type {string[]} */
+  const pending = [""];
+  while (pending.length > 0) {
+    const relative = /** @type {string} */ (pending.shift());
+    let entries;
+    try {
+      entries = fs.readdirSync(relative === "" ? root : posix.join(root, relative), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    seen += entries.length;
+    if (seen > limit) {
+      return found;
+    }
+    for (const entry of entries) {
+      const path = relative === "" ? entry.name : `${relative}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (!entry.name.startsWith(".") && entry.name !== "node_modules" && path !== aitna) {
+          pending.push(path);
+        }
+      } else if (fnmatchCase(entry.name, pattern)) {
+        found.push(path);
+      }
+    }
+  }
+  return found;
 }
 
 /**
@@ -499,17 +634,21 @@ function _object(/** @type {Array<[string, Json]>} */ pairs) {
 }
 
 /**
- * The Codex wiring: `node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs"`
- * with the advisory name appended. The matcher/command table lives in `sync.json`: routes, not
+ * The Codex wiring: `node "$(git rev-parse --show-toplevel)/<hooks dir>/codex-hook.mjs"` with the
+ * advisory name appended, the hooks directory being {@link nodeHooksDir}'s. The matcher/command table lives in `sync.json`: routes, not
  * spellings — `Edit`, `Write` and `apply_patch` are three live aliases for the same patch call,
  * while the shell (the route its model took when a denied patch was refused) matches as `Bash`
  * (C49, measured on codex 0.146.0). Not widened to `.*`: an unconditional hook on every shell call
  * costs latency and noise on the hottest tool and buys precision nowhere.
  * @param {SyncData} data
+ * @param {string} root
  * @returns {Map<string, Json>}
  */
-export function codexHooks(data) {
-  const base = fill(data.sync.node_codex_hook_command, { anchor: "$(git rev-parse --show-toplevel)" });
+export function codexHooks(data, root) {
+  const base = fill(data.sync.node_codex_hook_command, {
+    anchor: "$(git rev-parse --show-toplevel)",
+    hooks_dir: nodeHooksDir(root),
+  });
   const hooks = new Map();
   for (const [event, entries] of Object.entries(data.sync.codex_hooks)) {
     hooks.set(
@@ -535,17 +674,20 @@ export function codexHooks(data) {
 }
 
 /**
- * The Claude wiring: `node "$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/<script>.mjs"`, from the
- * matcher/command table of `sync.json`. The Bash entry also carries the unclassified-shell-route
+ * The Claude wiring: `node "$CLAUDE_PROJECT_DIR/<hooks dir>/<script>.mjs"` ({@link nodeHooksDir}), from
+ * the matcher/command table of `sync.json`. The Bash entry also carries the unclassified-shell-route
  * diagnostic (C49, ADR-0012/D02): the edit-tool advisories would not see a write that arrives
  * through Bash. The combined-matcher entry stays one entry because `mergeHookEntries` dedups by
  * command; it includes Read|Grep|Glob so the nudge/ask also see read/sweep drift. UserPromptSubmit
  * is per-turn (a mid-session /model switch rebinds silently); Stop holds a turn at or above the
- * gate's count floors (C25) — Claude only, Codex 0.155.1 has no main-agent stop event.
+ * gate's count floors (C25) — Claude only; not wired on Codex until a live probe confirms its
+ * main-agent Stop (M151).
  * @param {SyncData} data
+ * @param {string} root
  * @returns {Map<string, Json>}
  */
-export function claudeHooks(data) {
+export function claudeHooks(data, root) {
+  const hooksDir = nodeHooksDir(root);
   const hooks = new Map();
   for (const [event, entries] of Object.entries(data.sync.claude_hooks)) {
     hooks.set(
@@ -554,7 +696,10 @@ export function claudeHooks(data) {
         const commands = entry.commands.map((script) =>
           _object([
             ["type", "command"],
-            ["command", fill(data.sync.node_hook_command, { anchor: "$CLAUDE_PROJECT_DIR", script })],
+            [
+              "command",
+              fill(data.sync.node_hook_command, { anchor: "$CLAUDE_PROJECT_DIR", hooks_dir: hooksDir, script }),
+            ],
           ]),
         );
         return entry.matcher === null
@@ -1034,7 +1179,7 @@ export function claudeSettings(data, root) {
   if (!(hooks instanceof Map)) {
     throw pyError("ValueError", `${path}: expected hooks to be a JSON object`);
   }
-  for (const [eventName, wantedEntries] of claudeHooks(data).get("hooks")) {
+  for (const [eventName, wantedEntries] of claudeHooks(data, root).get("hooks")) {
     hooks.set(eventName, mergeHookEntries(data, hooks.get(eventName), wantedEntries));
   }
   return new PlannedFile(path, wiringForm(settings));
@@ -1182,9 +1327,8 @@ export function skillStubs(data, root, source) {
 // --------------------------------------------------------------------------------------
 
 // Fenced blocks first, then inline code spans: the akmon block in AGENTS.md *documents* the import
-// as well as making it ("import this project's language profile on its own line
-// (e.g. `@_aitna/.akmon/profiles/python.md`)"), and read literally the example is indistinguishable
-// from the real thing. Code spans are exactly where prose quotes a path it does not mean, so
+// as well as making it ("add any other (`@_aitna/.akmon/profiles/<name>.md`)"), and read literally the
+// quoted form is indistinguishable from the real thing. Code spans are exactly where prose quotes a path it does not mean, so
 // stripping them separates the two without requiring a real import to sit in any particular column.
 // The Python pattern is `^(?P<fence>```|~~~).*?(?:^(?P=fence)[^\n]*$|\Z)` under MULTILINE | DOTALL.
 const _FENCED_BLOCK = /(?<![^\n])(?<fence>```|~~~)[^]*?(?:(?<![^\n])\k<fence>[^\n]*(?![^\n])|(?![^]))/g;
@@ -1214,6 +1358,71 @@ export function movedImports(data) {
  */
 export function importPrefix(root) {
   return isPackageMode(root) ? `@${aitnaRootName()}/.akmon/` : `@${aitnaRootName()}/akmon/`;
+}
+
+/**
+ * A language profile a project calls for, and what named its language: `source` is the manifest
+ * that named it (`pyproject.toml`) or, when no manifest did, the language value that matched,
+ * spelled as the caller passed it.
+ * @typedef {object} LanguageProfile
+ * @property {string} profile
+ * @property {string} source
+ */
+
+/**
+ * The language profiles `root` calls for, in the table's order (`sync.json`). A profile is called
+ * for when one of `languages` names its language — a value is split on `/` and compared without
+ * case, so a recorded `package/python` names `python` — or when one of its manifests is a file at
+ * `root`. An unknown or unclassified language calls for none. `init` writes one import per answer;
+ * `verify` warns on an answer with no import.
+ * @param {SyncData} data
+ * @param {string} root
+ * @param {readonly string[]} languages
+ * @returns {LanguageProfile[]}
+ */
+export function languageProfiles(data, root, languages) {
+  /** @type {LanguageProfile[]} */
+  const found = [];
+  for (const entry of data.sync.language_profiles) {
+    const manifest = entry.manifests.find((name) => isFile(pyPath(root, name)));
+    const named = languages.find((value) =>
+      value.split("/").some((part) => entry.languages.includes(pyStrip(part).toLowerCase())),
+    );
+    const source = manifest ?? named;
+    if (source !== undefined) {
+      found.push({ profile: entry.profile, source });
+    }
+  }
+  return found;
+}
+
+/**
+ * One `@`-import of a file under a `profiles/` directory: `prefix` is everything between `@` and
+ * `profiles/` (`_aitna/.akmon/`; empty when relative), `name` the profile's file name (`python.md`),
+ * and `line` the import as `AGENTS.md` spells it.
+ * @typedef {object} ProfileImport
+ * @property {string} prefix
+ * @property {string} name
+ * @property {string} line
+ */
+
+/** A profile import as the harness reads it: a token starting a line or following whitespace. */
+const _PROFILE_IMPORT = /(?<![^\t\n\v\f\r ])@([^\t\n\v\f\r `]*?)profiles\/([A-Za-z0-9._-]+\.md)(?![^\t\n\v\f\r ])/g;
+
+/**
+ * Every profile `@`-import `text` makes, in order. Code spans and fenced blocks are skipped as the
+ * materialization scan skips them: there the block quotes the form (`@<prefix>profiles/<name>.md`)
+ * without making the import.
+ * @param {string} text
+ * @returns {ProfileImport[]}
+ */
+export function profileImports(text) {
+  const visible = text.replace(_FENCED_BLOCK, "\n").replace(_INLINE_CODE, " ");
+  return [...visible.matchAll(_PROFILE_IMPORT)].map((match) => ({
+    prefix: match[1],
+    name: match[2],
+    line: `@${match[1]}profiles/${match[2]}`,
+  }));
 }
 
 /**
@@ -1267,9 +1476,10 @@ export function ruffExtends(data, root) {
  *
  * The files — as `guardrails/<name>` and `profiles/<name>` — are every file `AGENTS.md`
  * `@`-imports, and the ruff rules a ruff configuration of the project `extend`s. Read from the
- * documents rather than derived from the recorded archetype: the language profile is a line a human
- * adds by hand (`init` says so in as many words), an archetype-driven list would miss it, and it
- * would ship files to a project whose archetype is still `<archetype>`.
+ * documents rather than derived from the recorded archetype: `init` writes a fresh block's
+ * language-profile imports from {@link languageProfiles}, but the block is hand-owned from then on —
+ * a human adds the profile of a language `init` did not detect, or an environment profile, and
+ * removes one — so the document, not a derivation, is what the harness loads.
  *
  * Checked against the tree the project runs: an import whose target the standard does not ship
  * resolves to nothing, silently, and this error is the only thing that says so.
@@ -1448,10 +1658,11 @@ export function packageModeAkmonToml(root) {
  * below writes it, and `verify`'s host-trust check compares the file against it before parsing
  * anything.
  * @param {SyncData} data
+ * @param {string} root
  * @returns {string}
  */
-export function codexHooksText(data) {
-  return wiringForm(codexHooks(data));
+export function codexHooksText(data, root) {
+  return wiringForm(codexHooks(data, root));
 }
 
 /**
@@ -1463,7 +1674,7 @@ export function codexHooksText(data) {
 export function plannedFiles(data, root) {
   /** @type {string[]} */
   const errors = [];
-  /** @type {Record<string, (data: SyncData) => string>} */
+  /** @type {Record<string, (data: SyncData, root: string) => string>} */
   const generators = {
     claude_md: _claudeMd,
     copilot_md: _copilotMd,
@@ -1473,7 +1684,7 @@ export function plannedFiles(data, root) {
   };
   /** @type {PlannedFile[]} */
   const files = data.sync.planned_files.map(
-    ([relative, name]) => new PlannedFile(pyPath(root, relative), generators[name](data)),
+    ([relative, name]) => new PlannedFile(pyPath(root, relative), generators[name](data, root)),
   );
   try {
     files.push(claudeSettings(data, root));
@@ -1807,8 +2018,8 @@ export function printSummary(data, result, { root, mode }) {
 // --------------------------------------------------------------------------------------
 
 /**
- * The refusal for a project this implementation does not serve, or `null` when the record says Node
- * package mode: a wrong-spelling write is worse than a refusal.
+ * The refusal for a project this implementation does not serve, or `null` when the record says
+ * `ecosystem = "node"`: a wrong-spelling write is worse than a refusal.
  * @param {SyncData} data
  * @param {string} root
  * @returns {string | null}
@@ -1819,8 +2030,10 @@ export function unsupportedRecord(data, root) {
 }
 
 /**
- * What the project has instead of a Node package record — the `{{found}}` of every refusal text
- * (`sync`'s and `verify`'s) — or `null` when the record says Node package mode.
+ * What the project has instead of a Node record — the `{{found}}` of every refusal text (`sync`'s,
+ * `verify`'s, `init`'s and `update`'s) — or `null` when the record says `ecosystem = "node"`.
+ *
+ * Every command serves a Node record in every mode (the C129 amendment of ADR 0020 D02).
  * @param {SyncData} data
  * @param {string} root
  * @returns {string | null}
@@ -1829,9 +2042,6 @@ export function unsupportedFound(data, root) {
   const found = data.sync.unsupported_found;
   if (!isFile(pyPath(aitnaRoot(root), ".akmon.toml"))) {
     return fill(found.no_record, { record: `${aitnaRootName()}/.akmon.toml` });
-  }
-  if (!isPackageMode(root)) {
-    return fill(found.mount, { value: readMountMode(root) });
   }
   if (recordedEcosystem(root) !== _NODE_ECOSYSTEM) {
     return fill(found.ecosystem, { value: recordedEcosystem(root) });
@@ -1890,7 +2100,7 @@ function _parse(argv) {
  * Parse arguments, plan the generated files, and apply, check, or dry-run the plan.
  * @param {string[]} [argv] the arguments after `sync` (default: the process's)
  * @returns {number} The process exit code: 0, 1 when `--check` finds the tree stale, 2 when the
- *   files could not even be planned or the record is not Node package mode.
+ *   files could not even be planned or the record is not a Node one.
  */
 export function main(argv = process.argv.slice(2)) {
   const options = _parse(argv);

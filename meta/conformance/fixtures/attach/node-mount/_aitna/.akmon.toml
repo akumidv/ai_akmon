@@ -1,0 +1,5 @@
+mount = "submodule"
+ecosystem = "node"
+akmon_version = "{{version}}"
+attached_archetype = "unclassified"
+last_realign = "{{version}}"

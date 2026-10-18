@@ -1,22 +1,28 @@
 /**
  * `akmon update` — move a Node project to another akmon release, then realign it (C107, ADR 0020
- * D07, ADR-0018/D03). The JavaScript twin of `src/akmon/_update.py` for **Node package mode only**:
- * the Python module is the spec for the plan (direction, rollback, the six notes), the banner, the
- * checks after `init`, the closing steps and the exit codes. The mounted modes and Python package
- * mode are served by the Python implementation.
+ * D07, ADR-0018/D03). The JavaScript twin of `src/akmon/_update.py` for a record that names
+ * `ecosystem = "node"`, in every mount mode (the mounted ones since C129, the amendment of ADR
+ * 0020 D02): the Python module is the spec for the plan (direction, rollback, the six notes), the
+ * banner, the per-mode moves, the checks after `init`, the closing steps and the exit codes.
  *
- * What differs from the Python, each a decision of C107:
- * - a record that is not a Node package attach is refused (exit 2, `node_refuses_record`, naming
- *   what `bin/sync.mjs::unsupportedFound` found); no record at all keeps the shared `missing_record`;
- * - the target without `--ref` is the newest final release the **npm registry** lists
- *   (`npm view akmon versions --json`, run in the project so its `.npmrc` applies), because the
- *   installed package comes from there, not from a git tag; `--repo` is accepted and changes
- *   nothing. A release is ordered with the PEP 440 reading of its SemVer spelling (`-dev.N`);
+ * What differs from the Python, each a decision of C107 or C129:
+ * - a record that is not a Node attach is refused (exit 2, `node_refuses_record`, naming what
+ *   `bin/sync.mjs::unsupportedFound` found); no record at all keeps the shared `missing_record`;
+ * - in package mode the target without `--ref` is the newest final release the **npm registry**
+ *   lists (`npm view akmon versions --json`, run in the project so its `.npmrc` applies), because
+ *   the installed package comes from there, not from a git tag, and `--repo` changes nothing. A
+ *   mounted mode reads the tags of `--repo` with `git ls-remote`, as the Python does. A release is
+ *   ordered with the PEP 440 reading of its SemVer spelling (`-dev.N`);
+ * - the mounted modes: `submodule` fetches the release tags into the mount, then this CLI's `init
+ *   --ref` moves the pin; `subtree` prints the `git subtree pull` that commits; `vendored` runs
+ *   `init` from this CLI when it is the target release and otherwise prints the `npx` command that
+ *   fetches that release's CLI — running it would be a download the owner did not ask for (the
+ *   Python runs `uvx` instead). The checks then run on the mount's own CLI, the tree that governs;
  * - the pin moves with the detected manager's exact dev-install command (`add_dev_exact` of
  *   `init.json`'s `node_managers`) at the bare version (`v0.5.0` pins `akmon@0.5.0`). A
  *   `packageManager` naming any other manager, or a manager binary not on PATH, gets the command
  *   printed (exit 2), never a guessed substitute;
- * - `init` and the checks run from the project's own installed CLI,
+ * - in package mode `init` and the checks run from the project's own installed CLI,
  *   `node_modules/akmon/js/akmon/cli.mjs`, under the running node — the release the project now
  *   pins, whichever CLI started the update;
  * - the arguments are parsed by `node:util` `parseArgs` (ADR 0020 D08, DV12).
@@ -35,10 +41,21 @@ import { fill, read } from "../common/jsondata.mjs";
 import { resolvePath } from "../common/project_root.mjs";
 import { isFile } from "../common/pyvalue.mjs";
 import { readAkmonToml, recordedMount } from "../common/record.mjs";
-import { compareVersions, isFinal, orderKey } from "../common/versions.mjs";
+import { compareVersions, isFinal, orderKey, splitVersion } from "../common/versions.mjs";
 import { shlexJoin, shlexSplit } from "../common/shlex.mjs";
-import { packagePinStatus, readSyncData, unsupportedFound } from "../bin/sync.mjs";
-import { InitError, declaredManager, detectManager, effectiveAitnaRoot, readInitData } from "./_init.mjs";
+import { installedAkmonVersion, packagePinStatus, readSyncData, unsupportedFound } from "../bin/sync.mjs";
+import {
+  InitError,
+  declaredManager,
+  defaultRef,
+  detectManager,
+  effectiveAitnaRoot,
+  mountedCli,
+  npxSpec,
+  readInitData,
+  shellWord,
+} from "./_init.mjs";
+import { CLI_PATH } from "./_mount.mjs";
 import { embeddedTreeRoot } from "./_tree.mjs";
 
 /**
@@ -58,6 +75,11 @@ import { embeddedTreeRoot } from "./_tree.mjs";
  * @property {string} closing_bump
  * @property {string} closing_codex
  * @property {string} closing_staged_node
+ * @property {string} subtree_refusal
+ * @property {string} subtree_pull_command
+ * @property {string} subtree_realign_command
+ * @property {string} vendored_not_fetchable
+ * @property {string} node_vendored_command
  * @property {string} node_refuses_record
  * @property {string} node_pin_not_dev
  * @property {string} node_registry_unreachable
@@ -263,6 +285,102 @@ function _movePin(data, deps, root, thePlan) {
   }
 }
 
+// --------------------------------------------------------------------------------------
+// per mounted mode: move the pin, run init — the init exit code (the Python's `_update_*`)
+// --------------------------------------------------------------------------------------
+
+/**
+ * The argv that runs this CLI's own `init` on `root` (the Python calls its `_init.main` in process).
+ * @param {string} root
+ * @param {string[]} [extra]
+ * @returns {string[]}
+ */
+function _ownInit(root, extra = []) {
+  return [
+    process.execPath,
+    posix.join(embeddedTreeRoot(), CLI_PATH),
+    "init",
+    "--project-root",
+    root,
+    "--yes",
+    ...extra,
+  ];
+}
+
+/**
+ * Mode `submodule`: fetch the release tags from `repo`, where the target was read, into the mount;
+ * then `init --ref` moves the pin (left unstaged, D5).
+ * @param {UpdateDeps} deps
+ * @param {{root: string, aitna: string, thePlan: Plan, repo: string}} run
+ * @returns {number}
+ */
+function _updateSubmodule(deps, { root, aitna, thePlan, repo }) {
+  const extra = [];
+  if (thePlan.move) {
+    _log(`fetching release tags into ${aitna}/akmon`);
+    if (deps.run(["git", "fetch", "--quiet", "--tags", repo], posix.join(root, aitna, "akmon")) !== 0) {
+      throw new UpdateError(
+        `\`git fetch --tags\` failed in ${aitna}/akmon — it needs git and network access to ${repo}`,
+      );
+    }
+    extra.push("--ref", thePlan.target);
+  }
+  return deps.run(_ownInit(root, extra), root);
+}
+
+/**
+ * Whether `ref` names a release and it is the release this CLI is.
+ * @param {string | null} ref
+ * @returns {boolean}
+ */
+function _isRunningRelease(ref) {
+  const running = installedAkmonVersion();
+  if (!ref || !isFinal(ref) || running === null) {
+    return false;
+  }
+  return splitVersion(ref).base === splitVersion(running).base;
+}
+
+/**
+ * Mode `vendored`: the mount is a copy of the tree of the CLI that runs `init`, so `init` runs from
+ * exactly the pinned release — this CLI when it is that release; otherwise the `npx` command that
+ * fetches it is printed, never run.
+ * @param {{update: UpdateData, init: import("./_init.mjs").InitData}} data
+ * @param {UpdateDeps} deps
+ * @param {{root: string, aitna: string, thePlan: Plan, repo: string}} run
+ * @returns {number}
+ */
+function _updateVendored(data, deps, { root, thePlan, repo }) {
+  const ref = thePlan.move ? thePlan.target : thePlan.current;
+  if (_isRunningRelease(ref)) {
+    return deps.run(_ownInit(root), root);
+  }
+  if (!thePlan.move && !(ref && isFinal(ref))) {
+    throw new UpdateError(fill(data.update.vendored_not_fetchable, { recorded: ref || "version" }));
+  }
+  const tag = thePlan.move ? /** @type {string} */ (ref) : `v${splitVersion(/** @type {string} */ (ref)).base}`;
+  const command = ["npx", npxSpec(repo, tag), "init", "--mode", "vendored", "--project-root", root, "--yes"];
+  throw new UpdateError(fill(data.update.node_vendored_command, { tag, command: command.map(shellWord).join(" ") }));
+}
+
+/**
+ * Mode `subtree`: realign in place; a move is `git subtree pull`, which commits, so it is printed.
+ * @param {{update: UpdateData, init: import("./_init.mjs").InitData}} data
+ * @param {UpdateDeps} deps
+ * @param {{root: string, aitna: string, thePlan: Plan, repo: string}} run
+ * @returns {number}
+ */
+function _updateSubtree(data, deps, { root, aitna, thePlan, repo }) {
+  if (!thePlan.move) {
+    return deps.run(_ownInit(root, ["--ref", String(thePlan.current)]), root);
+  }
+  const commands = [
+    fill(data.update.subtree_pull_command, { aitna, repo, target: thePlan.target }),
+    fill(data.update.subtree_realign_command, { target: thePlan.target, cli: mountedCli(data.init, aitna) }),
+  ];
+  throw new UpdateError(`${data.update.subtree_refusal}\n${commands.join("\n")}`);
+}
+
 /**
  * `sync --check`, then `verify --strict`, run by the CLI the project now pins; the first failure.
  * @param {UpdateData} data
@@ -286,12 +404,11 @@ function _checks(data, deps, root, launcher) {
 /**
  * What the update leaves to the owner (`update.json`, `closing_*`), one numbered line each.
  * @param {UpdateData} data
- * @param {string} root
- * @param {string} aitna
+ * @param {{root: string, aitna: string, mode: string}} project
  * @param {Plan} thePlan
  * @param {string | null} lastRealign
  */
-function _closing(data, root, aitna, thePlan, lastRealign) {
+function _closing(data, { root, aitna, mode }, thePlan, lastRealign) {
   const steps = [];
   if (thePlan.move) {
     steps.push(
@@ -301,7 +418,8 @@ function _closing(data, root, aitna, thePlan, lastRealign) {
       }),
     );
   }
-  steps.push(fill(data.closing_review, { staged: data.closing_staged_node }));
+  const staged = mode === _PACKAGE_MODE ? data.closing_staged_node : `\`${aitna}/akmon\``;
+  steps.push(fill(data.closing_review, { staged }));
   if (thePlan.move) {
     steps.push(fill(data.closing_bump, { aitna }));
   }
@@ -328,18 +446,20 @@ Move this Node project to another akmon release, then realign it: init, sync
 
 options:
   -h, --help            show this help message and exit
-  --ref REF             Release to move to (default: the newest release on the
-                        npm registry; an older one rolls back).
+  --ref REF             Release to move to (default: the newest release — on the
+                        npm registry in package mode, the newest release tag of
+                        --repo in a mounted one; an older one rolls back).
   --project-root PROJECT_ROOT
                         Project to update. Defaults to the current directory.
   --aitna-root AITNA_ROOT
                         Dev-layer root, project-root-relative (default:
                         AITNA_ROOT or _aitna).
-  --repo REPO           Accepted; the release comes from the npm registry.
+  --repo REPO           akmon repository URL of a mounted mode (package mode:
+                        accepted; the release comes from the npm registry).
 `;
 
 /**
- * @typedef {{ref: string | undefined, projectRoot: string | undefined, aitnaRoot: string | undefined, help: boolean}} UpdateOptions
+ * @typedef {{ref: string | undefined, projectRoot: string | undefined, aitnaRoot: string | undefined, repo: string | undefined, help: boolean}} UpdateOptions
  */
 
 /**
@@ -365,6 +485,7 @@ function _parse(argv) {
       ref: /** @type {string | undefined} */ (values.ref),
       projectRoot: /** @type {string | undefined} */ (values["project-root"]),
       aitnaRoot: /** @type {string | undefined} */ (values["aitna-root"]),
+      repo: /** @type {string | undefined} */ (values.repo),
       help: values.help === true,
     };
   } catch (exc) {
@@ -473,10 +594,27 @@ function _run(options, deps, root) {
   const text = (/** @type {unknown} */ value) => (typeof value === "string" && value !== "" ? value : null);
   const current = text(record["akmon_version"]);
   const lastRealign = text(record["last_realign"]);
-  const target = options.ref || _registryTarget(data.update, deps, root);
+  const repo = options.repo ?? data.init.akmon_repo;
+  const target =
+    options.ref ||
+    (mode === _PACKAGE_MODE
+      ? _registryTarget(data.update, deps, root)
+      : defaultRef(data.init, repo, root, deps.capture));
   const thePlan = plan(data.update, current, target, { explicit: options.ref !== undefined });
-  _log(fill(data.update.banner, { root, mode: _PACKAGE_MODE, note: thePlan.note }));
+  _log(fill(data.update.banner, { root, mode, note: thePlan.note }));
+  const run = { root, aitna, mode, thePlan, repo, lastRealign };
+  return mode === _PACKAGE_MODE ? _finishPackage(data, deps, run) : _finishMounted(data, deps, run);
+}
 
+/**
+ * Package mode after the plan: move the pin with the project's manager, then `init` and the checks
+ * on the project's own installed CLI, and the closing steps.
+ * @param {{update: UpdateData, init: import("./_init.mjs").InitData}} data
+ * @param {UpdateDeps} deps
+ * @param {{root: string, aitna: string, mode: string, thePlan: Plan, repo: string, lastRealign: string | null}} run
+ * @returns {number}
+ */
+function _finishPackage(data, deps, { root, aitna, mode, thePlan, lastRealign }) {
   if (thePlan.move) {
     _movePin(data, deps, root, thePlan);
   }
@@ -496,7 +634,34 @@ function _run(options, deps, root) {
     return code;
   }
   code = _checks(data.update, deps, root, launcher);
-  _closing(data.update, root, aitna, thePlan, lastRealign);
+  _closing(data.update, { root, aitna, mode }, thePlan, lastRealign);
+  return code;
+}
+
+/**
+ * A mounted mode after the plan: move the pin the mode's way, then the checks on the mount's own
+ * CLI — the tree that governs once `init` has realigned it — and the closing steps.
+ * @param {{update: UpdateData, init: import("./_init.mjs").InitData}} data
+ * @param {UpdateDeps} deps
+ * @param {{root: string, aitna: string, mode: string, thePlan: Plan, repo: string, lastRealign: string | null}} run
+ * @returns {number}
+ */
+function _finishMounted(data, deps, run) {
+  const { root, aitna, mode, thePlan, lastRealign } = run;
+  let code;
+  if (mode === "submodule") {
+    code = _updateSubmodule(deps, run);
+  } else if (mode === "vendored") {
+    code = _updateVendored(data, deps, run);
+  } else {
+    code = _updateSubtree(data, deps, run);
+  }
+  if (code !== 0) {
+    process.stderr.write(`${fill(data.update.init_failed, { code: String(code) })}\n`);
+    return code;
+  }
+  code = _checks(data.update, deps, root, posix.join(root, aitna, "akmon", CLI_PATH));
+  _closing(data.update, { root, aitna, mode }, thePlan, lastRealign);
   return code;
 }
 

@@ -803,7 +803,8 @@ def _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, co
     monkeypatch.setattr(deleg_log.routing, "load_registry", lambda *_args: base_registry)
 
 
-def test_delegation_log_role_advisory_is_system_message_only(tmp_path, monkeypatch, capsys):
+def test_delegation_log_role_advisory_reaches_owner_and_model(tmp_path, monkeypatch, capsys):
+    """ADR 0006 item 4: the owner reads the systemMessage, the orchestrator the additionalContext (M149)."""
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
@@ -815,10 +816,15 @@ def test_delegation_log_role_advisory_is_system_message_only(tmp_path, monkeypat
 
     assert deleg_log.main() == 0
     emitted = json.loads(capsys.readouterr().out)
-    assert emitted["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
+    assert set(emitted["hookSpecificOutput"]) == {"hookEventName", "additionalContext"}
     assert "permissionDecision" not in emitted["hookSpecificOutput"]
     assert "[akmon] → k_mechanic: do the work" in emitted["systemMessage"]
     assert "role/task-kind: k_mechanic" in emitted["systemMessage"]
+    context = emitted["hookSpecificOutput"]["additionalContext"]
+    assert context.startswith("[akmon] ⚠ role/task-kind: k_mechanic")
+    assert "re-route this work" in context
+    # The console line is the owner's alone: the delegation itself is not narrated to the model.
+    assert "→ k_mechanic" not in context
 
 
 def test_delegation_log_allowed_agent_stays_silent(tmp_path, monkeypatch, capsys):
@@ -834,17 +840,18 @@ def test_delegation_log_allowed_agent_stays_silent(tmp_path, monkeypatch, capsys
     assert deleg_log.main() == 0
     emitted = json.loads(capsys.readouterr().out)
     assert emitted["systemMessage"] == "[akmon] → k_explorer: do the work"
-    assert "permissionDecision" not in emitted["hookSpecificOutput"]
+    # No warning, no context injection: no empty additionalContext either.
+    assert emitted["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
 
 
-def _bound_config(available):
+def _bound_config(available, orchestrator="opus"):
     """A local routing config as ``routing.local_config`` writes it, bound or semantic."""
     akmon_root = Path(hook_core.__file__).parent.parent
     sys.path.insert(0, str(akmon_root / "tools" / "model_routing"))
     import routing
 
     registry = routing.load_registry(akmon_root)
-    binding = routing.compute_binding(registry, "opus", available, "anthropic")
+    binding = routing.compute_binding(registry, orchestrator, available, "anthropic")
     return routing.local_config(registry=registry, binding=binding, second_opinion=False, available=available)
 
 
@@ -1227,14 +1234,37 @@ def test_delegation_log_warns_when_the_agent_runs_below_a_kind_floor(tmp_path, m
         json.dumps({"type": "assistant", "message": {"content": "🧭 agent: architect — fork"}}) + "\n",
         encoding="utf-8",
     )
-    config = _bound_config(["haiku", "sonnet", "opus", "fable"])
+    # C32 review: the floor is the corridor's boundary (opus), so only an orchestrator below it —
+    # here sonnet, which the reasoner follows — opens the gap.
+    config = _bound_config(["haiku", "sonnet", "opus", "fable"], orchestrator="sonnet")
     payload = _delegation_log_payload(tmp_path, transcript, "k_reasoner")
     _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, config=config)
     assert deleg_log.main() == 0
-    message = json.loads(capsys.readouterr().out)["systemMessage"]
-    assert "below the floor of quant-derivation (floor fable)" in message
+    emitted = json.loads(capsys.readouterr().out)
+    assert "below the floor of quant-derivation (floor opus)" in emitted["systemMessage"]
+    # ADR 0006 item 4: the orchestrator is told which model the kind takes from the next call on (M149).
+    assert emitted["hookSpecificOutput"]["additionalContext"].endswith(
+        "this call runs as issued; from the next call on, delegate quant-derivation with model=opus"
+    )
 
-    payload["tool_input"]["model"] = "fable"
+    payload["tool_input"]["model"] = "opus"
+    assert deleg_log.main() == 0
+    emitted = json.loads(capsys.readouterr().out)
+    assert "floor" not in emitted["systemMessage"]
+    assert "additionalContext" not in emitted["hookSpecificOutput"]
+
+
+def test_delegation_log_is_silent_on_floors_for_a_healthy_binding(tmp_path, monkeypatch, capsys):
+    """C32 review: haiku/sonnet/opus/fable with the orchestrator on opus warns on no k_reasoner call."""
+    deleg_log = _claude_hook("delegation-log.py")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: architect — fork"}}) + "\n",
+        encoding="utf-8",
+    )
+    config = _bound_config(["haiku", "sonnet", "opus", "fable"])
+    payload = _delegation_log_payload(tmp_path, transcript, "k_reasoner")
+    _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, config=config)
     assert deleg_log.main() == 0
     assert "floor" not in json.loads(capsys.readouterr().out)["systemMessage"]
 
@@ -1252,14 +1282,15 @@ def test_delegation_log_warns_on_an_unlabelled_call_in_a_zoned_session(tmp_path,
 
     payload["tool_input"]["description"] = "zone:auth read the token code"
     assert deleg_log.main() == 0
-    assert "⚠" not in json.loads(capsys.readouterr().out)["systemMessage"]
+    emitted = json.loads(capsys.readouterr().out)
+    assert "⚠" not in emitted["systemMessage"]
+    assert "additionalContext" not in emitted["hookSpecificOutput"]
 
     payload["tool_input"]["description"] = "read the pricing code"
     assert deleg_log.main() == 0
-    assert (
-        "carries no zone label while this session's fan-out is zoned (auth)"
-        in json.loads(capsys.readouterr().out)["systemMessage"]
-    )
+    emitted = json.loads(capsys.readouterr().out)
+    assert "carries no zone label while this session's fan-out is zoned (auth)" in emitted["systemMessage"]
+    assert "label fan-out calls with [zone:<label>]" in emitted["hookSpecificOutput"]["additionalContext"]
     zones = [ln.split("\t")[4] for ln in (tmp_path / deleg_log.routing.delegation_log_rel()).read_text().splitlines()]
     assert zones == ["auth", "-"]
 

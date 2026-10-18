@@ -1,0 +1,62 @@
+{
+  "account_id_sha256": "dc17f02443f35278c2d94b94ee471ee5dc9f10e499726ea3d92d591eecdab320",
+  "codex_cli_version": "codex-cli 0.162.1",
+  "codex_effort": "medium",
+  "codex_executable": "/home/ai/.codex/packages/standalone/releases/0.162.1-x86_64-unknown-linux-musl/bin/codex",
+  "codex_executable_sha256": "628e35487d888a28f0427fc37501da529dd3d81fcbad7a2c3421c1e8670d92e1",
+  "codex_format_approval_sha256": "1612de967bdbef13395bbe1fe8f793d7c5c9f9370d64411cb0048f099c3396da",
+  "codex_format_manifest_sha256": "9fdcc3f6b9e651b2c9df8f45bfd653d7d2293d59386a3f271f96f9dc1720cc50",
+  "codex_format_outcome_sha256": "c82e19435fe36cad700734f98bc8ae4449e08322d794a196d4f3e24a8bad6f39",
+  "codex_format_seal_sha256": "080abfb3f45d52a1057b274fc8ab9d2652dba02d983464c5c3661bd905831ea1",
+  "codex_limit_tokens": 5000000,
+  "codex_scorer_model": "gpt-6-astra",
+  "codex_subject_models": {
+    "mid": "gpt-5.6-luna",
+    "strongest": "gpt-6-astra"
+  },
+  "five_hour_stop_percent": 80,
+  "format_prompt_sha256": "3a22898c9b954c0bad8305bf2efd3eeaf8099c269e7e6c428a9454fddb7f3e20",
+  "opening_codex_tokens": 285782,
+  "packet_seal_sha256": "62ace0ce353ce059acd2ee442589d81912ffa61d6442787dc17aebd34728dd93",
+  "planned_calls": 128,
+  "proposal_sha256": "940dcabbd367215d021f34bfa40fd1b8d3ac6fced6c468b9b0ea5d5fefc293ec",
+  "provider_calls_started": 0,
+  "qwen_cli_version": "0.24.7",
+  "qwen_format_approval_sha256": "72664d36f8d8a23b890fe1c68485848b4196f2eaaf19553f825671bed9e6cd5f",
+  "qwen_format_outcome_sha256": "bec9019449733d3a5ef21a6b2034cf0252536a83c166f6a249d6bc4ddf8ff2a1",
+  "qwen_format_seal_sha256": "8bf88df9a4b6d1d7073284ef31fd946a15efdd79d32ad471368fe16dad09ae93",
+  "qwen_model": "qwen3.8-27b",
+  "qwen_thinking": "provider default retained",
+  "record_type": "p3_v3_qualification_successor_seal",
+  "regression_sha256": "39b64d787bddb7783b43b4dfa3336d3b54124bd2bc33d86da0fbb7facde4c8d9",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "runtime_root": "/tmp/a22-p3-v3-qualification-successor-runtime",
+  "schedule_sha256": "d9dd1650fb0003d59c751c4b7e12ff1371ed06d8ca47ba3faed7db09f3e1ee62",
+  "schema": 1,
+  "scope": [
+    "qualification"
+  ],
+  "scorer_input_cap": 20000,
+  "scorer_output_settings": {
+    "codex": 1000,
+    "qwen": 5000
+  },
+  "source_sha256": {
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "scorer_route_check.py": "5947219962ce3d7f8defefafb1f705acc414bf274c89cff1de8f872ddbc604d5",
+    "v3_codex_format_route.py": "02804bd20afeaa10110470e5a2790015d69add6d5c8918a59ff4d54c2ab456d5",
+    "v3_controls_successor.py": "93d085b9f9332941e949773fbc6e35cf0a952ad78741b27b1ccc9b29eb33da43",
+    "v3_qualification_successor.py": "163f6e54e88b729f617de64711431bda2de50f0a359083cac2f5ac88bdf0507c",
+    "v3_qualification_successor_packet.py": "10af1f9f65d973be8cbf8d44aff90f0d61508106efab592785012922ee972023",
+    "v3_qualification_successor_reduce.py": "555648b89b3968e61a912a2c488ba0d712789f309e98ad6e013c44dfd671c215",
+    "v3_qualification_successor_schedule.py": "703aaffc422a105532e1173d7edf8be8f9ced6695938735b248d93648260166e",
+    "v3_qwen_5000_format_route.py": "7564f0d50a4979f0851a8139f16beb466eeee8be821802fb243f7913ed72f2f7",
+    "v3_runner_version_successor.py": "a059553c4ce0a5447aa09254fbb9d2a6bd3d0c75f58f9feb50a5675313fd9b67"
+  },
+  "status": "offline_candidate_pending_owner_acceptance",
+  "subject_input_cap": 40000,
+  "terminal_qualification_ledger_sha256": "ab0408ec2b373839b94fcb0fab5b2c08185032f97ac2ca71fa09237e76945b8e",
+  "terminal_qualification_review_sha256": "fd8a3a6afe92c9e1837d5db8423f09fe50dbc6ab5522f2f76a008cdd954456a5",
+  "terminal_qualification_seal_sha256": "7a6b4ee73eb41b105222e866bedd1723d0f701b50f89145555337121363e29b4",
+  "weekly_stop_percent": 90
+}

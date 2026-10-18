@@ -69,6 +69,7 @@
     "all_covered_sentinel": "_All planned zones have at least one worker._",
     "unlabelled_marker": "(unlabelled)",
     "unlabelled_note": "_{{count}} delegation(s) carried no `[zone:…]` marker — unattributable._",
+    "all_unlabelled_error": "--zone-plan given, but none of the {{count}} delegation(s) in scope carries a zone label — every planned zone would read as uncovered; label the fan-out calls with [zone:<label>] or drop --zone-plan; no map written",
     "summary_entries": "coverage-map entries={{entries}} zones={{zones}}",
     "scope_session": "session {{session}}",
     "scope_all": "all sessions ({{count}}: {{sessions}})",

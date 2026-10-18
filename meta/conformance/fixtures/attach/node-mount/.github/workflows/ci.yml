@@ -1,0 +1,11 @@
+name: CI
+on: [push]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - run: node _aitna/akmon/js/akmon/cli.mjs sync --check
+      - run: node _aitna/akmon/js/akmon/cli.mjs verify --strict

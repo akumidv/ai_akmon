@@ -1,0 +1,25 @@
+# C129 step 8: the JavaScript init refuses a mounted record of the Python implementation without
+# `--ecosystem node`, and in a repository with package.json and no Python files the refusal names
+# the switch: the mount's own CLI for a submodule (a vendored copy names `npx` at the recorded
+# release, `_init.test.mjs`). Nothing is touched. Node-tagged: the Python implementation serves this
+# record.
+id = "cli/init-node-python-mount-refused"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:init"]
+
+[fixture]
+attach = "mount"
+# src/app.py is Python (C129: a Python source makes a Python repository)
+remove = ["src"]
+files = { "_aitna/.akmon.toml" = "mount = \"submodule\"\nakmon_version = \"0.3.0\"\nattached_archetype = \"unclassified\"\nlast_realign = \"0.3.0\"\n" }
+
+[run]
+argv = ["init", "--project-root", "{{root}}", "--yes"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "akmon init: this project's integration record is not a Node attach (ecosystem = \"python\"); the JavaScript implementation serves records that name ecosystem = \"node\", and the Python implementation of akmon serves the other records; this repository has package.json and no Python files, so its mount can move to this implementation, which needs no Python:\n    node _aitna/akmon/js/akmon/cli.mjs init --ecosystem node\n"
+[expected.files]
+"_aitna/.akmon.toml" = "mount = \"submodule\"\nakmon_version = \"0.3.0\"\nattached_archetype = \"unclassified\"\nlast_realign = \"0.3.0\"\n"

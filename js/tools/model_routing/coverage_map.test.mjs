@@ -19,6 +19,7 @@ import {
   parseInstant,
   parseZonePlan,
   unlabelledMarker,
+  unlabelledPlanError,
 } from "./coverage_map.mjs";
 import { DelegationEntry } from "./routing.mjs";
 
@@ -105,6 +106,34 @@ test("a plan surfaces uncovered, off-plan and unlabelled zones", () => {
   assert.ok(map.includes("### Off-plan zones (worked, not in the zone plan)\n- z"));
   assert.ok(map.endsWith("_1 delegation(s) carried no `[zone:…]` marker — unattributable._"));
   assert.ok(buildCoverageMap([entry("a")], ["a"]).endsWith("_All planned zones have at least one worker._"));
+});
+
+test("a label matches its planned zone case-insensitively and keeps its spelling (C33 review)", () => {
+  const map = buildCoverageMap([entry("Auth"), entry("STRASSE"), entry("ΑΣ")], ["auth", "straße", "ασ", "io"]);
+  assert.ok(map.includes("| Auth | k_explorer | 1 |"));
+  assert.ok(map.includes("### Uncovered zones (planned, no worker)\n- io"));
+  assert.ok(!map.includes("- auth") && !map.includes("- straße") && !map.includes("- ασ"));
+  assert.ok(!map.includes("Off-plan"));
+});
+
+test("an all-unlabelled round against a plan is an error, and main writes no map (C33 review)", () => {
+  assert.match(
+    unlabelledPlanError([entry(null), entry(null)], ["auth"]) ?? "",
+    /none of the 2 delegation\(s\) in scope carries a zone label/,
+  );
+  assert.equal(unlabelledPlanError([entry(null), entry("auth")], ["auth"]), null);
+  assert.equal(unlabelledPlanError([entry(null)], null), null);
+  assert.equal(unlabelledPlanError([], ["auth"]), null);
+
+  const root = project({
+    ".claude/model-routing.log": "2026-05-01T10:00:00\ts1\tk_explorer\thaiku\t-\tx\n",
+    "plan.md": "- auth\n",
+  });
+  const result = run(["--project-root", root, "--session", "s1", "--zone-plan", path.join(root, "plan.md")]);
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /^coverage_map\.mjs: error: --zone-plan given, but none of the 1 delegation\(s\)/);
+  assert.equal(result.stdout, "");
+  assert.ok(!fs.existsSync(path.join(root, "_aitna", "artifacts")));
 });
 
 test("bounds: a bare date is the whole day, an offset is honoured, fractions truncate to microseconds", () => {

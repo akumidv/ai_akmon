@@ -318,16 +318,14 @@ test("no record is the shared missing-record refusal; a record the Python serves
     stderr: `akmon update: ${bare} records no akmon attach (no mount mode in the integration record under _aitna/) — attach it with \`akmon init\`\n`,
   });
   for (const [record, found] of [
-    ['mount = "submodule"\nakmon_version = "0.4.0"\n', 'mount = "submodule"'],
+    ['mount = "submodule"\nakmon_version = "0.4.0"\n', 'ecosystem = "python"'],
     ['mount = "package"\nakmon_version = "0.4.0"\n', 'ecosystem = "python"'],
   ]) {
     const root = project({ "_aitna/.akmon.toml": record });
     const stand = deps();
     const result = run(["--ref", "v0.5.0", "--project-root", root], stand);
     assert.equal(result.status, 2);
-    assert.ok(
-      result.stderr.startsWith("akmon update: this project's integration record is not a Node package attach ("),
-    );
+    assert.ok(result.stderr.startsWith("akmon update: this project's integration record is not a Node attach ("));
     assert.ok(result.stderr.includes(found), result.stderr);
     assert.equal(result.stdout, "");
     assert.deepEqual(stand.ran, []);
@@ -460,5 +458,91 @@ test("the real process realigns a Node project through its installed CLI, keepin
   assert.ok(fs.readFileSync(posix.join(root, "_aitna", ".akmon.toml"), "utf8").endsWith(none));
   assert.ok(!fs.existsSync(posix.join(root, ".oxlintrc.json")));
   fs.rmSync(scratch, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+// -- the mounted modes (C129) ------------------------------------------------------------------
+
+/** @param {string} mode */
+const mountedRecord = (mode) =>
+  `mount = "${mode}"\necosystem = "node"\nakmon_version = "0.1.0"\nlast_realign = "0.1.0"\n`;
+
+test("a mounted record reads its target from the tags of --repo, as the Python does", () => {
+  const root = project({ "_aitna/.akmon.toml": mountedRecord("subtree") }, { linked: false });
+  const listing = "aaa\trefs/tags/v0.9.0\nbbb\trefs/tags/v0.10.0\nccc\trefs/tags/v1.0.0rc1\n";
+  const stand = deps({ registry: listing });
+  const result = run(["--repo", "/srv/akmon", "--project-root", root], stand);
+  assert.deepEqual(stand.asked, [["git", "ls-remote", "--tags", "--refs", "/srv/akmon", "refs/tags/v*"]]);
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, `akmon update: ${root} · mount mode subtree · 0.1.0 → v0.10.0\n`);
+  assert.equal(
+    result.stderr,
+    `akmon update: ${data.subtree_refusal}\n` +
+      "    git subtree pull --prefix _aitna/akmon /srv/akmon v0.10.0 --squash\n" +
+      "    node _aitna/akmon/js/akmon/cli.mjs init --ref v0.10.0\n",
+  );
+  const unreachable = run(["--project-root", root], deps({ registry: null }));
+  assert.equal(unreachable.status, 2);
+  assert.ok(
+    unreachable.stderr.includes("cannot discover the latest release tag from 'https://github.com/akumidv/ai_akmon'"),
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("subtree realigns in place with this CLI's init at the recorded ref, then checks on the mount's CLI", () => {
+  const root = project({ "_aitna/.akmon.toml": mountedRecord("subtree") }, { linked: false });
+  const stand = deps();
+  const result = run(["--ref", "v0.1.0", "--project-root", root], stand);
+  assert.equal(result.status, 0, result.stderr);
+  const mountCli = posix.join(root, "_aitna/akmon/js/akmon/cli.mjs");
+  assert.deepEqual(stand.ran, [
+    [process.execPath, CLI, "init", "--project-root", root, "--yes", "--ref", "0.1.0"],
+    [process.execPath, mountCli, "sync", "--check", "--project-root", root],
+    [process.execPath, mountCli, "verify", "--strict", "--project-root", root],
+  ]);
+  assert.ok(result.stdout.includes("review `git diff` and stage `_aitna/akmon` with the generated files that changed"));
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("vendored prints the npx command of the target release, runs nothing; this CLI's own release runs init", () => {
+  const root = project({ "_aitna/.akmon.toml": mountedRecord("vendored") }, { linked: false });
+  const stand = deps();
+  const result = run(["--ref", "v9.9.9", "--project-root", root], stand);
+  assert.equal(result.status, 2);
+  const command = `npx github:akumidv/ai_akmon#v9.9.9 init --mode vendored --project-root ${root} --yes`;
+  assert.equal(
+    result.stderr,
+    `akmon update: ${data.node_vendored_command.replace("{{tag}}", "v9.9.9").replace("{{command}}", command)}\n`,
+  );
+  assert.deepEqual(stand.ran, []);
+  const realign = run(["--ref", "0.1.0", "--project-root", root], deps());
+  assert.equal(realign.status, 2, "0.1.0 → 0.1.0 is no move, and it is not this CLI's release: v0.1.0's CLI is named");
+  assert.ok(realign.stderr.includes("npx github:akumidv/ai_akmon#v0.1.0 init --mode vendored"), realign.stderr);
+  fs.writeFileSync(
+    posix.join(root, "_aitna/.akmon.toml"),
+    mountedRecord("vendored").replace('"0.1.0"', '"0.1.0-3-gabc1234"'),
+  );
+  const unfetchable = run(["--ref", "0.1.0-3-gabc1234", "--project-root", root], deps());
+  assert.equal(unfetchable.status, 2);
+  assert.ok(unfetchable.stderr.includes("is not a release this can fetch"), unfetchable.stderr);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("submodule fetches the tags into the mount from --repo, then this CLI's init moves the pin", () => {
+  const root = project({ "_aitna/.akmon.toml": mountedRecord("submodule") }, { linked: false });
+  const stand = deps();
+  const result = run(["--ref", "v0.2.0", "--repo", "/srv/akmon", "--project-root", root], stand);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(stand.ran.slice(0, 2), [
+    ["git", "fetch", "--quiet", "--tags", "/srv/akmon"],
+    [process.execPath, CLI, "init", "--project-root", root, "--yes", "--ref", "v0.2.0"],
+  ]);
+  assert.ok(result.stdout.includes("akmon update: fetching release tags into _aitna/akmon\n"));
+  const failed = run(["--ref", "v0.2.0", "--repo", "/srv/akmon", "--project-root", root], deps({ codes: () => 1 }));
+  assert.equal(failed.status, 2);
+  assert.equal(
+    failed.stderr,
+    "akmon update: `git fetch --tags` failed in _aitna/akmon — it needs git and network access to /srv/akmon\n",
+  );
   fs.rmSync(root, { recursive: true, force: true });
 });

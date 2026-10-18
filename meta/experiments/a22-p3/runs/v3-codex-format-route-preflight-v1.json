@@ -1,0 +1,9 @@
+{
+  "dispatch_allowed": false,
+  "opening_codex_tokens": 273286,
+  "operational_seal_sha256": "080abfb3f45d52a1057b274fc8ab9d2652dba02d983464c5c3661bd905831ea1",
+  "packet_sha256": "5cce39ac1d12dcb99ab5623e0c44e541df4f471e07f8c972626d574adfcf450c",
+  "prompt_sha256": "3a22898c9b954c0bad8305bf2efd3eeaf8099c269e7e6c428a9454fddb7f3e20",
+  "provider_calls": 0,
+  "status": "PASSED_OFFLINE_ROUTE_PREFLIGHT"
+}

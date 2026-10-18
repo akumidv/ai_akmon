@@ -11,15 +11,17 @@ once with the one request the flows make there: run the `audit` pass, or say the
 
 Three properties keep it from becoming noise:
 
-- **it holds the turn once per gate** — the C36 marker is keyed by role and count, so the same
-  material never blocks twice while a later turn carrying a different count is a new gate;
+- **it holds the turn once per gate** — the C36 marker is keyed by role and a digest of the
+  counted section text, so the same material never blocks twice in a session while different
+  material, even at the same count, is a new gate;
 - **it never holds a turn it already held** — `stop_hook_active` is true on the turn that runs
   *because* a Stop hook blocked (M87), and that turn is the audit itself;
 - **it stays advisory in substance** — the floor is advisory in review-flow and design-flow, so
   the request names both moves the flows allow; what it removes is the silent pass.
 
-Codex has no main-agent stop event on 0.155.1 (M88), so this gate is Claude-only for now; the
-logic it calls lives in `tools/model_routing/routing.py` and is vendor-neutral when one appears.
+This gate is Claude-only for now: it is not wired on Codex — M151 (codex 0.162.1) suggests a
+main-agent `Stop` exists, live probe pending (C128). The logic it calls lives in
+`tools/model_routing/routing.py` and is vendor-neutral when Codex is wired.
 """
 
 from __future__ import annotations

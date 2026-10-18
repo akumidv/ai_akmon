@@ -221,7 +221,7 @@ def _update_subtree(root: Path, aitna: str, plan: _Plan, repo: str) -> _Moved:
     data = _data()
     commands = [
         jsondata.fill(data["subtree_pull_command"], {"aitna": aitna, "repo": repo, "target": plan.target}),
-        jsondata.fill(data["subtree_realign_command"], {"target": plan.target}),
+        jsondata.fill(data["subtree_realign_command"], {"target": plan.target, "cli": "akmon"}),
     ]
     raise _UpdateError(data["subtree_refusal"] + "\n" + "\n".join(commands))
 
@@ -310,7 +310,10 @@ def main(argv: list[str] | None = None) -> int:
         ecosystem = _init._record_fields(root, aitna).get("ecosystem")
         if isinstance(ecosystem, str) and ecosystem and ecosystem != "python":
             raise _UpdateError(
-                _jsondata().fill(_data()["python_refuses_ecosystem"], {"value": ecosystem, "aitna": aitna})
+                _jsondata().fill(
+                    _data()["python_refuses_ecosystem"],
+                    {"value": ecosystem, "aitna": aitna, "cli": _init.node_cli(root, aitna)},
+                )
             )
         current, last_realign = _recorded_versions(root, aitna)
         target = args.ref or _init._package_default_ref(args.repo, root)

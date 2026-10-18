@@ -5,7 +5,8 @@
   C77 execute-from-the-package amendment (D2-35) are owner-verified and landed in `db9ad7e`.
   For executable code, D01/D02's single-implementation premise is narrowed by
   [ADR-0020/D01](0020-node-consumers-js-implementation.md#d01--two-implementations-one-normative-behavioral-spec)
-  (a JavaScript implementation for Node package mode).
+  (a JavaScript implementation for Node package mode) and by its D02 amendment (C129: a mounted
+  record naming `node` runs the JavaScript implementation).
 - **Owner:** akuminov@gmail.com
 - **References:** design [packaging concept](../design/packaging/README.md) (options
   and mechanics — the operative spec) · ROADMAP §Distribution ·

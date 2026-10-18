@@ -22,12 +22,18 @@ def _fixture(tmp_path: Path, option: str = "usd25") -> tuple[Path, Path, Path, d
     plan = tmp_path / "plan.md"
     plan.write_text("proposal snapshot\n", encoding="utf-8")
     seal = tmp_path / "seal.json"
-    seal.write_text(json.dumps({
-        "schema": 1,
-        "record_type": "p3_v2_plan_seal",
-        "proposal_sha256": _sha(plan),
-        "packet_seal_sha256": _sha(approval_v2.PACKET_SEAL),
-    }, separators=(",", ":")), encoding="utf-8")
+    seal.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "record_type": "p3_v2_plan_seal",
+                "proposal_sha256": _sha(plan),
+                "packet_seal_sha256": _sha(approval_v2.PACKET_SEAL),
+            },
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
     record = {
         "schema": 2,
         "record_type": "p3_v2_owner_approval",
@@ -38,10 +44,12 @@ def _fixture(tmp_path: Path, option: str = "usd25") -> tuple[Path, Path, Path, d
         "retry_evidence_policy": "OBSERVED_NO_RETRY",
         "acceptance_evidence": {
             "record_type": "p3_owner_acceptance_transcript_evidence",
-            "accepted_utc": "2026-10-11T00:00:00Z", "transcript_ref": "test-only fixture",
+            "accepted_utc": "2026-10-11T00:00:00Z",
+            "transcript_ref": "test-only fixture",
             "transcript_sha256": "a" * 64,
             "exact_quote": "I accept OBSERVED_NO_RETRY for the test-only fixture.",
-            "decision_ref": "test-only fixture decision", "proposal_sha256": _sha(plan),
+            "decision_ref": "test-only fixture decision",
+            "proposal_sha256": _sha(plan),
             "accepted_v2_seal_sha256": _sha(seal),
         },
         "authorized_phases": ["route_check", "qualification"],
@@ -103,11 +111,14 @@ def test_valid_token_only_policy_passes_pure_validation(tmp_path):
     assert approval_v2.validate(approval, plan, seal)["selected_resource_option"] == "token_only"
 
 
-@pytest.mark.parametrize("value,match", [
-    ("UNSELECTED", "retry evidence policy is unselected"),
-    ("PROVIDER_ZERO_RETRIES", "retry evidence policy is unknown"),
-    ([], "retry evidence policy is unknown"),
-])
+@pytest.mark.parametrize(
+    "value,match",
+    [
+        ("UNSELECTED", "retry evidence policy is unselected"),
+        ("PROVIDER_ZERO_RETRIES", "retry evidence policy is unknown"),
+        ([], "retry evidence policy is unknown"),
+    ],
+)
 def test_retry_evidence_policy_must_be_owner_selected_supported_value(tmp_path, value, match):
     approval, plan, seal, record = _fixture(tmp_path, "token_only")
     record["retry_evidence_policy"] = value
@@ -135,14 +146,17 @@ def test_token_policy_fixes_codex_only_limit_and_qwen_has_no_aggregate_cap(tmp_p
     assert approval_v2.validate(approval, plan, seal)["selected_resource_option"] == "token_only"
 
 
-@pytest.mark.parametrize("field,value", [
-    ("codex_aggregate_limit_tokens", 5_040_000),
-    ("known_prior_codex_usage_tokens", None),
-    ("remaining_codex_tokens_at_approval", 5_000_000),
-    ("qwen_aggregate_limit_tokens", 5_000_000),
-    ("accepted_scorer_readings_per_route", 240),
-    ("exploratory_calls_counted", False),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("codex_aggregate_limit_tokens", 5_040_000),
+        ("known_prior_codex_usage_tokens", None),
+        ("remaining_codex_tokens_at_approval", 5_000_000),
+        ("qwen_aggregate_limit_tokens", 5_000_000),
+        ("accepted_scorer_readings_per_route", 240),
+        ("exploratory_calls_counted", False),
+    ],
+)
 def test_invalid_or_missing_accepted_limits_fail_closed(tmp_path, field, value):
     approval, plan, seal, record = _fixture(tmp_path, "token_only")
     record["options"]["token_only"][field] = value

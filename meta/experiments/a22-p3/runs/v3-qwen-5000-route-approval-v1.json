@@ -1,0 +1,13 @@
+{
+  "acceptance_basis": "owner direction after terminal qualification report: \u0437\u0430\u043f\u0443\u0441\u043a\u0430\u0439",
+  "authorized_phases": [
+    "qwen_5000_route_check"
+  ],
+  "dispatch_allowed": true,
+  "operational_seal_sha256": "a8403cf0a9a8b233574c16f13725d094652441535f2f9b3867256b6561b2c012",
+  "owner_accepted": true,
+  "preflight_sha256": "df4f623646f6b02c9455dcf0cbd21abdbb14b452ca83e77d714cc82c9b35e38a",
+  "record_type": "p3_v3_qwen_5000_route_approval",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "schema": 1
+}

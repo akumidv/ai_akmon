@@ -211,7 +211,7 @@ The single owner of model-selection policy *and* task-kind knowledge (requiremen
     "implement-under-spec": {"tier": "worker", "rung": "mid"},
     "debug-deep": {"tier": "reasoner"},
     "design-fork": {"tier": "reasoner"},
-    "quant-derivation": {"tier": "reasoner"},
+    "quant-derivation": {"tier": "reasoner", "floor": "orchestrator_floor"},
     "independent-review": {"tier": "second-opinion"}
   }
 }
@@ -219,6 +219,15 @@ The single owner of model-selection policy *and* task-kind knowledge (requiremen
 
 A project may overlay this with a local override file (same shape, deep-merged) for
 project-specific kinds or a pinned dated id when behaviour must be frozen.
+
+A task kind's optional `floor` is the lowest rung its delegate may run on, resolved at init
+against the local ladder into `task_kind_floors` (C32): `"highest"` is the top rung; a literal
+alias counts only when the ladder has it; `"orchestrator_floor"` is the vendor's corridor
+boundary (`selection_policy.orchestrator_floor`, §3) — the lowest rung the corridor accepts for
+the orchestrator, and so for the reasoner that follows it. `quant-derivation` carries
+`"orchestrator_floor"`: a healthy binding (orchestrator inside the corridor) opens no gap, and
+only an orchestrator below the corridor leaves the kind under-powered. A floor that resolves to
+nothing on the local ladder records nothing.
 
 `second_opinion` names a harness and an operation; it does not spell a command. C57 moved the
 executable and its argv into `common/runtime.py`, the single map of harness commands, so the
@@ -307,9 +316,13 @@ Same rule-plus-hook split akmon already uses (commit guard, role declaration).
 Requirement 8. A **PreToolUse hook on the subagent tool** (`Agent`/`Task` matcher, wired
 like the guards) appends one line per delegation to a local log
 (`.claude/model-routing.log`): timestamp, session id, subagent, resolved model, zone and
-description. The hook injects nothing into model context; it emits a UI-visible system message
-and the harness already shows subagent calls live. The model never narrates a switch. The
-harness payload names the subagent but carries no independently authoritative task kind.
+description. The hook does not narrate the delegation into model context; it emits a UI-visible
+system message and the harness already shows subagent calls live. The model never narrates a
+switch. Its per-call warnings (C20, C32, C33) are the exception: each goes out on both channels —
+the owner's text in `systemMessage`, which the model does not see (M77), and a text addressed to
+the orchestrator in `additionalContext` (ADR 0006 item 4); on PreToolUse both are delivered and the
+call runs with no permission decision (M149). The harness payload names the subagent but carries
+no independently authoritative task kind.
 
 **Resolved model selection** is the call's explicit override if it carries one, else the routed
 agent's pinned tier model derived from the *recorded binding* (`bound_model_for`) — the calls
@@ -555,8 +568,13 @@ the evidence-based gate check is the authoritative signal.
    for a bounded draft. Default and floors decided (§9.7 #1): default to
    the orchestrator's rung (hypothesis-consistent, fresh context is the main benefit),
    escalate on the existing ladder signals, with per-task-kind floors as registry data
-   (e.g. `quant-derivation` may pin higher). A wrong under-powered draft at a gate is
-   caught by the auditor — the safety net that makes the cheaper default acceptable.
+   (`quant-derivation` pins the corridor boundary, `"orchestrator_floor"` — §4.1; C32 reads
+   the floors in the status line and per delegation call; the per-call check is Claude-only,
+   since a Codex delegation names neither agent nor model and no delegation-log route fires
+   on it, M62). The per-call warning reaches both readers (ADR 0006 item 4): the owner in
+   `systemMessage`, the orchestrator in `additionalContext` with the override to re-issue the
+   call with — `delegate <kind> with model=<floor>` (M149). A wrong under-powered draft at a
+   gate is caught by the auditor — the safety net that makes the cheaper default acceptable.
 3. **`second-opinion` — always a *different model*, because it thinks differently.** The
    diversity requirement is about priors, not vendor branding: the reviewer must differ
    from the models whose work it reviews (the orchestrator as author, the auditor as
@@ -655,11 +673,14 @@ advisory does not warn against it.**
   the counting rule is **structural** — the outermost bullets, numbered items and table rows
   under the turn's Findings/Options headings, read from `last_assistant_message` (M87). At or
   above the floor the hook holds the turn once, with `stop_hook_active` and a C36 marker keyed
-  by role and count keeping it to one hold per gate. Rejected: reading the previous turn at the
+  by role and a digest of the counted section text keeping it to one hold per gate: the same
+  material holds once in a session, different material holds again even at the same count (a
+  count key merged two gates of equal size and re-held 3 → 4 → 3). Rejected: reading the previous turn at the
   next `UserPromptSubmit` (fires after the hand-off the gate exists to precede) and a declared
   count line in the flows (a new cross-cutting convention, and it relies on the role writing
-  the line — the very step that is missed). Codex has no main-agent stop event (M88), so the
-  gate is Claude-only until one appears; the logic itself is vendor-neutral.
+  the line — the very step that is missed). The gate is not wired on Codex — M151 (codex
+  0.162.1) suggests a main-agent `Stop` exists, live probe pending (C128) — so it is Claude-only
+  until then; the logic itself is vendor-neutral.
   **Measured afterwards (C98):** over this repository's own history the anchor opens no section at
   all, so the floors are never reached — the counting rule stands, the heading vocabulary and the
   role↔noun pairing do not. The open choice lives in C98.
@@ -805,7 +826,9 @@ self-reported protocol rather than an authoritative harness fact; and splitting 
 which would reopen the grouped-by-brief design solely for advisory precision. D2-4 owns this
 predicate and the transcript role source. D2-6 independently owns the `cross_cutting_kinds`
 population added to `effective_allowed`; approving D2-4 does not approve that population. No
-Codex runtime claim is made because Codex does not wire this hook.
+Codex runtime claim is made because Codex does not wire this hook. The advisory reaches both
+readers (ADR 0006 item 4): the owner in `systemMessage`, the orchestrator in `additionalContext`
+— re-route the work or declare the role switch (M149).
 
 The hook needs a machine-readable active role, and the `🧭` chat declaration is invisible to a
 hook *as chat* — so §10.4 decision 1 planned a session-state marker to land with C20. **C20 shipped
@@ -822,7 +845,14 @@ was not built, and nothing may name that marker as a carrier. See the note under
 - **Decompose (review) / Survey (design) emit an explicit zone plan** — the named list
   of zones/modules the fan-out is split by. Each fan-out delegation carries its zone
   label; the coverage map (§9.4, C17) is then *assembled from the log by code*, closing
-  the loop between how work was split and how its completeness is audited. Today the
+  the loop between how work was split and how its completeness is audited. A label starts
+  with a letter or digit and holds only letters, digits, `-`, `_` and `.` (anything else
+  yields no label); it is stored as written and matched against the plan case-insensitively;
+  a plan against a round whose every delegation is unlabelled fails the map instead of
+  reporting every zone uncovered (C33). An unlabelled call in a session whose earlier
+  delegations carried labels is warned per call on both channels (ADR 0006 item 4): the owner
+  in `systemMessage`, the orchestrator in `additionalContext` — label fan-out calls with
+  `[zone:<label>]` (M149). Today the
   decomposition lives in prose and the map would have no source.
 - **Loop-back edges become explicit steps** in review-flow (Calibrate → Decompose, one
   bounded re-round) and design-flow (Consolidate → Iterate) — §9.5's topology, written

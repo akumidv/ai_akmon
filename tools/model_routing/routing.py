@@ -205,8 +205,7 @@ def compute_binding(
     if semantic:
         warning = warnings["semantic"]
     else:
-        floor = policy.get("orchestrator_floor", "highest")
-        floor_rung = rungs[-1] if floor == "highest" else str(floor)
+        floor_rung = _corridor_floor(policy, rungs)
         if orchestrator not in rungs:
             warning = jsondata.fill(warnings["not_in_list"], {"orchestrator": orchestrator})
         elif floor_rung in rungs:
@@ -237,12 +236,25 @@ def compute_binding(
     )
 
 
-def task_kind_floors(registry: dict, rungs: list[str]) -> dict[str, str]:
+def _corridor_floor(policy: dict, rungs: list[str]) -> str:
+    """The corridor's lower bound on ``rungs``: ``orchestrator_floor``, ``"highest"`` the top rung.
+
+    Not necessarily on the ladder — an alias the local ladder lacks disables the corridor.
+    """
+    floor = policy.get("orchestrator_floor", "highest")
+    return rungs[-1] if floor == "highest" else str(floor)
+
+
+def task_kind_floors(registry: dict, rungs: list[str], vendor: str = "anthropic") -> dict[str, str]:
     """Per-task-kind rung floors, resolved to concrete aliases from ``rungs``.
 
     Only task kinds carrying a ``"floor"`` key are included. ``"highest"`` resolves to
-    ``rungs[-1]``; a literal alias passes through only when present in ``rungs``. A kind
-    whose floor cannot be resolved (empty ``rungs``, or an alias absent from it) is skipped.
+    ``rungs[-1]``; ``"orchestrator_floor"`` resolves to ``vendor``'s corridor floor
+    (``selection_policy.orchestrator_floor``, itself ``"highest"`` or an alias) — the lowest
+    rung the corridor accepts for the orchestrator, and so for the reasoner that follows it
+    (C32: a healthy binding opens no gap); a literal alias passes through only when present in
+    ``rungs``. A kind whose floor cannot be resolved (empty ``rungs``, or an alias absent from
+    it) is skipped.
     """
     floors: dict[str, str] = {}
     if not rungs:
@@ -251,11 +263,19 @@ def task_kind_floors(registry: dict, rungs: list[str]) -> dict[str, str]:
         floor = spec.get("floor")
         if not floor:
             continue
-        if floor == "highest":
-            floors[kind] = rungs[-1]
-        elif floor in rungs:
-            floors[kind] = str(floor)
+        if floor == "orchestrator_floor":
+            floor = _corridor_floor(registry.get(vendor, {}).get("selection_policy", {}), rungs)
+        resolved = _rung_floor(floor, rungs)
+        if resolved is not None:
+            floors[kind] = resolved
     return floors
+
+
+def _rung_floor(floor: object, rungs: list[str]) -> str | None:
+    """A ``"highest"`` or literal floor on ``rungs``, else None (an alias the ladder lacks)."""
+    if floor == "highest":
+        return rungs[-1]
+    return str(floor) if floor in rungs else None
 
 
 def vendors_with_routing_policy(registry: dict) -> list[str]:
@@ -830,6 +850,22 @@ def role_matrix_warning(registry: dict, subagent_type: str, role: str | None) ->
     allowed set, so an agent whose only kinds are cross-cutting (e.g. ``k_auditor``) never
     warns under any role.
     """
+    fields = _role_matrix_fields(registry, subagent_type, role)
+    return None if fields is None else jsondata.fill(_agents_data()["role_matrix_warning"], fields)
+
+
+def role_matrix_directive(registry: dict, subagent_type: str, role: str | None) -> str | None:
+    """The model-addressed form of ``role_matrix_warning``: re-route or switch role.
+
+    Same predicate, same silence; the delegation log sends it as ``additionalContext`` beside
+    the owner's ``systemMessage`` (ADR 0006 item 4, M149).
+    """
+    fields = _role_matrix_fields(registry, subagent_type, role)
+    return None if fields is None else jsondata.fill(_agents_data()["role_matrix_directive"], fields)
+
+
+def _role_matrix_fields(registry: dict, subagent_type: str, role: str | None) -> dict[str, str] | None:
+    """The role-matrix advisory's template fields, or ``None`` when it stays silent (§10.2)."""
     if not role:
         return None
     role_rows = registry.get("role_task_kinds", {})
@@ -843,10 +879,7 @@ def role_matrix_warning(registry: dict, subagent_type: str, role: str | None) ->
     if not kinds or set(kinds) & set(effective_allowed):
         return None
     allowed_text = ", ".join(effective_allowed) or "no task kinds"
-    return jsondata.fill(
-        _agents_data()["role_matrix_warning"],
-        {"subagent": subagent_type, "kinds": ", ".join(kinds), "role": role, "allowed": allowed_text},
-    )
+    return {"subagent": subagent_type, "kinds": ", ".join(kinds), "role": role, "allowed": allowed_text}
 
 
 # --------------------------------------------------------------------------------------
@@ -1168,7 +1201,7 @@ def local_config(binding: Binding, registry: dict, *, second_opinion: bool, avai
         "second_opinion_provider": opposite_vendor(registry, binding.vendor),
         "available": available,
         "registry_hash": registry_hash(registry),
-        "task_kind_floors": task_kind_floors(registry, available or []),
+        "task_kind_floors": task_kind_floors(registry, available or [], binding.vendor),
     }
     provider = config["second_opinion_provider"]
     if provider == binding.vendor:
@@ -1276,12 +1309,7 @@ def delegation_floor_warning(config: dict, subagent_type: str, call_model: objec
     The call does not say which task kind it carries, so the warning is conditional on the
     kind; an explicit ``model`` override at or above every gapped floor silences it.
     """
-    ladder = config.get("available") if isinstance(config, dict) else None
-    gaps = [gap for gap in floor_gaps(config) if gap.agent == subagent_type]
-    if not gaps or not isinstance(ladder, list):
-        return None
-    call_rank = _rank(ladder, call_model)
-    open_gaps = [gap for gap in gaps if call_rank is None or call_rank < ladder.index(gap.floor)]
+    open_gaps = _open_floor_gaps(config, subagent_type, call_model)
     if not open_gaps:
         return None
     kinds = ", ".join(f"{gap.kind} (floor {gap.floor})" for gap in open_gaps)
@@ -1289,6 +1317,32 @@ def delegation_floor_warning(config: dict, subagent_type: str, call_model: objec
         _agents_data()["delegation_floor_warning"],
         {"subagent": subagent_type, "bound": open_gaps[0].bound, "kinds": kinds},
     )
+
+
+def delegation_floor_directive(config: dict, subagent_type: str, call_model: object) -> str | None:
+    """The model-addressed form of ``delegation_floor_warning``: from the next call on, the floor's model.
+
+    Same predicate, same silence; the delegation log sends it as ``additionalContext`` beside
+    the owner's ``systemMessage`` (ADR 0006 item 4, M149).
+    """
+    open_gaps = _open_floor_gaps(config, subagent_type, call_model)
+    if not open_gaps:
+        return None
+    texts = _agents_data()["delegation_floor_directive"]
+    overrides = "; ".join(jsondata.fill(texts["override"], {"kind": gap.kind, "floor": gap.floor}) for gap in open_gaps)
+    return jsondata.fill(
+        texts["text"], {"subagent": subagent_type, "bound": open_gaps[0].bound, "overrides": overrides}
+    )
+
+
+def _open_floor_gaps(config: dict, subagent_type: str, call_model: object) -> list[FloorGap]:
+    """The agent's floor gaps the call's ``model`` override leaves open (C32)."""
+    ladder = config.get("available") if isinstance(config, dict) else None
+    gaps = [gap for gap in floor_gaps(config) if gap.agent == subagent_type]
+    if not gaps or not isinstance(ladder, list):
+        return []
+    call_rank = _rank(ladder, call_model)
+    return [gap for gap in gaps if call_rank is None or call_rank < ladder.index(gap.floor)]
 
 
 def _escalation_hint(config: dict) -> str:
@@ -1391,6 +1445,9 @@ _ZONE_BRACKETED = re.compile(r"\[\s*zone\s*:\s*([^\]]*)\]\s*(.*)", re.ASCII | re
 # Unbracketed only as one token (``zone:auth``): with a space after the colon, prose such as
 # "zone: the auth module" would otherwise yield the label "the".
 _ZONE_BARE = re.compile(r"zone:(\S+)\s*(.*)", re.ASCII | re.IGNORECASE | re.DOTALL)
+#: A zone label (C33 review): a letter or digit first, then letters, digits, ``-``, ``_`` or ``.``.
+#: Unicode letters and digits count; anything else — a bracket, a lone ``-`` — is no label.
+_ZONE_LABEL = re.compile(r"[^\W_][\w.-]*")
 
 
 def zone_convention() -> str:
@@ -1415,18 +1472,26 @@ def parse_zone(description: str) -> tuple[str | None, str]:
     carries (§9.4/§10.3). A marker only counts at the very start:
     ``[zone:auth] check tokens`` -> ``("auth", "check tokens")``; tolerated alike (C33):
     any case, spaces inside the brackets, and the bare one-token ``zone:auth check tokens``.
-    No marker -> ``(None, <description stripped>)``.
+    No marker -> ``(None, <description stripped>)``. A marker whose label is not a label —
+    empty, or breaking ``_ZONE_LABEL`` (``[zone:-]``, ``zone:[auth]``, ``zone:auth]x``) — is
+    still taken off the description but yields no label. The label keeps its case as written;
+    the coverage map matches it case-insensitively.
     """
     text = description.strip()
     bracketed = _ZONE_BRACKETED.match(text)
     if bracketed:
-        return (bracketed.group(1).strip() or None, bracketed.group(2).strip())
+        return (_zone_label(bracketed.group(1).strip()), bracketed.group(2).strip())
     bare = _ZONE_BARE.match(text)
     if bare:
         # C33: the unbracketed ``zone:X …`` spelling was observed live and used to leave the
         # whole fan-out unlabelled — an all-uncovered coverage map.
-        return (bare.group(1).rstrip(",;:") or None, bare.group(2).strip())
+        return (_zone_label(bare.group(1).rstrip(",;:")), bare.group(2).strip())
     return (None, text)
+
+
+def _zone_label(candidate: str) -> str | None:
+    """``candidate`` when it is a well-formed zone label, else None."""
+    return candidate if _ZONE_LABEL.fullmatch(candidate) else None
 
 
 def unlabelled_fanout_warning(
@@ -1438,14 +1503,37 @@ def unlabelled_fanout_warning(
     one is active is that earlier delegations of this session carried zone labels. The
     auditor is exempt: an audit reads the fan-out, it is not a zone of it.
     """
-    if zone or not session_id or subagent not in _agent_by_name() or subagent == "k_auditor":
-        return None
-    labelled = sorted({e.zone for e in entries if e.session_id == session_id and e.zone})
+    labelled = _zoned_labels(entries, session_id, subagent, zone)
     if not labelled:
         return None
     return jsondata.fill(
         _agents_data()["unlabelled_fanout_warning"], {"subagent": subagent, "labelled": ", ".join(labelled)}
     )
+
+
+def unlabelled_fanout_directive(
+    entries: Iterable[DelegationEntry], session_id: str | None, subagent: str, zone: str | None
+) -> str | None:
+    """The model-addressed form of ``unlabelled_fanout_warning``: label the fan-out calls.
+
+    Same predicate, same silence; the delegation log sends it as ``additionalContext`` beside
+    the owner's ``systemMessage`` (ADR 0006 item 4, M149).
+    """
+    labelled = _zoned_labels(entries, session_id, subagent, zone)
+    if not labelled:
+        return None
+    return jsondata.fill(
+        _agents_data()["unlabelled_fanout_directive"], {"subagent": subagent, "labelled": ", ".join(labelled)}
+    )
+
+
+def _zoned_labels(
+    entries: Iterable[DelegationEntry], session_id: str | None, subagent: str, zone: str | None
+) -> list[str]:
+    """The session's earlier zone labels when this call should carry one too, else ``[]`` (C33)."""
+    if zone or not session_id or subagent not in _agent_by_name() or subagent == "k_auditor":
+        return []
+    return sorted({e.zone for e in entries if e.session_id == session_id and e.zone})
 
 
 def delegation_log_line(
@@ -1608,6 +1696,27 @@ def _opens_section(text: str, headings: tuple[str, ...]) -> bool:
     return any(word.startswith(heading) for word in words[:3] for heading in headings)
 
 
+def _gate_section_lines(message: str, rule: GateRule) -> Iterator[tuple[int, str]]:
+    """``(section ordinal, line)`` for every body line under a ``rule`` section of ``message``.
+
+    A section opens at a heading that names the counted material and closes at the next heading
+    of the same or a higher level; a deeper heading inside it is neither yielded nor a closer.
+    The ordinal tells a caller where one section's body ends and the next one's begins.
+    """
+    level, ordinal = None, 0
+    for line in message.splitlines():
+        heading = _heading(line)
+        if heading is not None:
+            opened, text = heading
+            if level is not None and opened <= level:
+                level = None
+            if level is None and _opens_section(text, rule.headings):
+                level, ordinal = opened, ordinal + 1
+            continue
+        if level is not None:
+            yield ordinal, line
+
+
 def count_gate_items(message: str, rule: GateRule) -> int:
     """Structural items under every ``rule`` section of ``message`` (C25's counting rule).
 
@@ -1618,18 +1727,10 @@ def count_gate_items(message: str, rule: GateRule) -> int:
     not swept in. The base indent is per section: a section whose whole list sits inside a
     numbered step counts its items, not zero.
     """
-    total, level, in_table, base = 0, None, False, None
-    for line in message.splitlines():
-        heading = _heading(line)
-        if heading is not None:
-            opened, text = heading
-            if level is not None and opened <= level:
-                level, in_table, base = None, False, None
-            if level is None and _opens_section(text, rule.headings):
-                level, base = opened, None
-            continue
-        if level is None:
-            continue
+    total, section, in_table, base = 0, 0, False, None
+    for ordinal, line in _gate_section_lines(message, rule):
+        if ordinal != section:
+            section, in_table, base = ordinal, False, None
         if line.lstrip().startswith("|"):
             if _TABLE_SEPARATOR_RE.match(line):
                 in_table = True  # the row above it was the header, not an item
@@ -1645,6 +1746,16 @@ def count_gate_items(message: str, rule: GateRule) -> int:
         if indent <= base:
             total += 1
     return total
+
+
+def gate_section_text(message: str, rule: GateRule) -> str:
+    """The body of every ``rule`` section of ``message``, one line each — the material a gate counts.
+
+    The headings are left out (a renamed heading over the same items is the same gate), and so
+    are blank lines and every line outside the sections (the summary around them moves from turn
+    to turn).
+    """
+    return "\n".join(line for _ordinal, line in _gate_section_lines(message, rule) if line.strip())
 
 
 def gate_threshold(registry: dict, rule: GateRule) -> int | None:
@@ -1687,21 +1798,25 @@ def gate_audit_request(
     )
 
 
-def gate_audit_marker_kind(rule: GateRule, count: int) -> str:
-    """The marker kind for one gate episode: role and count, so a changed count asks again."""
-    return f"{_GATE_MARKER_PREFIX}-{rule.role}-{count}"
+def gate_audit_marker_kind(message: str, rule: GateRule) -> str:
+    """The marker kind for one gate episode: the role and a digest of the counted material.
+
+    Keyed by content, not count (C25 review): two different gates with the same count are two
+    gates, and the same material is one gate however the count moved in between.
+    """
+    digest = hashlib.sha256(gate_section_text(message, rule).encode("utf-8")).hexdigest()[:16]
+    return f"{_GATE_MARKER_PREFIX}-{rule.role}-{digest}"
 
 
 def gate_audit_once(role: str | None, message: str, session_id: str | None, *, marker_dir: Path | None = None) -> bool:
     """Claim this gate episode for ``session_id``; False when it was already asked for.
 
-    Keyed by role and count (C36 markers): the same material never blocks twice, while a later
-    turn that carries a different count is a new gate and is asked about again.
+    Keyed by role and the counted material (C36 markers): the same Findings/Options never block
+    twice in a session, while different material — even with the same count — is a new gate and
+    is asked about again. Markers are not released on a new gate, so returning to material
+    already held (3 → 4 → 3) does not hold it a second time; they age out with the C36 throttle.
     """
     rule = gate_rule_for(role)
     if rule is None:
         return False
-    kind = gate_audit_marker_kind(rule, count_gate_items(message, rule))
-    claimed = claim_diagnostic_marker(kind, session_id, directory=marker_dir)
-    release_diagnostic_markers(_GATE_MARKER_PREFIX, session_id, keep_kind=kind, directory=marker_dir)
-    return claimed
+    return claim_diagnostic_marker(gate_audit_marker_kind(message, rule), session_id, directory=marker_dir)

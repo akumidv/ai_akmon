@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
@@ -659,10 +661,13 @@ def generated_wiring(root: Path) -> dict:
 
 
 #: The script ``node --input-type=module -e`` runs to read the wiring the JavaScript ``sync`` emits:
-#: the command strings of each vendor, as JSON on stdout. It imports the module under ``root``
-#: (the tree being checked), so the join cannot be satisfied by a stale copy elsewhere.
+#: the command strings of each vendor, as JSON on stdout, for every project root after the module
+#: (a package-mode one and a mounted one: the hooks directory is the record's, C129). It imports the
+#: module under ``root`` (the tree being checked), so the join cannot be satisfied by a stale copy
+#: elsewhere.
 _NODE_WIRING_SCRIPT = """
 const sync = await import(process.argv[1]);
+const projects = process.argv.slice(2);
 const data = sync.readSyncData();
 const get = (node, key) => (node instanceof Map ? node.get(key) : node[key]);
 const commands = (config) => {
@@ -677,8 +682,14 @@ const commands = (config) => {
   }
   return out;
 };
-console.log(JSON.stringify({ claude: commands(sync.claudeHooks(data)), codex: commands(sync.codexHooks(data)) }));
+console.log(JSON.stringify({
+  claude: projects.flatMap((project) => commands(sync.claudeHooks(data, project))),
+  codex: projects.flatMap((project) => commands(sync.codexHooks(data, project))),
+}));
 """
+#: The integration records of the two projects the wiring is read for: the hooks directory is
+#: ``node_modules/akmon/js/hooks`` in package mode and ``<AITNA_ROOT>/akmon/js/hooks`` in a mount.
+_NODE_WIRING_RECORDS = ('mount = "package"\necosystem = "node"\n', 'mount = "submodule"\necosystem = "node"\n')
 
 
 class NodeWiringError(Exception):
@@ -689,7 +700,9 @@ def node_generated_wiring(root: Path) -> dict:
     """``vendor -> command entries`` as the JavaScript ``sync`` would emit them for ``root``.
 
     Read by running ``node`` over ``<root>/js/bin/sync.mjs`` — the generators of the Node
-    ecosystem live in JavaScript, so the Python checker asks them rather than restating them.
+    ecosystem live in JavaScript, so the Python checker asks them rather than restating them. The
+    wiring depends on the record's mode (C129), so it is read for a package-mode project and a
+    mounted one, two scratch roots holding nothing but their record.
     """
     if shutil.which("node") is None:
         raise NodeWiringError(
@@ -697,12 +710,20 @@ def node_generated_wiring(root: Path) -> dict:
             "prerequisite of this check, not a defect — it needs node >= 22 on PATH"
         )
     module = (root / "js" / "bin" / "sync.mjs").resolve().as_uri()
-    result = subprocess.run(
-        ["node", "--input-type=module", "-e", _NODE_WIRING_SCRIPT, module],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory(prefix="akmon-node-wiring-") as scratch:
+        projects = []
+        for index, record in enumerate(_NODE_WIRING_RECORDS):
+            project = Path(scratch) / f"project-{index}"
+            (project / "_aitna").mkdir(parents=True)
+            (project / "_aitna" / ".akmon.toml").write_text(record, encoding="utf-8")
+            projects.append(str(project))
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", _NODE_WIRING_SCRIPT, module, *projects],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={key: value for key, value in os.environ.items() if key != "AITNA_ROOT"},
+        )
     if result.returncode != 0:
         tail = (result.stderr or "").strip().splitlines()
         reason = tail[-1] if tail else f"exit {result.returncode}"

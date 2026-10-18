@@ -39,15 +39,17 @@
 # tempdir (a marker one claimed must stop the other) — the hash is the first 20 hex digits of the
 # SHA-256 of the identity's UTF-8, so an identity with `/`, `..` or an astral character is one flat
 # file; `sequence` pins the claim contract (atomic, repeat when unidentified, stale age-out, the
-# noisy failure directions, release by prefix with `keep_kind`); `tempdir` pins the one place
+# noisy failure directions, only a regular file of ours as a claim, release by prefix with `keep_kind`); `tempdir` pins the one place
 # Node's `os.tmpdir()` differs from `tempfile.gettempdir()` (TMP before TEMP, and no probing of
 # writability), which would put the twins' markers in different directories. A row marked
 # `nonroot` relies on file modes and is left out when the probe runs as root.
 #
-# Deliberate non-pins: a marker exactly MARKER_MAX_AGE_SECONDS old (it races the clock — the
-# rows age by a minute either side), a `kind`/prefix holding `/`, and an identity with a lone
-# surrogate (Python raises on `.encode()`, the twin refuses the same way, but the table is TOML
-# text and cannot spell one).
+# Deliberate non-pins: a marker exactly MARKER_MAX_AGE_SECONDS old, or exactly the future slack
+# ahead (each races the clock — the rows stay well to either side), a marker another user owns
+# (a table cannot chown; the unit tests fake the uid), a marker vanishing between the refused
+# create and its lstat (a race; the unit tests fake it), a `kind`/prefix holding `/`, and an
+# identity with a lone surrogate (Python raises on `.encode()`, the twin refuses the same way,
+# but the table is TOML text and cannot spell one).
 
 # --- the vocabulary (base 0) ----------------------------------------------------------------
 
@@ -199,8 +201,10 @@ steps = [
 expected = [true, true, true, true, true, true, []]
 
 [[sequence]]
-# Age-out: a marker older than a day is replaced and the diagnostic speaks again; a fresh one,
-# and one dated in the future (a clock that moved), keep it silent. The probe sets the mtime.
+# Age-out: a marker older than a day is replaced and the diagnostic speaks again; a fresh one
+# keeps it silent. One dated ahead of the clock (a clock that moved back) is stale too once it is
+# past the 60-second slack — an hour ahead speaks, half a minute ahead (a coarse timestamp) does
+# not. The probe sets the mtime; a negative age is a future one.
 steps = [
   { op = "claim", kind = "shell-route", identity = "s1" },
   { op = "age", label = "shell-route@s1", seconds = 86460 },
@@ -210,13 +214,16 @@ steps = [
   { op = "claim", kind = "shell-route", identity = "s1" },
   { op = "age", label = "shell-route@s1", seconds = -3600 },
   { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "age", label = "shell-route@s1", seconds = -30 },
+  { op = "claim", kind = "shell-route", identity = "s1" },
   { op = "ls" },
 ]
-expected = [true, true, false, false, false, ["shell-route@s1"]]
+expected = [true, true, false, false, true, false, false, ["shell-route@s1"]]
 
 [[sequence]]
-# Something that is not a file sits at the marker's path. Fresh, it counts as a held marker;
-# once old, the twin cannot unlink it, tries twice, and emits rather than stay silent.
+# Something that is not a regular file sits at the marker's path. It is not our claim, fresh or
+# old: the diagnostic speaks every time and the directory is left where it is.
 steps = [
   { op = "plant_dir", kind = "shell-route", identity = "s1" },
   { op = "claim", kind = "shell-route", identity = "s1" },
@@ -225,7 +232,20 @@ steps = [
   { op = "claim", kind = "shell-route", identity = "s1" },
   { op = "ls" },
 ]
-expected = [false, true, true, ["shell-route@s1"]]
+expected = [true, true, true, ["shell-route@s1"]]
+
+[[sequence]]
+# A symlink at the marker's path is read with lstat, never followed: pointing at a fresh regular
+# file of ours, it would read as a held marker if followed. It speaks every time, and both the
+# link and its target stay.
+steps = [
+  { op = "plant", name = "target.txt" },
+  { op = "plant_link", kind = "shell-route", identity = "s1", target = "target.txt" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "claim", kind = "shell-route", identity = "s1" },
+  { op = "ls" },
+]
+expected = [true, true, ["shell-route@s1", "target.txt"]]
 
 [[sequence]]
 # A marker that cannot be written (the directory is not there) makes the diagnostic noisier,

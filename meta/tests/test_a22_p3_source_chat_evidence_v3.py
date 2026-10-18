@@ -1,4 +1,5 @@
 """Chat-evidence extraction stays explicit, raw-preserving, and source-phase scoped."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -11,14 +12,12 @@ import pytest
 
 EXPERIMENT = Path(__file__).resolve().parents[1] / "experiments" / "a22-p3"
 sys.path.insert(0, str(EXPERIMENT))
-spec = importlib.util.spec_from_file_location(
-    "source_chat_evidence_v3", EXPERIMENT / "source_chat_evidence_v3.py")
+spec = importlib.util.spec_from_file_location("source_chat_evidence_v3", EXPERIMENT / "source_chat_evidence_v3.py")
 assert spec and spec.loader
 chat = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = chat
 spec.loader.exec_module(chat)
-phase_spec = importlib.util.spec_from_file_location(
-    "source_phase_v3_chat_test", EXPERIMENT / "source_phase_v3.py")
+phase_spec = importlib.util.spec_from_file_location("source_phase_v3_chat_test", EXPERIMENT / "source_phase_v3.py")
 assert phase_spec and phase_spec.loader
 phase = importlib.util.module_from_spec(phase_spec)
 sys.modules[phase_spec.name] = phase
@@ -39,16 +38,30 @@ def _synthetic_log(path: Path, *, override: str = chat.OVERRIDE_TEXT) -> None:
     )
     rows: list[dict[str, Any]] = [
         {"type": "session_meta", "payload": {"session_id": chat.SESSION_ID, "originator": "codex-tui"}},
-        {"type": "response_item", "ordinal": 23009, "timestamp": "stable-acceptance", "payload": {
-            "type": "message", "id": chat.ACCEPTANCE_MESSAGE_ID, "role": "user", "content": [
-                {"type": "input_text", "text": acceptance}],
-            "internal_chat_message_metadata_passthrough": {"turn_id": "01a13fac-73f5-7302-abc1-4d3d5c6b9d8e"},
-        }},
-        {"type": "response_item", "ordinal": 23313, "timestamp": "stable-override", "payload": {
-            "type": "message", "id": chat.OVERRIDE_MESSAGE_ID, "role": "user", "content": [
-                {"type": "input_text", "text": override}],
-            "internal_chat_message_metadata_passthrough": {"turn_id": "01a13fd2-5a39-7570-8ae5-50d42fc54e13"},
-        }},
+        {
+            "type": "response_item",
+            "ordinal": 23009,
+            "timestamp": "stable-acceptance",
+            "payload": {
+                "type": "message",
+                "id": chat.ACCEPTANCE_MESSAGE_ID,
+                "role": "user",
+                "content": [{"type": "input_text", "text": acceptance}],
+                "internal_chat_message_metadata_passthrough": {"turn_id": "01a13fac-73f5-7302-abc1-4d3d5c6b9d8e"},
+            },
+        },
+        {
+            "type": "response_item",
+            "ordinal": 23313,
+            "timestamp": "stable-override",
+            "payload": {
+                "type": "message",
+                "id": chat.OVERRIDE_MESSAGE_ID,
+                "role": "user",
+                "content": [{"type": "input_text", "text": override}],
+                "internal_chat_message_metadata_passthrough": {"turn_id": "01a13fd2-5a39-7570-8ae5-50d42fc54e13"},
+            },
+        },
     ]
     path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n", encoding="utf-8")
 
@@ -65,7 +78,8 @@ def test_synthetic_chat_log_preserves_raw_text_and_normalizes_wrapped_approval(t
     assert artifact["override_message"]["scope"] == ["technical_source"]
     artifact_path.write_text(json.dumps(artifact, ensure_ascii=False), encoding="utf-8")
     checked = chat.validate_artifact(
-        artifact_path=artifact_path, expected_quote=chat.CANONICAL_QUOTE, source_log_path=source_log)
+        artifact_path=artifact_path, expected_quote=chat.CANONICAL_QUOTE, source_log_path=source_log
+    )
     assert checked["scope"] == ["technical_source"]
     assert checked["authentication"] == "unsigned local log evidence; not a cryptographic signature"
 

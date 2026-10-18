@@ -12,6 +12,7 @@ import os from "node:os";
 import { posix } from "node:path";
 
 import {
+  MARKER_FUTURE_SLACK_SECONDS,
   MARKER_MAX_AGE_SECONDS,
   claimDiagnosticMarker,
   delegationStateName,
@@ -106,6 +107,151 @@ test("a marker older than a day is replaced; one inside the day is kept", () => 
     assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), false);
     age(MARKER_MAX_AGE_SECONDS - 60);
     assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), false);
+  });
+});
+
+/** Set `file`'s mtime `seconds` in the past (a negative value: in the future). */
+function age(/** @type {string} */ file, /** @type {number} */ seconds) {
+  const moment = Date.now() / 1000 - seconds;
+  fs.utimesSync(file, moment, moment);
+}
+
+/** Claim once in `directory` and return the path of the marker that claim left. */
+function claimed(/** @type {string} */ directory) {
+  assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), true);
+  const [name] = fs.readdirSync(directory);
+  return posix.join(directory, name);
+}
+
+test("a marker dated ahead of the clock is stale once past the slack", () => {
+  withDir((directory) => {
+    const file = claimed(directory);
+    age(file, -(MARKER_FUTURE_SLACK_SECONDS / 2)); // a coarse timestamp: still held
+    assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), false);
+    age(file, -3600); // a clock that moved back an hour: no longer suppresses for days
+    assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), true);
+    assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), false);
+  });
+});
+
+test("a symlink at the marker path is not followed and speaks", () => {
+  withDir((directory) => {
+    const file = claimed(directory);
+    const target = posix.join(directory, "target.txt");
+    fs.renameSync(file, target); // a fresh regular file of ours: followed, it would read as held
+    fs.symlinkSync(target, file);
+    assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), true);
+    assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), true);
+    assert.equal(fs.lstatSync(file).isSymbolicLink(), true); // the planted path is left alone
+    assert.equal(fs.lstatSync(target).isFile(), true);
+  });
+});
+
+test("a directory at the marker path speaks and stays", () => {
+  withDir((directory) => {
+    const file = claimed(directory);
+    fs.unlinkSync(file);
+    fs.mkdirSync(file);
+    assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), true);
+    assert.equal(fs.lstatSync(file).isDirectory(), true);
+  });
+});
+
+/** Run `body` with `process.getuid` replaced by `getuid` (`undefined`: absent), then restored. */
+function withUid(/** @type {(() => number) | undefined} */ getuid, /** @type {() => void} */ body) {
+  const saved = Object.getOwnPropertyDescriptor(process, "getuid");
+  try {
+    Object.defineProperty(process, "getuid", { value: getuid, configurable: true, writable: true });
+    body();
+  } finally {
+    if (saved) {
+      Object.defineProperty(process, "getuid", saved);
+    } else {
+      delete process.getuid;
+    }
+  }
+}
+
+test("a marker another user owns is not our claim", { skip: typeof process.getuid !== "function" }, () => {
+  withDir((directory) => {
+    const file = claimed(directory);
+    const realUid = /** @type {() => number} */ (process.getuid)();
+    withUid(
+      () => realUid + 1, // a chown needs privilege: fake the uid instead
+      () => assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), true),
+    );
+    assert.equal(fs.lstatSync(file).isFile(), true); // someone else's file is not ours to replace
+    assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), false);
+  });
+});
+
+test("without user ids a regular file is enough", () => {
+  withDir((directory) => {
+    claimed(directory);
+    withUid(undefined, () => assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), false));
+  });
+});
+
+/** Run `body` with `fs.lstatSync` replaced by `lstat`, then restored. */
+function withLstat(/** @type {(file: string) => fs.Stats} */ lstat, /** @type {() => void} */ body) {
+  const patched = /** @type {{lstatSync: unknown}} */ (/** @type {unknown} */ (fs));
+  const saved = fs.lstatSync;
+  try {
+    patched.lstatSync = lstat;
+    body();
+  } finally {
+    patched.lstatSync = saved;
+  }
+}
+
+/** A Node system error with `code` and `errno`, as `fs` throws it. */
+function systemError(/** @type {string} */ code, /** @type {number} */ errno) {
+  return Object.assign(new Error(`${code}: faked`), { code, errno: -errno });
+}
+
+test("a marker that vanishes before its lstat is claimed again", () => {
+  withDir((directory) => {
+    const file = claimed(directory);
+    const real = fs.lstatSync;
+    let calls = 0;
+    withLstat(
+      (path) => {
+        calls += 1;
+        if (path === file && calls === 1) {
+          fs.unlinkSync(file); // another process aged it out between the create and the lstat
+        }
+        return real(path);
+      },
+      () => assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), true),
+    );
+    assert.equal(calls, 1);
+    assert.equal(fs.lstatSync(file).isFile(), true);
+    assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), false);
+  });
+});
+
+test("a marker that keeps vanishing still emits", () => {
+  withDir((directory) => {
+    claimed(directory);
+    withLstat(
+      () => {
+        throw systemError("ENOENT", 2);
+      },
+      () => assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), true),
+    );
+  });
+});
+
+test("an unreadable existing marker is noisier, never silent", () => {
+  withDir((directory) => {
+    claimed(directory);
+    withLstat(
+      () => {
+        throw systemError("EACCES", 13);
+      },
+      () => assert.equal(claimDiagnosticMarker(data, "shell-route", "s1", { directory }), true),
+    );
+    assert.equal(fs.readdirSync(directory).length, 1); // nothing removed
   });
 });
 

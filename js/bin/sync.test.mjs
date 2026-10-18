@@ -22,20 +22,25 @@ import {
   claudeSettings,
   codexHooks,
   codexHooksText,
+  hasPython,
   importedStandardFiles,
   installedAkmonVersion,
   isAkmonEntry,
+  languageProfiles,
   main,
   materializationRoot,
   mergeHookEntries,
+  nodeHooksDir,
   packagePinStatus,
   plannedFiles,
+  profileImports,
   readJson,
   readMountMode,
   readSyncData,
   skillSources,
   skillStubs,
   standardTreeRoot,
+  unsupportedFound,
   unsupportedRecord,
   upsertTomlKey,
 } from "./sync.mjs";
@@ -45,6 +50,7 @@ const SYNC = posix.join(TREE, "js", "bin", "sync.mjs");
 const data = readSyncData();
 const NODE_RECORD = 'mount = "package"\necosystem = "node"\nakmon_version = "0.0.1"\n';
 const COMMON = "@_aitna/.akmon/guardrails/_common.md\n";
+const MOUNTED_RECORD = 'mount = "submodule"\necosystem = "node"\nakmon_version = "0.0.1"\n';
 
 /**
  * A scratch directory removed after `body`.
@@ -91,6 +97,30 @@ function project(scratch, { record = NODE_RECORD, agents = COMMON, link = true }
     fs.symlinkSync(TREE, posix.join(root, "node_modules", "akmon"));
   }
   return root;
+}
+
+/**
+ * A Node project under `scratch` attached in a mounted mode (C129): the record, an AGENTS.md importing
+ * the common guardrail from the mount, and `<AITNA_ROOT>/akmon` linked to this tree.
+ * @param {string} scratch
+ * @param {{record?: string}} [options]
+ * @returns {string} the project root
+ */
+function mountedProject(scratch, { record = MOUNTED_RECORD } = {}) {
+  const root = posix.join(scratch, "project");
+  fs.mkdirSync(root);
+  put(root, "_aitna/.akmon.toml", record);
+  put(root, "AGENTS.md", "@_aitna/akmon/guardrails/_common.md\n");
+  fs.symlinkSync(TREE, posix.join(root, "_aitna", "akmon"));
+  return root;
+}
+
+/**
+ * `body` on a fresh Node package-mode project (see {@link project}).
+ * @param {(root: string) => void} body
+ */
+function withPackageProject(body) {
+  withScratch((scratch) => body(project(scratch)));
 }
 
 /**
@@ -303,16 +333,19 @@ test("a project's own skill is a relative link whatever the tree", () => {
 // --------------------------------------------------------------------------------------
 
 test("Claude wiring: every command is node on the hook's own file under node_modules/akmon", () => {
+  /** @type {string[]} */
   const commands = [];
-  for (const [event, entries] of claudeHooks(data).get("hooks")) {
-    assert.ok(["PreToolUse", "SessionStart", "UserPromptSubmit", "Stop"].includes(event));
-    for (const entry of entries) {
-      for (const hook of entry.get("hooks")) {
-        commands.push(hook.get("command"));
-        assert.equal(hook.get("type"), "command");
+  withPackageProject((root) => {
+    for (const [event, entries] of claudeHooks(data, root).get("hooks")) {
+      assert.ok(["PreToolUse", "SessionStart", "UserPromptSubmit", "Stop"].includes(event));
+      for (const entry of entries) {
+        for (const hook of entry.get("hooks")) {
+          commands.push(hook.get("command"));
+          assert.equal(hook.get("type"), "command");
+        }
       }
     }
-  }
+  });
   assert.ok(commands.length >= 8);
   for (const command of commands) {
     const match = /^node "\$CLAUDE_PROJECT_DIR\/node_modules\/akmon\/js\/hooks\/([a-z-]+)\.mjs"$/.exec(command);
@@ -322,24 +355,29 @@ test("Claude wiring: every command is node on the hook's own file under node_mod
 });
 
 test("Claude wiring keeps the table's shape: a matcher-less entry has no matcher key", () => {
-  const session = claudeHooks(data).get("hooks").get("SessionStart");
-  assert.deepEqual([...session[0].keys()], ["hooks"]);
-  const pre = claudeHooks(data).get("hooks").get("PreToolUse");
-  assert.deepEqual([...pre[0].keys()], ["matcher", "hooks"]);
-  assert.equal(pre[0].get("matcher"), "Bash");
+  withPackageProject((root) => {
+    const session = claudeHooks(data, root).get("hooks").get("SessionStart");
+    assert.deepEqual([...session[0].keys()], ["hooks"]);
+    const pre = claudeHooks(data, root).get("hooks").get("PreToolUse");
+    assert.deepEqual([...pre[0].keys()], ["matcher", "hooks"]);
+    assert.equal(pre[0].get("matcher"), "Bash");
+  });
 });
 
 test("Codex wiring: node on codex-hook.mjs from the git toplevel, the advisory appended, a status message", () => {
+  /** @type {string[]} */
   const seen = [];
-  for (const entries of codexHooks(data).get("hooks").values()) {
-    for (const entry of entries) {
-      for (const hook of entry.get("hooks")) {
-        seen.push(hook.get("command"));
-        assert.deepEqual([...hook.keys()], ["type", "command", "statusMessage"]);
-        assert.ok(typeof hook.get("statusMessage") === "string");
+  withPackageProject((root) => {
+    for (const entries of codexHooks(data, root).get("hooks").values()) {
+      for (const entry of entries) {
+        for (const hook of entry.get("hooks")) {
+          seen.push(hook.get("command"));
+          assert.deepEqual([...hook.keys()], ["type", "command", "statusMessage"]);
+          assert.ok(typeof hook.get("statusMessage") === "string");
+        }
       }
     }
-  }
+  });
   assert.deepEqual(seen, [
     'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" role-on-code',
     'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" analysis-guard',
@@ -347,18 +385,68 @@ test("Codex wiring: node on codex-hook.mjs from the git toplevel, the advisory a
   ]);
 });
 
-test("every command the wiring writes is one sync recognises as its own", () => {
-  for (const wiring of [claudeHooks(data), codexHooks(data)]) {
-    for (const entries of wiring.get("hooks").values()) {
-      for (const entry of entries) {
-        assert.ok(isAkmonEntry(data, entry), JSON.stringify([...entry]));
+test("every command the wiring writes is one sync recognises as its own, package or mounted", () => {
+  for (const build of [project, mountedProject]) {
+    withScratch((scratch) => {
+      const root = build(scratch);
+      for (const wiring of [claudeHooks(data, root), codexHooks(data, root)]) {
+        for (const entries of wiring.get("hooks").values()) {
+          for (const entry of entries) {
+            assert.ok(isAkmonEntry(data, entry), JSON.stringify([...entry]));
+          }
+        }
       }
-    }
+    });
   }
 });
 
+test("a mounted record's wiring runs node on the mount's hooks, one template for both modes (C129)", () => {
+  withScratch((scratch) => {
+    const root = mountedProject(scratch);
+    assert.equal(nodeHooksDir(root), "_aitna/akmon/js/hooks");
+    const pre = claudeHooks(data, root).get("hooks").get("PreToolUse");
+    assert.equal(
+      pre[0].get("hooks")[0].get("command"),
+      'node "$CLAUDE_PROJECT_DIR/_aitna/akmon/js/hooks/git-commit-guard.mjs"',
+    );
+    const codex = codexHooks(data, root).get("hooks").get("PreToolUse");
+    assert.equal(
+      codex[0].get("hooks")[0].get("command"),
+      'node "$(git rev-parse --show-toplevel)/_aitna/akmon/js/hooks/codex-hook.mjs" role-on-code',
+    );
+    for (const hook of pre.flatMap((/** @type {Map<string, any>} */ entry) => entry.get("hooks"))) {
+      const match = /^node "\$CLAUDE_PROJECT_DIR\/_aitna\/akmon\/js\/hooks\/([a-z-]+)\.mjs"$/.exec(hook.get("command"));
+      assert.ok(match, hook.get("command"));
+      assert.ok(fs.existsSync(posix.join(root, "_aitna", "akmon", "js", "hooks", `${match[1]}.mjs`)));
+    }
+  });
+});
+
+test("a mounted record's hooks directory follows a relocated dev layer", () => {
+  withScratch((scratch) => {
+    const root = posix.join(scratch, "project");
+    put(root, "tools/ai/.akmon.toml", MOUNTED_RECORD);
+    withAitnaRoot("tools/ai", () => {
+      assert.equal(nodeHooksDir(root), "tools/ai/akmon/js/hooks");
+      const commands = [...codexHooks(data, root).get("hooks").values()].flatMap((entries) =>
+        entries.flatMap((/** @type {Map<string, any>} */ entry) =>
+          entry.get("hooks").map((/** @type {Map<string, any>} */ hook) => hook.get("command")),
+        ),
+      );
+      assert.ok(
+        commands.every((command) => command.includes('/tools/ai/akmon/js/hooks/codex-hook.mjs"')),
+        commands.join("\n"),
+      );
+      assert.ok(isAkmonEntry(data, new Map([["hooks", [new Map([["command", commands[0]]])]]])));
+    });
+  });
+});
+
 test("codexHooksText is the pretty-printed wiring with a trailing newline, ASCII only", () => {
-  const text = codexHooksText(data);
+  let text = "";
+  withPackageProject((root) => {
+    text = codexHooksText(data, root);
+  });
   assert.ok(text.endsWith("}\n"));
   assert.ok(text.startsWith('{\n  "hooks": {\n    "PreToolUse": [\n'));
   assert.ok(/^[\x20-\x7e\n]*$/.test(text));
@@ -369,21 +457,19 @@ test("codexHooksText is the pretty-printed wiring with a trailing newline, ASCII
 // the refusal
 // --------------------------------------------------------------------------------------
 
-test("a record that is not Node package mode is refused with exit 2 and writes nothing", () => {
+test("a record that is not a Node one is refused with exit 2 and writes nothing", () => {
   withScratch((scratch) => {
     /** @type {Array<[string | null, string]>} */
     const cases = [
       [null, "no integration record (_aitna/.akmon.toml)"],
-      ['akmon_version = "1"\n', 'mount = "submodule"'],
-      ['mount = "submodule"\n', 'mount = "submodule"'],
-      ['mount = "vendored"\n', 'mount = "vendored"'],
-      ['mount = "subtree"\n', 'mount = "subtree"'],
+      ['akmon_version = "1"\n', 'ecosystem = "python"'],
+      ['mount = "submodule"\n', 'ecosystem = "python"'],
+      ['mount = "vendored"\n', 'ecosystem = "python"'],
+      ['mount = "subtree"\necosystem = "python"\n', 'ecosystem = "python"'],
       ['mount = "package"\n', 'ecosystem = "python"'],
       ['mount = "package"\necosystem = "python"\n', 'ecosystem = "python"'],
       ['mount = "package"\necosystem = "ruby"\n', 'ecosystem = "ruby"'],
       ['mount = "package"\necosystem = ""\n', 'ecosystem = "python"'],
-      ['ecosystem = "node"\n', 'mount = "submodule"'],
-      ['mount = "vendored"\necosystem = "node"\n', 'mount = "vendored"'],
     ];
     for (const [record, found] of cases) {
       fs.rmSync(posix.join(scratch, "project"), { recursive: true, force: true });
@@ -394,7 +480,7 @@ test("a record that is not Node package mode is refused with exit 2 and writes n
         assert.equal(result.code, 2, `${record} ${args}`);
         assert.equal(result.stdout, "", `${record} ${args}`);
         assert.ok(
-          result.stderr.startsWith("akmon sync: the JavaScript implementation serves Node package mode only"),
+          result.stderr.startsWith("akmon sync: the JavaScript implementation serves Node projects only"),
           result.stderr,
         );
         assert.ok(result.stderr.includes(`but this project has ${found};`), result.stderr);
@@ -408,6 +494,20 @@ test("a record that is not Node package mode is refused with exit 2 and writes n
 test("a Node record is accepted, and the refusal answers null for it", () => {
   withScratch((scratch) => {
     assert.equal(unsupportedRecord(data, project(scratch)), null);
+  });
+});
+
+test("a mounted Node record is served in every mounted mode (C129)", () => {
+  for (const mount of ["submodule", "vendored", "subtree"]) {
+    withScratch((scratch) => {
+      const root = mountedProject(scratch, { record: `mount = "${mount}"\necosystem = "node"\n` });
+      assert.equal(unsupportedRecord(data, root), null, mount);
+      assert.equal(unsupportedFound(data, root), null, mount);
+    });
+  }
+  withScratch((scratch) => {
+    const root = mountedProject(scratch, { record: 'ecosystem = "node"\n' });
+    assert.equal(unsupportedFound(data, root), null);
   });
 });
 
@@ -485,7 +585,7 @@ test("a written project holds the Node spellings and the record's pin is the tre
       settings.hooks.PreToolUse[0].hooks[0].command,
       'node "$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs"',
     );
-    assert.equal(get(root, ".codex/hooks.json"), codexHooksText(data));
+    assert.equal(get(root, ".codex/hooks.json"), codexHooksText(data, root));
     const record = get(root, "_aitna/.akmon.toml");
     assert.equal(record, `mount = "package"\necosystem = "node"\nakmon_version = "${installedAkmonVersion()}"\n`);
     assert.ok(
@@ -493,6 +593,41 @@ test("a written project holds the Node spellings and the record's pin is the tre
     );
     assert.equal(get(root, "_aitna/.akmon/guardrails/_common.md").includes("\r"), false);
     assert.ok(!fs.existsSync(posix.join(root, "_aitna", ".akmon", "hooks")));
+  });
+});
+
+test("a mounted Node project is written from the mount: its wiring, relative skill links, no materialization (C129)", () => {
+  withScratch((scratch) => {
+    const root = mountedProject(scratch);
+    assert.equal(standardTreeRoot(root), posix.join(root, "_aitna", "akmon"));
+    const written = run(["--project-root", root]);
+    assert.equal(written.code, 0, written.stderr);
+    assert.equal(written.stderr, "");
+    const settings = JSON.parse(get(root, ".claude/settings.json"));
+    assert.equal(
+      settings.hooks.PreToolUse[0].hooks[0].command,
+      'node "$CLAUDE_PROJECT_DIR/_aitna/akmon/js/hooks/git-commit-guard.mjs"',
+    );
+    assert.equal(get(root, ".codex/hooks.json"), codexHooksText(data, root));
+    assert.ok(
+      get(root, ".claude/skills/release/SKILL.md").includes("](../../../_aitna/akmon/skills/release/SKILL.md)"),
+    );
+    // A mounted record imports the mount directly: nothing is materialized, the record is not stamped.
+    assert.ok(!fs.existsSync(materializationRoot(root)));
+    assert.equal(get(root, "_aitna/.akmon.toml"), MOUNTED_RECORD);
+    const clean = run(["--project-root", root, "--check"]);
+    assert.equal(clean.code, 0, clean.stdout);
+  });
+});
+
+test("standardTreeRoot: a mounted record without its mount, or a package record beside a stale mount, is the running tree", () => {
+  withScratch((scratch) => {
+    const root = mountedProject(scratch);
+    fs.unlinkSync(posix.join(root, "_aitna", "akmon"));
+    assert.equal(standardTreeRoot(root), TREE);
+    put(root, "_aitna/.akmon.toml", NODE_RECORD);
+    fs.symlinkSync(TREE, posix.join(root, "_aitna", "akmon"));
+    assert.equal(standardTreeRoot(root), TREE);
   });
 });
 
@@ -789,7 +924,11 @@ test("readJson: a missing file is an empty object; the document keeps integer-li
 });
 
 test("mergeHookEntries: the stale akmon entry goes, the user's stays, and a repeat changes nothing", () => {
-  const wanted = [...claudeHooks(data).get("hooks").get("PreToolUse")];
+  /** @type {any[]} */
+  let wanted = [];
+  withPackageProject((root) => {
+    wanted = [...claudeHooks(data, root).get("hooks").get("PreToolUse")];
+  });
   const user = { matcher: "Bash", hooks: [{ type: "command", command: "echo mine" }] };
   const once = mergeHookEntries(data, [user, wanted[0]], wanted);
   assert.equal(once[0], user);
@@ -1062,7 +1201,7 @@ test("run as a program: the exit code is the command's, through a symlink as npm
     assert.equal(clean.status, 0);
     const refused = spawnSync(process.execPath, [SYNC, "--project-root", scratch], { encoding: "utf-8", env });
     assert.equal(refused.status, 2);
-    assert.ok(refused.stderr.includes("serves Node package mode only"));
+    assert.ok(refused.stderr.includes("serves Node projects only"));
   });
 });
 
@@ -1074,4 +1213,115 @@ test("imported as a module, the file runs nothing", () => {
   );
   assert.equal(done.stdout, "quiet\n");
   assert.equal(done.stderr, "");
+});
+
+// -- language profiles (C127): the mapping init writes from and verify checks against ----------
+
+test("languageProfiles maps the named languages and reads the manifests, python first", () => {
+  const scratch = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-sync-profiles-")));
+  try {
+    const data = readSyncData();
+    const names = (/** @type {string[]} */ languages) =>
+      languageProfiles(data, scratch, languages).map((found) => found.profile);
+    assert.deepEqual(names(["python"]), ["python.md"]);
+    assert.deepEqual(names(["package/python"]), ["python.md"]);
+    assert.deepEqual(names(["JavaScript"]), ["js.md"]);
+    assert.deepEqual(names(["service/typescript"]), ["js.md"]);
+    assert.deepEqual(names(["python", "javascript"]), ["python.md", "js.md"]);
+    assert.deepEqual(names(["unclassified"]), []);
+    assert.deepEqual(names(["<archetype>/<language>"]), []);
+    assert.deepEqual(names(["rust"]), []);
+    assert.deepEqual(names([]), []);
+    fs.writeFileSync(posix.join(scratch, "pyproject.toml"), "[project]\n");
+    assert.deepEqual(languageProfiles(data, scratch, ["package/python", "javascript"]), [
+      { profile: "python.md", source: "pyproject.toml" },
+      { profile: "js.md", source: "javascript" },
+    ]);
+    fs.writeFileSync(posix.join(scratch, "package.json"), "{}\n");
+    assert.deepEqual(languageProfiles(data, scratch, []), [
+      { profile: "python.md", source: "pyproject.toml" },
+      { profile: "js.md", source: "package.json" },
+    ]);
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test("profileImports skips code spans and fenced blocks (the twin's rows)", () => {
+  const text =
+    "Import one per line (`@_aitna/.akmon/profiles/<name>.md`, `@_aitna/.akmon/profiles/js.md`).\n\n" +
+    "```\n@_aitna/.akmon/profiles/quant.md\n```\n\n" +
+    "@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/profiles/python.md\n" +
+    "  @_aitna/akmon/profiles/js.md\n@profiles/python-stdlib.md\nmail@profiles/x.md\n";
+  assert.deepEqual(profileImports(text), [
+    { prefix: "_aitna/.akmon/", name: "python.md", line: "@_aitna/.akmon/profiles/python.md" },
+    { prefix: "_aitna/akmon/", name: "js.md", line: "@_aitna/akmon/profiles/js.md" },
+    { prefix: "", name: "python-stdlib.md", line: "@profiles/python-stdlib.md" },
+  ]);
+});
+
+// -- what counts as Python (C129) ---------------------------------------------------------------
+
+/**
+ * `git <args>` in `cwd`, which must succeed.
+ * @param {string[]} args
+ * @param {string} cwd
+ */
+function gitIn(args, cwd) {
+  const result = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+}
+
+test("hasPython: a marker file at the root, by glob; package.json alone is no Python", () => {
+  for (const marker of [
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "requirements.txt",
+    "requirements-dev.txt",
+    "Pipfile",
+    "uv.lock",
+    "poetry.lock",
+  ]) {
+    withScratch((scratch) => {
+      put(scratch, "package.json", "{}");
+      put(scratch, marker, "");
+      assert.equal(hasPython(data, scratch, "_aitna"), true, marker);
+    });
+  }
+  withScratch((scratch) => {
+    put(scratch, "package.json", "{}");
+    put(scratch, "docs/requirements.txt", "");
+    assert.equal(hasPython(data, scratch, "_aitna"), false, "a marker counts at the root only");
+  });
+});
+
+test("hasPython: in a git work tree only tracked sources count, outside the dev layer and node_modules", () => {
+  withScratch((scratch) => {
+    put(scratch, "package.json", "{}");
+    put(scratch, "app/x.py", "");
+    put(scratch, "_aitna/akmon/bin/sync.py", "");
+    put(scratch, "node_modules/pkg/y.py", "");
+    gitIn(["init", "-q"], scratch);
+    assert.equal(hasPython(data, scratch, "_aitna"), false, "untracked app/x.py");
+    gitIn(["add", "-f", "_aitna", "node_modules"], scratch);
+    assert.equal(hasPython(data, scratch, "_aitna"), false, "tracked, but the dev layer and node_modules");
+    assert.equal(hasPython(data, scratch, "tools/ai"), true, "another dev layer leaves _aitna as project code");
+    gitIn(["add", "app/x.py"], scratch);
+    assert.equal(hasPython(data, scratch, "_aitna"), true);
+  });
+});
+
+test("hasPython: outside a work tree a walk finds sources, skipping the dev layer, node_modules and dot-directories, up to walk_limit", () => {
+  withScratch((scratch) => {
+    put(scratch, "package.json", "{}");
+    for (const skipped of ["tools/ai/akmon/x.py", "node_modules/p/x.py", ".venv/x.py"]) {
+      put(scratch, skipped, "");
+    }
+    assert.equal(hasPython(data, scratch, "tools/ai"), false);
+    put(scratch, "src/deep/app.py", "");
+    assert.equal(hasPython(data, scratch, "tools/ai"), true);
+    const bounded = { sync: { ...data.sync, python_markers: { ...data.sync.python_markers, walk_limit: 3 } } };
+    assert.equal(hasPython(/** @type {any} */ (bounded), scratch, "tools/ai"), false, "the walk stopped first");
+  });
 });

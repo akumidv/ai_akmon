@@ -179,12 +179,33 @@ def test_loader_accepts_a_minimal_scenario(scen_root):
     assert scenario.fixture.warmup == "after"  # the native default is a synced consumer
 
 
-def test_loader_refuses_shared_mount(scen_root):
-    with pytest.raises(corpus.CorpusError, match="Python-only"):
-        corpus.load_scenario(_write(scen_root, '[fixture]\nattach = "mount"\n' + _OK_EXPECTED))
-    python = _write(scen_root, '[fixture]\nattach = "mount"\n' + _OK_EXPECTED, "py", ecosystem="python")
-    scenario = corpus.load_scenario(python)
+@pytest.mark.parametrize("ecosystem", ["shared", "python", "node"])
+def test_loader_accepts_a_mount_in_every_ecosystem(scen_root, ecosystem):
+    """The C129 amendment of ADR 0020 D02: the JavaScript implementation serves mounted Node records."""
+    path = _write(scen_root, '[fixture]\nattach = "mount"\n' + _OK_EXPECTED, ecosystem, ecosystem=ecosystem)
+    scenario = corpus.load_scenario(path)
     assert (scenario.fixture.attach, scenario.fixture.warmup) == ("mount", "none")
+
+
+@pytest.mark.parametrize(("impl", "record"), [("python", None), ("node", 'ecosystem = "node"')])
+def test_a_mount_lays_the_implementations_mount_layer(tmp_path, impl, record):
+    """Python's mounted consumer is the base fixture; a Node one adds its record, manifest, block and CI."""
+    env = corpus.RunEnv(snapshot=tmp_path / "tree", repo=corpus.REPO_ROOT, work=tmp_path, version="9.8.7", impl=impl)
+    (tmp_path / "tree").mkdir()
+    proj, _tree = corpus.materialize_fixture(corpus.FixtureSpec(attach="mount", git=False), env, "demo")
+    record_path = proj / "_aitna" / ".akmon.toml"
+    if record is None:
+        assert not record_path.exists()
+        assert not (proj / "package.json").exists()
+    else:
+        text = record_path.read_text(encoding="utf-8")
+        assert record in text
+        assert 'akmon_version = "9.8.7"' in text
+        assert "node _aitna/akmon/js/akmon/cli.mjs verify --strict" in (
+            proj / ".github" / "workflows" / "ci.yml"
+        ).read_text(encoding="utf-8")
+        assert "@_aitna/akmon/profiles/js.md" in (proj / "AGENTS.md").read_text(encoding="utf-8")
+    assert (proj / "_aitna" / "akmon").is_symlink()
 
 
 @pytest.mark.parametrize("fixture", ['attach = "linked"', 'warmup = "later"'])
@@ -592,6 +613,30 @@ def test_record_keeps_hand_written_stderr_contains(tmp_path, owned):
     expected, problems = _round_trip(tmp_path, _scenario(stderr_contains=("usage:",)), 2, "", "usage: akmon x\n")
     assert problems == ""
     assert (expected.stderr, expected.stderr_contains) == (None, ("usage:",))
+
+
+def test_record_writes_file_absent_before_the_sub_tables(tmp_path, owned):
+    """C128: a key after ``[expected.files]`` belongs to that table, so ``file_absent`` precedes it."""
+    (tmp_path / "kept.txt").write_text(f"at {tmp_path}\n", encoding="utf-8")
+    scenario = _scenario(stdout="", files={"kept.txt": ""}, file_absent=("gone.txt",))
+    block = runner._record_block(scenario, 0, "done\n", "", _ctx(tmp_path))
+    assert block.splitlines() == [
+        "[expected]",
+        "exit = 0",
+        'stderr = ""',
+        'stdout = "done\\n"',
+        'file_absent = ["gone.txt"]',
+        "[expected.files]",
+        '"kept.txt" = "at {{root}}\\n"',
+    ]
+    data = tomllib.loads(block)["expected"]
+    assert (data["file_absent"], data["files"]) == (["gone.txt"], {"kept.txt": "at {{root}}\n"})
+
+
+def test_record_writes_file_absent_before_the_stdout_json_table(tmp_path, owned):
+    scenario = _scenario(stdout_json={}, file_absent=("gone.txt",))
+    data = tomllib.loads(runner._record_block(scenario, 0, '{"a": {"b": 1}}', "", _ctx(tmp_path)))["expected"]
+    assert (data["file_absent"], data["stdout_json"]) == (["gone.txt"], {"a": {"b": 1}})
 
 
 _JSON = (

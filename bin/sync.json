@@ -5,15 +5,19 @@
     "{{aitna}}/akmon/hooks/",
     "{{aitna}}/.akmon/hooks/",
     "{{cli}}\" hook ",
-    "/node_modules/akmon/js/hooks/"
+    "/node_modules/akmon/js/hooks/",
+    "{{aitna}}/akmon/js/hooks/"
   ],
-  "node_hook_command": "node \"{{anchor}}/node_modules/akmon/js/hooks/{{script}}.mjs\"",
-  "node_codex_hook_command": "node \"{{anchor}}/node_modules/akmon/js/hooks/codex-hook.mjs\"",
-  "unsupported_record": "akmon sync: the JavaScript implementation serves Node package mode only (mount = \"package\" and ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has {{found}}; run the Python implementation of akmon for it.",
-  "python_refuses_ecosystem": "akmon sync: this project's integration record names ecosystem = \"{{value}}\" (<AITNA_ROOT>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon sync",
+  "node_hook_command": "node \"{{anchor}}/{{hooks_dir}}/{{script}}.mjs\"",
+  "node_codex_hook_command": "node \"{{anchor}}/{{hooks_dir}}/codex-hook.mjs\"",
+  "unsupported_record": "akmon sync: the JavaScript implementation serves Node projects only (ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has {{found}}; run the Python implementation of akmon for it.",
+  "node_cli": {
+    "package": "npx akmon",
+    "mounted": "node {{aitna}}/akmon/js/akmon/cli.mjs"
+  },
+  "python_refuses_ecosystem": "akmon sync: this project's integration record names ecosystem = \"{{value}}\" (<AITNA_ROOT>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: {{cli}} sync",
   "unsupported_found": {
     "no_record": "no integration record ({{record}})",
-    "mount": "mount = \"{{value}}\"",
     "ecosystem": "ecosystem = \"{{value}}\""
   },
   "claude_hooks": {
@@ -138,6 +142,27 @@
   "moved_imports": {
     "guardrails/python.md": "profiles/python.md"
   },
+  "language_profiles": [
+    {
+      "profile": "python.md",
+      "languages": [
+        "python"
+      ],
+      "manifests": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "profile": "js.md",
+      "languages": [
+        "javascript",
+        "typescript"
+      ],
+      "manifests": [
+        "package.json"
+      ]
+    }
+  ],
   "ruff_configs": [
     [
       "pyproject.toml",
@@ -155,6 +180,20 @@
       []
     ]
   ],
+  "ruff_toml_template": "# ruff with akmon's Python rules; adjust them here with extend-select, extend-ignore and\n# per-file-ignores.\nextend = \"{{rules_path}}\"\n",
+  "python_markers": {
+    "files": [
+      "pyproject.toml",
+      "setup.py",
+      "setup.cfg",
+      "requirements*.txt",
+      "Pipfile",
+      "uv.lock",
+      "poetry.lock"
+    ],
+    "sources": "*.py",
+    "walk_limit": 20000
+  },
   "check_findings": {
     "stale": {
       "message": "generated file is stale or missing: {{relative}}",

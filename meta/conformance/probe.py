@@ -559,6 +559,9 @@ def _marker_step(module: types.ModuleType, data: dict, world: dict, step: dict) 
         (folder / step["name"]).write_bytes(b"")
     elif op == "plant_dir":
         (folder / f"{data['name_prefix']}{step['kind']}-{_marker_digest(data, step['identity'])}").mkdir()
+    elif op == "plant_link":
+        link = folder / f"{data['name_prefix']}{step['kind']}-{_marker_digest(data, step['identity'])}"
+        link.symlink_to(step["target"])
     elif op == "age":
         names = _marker_listing(folder)
         (name,) = [

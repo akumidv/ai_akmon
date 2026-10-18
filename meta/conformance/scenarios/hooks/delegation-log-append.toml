@@ -1,7 +1,7 @@
 # A Task delegation appends one TSV line (timestamp · session · subagent · model · zone ·
 # description) to .claude/model-routing.log — the zone is parsed off the leading
-# [zone:auth] marker — and the owner sees a systemMessage naming the call. No context
-# injection (no additionalContext), no decision.
+# [zone:auth] marker — and the owner sees a systemMessage naming the call. No warning, so no
+# context injection (no additionalContext), and no decision.
 id = "hooks/delegation-log-append"
 ecosystem = "shared"
 kind = "hook"
