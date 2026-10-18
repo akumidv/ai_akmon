@@ -1,0 +1,16 @@
+{
+  "printWidth": 120,
+  "ignorePatterns": [
+    "*",
+    "!*/",
+    "!*.mjs",
+    "!*.js",
+    "!*.ts",
+    "js/vendor/**",
+    ".qwen/**",
+    ".claude/**",
+    ".review/**",
+    ".venv/**",
+    "node_modules/**"
+  ]
+}

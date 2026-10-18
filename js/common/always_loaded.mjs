@@ -36,7 +36,7 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { read } from "./jsondata.mjs";
-import { resolvePath } from "./project_root.mjs";
+import { isRelativeTo, resolvePath } from "./project_root.mjs";
 import { isFile, pyError, pySplitlines, readText } from "./pyvalue.mjs";
 
 /** The finding code the always-loaded ratchet reports under. */
@@ -56,7 +56,9 @@ export const CODE = "caps.always-loaded";
  * @returns {AlwaysLoadedData}
  */
 export function readAlwaysLoadedData() {
-  return /** @type {AlwaysLoadedData} */ (read(fileURLToPath(new URL("../../common/always_loaded.json", import.meta.url))));
+  return /** @type {AlwaysLoadedData} */ (
+    read(fileURLToPath(new URL("../../common/always_loaded.json", import.meta.url)))
+  );
 }
 
 /**
@@ -295,16 +297,6 @@ function _passwdHome(/** @type {string} */ user) {
 }
 
 /**
- * `path.is_relative_to(root)` for two resolved absolute POSIX paths: a component prefix.
- * @param {string} path
- * @param {string} root
- * @returns {boolean}
- */
-function _isRelativeTo(path, root) {
-  return path === root || path.startsWith(root === "/" ? "/" : `${root}/`);
-}
-
-/**
  * Files `text` `@`-imports, transitively and in first-seen order; missing targets skipped.
  *
  * A relative import resolves against the importing file's directory (`base` for the first level).
@@ -324,7 +316,7 @@ export function importChain(text, base, { root }) {
     const [target, directory] = /** @type {[string, string]} */ (pending.shift());
     const expanded = _expandUser(target);
     const path = resolvePath(expanded.startsWith("/") ? expanded : `${directory}/${expanded}`);
-    if (seen.includes(path) || !isFile(path) || !_isRelativeTo(path, resolvePath(root))) {
+    if (seen.includes(path) || !isFile(path) || !isRelativeTo(path, resolvePath(root))) {
       continue;
     }
     seen.push(path);
@@ -353,10 +345,11 @@ function _union(root, head, chain, selected) {
     }
     seen.add(resolved);
     const rootResolved = resolvePath(root);
-    if (!_isRelativeTo(resolved, rootResolved)) {
+    if (!isRelativeTo(resolved, rootResolved)) {
       throw pyError("ValueError", `'${resolved}' is not in the subpath of '${rootResolved}'`);
     }
-    const relative = resolved === rootResolved ? "." : resolved.slice(rootResolved === "/" ? 1 : rootResolved.length + 1);
+    const relative =
+      resolved === rootResolved ? "." : resolved.slice(rootResolved === "/" ? 1 : rootResolved.length + 1);
     members.push(new Member(relative, readText(resolved)));
   }
   return members;
@@ -379,8 +372,14 @@ export function populations(data, agentsText, root, selected = []) {
   const shippedScope = shipped(data);
   const consumerScope = consumer(data);
   return {
-    [shippedScope]: new Population(shippedScope, _union(root, new Member("AGENTS.md (akmon block)", block), chain, [...selected])),
-    [consumerScope]: new Population(consumerScope, _union(root, new Member("AGENTS.md", agentsText), chain, [...selected])),
+    [shippedScope]: new Population(
+      shippedScope,
+      _union(root, new Member("AGENTS.md (akmon block)", block), chain, [...selected]),
+    ),
+    [consumerScope]: new Population(
+      consumerScope,
+      _union(root, new Member("AGENTS.md", agentsText), chain, [...selected]),
+    ),
   };
 }
 

@@ -225,13 +225,18 @@ export function main(argv = process.argv.slice(2)) {
     return 2;
   }
   const available = options.available
-    ? options.available.split(",").map((alias) => pyStrip(alias)).filter((alias) => alias !== "")
+    ? options.available
+        .split(",")
+        .map((alias) => pyStrip(alias))
+        .filter((alias) => alias !== "")
     : null;
   const fallback = dictGet(dictGet(registry, options.vendor), "semantic_fallback", {});
   const orchestrator =
     (options.orchestrator || null) ??
     _settingsModel(data, root) ??
-    (available && available.length > 0 ? available[available.length - 1] : dictGet(fallback, "orchestrator", "strongest"));
+    (available && available.length > 0
+      ? available[available.length - 1]
+      : dictGet(fallback, "orchestrator", "strongest"));
   const secondOpinion =
     options.secondOpinion === null ? _existingSecondOpinion(data, root) : options.secondOpinion === "on";
 

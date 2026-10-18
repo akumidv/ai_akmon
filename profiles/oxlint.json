@@ -1,0 +1,145 @@
+// akmon's JavaScript/TypeScript rules as a standard oxlint configuration (A35): ESLint's
+// `recommended` bug class, the Google JavaScript Style Guide's checkable rules (section numbers
+// below) and akmon's size floor. It runs with or without akmon:
+//   oxlint -c <path to this file> .                                  a one-off run
+//   "extends": ["./node_modules/akmon/profiles/oxlint.json"]         in the project's .oxlintrc.json
+// A project adjusts it in its own .oxlintrc.json the standard way — `rules`, `overrides`, `env`,
+// `globals`, `ignorePatterns` — and never edits this file; globals go in its config, not in
+// `/* global */` comments, which oxlint does not read. The ECMAScript globals (`Promise`, `Map`,
+// `BigInt`, …) need no `env`: oxlint defines them itself (M132). Where the code runs (`env`: node,
+// browser, …) is stated in the project's own config, because `extends` does not carry `env` (M132).
+//
+// TypeScript: tsc checks what the override at the end turns off (the set typescript-eslint's
+// `eslint-recommended` turns off), and `this` outside a class (Google §5.9) through `strict`.
+// In JavaScript §5.9 is a review point (profiles/js.md): oxlint has no `no-invalid-this`.
+{
+  "plugins": [],
+  "categories": { "correctness": "off" },
+  "rules": {
+    // ESLint's `recommended`, as oxlint names it
+    "constructor-super": "error",
+    "for-direction": "error",
+    "getter-return": "error",
+    "no-async-promise-executor": "error",
+    "no-case-declarations": "error",
+    "no-class-assign": "error",
+    "no-compare-neg-zero": "error",
+    "no-cond-assign": "error",
+    "no-const-assign": "error",
+    "no-constant-binary-expression": "error",
+    "no-constant-condition": "error",
+    "no-control-regex": "error",
+    "no-debugger": "error",
+    "no-delete-var": "error",
+    "no-dupe-class-members": "error",
+    "no-dupe-else-if": "error",
+    "no-dupe-keys": "error",
+    "no-duplicate-case": "error",
+    "no-empty": "error",
+    "no-empty-character-class": "error",
+    "no-empty-pattern": "error",
+    "no-empty-static-block": "error",
+    "no-ex-assign": "error",
+    "no-extra-boolean-cast": "error",
+    "no-fallthrough": "error",
+    "no-func-assign": "error",
+    "no-global-assign": "error",
+    "no-import-assign": "error",
+    "no-invalid-regexp": "error",
+    "no-irregular-whitespace": "error",
+    "no-loss-of-precision": "error",
+    "no-misleading-character-class": "error",
+    "no-new-native-nonconstructor": "error",
+    "no-nonoctal-decimal-escape": "error",
+    "no-obj-calls": "error",
+    "no-prototype-builtins": "error",
+    "no-redeclare": "error",
+    "no-regex-spaces": "error",
+    "no-self-assign": "error",
+    "no-setter-return": "error",
+    "no-shadow-restricted-names": "error",
+    "no-sparse-arrays": "error",
+    "no-this-before-super": "error",
+    "no-unassigned-vars": "error",
+    "no-undef": "error",
+    "no-unexpected-multiline": "error",
+    "no-unreachable": "error",
+    "no-unsafe-finally": "error",
+    "no-unsafe-negation": "error",
+    "no-unsafe-optional-chaining": "error",
+    "no-unused-labels": "error",
+    "no-unused-private-class-members": "error",
+    "no-unused-vars": "error",
+    "no-useless-assignment": "error",
+    "no-useless-backreference": "error",
+    "no-useless-catch": "error",
+    "no-useless-escape": "error",
+    "no-with": "error",
+    "preserve-caught-error": "error",
+    "require-yield": "error",
+    "use-isnan": "error",
+    "valid-typeof": "error",
+
+    // Google JavaScript Style Guide
+    "curly": ["error", "all"], // §4.1.1 braces for all control structures
+    "no-var": "error", // §5.1.1 const and let
+    "prefer-const": "error", // §5.1.1
+    "one-var": ["error", "never"], // §5.1.2 one variable per declaration
+    "no-array-constructor": "error", // §5.2.2
+    "no-object-constructor": "error", // §5.3.2
+    "prefer-arrow-callback": "error", // §5.5.3 arrow functions for nested functions
+    "prefer-rest-params": "error", // §5.5.5.2 rest, not `arguments`
+    "prefer-spread": "error", // §5.5.7 spread, not `apply`
+    "no-multi-str": "error", // §5.6.3 no line continuations
+    "guard-for-in": "error", // §5.8.1 for-in only with a guard
+    "no-throw-literal": "error", // §5.8.2 throw an Error
+    "prefer-promise-reject-errors": "error", // §5.8.2
+    "default-case": "error", // §5.8.3.2 a default case, last
+    "default-case-last": "error", // §5.8.3.2
+    "eqeqeq": ["error", "always", { "null": "ignore" }], // §5.10, §5.10.1 `===`; `== null` allowed
+    "no-eval": "error", // §5.11.2 no dynamic code
+    "no-implied-eval": "error", // §5.11.2
+    "no-new-func": "error", // §5.11.2
+    "no-new-wrappers": "error", // §5.11.5 no primitive wrappers
+    "no-implicit-coercion": ["error", { "boolean": false }], // §5.11.5 Boolean(x), not `+x`/`"" + x`
+    "no-extend-native": "error", // §5.11.6 no modified builtins
+    // §6 naming: camelCase, PascalCase or CONSTANT_CASE, declarations only (ESLint's `camelcase`
+    // with properties never)
+    "id-match": [
+      "error",
+      "^_*(?:[a-z$][a-zA-Z0-9$]*|[A-Z][a-zA-Z0-9$]*|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*)_*$",
+      { "properties": false, "onlyDeclarations": true }
+    ],
+    "new-cap": "error", // §6 naming: a capitalized name is a constructor
+
+    // akmon's size floor (the analogue of ruff's C90 and PLR limits in profiles/ruff.toml)
+    "complexity": ["error", 10],
+    "max-params": ["error", 5],
+    "max-statements": ["error", 50],
+    "max-depth": ["error", 4]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+      "rules": {
+        "constructor-super": "off",
+        "getter-return": "off",
+        "no-class-assign": "off",
+        "no-const-assign": "off",
+        "no-dupe-class-members": "off",
+        "no-dupe-keys": "off",
+        "no-func-assign": "off",
+        "no-import-assign": "off",
+        "no-new-native-nonconstructor": "off",
+        "no-obj-calls": "off",
+        "no-redeclare": "off",
+        "no-setter-return": "off",
+        "no-this-before-super": "off",
+        "no-undef": "off",
+        "no-unreachable": "off",
+        "no-unsafe-negation": "off",
+        "no-with": "off"
+      }
+    }
+  ]
+}

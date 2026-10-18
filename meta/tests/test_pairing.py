@@ -163,5 +163,4 @@ def test_live_tree_passes_the_gate() -> None:
     assert pairing.is_ported(_AKMON, "src/akmon/cli.py")
     assert pairing.is_ported(_AKMON, "bin/verify.py")
     assert pairing.is_ported(_AKMON, "src/akmon/_init.py")
-    # update is C107's
-    assert not pairing.is_ported(_AKMON, "src/akmon/_update.py")
+    assert pairing.is_ported(_AKMON, "src/akmon/_update.py")

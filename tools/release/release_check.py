@@ -137,8 +137,16 @@ def _tasks_summary(tasks_dir: Path) -> list[str]:
 
 
 def run_state(root: Path, subject: str) -> int:
-    """``--state``: print the TASKS / CHANGELOG / release-charter / git-status summary."""
+    """``--state``: print the TASKS / CHANGELOG / release-charter / git-status summary.
+
+    The akmon subject reads ``<AITNA_ROOT>/akmon`` when the project mounts it, else the running
+    tree itself (an akmon clone). It is refused (exit 2) when that tree has no ``meta/`` at all: a
+    package carrier ships no development record, and a summary of nothing but ``(missing)`` lines
+    would read as an empty backlog. A ``meta/`` missing one file keeps its ``(missing)`` line.
+    """
     akmon = aitna_root(root) / "akmon"
+    if not akmon.is_dir():
+        akmon = AKMON_ROOT
     # The subject decides which working tree a tag is cut from: akmon is the submodule's
     # own tree; package is the project root. For akmon the backlog lives in its dev layer
     # (meta/) while the changelog stays at the akmon root; for package both come from the
@@ -153,6 +161,9 @@ def run_state(root: Path, subject: str) -> int:
         git_dir = root
 
     texts = _release_data()["run_state"]
+    if subject == "akmon" and not tasks_dir.is_dir():
+        print(texts["akmon_meta_absent"], file=sys.stderr)
+        return 2
     print(jsondata.fill(texts["state_header"], {"subject": subject}))
     print(jsondata.fill(texts["project_root_line"], {"root": root}))
     print()
@@ -206,6 +217,7 @@ def run_state(root: Path, subject: str) -> int:
 # spelling, a ``git describe`` distance means the tree is *past* that tag rather than at it, and
 # a PEP 440 pre/post/dev segment is neither — it names a different version.
 
+
 def changelog_name() -> str:
     """The changelog file whose topmost released window the version is checked against."""
     return _release_data()["changelog_name"]
@@ -219,6 +231,7 @@ def pyproject_name() -> str:
 def static_version_file() -> str:
     """The file holding the ``_STATIC_VERSION`` fallback literal for an uninstalled package."""
     return _release_data()["static_version_file"]
+
 
 _STATIC_VERSION_RE = re.compile(r"^_STATIC_VERSION\s*=\s*[\"\']([^\"\']+)[\"\']", re.MULTILINE)
 _HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
@@ -428,9 +441,7 @@ def check_release_versions(root: Path, subject: str = "package") -> list[Finding
                     _finding(
                         "error",
                         "release.version-literals",
-                        jsondata.fill(
-                            findings_data["npm-carrier-missing"]["message"], {"declared": version}
-                        ),
+                        jsondata.fill(findings_data["npm-carrier-missing"]["message"], {"declared": version}),
                         "package.json",
                         findings_data["npm-carrier-missing"]["fix"],
                     )
@@ -719,7 +730,8 @@ def run_check(root: Path, subject: str) -> int:
 
     if subject == "akmon":
         commands = [
-            [sys.executable, str(META / "self_ci.py")],
+            # The release depth of the differential hook fuzz (C111): many more cases than self-CI's bounded leg.
+            [sys.executable, str(META / "self_ci.py"), "--fuzz-depth", "release"],
             _pytest_command(AKMON_ROOT, str(META / "tests")),
         ]
         failed = _run_commands(AKMON_ROOT, commands)
@@ -826,8 +838,7 @@ def run_plan(version: str, subject: str) -> int:
     # the shared note takes no `semver` and the extra fill value is simply unused there.
     cycle_note = facts.get("cycle_note", plan["cycle_note"])
     lines += [
-        jsondata.fill(line, {"literal": literal, "semver": semver_spelling(f"{literal}.dev0")})
-        for line in cycle_note
+        jsondata.fill(line, {"literal": literal, "semver": semver_spelling(f"{literal}.dev0")}) for line in cycle_note
     ]
     lines.append("")
     lines.append(plan["closing"])

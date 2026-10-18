@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 from collections.abc import Iterable
 from datetime import date, datetime
 from pathlib import Path
@@ -48,6 +47,7 @@ import routing
 
 from common import jsondata
 from common.project_root import aitna_root, resolve_project_root
+from common.report_path import create_report, report_prefix, task_error
 
 
 def _gate_data() -> dict:
@@ -190,8 +190,8 @@ def _describe_scope(session: str | None, entries: list[routing.DelegationEntry])
     return data["scope_all_none"]
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: assemble the scoped coverage map and write it under ``artifacts/gates/``."""
+def _build_parser() -> argparse.ArgumentParser:
+    """The command line of ``main``."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, help="Project root. Defaults to cwd or a parent with AGENTS.md.")
     parser.add_argument("--log", type=Path, help="Delegation log. Defaults to <root>/.claude/model-routing.log.")
@@ -209,11 +209,23 @@ def main(argv: list[str] | None = None) -> int:
         "--until", help="Include entries at or before this ISO date/date-time (a bare date: through its end)."
     )
     parser.add_argument("--zone-plan", type=Path, help="Zone-plan file (§10.3) — enables uncovered-seam detection.")
+    parser.add_argument("--task", help="Task id the map belongs to; prefixes the default name: <task>-coverage-<n>.md.")
     parser.add_argument(
-        "--out", type=Path, help="Output path. Defaults under <AITNA_ROOT>/artifacts/gates/ (gitignored)."
+        "--out",
+        type=Path,
+        help="Output path. Defaults to <AITNA_ROOT>/artifacts/gates/[<task>-]coverage-<n>.md (gitignored), "
+        "n the next ordinal.",
     )
     parser.add_argument("--stdout", action="store_true", help="Also print the coverage map to stdout.")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: assemble the scoped coverage map and write it under ``artifacts/gates/``."""
+    parser = _build_parser()
     args = parser.parse_args(argv)
+    if (task_problem := task_error(args.task)) is not None:
+        parser.error(task_problem)
 
     bounds: dict[str, datetime | None] = {}
     for flag, text, end_of_day in (("--since", args.since, False), ("--until", args.until, True)):
@@ -243,10 +255,14 @@ def main(argv: list[str] | None = None) -> int:
     # The default lands under the *configured* dev layer, like every other generated artifact:
     # the literal this replaced wrote the map into `_aitna/` even when the project's dev layer is
     # somewhere else, i.e. into a directory the project does not read (same defect as gate_pack's).
-    default_name = f"coverage-{time.strftime('%Y%m%d-%H%M%S')}.md"
-    out = args.out or (aitna_root(root) / "artifacts" / "gates" / default_name)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(coverage + "\n", encoding="utf-8")
+    # Named [<task>-]coverage-<n>.md, n the next free ordinal, created exclusively (C114).
+    if args.out:
+        out = args.out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(coverage + "\n", encoding="utf-8")
+    else:
+        gates_dir = aitna_root(root) / "artifacts" / "gates"
+        out = create_report(gates_dir, report_prefix("coverage", args.task), coverage + "\n")
     try:
         rel = out.relative_to(root)
     except ValueError:

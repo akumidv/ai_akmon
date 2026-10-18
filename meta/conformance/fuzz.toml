@@ -1,0 +1,59 @@
+# Known divergences of the differential fuzz run (C111, README § Gates, gate 4).
+#
+# A fuzz case whose two results differ is *known* when an entry below matches it, and the entry
+# names the DIVERGENCES.md row that accepts the difference; anything else is divergent and fails
+# the run. An entry never stands on its own: `dv` must be a row of DIVERGENCES.md (the loader
+# refuses one that is not), so a difference is accepted here only after it was accepted there.
+#
+# Fields (all but `dv` and `reason` optional; an entry matches when every given field does):
+#   dv                  the DIVERGENCES.md row id
+#   reason              one line: why this signature is that row
+#   scripts             globs over the hook name (default ["*"])
+#   streams             the observables allowed to differ: exit, stdout, stderr, files
+#                       (default all; every differing stream must be in the list)
+#   mutation            a glob (or a list of globs) one of the case's mutation labels must match
+#                       ("kind:detail:path", e.g. "invalid-utf8:*"; default "*")
+#   stdin_regex         a regex the case's stdin (decoded with replacement) must contain
+#   python_stdin_errors a host condition: the error handler of Python's stdin under the run's
+#                       environment ("strict" under a UTF-8 locale, "surrogateescape" under C/POSIX)
+
+[[known]]
+dv = "DV4"
+reason = "under a C/POSIX locale Python reads stdin with surrogateescape, so an invalid byte survives where node's strict UTF-8 refuses it"
+mutation = "invalid-utf8:*"
+python_stdin_errors = "surrogateescape"
+
+[[known]]
+dv = "DV2"
+reason = "a payload number spelled into a marker file name (the session id): Python spells 1.0, 1E+2 and -0.0 as floats and keeps an integer beyond 2**53 exact, JSON.parse gives 1, 100, 0 and the nearest double"
+streams = ["files"]
+mutation = [
+  "big-number:float-one:session_id",
+  "big-number:exponent:session_id",
+  "big-number:neg-zero-float:session_id",
+  "big-number:beyond-2^*:session_id",
+]
+
+[[known]]
+dv = "DV2"
+reason = "one of the row's visible cases: a numeric delegation-log description is logged and echoed in the runtime's spelling, 1.0 (or another float with a zero fraction) as 1 by JS, an integer beyond 2**53 as the nearest double"
+scripts = ["delegation-log"]
+streams = ["stdout", "files"]
+mutation = [
+  "big-number:float-one:tool_input.description",
+  "big-number:exponent:tool_input.description",
+  "big-number:neg-zero-float:tool_input.description",
+  "big-number:beyond-2^*:tool_input.description",
+]
+
+[[known]]
+dv = "DV2"
+reason = "the row's other visible case: a numeric delegation-log subagent_type is spelled into the systemMessage and the log, an integer beyond 2**53 exactly by Python and as the nearest double by JS, 1E+2, 1.0 and -0.0 as floats by Python and as 100, 1 and 0 by JS"
+scripts = ["delegation-log"]
+streams = ["stdout", "files"]
+mutation = [
+  "big-number:float-one:tool_input.subagent_type",
+  "big-number:exponent:tool_input.subagent_type",
+  "big-number:neg-zero-float:tool_input.subagent_type",
+  "big-number:beyond-2^*:tool_input.subagent_type",
+]

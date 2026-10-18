@@ -6,7 +6,7 @@ The population is **derived** from the source of the tree under test, never list
 - ``command:<name>`` — the ``_COMMANDS`` tuple literal of ``src/akmon/cli.py``;
 - ``hook:<name>`` — every ``hooks/*.py`` with a ``__main__`` block (the shared core has none);
 - ``tool:<rel>`` — every ``tools/**/*.py`` with a ``__main__`` block (``model_routing/init``);
-- ``unit:<name>`` — every shared unit table ``units/*.toml`` of the corpus;
+- ``unit:<name>`` — every shared unit table ``units/*.toml`` of the corpus that holds a row;
 - ``code:<code>:<severity>`` — every literal emission site over ``bin/``, ``common/``,
   ``src/akmon/``, ``hooks/`` and ``tools/``: ``self.ok|warn|error("<code>", …)`` and any call
   whose first two positional arguments are a literal severity and a literal code
@@ -142,8 +142,26 @@ def _tools(repo: Path) -> set[str]:
     }
 
 
+def table_rows(table: dict) -> int:
+    """How many rows a unit table holds: every entry of its top-level arrays of tables.
+
+    ``[[case]]`` is the usual family; a few tables split their rows into several (``markers``:
+    ``[[kind]]``, ``[[state]]``, …). Each probe answers each row exactly once.
+    """
+    return sum(
+        len(value)
+        for value in table.values()
+        if isinstance(value, list) and value and all(isinstance(row, dict) for row in value)
+    )
+
+
 def _units(units_dir: Path) -> set[str]:
-    return {f"unit:{path.stem}" for path in sorted(units_dir.glob("*.toml"))}
+    """A table counts once it holds a row: an empty one is nothing a probe can answer (C120)."""
+    return {
+        f"unit:{path.stem}"
+        for path in sorted(units_dir.glob("*.toml"))
+        if table_rows(tomllib.loads(path.read_text(encoding="utf-8")))
+    }
 
 
 def _str_constant(node: ast.expr | None) -> str | None:
@@ -389,7 +407,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tree", default=str(REPO_ROOT))
     args = parser.parse_args(argv)
-    findings = check_coverage(Path(args.tree).resolve())
+    try:
+        findings = check_coverage(Path(args.tree).resolve())
+    except CorpusError as exc:  # a scenario the loader refuses: one line naming the file
+        print(f"conformance coverage: {exc}", file=sys.stderr)
+        return 2
     print_findings(findings)
     return exit_code(findings)
 

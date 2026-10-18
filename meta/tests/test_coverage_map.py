@@ -141,8 +141,13 @@ def test_the_default_map_path_follows_the_configured_dev_layer_root(tmp_path, mo
     capsys.readouterr()
 
     written = sorted((root / "tools" / "ai" / "artifacts" / "gates").glob("coverage-*.md"))
-    assert len(written) == 1
+    assert [p.name for p in written] == ["coverage-1.md"]
     assert not (root / "_aitna").exists()
+
+    # C114: a task prefixes the name, and its ordinal counts only that prefix's files.
+    assert coverage_map.main(["--project-root", str(root), "--all-sessions", "--task", "C7"]) == 0
+    assert coverage_map.main(["--project-root", str(root), "--all-sessions", "--task", "C7"]) == 0
+    assert "map: tools/ai/artifacts/gates/C7-coverage-2.md" in capsys.readouterr().out
 
 
 # --------------------------------------------------------------------------------------

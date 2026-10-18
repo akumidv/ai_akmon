@@ -7,7 +7,7 @@
   prefix and its *Kyklōpes* reading) · [ADR 0010](0010-alternatives-adoption-a11-verdicts.md)
   (A12 owns the decisions that ride the N2 inventory) · backlog carrier
   [C46](../TASKS.md) (the mechanism half — neutral declaration + per-vendor name map) ·
-  N2 stage-0 findings [`n2-stage0-probes-inventory-20260807.md`](../reviews/alternatives/n2-stage0-probes-inventory-20260807.md)
+  N2 stage-0 findings [`n2-stage0-probes-inventory.md`](../reviews/alternatives/n2-stage0-probes-inventory.md)
   · ledger row D2-15.
 
 ## Context
@@ -44,7 +44,7 @@ name under which the **task name's** path segment is validated, which is why pas
 agent-definition convention — `<repo>/.codex/agents/<name>.toml` (also
 `$CODEX_HOME/agents/`), carrying `name`, `description`, `developer_instructions` and
 model/reasoning/sandbox overrides, selected at spawn time by an `agent_type` argument. See
-[N2 findings §1A.6](../reviews/alternatives/n2-stage0-probes-inventory-20260807.md).
+[N2 findings §1A.6](../reviews/alternatives/n2-stage0-probes-inventory.md).
 Neither correction disturbs the decision — the constraint that forced it is a property of
 the name, not of where the name is declared — but it removes the ADR's stated reason for
 *not* generating Codex agent definitions, which is now an open design question rather than

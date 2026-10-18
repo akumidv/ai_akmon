@@ -32,7 +32,7 @@ project-local hook surface.
   [`../guardrails/_common.md`](../guardrails/_common.md) "Commits & ownership": denies an AI
   `Co-Authored-By` trailer; asks the owner before `push`/`tag`/`merge` and before a `commit`
   on the default branch (landing history). Runs as a **PreToolUse → Bash** hook, and carries the
-  neutral **unclassified-shell-route diagnostic** ([ADR 0012 D02](../meta/decisions/0012-stage1-contracts-and-vocabulary.md)): the advisories below key off a
+  neutral **unclassified-shell-route diagnostic** ([ADR 0012 D02](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0012-stage1-contracts-and-vocabulary.md)): the advisories below key off a
   file path, so a write that arrives through the shell is invisible to them on Claude as well —
   said once per session on the hook process's stderr, never blocking, never model context.
 - [`session-start-agent.py`](session-start-agent.py) — Claude SessionStart wrapper for the
@@ -119,12 +119,12 @@ project-local hook surface.
   atomic marker for a reliable session/tool-use pair, the next bad event emits again, and missing
   identity repeats fail-visible.
   Whether Codex surfaces that stderr to the owner is unverified (design
-  [codex-runtime-contract.md](../meta/design/codex-runtime-contract.md) § PreToolUse routes).
+  [codex-runtime-contract.md](https://github.com/akumidv/ai_akmon/blob/main/meta/design/codex-runtime-contract.md) § PreToolUse routes).
   Commit enforcement, delegation log/nudge, named-agent generation, and model routing are
   deliberately not wired. N2 proved hard `deny` on the headless patch route, but the exact
   Bash+git `deny`/`ask` matrix, `permission_mode` delivery, and TUI/headless equivalence remain
   C28(b) evidence gates. Generic Codex subagents fire `SubagentStart`/`SubagentStop` on 0.153.4
-  ([M62](../meta/MEASUREMENTS.md)), but akmon wires neither; that remains separate N1/A12 work.
+  ([M62](https://github.com/akumidv/ai_akmon/blob/main/meta/MEASUREMENTS.md)), but akmon wires neither; that remains separate N1/A12 work.
 
 > The Role-declaration **rule** also lives in `AGENTS.md` (vendor-neutral), so Codex/Gemini
 > follow it by reading the doc; this hook is only the Claude-side *enforcement* of it.
@@ -132,7 +132,7 @@ project-local hook surface.
 ## Crash posture (C87)
 
 Every spawned entry point runs under one top-level guard: the seven Claude wrappers and
-`codex-hook.py` ([ADR 0013 D01](../meta/decisions/0013-hook-survivability-and-crash-posture.md)).
+`codex-hook.py` ([ADR 0013 D01](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0013-hook-survivability-and-crash-posture.md)).
 A crash never blocks the action, and it is always reported:
 
 - **stderr:** one line, `akmon <hook> hook: <ExceptionClass>`. It never carries the exception's
@@ -140,9 +140,9 @@ A crash never blocks the action, and it is always reported:
 - **Claude Code:** the entry's one stdout document is `{"systemMessage": …}` for the owner — the
   fact and `akmon verify` — and it exits 0. Claude Code 2.1.270 shows that message as a notice on
   `PreToolUse`/`UserPromptSubmit` and never gives it to the model; a hook that exits 1 there is
-  shown nowhere ([M69, M70](../meta/MEASUREMENTS.md)).
+  shown nowhere ([M69, M70](https://github.com/akumidv/ai_akmon/blob/main/meta/MEASUREMENTS.md)).
 - **Codex:** nothing on stdout, and it exits 1. Codex prints the hook as `Failed` and runs the
-  action ([M68, M71](../meta/MEASUREMENTS.md)); an exit 0 would read `Completed`.
+  action ([M68, M71](https://github.com/akumidv/ai_akmon/blob/main/meta/MEASUREMENTS.md)); an exit 0 would read `Completed`.
 
 The code is `claude_adapter.run_guarded` and `codex_adapter.report_failure`. The crash tests read
 the entry points from the generated wiring, so a newly wired entry fails them until it uses the

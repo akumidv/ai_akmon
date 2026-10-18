@@ -1,5 +1,7 @@
 # Design note: why the Python floor moved from 3.9 to 3.11
 
+> **Later raised to 3.12** (C122, ADR 0009 amendment); the body below is the 3.9 → 3.11 history.
+
 > **Decision owner-verified at D2-34; C68 landed in `db9ad7e`.** Provenance: C37 side finding, measured on the tree that
 > declared Python 3.9. The filename is retained because this note is the historical evidence for
 > retiring that floor. The operative contract is now Python **3.11 or newer** for the package and

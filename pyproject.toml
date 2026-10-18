@@ -4,7 +4,7 @@ version = "0.4.0.dev0"
 description = "Akmon is AI-agent development standard, as an installable package."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     {name = "Andrei Kuminov", email = "akuminov@gmail.com"}
 ]
@@ -31,12 +31,19 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# The standard tree ships as package data under akmon/_tree/: what runs or is read in a consumer,
+# not akmon's development record — no meta/, no test files (ADR 0009, C118 amendment). Each
+# top-level member is named explicitly (not "." ) so the embedded copy never recurses into src/ or
+# this pyproject.toml itself. The member list is split by what hatchling can filter: force-include
+# ignores every `exclude` pattern (only its hardcoded constants apply, measured on hatchling 1.27),
+# so a directory carrying files to drop — js/ and its `*.test.mjs` — goes through `only-include` +
+# `sources`, which the excludes do reach. Root files stay in force-include: a `sources` prefix is a
+# directory, so a remapped root file would land at the wheel root, outside the package.
+# meta/tests/test_init.py asserts the two lists together equal `init.json::tree_members`.
 [tool.hatch.build.targets.wheel]
-packages = ["src/akmon"]
+only-include = ["src/akmon", "js"]
+sources = {"src" = "", "js" = "akmon/_tree/js"}
 
-# The standard tree ships as package data (ADR 0009 §1 — full tree incl. meta/, for parity
-# with the submodule mount). Force-include each top-level member explicitly (not "." ) so the
-# embedded copy never recurses into src/ or this pyproject.toml itself.
 [tool.hatch.build.targets.wheel.force-include]
 "ARCHETYPES.md" = "akmon/_tree/ARCHETYPES.md"
 "BOOTSTRAP.md" = "akmon/_tree/BOOTSTRAP.md"
@@ -50,19 +57,19 @@ packages = ["src/akmon"]
 "examples" = "akmon/_tree/examples"
 "guardrails" = "akmon/_tree/guardrails"
 "hooks" = "akmon/_tree/hooks"
-"meta" = "akmon/_tree/meta"
 "pipelines" = "akmon/_tree/pipelines"
 "profiles" = "akmon/_tree/profiles"
 "roles" = "akmon/_tree/roles"
 "skills" = "akmon/_tree/skills"
 "tools" = "akmon/_tree/tools"
-"js" = "akmon/_tree/js"
 
-# The custom patterns apply to the `packages` scan only: force-include entries are filtered by
-# hatchling's hardcoded constants (EXCLUDED_DIRECTORIES incl. `__pycache__` and `.ruff_cache`),
-# which is why the cache dirs never ship there either. A force-included `.gitignore` file
-# (the corpus fixture's) is NOT excludable — npm hard-drops it instead (M103); the one-file
-# divergence is encoded in meta/tests/test_carriers_match.py.
+# The custom patterns apply to the `only-include` members only: force-include entries are filtered
+# by hatchling's hardcoded constants (EXCLUDED_DIRECTORIES incl. `__pycache__` and `.ruff_cache`),
+# which is why the cache dirs never ship there either. npm drops `.gitignore` files on its own
+# (M103); no shipped member carries one, so wheel and npm ship one file set —
+# meta/tests/test_carriers_match.py asserts it. `*.test.mjs` is listed here, not on the wheel
+# target, because a target-level `exclude` replaces this list rather than extending it; the sdist
+# drops the JS tests with it.
 [tool.hatch.build]
 exclude = [
     "**/__pycache__",
@@ -70,12 +77,16 @@ exclude = [
     "**/.pytest_cache",
     "**/.git",
     "**/.git/**",
+    "**/*.test.mjs",
 ]
 
 [tool.ruff]
 # akmon runs exactly the Python rules it offers a consumer (profiles/ruff.toml, ADR 0014 §6).
 extend = "profiles/ruff.toml"
-target-version = "py311"
+target-version = "py312"
+# Experiment material is not akmon source: its inputs are sealed by hash (seal*.json), so their
+# bytes cannot be reformatted or brought under the rules (owner decision, C116).
+extend-exclude = ["meta/experiments"]
 
 [tool.ruff.lint]
 # ℹ is the notice glyph akmon's hooks print — meant, not a mistyped `i`.

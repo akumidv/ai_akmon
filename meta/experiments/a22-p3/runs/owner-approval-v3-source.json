@@ -1,0 +1,37 @@
+{
+  "acceptance_evidence": {
+    "amendment_proposal_sha256": "bfc6452a9713089f8ee607ff87fb892932daf2f64cdc1598a39fd14d627b8f57",
+    "amendment_seal_sha256": "3d0f931f47a54f0d101e99e63e33182b1f447704ff340e9f9257c7ea15f89667",
+    "exact_quote": "I accept the V3-only 5,000,000-token Codex accounting ceiling, including its exclusion of the known 153,614-token V2 debit and unresolved q1461 usage from that ceiling while preserving both as separately reported V2 history. I accept the frozen technical-source conditions, the OBSERVED_NO_RETRY evidence limit, the 80% five-hour and 90% weekly stop thresholds, the requirement for fresh interpretable quota telemetry, and the named human stop operator recorded in the amended approval. I authorize only the technical_source phase for the exact amended proposal and seal. This does not authorize route checks, qualification, comparison, repair, retry, or any other provider call.",
+    "operative_v3_seal_sha256": "58eea0362178111b0497e6fcd248dffb25b07dda295fa91de2d03205819cedde",
+    "proposal_sha256": "c163caa638f5d9dbc65dd405858408d5c01e0e91a399caa36ccac3e1520bd06a",
+    "transcript_path": "/tmp/a22-p3-v3-chat-evidence-2.json",
+    "transcript_sha256": "f36bf2f273ae7edd202309ed139c81b062bbc8f4e82714106b5862b029c001a4"
+  },
+  "accepted_v2_history": {
+    "files": {
+      "RUN_PLAN_V2_PROPOSAL.md": "89de386b05fbd38e70ed90da75a56c6f3aa584598314afdbb54de859c0f9b8f5",
+      "runs/accepted-v2-seal.json": "dfa34f9da5ae18a6038b506170ea83226bbf026902db2951ad457b589499d0c9",
+      "runs/owner-approval-v2.json": "986dc2d304c505f748624c2f261b92f027bf9d165593f9cad8d08a63420ed0e9",
+      "seal.json": "a4e7036b5aae7ea4b603add4e7e98a7bde3331164a5fae5da5e85fbb75b66bcb"
+    },
+    "path": "/tmp/akmon-a22-p3-v2-20261011/meta/experiments/a22-p3",
+    "storage_assurance": "hash-matching preserved snapshot; storage is not immutable"
+  },
+  "amendment_proposal_sha256": "bfc6452a9713089f8ee607ff87fb892932daf2f64cdc1598a39fd14d627b8f57",
+  "amendment_seal_sha256": "3d0f931f47a54f0d101e99e63e33182b1f447704ff340e9f9257c7ea15f89667",
+  "authorized_phases": [
+    "technical_source"
+  ],
+  "named_stop_operator": "owner (current chat session)",
+  "new_epoch_budget_accepted": true,
+  "observed_no_retry_accepted": true,
+  "operative_v3_seal_sha256": "58eea0362178111b0497e6fcd248dffb25b07dda295fa91de2d03205819cedde",
+  "owner_accepted": true,
+  "proposal_sha256": "c163caa638f5d9dbc65dd405858408d5c01e0e91a399caa36ccac3e1520bd06a",
+  "record_type": "p3_v3_source_phase_owner_approval",
+  "schema": 1,
+  "source_conditions_accepted": true,
+  "subscription_thresholds_accepted": true,
+  "v2_usage_exclusion_accepted": true
+}

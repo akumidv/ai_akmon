@@ -1,0 +1,13 @@
+{
+  "acceptance_evidence_sha256": "aeca0174fd15462f255e4a14e3647f221fcbb27ebd52f62058ee3a5acf1dbcac",
+  "accepted_accounting_exception": true,
+  "authorized_phases": [
+    "technical_controls"
+  ],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "d3d513feead984a755167e446eee9a9d84f6ba32f9cfd4c8cad0b96c5ecd2103",
+  "owner_accepted": true,
+  "record_type": "p3_v3_controls_owner_approval",
+  "schema": 1
+}

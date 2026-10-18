@@ -118,6 +118,7 @@ def _skill_description_max(data: Mapping[str, Any]) -> int:
     """The standard's skill-description limit (agentskills.io/specification) (``verify.json``)."""
     return data["skill_description_max"]
 
+
 # USE-surface isolation: the documentary surface a consumer reads as guidance must be
 # self-contained and must not even *name* akmon's own development artifacts. A deployed
 # external agent should not learn they exist — naming them costs tokens and invites it to chase
@@ -147,6 +148,7 @@ def _use_operative_globs(data: Mapping[str, Any]) -> tuple[str, ...]:
 def _use_operative_files(data: Mapping[str, Any]) -> tuple[str, ...]:
     """The top-level USE files the isolation check scans (``verify.json``)."""
     return tuple(data["use_operative_files"])
+
 
 # Citations that pin a specific akmon development artifact, even in plain prose:
 #  - a numbered decision record ("ADR 0001", "ADR-12") — the bare word "ADR" as a concept is fine;
@@ -184,6 +186,7 @@ def wired_hook_scripts(data: Mapping[str, Any] | None = None) -> tuple[str, ...]
     list, so it has one owner. Called on its own, it reads ``verify.json`` itself.
     """
     return tuple((data if data is not None else read_verify_data())["wired_hook_scripts"])
+
 
 class Verifier:
     """Runs every USE-contract check against one consuming project and collects findings."""
@@ -834,8 +837,7 @@ class Verifier:
             if bad:
                 self.warn(
                     "tasks.entry-status",
-                    f"{len(bad)} TASKS.md entry(ies) carry a status outside "
-                    f"{status_join}: {_sample(bad)}",
+                    f"{len(bad)} TASKS.md entry(ies) carry a status outside {status_join}: {_sample(bad)}",
                     target=f"{self.aitna}/TASKS.md",
                     fix=f"Set each listed entry's status field to one of {status_join}.",
                 )
@@ -1193,6 +1195,34 @@ class Verifier:
                 fix=f"Add __pycache__/ to {self.akmon}/.gitignore.",
             )
 
+    def check_vendored_leftovers(self) -> None:
+        """Warn about each top-level entry of a ``vendored`` mount that the carrier does not ship.
+
+        A re-run of ``init --mode vendored`` replaces the standard's members and touches nothing
+        else, so a member a later carrier dropped — ``meta/`` before C118 — stays in the mount.
+        akmon deletes nothing in the consumer's tree; the owner removes it (ADR 0009, C118
+        amendment). Only ``vendored`` is a copy: a submodule or subtree mount is the git tree and
+        carries ``meta/`` on purpose, and package mode mounts nothing. The members are
+        ``verify.json::vendored_tree_members``, pinned equal to ``init.json::tree_members`` (that
+        file is not in the mount), plus the files ``init`` itself writes there.
+        """
+        if sync_tool.read_mount_mode(self.root) != "vendored":
+            return
+        mount = self.root / self.akmon
+        if not mount.is_dir():
+            return
+        shipped = {*self.data["vendored_tree_members"], *self.data["vendored_mount_own_files"]}
+        for entry in sorted(path.name for path in mount.iterdir()):
+            if entry in shipped:
+                continue
+            path = f"{self.akmon}/{entry}"
+            self.warn(
+                "layout.vendored-leftover",
+                jsondata.fill(self.data["vendored_leftover"], {"path": path}),
+                target=path,
+                fix=jsondata.fill(self.data["vendored_leftover_fix"], {"path": path}),
+            )
+
     def check_ci(self) -> None:
         """Check that a GitHub Actions workflow runs akmon's sync and verify commands."""
         workflow_dir = self.root / ".github" / "workflows"
@@ -1210,8 +1240,7 @@ class Verifier:
         # exist (ADR 0009 §4). Substring match so `uv run akmon sync --check` etc. pass.
         variant = "package" if sync_tool.is_package_mode(self.root) else "mounted"
         required = tuple(
-            jsondata.fill(command, {"akmon": self.akmon})
-            for command in self.data["ci_required_commands"][variant]
+            jsondata.fill(command, {"akmon": self.akmon}) for command in self.data["ci_required_commands"][variant]
         )
         missing = [command for command in required if command not in workflow_text]
         if missing:
@@ -1432,6 +1461,7 @@ class Verifier:
         self.check_model_routing()
         self.check_gitignore()
         self.check_akmon_gitignore()
+        self.check_vendored_leftovers()
         self.check_ci()
         self.check_changelog()
         self.check_package_pin()
@@ -1456,7 +1486,8 @@ class Verifier:
         checks, problems = read_checks(table)
         for problem in problems:
             self.error("check.config", problem, target=config_target(), fix=correct_entry_fix())
-        if not problems:
+        # An empty table is what `init --checks none` records (C123): no finding, as for no table.
+        if checks and not problems:
             message, fix = check_table_ok()
             self.ok(
                 "check.config",
@@ -1482,7 +1513,7 @@ def main(argv: list[str] | None = None) -> int:
     ecosystem = recorded_ecosystem(root)
     if ecosystem != "python":
         text = read_verify_data()["python_refuses_ecosystem"]
-        print(text.replace("{{value}}", line_safe(ecosystem)), file=sys.stderr)
+        print(jsondata.fill(text, {"value": line_safe(ecosystem)}), file=sys.stderr)
         return 2
     verify = Verifier(root)
     verify.run()

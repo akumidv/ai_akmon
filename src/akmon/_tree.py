@@ -1,8 +1,9 @@
 """Resolve the embedded akmon standard-tree root.
 
-The standard tree (the full akmon repo minus ``src/`` — README, roles/, pipelines/,
-guardrails/, hooks/, bin/, common/, tools/, meta/, …) ships as package data under ``akmon/_tree/``
-(hatchling force-include, see ``pyproject.toml``). This module is the single place that
+The standard tree (the akmon repo's consumer-facing members — README, roles/, pipelines/,
+guardrails/, hooks/, bin/, common/, tools/, js/, …; not ``src/``, not ``meta/``, no test files)
+ships as package data under ``akmon/_tree/`` (hatchling force-include and ``only-include``, see
+``pyproject.toml``). This module is the single place that
 resolves its filesystem root; the CLI's ``path``/``sync``/``verify`` dispatch use it.
 """
 

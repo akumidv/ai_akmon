@@ -8,8 +8,9 @@
 # is not a line start) and lets `.` cross it; `re.escape` and `findall` answer for a dev-layer root such
 # as `a.b+c`; `tomllib` refuses a byte-order mark where the vendored parser folds it in, and a table
 # that is a date, an array or a string is not a table; `sorted()` orders names by code point. A JS port
-# gets none of this for free. The table is the spec: every expected value was produced by running the
-# Python and then read against the function's docstring.
+# gets none of this for free. The table is the spec, held to the Python reference row by row:
+# `runner.py --impl python` runs it as scenario `units/sync` in the conformance leg of
+# `meta/self_ci.py`, and every expected value was read against the function's docstring.
 #
 # The mouth is the generic one of `routing.toml` (the row format is the block comment above
 # `probe_routing` in probe.py): a row is `{id, fn, args_json, expected_json}` plus world keys. What

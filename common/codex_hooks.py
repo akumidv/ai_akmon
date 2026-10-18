@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """C70 — bounded live query of Codex host-side hook delivery (ADR-0012/D03, design §7).
 
-Generated wiring is structural proof only (N7 — meta/reviews/n7-codex-hook-delivery-20260825.md):
+Generated wiring is structural proof only (N7 — meta/reviews/n7-codex-hook-delivery.md):
 a discovered hook entry can be reported ``enabled: true`` while its persisted trust is absent or
 stale, and the handler simply never fires. This module derives the expected hook population from
 generated wiring and compares it against the authoritative ``codex app-server`` ``hooks/list``
@@ -56,6 +56,7 @@ DEFAULT_TIMEOUT_SECONDS = 5.0
 #: than waited on without bound: the query's answer, or its failure, is already decided by then.
 _EXIT_GRACE_SECONDS = 2.0
 
+
 def _codex_data() -> dict:
     """The closed diagnostic table and the status vocabularies, as the data file carries them."""
     return jsondata.read(Path(__file__).parent / "codex_hooks.json")
@@ -95,6 +96,7 @@ def _trust_statuses() -> frozenset[str]:
 #: what N7 measured as reported ``enabled: true`` and inert.
 def _live_trust_statuses() -> frozenset[str]:
     return frozenset(_codex_data()["live_trust_statuses"])
+
 
 #: Fixed JSON-RPC request ids this module sends: 1 for the handshake, 2 for the query it actually
 #: reads. Any response not echoing 2 is rejected rather than trusted, matching-notification

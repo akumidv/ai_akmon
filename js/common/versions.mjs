@@ -199,9 +199,7 @@ export function semverSpelling(recorded) {
       .join(".");
   const { base, ahead } = splitVersion(recorded);
   if (ahead !== null) {
-    throw new Error(
-      `'${recorded}' is a distance past its tag — a position, not a version the npm carrier can spell`,
-    );
+    throw new Error(`'${recorded}' is a distance past its tag — a position, not a version the npm carrier can spell`);
   }
   if (FINAL_RE.test(base)) {
     return withoutLeadingZeros(base);

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Owner:** akuminov@gmail.com
-- **References:** [C79 evidence](../reviews/c79-skill-guidance-20260913.md) ·
+- **References:** [C79 evidence](../reviews/c79-skill-guidance.md) ·
   [C79 archive](../TASKS_ARCHIVE.md)
 
 ## Accepted decision block

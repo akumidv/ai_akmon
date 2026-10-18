@@ -4,7 +4,7 @@
 - **Owner:** akuminov@gmail.com
 - **References:** [design `code-rules-and-profiles`](../design/code-rules-and-profiles.md) (the
   full classification and slices) ·
-  [C89 baseline](../reviews/c89-python-rule-baseline-20260913.md) ·
+  [C89 baseline](../reviews/c89-python-rule-baseline.md) ·
   [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html) ·
   [ADR 0009](0009-packaging-package-carrier-and-mount-modes.md) (package mode, the materialized
   guardrails) · archived tasks [C89, C91, C83](../TASKS_ARCHIVE.md) (C83 is the one

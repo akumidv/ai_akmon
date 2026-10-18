@@ -2,10 +2,11 @@
 """Run akmon's self-checks against a synthetic consuming-project fixture.
 
 Each leg — the fixture ``sync`` write, the ``sync --check`` re-run, the USE-layer
-``verify --strict``, and the installed-wheel smoke — reports through the shared finding
-envelope (``common/findings.py``), imported directly rather than by parsing what the child
-processes print. The child's own output is echoed to stderr when its leg fails, so the
-finding names the leg and the detail is still there to read.
+``verify --strict``, the installed-wheel smoke, and the npm smoke with no Python on ``PATH``
+(C106) — reports through the shared finding envelope (``common/findings.py``), imported
+directly rather than by parsing what the child processes print. The child's own output is
+echoed to stderr when its leg fails, so the finding names the leg and the detail is still
+there to read.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -125,6 +128,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "common/check_runner.py",
         "common/project_root.py",
         "common/record.py",
+        "common/report_path.py",
         "common/runtime.json",
         "common/runtime.py",
         "common/versions.py",
@@ -254,16 +258,16 @@ def _leg(
 
 
 def _assert_wheel_python_floor(wheel: Path) -> None:
-    """Fail unless the built wheel carries exactly one Python >=3.11 metadata field."""
+    """Fail unless the built wheel carries exactly one Python >=3.12 metadata field (the C122 floor)."""
     with zipfile.ZipFile(wheel) as archive:
         metadata_names = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
         if len(metadata_names) != 1:
             raise RuntimeError(f"wheel has {len(metadata_names)} METADATA files; expected exactly one")
         metadata = archive.read(metadata_names[0]).decode("utf-8")
     fields = [line for line in metadata.splitlines() if line.startswith("Requires-Python:")]
-    if fields != ["Requires-Python: >=3.11"]:
+    if fields != ["Requires-Python: >=3.12"]:
         rendered = ", ".join(fields) if fields else "missing"
-        raise RuntimeError(f"wheel Requires-Python must be exactly >=3.11; got {rendered}")
+        raise RuntimeError(f"wheel Requires-Python must be exactly >=3.12; got {rendered}")
 
 
 def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[str, str]) -> None:
@@ -371,7 +375,7 @@ def _hook_payload(vendor: str, event: str, cwd: Path) -> dict:
     return payload
 
 
-def _run_generated_hook_commands(fixture: Path, nested: Path) -> None:
+def _run_generated_hook_commands(fixture: Path, nested: Path, env: dict[str, str] | None = None) -> None:
     """Run every generated hook command **verbatim**, the way the harness runs it.
 
     Verbatim and through a shell because the command *is* the artifact under test: the vendor
@@ -385,7 +389,7 @@ def _run_generated_hook_commands(fixture: Path, nested: Path) -> None:
     that must always speak — the Codex session brief and the Claude routing status — are
     required to produce output, while the advisories are only required not to fail.
     """
-    environment = {**os.environ, "CLAUDE_PROJECT_DIR": str(fixture)}
+    environment = {**(os.environ if env is None else env), "CLAUDE_PROJECT_DIR": str(fixture)}
     speaking = 0
     for vendor, event, command in _generated_hook_commands(fixture):
         # Codex is handed the *nested* cwd, which is what pins root discovery from a
@@ -450,11 +454,155 @@ def _wheel_smoke_report(detail: str) -> tuple[str, str]:
     )
 
 
+#: What the npm smoke hides from ``PATH``: every Python a hook or command could fall back to.
+_PYTHON_BINARIES = ("python3", "python")
+
+
+def _python_free_env(env: dict[str, str], scratch: Path) -> dict[str, str]:
+    """``env`` with every Python interpreter hidden from its ``PATH`` (one shadow set per binary)."""
+    path = env.get("PATH", os.defpath)
+    for binary in _PYTHON_BINARIES:
+        path = path_without(binary, path, scratch / binary)
+    for binary in _PYTHON_BINARIES:
+        if shutil.which(binary, path=path) is not None:
+            raise RuntimeError(f"could not hide {binary} from PATH ({shutil.which(binary, path=path)})")
+    return {**env, "PATH": path}
+
+
+#: The npm smoke's toolchain: ``node`` runs every command and hook, ``npm`` packs and installs,
+#: ``git`` makes the fixture a repository. Nothing else — the leg is offline by design.
+_NPM_SMOKE_BINARIES = ("node", "npm", "git")
+
+#: The oldest Node major the npm smoke runs on (``engines.node`` in package.json).
+_NODE_FLOOR = 22
+
+#: What every npm smoke prerequisite message names, whichever of them is missing.
+_NPM_SMOKE_PREREQUISITES = f"node >= {_NODE_FLOOR}, npm and git on PATH"
+
+
+def _node_major(version: str) -> int:
+    """The major of a ``node --version`` line (``v24.1.0`` → 24)."""
+    major = version.strip().removeprefix("v").split(".", 1)[0]
+    if not major.isdigit():
+        raise RuntimeError(f"node --version printed an unreadable version: {version.strip()!r}")
+    return int(major)
+
+
+def _check_npm_smoke_prerequisites(env: dict[str, str]) -> None:
+    """Raise, naming the prerequisite, when ``env``'s ``PATH`` lacks a toolchain binary or holds a node below the floor.
+
+    Checked up front so a missing or old toolchain reads as what it is rather than as the first
+    command that happens to trip over it.
+    """
+    path = env.get("PATH", os.defpath)
+    for binary in _NPM_SMOKE_BINARIES:
+        if shutil.which(binary, path=path) is None:
+            raise RuntimeError(f"the `{binary}` binary is not on PATH")
+    node = shutil.which("node", path=path)
+    version = subprocess.run([node, "--version"], env=env, capture_output=True, text=True, check=True).stdout
+    if _node_major(version) < _NODE_FLOOR:
+        raise RuntimeError(f"node {version.strip()} is older than {_NODE_FLOOR}")
+
+
+def _installed_npm_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[str, str]) -> None:
+    """The npm leg (C106): pack, install into a fresh Node project, and attach it with no Python on the host.
+
+    `npm pack` → `npm install` of the tarball → `akmon init` → `sync --check` → `verify --strict` → every
+    generated hook command, run verbatim — with `python3` and `python` hidden from ``PATH`` for all of it,
+    so a command or hook that still reaches for Python fails here instead of on a consumer's machine.
+
+    The tarball is installed offline and the pin is then written as the exact version, which is what
+    `npm install -D -E akmon` leaves after a publish: the `file:` spelling a tarball install records is a
+    range to `verify` (`package.dev-pin`), and the registry is not what this leg tests.
+    """
+    _check_npm_smoke_prerequisites(verify_env)
+    dist = tmp_root / "dist"
+    dist.mkdir(parents=True)
+    fixture = tmp_root / "node-consumer"
+    fixture.mkdir(parents=True)
+    # A repository, because the Codex wiring anchors on `git rev-parse --show-toplevel`.
+    _checked(["git", "init", "-q", str(fixture)])
+    _checked(["npm", "pack", "--silent", "--pack-destination", str(dist)], cwd=akmon_root)
+    tarball = next(dist.glob("akmon-*.tgz"), None)
+    if tarball is None:
+        raise RuntimeError(f"npm pack produced no akmon-*.tgz tarball in {dist}")
+    version = json.loads((akmon_root / "package.json").read_text(encoding="utf-8"))["version"]
+    _write(fixture / "package.json", json.dumps({"name": "node-consumer", "version": "0.1.0", "private": True}) + "\n")
+    _checked(
+        ["npm", "install", "--save-dev", "--save-exact", "--offline", "--no-audit", "--no-fund", str(tarball)],
+        cwd=fixture,
+    )
+    manifest = json.loads((fixture / "package.json").read_text(encoding="utf-8"))
+    manifest["devDependencies"]["akmon"] = version
+    _write(fixture / "package.json", json.dumps(manifest, indent=2) + "\n")
+
+    env = _python_free_env(verify_env, tmp_root / "path")
+    akmon = str(fixture / "node_modules" / ".bin" / "akmon")
+    _checked([akmon, "init", "--yes", "--project-root", str(fixture)], cwd=fixture, env=env)
+    for command in (["sync", "--check"], ["verify", "--strict", "--quiet"]):
+        _checked([akmon, *command], cwd=fixture, env=env)
+
+    record = (fixture / "_aitna" / ".akmon.toml").read_text(encoding="utf-8")
+    if 'ecosystem = "node"' not in record:
+        raise RuntimeError('the Node attach did not record ecosystem = "node"')
+    materialized = sorted(
+        path.relative_to(fixture).as_posix() for path in (fixture / "_aitna" / ".akmon").rglob("*") if path.is_file()
+    )
+    # The lint rules are extended in place from node_modules/akmon/profiles/oxlint.json (C109), so only
+    # the imported guardrail is materialized.
+    if materialized != ["_aitna/.akmon/guardrails/_common.md"]:
+        raise RuntimeError(f"the Node attach materialized more than the imported guardrail: {materialized}")
+    wiring = [command for _, _, command in _generated_hook_commands(fixture)]
+    if not wiring or any("/node_modules/akmon/js/hooks/" not in command for command in wiring):
+        raise RuntimeError(f"the Node wiring does not run every hook from node_modules/akmon/js/hooks: {wiring}")
+
+    nested = fixture / "src" / "package"
+    nested.mkdir(parents=True)
+    _run_generated_hook_commands(fixture, nested, env)
+
+
+#: How a missing toolchain surfaces once a command runs: Python's own ``FileNotFoundError`` for a
+#: binary it spawns, and coreutils ``env`` for node missing behind a ``#!/usr/bin/env node`` shebang
+#: (npm, the akmon bin) — ``/usr/bin/env: 'node': No such file or directory``, exit 127. The quotes
+#: and the reason text follow the locale (curly quotes under a UTF-8 one), so neither is matched.
+_MISSING_TOOLCHAIN_RE = re.compile(
+    r"No such file or directory: '(?:node|npm|git)'"
+    r"|\benv: \W?node\W?: "
+    r"|the `(?:node|npm|git)` binary is not on PATH"
+    rf"|\bnode \S+ is older than {_NODE_FLOOR}\b"
+)
+
+
+def _npm_smoke_report(detail: str) -> tuple[str, str]:
+    """Message and one-sentence fix for a failed npm smoke — a missing or old toolchain is a prerequisite, said so.
+
+    The leg is offline by design (no registry, an ``--offline`` install, a Node ``init`` that looks
+    nothing up), so a missing node, npm or git — or a node below the floor — is its only kind of
+    prerequisite failure; anything else is a defect in what akmon ships.
+    """
+    if _MISSING_TOOLCHAIN_RE.search(detail):
+        return (
+            f"npm smoke could not run: {detail} :: prerequisite of this leg, not a packaging defect — it needs "
+            f"{_NPM_SMOKE_PREREQUISITES}",
+            f"Install node >= {_NODE_FLOOR} (npm ships with it) and git, and re-run python3 meta/self_ci.py.",
+        )
+    return (
+        f"npm smoke failed: {detail}",
+        "Run python3 meta/self_ci.py and fix the Python-free Node install failure it reports.",
+    )
+
+
 def _registry_unreachable(output: str) -> bool:
     """Whether a failed npm invocation names registry reach — a prerequisite, not a shipped defect."""
     if any(marker in output for marker in ("ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "ECONNREFUSED")):
         return True
     return "registry.npmjs.org" in output and ("404" in output or "403" in output)
+
+
+#: The wall-clock bound on one node-toolchain leg, in seconds. The longest leg is the release-depth
+#: fuzz (2000 cases): about 0.4 s a case on a 4-core host, so roughly 13 minutes; an hour is several
+#: times that and still ends a hung leg rather than the release check hanging for ever.
+JS_LEG_TIMEOUT = 3600
 
 
 def _js_leg(
@@ -488,7 +636,23 @@ def _js_leg(
             )
         )
         return
-    result = subprocess.run(command, capture_output=True, text=True, cwd=invocation.cwd, check=False)
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, cwd=invocation.cwd, check=False, timeout=JS_LEG_TIMEOUT
+        )
+    except subprocess.TimeoutExpired as exc:
+        partial = exc.stdout or ""
+        sys.stderr.write(partial if isinstance(partial, str) else partial.decode("utf-8", "replace"))
+        findings.append(
+            Finding(
+                "error",
+                code,
+                f"{label} timed out: still running after {JS_LEG_TIMEOUT} s and was stopped, so it has no verdict",
+                "",
+                fixes.error_fix,
+            )
+        )
+        return
     if result.returncode == 0:
         findings.append(Finding("ok", code, f"{label} passes", "", fixes.ok_fix))
         return
@@ -510,7 +674,30 @@ def _js_leg(
     findings.append(Finding("error", code, f"{label} failed: {tail}", "", fixes.error_fix))
 
 
-def _run(akmon_root: Path) -> list[Finding]:
+#: The differential fuzz leg's budget per depth: (cases, seed). The bounded leg is self-CI's
+#: (about 45 s on a 4-core host); the release depth draws a fresh seed (``None``) so successive
+#: releases explore different cases, and prints it so a failure reproduces.
+FUZZ_BUDGETS: dict[str, tuple[int, int | None]] = {"bounded": (120, 0), "release": (2000, None)}
+
+
+#: Where the printed fuzz rerun command writes its draft scenarios: under the repository's
+#: gitignored ``/.tmp`` scratch, so the owner finds them at a fixed path and they never stage.
+#: The leg's own run keeps fuzz.py's default (a fresh temp dir) so self-CI writes nothing in the tree.
+FUZZ_EMIT_DIR = ".tmp/fuzz-drafts"
+
+
+def fuzz_rerun_command(cases: int, seed: int) -> str:
+    """The command that reruns the fuzz leg's ``cases`` at ``seed`` and keeps its drafts in ``FUZZ_EMIT_DIR``."""
+    return f"python3 meta/conformance/fuzz.py --cases {cases} --seed {seed} --emit {FUZZ_EMIT_DIR}"
+
+
+def fuzz_budget(depth: str) -> tuple[int, int]:
+    """The (cases, seed) of the fuzz leg at ``depth``: a release run's seed is drawn fresh."""
+    cases, seed = FUZZ_BUDGETS[depth]
+    return cases, secrets.randbelow(2**31) if seed is None else seed
+
+
+def _run(akmon_root: Path, fuzz_depth: str = "bounded") -> list[Finding]:
     findings: list[Finding] = []
     with (
         tempfile.TemporaryDirectory(prefix="akmon-self-ci-") as tmp,
@@ -581,6 +768,22 @@ def _run(akmon_root: Path) -> list[Finding]:
                     "Keep the packaged install green before every release.",
                 )
             )
+        try:
+            _installed_npm_smoke(akmon_root, fixture / "npm-smoke", verify_env)
+        except Exception as exc:  # noqa: BLE001 — the leg owns pack, install, attach and hook execution
+            detail = " ".join(str(exc).split()) or type(exc).__name__
+            message, fix = _npm_smoke_report(detail)
+            findings.append(Finding("error", "selfci.npm-smoke", message, "", fix))
+        else:
+            findings.append(
+                Finding(
+                    "ok",
+                    "selfci.npm-smoke",
+                    "npm smoke passes with python3 hidden (pack, install, init, sync, verify, hook)",
+                    "",
+                    "Keep the Python-free Node install green before every release.",
+                )
+            )
     # Akmon's own declarations, checked against akmon's own tree rather than the fixture: the
     # capability matrix is a property of what akmon ships, not of a synthetic consumer's use of it.
     findings.extend(always_loaded_caps.check_always_loaded(akmon_root))
@@ -627,7 +830,9 @@ def _run(akmon_root: Path) -> list[Finding]:
         code="selfci.js-typecheck",
         fixes=LegFixes(
             ok_fix="Keep the JSDoc-annotated js/ implementation type-clean.",
-            error_fix="Run npx --no-install tsc --checkJs --noEmit -p . and fix the type errors it reports.",
+            error_fix=(
+                "Run npx --no-install tsc --checkJs --noEmit at the repository root and fix the type errors it reports."
+            ),
         ),
     )
     _js_leg(
@@ -642,12 +847,24 @@ def _run(akmon_root: Path) -> list[Finding]:
     )
     _js_leg(
         findings,
-        "js lint (eslint)",
-        LegInvocation(["npx", "--no-install", "eslint", "."], cwd=akmon_root),
+        "js lint (oxlint)",
+        LegInvocation(["npx", "--no-install", "oxlint", "."], cwd=akmon_root),
         code="selfci.js-lint",
         fixes=LegFixes(
-            ok_fix="Keep the repository eslint-clean under akmon's own dev ruleset.",
-            error_fix="Run npx --no-install eslint . and fix the lint errors it reports.",
+            ok_fix="Keep the repository oxlint-clean under akmon's own ruleset (profiles/oxlint.json).",
+            error_fix="Run npx --no-install oxlint at the repository root and fix the lint errors it reports.",
+        ),
+    )
+    _js_leg(
+        findings,
+        "js format (oxfmt)",
+        LegInvocation(["npx", "--no-install", "oxfmt", "--check", "."], cwd=akmon_root),
+        code="selfci.js-format",
+        fixes=LegFixes(
+            ok_fix="Keep the JS sources formatted with oxfmt.",
+            error_fix=(
+                "Run npx --no-install oxfmt at the repository root to format the JS sources, then review the diff."
+            ),
         ),
     )
     _js_leg(
@@ -681,8 +898,35 @@ def _run(akmon_root: Path) -> list[Finding]:
             ),
             error_fix=(
                 "Run python3 meta/conformance/runner.py --tree <repo> --impl node --area units --area hooks "
-                "--area cli and "
-                "fix the prerequisite or the failing scenario it names."
+                "--area cli --area tools and fix the prerequisite or the failing scenario it names."
+            ),
+        ),
+    )
+    # Differential fuzzing (C111, design node-consumers.md §5 gate 4): every hook scenario's payload,
+    # mutated, through both implementations. Bounded by default (a fixed seed, so a red leg is
+    # reproducible as is); the release check asks for the deep run, whose fresh seed the label carries.
+    cases, seed = fuzz_budget(fuzz_depth)
+    _js_leg(
+        findings,
+        f"differential hook fuzz ({fuzz_depth}: {cases} cases, seed {seed})",
+        LegInvocation(
+            [
+                sys.executable,
+                str(akmon_root / "meta" / "conformance" / "fuzz.py"),
+                "--cases",
+                str(cases),
+                "--seed",
+                str(seed),
+            ],
+            cwd=akmon_root,
+        ),
+        code="selfci.fuzz",
+        fixes=LegFixes(
+            ok_fix="Keep the Python and Node hooks one behaviour on mutated payloads (or each difference a DV row).",
+            error_fix=(
+                f"Run {fuzz_rerun_command(cases, seed)}, review the draft scenarios it writes under "
+                f"{FUZZ_EMIT_DIR}/, and fix the twin that is wrong or record a DIVERGENCES.md row plus a "
+                "fuzz.toml entry."
             ),
         ),
     )
@@ -694,9 +938,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict", action="store_true", help="Treat warnings as failures.")
     parser.add_argument("--quiet", action="store_true", help="Only print warnings and errors.")
+    parser.add_argument(
+        "--fuzz-depth",
+        choices=sorted(FUZZ_BUDGETS),
+        default="bounded",
+        help="the differential fuzz leg's budget: bounded (self-CI) or release (the release check's deep run)",
+    )
     args = parser.parse_args(argv)
 
-    findings = _run(_AKMON_ROOT)
+    findings = _run(_AKMON_ROOT, args.fuzz_depth)
     print_findings(findings, quiet=args.quiet)
     return exit_code(findings, strict=args.strict)
 

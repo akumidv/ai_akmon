@@ -9,9 +9,9 @@
  *   plain JS number (`1.0` is `1`, an integer beyond 2**53 is inexact): a payload field is only
  *   ever tested for type and truthiness, or spelled by `str()` into a marker name, never into
  *   the document;
- * - Python's C scanner raises `RecursionError` (not a `ValueError`: a crash, not `{}`) for
- *   nesting deeper than 9997 levels (3.12.3; about 990 on 3.11); `JSON.parse` has no limit, so a
- *   long text is measured first. The measure ignores syntax — a text broken before that depth is
+ * - Python's C scanner raises `RecursionError` (not a `ValueError`: a crash, not `{}`) past 9997
+ *   levels on 3.12, the floor (M143; 3.13 takes 9998, 3.14 is bounded by the stack, far deeper);
+ *   `JSON.parse` has no limit, so a long text is measured first. The measure ignores syntax — a text broken before that depth is
  *   a `RecursionError` here and a `JSONDecodeError` there;
  * - `sys.stdin.read()` is a strict UTF-8 decode of every byte (a malformed one raises
  *   `UnicodeDecodeError`, a `ValueError`) and keeps a BOM (which `json` then refuses). Not
@@ -33,7 +33,7 @@ export class JSONDecodeError extends Error {
   }
 }
 
-/** The deepest nesting Python's C scanner takes (3.12.3); one level more is `RecursionError`. */
+/** The deepest nesting Python's C scanner takes on 3.12, the floor (M143); one level more is `RecursionError`. */
 const _MAX_NESTING = 9997;
 // `sys.int_info.default_max_str_digits`: an integer literal with more digits than this is refused.
 const _MAX_INT_DIGITS = 4300;

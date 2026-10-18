@@ -7,12 +7,15 @@ The cross-project standard for **how an AI assistant helps develop, and helps us
 project**. A consumer either mounts the repository at `_aitna/akmon/` or pins the
 `akmon` package as a development dependency and runs it from there — with only the
 guardrails and profiles its `AGENTS.md` imports materialized under `_aitna/.akmon/`
-([ADR 0009](meta/decisions/0009-packaging-package-carrier-and-mount-modes.md)).
+([ADR 0009](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0009-packaging-package-carrier-and-mount-modes.md)).
+The package comes in two carriers of one tree: a Python wheel, and an npm package whose
+JavaScript implementation lets a Node project run akmon with no Python at all
+([ADR 0020](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0020-node-consumers-js-implementation.md)).
 The standard is **LLM-agnostic** at the policy layer: plain Markdown/JSON that any assistant
 or human can read. Enforcement depth remains vendor-specific, and the single entry point in
-a consuming project is its root `AGENTS.md`. `akmon init`, `sync`, `verify`, `path` and
-`hook` are implemented for all four mount modes; public PyPI
-publication is still pending (pin by git tag until then).
+a consuming project is its root `AGENTS.md`. `akmon init`, `sync`, `verify`, `check`, `path`,
+`hook` and `tool` are implemented for all four mount modes on Python, and in package mode on
+Node; public PyPI and npm publication are still pending (pin by git tag until then).
 
 **New consumer? Run `akmon init`** (Quick start below) — it attaches akmon to a project.
 Already attached? **[MODEL.md](MODEL.md)** is the operative rulebook.
@@ -36,7 +39,7 @@ outcome or avoids larger implementation and rework costs. Evaluate the whole pat
 the result, not the price of an isolated step.
 
 Routing and governance mechanisms already exist. The fuller attention-aware interaction
-protocol is [under design, with evaluation planned](meta/design/attention-and-human-agent-collaboration.md),
+protocol is [under design, with evaluation planned](https://github.com/akumidv/ai_akmon/blob/main/meta/design/attention-and-human-agent-collaboration.md),
 not a claimed measured advantage over other products. The research preserves its
 premises, alternatives, implementation plan, and conditions for reconsideration.
 
@@ -66,6 +69,23 @@ With `--mode package` there is no tree in the repo, so the pin lives in your man
 `"akmon @ git+https://github.com/akumidv/ai_akmon@vX.Y.Z"` until the first publish. `init`
 exits 1 and `verify --strict` keeps failing until it is there, because nothing else attaches
 the standard in that mode.
+
+### Node project
+
+A Node project pins the npm package and runs the JavaScript implementation; nothing needs
+Python, in the project or in its CI:
+
+```bash
+npm install -D -E akmon            # pnpm add -D -E · yarn add -D -E · bun add -d --exact
+npx akmon init                     # package mode, ecosystem = "node"
+npx akmon verify --strict
+```
+
+`init` detects the package manager, records the project's own linters and type checker for
+`akmon check` (oxlint with akmon's JavaScript/TypeScript rules when it has none), wires the hooks
+to `node_modules/akmon/js/hooks/` and writes a CI workflow with no Python step. The npm package
+ships from the first release after v0.3.0, and until it is on npm the pin is that release's git
+tag. The Node path in full, the pin included: [BOOTSTRAP §G](BOOTSTRAP.md#g-node-project--the-npm-package).
 
 ## The simple idea
 
@@ -120,8 +140,8 @@ inside each project's own forge-workspace. The vocabulary maps one-to-one onto t
 Containment is literal: the anvil sits **inside** the volcano-forge, exactly as `akmon/`
 sits inside `_aitna/`; the `k-` prefix of the subagents reads as *Kyklōpes*.
 
-> The names are **locked** ([ADR 0008](meta/decisions/0008-mythological-naming-aitna-akmon-kyklopes.md)),
-> and the on-disk rename is tracked as one migration release ([V1](meta/TASKS.md)).
+> The names are **locked** ([ADR 0008](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0008-mythological-naming-aitna-akmon-kyklopes.md)),
+> and the on-disk rename is tracked as one migration release ([V1](https://github.com/akumidv/ai_akmon/blob/main/meta/TASKS.md)).
 
 ## Vendor support
 
@@ -137,7 +157,7 @@ rather than compressing them into one mark. Two consequences are worth knowing b
   delivery, and the procedure for it is in [BOOTSTRAP](BOOTSTRAP.md) §A8, §E and §F.
 
 Gemini CLI and Copilot carry no measured claim beyond the generated pointer; filling that in is
-tracked as **N1** in [meta/TASKS.md](meta/TASKS.md).
+tracked as **N1** in [meta/TASKS.md](https://github.com/akumidv/ai_akmon/blob/main/meta/TASKS.md).
 
 
 ## What's in this repository
@@ -150,15 +170,16 @@ tracked as **N1** in [meta/TASKS.md](meta/TASKS.md).
 | [roles/](roles/) | the role definitions: `review` · `architect` · `engineer` + `learn` · `release` |
 | [pipelines/](pipelines/) | how each role works: review-flow · design-flow · code-flow · pre-commit · release · tasks · the learn loop |
 | [guardrails/](guardrails/) | always-on hard rules for every project (`_common`) |
-| [profiles/](profiles/) | always-on language and environment profiles (`python`, `python-stdlib`) and opt-in domain rules (`quant`, …) |
+| [profiles/](profiles/) | always-on language and environment profiles (`python`, `python-stdlib`, `js`), the checkable rules as standard linter configurations (`ruff.toml`, `oxlint.json`), and opt-in domain rules (`quant`, …) |
 | [skills/](skills/) | shared know-how any consuming project can use |
-| [tools/](tools/) | executable mechanics: model routing (registry · init · gate-pack · coverage map · second opinion), tasks, release checks |
+| [tools/](tools/) | executable mechanics: model routing (registry · init · gate-pack · coverage map · second opinion), tasks, release checks — run as `akmon tool <path>` |
 | [hooks/](hooks/) | the forcing functions — vendor-wired session/pre-tool guards (commit guard, analysis guard, delegation log + nudge, model routing) — [hooks/README.md](hooks/README.md) |
-| [bin/](bin/) | the two launchers: `sync.py` — generates the thin vendor pointers · `verify.py` — validates the project contract (reports, never modifies) |
+| [bin/](bin/) | the launchers: `sync.py` — generates the thin vendor pointers · `verify.py` — validates the project contract (reports, never modifies) · `check.py` — runs the project's own checks |
 | [common/](common/) | the shared stdlib-only utilities every carrier imports: project-root discovery · the finding envelope · the harness command map · the version-spelling rule |
+| [js/](js/) | the JavaScript implementation a Node project runs — the same CLI, hooks and tools at mirrored paths, held to the Python by one shared set of behavior scenarios |
 | [examples/](examples/) | worked, self-contained walkthroughs (start: [gate-anatomy.md](examples/gate-anatomy.md)) |
 | [CHANGELOG.md](CHANGELOG.md) | the versioned change record — what a consumer's bump delta-checks against |
-| [meta/](meta/) | akmon's **own** DEVELOP layer — a consumer never loads it |
+| [meta/](https://github.com/akumidv/ai_akmon/tree/main/meta) | akmon's **own** DEVELOP layer — a consumer never loads it |
 
 ## Life with a consuming project
 
@@ -173,7 +194,7 @@ Three movements, each defined once here and reused by every project:
    commits**.
 2. **Stay current.** A project pins an akmon version; a bump is a **delta-check** against
    [CHANGELOG.md](CHANGELOG.md) — only `Breaking`/`migration` lines in the version window
-   need action — then a realign. `sync.py --check` + `verify.py --strict` run in the
+   need action — then a realign. `akmon sync --check` + `akmon verify --strict` run in the
    project's CI, so pointer and contract drift fail before merge, not months later.
 3. **Give back — the learn loop.** CAPTURE a session fact into `_aitna/memory/` → DISTILL
    recurring facts into a LOCAL skill/tool/requirement → PROMOTE what is general *and*
@@ -256,16 +277,16 @@ owner ◄── synthesis + audit verdict + the items only the owner can verify
 > threshold, nudges — then hard-asks — to hand the work to a smith. How far that reaches on
 > each harness is one row in [CAPABILITIES.md](CAPABILITIES.md).
 > The smiths themselves are exempt (a `k_*` delegate has no delegation tool of its own).
-> Mechanism + motivation: [model-routing §13](meta/design/model-routing.md).
+> Mechanism + motivation: [model-routing §13](https://github.com/akumidv/ai_akmon/blob/main/meta/design/model-routing.md).
 
 ## akmon's own development
 
 akmon's vision/constitution, decisions (ADRs), roadmap, backlog, design concepts, reviews,
-and tests live under **[meta/](meta/)** — akmon's own DEVELOP layer. A consuming project
+and tests live under **[meta/](https://github.com/akumidv/ai_akmon/tree/main/meta)** — akmon's own DEVELOP layer. A consuming project
 does **not** load it; the operative standard above is self-contained
-([meta/CONCEPT.md](meta/CONCEPT.md) holds the full rationale). Separation locked in meta
+([meta/CONCEPT.md](https://github.com/akumidv/ai_akmon/blob/main/meta/CONCEPT.md) holds the full rationale). Separation locked in meta
 ADR 0003. **Working on akmon itself? Start there** — constitution first, then the ADRs and
-[meta/TASKS.md](meta/TASKS.md).
+[meta/TASKS.md](https://github.com/akumidv/ai_akmon/blob/main/meta/TASKS.md).
 
 The dev bench is a **plain clone of this repo**: akmon is self-hosted, so a session opened
 in the clone develops the standard under the standard. To validate a change against a real

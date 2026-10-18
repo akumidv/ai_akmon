@@ -7,6 +7,8 @@ the record's place, and the contract that no record written before the key exist
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -84,3 +86,17 @@ def test_the_answer_is_always_a_string(tmp_path):
         if text is not None:
             _record(root, text)
         assert isinstance(recorded_ecosystem(root), str)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root searches any directory")
+@pytest.mark.skipif(sys.version_info >= (3, 14), reason="3.14's is_file() swallows every OSError")
+def test_a_record_behind_a_directory_that_cannot_be_searched_raises(tmp_path):
+    """``Path.is_file()`` swallows only ENOENT, ENOTDIR, EBADF and ELOOP: a permission error is
+    loud, never a silent ``python`` (the C115 reference the JavaScript twin follows)."""
+    _record(tmp_path, 'ecosystem = "node"\n')
+    (tmp_path / "_aitna").chmod(0)
+    try:
+        with pytest.raises(PermissionError):
+            recorded_ecosystem(tmp_path)
+    finally:
+        (tmp_path / "_aitna").chmod(0o755)

@@ -29,7 +29,8 @@
  *   (`node_wired_hook_scripts`).
  *
  * The Python's mounted-only checks are unreachable here and have no port: `gitignore.akmon-pycache`
- * (`check_akmon_gitignore`), `changelog.unreleased` (the mounted half of `check_changelog`; package
+ * (`check_akmon_gitignore`), `layout.vendored-leftover` (`check_vendored_leftovers`, a vendored
+ * mount's members the carrier no longer ships, C117), `changelog.unreleased` (the mounted half of `check_changelog`; package
  * mode answers `changelog.package-mode`) and the mount-relative paths of `check_standard_path`
  * (the standard tree of a Node project is `<root>/node_modules/akmon`, `standardTreeRoot`).
  *
@@ -59,12 +60,23 @@ import { fileURLToPath } from "node:url";
 import { TextDecoder, parseArgs } from "node:util";
 
 import {
-  apply, codexHooksText, packagePinStatus, plannedFiles, readJson, readSyncData, skillSources,
-  standardTreeRoot, unsupportedFound,
+  apply,
+  codexHooksText,
+  packagePinStatus,
+  plannedFiles,
+  readJson,
+  readSyncData,
+  skillSources,
+  standardTreeRoot,
+  unsupportedFound,
 } from "./sync.mjs";
 import * as alwaysLoaded from "../common/always_loaded.mjs";
 import {
-  checkTableOk, configTarget, correctEntryFix, readChecks, repairRecordVerifyFix,
+  checkTableOk,
+  configTarget,
+  correctEntryFix,
+  readChecks,
+  repairRecordVerifyFix,
 } from "../common/check_runner.mjs";
 import * as codexHooks from "../common/codex_hooks.mjs";
 import { fnmatchCase } from "../common/glob.mjs";
@@ -73,8 +85,25 @@ import { fill, read } from "../common/jsondata.mjs";
 import { generatedMarker } from "../common/materialization.mjs";
 import { aitnaRoot, aitnaRootName, resolveProjectRoot } from "../common/project_root.mjs";
 import {
-  isDir, isFile, isOSError, isDict, dictGet, pyContains, pyEq, pyError, pyLen, pyLower, pyPath, pyRepr, pySplit,
-  pySplitlines, pyStat, pyStrip, readText, strRepr, truthy,
+  isDir,
+  isFile,
+  isOSError,
+  isDict,
+  dictGet,
+  pyContains,
+  pyEq,
+  pyError,
+  pyLen,
+  pyLower,
+  pyPath,
+  pyRepr,
+  pySplit,
+  pySplitlines,
+  pyStat,
+  pyStrip,
+  readText,
+  strRepr,
+  truthy,
 } from "../common/pyvalue.mjs";
 import { RecordError, readAkmonToml, readAkmonTomlStrict } from "../common/record.mjs";
 import { codexHooksListCommand } from "../common/runtime.mjs";
@@ -149,7 +178,19 @@ export const TEXT_PATTERNS = {
   devName: _DEV_NAME_RE,
   legacyOwnerAnchor: _LEGACY_OWNER_ANCHOR_RE,
 };
-const _EXACT_VERSION_RE = /^=?[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+/** An exact semver release: `MAJOR.MINOR.PATCH`, an optional pre-release and build part. */
+const _SEMVER = String.raw`[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`;
+const _EXACT_VERSION_RE = new RegExp(`^=?${_SEMVER}$`);
+/**
+ * A git dependency at an exact release tag, as npm, pnpm and yarn write one: a hosted shorthand
+ * (`github:`, `gitlab:`, `bitbucket:`, or bare `<owner>/<repo>`) or a `git`, `git+http(s)` or
+ * `git+ssh` URL, whose `#` fragment is `v`? and an exact version. A branch, a `#semver:` range, a
+ * commit, no fragment, or a plain http(s) tarball URL stays a non-exact pin.
+ */
+const _GIT_TAG_PIN_RE = new RegExp(
+  String.raw`^(?:(?:github|gitlab|bitbucket):[^\s#]+|[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+` +
+    String.raw`|git(?:\+(?:https?|ssh))?://[^\s#]+)#v?${_SEMVER}$`,
+);
 
 /** The standard files the Node project's wiring runs, relative to the standard tree. */
 const _NODE_HOOKS_DIR = "js/hooks";
@@ -290,7 +331,9 @@ function _glob(base, pattern) {
     if (part === "**") {
       current = current.flatMap(_recursiveDirs);
     } else if (!/[*?[]/.test(part)) {
-      current = current.map((directory) => pyPath(directory, part)).filter((path) => (last ? pyStat(path) !== null : isDir(path)));
+      current = current
+        .map((directory) => pyPath(directory, part))
+        .filter((path) => (last ? pyStat(path) !== null : isDir(path)));
     } else {
       current = current.flatMap((directory) =>
         _names(directory)
@@ -374,7 +417,9 @@ function _recordTruthy(value) {
  */
 function _devPinValue(root) {
   try {
-    const document = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(fs.readFileSync(pyPath(root, "package.json"))));
+    const document = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(fs.readFileSync(pyPath(root, "package.json"))),
+    );
     const dev = document?.devDependencies;
     return dev !== null && typeof dev === "object" && Object.hasOwn(dev, "akmon") ? dev.akmon : undefined;
   } catch {
@@ -454,7 +499,10 @@ export class Verifier {
 
   /** `common/check_runner.json`. */
   get checkData() {
-    return this._table("check", () => /** @type {CheckRunnerData} */ (read(posix.join(TREE_ROOT, "common", "check_runner.json"))));
+    return this._table(
+      "check",
+      () => /** @type {CheckRunnerData} */ (read(posix.join(TREE_ROOT, "common", "check_runner.json"))),
+    );
   }
 
   /**
@@ -466,7 +514,14 @@ export class Verifier {
    */
   _record(severity, code, message, target, fix) {
     this.findings.push(
-      new Finding({ severity, code, message: lineSafe(message), target: lineSafe(target), fix: lineSafe(fix), data: this.findingsData }),
+      new Finding({
+        severity,
+        code,
+        message: lineSafe(message),
+        target: lineSafe(target),
+        fix: lineSafe(fix),
+        data: this.findingsData,
+      }),
     );
   }
 
@@ -548,7 +603,10 @@ export class Verifier {
     const exists = kind === "dir" ? isDir(path) : isFile(path);
     const display = this.displayPath(path);
     if (exists) {
-      this.ok("layout.standard-path", `${display} exists`, { target: display, fix: `Keep ${display} in the standard tree.` });
+      this.ok("layout.standard-path", `${display} exists`, {
+        target: display,
+        fix: `Keep ${display} in the standard tree.`,
+      });
       return true;
     }
     this.error("layout.standard-path", `${display} is missing`, {
@@ -647,17 +705,22 @@ export class Verifier {
     }
     const text = readText(path);
     if (text.includes(generatedMarker(this.syncData.materialization))) {
-      this.error("agents.generated-source", "AGENTS.md must be a hand-reviewed source document, not generated by sync.py", {
-        target: "AGENTS.md",
-        fix: "Remove the generated banner and hand-own AGENTS.md.",
-      });
+      this.error(
+        "agents.generated-source",
+        "AGENTS.md must be a hand-reviewed source document, not generated by sync.py",
+        {
+          target: "AGENTS.md",
+          fix: "Remove the generated banner and hand-own AGENTS.md.",
+        },
+      );
     }
     // Node is package mode by construction (the refusal in `main`): the package table applies. The
     // block heading is filled from its single owner (`common/always_loaded`), not from a copy here.
     const variant = "package";
     const heading = alwaysLoaded.blockHeading(this.alwaysLoadedData);
     const required = Object.entries(this.data.agents_anchors[variant]).map(
-      ([name, snippet]) => /** @type {[string, string]} */ ([name, fill(snippet, { aitna: this.aitna, akmon: this.akmon, heading })]),
+      ([name, snippet]) =>
+        /** @type {[string, string]} */ ([name, fill(snippet, { aitna: this.aitna, akmon: this.akmon, heading })]),
     );
     const missing = required.filter(([, snippet]) => !text.includes(snippet)).map(([name]) => name);
     // C94 migrates the source contract, but consumer AGENTS.md blocks are hand-owned and explicitly
@@ -746,16 +809,24 @@ export class Verifier {
         missingAgentsLinks.push(relative);
       }
       if (requiredImport && !text.includes(requiredImport)) {
-        this.error("pointers.vendor-import", `${relative} must import ${requiredImport}; a prose pointer is not enough`, {
-          target: relative,
-          fix: `Re-run akmon sync so ${relative} imports ${requiredImport}.`,
-        });
+        this.error(
+          "pointers.vendor-import",
+          `${relative} must import ${requiredImport}; a prose pointer is not enough`,
+          {
+            target: relative,
+            fix: `Re-run akmon sync so ${relative} imports ${requiredImport}.`,
+          },
+        );
       }
     }
     if (missingAgentsLinks.length > 0) {
-      this.error("pointers.vendor-agents-link", `vendor pointer(s) do not point at AGENTS.md: ${missingAgentsLinks.join(", ")}`, {
-        fix: "Re-run akmon sync so every vendor pointer points at AGENTS.md.",
-      });
+      this.error(
+        "pointers.vendor-agents-link",
+        `vendor pointer(s) do not point at AGENTS.md: ${missingAgentsLinks.join(", ")}`,
+        {
+          fix: "Re-run akmon sync so every vendor pointer points at AGENTS.md.",
+        },
+      );
     } else if (presentPointers === vendorPointers.length) {
       this.ok("pointers.vendor-agents-link", "vendor pointers point at AGENTS.md", {
         fix: "Keep every vendor pointer aimed at AGENTS.md.",
@@ -973,10 +1044,14 @@ export class Verifier {
     const directory = posix.basename(posix.dirname(source));
     const name = fields.get("name") ?? "";
     if (name && name !== directory) {
-      this.error("skills.name-matches-dir", `${relative} frontmatter name must match its skill directory (${directory})`, {
-        target: relative,
-        fix: `Set the frontmatter name to ${directory}.`,
-      });
+      this.error(
+        "skills.name-matches-dir",
+        `${relative} frontmatter name must match its skill directory (${directory})`,
+        {
+          target: relative,
+          fix: `Set the frontmatter name to ${directory}.`,
+        },
+      );
     }
     const limit = this.data.skill_name_max;
     if (name && (pyLen(name) > limit || !_SKILL_NAME_RE.test(name))) {
@@ -997,10 +1072,14 @@ export class Verifier {
     const description = fields.get("description") ?? "";
     const limit = this.data.skill_description_max;
     if (pyLen(description) > limit) {
-      this.error("skills.description-length", `${relative} description is ${pyLen(description)} characters; the limit is ${limit}`, {
-        target: relative,
-        fix: "Shorten the description to the result and the trigger; move detail into the body.",
-      });
+      this.error(
+        "skills.description-length",
+        `${relative} description is ${pyLen(description)} characters; the limit is ${limit}`,
+        {
+          target: relative,
+          fix: "Shorten the description to the result and the trigger; move detail into the body.",
+        },
+      );
     }
   }
 
@@ -1033,10 +1112,14 @@ export class Verifier {
   checkSkills() {
     const [sources, errors] = skillSources(this.syncData, this.root);
     for (const error of errors) {
-      this.error("skills.duplicate-name", error, { fix: "Rename one of the two skill directories so each skill name is unique." });
+      this.error("skills.duplicate-name", error, {
+        fix: "Rename one of the two skill directories so each skill name is unique.",
+      });
     }
     if (sources.length > 0) {
-      this.ok("skills.present", `found ${sources.length} skill(s)`, { fix: "Keep at least one SKILL.md in a skill root." });
+      this.ok("skills.present", `found ${sources.length} skill(s)`, {
+        fix: "Keep at least one SKILL.md in a skill root.",
+      });
       for (const source of sources) {
         this.checkSkillContract(source);
       }
@@ -1051,14 +1134,20 @@ export class Verifier {
   checkGeneratedPointers() {
     const [files, errors] = plannedFiles(this.syncData, this.root);
     for (const error of errors) {
-      this.error("pointers.generated-plan", error, { fix: "Resolve the reported planning error, then re-run akmon sync." });
+      this.error("pointers.generated-plan", error, {
+        fix: "Resolve the reported planning error, then re-run akmon sync.",
+      });
     }
     const result = apply(this.syncData, files, { write: false, root: this.root });
     if (result.changed.length > 0 || result.deleted.length > 0) {
       const stale = [...result.changed, ...result.deleted].map((path) => _relativeTo(path, this.root)).join(", ");
-      this.error("pointers.generated-freshness", `generated pointers are stale or missing: ${stale}; run \`akmon sync\``, {
-        fix: "Run akmon sync to regenerate the listed files.",
-      });
+      this.error(
+        "pointers.generated-freshness",
+        `generated pointers are stale or missing: ${stale}; run \`akmon sync\``,
+        {
+          fix: "Run akmon sync to regenerate the listed files.",
+        },
+      );
     } else {
       this.ok("pointers.generated-freshness", "generated pointers match `akmon sync`", {
         fix: "Re-run akmon sync after every change to a generated file's source.",
@@ -1116,7 +1205,9 @@ export class Verifier {
     const statusJoin = statusList.join(" | ");
     const entries = lines.filter((line) => line.startsWith("- ") && line.includes(" · "));
     if (entries.length > 0) {
-      const statuses = entries.map((line) => /** @type {[string, string | null]} */ ([Verifier.entryId(line), Verifier.entryStatus(line)]));
+      const statuses = entries.map(
+        (line) => /** @type {[string, string | null]} */ ([Verifier.entryId(line), Verifier.entryStatus(line)]),
+      );
       const bad = statuses.filter(([, status]) => status === null || !statusList.includes(status)).map(([id]) => id);
       if (bad.length > 0) {
         this.warn(
@@ -1127,10 +1218,14 @@ export class Verifier {
       }
       const finished = statuses.filter(([, status]) => status === "done").map(([id]) => id);
       if (finished.length > 0) {
-        this.warn("tasks.done-archived", `TASKS.md has 'done' entries; move them to TASKS_ARCHIVE.md: ${_sample(finished)}`, {
-          target,
-          fix: "Move the listed done entries to TASKS_ARCHIVE.md.",
-        });
+        this.warn(
+          "tasks.done-archived",
+          `TASKS.md has 'done' entries; move them to TASKS_ARCHIVE.md: ${_sample(finished)}`,
+          {
+            target,
+            fix: "Move the listed done entries to TASKS_ARCHIVE.md.",
+          },
+        );
       }
       if (bad.length === 0) {
         this.ok("tasks.entry-status", "TASKS.md uses well-formed index entries", {
@@ -1173,11 +1268,17 @@ export class Verifier {
     const relative = _NODE_LAUNCHER_DIR;
     const pnp = /** @type {string[]} */ (texts.pnp_markers).find((marker) => isFile(pyPath(this.root, marker)));
     if (pnp !== undefined) {
-      this.error("hooks.launcher", fill(texts.launcher_pnp, { found: pnp }), { target: pnp, fix: texts.launcher_pnp_fix });
+      this.error("hooks.launcher", fill(texts.launcher_pnp, { found: pnp }), {
+        target: pnp,
+        fix: texts.launcher_pnp_fix,
+      });
       return;
     }
     if (isDir(pyPath(this.root, relative))) {
-      this.ok("hooks.launcher", fill(texts.launcher_ok, { relative }), { target: relative, fix: texts.launcher_ok_fix });
+      this.ok("hooks.launcher", fill(texts.launcher_ok, { relative }), {
+        target: relative,
+        fix: texts.launcher_ok_fix,
+      });
       return;
     }
     let ancestor = this.root;
@@ -1189,14 +1290,21 @@ export class Verifier {
       ancestor = parent;
       const hoisted = pyPath(ancestor, "node_modules", "akmon");
       if (isDir(hoisted)) {
-        this.error("hooks.launcher", fill(texts.launcher_hoisted, { relative, found: posix.relative(this.root, hoisted) }), {
-          target: relative,
-          fix: texts.launcher_hoisted_fix,
-        });
+        this.error(
+          "hooks.launcher",
+          fill(texts.launcher_hoisted, { relative, found: posix.relative(this.root, hoisted) }),
+          {
+            target: relative,
+            fix: texts.launcher_hoisted_fix,
+          },
+        );
         return;
       }
     }
-    this.error("hooks.launcher", fill(texts.launcher_missing, { relative }), { target: relative, fix: texts.launcher_missing_fix });
+    this.error("hooks.launcher", fill(texts.launcher_missing, { relative }), {
+      target: relative,
+      fix: texts.launcher_missing_fix,
+    });
   }
 
   /**
@@ -1342,12 +1450,16 @@ export class Verifier {
       }
       const retired = this.data.routing_retired_second_opinion_keys.filter((key) => Object.hasOwn(second, key));
       if (retired.length > 0) {
-        this.error("routing.second-opinion", `project overlay ${vendor} second_opinion carries the retired key(s) ${retired.join(", ")}`, {
-          target: `${this.aitna}/model-routing.json#${vendor}`,
-          fix:
-            "Delete only cli/invoke from this hand-owned overlay, leave the rest " +
-            "of the object as it is, then re-run the routing initializer.",
-        });
+        this.error(
+          "routing.second-opinion",
+          `project overlay ${vendor} second_opinion carries the retired key(s) ${retired.join(", ")}`,
+          {
+            target: `${this.aitna}/model-routing.json#${vendor}`,
+            fix:
+              "Delete only cli/invoke from this hand-owned overlay, leave the rest " +
+              "of the object as it is, then re-run the routing initializer.",
+          },
+        );
       }
     }
   }
@@ -1368,7 +1480,11 @@ export class Verifier {
         continue;
       }
       const policy = dictGet(spec, "selection_policy");
-      if (isDict(policy) && pyContains(policyValues, dictGet(policy, "reasoner")) && pyEq(dictGet(policy, "worker"), "lowest")) {
+      if (
+        isDict(policy) &&
+        pyContains(policyValues, dictGet(policy, "reasoner")) &&
+        pyEq(dictGet(policy, "worker"), "lowest")
+      ) {
         this.ok("routing.selection-policy", `model-routing ${vendor} semantic selection policy exists`, {
           target,
           fix: "Keep the semantic selection policy on this vendor.",
@@ -1390,10 +1506,14 @@ export class Verifier {
           fix: "Keep a model named for every tier in this vendor's semantic_fallback.",
         });
       } else {
-        this.error("routing.semantic-fallback", `model-routing ${vendor} semantic_fallback must name worker/mid/reasoner/orchestrator`, {
-          target,
-          fix: "Name a model for each of worker, mid, reasoner and orchestrator in semantic_fallback.",
-        });
+        this.error(
+          "routing.semantic-fallback",
+          `model-routing ${vendor} semantic_fallback must name worker/mid/reasoner/orchestrator`,
+          {
+            target,
+            fix: "Name a model for each of worker, mid, reasoner and orchestrator in semantic_fallback.",
+          },
+        );
       }
       const second = dictGet(spec, "second_opinion");
       if (!isDict(second)) {
@@ -1490,7 +1610,8 @@ export class Verifier {
    * resolve and the CI commands cannot run. The class is locked too — a runtime dependency pushes
    * dev tooling onto the consumer's own users, so it is an error rather than a warning. Exact,
    * because the record and the generated wiring are written per akmon version: a range lets two
-   * installs resolve different ones. Only checked when a `package.json` exists.
+   * installs resolve different ones. A git dependency at a release tag is exact too: the tag names
+   * one release. Only checked when a `package.json` exists.
    */
   checkPackagePin() {
     if (!isFile(pyPath(this.root, "package.json"))) {
@@ -1507,7 +1628,7 @@ export class Verifier {
       this.warn("package.dev-pin", texts.pin_none, { target, fix: texts.pin_none_fix });
     } else {
       const value = _devPinValue(this.root);
-      if (typeof value === "string" && _EXACT_VERSION_RE.test(value)) {
+      if (typeof value === "string" && (_EXACT_VERSION_RE.test(value) || _GIT_TAG_PIN_RE.test(value))) {
         this.ok("package.dev-pin", texts.pin_ok, { target, fix: texts.pin_ok_fix });
       } else {
         this.warn("package.dev-pin", fill(texts.exact_pin_warn, { value: _pinSpelling(value) }), {
@@ -1548,12 +1669,18 @@ export class Verifier {
       });
       return;
     }
-    const invalidVersions = ["akmon_version", "last_realign"].filter((key) => typeof fields[key] !== "string" || pyStrip(/** @type {string} */ (fields[key])) === "");
+    const invalidVersions = ["akmon_version", "last_realign"].filter(
+      (key) => typeof fields[key] !== "string" || pyStrip(/** @type {string} */ (fields[key])) === "",
+    );
     if (invalidVersions.length > 0) {
-      this.error("attach.record", `${name} has invalid version key(s): ${invalidVersions.join(", ")}; expected non-empty strings`, {
-        target: name,
-        fix: `Repair the listed keys in ${name} by re-running a realign.`,
-      });
+      this.error(
+        "attach.record",
+        `${name} has invalid version key(s): ${invalidVersions.join(", ")}; expected non-empty strings`,
+        {
+          target: name,
+          fix: `Repair the listed keys in ${name} by re-running a realign.`,
+        },
+      );
       return;
     }
     this.ok("attach.record", `${name} records akmon version ${fields["akmon_version"]}`, {
@@ -1612,7 +1739,8 @@ export class Verifier {
     for (const problem of problems) {
       this.error("check.config", problem, { target: configTarget(data), fix: correctEntryFix(data) });
     }
-    if (problems.length === 0) {
+    // An empty table is what `init --checks none` records (C123): no finding, as for no table.
+    if (checks.length > 0 && problems.length === 0) {
       const [message, fix] = checkTableOk(data);
       this.ok("check.config", fill(message, { count: String(checks.length) }), { target: configTarget(data), fix });
     }

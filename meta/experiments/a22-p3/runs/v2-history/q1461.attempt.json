@@ -1,0 +1,14 @@
+{
+  "run_id": "q1461",
+  "case": "P3-01",
+  "arm": "A",
+  "tier": "strongest",
+  "repeat": 1,
+  "subject_attempt_id": "3b7400df718de2df6b26b7de3e259779",
+  "attempt_class": "technical",
+  "origin_attempt_id": null,
+  "source_origin_id": "b429e18128152263f858fb7fcdf73b23",
+  "model": "gpt-6-astra",
+  "effort": "medium",
+  "started_utc": "2026-10-11T19:57:08Z"
+}

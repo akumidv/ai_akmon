@@ -328,7 +328,7 @@ def test_examples_dir_is_deliberately_not_scanned_for_use_surface(tmp_path):
     examples_dir = akmon / "examples"
     examples_dir.mkdir()
     (examples_dir / "gate-anatomy.md").write_text(
-        "# example\n\nSee [the audit](../meta/reviews/review-20260705.md).\n",
+        "# example\n\nSee [the audit](../meta/reviews/architecture-audit.md).\n",
         encoding="utf-8",
     )
     verifier = verify.Verifier(root)
@@ -803,6 +803,48 @@ def test_changelog_without_unreleased_is_warning(tmp_path):
     verifier = verify.Verifier(root)
     verifier.run()
     assert any("Unreleased" in message for message in _messages(verifier.findings, "warn"))
+
+
+# --------------------------------------------------------------------------------------
+# a vendored mount's leftovers (ADR 0009, C118 amendment)
+# --------------------------------------------------------------------------------------
+
+
+def _leftovers(root: Path, mount: str) -> list:
+    _write(root / "_aitna" / ".akmon.toml", f'mount = "{mount}"\n')
+    _write(root / "_aitna" / "akmon" / "meta" / "TASKS.md")  # what a pre-C118 vendored copy kept
+    _write(root / "_aitna" / "akmon" / ".gitignore", "__pycache__/\n")  # init writes it
+    verifier = verify.Verifier(root)
+    verifier.check_vendored_leftovers()
+    return verifier.findings
+
+
+def test_a_vendored_mount_warns_about_each_entry_the_carrier_does_not_ship(tmp_path):
+    root = _make_project(tmp_path)
+    _write(root / "_aitna" / "akmon" / "OLD.md")
+    findings = _leftovers(root, "vendored")
+    assert [(f.severity, f.code, f.target) for f in findings] == [
+        ("warn", "layout.vendored-leftover", "_aitna/akmon/OLD.md"),
+        ("warn", "layout.vendored-leftover", "_aitna/akmon/meta"),
+    ]
+    assert findings[1].message == (
+        "_aitna/akmon/meta is no longer shipped by the akmon carrier; `akmon init --mode vendored` copies only "
+        "the standard's members and leaves it in place"
+    )
+    assert findings[1].fix == "Remove _aitna/akmon/meta by hand if the mount should match the carrier."
+    assert (root / "_aitna" / "akmon" / "meta" / "TASKS.md").is_file()  # verify deletes nothing
+
+
+@pytest.mark.parametrize("mount", ["submodule", "subtree", "package"])
+def test_only_a_vendored_mount_is_a_copy_with_leftovers(tmp_path, mount):
+    # submodule and subtree are the git tree and keep meta/ on purpose; package mounts nothing
+    assert _leftovers(_make_project(tmp_path), mount) == []
+
+
+def test_the_vendored_members_verify_reads_are_inits(tmp_path):
+    """verify runs from the mount, where ``src/akmon/init.json`` is not: its copy is pinned equal."""
+    init_data = json.loads((_AKMON_ROOT / "src" / "akmon" / "init.json").read_text(encoding="utf-8"))
+    assert _VERIFY_DATA["vendored_tree_members"] == init_data["tree_members"]
 
 
 # --------------------------------------------------------------------------------------
@@ -1885,6 +1927,11 @@ def test_verify_data_pins_its_structure():
         "python_refuses_ecosystem",
         "changelog_package_mode",
         "changelog_package_mode_fix",
+        # a vendored mount's leftovers (C117, the C118 amendment of ADR 0009)
+        "vendored_tree_members",
+        "vendored_mount_own_files",
+        "vendored_leftover",
+        "vendored_leftover_fix",
         # the JavaScript verify's own keys (C105); this file never reads them
         "unsupported_record",
         "node_wired_hook_scripts",

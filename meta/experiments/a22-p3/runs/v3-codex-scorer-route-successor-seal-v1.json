@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.162.1",
+  "codex_limit_tokens": 5000000,
+  "controls_approval_sha256": "b5ef9b5604719ed4edf8c1862eda2309ed8be4836d0025a2b87c2b6a784034fc",
+  "controls_ledger_sha256": "79ad8ab7ff6e9b17daf094d4b4031295fca39a752bc913e9ae0bcf33a1476f1c",
+  "controls_manifest_sha256": "601f5b1d29435d955c01771a9e4c3c07ea34b5c349a30bbf5f4a4032c302c6ef",
+  "controls_seal_sha256": "d3d513feead984a755167e446eee9a9d84f6ba32f9cfd4c8cad0b96c5ecd2103",
+  "effort": "medium",
+  "historical_receipt_sha256": "722350657d7bb18d04d8356c7d223460fe4723d1a3555192a252e378ae5869e0",
+  "model": "gpt-6-astra",
+  "opening_codex_tokens": 202220,
+  "packet_manifest_sha256": "d0a01c0dc38e63507ff47dd713cd679e5c6688f04ead06156903106f8b0f9d7a",
+  "packet_sha256": "5cce39ac1d12dcb99ab5623e0c44e541df4f471e07f8c972626d574adfcf450c",
+  "pinned_executable": "/home/ai/.codex/packages/standalone/releases/0.162.1-x86_64-unknown-linux-musl/bin/codex",
+  "pinned_executable_sha256": "628e35487d888a28f0427fc37501da529dd3d81fcbad7a2c3421c1e8670d92e1",
+  "prior_route_approval_sha256": "477d089da9aad0eef0d5bb4346ce2de114ae549e4cc9a2dc67296fadd591ec65",
+  "prior_route_seal_sha256": "b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79",
+  "prompt_sha256": "7d875d7eb91f2f06d2c0b869f6f6f21b23d5240d4de00bb96aa3dba89c583ce5",
+  "proposal_sha256": "40b437f39ef8eb09f00e9ba7fad7b9af08775c3be636ca850673d7776d332bd5",
+  "provider_calls_started": 0,
+  "record_type": "p3_v3_codex_scorer_route_successor_seal",
+  "regression_sha256": "c9575229d11e0a04b6b007b7688f3723b02c6ad64c595a2e9d0f11547d821088",
+  "schema": 1,
+  "scope": [
+    "codex_scorer_route_check"
+  ],
+  "source_sha256": {
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "scorer_route_check.py": "5947219962ce3d7f8defefafb1f705acc414bf274c89cff1de8f872ddbc604d5",
+    "v3_codex_scorer_route_successor.py": "6d86c563663ec5b9bc4fc26dbfd447fa8b6cf91dfe4d98f0b8da489aad8d04a1",
+    "v3_controls_successor.py": "93d085b9f9332941e949773fbc6e35cf0a952ad78741b27b1ccc9b29eb33da43",
+    "v3_successor_route_check.py": "faf9f869a300997c5b7b0ca69c4649e0a9d7a2033d32c00e7991b2c564087a35",
+    "v3_successor_route_packet.py": "dc527df38e8d7fd95579d8d4f23be0a59bb7514cc6d88af4b02e9a97246b2ee8"
+  },
+  "status": "offline_candidate_pending_owner_acceptance"
+}

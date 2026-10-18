@@ -15,9 +15,29 @@ import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  PlannedFile, apply, checkFindings, claudeHooks, claudeSettings, codexHooks, codexHooksText, importedStandardFiles,
-  installedAkmonVersion, isAkmonEntry, main, materializationRoot, mergeHookEntries, packagePinStatus, plannedFiles,
-  readJson, readMountMode, readSyncData, skillSources, skillStubs, standardTreeRoot, unsupportedRecord, upsertTomlKey,
+  PlannedFile,
+  apply,
+  checkFindings,
+  claudeHooks,
+  claudeSettings,
+  codexHooks,
+  codexHooksText,
+  importedStandardFiles,
+  installedAkmonVersion,
+  isAkmonEntry,
+  main,
+  materializationRoot,
+  mergeHookEntries,
+  packagePinStatus,
+  plannedFiles,
+  readJson,
+  readMountMode,
+  readSyncData,
+  skillSources,
+  skillStubs,
+  standardTreeRoot,
+  unsupportedRecord,
+  upsertTomlKey,
 } from "./sync.mjs";
 
 const TREE = fs.realpathSync(posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", ".."));
@@ -108,8 +128,14 @@ function run(argv) {
   const err = process.stderr.write;
   let stdout = "";
   let stderr = "";
-  process.stdout.write = /** @type {any} */ ((/** @type {string} */ chunk) => ((stdout += chunk), true));
-  process.stderr.write = /** @type {any} */ ((/** @type {string} */ chunk) => ((stderr += chunk), true));
+  process.stdout.write = /** @type {any} */ (
+    (/** @type {string} */ chunk) =>
+      ((stdout += chunk), true)
+  );
+  process.stderr.write = /** @type {any} */ (
+    (/** @type {string} */ chunk) =>
+      ((stderr += chunk), true)
+  );
   try {
     const code = main(argv);
     return { code, stdout, stderr };
@@ -130,7 +156,11 @@ const HOOKS_DIR = posix.join(TREE, "js", "hooks");
 function pinStatus(manifest) {
   let status = "";
   withScratch((scratch) => {
-    put(scratch, "package.json", typeof manifest === "string" || Buffer.isBuffer(manifest) ? manifest : JSON.stringify(manifest));
+    put(
+      scratch,
+      "package.json",
+      typeof manifest === "string" || Buffer.isBuffer(manifest) ? manifest : JSON.stringify(manifest),
+    );
     status = packagePinStatus(scratch);
   });
   return status;
@@ -201,7 +231,10 @@ test("standardTreeRoot: a pnpm-style link never leaks the version-carrying store
     assert.equal(standardTreeRoot(root), posix.join(root, "node_modules", "akmon"));
     const [sources] = skillSources(data, root);
     assert.ok(sources.length > 0);
-    assert.ok(sources.every((source) => !source.includes(".pnpm")), sources.join("\n"));
+    assert.ok(
+      sources.every((source) => !source.includes(".pnpm")),
+      sources.join("\n"),
+    );
     for (const stub of sources.flatMap((source) => skillStubs(data, root, source))) {
       assert.ok(!stub.content.includes(".pnpm"), stub.path);
     }
@@ -234,10 +267,17 @@ test("a standard skill points at node_modules/akmon with a relative link; outsid
     const elsewhere = posix.join(scratch, "other");
     fs.mkdirSync(elsewhere);
     const [outside] = skillSources(data, elsewhere);
-    const stubs = skillStubs(data, elsewhere, /** @type {string} */ (outside.find((source) => source.endsWith("/skills/release/SKILL.md"))));
+    const stubs = skillStubs(
+      data,
+      elsewhere,
+      /** @type {string} */ (outside.find((source) => source.endsWith("/skills/release/SKILL.md"))),
+    );
     assert.deepEqual(
       stubs.map((stub) => stub.path),
-      [posix.join(elsewhere, ".claude/skills/release/SKILL.md"), posix.join(elsewhere, ".agents/skills/release/SKILL.md")],
+      [
+        posix.join(elsewhere, ".claude/skills/release/SKILL.md"),
+        posix.join(elsewhere, ".agents/skills/release/SKILL.md"),
+      ],
     );
     for (const stub of stubs) {
       assert.ok(stub.content.includes("Source skill: `$(akmon path)/skills/release/SKILL.md`"), stub.content);
@@ -252,7 +292,9 @@ test("a project's own skill is a relative link whatever the tree", () => {
     const [sources] = skillSources(data, root);
     const stubs = skillStubs(data, root, posix.join(root, "skills/mine/SKILL.md"));
     assert.ok(sources.includes(posix.join(root, "skills/mine/SKILL.md")));
-    assert.ok(stubs[0].content.includes("Source skill: [../../../skills/mine/SKILL.md](../../../skills/mine/SKILL.md)"));
+    assert.ok(
+      stubs[0].content.includes("Source skill: [../../../skills/mine/SKILL.md](../../../skills/mine/SKILL.md)"),
+    );
   });
 });
 
@@ -331,7 +373,7 @@ test("a record that is not Node package mode is refused with exit 2 and writes n
   withScratch((scratch) => {
     /** @type {Array<[string | null, string]>} */
     const cases = [
-      [null, 'no integration record (_aitna/.akmon.toml)'],
+      [null, "no integration record (_aitna/.akmon.toml)"],
       ['akmon_version = "1"\n', 'mount = "submodule"'],
       ['mount = "submodule"\n', 'mount = "submodule"'],
       ['mount = "vendored"\n', 'mount = "vendored"'],
@@ -351,7 +393,10 @@ test("a record that is not Node package mode is refused with exit 2 and writes n
         const result = run(["--project-root", root, ...args]);
         assert.equal(result.code, 2, `${record} ${args}`);
         assert.equal(result.stdout, "", `${record} ${args}`);
-        assert.ok(result.stderr.startsWith("akmon sync: the JavaScript implementation serves Node package mode only"), result.stderr);
+        assert.ok(
+          result.stderr.startsWith("akmon sync: the JavaScript implementation serves Node package mode only"),
+          result.stderr,
+        );
         assert.ok(result.stderr.includes(`but this project has ${found};`), result.stderr);
         assert.equal(result.stderr.split("\n").length, 2, "one line");
       }
@@ -370,7 +415,9 @@ test("the refusal names the relocated dev layer", () => {
   withScratch((scratch) => {
     const root = project(scratch, { record: null });
     withAitnaRoot("tools/ai", () => {
-      assert.ok(/** @type {string} */ (unsupportedRecord(data, root)).includes("no integration record (tools/ai/.akmon.toml)"));
+      assert.ok(
+        /** @type {string} */ (unsupportedRecord(data, root)).includes("no integration record (tools/ai/.akmon.toml)"),
+      );
     });
   });
 });
@@ -391,7 +438,10 @@ test("--dry-run writes nothing and lists what would change; a real run writes; -
     const before = fs.readdirSync(root).sort();
     const dry = run(["--project-root", root, "--dry-run"]);
     assert.equal(dry.code, 0);
-    assert.ok(dry.stdout.startsWith("would update: CLAUDE.md\nwould update: .github/copilot-instructions.md\n"), dry.stdout);
+    assert.ok(
+      dry.stdout.startsWith("would update: CLAUDE.md\nwould update: .github/copilot-instructions.md\n"),
+      dry.stdout,
+    );
     assert.ok(dry.stdout.includes("would update: .claude/settings.json\n"));
     assert.ok(dry.stdout.includes("would update: _aitna/.akmon/guardrails/_common.md\n"));
     assert.ok(dry.stdout.endsWith("would update: _aitna/.akmon.toml\n"), dry.stdout);
@@ -399,7 +449,12 @@ test("--dry-run writes nothing and lists what would change; a real run writes; -
 
     const stale = run(["--project-root", root, "--check"]);
     assert.equal(stale.code, 1);
-    assert.ok(stale.stdout.startsWith("ERROR sync.stale-generated CLAUDE.md: generated file is stale or missing: CLAUDE.md → Run akmon sync to regenerate this file.\n"), stale.stdout);
+    assert.ok(
+      stale.stdout.startsWith(
+        "ERROR sync.stale-generated CLAUDE.md: generated file is stale or missing: CLAUDE.md → Run akmon sync to regenerate this file.\n",
+      ),
+      stale.stdout,
+    );
 
     const written = run(["--project-root", root]);
     assert.equal(written.code, 0);
@@ -410,7 +465,13 @@ test("--dry-run writes nothing and lists what would change; a real run writes; -
     assert.ok(again.stdout.endsWith("akmon sync: no changes\n"), again.stdout);
     const clean = run(["--project-root", root, "--check"]);
     assert.equal(clean.code, 0);
-    assert.ok(clean.stdout.split("\n").filter(Boolean).every((line) => line.startsWith("OK sync.up-to-date ")), clean.stdout);
+    assert.ok(
+      clean.stdout
+        .split("\n")
+        .filter(Boolean)
+        .every((line) => line.startsWith("OK sync.up-to-date ")),
+      clean.stdout,
+    );
     assert.equal(clean.stderr, "");
   });
 });
@@ -427,7 +488,9 @@ test("a written project holds the Node spellings and the record's pin is the tre
     assert.equal(get(root, ".codex/hooks.json"), codexHooksText(data));
     const record = get(root, "_aitna/.akmon.toml");
     assert.equal(record, `mount = "package"\necosystem = "node"\nakmon_version = "${installedAkmonVersion()}"\n`);
-    assert.ok(get(root, ".claude/skills/release/SKILL.md").includes("](../../../node_modules/akmon/skills/release/SKILL.md)"));
+    assert.ok(
+      get(root, ".claude/skills/release/SKILL.md").includes("](../../../node_modules/akmon/skills/release/SKILL.md)"),
+    );
     assert.equal(get(root, "_aitna/.akmon/guardrails/_common.md").includes("\r"), false);
     assert.ok(!fs.existsSync(posix.join(root, "_aitna", ".akmon", "hooks")));
   });
@@ -435,7 +498,9 @@ test("a written project holds the Node spellings and the record's pin is the tre
 
 test("the record is stamped without touching its other lines or the ecosystem", () => {
   withScratch((scratch) => {
-    const root = project(scratch, { record: "# mine\nmount = 'package'\necosystem = 'node'\n[check]\nrunner = \"x\"\n" });
+    const root = project(scratch, {
+      record: "# mine\nmount = 'package'\necosystem = 'node'\n[check]\nrunner = \"x\"\n",
+    });
     assert.equal(run(["--project-root", root]).code, 0);
     assert.equal(
       get(root, "_aitna/.akmon.toml"),
@@ -450,19 +515,42 @@ test("a plan error is exit 2: stderr in the writing modes, a finding in --check,
     put(root, ".claude/settings.json", '{"hooks": {},}');
     const written = run(["--project-root", root]);
     assert.equal(written.code, 2);
-    assert.ok(written.stderr.startsWith(`error: ${root}/.claude/settings.json: invalid JSON: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)\n`), written.stderr);
+    assert.ok(
+      written.stderr.startsWith(
+        `error: ${root}/.claude/settings.json: invalid JSON: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)\n`,
+      ),
+      written.stderr,
+    );
     assert.ok(written.stdout.includes("updated: CLAUDE.md\n"));
     assert.equal(get(root, ".claude/settings.json"), '{"hooks": {},}');
     const checked = run(["--project-root", root, "--check"]);
     assert.equal(checked.code, 2);
-    assert.ok(checked.stdout.includes(`ERROR sync.plan-error: ${root}/.claude/settings.json: invalid JSON`), "an empty target collapses the slot");
-    assert.ok(checked.stdout.includes("invalid JSON: Expecting property name enclosed in double quotes: line 1 column 14 (char 13) → Resolve the reported planning error, then re-run akmon sync.\n"));
+    assert.ok(
+      checked.stdout.includes(`ERROR sync.plan-error: ${root}/.claude/settings.json: invalid JSON`),
+      "an empty target collapses the slot",
+    );
+    assert.ok(
+      checked.stdout.includes(
+        "invalid JSON: Expecting property name enclosed in double quotes: line 1 column 14 (char 13) → Resolve the reported planning error, then re-run akmon sync.\n",
+      ),
+    );
+  });
+});
+
+test("the JavaScript language profile the init block names is materialized like the Python one", () => {
+  withScratch((scratch) => {
+    const root = project(scratch, { agents: `${COMMON}@_aitna/.akmon/profiles/js.md\n` });
+    assert.equal(run(["--project-root", root]).code, 0);
+    assert.ok(get(root, "_aitna/.akmon/profiles/js.md").startsWith("# Profile: JavaScript and TypeScript"));
+    assert.equal(run(["--project-root", root, "--check"]).code, 0);
   });
 });
 
 test("an import the standard does not ship is a plan error naming the line to write", () => {
   withScratch((scratch) => {
-    const root = project(scratch, { agents: `${COMMON}@_aitna/.akmon/guardrails/python.md\n@_aitna/.akmon/profiles/gone.md\n` });
+    const root = project(scratch, {
+      agents: `${COMMON}@_aitna/.akmon/guardrails/python.md\n@_aitna/.akmon/profiles/gone.md\n`,
+    });
     const result = run(["--project-root", root, "--dry-run"]);
     assert.equal(result.code, 2);
     assert.equal(
@@ -494,7 +582,10 @@ test("usage errors are one line and exit 2; --help is exit 0", () => {
     assert.equal(result.stderr.split("\n").length, 2);
     assert.equal(result.stdout, "");
   }
-  assert.equal(run(["--check", "--dry-run"]).stderr, "akmon sync: error: --check and --dry-run are mutually exclusive\n");
+  assert.equal(
+    run(["--check", "--dry-run"]).stderr,
+    "akmon sync: error: --check and --dry-run are mutually exclusive\n",
+  );
   const help = run(["-h"]);
   assert.equal(help.code, 0);
   assert.ok(help.stdout.startsWith("usage: akmon sync [-h] [--project-root PROJECT_ROOT] [--check] [--dry-run]\n"));
@@ -510,7 +601,12 @@ test("with no project root in reach the notice names the fallback and the record
     try {
       const result = run([]);
       assert.equal(result.code, 2);
-      assert.ok(result.stderr.startsWith(`[akmon] no project root at or above ${empty}: expected AGENTS.md beside _aitna/akmon or _aitna/.akmon.toml.`), result.stderr);
+      assert.ok(
+        result.stderr.startsWith(
+          `[akmon] no project root at or above ${empty}: expected AGENTS.md beside _aitna/akmon or _aitna/.akmon.toml.`,
+        ),
+        result.stderr,
+      );
       assert.ok(result.stderr.includes("but this project has no integration record (_aitna/.akmon.toml);"));
     } finally {
       process.chdir(saved);
@@ -555,13 +651,23 @@ function settingsFor(text) {
 }
 
 test("settings: everything of the user's file is kept, in its order, and written like json.dumps(indent=2)", () => {
-  const text = '{"b": 1, "10": {"7": 1, "1": 2}, "2": [1.0, 1e3, -0.0, 2.5], "é": "日本語😀", "hooks": {"Custom": [{"x": 1}]}, "a": null}';
+  const text =
+    '{"b": 1, "10": {"7": 1, "1": 2}, "2": [1.0, 1e3, -0.0, 2.5], "é": "日本語😀", "hooks": {"Custom": [{"x": 1}]}, "a": null}';
   const written = settingsFor(text);
   const parsed = JSON.parse(written);
   assert.deepEqual(Object.keys(parsed).sort(), ["10", "2", "a", "b", "hooks", "é"]);
-  assert.ok(written.startsWith('{\n  "b": 1,\n  "10": {\n    "7": 1,\n    "1": 2\n  },\n  "2": [\n    1.0,\n    1000.0,\n    -0.0,\n    2.5\n  ],\n  "\\u00e9": "\\u65e5\\u672c\\u8a9e\\ud83d\\ude00",\n  "hooks": {\n    "Custom": [\n'), written);
+  assert.ok(
+    written.startsWith(
+      '{\n  "b": 1,\n  "10": {\n    "7": 1,\n    "1": 2\n  },\n  "2": [\n    1.0,\n    1000.0,\n    -0.0,\n    2.5\n  ],\n  "\\u00e9": "\\u65e5\\u672c\\u8a9e\\ud83d\\ude00",\n  "hooks": {\n    "Custom": [\n',
+    ),
+    written,
+  );
   assert.ok(written.endsWith("}\n"));
-  assert.ok(written.indexOf('"\\u00e9"') < written.indexOf('"hooks"') && written.indexOf('"hooks"') < written.indexOf('"a": null'), "hooks stays where the file had it");
+  assert.ok(
+    written.indexOf('"\\u00e9"') < written.indexOf('"hooks"') &&
+      written.indexOf('"hooks"') < written.indexOf('"a": null'),
+    "hooks stays where the file had it",
+  );
 });
 
 test("settings: a missing file or `{}` gets a `hooks` key last; the wiring is the whole of it", () => {
@@ -579,18 +685,33 @@ test("settings: user hooks stay put and the old Python-spelled akmon entries are
   const old = {
     hooks: {
       PreToolUse: [
-        { matcher: "Bash", hooks: [{ type: "command", command: '"$CLAUDE_PROJECT_DIR/.venv/bin/akmon" hook git-commit-guard' }] },
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: '"$CLAUDE_PROJECT_DIR/.venv/bin/akmon" hook git-commit-guard' }],
+        },
         { matcher: "Bash", hooks: [{ type: "command", command: "echo mine" }] },
-        { matcher: "Edit", hooks: [{ type: "command", command: 'python3 "$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/role-on-code.py"' }] },
+        {
+          matcher: "Edit",
+          hooks: [{ type: "command", command: 'python3 "$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/role-on-code.py"' }],
+        },
       ],
       Stop: [{ hooks: [{ type: "command", command: "user-stop.sh" }] }],
     },
     permissions: { allow: ["Bash(ls)"] },
   };
   const written = JSON.parse(settingsFor(JSON.stringify(old)));
-  const commands = written.hooks.PreToolUse.flatMap((/** @type {any} */ entry) => entry.hooks.map((/** @type {any} */ hook) => hook.command));
+  const commands = written.hooks.PreToolUse.flatMap((/** @type {any} */ entry) =>
+    entry.hooks.map((/** @type {any} */ hook) => hook.command),
+  );
   assert.deepEqual(commands.slice(0, 1), ["echo mine"]);
-  assert.ok(commands.slice(1).every((/** @type {string} */ command) => command.startsWith('node "$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/')), commands.join("\n"));
+  assert.ok(
+    commands
+      .slice(1)
+      .every((/** @type {string} */ command) =>
+        command.startsWith('node "$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/'),
+      ),
+    commands.join("\n"),
+  );
   assert.equal(new Set(commands).size, commands.length);
   assert.deepEqual(written.permissions, old.permissions);
   assert.equal(written.hooks.Stop[0].hooks[0].command, "user-stop.sh");
@@ -624,18 +745,25 @@ test("settings: the sentences of a file that is not a settings object are the tw
     ['{"hooks": "x"}', "expected hooks to be a JSON object"],
     [Buffer.from('{"a": "\xff"}', "latin1"), "'utf-8' codec can't decode byte 0xff in position 7: invalid start byte"],
     [Buffer.from([0x7b, 0xe2, 0x82]), "'utf-8' codec can't decode bytes in position 1-2: unexpected end of data"],
-    [Buffer.from([0x7b, 0xed, 0xa0, 0x80]), "'utf-8' codec can't decode byte 0xed in position 1: invalid continuation byte"],
+    [
+      Buffer.from([0x7b, 0xed, 0xa0, 0x80]),
+      "'utf-8' codec can't decode byte 0xed in position 1: invalid continuation byte",
+    ],
   ];
   withScratch((scratch) => {
     const root = project(scratch);
     for (const [text, sentence] of cases) {
       put(root, ".claude/settings.json", text);
-      assert.throws(() => claudeSettings(data, root), (error) => {
-        assert.ok(error instanceof Error);
-        assert.ok(error.message.endsWith(sentence), `${error.message}\n  wanted: ...${sentence}`);
-        assert.ok(["ValueError", "UnicodeDecodeError"].includes(error.name));
-        return true;
-      }, String(text));
+      assert.throws(
+        () => claudeSettings(data, root),
+        (error) => {
+          assert.ok(error instanceof Error);
+          assert.ok(error.message.endsWith(sentence), `${error.message}\n  wanted: ...${sentence}`);
+          assert.ok(["ValueError", "UnicodeDecodeError"].includes(error.name));
+          return true;
+        },
+        String(text),
+      );
     }
   });
 });
@@ -667,7 +795,10 @@ test("mergeHookEntries: the stale akmon entry goes, the user's stays, and a repe
   assert.equal(once[0], user);
   assert.equal(once.length, 1 + wanted.length);
   const twice = mergeHookEntries(data, once, wanted);
-  assert.deepEqual(twice.map((entry) => JSON.stringify(entry instanceof Map ? [...entry] : entry)), once.map((entry) => JSON.stringify(entry instanceof Map ? [...entry] : entry)));
+  assert.deepEqual(
+    twice.map((entry) => JSON.stringify(entry instanceof Map ? [...entry] : entry)),
+    once.map((entry) => JSON.stringify(entry instanceof Map ? [...entry] : entry)),
+  );
 });
 
 // --------------------------------------------------------------------------------------
@@ -692,7 +823,12 @@ test("the dev layer's .akmon directory is owned outright: everything unplanned g
     const written = run(["--project-root", root]);
     assert.deepEqual(
       written.stdout.split("\n").filter((line) => line.startsWith("deleted: ")),
-      ["deleted: _aitna/.akmon/a/b/d.txt", "deleted: _aitna/.akmon/a/c.txt", "deleted: _aitna/.akmon/a-b/f.txt", "deleted: _aitna/.akmon/routing.json"],
+      [
+        "deleted: _aitna/.akmon/a/b/d.txt",
+        "deleted: _aitna/.akmon/a/c.txt",
+        "deleted: _aitna/.akmon/a-b/f.txt",
+        "deleted: _aitna/.akmon/routing.json",
+      ],
     );
     assert.deepEqual(fs.readdirSync(posix.join(root, "_aitna", ".akmon")), ["guardrails"]);
   });
@@ -727,7 +863,10 @@ test("a link in the materialization is judged by what it points at, and a linked
     fs.symlinkSync(posix.join(scratch, "nowhere"), posix.join(akmon, "dangling"));
     const check = run(["--project-root", root, "--check"]);
     const obsolete = check.stdout.split("\n").filter((line) => line.startsWith("ERROR sync.obsolete-generated "));
-    assert.deepEqual(obsolete.map((line) => line.split(" ")[2].slice(0, -1)), ["_aitna/.akmon/dangling", "_aitna/.akmon/filelink"]);
+    assert.deepEqual(
+      obsolete.map((line) => line.split(" ")[2].slice(0, -1)),
+      ["_aitna/.akmon/dangling", "_aitna/.akmon/filelink"],
+    );
     assert.equal(run(["--project-root", root]).code, 0);
     assert.deepEqual(fs.readdirSync(akmon).sort(), ["dirlink", "guardrails"]);
     assert.equal(fs.readFileSync(posix.join(scratch, "elsewhere", "inner", "f.txt"), "utf-8"), "x\n");
@@ -752,7 +891,11 @@ test("only .pyc and .pyo go from a cache: a cache holding anything else is left,
     }
     assert.equal(run(["--project-root", root, "--check"]).code, 0);
     assert.equal(run(["--project-root", root]).code, 0);
-    assert.deepEqual(fs.readdirSync(posix.join(root, "_aitna", ".akmon", "__pycache__")).sort(), [".pyc", "b.pyc.bak", "keep.txt"]);
+    assert.deepEqual(fs.readdirSync(posix.join(root, "_aitna", ".akmon", "__pycache__")).sort(), [
+      ".pyc",
+      "b.pyc.bak",
+      "keep.txt",
+    ]);
   });
 });
 
@@ -866,7 +1009,14 @@ test("the plan lists the vendor files first, then settings, skills, the material
     const [files, errors] = plannedFiles(data, root);
     assert.deepEqual(errors, []);
     const relative = files.map((file) => file.path.slice(root.length + 1));
-    assert.deepEqual(relative.slice(0, 6), ["CLAUDE.md", ".github/copilot-instructions.md", "GEMINI.md", ".codex/README.md", ".codex/hooks.json", ".claude/settings.json"]);
+    assert.deepEqual(relative.slice(0, 6), [
+      "CLAUDE.md",
+      ".github/copilot-instructions.md",
+      "GEMINI.md",
+      ".codex/README.md",
+      ".codex/hooks.json",
+      ".claude/settings.json",
+    ]);
     assert.equal(relative.at(-1), "_aitna/.akmon.toml");
     assert.ok(relative.includes("_aitna/.akmon/guardrails/_common.md"));
     assert.equal(materializationRoot(root), posix.join(root, "_aitna", ".akmon"));
@@ -879,10 +1029,13 @@ test("checkFindings: one finding per file, then one per plan error, in the envel
     const result = apply(data, [new PlannedFile(posix.join(root, "a.txt"), "x")], { write: false });
     result.errors.push("boom");
     const findings = checkFindings(data, result, { root });
-    assert.deepEqual(findings.map((finding) => [finding.severity, finding.code, finding.target]), [
-      ["error", "sync.stale-generated", "a.txt"],
-      ["error", "sync.plan-error", ""],
-    ]);
+    assert.deepEqual(
+      findings.map((finding) => [finding.severity, finding.code, finding.target]),
+      [
+        ["error", "sync.stale-generated", "a.txt"],
+        ["error", "sync.plan-error", ""],
+      ],
+    );
     assert.equal(findings[1].message, "boom");
   });
 });
@@ -914,7 +1067,11 @@ test("run as a program: the exit code is the command's, through a symlink as npm
 });
 
 test("imported as a module, the file runs nothing", () => {
-  const done = spawnSync(process.execPath, ["--input-type=module", "-e", `import ${JSON.stringify(SYNC)}; console.log("quiet")`], { encoding: "utf-8" });
+  const done = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", `import ${JSON.stringify(SYNC)}; console.log("quiet")`],
+    { encoding: "utf-8" },
+  );
   assert.equal(done.stdout, "quiet\n");
   assert.equal(done.stderr, "");
 });

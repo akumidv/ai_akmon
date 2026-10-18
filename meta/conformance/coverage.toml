@@ -22,6 +22,7 @@
 "code:hooks.launcher" = { ecosystem = "python", reason = "names the .venv/bin/akmon launcher; Node wiring calls node on node_modules/akmon/js directly (ADR 0020 D05)" }
 "code:gitignore.akmon-pycache" = { ecosystem = "python", reason = "the Python bytecode cache the mounted tree writes; nothing in a Node consumer produces it" }
 "code:changelog.unreleased" = { ecosystem = "python", reason = "a mounted mode's check of the mount's CHANGELOG.md; package mode reports changelog.package-mode instead, and mounted modes are Python-only (ADR 0020 D02)" }
+"code:layout.vendored-leftover" = { ecosystem = "python", reason = "a vendored mount's leftover members; mounted modes are Python-only (ADR 0020 D02), and the JS verify refuses a vendored record" }
 
 # [exempt] — items no hermetic scenario can reach; each reason says why and where the item is
 # covered instead. An exempt item needs no scenario.

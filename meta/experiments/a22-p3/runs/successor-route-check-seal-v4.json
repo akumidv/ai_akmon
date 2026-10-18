@@ -1,0 +1,29 @@
+{
+  "codex_limit_tokens": 5000000,
+  "opaque_packet_id": "g286aa508b7bdeefe",
+  "packet_manifest_sha256": "d0a01c0dc38e63507ff47dd713cd679e5c6688f04ead06156903106f8b0f9d7a",
+  "packet_sha256": "5cce39ac1d12dcb99ab5623e0c44e541df4f471e07f8c972626d574adfcf450c",
+  "previous_source_approval_sha256": "e2fb06adc5a0c1ad6af9255abfad28b0421523a6d06a2b9572e089d27cdf930a",
+  "previous_source_seal_sha256": "7c0e3e25f915e267a8d32fc3052c1a2e652ab0b4886360d8c96ecddf1726884d",
+  "prior_v3_observed_codex_tokens": 54010,
+  "prompt_sha256": "7d875d7eb91f2f06d2c0b869f6f6f21b23d5240d4de00bb96aa3dba89c583ce5",
+  "proposal_sha256": "0e3ec40659ace040248f6b2567853f1908cc6326ec346f94c110a04ab40305f4",
+  "provider_calls_started": 0,
+  "record_type": "p3_v3_successor_route_check_seal",
+  "regression_sha256": "a98a1e3d7e61ac6ae561b87c298d36b70eed501af507d9ca90dfbe2386806df6",
+  "schema": 1,
+  "scope": [
+    "route_checks"
+  ],
+  "source_exchange_sha256": "bfc388fe90d663f4ed1f1527f75955d077a7aa0ca296dfd31138c1d103b6d6e1",
+  "source_ledger_sha256": "64ab455b03038056f08c86627618fd4f16d97be32654ea38986ee82159de4d1c",
+  "source_record_sha256": "a14ef0c4615690e9d357fbcfd54e45bdd59a2a4135e817506f6587793b4dd63b",
+  "source_sha256": {
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "scorer_route_check.py": "5947219962ce3d7f8defefafb1f705acc414bf274c89cff1de8f872ddbc604d5",
+    "usage_ledger_v3.py": "222a1a67e3d8efcb34b3f996ca40cae513008a44b80d94f9bb5dac1ad334a803",
+    "v3_successor_route_check.py": "477c3c848432f01c7969ce4bca21565b8917d583c14b1e74183f692f6af62098",
+    "v3_successor_route_packet.py": "dc527df38e8d7fd95579d8d4f23be0a59bb7514cc6d88af4b02e9a97246b2ee8"
+  },
+  "status": "offline_candidate_pending_owner_acceptance"
+}

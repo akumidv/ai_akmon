@@ -33,6 +33,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,7 +56,7 @@ from corpus import (  # noqa: E402
     materialize_fixture,
     python_metadata,
 )
-from coverage import check_coverage, load_exceptions  # noqa: E402
+from coverage import check_coverage, load_exceptions, table_rows  # noqa: E402
 from normalize import NORM_VERSION, Ctx, normalize  # noqa: E402
 from pairing import check_pairing, is_ported  # noqa: E402
 
@@ -69,6 +71,7 @@ COMMAND_FILE = {
     "check": "bin/check.py",
     "path": "src/akmon/cli.py",
     "hook": "src/akmon/cli.py",
+    "tool": "src/akmon/cli.py",
     "version": "src/akmon/cli.py",
 }
 #: One finding line as ``common.findings.render`` prints it: ``SEVERITY code[ target]: …``.
@@ -169,6 +172,38 @@ def _normalize_leaves(value: object, ctx: Ctx) -> object:
     return value
 
 
+def json_text(value: object) -> str:
+    """``json.dumps(value)``, spelled without recursion: a payload member nested thousands deep is carried.
+
+    ``json.dumps`` recurses once per level: the floor's interpreter (3.12) stops it past 9996
+    levels and 3.11 stopped it near a thousand, while a scenario that pins a deep payload
+    (``hooks/delegation-nudge-deep-tool-name``) nests five thousand. Same separators, escaping
+    and number spelling as the default ``json.dumps``.
+    """
+    out: list[str] = []
+    # Literal text (a str) or a value still to spell (a 1-tuple), in reverse output order.
+    stack: list[str | tuple[object]] = [(value,)]
+    while stack:
+        entry = stack.pop()
+        if isinstance(entry, str):
+            out.append(entry)
+            continue
+        (item,) = entry
+        if not isinstance(item, dict | list):
+            out.append(json.dumps(item))
+            continue
+        members = list(item.items()) if isinstance(item, dict) else [(None, element) for element in item]
+        parts: list[str | tuple[object]] = ["{" if isinstance(item, dict) else "["]
+        for index, (key, element) in enumerate(members):
+            prefix = (", " if index else "") + ("" if key is None else f"{json.dumps(key)}: ")
+            if prefix:
+                parts.append(prefix)
+            parts.append((element,))
+        parts.append("}" if isinstance(item, dict) else "]")
+        stack.extend(reversed(parts))
+    return "".join(out)
+
+
 def _toml_string(value: str) -> str:
     """A TOML basic string literal: JSON escaping is a subset of TOML's, and valid as such."""
     return json.dumps(value, ensure_ascii=False)
@@ -259,9 +294,7 @@ def _run_node_unit(scenario: Scenario, ctx: RunCtx) -> tuple[int, str, str, Ctx]
     run_spec = scenario.run
     node = shutil.which("node")
     if node is None:
-        raise CorpusError(
-            "prerequisite of --impl node units: the node binary is not on PATH (node >= 22 is the floor)"
-        )
+        raise CorpusError("prerequisite of --impl node units: the node binary is not on PATH (node >= 22 is the floor)")
     probe = CORPUS / "probe.mjs"
     if not probe.is_file():
         raise CorpusError(
@@ -276,8 +309,11 @@ def _run_node_unit(scenario: Scenario, ctx: RunCtx) -> tuple[int, str, str, Ctx]
         text=True,
         check=False,
     )
-    return result.returncode, result.stdout, result.stderr, Ctx(
-        root="", mount="", tree=str(ctx.snapshot), tmp="", version=ctx.version, repo="", days=(first_day,)
+    return (
+        result.returncode,
+        result.stdout,
+        result.stderr,
+        Ctx(root="", mount="", tree=str(ctx.snapshot), tmp="", version=ctx.version, repo="", days=(first_day,)),
     )
 
 
@@ -304,7 +340,7 @@ def _command_for(
             command = [str(proj_dir / ".venv" / "bin" / "akmon"), "hook", run_spec.script, *args]
         else:
             command = [sys.executable, str(tree / "hooks" / f"{run_spec.script}.py"), *args]
-        payload = _materialize_tokens(json.dumps(run_spec.payload), ctx) if run_spec.payload else ""
+        payload = _materialize_tokens(json_text(run_spec.payload), ctx) if run_spec.payload else ""
         return command, payload, {}
     if scenario.kind == "cli":
         if impl == "node":
@@ -320,51 +356,52 @@ def _command_for(
             return ["node", str(carrier / "js" / "tools" / f"{run_spec.tool}.mjs"), *argv], "", {}
         return [sys.executable, str(tree / "tools" / f"{run_spec.tool}.py"), *argv], "", {}
     # unit: the table is the expectation; the probe is only the implementation's mouth.
-    return [
-        sys.executable,
-        str(CORPUS / "probe.py"),
-        "--tree",
-        str(tree),
-        run_spec.probe,
-        str(CORPUS / "units" / run_spec.table),
-    ], "", {}
+    return (
+        [
+            sys.executable,
+            str(CORPUS / "probe.py"),
+            "--tree",
+            str(tree),
+            run_spec.probe,
+            str(CORPUS / "units" / run_spec.table),
+        ],
+        "",
+        {},
+    )
 
 
-def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
-    """Execute one scenario; returns (exit, stdout, stderr, the run's normalization ctx)."""
-    if run.impl == "node" and scenario.kind == "unit":
-        return _run_node_unit(scenario, run)
-    repo, snapshot, work, version = run.repo, run.snapshot, run.work, run.version
-    tag = scenario.id.replace("/", "-")
-    run_tmp = work / f"tmp-{tag}"
-    run_tmp.mkdir(parents=True)
-    fixture = scenario.fixture
-    first_day = _today()
-    env = {
+def scenario_env(scenario: Scenario, run: RunCtx, run_tmp: Path) -> dict[str, str]:
+    """The environment of the process under test: the host's, a private TMPDIR, no codex, the scenario's own."""
+    return {
         **os.environ,
         "TMPDIR": str(run_tmp),
         "PYTHONDONTWRITEBYTECODE": "1",
-        "PATH": _hide_binary_from_path("codex", work / "path-shadow"),
+        "PATH": _hide_binary_from_path("codex", run.work / "path-shadow"),
         **scenario.env,
     }
 
-    def warmup(proj: Path, tree: Path) -> None:
-        """The project's sync (write): the mounted script, or the implementation's own package CLI.
 
-        A node fixture is synced by the JS ``sync`` (C105): the hooks and the CLI commands under
-        test then read a project the implementation itself wrote, as a consumer's does.
-        """
+def warmup_sync(scenario: Scenario, run: RunCtx, env: dict[str, str]) -> Callable[[Path, Path], None]:
+    """The fixture's warmup: the project's sync (write) by the implementation under test.
+
+    The mounted script, or the implementation's own package CLI. A node fixture is synced by
+    the JS ``sync`` (C105): the hooks and the CLI commands under test then read a project the
+    implementation itself wrote, as a consumer's does.
+    """
+
+    def warmup(proj: Path, tree: Path) -> None:
         if run.impl == "node":
             cli = proj / "node_modules" / "akmon" / "js" / "akmon" / "cli.mjs"
             warm = ["node", str(cli), "sync", "--project-root", str(proj)]
-        elif fixture.attach == "mount":
+        elif scenario.fixture.attach == "mount":
             warm = [sys.executable, str(proj / "_aitna" / "akmon" / "bin" / "sync.py"), "--project-root", str(proj)]
         else:
             warm = [sys.executable, str(tree / "src" / "akmon" / "cli.py"), "sync", "--project-root", str(proj)]
+        metadata = python_metadata(run.work, run.version)
         result = subprocess.run(
             warm,
             cwd=proj,
-            env={**env, "PYTHONPATH": os.pathsep.join([str(tree / "src"), str(python_metadata(work, version))])},
+            env={**env, "PYTHONPATH": os.pathsep.join([str(tree / "src"), str(metadata)])},
             capture_output=True,
             text=True,
             check=False,
@@ -374,27 +411,51 @@ def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
                 f"{scenario.id}: warmup sync failed (exit {result.returncode}):\n" + result.stdout + result.stderr
             )
 
-    # The tree is the corpus-controlled snapshot (or a private override copy): a mounted
-    # consumer links it, a native one runs the CLI inside it as its embedded tree.
-    proj_dir, tree = materialize_fixture(
-        fixture, RunEnv(snapshot=snapshot, repo=repo, work=work, version=version, impl=run.impl), tag, warmup
-    )
-    local_repo = _build_local_repo(snapshot, work, version) if fixture.repo else None
-    mount = proj_dir / "_aitna" / "akmon"
-    ctx = Ctx(
+    return warmup
+
+
+def run_ctx_for(scenario: Scenario, run: RunCtx, located: tuple[Path, Path, Path], local_repo: Path | None) -> Ctx:
+    """The normalization ctx of one materialized run; ``located`` is (project root, tree, run tempdir)."""
+    proj_dir, tree, run_tmp = located
+    fixture = scenario.fixture
+    native_node = run.impl == "node" and fixture.attach == "native"
+    return Ctx(
         root=str(proj_dir),
-        mount=str(mount) if fixture.attach == "mount" else "",
+        mount=str(proj_dir / "_aitna" / "akmon") if fixture.attach == "mount" else "",
         tree=str(tree),
         tmp=str(run_tmp),
-        version=version,
+        version=run.version,
         repo=str(local_repo) if local_repo else "",
-        days=(first_day,),
-        carrier=str(proj_dir / "node_modules" / "akmon") if run.impl == "node" and fixture.attach == "native" else "",
+        days=(_today(),),
+        carrier=str(proj_dir / "node_modules" / "akmon") if native_node else "",
     )
-    for relative, content in fixture.tmp_files.items():
+
+
+def seed_tmp_files(scenario: Scenario, run_tmp: Path, ctx: Ctx) -> None:
+    """Write the fixture's ``tmp_files`` (hook markers and counters) into the run tempdir, tokens materialized."""
+    for relative, content in scenario.fixture.tmp_files.items():
         target = run_tmp / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(_materialize_tokens(content, ctx), encoding="utf-8")
+
+
+def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
+    """Execute one scenario; returns (exit, stdout, stderr, the run's normalization ctx)."""
+    if run.impl == "node" and scenario.kind == "unit":
+        return _run_node_unit(scenario, run)
+    tag = scenario.id.replace("/", "-")
+    run_tmp = run.work / f"tmp-{tag}"
+    run_tmp.mkdir(parents=True)
+    fixture = scenario.fixture
+    first_day = _today()
+    env = scenario_env(scenario, run, run_tmp)
+    # The tree is the corpus-controlled snapshot (or a private override copy): a mounted
+    # consumer links it, a native one runs the CLI inside it as its embedded tree.
+    run_env = RunEnv(snapshot=run.snapshot, repo=run.repo, work=run.work, version=run.version, impl=run.impl)
+    proj_dir, tree = materialize_fixture(fixture, run_env, tag, warmup_sync(scenario, run, env))
+    local_repo = _build_local_repo(run.snapshot, run.work, run.version) if fixture.repo else None
+    ctx = dataclasses.replace(run_ctx_for(scenario, run, (proj_dir, tree, run_tmp), local_repo), days=(first_day,))
+    seed_tmp_files(scenario, run_tmp, ctx)
     command, payload, extra_env = _command_for(scenario, tree, proj_dir, ctx, run.impl)
     env.update(extra_env)
     result = subprocess.run(command, cwd=proj_dir, env=env, input=payload, capture_output=True, text=True, check=False)
@@ -509,7 +570,27 @@ def _compare(scenario: Scenario, exit_code: int, stdout: str, stderr: str, ctx: 
     )
     problems.extend(_file_problems(expected, Path(ctx.root), Path(ctx.tree), ctx))
     problems.extend(_cover_problems(scenario.covers, stdout))
+    if scenario.kind == "unit":
+        problems.extend(_answered_problems(scenario, stdout))
     return "\n".join(problems)
+
+
+def _answered_problems(scenario: Scenario, stdout: str) -> list[str]:
+    """A unit run must have answered every row of its table, and at least one (C116).
+
+    ``ok`` alone is green for a probe that answered nothing — an emptied table, a probe that
+    skips a family — so the probe's ``answered`` count is held to the table's row count.
+    """
+    rows = table_rows(tomllib.loads((CORPUS / "units" / scenario.run.table).read_text(encoding="utf-8")))
+    try:
+        answered = json.loads(stdout).get("answered")
+    except (json.JSONDecodeError, AttributeError):
+        return [f"units: the probe printed no answer document for {scenario.run.table}"]
+    if not isinstance(answered, int) or isinstance(answered, bool) or answered <= 0:
+        return [f"units: the probe answered {answered!r} rows of {scenario.run.table}; at least one is owed"]
+    if answered != rows:
+        return [f"units: the probe answered {answered} rows of {scenario.run.table}, which holds {rows}"]
+    return []
 
 
 def _records_findings(scenario: Scenario, stdout: str) -> bool:
@@ -572,17 +653,27 @@ def _wanted_scenarios(scenarios: list[Scenario], scenario_ids: list[str]) -> lis
 def _pending_file(scenario: Scenario, repo: Path) -> str | None:
     """The unported Python file a node run of this scenario waits for, or ``None`` when it can run.
 
-    A CLI scenario waits for the file of its command, a tool scenario for the tool's file; a hook
-    scenario never waits (the hooks are paired). Derived from the pairing gate's own answer, so
+    A CLI scenario waits for the file of its command (``akmon tool <tool>`` for the tool's file
+    too), a tool scenario for the tool's file; a hook scenario never waits (the hooks are
+    paired). Derived from the pairing gate's own answer, so
     the moment a port lands its scenarios are in scope, and nothing is listed twice.
+
+    Only a file that exists can wait for a port (C116): ``akmon tool`` naming a tool the tree does
+    not carry is the CLI's refusal, which runs on both implementations, and a tool scenario naming
+    a missing tool is a corpus error, never a skip.
     """
     if scenario.kind == "cli":
         command = scenario.run.argv[0] if scenario.run.argv else None
         rel = COMMAND_FILE.get(command or "")
         if rel is None:
             raise CorpusError(f"{scenario.id}: the runner knows no source file for command {command!r}")
+        tool = f"tools/{scenario.run.argv[1]}.py" if command == "tool" and len(scenario.run.argv) > 1 else None
+        if tool is not None and (repo / tool).is_file() and not is_ported(repo, tool):
+            return tool
     elif scenario.kind == "tool":
         rel = f"tools/{scenario.run.tool}.py"
+        if not (repo / rel).is_file():
+            raise CorpusError(f"{scenario.id}: the tool {rel} does not exist in the tree under test")
     else:
         return None
     return None if is_ported(repo, rel) else rel
@@ -660,6 +751,7 @@ def run_scenarios(repo: Path, impl: str, areas: list[str], scenario_ids: list[st
     of the corpus (one area, or several named ones) and its gate verdicts would be about the rest
     as much as the slice.
     """
+    areas = list(dict.fromkeys(areas))  # `--area x --area x` is one slice: each scenario runs once
     version = _impl_version(repo, impl)
     run_gates = not areas
     with tempfile.TemporaryDirectory(prefix="akmon-conformance-") as raw:
@@ -718,7 +810,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.record and args.impl != "python":
         parser.error("--record reseeds the expectations from the reference: it runs with --impl python only")
-    return run_scenarios(Path(args.tree).resolve(), args.impl, args.area, args.scenario, record=args.record)
+    try:
+        return run_scenarios(Path(args.tree).resolve(), args.impl, args.area, args.scenario, record=args.record)
+    except CorpusError as exc:  # a scenario the loader refuses, or a missing prerequisite: one line
+        print(f"conformance: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

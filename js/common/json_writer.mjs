@@ -45,9 +45,7 @@ function _string(value) {
     const cp = ch.codePointAt(0) ?? 0;
     if (cp > 0xffff) {
       const lo = cp - 0x10000;
-      out +=
-        `\\u${(0xd800 + (lo >> 10)).toString(16)}` +
-        `\\u${(0xdc00 + (lo & 0x3ff)).toString(16)}`;
+      out += `\\u${(0xd800 + (lo >> 10)).toString(16)}` + `\\u${(0xdc00 + (lo & 0x3ff)).toString(16)}`;
     } else if (cp < 0x20 || cp > 0x7e) {
       out += `\\u${cp.toString(16).padStart(4, "0")}`;
     } else {
@@ -169,7 +167,11 @@ function _value(value, level, form) {
     if (form === "wiring") {
       const pad = "  ".repeat(level + 1);
       return (
-        "[\n" + value.map((item) => pad + _value(item, level + 1, "wiring")).join(",\n") + "\n" + "  ".repeat(level) + "]"
+        "[\n" +
+        value.map((item) => pad + _value(item, level + 1, "wiring")).join(",\n") +
+        "\n" +
+        "  ".repeat(level) +
+        "]"
       );
     }
     const sep = form === "canonical" ? "," : ", ";

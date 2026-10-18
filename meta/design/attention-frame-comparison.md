@@ -418,7 +418,7 @@ while the tool call proceeds — M19, M20 at codex-cli 0.149.1, observed again a
 every entry — M50 at 0.154.0.
 
 The three levels are kept apart by the measurement that produced those rows.
-[N7's elimination matrix](../reviews/n7-codex-hook-delivery-20260825.md) records project
+[N7's elimination matrix](../reviews/n7-codex-hook-delivery.md) records project
 trust alone discovering four entries, all `untrusted`, with **no** measured `SessionStart`
 run; project trust plus hook trust discovering four `trusted` entries **and** the marker
 written by the firing hook. Its method section states that `hooks/list` "cannot answer
@@ -667,7 +667,7 @@ Stop before the ceiling when any of these holds:
 
 Non-interactive one-shot runs, in a scratch fixture, with the hygiene prior probes had to
 learn — and with one of them **withdrawn by measurement**. The recipe is now measured, not
-assumed: a [mechanics run](../reviews/t1-mechanics-20260921.md) executed condition B on case
+assumed: a [mechanics run](../reviews/t1-mechanics.md) executed condition B on case
 P1-2 and its transcript was read back (M78–M80). The working directory is a scratch fixture
 outside any git repository, so no project file is discovered; `--system-prompt` carries the
 condition and genuinely replaces the default preamble and memory block; `--strict-mcp-config`
@@ -724,7 +724,7 @@ one harness on one vendor, and transfer to another is an open question, not an e
 ### Result of the B-vs-C block
 
 The first block **ran** — 18 cells, two conditions × three cases × three repeats, recorded in
-[the B-vs-C evidence](../reviews/t1-grid-b-vs-c-20260921.md) — and B and C produced identical
+[the B-vs-C evidence](../reviews/t1-grid-b-vs-c.md) — and B and C produced identical
 case verdicts in every cell. That result is **non-informative by construction**: the design would
 have produced it whether or not the clause works, so it is not a reading of stopping condition 1
 and supports no disposition. The earlier reading of this section, that *B already passes* was met
@@ -763,7 +763,7 @@ fixed **before** any scored run; results live in T2.
 | --- | --- |
 | `B_del ≈ A` | the guidance that actually reaches a consumer session has no measurable effect on these cases |
 | `B_dev ≈ A` | the same for a session on the akmon repository itself |
-| `B_ship ≫ B_del` | the defect is release lag — the consumer's installed akmon is behind its source ([session delivery](../reviews/t2-session-delivery-20260922.md)); the clause question is premature |
+| `B_ship ≫ B_del` | the defect is release lag — the consumer's installed akmon is behind its source ([session delivery](../reviews/t2-session-delivery.md)); the clause question is premature |
 | `B_full ≫ B_ship` | the content works but never arrives; work goes to what akmon auto-loads — the entry points `bin/sync.py` materializes |
 | `C > B_full` | and only then is the candidate clause worth adopting |
 
@@ -834,7 +834,7 @@ model pin (C97 carries the rest).
 | Held | Value |
 | --- | --- |
 | Tiers | the registry's strongest rung (as in T1) and its `mid` rung — separate conditions; resolved aliases go to run evidence only |
-| Recipe | [T1 mechanics](../reviews/t1-mechanics-20260921.md) (M78–M80, cited at the installed build under the semver rule), with the arm passed by file and turn 2 by resuming the session; each run is verified from its transcript — system prompt byte-equal to the arm, no tools, no instruction files, working directory outside any repository, both user messages as sent |
+| Recipe | [T1 mechanics](../reviews/t1-mechanics.md) (M78–M80, cited at the installed build under the semver rule), with the arm passed by file and turn 2 by resuming the session; each run is verified from its transcript — system prompt byte-equal to the arm, no tools, no instruction files, working directory outside any repository, both user messages as sent |
 | Caps | ≤ 40k input tokens per turn — 50k for `B_full` and `C`, by owner decision; 120 runs, a run being one case × arm × tier × repeat with both turns |
 | Repeats | two |
 
@@ -848,7 +848,7 @@ rather than trimming the base by hand.
 
 ### Result of T2
 
-[The grid evidence](../reviews/t2-grid-20260922.md), six qualified pairs × two repeats, failed runs
+[The grid evidence](../reviews/t2-grid.md), six qualified pairs × two repeats, failed runs
 out of 12: `A` 10, `B_dev` 3, `B_del` 10, `B_ship` 10, `B_full` 2, `C` 3.
 
 - **Guidance written for the cases' project changed behaviour; the consumer's did not, here.** What
@@ -863,7 +863,7 @@ out of 12: `A` 10, `B_dev` 3, `B_del` 10, `B_ship` 10, `B_full` 2, `C` 3.
   evidence of equivalence: the matched pairs split 1 `B_full`-only, 2 `C`-only and 1 shared failure
   (exact McNemar p = 1), and two scoring elements are reading-sensitive — a literal reading of
   P2-4 E3 ("both harnesses") gives `B_full` 5 and `C` 4
-  ([audit synthesis](../reviews/t2-audit-synthesis-20260923.md)). No reading puts `C` ahead by more
+  ([audit synthesis](../reviews/t2-audit-synthesis.md)). No reading puts `C` ahead by more
   than one run.
 - **Named confound.** The cases are about the akmon repository; the in-context arms carry akmon's
   own documents and the consumer arms the consumer's. On these cases a delivery gap cannot be told
@@ -874,7 +874,7 @@ The disposition — useful interaction change, examples-only, or no new rule —
 result is its input, not its acceptance. **T2 is complete and its result stands as obtained** —
 recorded per model as [M83–M85](../MEASUREMENTS.md). Two independent audits reproduced it and
 bounded its readings; their findings and the scoring-sensitivity table are in the
-[audit synthesis](../reviews/t2-audit-synthesis-20260923.md). The owner kept the clause open, so
+[audit synthesis](../reviews/t2-audit-synthesis.md). The owner kept the clause open, so
 further work is added to this result, not substituted for it, in this order: the same packet on a
 second vendor ([trial T3](#trial-t3--packet-p2-on-a-second-vendor-with-the-examples-arm); its model pin is C97), with its own qualification, the examples condition `E` as one
 more arm — an examples-only outcome cannot be inferred without it — and the margin that counts as
@@ -885,7 +885,7 @@ longer bears on the disposition.
 
 ## Trial T3 — packet P2 on a second vendor, with the examples arm
 
-**Status: complete, 2026-09-24 — [result](#result-of-t3); pre-registered and owner-approved the same day as written.** The owner fixed
+**Status: complete — [result](#result-of-t3); pre-registered and owner-approved the same day as written.** The owner fixed
 one open choice with the approval: the second scorer is from a model family other than the
 primary scorer's. Everything below is fixed
 before any scored run and is not revised after results. T3 repeats T2's clause comparison on the
@@ -923,7 +923,7 @@ manifest commit (rows C61 and C62), markdown emphasis included. It states no rul
 > 2. A diagnosis measured rather than argued (C62): **Both of the old guard's answers were measured wrong on the pre-fix code**, not argued: a root whose manifest declares pytest with pytest absent returned `None` (refused exactly the case `uv` handles), and a root with **no manifest at all** but pytest on PATH returned `["uv", "run", "pytest"]` — a runner claimed where this root declares nothing to provision from, so the outcome then depended on a PATH binary rather than on the project.
 
 None of the 41 leakage phrases of cases P2-1 to P2-5 occurs in the block. The builder asserts this
-with T2's checker, case-insensitive over normalized whitespace. Its first run on 2026-09-24,
+with T2's checker, case-insensitive over normalized whitespace. Its first run,
 before any run of T3, found P2-3's `Corrected` in the first example's label, which was "a report
 corrected against live rendering". That label is framing, not quotation, so it became "checked".
 The quotations are unchanged.
@@ -934,7 +934,7 @@ The quotations are unchanged.
 - **Rubric:** T2's, unchanged, so the vendors compare. The two reading-sensitive elements are read
   as T2 recorded them — P2-4 E3 by the element's intent (a live probe of behaviour rather than a
   config comparison), P2-5 E4 by its own example — and the literal readings are reported beside
-  them, as in the [audit synthesis](../reviews/t2-audit-synthesis-20260923.md).
+  them, as in the [audit synthesis](../reviews/t2-audit-synthesis.md).
 - **Scoring:** blind, as in T2, by the primary scorer; a second, independent scorer scores **every**
   run of `B_full`, `C`, `E` and `C_E`, not a sample. Each element keeps the primary verdict; every
   disagreement is listed; the second scorer's verdicts are one more reading below.
@@ -992,7 +992,7 @@ one unscored run per arm size, and read back from the rollout rather than the mo
 Each finding becomes a MEASUREMENTS row at the installed codex-cli version. If any of 1–3 cannot
 be met, T3 is not a replication of T2 and returns to the owner before any scored run.
 
-**Gate result (2026-09-24, codex-cli 0.156.1, arms `A` and `C`): item 2 is not met, so T3 is
+**Gate result (M90–M92, codex-cli 0.156.1, arms `A` and `C`): item 2 is not met, so T3 is
 back with the owner.**
 - Items 1, 4 and 5 are met (M90). The arm replaces the preamble byte-equal, apart from one trailing
   newline that Codex trims and the builder can drop. The model and effort hold, and no stdin
@@ -1007,7 +1007,7 @@ back with the owner.**
   - Two tool features stay on despite `--disable`.
   - The tool list sent to the model is not recorded locally.
 
-**Owner decision (2026-09-24): T3 proceeds on that floor.** Codex's added context is the same in
+**Owner decision: T3 proceeds on that floor.** Codex's added context is the same in
 every arm and every comparison is within Codex, so the gaps between arms stay fair. T3 is not a
 byte replication of T2, and the review states that as a limit on what it shows. Two rules hold
 before and during the run:
@@ -1023,7 +1023,7 @@ per model beside M83–M85; the A22 Next line updated.
 
 ### Result of T3
 
-[The T3 review](../reviews/t3-codex-p2-20260924.md) covers seven qualified pairs × three repeats
+[The T3 review](../reviews/t3-codex-p2.md) covers seven qualified pairs × three repeats
 on `gpt-6-astra` and `gpt-5.6-luna`. The table gives failed runs out of 21 under the recorded
 scoring.
 
@@ -1047,7 +1047,7 @@ The outcome row that applies is *nothing counts*. With T2, no benefit was detect
 vendor, so no new rule becomes the candidate and the positive controls are not run. **T3 is
 complete** and is recorded per model as [M96–M97](../MEASUREMENTS.md). Its limits are in the
 review: a Codex context floor shared by all arms, and 21 runs per arm, which detects a large
-effect only. **Disposition:** the owner accepted *no new rule* on 2026-09-25 — [ADR 0019 D01](../decisions/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule).
+effect only. **Disposition:** the owner accepted *no new rule* — [ADR 0019 D01](../decisions/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule).
 
 ## Proposal A30 — cases about the consumer's own project
 
@@ -1318,11 +1318,11 @@ not itself make this clause operative.
 - C89 accepted outcome and measured withdrawn path:
   [ADR 0014](../decisions/0014-code-rules-catalog-and-language-profiles.md),
   [design](code-rules-and-profiles.md), and
-  [baseline](../reviews/c89-python-rule-baseline-20260913.md).
+  [baseline](../reviews/c89-python-rule-baseline.md).
 - D2-41/C79 accepted outcome and evidence:
   [ADR 0017](../decisions/0017-skill-discovery-and-delivery.md) and
-  [review](../reviews/c79-skill-guidance-20260913.md).
+  [review](../reviews/c79-skill-guidance.md).
 - C80 accepted outcome and evidence:
   [ADR 0006](../decisions/0006-orchestrator-detection-corridor-context-pressure.md),
   [routing design](model-routing.md), and
-  [review](../reviews/c80-context-fill-20260912.md).
+  [review](../reviews/c80-context-fill.md).

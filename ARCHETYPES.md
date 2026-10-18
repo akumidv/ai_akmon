@@ -32,7 +32,7 @@ IDs are immutable contract values (tooling/templates depend on them).
 ## Required per archetype (beyond the universal set)
 
 **Universal (every archetype):** the Layer/Role/Archetype declaration in `AGENTS.md`; the
-secrets policy; the `_aitna/` layout + `bin/sync.py`; archetype ID + owner; the common
+secrets policy; the `_aitna/` layout + `akmon sync`; archetype ID + owner; the common
 [guardrail](guardrails/_common.md) + the language profile and any environment profile
 ([profiles/](profiles/)); any opted-in domain profiles.
 
@@ -99,7 +99,7 @@ Three kinds of attachment:
 | Language | Imported (automatic) |
 |---|---|
 | Python | [`_common`](guardrails/_common.md) guardrail + [`python`](profiles/python.md) profile |
-| JavaScript/TS | `_common` + a `js` profile *(when added)* |
+| JavaScript/TS | [`_common`](guardrails/_common.md) guardrail + [`js`](profiles/js.md) profile |
 | Mixed | `_common` + each present language's profile |
 | Other | `_common` + document the language's rules locally |
 

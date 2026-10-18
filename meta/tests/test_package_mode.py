@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 import sync
 
-from common import materialization
+from common import jsondata, materialization
 
 
 def test_python_floor_declarations_stay_joined():
@@ -31,12 +31,12 @@ def test_python_floor_declarations_stay_joined():
     with (root / "pyproject.toml").open("rb") as handle:
         manifest = tomllib.load(handle)
 
-    assert manifest["project"]["requires-python"] == ">=3.11"
-    assert manifest["tool"]["ruff"]["target-version"] == "py311"
+    assert manifest["project"]["requires-python"] == ">=3.12"
+    assert manifest["tool"]["ruff"]["target-version"] == "py312"
     workflow = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert 'python-version: ["3.11", "3.13"]' in workflow
+    assert 'python-version: ["3.12", "3.13"]' in workflow
     lock = (root / "uv.lock").read_text(encoding="utf-8")
-    assert lock.startswith('version = 1\nrevision = 3\nrequires-python = ">=3.11"\n')
+    assert lock.startswith('version = 1\nrevision = 3\nrequires-python = ">=3.12"\n')
 
 
 # --------------------------------------------------------------------------------------
@@ -558,16 +558,41 @@ def test_is_akmon_entry_recognises_every_spelling_the_generator_ever_emitted(mon
     assert sync._is_akmon_entry(_launcher_entry())
 
 
+def _node_wiring_commands() -> list[str]:
+    """Every hook command the JS ``sync`` writes, built from the ``sync.json`` templates it fills.
+
+    Mirrors ``js/bin/sync.mjs::claudeHooks``/``codexHooks``: the Claude command is
+    ``node_hook_command`` with no argument, the Codex one ``node_codex_hook_command`` plus the
+    script — the spelling a Node project really carries, not a hand-written lookalike (C16).
+    """
+    data = sync.read_sync_data()
+    claude = [
+        jsondata.fill(data["node_hook_command"], {"anchor": "$CLAUDE_PROJECT_DIR", "script": script})
+        for entries in data["claude_hooks"].values()
+        for entry in entries
+        for script in entry["commands"]
+    ]
+    codex_base = jsondata.fill(data["node_codex_hook_command"], {"anchor": "$(git rev-parse --show-toplevel)"})
+    codex = [
+        f"{codex_base} {script}"
+        for entries in data["codex_hooks"].values()
+        for entry in entries
+        for script, _status in entry["commands"]
+    ]
+    assert claude and codex
+    return [*claude, *codex]
+
+
 def test_is_akmon_entry_recognises_the_node_package_spelling(monkeypatch):
     """ADR 0020 D05: ``node "<anchor>/node_modules/akmon/js/hooks/<script>.mjs"``. The JS ``sync`` (C105)
     writes it; this implementation never does, but a project that moves from a Node package
     to another mode must have the entries replaced, not left running beside the new ones."""
     monkeypatch.delenv("AITNA_ROOT", raising=False)
-    claude = '"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs"'
-    codex = '"$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs"'
-    for anchored in (claude, codex):
-        entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": f"node {anchored} analysis-guard"}]}
-        assert sync._is_akmon_entry(entry)
+    commands = _node_wiring_commands()
+    assert '"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs"' in " ".join(commands)
+    for command in commands:
+        entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": command}]}
+        assert sync._is_akmon_entry(entry), command
     own = {"matcher": "Bash", "hooks": [{"type": "command", "command": "node tools/node_modules/other/hooks/x.mjs"}]}
     assert not sync._is_akmon_entry(own)
 

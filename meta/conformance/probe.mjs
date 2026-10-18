@@ -26,7 +26,9 @@ const REPO_ROOT = path.resolve(CORPUS_ROOT, "..", "..");
 
 // The mouth's own TOML reader: the repository's vendored smol-toml, the way probe.py reads
 // its tables with the host's tomllib.
-const smol = await import(pathToFileURL(path.join(CORPUS_ROOT, "..", "..", "js", "vendor", "smol-toml", "dist", "index.js")).href);
+const smol = await import(
+  pathToFileURL(path.join(CORPUS_ROOT, "..", "..", "js", "vendor", "smol-toml", "dist", "index.js")).href
+);
 
 /**
  * Load one module of the tree under test. Its shape is that module's own contract, checked
@@ -60,7 +62,9 @@ function _realpath(/** @type {string} */ path_) {
 // --------------------------------------------------------------------------------------
 
 function _skipWs(/** @type {string} */ text, /** @type {number} */ i) {
-  while (i < text.length && " \t".includes(text[i])) i++;
+  while (i < text.length && " \t".includes(text[i])) {
+    i++;
+  }
   return i;
 }
 
@@ -169,17 +173,17 @@ function isTomlFloat(written) {
 /**
  * Walk one TOML value expression (from `text` at `i`) in document order, taking every
  * scalar's value from the parallel `smolValue`. Returns [orderedValue, nextIndex]; objects
- * come back as Maps so integer-like keys keep their written order. A `floatMark` class, when
+ * come back as Maps so integer-like keys keep their written order. A `FloatMark` class, when
  * given, wraps the scalars that are floats — JS numbers lose that distinction (`1.0 === 1`),
  * and the writer spells the two differently.
  *
  * @param {string} text
  * @param {any} smolValue
  * @param {number} i
- * @param {{new (n: number): any} | null} [floatMark]
+ * @param {{new (n: number): any} | null} [FloatMark]
  * @returns {[any, number]}
  */
-function toOrderedValue(text, smolValue, i, floatMark = null) {
+function toOrderedValue(text, smolValue, i, FloatMark = null) {
   i = _skipWs(text, i);
   const c = text[i];
   if (c === "{") {
@@ -192,12 +196,12 @@ function toOrderedValue(text, smolValue, i, floatMark = null) {
         return [map, i + 1];
       }
       const [key, afterKey] = _readKey(text, i);
-      let j = _skipWs(text, afterKey);
+      const j = _skipWs(text, afterKey);
       if (text[j] !== "=") {
         throw new Error(`probe: expected = after key ${key} in the units table`);
       }
       const child = smolValue[key];
-      const [value, next] = toOrderedValue(text, child, j + 1, floatMark);
+      const [value, next] = toOrderedValue(text, child, j + 1, FloatMark);
       map.set(key, value);
       i = _skipWs(text, next);
       if (text[i] === ",") {
@@ -216,7 +220,7 @@ function toOrderedValue(text, smolValue, i, floatMark = null) {
       if (text[i] === "]") {
         return [array, i + 1];
       }
-      const [value, next] = toOrderedValue(text, smolValue[array.length], i, floatMark);
+      const [value, next] = toOrderedValue(text, smolValue[array.length], i, FloatMark);
       array.push(value);
       i = _skipWs(text, next);
       if (text[i] === ",") {
@@ -230,8 +234,8 @@ function toOrderedValue(text, smolValue, i, floatMark = null) {
   const end = _skipScalar(text, i);
   const written = text.slice(i, end).trim();
   if (typeof smolValue === "number") {
-    if (floatMark !== null && isTomlFloat(written)) {
-      return [new floatMark(smolValue), end];
+    if (FloatMark !== null && isTomlFloat(written)) {
+      return [new FloatMark(smolValue), end];
     }
     return [smolValue, end];
   }
@@ -245,7 +249,7 @@ function toOrderedValue(text, smolValue, i, floatMark = null) {
 function orderedValue(
   /** @type {string} */ block,
   /** @type {any} */ smolCase,
-  /** @type {{new (n: number): any} | null} */ floatMark,
+  /** @type {{new (n: number): any} | null} */ FloatMark,
 ) {
   const lines = block.split("\n");
   const line = lines.find((/** @type {string} */ l) => /^value\s*=/.test(l.trimStart()));
@@ -256,7 +260,7 @@ function orderedValue(
   if (start === -1) {
     throw new Error("probe: a json case whose value is not an inline table");
   }
-  const [value] = toOrderedValue(line, smolCase.value, start, floatMark);
+  const [value] = toOrderedValue(line, smolCase.value, start, FloatMark);
   return value;
 }
 
@@ -468,7 +472,7 @@ async function probeJson(tree, table, tableText) {
   for (const [index, case_] of (table.case ?? []).entries()) {
     const from = markers[index];
     const block = from === undefined ? "" : tableText.slice(from, markers[index + 1] ?? tableText.length);
-    let value = orderedValue(block, case_, writer.FloatValue);
+    const value = orderedValue(block, case_, writer.FloatValue);
     const nullKeys = case_.null_keys;
     if (nullKeys) {
       for (const key of nullKeys) {
@@ -867,11 +871,7 @@ function markerDigest(/** @type {any} */ data, /** @type {string} */ identity) {
 }
 
 /** Marker file names with each hash replaced by the identity that made it: `kind@identity`. */
-function markerLabelled(
-  /** @type {any} */ data,
-  /** @type {string[]} */ names,
-  /** @type {string[]} */ identities,
-) {
+function markerLabelled(/** @type {any} */ data, /** @type {string[]} */ names, /** @type {string[]} */ identities) {
   /** @type {Map<string, string>} */
   const labels = new Map(identities.map((identity) => [markerDigest(data, identity), identity]));
   const prefix = data.name_prefix;
@@ -1065,7 +1065,11 @@ async function probeMarkers(tree, table) {
   const data = readData(tree, "common/markers.json");
   const results = [];
   for (const [index, case_] of (table.kind ?? []).entries()) {
-    results.push({ index, expected: case_.expected ?? null, actual: answered(() => module.markerKind(data, case_.stem)) });
+    results.push({
+      index,
+      expected: case_.expected ?? null,
+      actual: answered(() => module.markerKind(data, case_.stem)),
+    });
   }
   for (const [index, case_] of (table.unidentified ?? []).entries()) {
     results.push({ index: 1000 + index, expected: case_.expected ?? null, actual: module.unidentifiedIdentity(data) });
@@ -1094,11 +1098,18 @@ function materializationWorld(case_) {
   const copies = path.join(project, case_.aitna_dir ?? "_aitna", ".akmon");
   fs.mkdirSync(project);
   fs.mkdirSync(tree);
-  for (const [base, prefix] of /** @type {Array<[string, string]>} */ ([[copies, "project"], [tree, "tree"]])) {
+  for (const [base, prefix] of /** @type {Array<[string, string]>} */ ([
+    [copies, "project"],
+    [tree, "tree"],
+  ])) {
     /** @type {Array<[string, Buffer]>} */
     const files = [
-      ...Object.entries(case_[prefix] ?? {}).map(([relative, text]) => /** @type {[string, Buffer]} */ ([relative, Buffer.from(String(text), "utf-8")])),
-      ...Object.entries(case_[`${prefix}_hex`] ?? {}).map(([relative, hexed]) => /** @type {[string, Buffer]} */ ([relative, Buffer.from(String(hexed), "hex")])),
+      ...Object.entries(case_[prefix] ?? {}).map(
+        ([relative, text]) => /** @type {[string, Buffer]} */ ([relative, Buffer.from(String(text), "utf-8")]),
+      ),
+      ...Object.entries(case_[`${prefix}_hex`] ?? {}).map(
+        ([relative, hexed]) => /** @type {[string, Buffer]} */ ([relative, Buffer.from(String(hexed), "hex")]),
+      ),
     ];
     for (const [relative, content] of files) {
       fs.mkdirSync(path.dirname(path.join(base, relative)), { recursive: true });
@@ -1134,7 +1145,10 @@ function materializationStale(module, data, table) {
         answered(() => module.staleMaterialized(data, project, tree)),
       );
     } finally {
-      for (const [prefix, base] of /** @type {Array<[string, string]>} */ ([["project", copies], ["tree", tree]])) {
+      for (const [prefix, base] of /** @type {Array<[string, string]>} */ ([
+        ["project", copies],
+        ["tree", tree],
+      ])) {
         for (const relative of Object.keys(case_[`${prefix}_chmod`] ?? {})) {
           fs.chmodSync(path.join(base, relative), 0o700);
         }
@@ -1221,20 +1235,64 @@ const ROUTING_DATA_PARAMS = {
   gateAuditOnce: ["gate", "markers"],
   ...Object.fromEntries(
     [
-      "overlayName", "localConfigRel", "delegationLogRel", "agentsDirRel", "generatedBanner", "settingsProbeNames",
-      "overlayPath", "loadRegistry", "computeBinding", "oppositeVendor", "retiredSecondOpinionKeys",
-      "secondOpinionSpec", "secondOpinionUnavailability", "resolveSecondOpinion", "agentSpecs", "agentFileContent",
-      "resolveBriefs", "briefWarning", "generatedAgentFiles", "subagentKinds", "boundModelFor", "roleMatrixWarning",
-      "contextPressureNotice", "bindingArtifacts", "obsoleteAgentFiles", "removeObsoleteAgents", "rebindTo",
-      "localConfig", "staleness", "floorGaps", "floorGapLines", "delegationFloorWarning", "statusLines",
-      "rebindNotice", "initInstruction", "zoneConvention", "unlabelledFanoutWarning", "readLocalConfig",
+      "overlayName",
+      "localConfigRel",
+      "delegationLogRel",
+      "agentsDirRel",
+      "generatedBanner",
+      "generatedBanners",
+      "toolCommand",
+      "settingsProbeNames",
+      "overlayPath",
+      "loadRegistry",
+      "computeBinding",
+      "oppositeVendor",
+      "retiredSecondOpinionKeys",
+      "secondOpinionSpec",
+      "secondOpinionUnavailability",
+      "resolveSecondOpinion",
+      "agentSpecs",
+      "agentFileContent",
+      "resolveBriefs",
+      "briefWarning",
+      "generatedAgentFiles",
+      "subagentKinds",
+      "boundModelFor",
+      "roleMatrixWarning",
+      "contextPressureNotice",
+      "bindingArtifacts",
+      "obsoleteAgentFiles",
+      "removeObsoleteAgents",
+      "rebindTo",
+      "localConfig",
+      "staleness",
+      "floorGaps",
+      "floorGapLines",
+      "delegationFloorWarning",
+      "statusLines",
+      "rebindNotice",
+      "initInstruction",
+      "zoneConvention",
+      "unlabelledFanoutWarning",
+      "readLocalConfig",
     ].map((name) => [name, /** @type {Array<keyof typeof ROUTING_DATA_FILES>} */ (["agents"])]),
   ),
 };
 
 /** The dataclasses' fields in declaration order (snake_case), for `$new` and class rows. */
 const ROUTING_CLASS_FIELDS = /** @type {Record<string, string[]>} */ ({
-  Binding: ["vendor", "orchestrator", "reasoner", "worker", "mid", "auditor", "escalation", "semantic_fallback", "warning", "second_opinion_cli"],
+  Binding: [
+    "vendor",
+    "orchestrator",
+    "reasoner",
+    "worker",
+    "mid",
+    "auditor",
+    "escalation",
+    "semantic_fallback",
+    "warning",
+    "second_opinion_cli",
+  ],
   SecondOpinionTarget: ["provider", "model"],
   AgentSpec: ["name", "tier", "description", "tools", "body", "kinds"],
   FloorGap: ["kind", "agent", "floor", "bound"],
@@ -1264,7 +1322,11 @@ function routingFill(/** @type {any} */ ctx, /** @type {string} */ text) {
 
 /** What `$float` stands for: Python's `float(text)` of the spellings a table uses. */
 function routingFloat(/** @type {string} */ text) {
-  const named = /** @type {Record<string, number>} */ ({ nan: Number.NaN, inf: Number.POSITIVE_INFINITY, "-inf": Number.NEGATIVE_INFINITY });
+  const named = /** @type {Record<string, number>} */ ({
+    nan: Number.NaN,
+    inf: Number.POSITIVE_INFINITY,
+    "-inf": Number.NEGATIVE_INFINITY,
+  });
   return Object.hasOwn(named, text) ? named[text] : Number(text);
 }
 
@@ -1304,17 +1366,17 @@ function routingSnake(/** @type {string} */ name) {
 
 /**
  * JSON with the float spelling kept: a whole value spelled `1.0` / `1e3` is a `FloatValue`.
- * @param {any} floatValue the json_writer `FloatValue` class of the tree under test
+ * @param {any} FloatValue the json_writer `FloatValue` class of the tree under test
  * @param {string} text
  * @returns {any}
  */
-function routingParse(floatValue, text) {
+function routingParse(FloatValue, text) {
   // The reviver's third argument (the source text, Node >= 21) is not in the lib typing yet.
   /** @type {(text: string, reviver: (key: string, value: any, context: any) => any) => any} */
   const parse = /** @type {any} */ (JSON.parse);
   return parse(text, (_key, value, context) => {
     if (typeof value === "number" && Number.isInteger(value) && /[.eE]/.test(context?.source ?? "")) {
-      return new floatValue(value);
+      return new FloatValue(value);
     }
     return value;
   });
@@ -1389,12 +1451,12 @@ function routingConstructed(ctx, value) {
 
 /** A dataclass from its snake_case fields, in the declaration order of `ROUTING_CLASS_FIELDS`. */
 function routingNew(/** @type {any} */ ctx, /** @type {string} */ name, /** @type {Record<string, any>} */ fields) {
-  const cls = ctx.module[name] ?? ctx.classes[name];
+  const Cls = ctx.module[name] ?? ctx.classes[name];
   if (ROUTING_OPTIONS_CLASSES.has(name)) {
-    return new cls(Object.fromEntries(Object.entries(fields).map(([key, value]) => [routingCamel(key), value])));
+    return new Cls(Object.fromEntries(Object.entries(fields).map(([key, value]) => [routingCamel(key), value])));
   }
   const order = ROUTING_CLASS_FIELDS[name] ?? [];
-  return new cls(...order.map((field) => fields[field]));
+  return new Cls(...order.map((field) => fields[field]));
 }
 
 /**
@@ -1416,7 +1478,12 @@ function routingCall(ctx, call) {
     return routingNew(ctx, name, kwargs);
   }
   if (name in ROUTING_CLASS_FIELDS) {
-    return routingNew(ctx, name, { ...Object.fromEntries(args.map((/** @type {any} */ a, /** @type {number} */ i) => [ROUTING_CLASS_FIELDS[name][i], a])), ...kwargs });
+    return routingNew(ctx, name, {
+      ...Object.fromEntries(
+        args.map((/** @type {any} */ a, /** @type {number} */ i) => [ROUTING_CLASS_FIELDS[name][i], a]),
+      ),
+      ...kwargs,
+    });
   }
   if (typeof target !== "function") {
     return target;
@@ -1446,7 +1513,10 @@ function routingJson(ctx, value) {
     return [...value].map((item) => routingJson(ctx, item)).sort(); // a frozenset answers as a sorted list
   }
   const entries = value instanceof Map ? [...value.entries()] : Object.entries(value);
-  const isClass = !(value instanceof Map) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null;
+  const isClass =
+    !(value instanceof Map) &&
+    Object.getPrototypeOf(value) !== Object.prototype &&
+    Object.getPrototypeOf(value) !== null;
   return Object.fromEntries(entries.map(([key, item]) => [isClass ? routingSnake(key) : key, routingJson(ctx, item)]));
 }
 
@@ -1480,7 +1550,9 @@ function routingText(ctx, value) {
     return value.map((item) => routingText(ctx, item));
   }
   if (value !== null && typeof value === "object" && !(value instanceof ctx.FloatValue)) {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [routingText(ctx, key), routingText(ctx, item)]));
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [routingText(ctx, key), routingText(ctx, item)]),
+    );
   }
   return value;
 }
@@ -1527,7 +1599,10 @@ function routingWorld(/** @type {any} */ ctx, /** @type {string} */ scratch, /**
     fs.mkdirSync(path.join(scratch, relative), { recursive: true });
   }
   /** @type {Array<[string, Buffer]>} */
-  const contents = Object.entries(case_.files ?? {}).map(([relative, text]) => [relative, Buffer.from(String(text), "utf-8")]);
+  const contents = Object.entries(case_.files ?? {}).map(([relative, text]) => [
+    relative,
+    Buffer.from(String(text), "utf-8"),
+  ]);
   for (const [relative, parts] of Object.entries(case_.files_parts ?? {})) {
     const chunks = /** @type {any[]} */ (parts).map((part) => {
       if (typeof part === "string") {
@@ -1573,7 +1648,10 @@ function routingOutcome(ctx, case_, call) {
     const caught = /** @type {Error} */ (error);
     // The class is what the module's crash handler would print: a Node system error under its Python name.
     const name = ctx.exceptionClassName(caught);
-    return [true, case_.class_only === true ? { error: name } : { error: name, message: routingText(ctx, caught.message) }];
+    return [
+      true,
+      case_.class_only === true ? { error: name } : { error: name, message: routingText(ctx, caught.message) },
+    ];
   }
   const isObject = raw !== null && typeof raw === "object" && !Array.isArray(raw) && !(raw instanceof ctx.FloatValue);
   return [false, routingText(ctx, case_.ordered === true && isObject ? routingPairs(ctx, raw) : routingJson(ctx, raw))];
@@ -1672,17 +1750,42 @@ function routingPrintable(ctx, value) {
  */
 const HOOK_DATA_EXPORTS = {
   hook_core: new Set([
-    "neutralKind", "editTool", "shellTool", "readTool", "subagentTool", "unclassifiedShellRouteNotice",
-    "reportUnclassifiedShellRoute", "privilegeEscalationGuardResult", "gitCommitGuardResult",
-    "staleGuardrailNotice", "sessionStartResult", "isCodePath", "isPlanningDoc", "roleOnCodeMessage",
-    "roleOnCodeResult", "analysisBeforeMutationMessage", "analysisWriteResult", "delegationGrace",
-    "delegationNudgeThreshold", "delegationAskThreshold", "delegationNudgeMessage", "delegationAskMessage",
+    "neutralKind",
+    "editTool",
+    "shellTool",
+    "readTool",
+    "subagentTool",
+    "unclassifiedShellRouteNotice",
+    "reportUnclassifiedShellRoute",
+    "privilegeEscalationGuardResult",
+    "gitCommitGuardResult",
+    "staleGuardrailNotice",
+    "sessionStartResult",
+    "isCodePath",
+    "isPlanningDoc",
+    "roleOnCodeMessage",
+    "roleOnCodeResult",
+    "analysisBeforeMutationMessage",
+    "analysisWriteResult",
+    "delegationGrace",
+    "delegationNudgeThreshold",
+    "delegationAskThreshold",
+    "delegationNudgeMessage",
+    "delegationAskMessage",
     "delegationNudgeResult",
   ]),
   claude_adapter: new Set(["normalizeTool", "renderResult"]),
   codex_adapter: new Set([
-    "normalizeTool", "toolKind", "toolName", "sessionId", "toolUseId", "command", "unmeasuredPathSource",
-    "filePaths", "payloadShape", "cwd",
+    "normalizeTool",
+    "toolKind",
+    "toolName",
+    "sessionId",
+    "toolUseId",
+    "command",
+    "unmeasuredPathSource",
+    "filePaths",
+    "payloadShape",
+    "cwd",
   ]),
 };
 
@@ -1729,7 +1832,9 @@ async function probeRows(tree, table, spec) {
   const classes = spec.classes === undefined ? {} : await loadModule(tree, spec.classes);
   const writer = await loadModule(tree, "js/common/json_writer.mjs");
   const values = await loadModule(tree, "js/common/pyvalue.mjs");
-  const data = Object.fromEntries(Object.entries(ROUTING_DATA_FILES).map(([key, relative]) => [key, readData(tree, relative)]));
+  const data = Object.fromEntries(
+    Object.entries(ROUTING_DATA_FILES).map(([key, relative]) => [key, readData(tree, relative)]),
+  );
   const base = {
     module,
     classes,
@@ -1758,7 +1863,12 @@ async function probeRows(tree, table, spec) {
     } else if (deepEqual(routingPrintable(base, expected), routingPrintable(base, actual))) {
       actual = { strictly: writer.canonicalForm(actual) }; // `1.0` against `1`: the print would hide it
     }
-    results.push({ index, id: case_.id, expected: routingPrintable(base, expected), actual: actual === expected ? routingPrintable(base, expected) : routingPrintable(base, actual) });
+    results.push({
+      index,
+      id: case_.id,
+      expected: routingPrintable(base, expected),
+      actual: actual === expected ? routingPrintable(base, expected) : routingPrintable(base, actual),
+    });
   }
   return results;
 }
@@ -1825,7 +1935,13 @@ async function probeFindings(tree, table) {
  * argument: the ones whose Python twin reads `sync.json` (or `materialization.json`) itself, directly
  * or through a callee. A name absent here takes none.
  */
-const SYNC_DATA_EXPORTS = new Set(["importedStandardFiles", "ruffExtends", "movedImports", "isAkmonEntry", "mergeHookEntries"]);
+const SYNC_DATA_EXPORTS = new Set([
+  "importedStandardFiles",
+  "ruffExtends",
+  "movedImports",
+  "isAkmonEntry",
+  "mergeHookEntries",
+]);
 
 /**
  * The pure helpers of `sync` (C105), one public call per row, against the tree's `js/bin/sync.mjs`.
@@ -1842,7 +1958,15 @@ async function probeSync(tree, table) {
 }
 
 /** The exports of `always_loaded.mjs` that take its data bundle first: the Python twins read `always_loaded.json` themselves. */
-const ALWAYS_LOADED_DATA_EXPORTS = new Set(["blockHeading", "shipped", "consumer", "caps", "severity", "markedBlock", "populations"]);
+const ALWAYS_LOADED_DATA_EXPORTS = new Set([
+  "blockHeading",
+  "shipped",
+  "consumer",
+  "caps",
+  "severity",
+  "markedBlock",
+  "populations",
+]);
 
 /**
  * The always-loaded counter (C105), one public call per row, against the tree's `js/common/always_loaded.mjs`.
@@ -1916,14 +2040,17 @@ async function main(argv) {
   }
   const [probeName, tablePath] = positionals;
   if (!(probeName in PROBES)) {
-    process.stderr.write(`probe.mjs: unknown probe ${JSON.stringify(probeName)}; known: ${[...Object.keys(PROBES)].sort().join(", ")}\n`);
+    process.stderr.write(
+      `probe.mjs: unknown probe ${JSON.stringify(probeName)}; known: ${[...Object.keys(PROBES)].sort().join(", ")}\n`,
+    );
     return 2;
   }
   const text = fs.readFileSync(tablePath, "utf-8");
   const table = smol.parse(text);
   const results = await PROBES[probeName](tree, table, text);
   const failed = results.filter((/** @type {any} */ r) => !deepEqual(r.expected, r.actual));
-  process.stdout.write(JSON.stringify({ ok: failed.length === 0, failed }, null, 2) + "\n");
+  // `answered` is held by the runner to the table's row count (probe.py's `main`).
+  process.stdout.write(JSON.stringify({ ok: failed.length === 0, answered: results.length, failed }, null, 2) + "\n");
   return failed.length === 0 ? 0 : 1;
 }
 
@@ -1932,7 +2059,10 @@ async function main(argv) {
 // (a `/tmp` that is a link) leaves this file loaded and silent — measured as exit 0 with an
 // empty stdout, which the runner reports as a units scenario whose document does not match the
 // pinned one: red, but naming nothing about the cause.
-if (process.argv[1] !== undefined && _realpath(path.resolve(process.argv[1])) === _realpath(fileURLToPath(import.meta.url))) {
+if (
+  process.argv[1] !== undefined &&
+  _realpath(path.resolve(process.argv[1])) === _realpath(fileURLToPath(import.meta.url))
+) {
   // `process.exitCode`, not `process.exit()`: a pipe is written asynchronously, and the document of a
   // failing hook table is larger than the 64 KiB a pipe takes at once (measured: a cut-off document).
   process.exitCode = await main();

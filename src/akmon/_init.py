@@ -35,7 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -70,13 +70,14 @@ def akmon_repo() -> str:
 _LS_REMOTE_FIELD_COUNT = 2
 
 # The top-level members that *are* the standard tree (``init.json``, ``tree_members``)
-# mirror ``[tool.hatch.build.targets.wheel.force-include]`` in ``pyproject.toml``: mode
-# ``vendored`` copies exactly what mode ``package`` would ship, so a vendored mount is not a
-# poorer flavor of the standard (ADR 0009 §1, "yes for parity"). The embedded tree resolves
-# to the akmon repo root in a source checkout, which carries development-only members
-# (``src/``, ``.git/``, ``tests/``, ``AGENTS.md``, …) that the wheel does not ship — an
-# allowlist keeps both carriers producing the same mount. ``meta/tests/test_init.py``
-# asserts the data file and the pyproject force-include list stay equal.
+# mirror the wheel's members in ``pyproject.toml`` (the ``force-include`` table plus the
+# ``only-include`` members mapped under ``akmon/_tree/``): mode ``vendored`` copies exactly what
+# mode ``package`` would ship, so a vendored mount is not a poorer flavor of the standard. None
+# of them is ``meta/`` — akmon's development record ships in no build (ADR 0009, C118 amendment).
+# The embedded tree resolves to the akmon repo root in a source checkout, which carries
+# development-only members (``src/``, ``meta/``, ``.git/``, ``AGENTS.md``, …) that the wheel does
+# not ship — an allowlist keeps both carriers producing the same mount.
+# ``meta/tests/test_init.py`` asserts the data file and the pyproject member lists stay equal.
 
 
 def tree_members() -> list[str]:
@@ -736,6 +737,7 @@ def _agents_block(aitna: str, ref: str, archetype: str, language: str, *, packag
             "roles_hint": roles_hint,
             "guardrails_dir": guardrails_dir,
             "profiles_dir": profiles_dir,
+            "language_profile": "python.md",
             "pre_commit": link("pipelines/pre-commit.md"),
             "review_flow": link("pipelines/review-flow.md"),
             "design_flow": link("pipelines/design-flow.md"),
@@ -764,7 +766,11 @@ class _InitError(Exception):
 def _confirm(question: str) -> bool:
     if not sys.stdin.isatty():
         return True  # non-interactive by design: agents and CI are first-class callers
-    answer = input(f"{question} [Y/n] ").strip().lower()
+    try:
+        answer = input(f"{question} [Y/n] ").strip().lower()
+    except EOFError:
+        print()
+        return False  # end of input on a terminal is "not confirmed", as in the JS twin
     return answer in ("", "y", "yes")
 
 
@@ -922,8 +928,10 @@ def _setup_checks(attach: _Attach, record: Path, choice: str | None, *, ask: boo
 
     The project's own linters when it has any; ruff with akmon's Python rules when it has none;
     or nothing — the owner's answer at the prompt, ``--checks``, or those defaults when nobody
-    is asked. A record that already has a ``[check]`` table is left alone: a realign never
-    changes that choice.
+    is asked. Nothing — ``none``, or ``own`` when no tool is found — is recorded as an empty
+    ``[check]`` table, so it is a choice like the others. A record that already has a
+    ``[check]`` table is left alone: a realign never changes that choice. A record written
+    before an empty table meant nothing has no table and is decided again.
     """
     root, next_steps = attach.root, attach.next_steps
     sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
@@ -942,10 +950,12 @@ def _setup_checks(attach: _Attach, record: Path, choice: str | None, *, ask: boo
             choice = "none"
     prefix = _run_prefix(root)
     if choice == "none":
+        _record_checks({}, record)
         log("akmon check: no checks recorded")
         next_steps.append(f"name the project's checks under `[check]` in {record.name} when it has any")
         return
     if choice == "own" and not tools:
+        _record_checks({}, record)
         next_steps.append(
             f"no linter configuration was found: name the project's checks under `[check]` in {record.name}"
         )
@@ -956,6 +966,12 @@ def _setup_checks(attach: _Attach, record: Path, choice: str | None, *, ask: boo
         step = _extend_with_akmon_rules(root, attach.rules_path, sync_mod, log)
         commands = {"ruff": f"{prefix}ruff check {{files}}"}
         next_steps.extend(item for item in (step, _ruff_step(root)) if item)
+    _record_checks(commands, record)
+    log(f"akmon check will run: {', '.join(commands)} (recorded as [check])")
+
+
+def _record_checks(commands: Mapping[str, str], record: Path) -> None:
+    """Append the ``[check]`` table naming ``commands`` to the record — empty when there are none."""
     lines = [
         "",
         "[check]",
@@ -964,7 +980,6 @@ def _setup_checks(attach: _Attach, record: Path, choice: str | None, *, ask: boo
     ]
     text = record.read_text(encoding="utf-8")
     record.write_text(f"{text.rstrip()}\n" + "\n".join(lines) + "\n", encoding="utf-8")
-    log(f"akmon check will run: {', '.join(commands)} (recorded as [check])")
 
 
 def _mark_realign_complete(path: Path, version: str | None) -> None:
@@ -1081,7 +1096,8 @@ def _plan(args: argparse.Namespace, root: Path) -> tuple[_Attach, str]:
     os.environ["AITNA_ROOT"] = aitna
 
     # A record another implementation wrote (C105): the run would re-spell its wiring for the Python
-    # launcher through `sync`, which refuses it; `init` says so before touching anything.
+    # launcher through `sync`, which refuses it; `init` says so before touching anything. It goes
+    # before the unready-switch refusal: the re-run that one advises would land here anyway.
     ecosystem = _record_fields(root, aitna).get("ecosystem")
     if isinstance(ecosystem, str) and ecosystem and ecosystem != "python":
         raise _InitError(_jsondata().fill(_data()["python_refuses_ecosystem"], {"value": ecosystem, "aitna": aitna}))
@@ -1207,9 +1223,7 @@ def _write_ci(attach: _Attach, *, no_ci: bool) -> None:
     existing_workflows = sorted(workflows.glob("*.yml")) + sorted(workflows.glob("*.yaml"))
     data = _data()
     variant = "package" if attach.package_mode else "mounted"
-    check_cmds = tuple(
-        _jsondata().fill(command, {"aitna": aitna}) for command in data["write_ci_commands"][variant]
-    )
+    check_cmds = tuple(_jsondata().fill(command, {"aitna": aitna}) for command in data["write_ci_commands"][variant])
     if no_ci:
         attach.next_steps.append(f"add the contract checks to CI: `{check_cmds[0]}` and `{check_cmds[1]}`")
     elif existing_workflows:

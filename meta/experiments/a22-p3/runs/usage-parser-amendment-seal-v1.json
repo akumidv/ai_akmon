@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "record_type": "p3_v3_usage_parser_prospective_amendment_seal",
+  "status": "proposal_only_not_accepted",
+  "proposal_sha256": "db3dfd347053714e4e1c47351b54d52a7fbdaf988c53afd2d9abc111caade442",
+  "previous_chat_evidence_seal_sha256": "3d0f931f47a54f0d101e99e63e33182b1f447704ff340e9f9257c7ea15f89667",
+  "operative_v3_seal_sha256": "58eea0362178111b0497e6fcd248dffb25b07dda295fa91de2d03205819cedde",
+  "source_phase_seal_sha256": "c4977c962a4c216abdc57951c981a2691063657f8928f9201847045cd96e84a8",
+  "source_sha256": {
+    "v3_runner.py": "56e579fd9a7db8ba321e4a5ebe622cd87c8e6f39efda087d8460e24834e70ccb",
+    "test_a22_p3_v3_runner_impl.py": "fed76affe92c77ce913611e8f1126b928f67d8109115da3dae3dc79b9736800d"
+  },
+  "scope": "prospective_parser_evidence_only",
+  "retroactive_repair_authorized": false,
+  "provider_calls_authorized": false
+}

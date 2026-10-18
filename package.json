@@ -9,6 +9,16 @@
   "bin": {
     "akmon": "js/akmon/cli.mjs"
   },
+  "exports": {
+    "./package.json": "./package.json",
+    "./tools/model_routing/coverage_map": "./js/tools/model_routing/coverage_map.mjs",
+    "./tools/model_routing/gate_pack": "./js/tools/model_routing/gate_pack.mjs",
+    "./tools/model_routing/init": "./js/tools/model_routing/init.mjs",
+    "./tools/model_routing/second_opinion": "./js/tools/model_routing/second_opinion.mjs",
+    "./tools/model_routing/stats": "./js/tools/model_routing/stats.mjs",
+    "./tools/release/release_check": "./js/tools/release/release_check.mjs",
+    "./tools/tasks/archive": "./js/tools/tasks/archive.mjs"
+  },
   "files": [
     "ARCHETYPES.md",
     "BOOTSTRAP.md",
@@ -22,7 +32,6 @@
     "examples",
     "guardrails",
     "hooks",
-    "meta",
     "pipelines",
     "profiles",
     "roles",
@@ -33,12 +42,13 @@
     "!**/__pycache__/**",
     "!**/*.py[cod]",
     "!**/.pytest_cache/**",
-    "!**/.git/**"
+    "!**/.git/**",
+    "!**/*.test.mjs"
   ],
   "devDependencies": {
-    "@eslint/js": "10.0.1",
     "@types/node": "22.20.4",
-    "eslint": "10.11.0",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0",
     "typescript": "7.0.2"
   }
 }

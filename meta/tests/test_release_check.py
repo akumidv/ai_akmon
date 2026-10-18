@@ -59,7 +59,7 @@ def test_akmon_check_runs_only_upstream_gates(monkeypatch, tmp_path):
     assert captured == {
         "root": release_check.AKMON_ROOT,
         "commands": [
-            [sys.executable, str(release_check.META / "self_ci.py")],
+            [sys.executable, str(release_check.META / "self_ci.py"), "--fuzz-depth", "release"],
             pytest_command,
         ],
     }
@@ -780,3 +780,52 @@ def test_semver_spelling_carries_a_final_version_and_its_development_spelling():
     assert semver_spelling("1.2.3") == "1.2.3"
     assert semver_spelling("v1.2.3") == "1.2.3"
     assert semver_spelling("1.2.3.dev0") == "1.2.3-dev.0"
+
+
+def test_state_refuses_the_akmon_subject_without_its_meta(tmp_path, capsys):
+    """No ``<AITNA_ROOT>/akmon/meta/`` at all (package mode, a carrier): one refusal line, exit 2."""
+    (tmp_path / "_aitna" / "akmon").mkdir(parents=True)
+    assert release_check.run_state(tmp_path, "akmon") == 2
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err == release_check._release_data()["run_state"]["akmon_meta_absent"] + "\n"
+    assert "run it from the akmon git tree" in err
+
+
+def test_state_reads_the_running_tree_when_no_akmon_is_mounted(tmp_path, monkeypatch, capsys):
+    """Inside an akmon clone there is no ``<AITNA_ROOT>/akmon``: the running tree's meta/ is the record."""
+    clone = tmp_path / "clone"
+    (clone / "meta").mkdir(parents=True)
+    (clone / "meta" / "TASKS.md").write_text("- C1 · a · active · e\n", encoding="utf-8")
+    (clone / "meta" / "TASKS_ARCHIVE.md").write_text("- C0 · z · done · e\n", encoding="utf-8")
+    (clone / "CHANGELOG.md").write_text("## Unreleased\n## v1.0.0\n", encoding="utf-8")
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setattr(release_check, "AKMON_ROOT", clone)
+    assert release_check.run_state(project, "akmon") == 0
+    out, err = capsys.readouterr()
+    assert "TASKS.md: 1 entry(ies)\n" in out
+    assert "TASKS_ARCHIVE.md: 1 entry(ies)\n" in out
+    assert "CHANGELOG.md sections:\n  - Unreleased\n  - v1.0.0\n" in out
+    assert err == ""
+
+
+def test_state_keeps_the_missing_line_for_a_single_file_absent_from_meta(tmp_path, capsys):
+    meta = tmp_path / "_aitna" / "akmon" / "meta"
+    meta.mkdir(parents=True)
+    (meta / "TASKS.md").write_text("- C1 · a · active · e\n", encoding="utf-8")
+    assert release_check.run_state(tmp_path, "akmon") == 0
+    out, err = capsys.readouterr()
+    assert "TASKS.md: 1 entry(ies)\n" in out
+    assert "TASKS_ARCHIVE.md: (missing)\n" in out
+    assert "akmon git tree" not in err
+
+
+def test_a_task_line_behind_a_bom_is_no_entry(tmp_path):
+    """``str.lstrip()`` keeps a U+FEFF: the line it leads is not a ``- `` entry (the C115 reference)."""
+    (tmp_path / "TASKS.md").write_text("﻿- C1 · a · done · e\n- C2 · b · active · e\n", encoding="utf-8")
+    summary = release_check._tasks_summary(tmp_path)
+    assert summary[0] == jsondata.fill(
+        release_check._release_data()["run_state"]["file_entry_count"], {"name": "TASKS.md", "count": 1}
+    )
+    assert not any("'done'" in line for line in summary)

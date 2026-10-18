@@ -166,6 +166,31 @@
   "python_refuses_ecosystem": "akmon verify: this project's integration record names ecosystem = \"{{value}}\" (<AITNA_ROOT>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon verify",
   "changelog_package_mode": "package mode: changelog discipline is owned by the akmon repository",
   "changelog_package_mode_fix": "Track the standard's changelog discipline in the akmon repository itself.",
+  "vendored_tree_members": [
+    "ARCHETYPES.md",
+    "BOOTSTRAP.md",
+    "CAPABILITIES.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "MODEL.md",
+    "README.md",
+    "common",
+    "bin",
+    "examples",
+    "guardrails",
+    "hooks",
+    "pipelines",
+    "profiles",
+    "roles",
+    "skills",
+    "tools",
+    "js"
+  ],
+  "vendored_mount_own_files": [
+    ".gitignore"
+  ],
+  "vendored_leftover": "{{path}} is no longer shipped by the akmon carrier; `akmon init --mode vendored` copies only the standard's members and leaves it in place",
+  "vendored_leftover_fix": "Remove {{path}} by hand if the mount should match the carrier.",
   "unsupported_record": "akmon verify: the JavaScript implementation serves Node package mode only (mount = \"package\" and ecosystem = \"node\" in <AITNA_ROOT>/.akmon.toml), but this project has {{found}}; run the Python implementation of akmon for it.",
   "node_wired_hook_scripts": [
     "hook_core.mjs",
@@ -204,6 +229,6 @@
     "pin_ok": "package.json pins akmon in devDependencies",
     "pin_ok_fix": "Keep akmon pinned in devDependencies.",
     "exact_pin_warn": "package.json pins akmon as {{value}}, not an exact version — two installs can resolve different akmon versions while the record and the generated wiring are written per version",
-    "exact_pin_warn_fix": "Pin an exact version with `npm install -D -E akmon@<version>`."
+    "exact_pin_warn_fix": "Pin an exact version with `npm install -D -E akmon@<version>`, or a release tag with `npm install -D github:akumidv/ai_akmon#v<version>`."
   }
 }

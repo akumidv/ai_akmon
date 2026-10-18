@@ -9,6 +9,7 @@ this file carries only what is true of akmon and of nothing else.
 
 @guardrails/_common.md
 @profiles/python.md
+@profiles/js.md
 @profiles/python-stdlib.md
 
 ## Roles
@@ -53,6 +54,16 @@ the shipped block states it directly: Codex does not expand nested `@` imports i
   merges into the default branch, tags, pushes, publishing, and consumer pin bumps. An agent
   **may** commit on a local non-default branch to keep its work safe; it never pushes, merges
   or tags. Everything else in § Commits & ownership stands as written.
+- **No dates, and never a date as an index.** Git history is the timeline. This applies to the
+  text and file names of every tracked document: `meta/` (tasks, ADRs, designs, reviews,
+  evidence) and the shipped prose. Name a file by its task id and a short subject
+  (`c110-evidence.md`); name a repeated output by its task id and an ordinal
+  (`c110-second-opinion-2.md`). Cite a measured fact by its `M<n>` id. Exceptions apply only
+  when time order is really needed. Prefer a month and year (`2026-07`). Use a full date only
+  as a last resort, where the day itself serves a purpose: an external deadline, or the date
+  field of a `MEASUREMENTS.md` row. Sealed experiment inputs (files hashed in a `seal*.json`)
+  keep their bytes and names. Consumer projects are not bound by this; `pipelines/tasks.md`
+  keeps its own rule for their backlog.
 - Do not edit consuming-project materializations as the source of truth; change this repository,
   release it, then realign consumers.
 
@@ -63,12 +74,14 @@ Run:
 ```bash
 uv run pytest
 uv run ruff check .
+uv run ruff format --check .
 python3 meta/self_ci.py
 uv build
 npm ci --ignore-scripts
 npx --no-install tsc --checkJs --noEmit -p .
 node --test "js/**/*.test.mjs"
-npx --no-install eslint .
+npx --no-install oxlint .
+npx --no-install oxfmt --check .
 ```
 
 The node toolchain's legs (from C103) need `node` (>= 22) and `npm` on PATH, and `npm ci`

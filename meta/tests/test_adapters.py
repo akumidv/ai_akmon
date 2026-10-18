@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -993,6 +994,35 @@ def test_every_wired_codex_route_reports_a_crash_as_failed(tmp_path, monkeypatch
         assert "SEEDED-SECRET" not in captured.err, route
 
 
+def test_an_over_long_cwd_takes_the_ordinary_failure_exit_and_does_not_hang(tmp_path, monkeypatch, capsys):
+    # C121 (fuzz seed 1, case 634): a `cwd` of 32,769 `a/` components kept the root walk busy
+    # for minutes. The walk refuses it before resolving it, and the refusal is a crash like any
+    # other: one stderr line with the class, exit 1 on Codex, the owner's notice on Claude.
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    over_long = "/" + "a/" * 32_769
+    began = time.monotonic()
+    for route in ("analysis-guard", "role-on-code", "session-start"):
+        payload = dict(_patch_payload(tmp_path, "src/x.py"), cwd=over_long)
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+        assert _codex_hook().main([route]) == 1, route
+        captured = capsys.readouterr()
+        assert captured.err.splitlines() == [f"akmon codex-hook {route} hook: ValueError"], route
+        assert captured.out == "", route
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Edit",
+        "session_id": "sess-c121",
+        "cwd": over_long,
+        "tool_input": {"file_path": "/src/app.py"},
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _claude_hook("role-on-code.py").main() == 0
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == ["akmon role-on-code hook: ValueError"]
+    assert json.loads(captured.out) == {"systemMessage": hook_core.hook_failure_notice("role-on-code", ValueError())}
+    assert time.monotonic() - began < 5
+
+
 def test_codex_entry_reports_a_bad_route_in_one_line(capsys):
     # argparse would print a usage block and raise SystemExit, which passes an `except Exception`
     # guard (ADR 0013): two lines, and a crash the guard never sees.
@@ -1189,7 +1219,6 @@ def test_stale_guardrail_notice_reaches_both_vendor_wirings(monkeypatch, tmp_pat
     assert "_common.md" in codex_payload["hookSpecificOutput"]["additionalContext"]
 
 
-
 def test_delegation_log_warns_when_the_agent_runs_below_a_kind_floor(tmp_path, monkeypatch, capsys):
     """C32: the recorded floor reaches the delegation, and an explicit model override meets it."""
     deleg_log = _claude_hook("delegation-log.py")
@@ -1210,7 +1239,6 @@ def test_delegation_log_warns_when_the_agent_runs_below_a_kind_floor(tmp_path, m
     assert "floor" not in json.loads(capsys.readouterr().out)["systemMessage"]
 
 
-
 def test_delegation_log_warns_on_an_unlabelled_call_in_a_zoned_session(tmp_path, monkeypatch, capsys):
     """C33: once the session's fan-out is zoned, an unlabelled call is named before the map misses it."""
     deleg_log = _claude_hook("delegation-log.py")
@@ -1228,9 +1256,10 @@ def test_delegation_log_warns_on_an_unlabelled_call_in_a_zoned_session(tmp_path,
 
     payload["tool_input"]["description"] = "read the pricing code"
     assert deleg_log.main() == 0
-    assert "carries no zone label while this session's fan-out is zoned (auth)" in json.loads(
-        capsys.readouterr().out
-    )["systemMessage"]
+    assert (
+        "carries no zone label while this session's fan-out is zoned (auth)"
+        in json.loads(capsys.readouterr().out)["systemMessage"]
+    )
     zones = [ln.split("\t")[4] for ln in (tmp_path / deleg_log.routing.delegation_log_rel()).read_text().splitlines()]
     assert zones == ["auth", "-"]
 

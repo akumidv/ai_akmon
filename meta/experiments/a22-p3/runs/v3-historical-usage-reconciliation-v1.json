@@ -1,0 +1,22 @@
+{
+  "classification": "historical_envelope_correlated_debit_only",
+  "debit_tokens": 7766,
+  "direct_correlation_claimed": false,
+  "future_calls_eligible_for_exception": false,
+  "input_tokens": 7737,
+  "original_ledger_status": "UNKNOWN_USAGE",
+  "output_tokens": 29,
+  "provider_call_id": "b56635eca40db627519d47d4717d379f",
+  "record_type": "p3_v3_historical_envelope_usage_reconciliation",
+  "run_id": "b62745e38d8ae5547c8c004c4ff19cc4",
+  "schema": 1,
+  "source_sha256": {
+    "attempt": "f98fea80bc70bcc85ca539e605da78dbd4b443e715251414aef894b3eb9afb57",
+    "dispatch": "1c9847889c33d4ca320c0fe227d5d0dd479f948a94309a6892d10e973cd475f5",
+    "events": "6d88be4f6e70f0b19a3656e8dfaffddb227e495359af41e7c81645171324e31b",
+    "failure": "40ee4f78c5ddb003279afb35c9ef1e21c18115dc09783091dd411e1c5618a43d",
+    "ledger": "8c68a5b94366df96225ece0dd3880a3e53fc463380a1420116f84a0bec2f1067",
+    "rollout": "97d12028aedcae2eea8622022a223ac20e119d08df7a5e9cb15f854cddef6480"
+  },
+  "subject_attempt_id": "95e85fab70b5464fd4b520d321088003"
+}

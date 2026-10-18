@@ -1,0 +1,77 @@
+{
+  "extends": [
+    "./profiles/oxlint.json"
+  ],
+  "env": {
+    "node": true
+  },
+  "ignorePatterns": [
+    "js/vendor/**",
+    ".qwen/**",
+    ".claude/**",
+    ".review/**",
+    ".venv/**"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "js/akmon/_init.mjs",
+        "js/akmon/cli.mjs",
+        "js/bin/check.mjs",
+        "js/bin/sync.mjs",
+        "js/bin/verify.mjs",
+        "js/common/check_runner.mjs",
+        "js/common/codex_hooks.mjs",
+        "js/common/glob.mjs",
+        "js/common/json_writer.mjs",
+        "js/common/markers.mjs",
+        "js/common/materialization.mjs",
+        "js/common/pyjson.mjs",
+        "js/common/pyvalue.mjs",
+        "js/common/shlex.mjs",
+        "js/hooks/hook_core.mjs",
+        "js/hooks/model-routing.mjs",
+        "js/tools/model_routing/coverage_map.mjs",
+        "js/tools/model_routing/gate_pack.mjs",
+        "js/tools/model_routing/init.mjs",
+        "js/tools/model_routing/routing.mjs",
+        "js/tools/model_routing/second_opinion.mjs",
+        "js/tools/model_routing/stats.mjs",
+        "js/tools/release/release_check.mjs",
+        "js/tools/tasks/archive.mjs",
+        "meta/conformance/probe.mjs"
+      ],
+      "rules": {
+        "complexity": "off"
+      }
+    },
+    {
+      "files": [
+        "js/tools/model_routing/routing.mjs",
+        "js/tools/model_routing/second_opinion.mjs",
+        "js/tools/model_routing/stats.mjs",
+        "js/tools/tasks/archive.mjs"
+      ],
+      "rules": {
+        "max-params": "off"
+      }
+    },
+    {
+      "files": [
+        "js/tools/model_routing/init.mjs",
+        "js/tools/model_routing/second_opinion.mjs"
+      ],
+      "rules": {
+        "max-statements": "off"
+      }
+    },
+    {
+      "files": [
+        "meta/conformance/probe.mjs"
+      ],
+      "rules": {
+        "max-depth": "off"
+      }
+    }
+  ]
+}

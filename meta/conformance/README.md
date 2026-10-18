@@ -25,6 +25,10 @@ is silent, the Python implementation is the reference, and the resolution become
 | `pairing.py` | the pairing gate: every consumer-executable `.py` paired under `js/` or exempted, with no exemption outliving its port or crediting a stub |
 | `probe.py` | the Python implementation's mouth for unit tables |
 | `probe.mjs` | the JS implementation's mouth for unit tables (same contract: the `{"ok","failed"}` document, exit 1 on a miss) |
+| `fuzz.py` | gate 4, the differential hook fuzz (C111): seeds, mutations, the two-implementation comparison, draft scenarios |
+| `fuzz.toml` | the fuzz run's known divergences: signatures, each naming the `DIVERGENCES.md` row that accepts it |
+| `fuzz_record.py` | records real hook payloads (`tee`) and scrubs them into `fuzz/seeds/` (`scrub`); how to record is in `fuzz/seeds/README.md` |
+| `fuzz/seeds/` | recorded hook payloads the fuzz run mutates beside the scenarios' (scrubbed, owner-reviewed) |
 
 ## Ecosystems and attaches
 
@@ -118,10 +122,10 @@ match exactly**. Rules, in normative order (see `normalize.py`):
    anchor `$CLAUDE_PROJECT_DIR` or `$(git rev-parse --show-toplevel)`. A command hanging from
    anything else is not collapsed, so an absolute path in shared wiring shows as a mismatch.
    The launcher's relative path is the Python carrier's fact, pinned by `hooks.launcher`.
-2. **Tool calls** in package-mode spelling, `python3 $(akmon path)/tools/<tool>.py`, become
-   `{{tool <tool>}}`; the Node spelling joins the rule with `akmon tool` (C108). The mounted
-   spelling names the mount and stays as written, so a package-mode message that names the
-   mount (the C77 class) is caught.
+2. **Tool calls** in package-mode spelling, `akmon tool <tool>` (the wheel) and
+   `npx akmon tool <tool>` (the npm package), become `{{tool <tool>}}` (ADR-0020/D06). The mounted
+   spelling (`python3 <mount>/tools/<tool>.py`) names the mount and stays as written, so a
+   package-mode message that names the mount (the C77 class) is caught.
 3. **Parser details** after `invalid JSON:` / `cannot be read as TOML:` up to the finding's
    ` → ` become `{{parse-error}}`: that a file failed to parse, and which, is spec; the
    parser's words are the implementation's.
@@ -135,7 +139,8 @@ match exactly**. Rules, in normative order (see `normalize.py`):
 Changing a rule, or adding one, is a corpus version change: bump `NORM_VERSION` in
 `normalize.py` and say what changed here. v2 (C101 review): rule 1 keeps the anchor and covers
 the launcher (v1 erased the whole path and kept the launcher's relative path); rules 2 and 3
-are new; rule 5 is limited to the run day.
+are new; rule 5 is limited to the run day. v3 (C108): rule 2 matches the `akmon tool` spelling of
+both implementations instead of `python3 $(akmon path)/tools/<tool>.py`.
 
 ## Fixture model
 
@@ -180,8 +185,52 @@ are new; rule 5 is limited to the run day.
    is **not** credited as a port: the `.py` behind it stays exempt and still needs its own
    exemption, so an outstanding task cannot read as done. The exemption list shrinks as the port
    lands (C104 hooks, C105 CLI, C107 update, C108 tools), and the `[[stub]]` entry goes with it.
-4. **Differential fuzzing** — recorded payloads plus mutations through both implementations
-   (C111 wires the release-depth run).
+4. **Differential fuzzing** (`fuzz.py`, C111) — the hook payloads, mutated, through both
+   implementations. The seeds are the `[run.payload]` (with the script, args, fixture and env) of
+   every `shared` hook scenario, plus the recorded payloads in `fuzz/seeds/` (`<script>--<label>.json`,
+   one JSON object each, on the base fixture; recorded only scrubbed of private content — the
+   directory's README). A seed member nested deeper than 64 levels (a scenario may pin a payload
+   thousands deep) is held as its raw JSON text, one leaf a mutation replaces whole. Each case applies one or more mutations, drawn from
+   `random.Random("akmon-fuzz:<seed>:<index>")`, so a case is a pure function of the run's seed and
+   its index and reruns alone (`--seed S --case I`). The primary kind cycles through every kind:
+   value mutations (drop or add a key, a `__proto__` among the added ones; change a value's type;
+   an empty or ≥ 64 KiB string; astral, U+FFFD, U+10FFFF, combining, RTL and BOM characters at a
+   string's edges; a lone surrogate escape; control characters; numbers beyond 2**53 and 2**64,
+   `-0`, `1e309`, `1.0`; a value nested up to 100 000 deep; `hook_event_name` / `tool_name`
+   swapped among the seeds' values; `..`, absolute, spaced and trailing-slash paths in the path
+   fields) and stdin mutations (invalid UTF-8 bytes, non-JSON text, truncated JSON, empty or blank
+   stdin, duplicate keys). Half the cases spell non-ASCII text as raw UTF-8, half as `\u` escapes.
+
+   Both implementations run each case on the same fixture at the same path: a seed's fixture is
+   materialized (and synced) once per implementation, and a pristine copy is restored before every
+   case, with a fresh tempdir. Compared: the exit code, stdout (as parsed JSON when it parses,
+   normalized like `stdout_json`), stderr, and the files the hook created, changed or removed under
+   the project (`.git` aside) and the tempdir, by path and normalized-content hash. A difference is
+   **known** when an entry of `fuzz.toml` matches it — script globs, the streams allowed to differ,
+   a mutation-label glob, an optional stdin regex and host condition — and that entry names the
+   `DIVERGENCES.md` row accepting it (the loader refuses an entry naming no row: a difference is
+   accepted here only after it is accepted there); anything else is **divergent**, and the run
+   exits 1.
+
+   A divergent case becomes a **draft** scenario under `--emit DIR` (default: a fresh temp dir the
+   summary prints), never in `scenarios/`: the corpus format (`kind = "hook"`, `ecosystem =
+   "shared"`, the seed's fixture and env, the mutated payload, the Python result as `[expected]`),
+   headed by a DRAFT comment with the node result and the reproduce command, plus a `[fuzz]` table
+   (seed, case, mutations, the differing streams, the exact stdin in base64). A stdin the schema
+   cannot spell (raw bytes, a `null`, a raw number token, a surrogate, an integer beyond int64) gets
+   no `[run.payload]`, and the header says so. The draft then follows the Seed protocol: a human
+   reads the Python result as a spec, and either fixes the twin that is wrong and keeps the draft
+   (header and `[fuzz]` removed) as a scenario, or records a `DIVERGENCES.md` row plus a `fuzz.toml`
+   entry and deletes the draft. Removing the `[fuzz]` table is the reviewer's mark: the corpus
+   loader (every runner, gate and fuzz run reads scenarios through it) refuses a scenario file that
+   still carries one, in one line naming the file, so an unreviewed draft never becomes spec.
+
+   Budgets: `selfci.fuzz` runs the bounded leg, 120 cases at seed 0 (about 45 s on a 4-core host;
+   every kind is the primary of at least six cases). `release_check --check` runs `self_ci.py
+   --fuzz-depth release`: 2 000 cases at a fresh seed, which the leg's finding prints so a failure
+   reproduces. `--jobs` (default: up to 4) runs seeds in parallel, each seed in one worker;
+   `--time-budget SEC` stops starting cases after that long and reports how many it left unrun.
+   The run needs `node` on PATH and names it when it is missing (exit 2).
 
 ## Seed protocol
 
@@ -215,5 +264,10 @@ one record of what is outstanding. The gates are off (they run on a full run onl
 name a slice of several areas). The node
 toolchain's own checks are independent self-CI legs on the same prerequisite-naming stance as
 the wheel smoke: `selfci.js-deps` (`npm ci --ignore-scripts`), `selfci.js-typecheck`
-(`npx --no-install tsc --checkJs --noEmit -p .`), `selfci.js-unit` (`node --test 'js/**/*.test.mjs'`) and
-`selfci.js-lint` (`npx --no-install eslint .`).
+(`npx --no-install tsc --checkJs --noEmit -p .`), `selfci.js-unit` (`node --test 'js/**/*.test.mjs'`),
+`selfci.js-lint` (`npx --no-install oxlint .`) and `selfci.js-format` (`npx --no-install oxfmt --check .`).
+
+`selfci.fuzz` (C111) runs `fuzz.py --cases 120 --seed 0`, the bounded differential fuzz of gate 4;
+`python3 meta/self_ci.py --fuzz-depth release` (what `release_check --check` runs) makes it 2 000
+cases at a fresh seed, printed in the leg's label. The leg is pinned by
+`meta/tests/test_conformance_fuzz.py`.

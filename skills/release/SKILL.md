@@ -37,7 +37,9 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
 
 1. **Frame the subject** *(gate)*. Ask the owner which subject and, when ambiguous, which
    downstream consumers. Do not read anything against the release until this is fixed.
-2. **Collect state.** Run `python3 _aitna/akmon/tools/release/release_check.py --state` to read
+2. **Collect state.** Run `akmon tool release/release_check --state` (`npx akmon tool …` in a
+   Node project, likewise below — except `--check` for the akmon subject, which runs only under
+   Python in the akmon source repository and refuses from the npm package) to read
    `TASKS.md`, `TASKS_ARCHIVE.md`, `CHANGELOG.md`, and `git status` in one pass. Read the
    relevant design/ADRs by hand when the summary points at them.
 3. **Classify changes** into the four impact classes. Every `consumer-visible` /
@@ -57,14 +59,14 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
    line for the subject, so one bump lands on every carrier in one commit and the git tag does
    not produce the version. These are the only files the release role edits — route everything
    else to its owning role.
-9. **Verify.** Run `python3 _aitna/akmon/tools/release/release_check.py --check`. It first joins
+9. **Verify.** Run `akmon tool release/release_check --check`. It first joins
    the version carriers — each literal the subject carries, the topmost `CHANGELOG.md` heading
    and the tag set — then runs the subject's release suite (pointer sync, contract verify, its
    own checks and tests), resilient to the test runner (`uv` → project `.venv` → system `pytest`).
    All green before handoff; a version finding fails the mode outright, and a skip finding names
    a rule whose input was absent rather than one that passed.
 10. **Owner handoff** *(gate, D5)*. Run
-    `python3 _aitna/akmon/tools/release/release_check.py --plan vX.Y.Z` to print the exact
+    `akmon tool release/release_check --plan vX.Y.Z` to print the exact
     owner-run command set, then present it with the residual risk and **stop**. The owner
     runs the landing commands.
 11. **Propagate** *(only if the owner selected consumers)*. Prepare the per-consumer
@@ -96,7 +98,10 @@ subject — a akmon **pin bump** — is deferred (backlog T18).
 | `--plan vX.Y.Z` | print the version bump, then the exact owner-run commit/tag/push command set | no |
 
 - **`--subject akmon`** runs the akmon suite (pointer sync, contract verify, and
-  akmon's own self-checks + tests); the plan tags from the submodule tree.
+  akmon's own self-checks + tests); the plan tags from the submodule tree. Its `--state` reads
+  the mounted `<AITNA_ROOT>/akmon`, else the running akmon tree, and exits 2 with one line when
+  that tree carries no development record (a package install): run it from the akmon git tree —
+  a clone, or a project mounting it as a submodule or subtree.
 - **`--subject package`** runs the akmon contract check (`verify --strict`) and then
   **defers to the project's own commands** in [`_aitna/agents/release/README.md`](../../../agents/release/README.md)
   (tests / lint / build) — it does not guess them. The plan tags from the project root.

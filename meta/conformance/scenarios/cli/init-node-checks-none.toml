@@ -1,0 +1,22 @@
+id = "cli/init-node-checks-none"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:init"]
+
+# --checks none (C123): an empty [check] table is recorded, so a realign keeps the choice; no .oxlintrc.json is written.
+[fixture]
+attach = "native"
+warmup = false
+remove = ["_aitna/.akmon.toml"]
+files = { "package.json" = "{\"name\": \"corpus-consumer\", \"private\": true, \"devDependencies\": {\"akmon\": \"{{version}}\"}}" }
+
+[run]
+argv = ["init", "--yes", "--checks", "none", "--project-root", "{{root}}"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "akmon init: attaching to {{root}}\nakmon init: mount mode: package (the JavaScript implementation attaches in package mode) · dev layer: _aitna/\nakmon init: wrote _aitna/agents/review/README.md\nakmon init: wrote _aitna/agents/architect/README.md\nakmon init: AGENTS.md already carries an akmon block — left untouched\nakmon init: .gitignore: added the akmon entries (secrets, Node dependencies, routing artifacts)\nakmon init: recorded _aitna/.akmon.toml (mount=package, akmon_version={{version}})\nakmon init: akmon check: no checks recorded\nakmon init: running sync (generated pointers, hook wiring, imported guardrails)\nupdated: CLAUDE.md\nupdated: .github/copilot-instructions.md\nupdated: GEMINI.md\nupdated: .codex/README.md\nupdated: .codex/hooks.json\nupdated: .claude/settings.json\nupdated: .claude/skills/demo/SKILL.md\nupdated: .agents/skills/demo/SKILL.md\nupdated: _aitna/.akmon/guardrails/_common.md\nok: _aitna/.akmon.toml\nakmon init: running model-routing init (subagent definitions + local routing config)\nupdated: .claude/agents/k_explorer.md\nupdated: .claude/agents/k_mechanic.md\nupdated: .claude/agents/k_validator.md\nupdated: .claude/agents/k_implementer.md\nupdated: .claude/agents/k_reasoner.md\nupdated: .claude/agents/k_auditor.md\nupdated: .claude/model-routing.local.json\nmodel routing: vendor=anthropic · orchestrator=strongest · reasoner=strongest · auditor=strongest · worker=worker · mid=mid · second-opinion=codex(off)\n⚠ using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally\n\nakmon init: attached, with steps left to a human/agent decision:\n  1. classify the project (archetype + language) against ARCHETYPES.md, import the language profile in AGENTS.md, and set `attached_archetype` in _aitna/.akmon.toml\n  2. `akmon verify --strict` checks the existing AGENTS.md block against the contract\n  3. add the contract checks to your existing workflow(s): `npx akmon sync --check` and `npx akmon verify --strict`\n  4. name the project's checks under `[check]` in .akmon.toml when it has any\n  5. pin the test environment: record the project's own test command (`npm test`, for example) as `[test].runner` in _aitna/.akmon.toml (BOOTSTRAP §A5)\n  6. run `npx akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)\n"
+file_absent = [".oxlintrc.json"]
+[expected.files]
+"_aitna/.akmon.toml" = "# akmon integration record — written by `akmon init`, refreshed on realign.\n# The version this project sits on; a later bump diffs the CHANGELOG window against it.\nmount = \"package\"\necosystem = \"node\"\nakmon_version = \"{{version}}\"\nattached_archetype = \"unclassified\"\n\nlast_realign = \"{{version}}\"\n[test]\n# The project's own test invocation, used verbatim by the release check\n# (BOOTSTRAP §A5). Uncomment and set it to whatever this project already uses:\n# runner = \"npm test\"\n\n[check]\n# What `akmon check` runs: the project's own commands, `{files}` becoming the files a run covers.\n"

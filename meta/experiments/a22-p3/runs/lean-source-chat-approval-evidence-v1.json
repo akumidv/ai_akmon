@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "record_type": "p3_v3_lean_source_chat_approval_evidence",
+  "status": "unsigned_local_session_log_evidence",
+  "authentication": "Local Codex session log; no cryptographic signature or independent account authentication.",
+  "source_log": {
+    "path": "/home/ai/.codex/sessions/2026/09/23/rollout-2026-09-23T09-16-25-01a0cd8d-4d82-7ac0-8b96-ce11eb0ff664.jsonl",
+    "session_id": "01a0cd8d-4d82-7ac0-8b96-ce11eb0ff664",
+    "integrity_basis": "SHA-256 of each selected JSONL record and extracted message text"
+  },
+  "seal_sha256": "e47596e5d3b7f0cbd9e9b15554665cc0d3a3e1428d9c13ab11eab9bfb78f0b8a",
+  "request": {
+    "message_id": "msg_01a73e526108f56c016ad0ec1b724887d2ae46cb97c7474ac2",
+    "turn_id": "01a14009-1db9-7883-bb3d-707004d9fe9b",
+    "ordinal": 24528,
+    "record_sha256": "d7d1c1e143027e25c9615b33df230777f28822f8932023dd2effa17cc48550a3",
+    "text_sha256": "f5c5e58ae0e34b404b11b5f6e00388103906c92d79e6aefd33cff8599661b0fd",
+    "requested_scope": ["technical_source"],
+    "requested_seal_sha256": "e47596e5d3b7f0cbd9e9b15554665cc0d3a3e1428d9c13ab11eab9bfb78f0b8a"
+  },
+  "approval": {
+    "message_id": "msg_01a1402b-806a-7a31-9fe9-a662b3f251ae",
+    "turn_id": "01a1402b-7fdd-7161-a00c-a6caa69c8ee7",
+    "ordinal": 24552,
+    "timestamp": "2026-10-15T15:25:55.178Z",
+    "record_sha256": "9e585107c8e7a97d76f1838a421e0ff05f8aebb997e1d87c85f1dbbdabb5950a",
+    "text_sha256": "74ad3eda10ada2fe87361641d08fce8a152def1ebdd664ec4d5857a03b647557",
+    "raw_text": "согласовано, запускай",
+    "mcp_attribution": "attribution_error: history_missing_checkpoint"
+  },
+  "scope": ["technical_source"],
+  "limitations": [
+    "The approval text is a short reply; its scope is inferred from its immediate position after the seal-specific request.",
+    "This evidence record does not itself alter the default-deny approval or authorize dispatch."
+  ]
+}

@@ -117,9 +117,10 @@ not its language. Full taxonomy + per-archetype checklists: [ARCHETYPES.md](ARCH
 - **[guardrails/](guardrails/)** — the universal floor, **applied automatically** to every
   project (`_common.md`).
 - **[profiles/](profiles/)** — language and environment profiles, **applied automatically**
-  by the project's language and by where its code runs (`python.md`, `python-stdlib.md`; the
-  checkable Python rules are a standard ruff configuration, `ruff.toml`), and domain
-  profiles **opt-in by need** (`quant.md`, …).
+  by the project's language and by where its code runs (`python.md`, `python-stdlib.md`,
+  `js.md`; the checkable rules are standard linter configurations — ruff's `ruff.toml` for
+  Python, oxlint's `oxlint.json` for JavaScript/TypeScript), and domain profiles **opt-in by
+  need** (`quant.md`, …).
 
 ## 6. The learn loop (how the standard evolves)
 
@@ -142,9 +143,12 @@ Never in code, markdown, or commits.
 
 ## 9. Tooling
 
-`bin/sync.py` writes the thin generated vendor pointers (CLAUDE.md, GEMINI.md, …) and hook
-wiring from one source; `bin/verify.py` validates the project contract (it reports, never
-modifies). Both are stdlib-only and run in-tree.
+`akmon sync` writes the thin generated vendor pointers (CLAUDE.md, GEMINI.md, …) and hook
+wiring from one source; `akmon verify` validates the project contract (it reports, never
+modifies); `akmon check` runs the project's own linters and analyzers; `akmon tool <path>` runs
+the tools. Each has two implementations with one behavior: Python (`bin/sync.py`,
+`bin/verify.py`, stdlib-only, runnable in-tree) and JavaScript under `js/` for a Node project,
+which needs no Python (`npx akmon …`).
 
 ## 10. Capability tiers — model routing
 

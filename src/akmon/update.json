@@ -34,5 +34,15 @@
   "closing_changelog": "read CHANGELOG.md after {{last}} up to {{target}}: each Breaking or Migration line there is a checklist item for this project",
   "closing_review": "review `git diff` and stage {{staged}} with the generated files that changed — the commit is the owner's (D5)",
   "closing_bump": "record the bump in this project — a `{{aitna}}/TASKS_ARCHIVE.md` line or its own changelog",
-  "closing_codex": "Codex: if `.codex/hooks.json` changed, re-approve its hooks with /hooks — a changed entry runs nothing until then"
+  "closing_codex": "Codex: if `.codex/hooks.json` changed, re-approve its hooks with /hooks — a changed entry runs nothing until then",
+  "python_refuses_ecosystem": "this project's integration record names ecosystem = \"{{value}}\" ({{aitna}}/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon update",
+  "node_refuses_record": "this project's integration record is not a Node package attach ({{found}}); the JavaScript implementation updates Node projects in package mode only, and the Python implementation of akmon serves the other records",
+  "node_pin_not_dev": "mode 'package' needs akmon pinned in the devDependencies of package.json, and it is not (found: {{status}}) — `akmon verify --strict` names the fix",
+  "node_registry_unreachable": "cannot discover the newest release of akmon from the npm registry (`npm view akmon versions --json` needs npm and network access to the registry); pass --ref explicitly",
+  "node_registry_no_release": "the npm registry lists no final release of akmon; pass --ref explicitly",
+  "node_manager_unknown": "package.json names packageManager \"{{declared}}\", a manager akmon does not drive. Point the pin at {{spec}} with it and install, then run `akmon init`; with npm:\n    {{command}}",
+  "node_manager_missing": "mode 'package' moves the pin with {{manager}}, the project's package manager, and `{{binary}}` is not on PATH. Run it where it is, then run `akmon init`:\n    {{command}}",
+  "node_move_failed": "`{{command}}` failed ({{code}}) — see its output above",
+  "node_launcher_missing": "{{launcher}} does not exist — the Node package mode runs akmon from the project's own node_modules; `{{install}}` installs it",
+  "closing_staged_node": "`package.json` and its lockfile"
 }

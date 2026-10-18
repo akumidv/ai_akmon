@@ -13,8 +13,9 @@
 # permission mode quotes and escapes; `str.strip()`/`sorted()` work on code points; and the command
 # guards use `\b`, which is ASCII on both sides by decision (`re.ASCII` on the Python side), so a
 # neighbour such as `é` or `β` is a boundary. A JS port gets none of this for free. The table is
-# the spec: every expected value was produced by running the Python and then read against the
-# function's docstring.
+# the spec, held to the Python reference row by row: `runner.py --impl python` runs it as scenario
+# `units/hook_core` in the conformance leg of `meta/self_ci.py`, and every expected value was read
+# against the function's docstring.
 #
 # The mouth is the generic one of `routing.toml` (the row format is the block comment above
 # `probe_routing` in probe.py): a row is `{id, fn, args_json, expected_json}` plus world keys. What

@@ -1,0 +1,14 @@
+{
+  "arm": "C",
+  "case": "P3-01",
+  "effort": "medium",
+  "exchange_sha256": "bd55867a7a0de1b8f81b6f52ab0e61bdaee6eb2915aa1d8421f4eb441ab2ef3d",
+  "model": "gpt-5.6-luna",
+  "provenance_scope": "evaluator_only",
+  "rollout_sha256": "093c60ef3bf47beb5fdbf7034dc766232ff6dece394d385577aae7418b4a534b",
+  "run_id": "966b65f2689e8f1f6c1de61a9abf2f33",
+  "scored_p3": false,
+  "subject_attempt_id": "cee4110331017c9a5d71e8c773bacfa2",
+  "tier": "mid",
+  "verified": true
+}

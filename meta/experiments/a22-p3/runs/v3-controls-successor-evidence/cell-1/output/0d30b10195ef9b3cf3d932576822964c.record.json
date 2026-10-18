@@ -1,0 +1,14 @@
+{
+  "arm": "C",
+  "case": "P3-01",
+  "effort": "medium",
+  "exchange_sha256": "5a746295036d248038befa7e04437945274154479df438563385c0c3bf9ac00f",
+  "model": "gpt-6-astra",
+  "provenance_scope": "evaluator_only",
+  "rollout_sha256": "c36639c1d4403de875fa7aad0b7e8fe66ea069a2787a846ad7055f2ae51466ca",
+  "run_id": "0d30b10195ef9b3cf3d932576822964c",
+  "scored_p3": false,
+  "subject_attempt_id": "f8618c748bb2fb6494c249b99767a7e2",
+  "tier": "strongest",
+  "verified": true
+}

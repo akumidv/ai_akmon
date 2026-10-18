@@ -194,9 +194,7 @@ def check_pairing(repo: Path | None = None, config: Path | None = None) -> list[
     """
     repo = repo or REPO_ROOT
     population = sorted(
-        path.relative_to(repo).as_posix()
-        for root in CODE_ROOTS
-        for path in sorted((repo / root).rglob("*.py"))
+        path.relative_to(repo).as_posix() for root in CODE_ROOTS for path in sorted((repo / root).rglob("*.py"))
     )
     if not population:
         raise CorpusError(

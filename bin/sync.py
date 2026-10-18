@@ -104,7 +104,7 @@ def _read_manifest(project_root: Path) -> dict | None:
     formatters write, and the scan this replaced split every line at its first ``=``: it read
     ``"akmon==0.4.0",`` as a key named ``"akmon``, so the ordinary versioned pin classified as no
     pin at all, and inline-table and dotted-key spellings were never read. ``tomllib`` is stdlib
-    on the 3.11 floor (ADR 0009, C68 amendment), so the parse adds no dependency. A file that
+    on the 3.12 floor (ADR 0009, C68 and C122 amendments), so the parse adds no dependency. A file that
     does not parse is reported rather than read leniently: uv cannot read it either, and "no
     pin" would name the wrong cause.
     """
@@ -982,9 +982,7 @@ def _check_findings(result: Result, data: Mapping[str, Any], *, root: Path) -> l
     for path in result.ok:
         relative = str(path.relative_to(root))
         message, fix = one("up_to_date", relative)
-        findings.append(
-            Finding("ok", "sync.up-to-date", line_safe(message), line_safe(relative), fix, data=record)
-        )
+        findings.append(Finding("ok", "sync.up-to-date", line_safe(message), line_safe(relative), fix, data=record))
     for error in result.errors:
         message, fix = one("plan_error", error)
         findings.append(Finding("error", "sync.plan-error", line_safe(message), "", fix, data=record))
@@ -1029,7 +1027,7 @@ def main(argv: list[str] | None = None) -> int:
     # Python launcher, and a wrong-spelling write is worse than a refusal.
     ecosystem = recorded_ecosystem(root)
     if ecosystem != "python":
-        print(data["python_refuses_ecosystem"].replace("{{value}}", line_safe(ecosystem)), file=sys.stderr)
+        print(jsondata.fill(data["python_refuses_ecosystem"], {"value": line_safe(ecosystem)}), file=sys.stderr)
         return 2
     files, errors = _planned_files(root, data)
     write = not args.check and not args.dry_run

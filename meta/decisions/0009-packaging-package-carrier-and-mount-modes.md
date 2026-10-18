@@ -77,6 +77,22 @@ raising package metadata alone were rejected. Zero runtime dependencies, the std
 and every other decision in this ADR remain unchanged. Evidence and acceptance carriers:
 [the C68 floor note](../design/packaging/python-39-floor.md).
 
+## Amendment — Python 3.12 floor (C122)
+
+The 3.11 floor of the amendment above and of D04 is raised: the package and every shipped
+venv-free entry point, the bare `python3` of generated hooks included, require **Python >=3.12**.
+Python 3.11 consumers must upgrade both interpreters before adopting this release. This is a
+Breaking migration and carries a pre-1.0 `x` bump.
+
+The cause is a behaviour the JavaScript implementation must reproduce and cannot on 3.11: there
+`json` refuses a nested payload at about 1000 levels minus the caller's own stack depth, so no
+single depth is the contract, while 3.12 refuses past a fixed 9997 levels (M143). Binding the
+contract to a conservative 3.11 depth was rejected because the number would be a function of each
+call site; a version-qualified constant with a pinned interpreter in the gates was rejected
+because the gate's verdict would depend on which `python3` ran it. Newer interpreters refuse
+deeper (3.13: 9998, 3.14: stack-bounded), a divergence above the floor (DV23). Every other
+decision of this ADR stands.
+
 ## Amendment — mode `package` executes from the package (C77)
 
 The materialization clause in decision 4 is narrowed. Mode `package` **puts no executable
@@ -110,6 +126,28 @@ surface in the consumer repository and runs the hooks out of the installed packa
   recorded `mount`. This supersedes D2-26 for that one function; see the
   [note](../design/packaging/mount-resolution-owner.md).
 
+## Amendment — the installable carriers ship no `meta/` (C118)
+
+Decision 1's "full standard tree (incl. `meta/`, for parity with the submodule)" is narrowed.
+The wheel and the npm package carry **what runs or is read in a consumer**, not akmon's own
+development record.
+
+- **`meta/` leaves both carriers** and the `vendored` copy (`init.json::tree_members`). It holds
+  decisions, designs, measurements, reviews, experiments, tests and the conformance corpus; no
+  shipped code reads it at runtime, and the experiments' sealed inputs and
+  the backlog were travelling to every consumer. `submodule` and `subtree` keep it: they are the
+  git tree, not a build. A `vendored` copy made before this keeps its `meta/` on re-init:
+  akmon deletes nothing in the consumer's tree. `verify` warns about a top-level member of a
+  `vendored` mount that the carrier no longer has, and the owner removes it.
+- **Test files leave with it:** `js/**/*.test.mjs` are not shipped. Two of them read
+  `meta/conformance/units/`, so they could not run from an install anyway.
+- **Parity with the submodule is no longer a carrier property.** The parity that holds is of the
+  executable and rule surface; the wheel and npm package carry the same file set as each other.
+- **Shipped prose links into `meta/` by absolute repository URL** (`https://github.com/akumidv/ai_akmon/blob/main/meta/…`),
+  so a reference to a decision or a measurement resolves from a mount, from a registry page and
+  from GitHub alike. A shipped document carries no relative link into `meta/`; a test pins it.
+  Paths named in code comments are provenance, not links, and stay as written.
+
 ## Addressable accepted decision blocks
 
 ### D01 — Supported carriers and source ownership
@@ -120,7 +158,8 @@ surface in the consumer repository and runs the hooks out of the installed packa
 The supported carriers are `submodule`, `vendored`, `subtree`, and `package`. Akmon's source tree
 remains authoritative; generated or materialized files are derived, never a second source. Package
 mode is a development dependency and materializes only documentary assets that cannot be addressed
-portably from the installed package.
+portably from the installed package. The installable carriers (wheel, npm) and the `vendored`
+copy carry no `meta/` and no test files (C118 amendment).
 
 ### D02 — Executable and runtime surface
 
@@ -147,7 +186,7 @@ meaning of the shared reader.
 `Decision-ID: ADR-0009/D04`
 `Legacy-ID: D2-34, D2-43`
 
-The supported Python floor is 3.11 for package metadata, tooling and generated bare-Python entry
+The supported Python floor is 3.12 (C122) for package metadata, tooling and generated bare-Python entry
 points. Manifest inspection parses supported TOML structures and returns an explicit `unreadable`
 result when it cannot establish the pin; text search is not a substitute for parsing.
 

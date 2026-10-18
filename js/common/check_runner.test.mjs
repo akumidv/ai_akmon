@@ -13,8 +13,17 @@ import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  ScopeError, argvFor, changedFiles, configTarget, defaultFiles, filesPlaceholder, makeCheck,
-  noChecks, readChecks, runChecks } from "./check_runner.mjs";
+  ScopeError,
+  argvFor,
+  changedFiles,
+  configTarget,
+  defaultFiles,
+  filesPlaceholder,
+  makeCheck,
+  noChecks,
+  readChecks,
+  runChecks,
+} from "./check_runner.mjs";
 
 const data = JSON.parse(fs.readFileSync(new URL("../../common/check_runner.json", import.meta.url), "utf-8"));
 
@@ -22,7 +31,10 @@ test("the config texts and the default patterns come from the shared data file",
   assert.equal(configTarget(data), ".akmon.toml [check]");
   assert.equal(filesPlaceholder(data), "{files}");
   assert.deepEqual(defaultFiles(data), ["*.py"]);
-  assert.deepEqual(noChecks(data), ["declares no checks, so nothing ran", "Name the project's checks under [check], or run akmon init to set them up"]);
+  assert.deepEqual(noChecks(data), [
+    "declares no checks, so nothing ran",
+    "Name the project's checks under [check], or run akmon init to set them up",
+  ]);
 });
 
 test("read_checks accepts a plain command and a command+files table", () => {
@@ -55,7 +67,10 @@ test("a malformed entry is reported and skipped, never guessed at", () => {
 });
 
 test("a non-table [check] is one problem, no guess", () => {
-  assert.deepEqual(readChecks(data, "ruff check"), { checks: [], problems: ["[check] must be a table of named commands"] });
+  assert.deepEqual(readChecks(data, "ruff check"), {
+    checks: [],
+    problems: ["[check] must be a table of named commands"],
+  });
   assert.deepEqual(readChecks(data, null), { checks: [], problems: [] });
 });
 
@@ -71,7 +86,7 @@ test("argv_for expands the placeholder: the whole project, or only the matching 
   assert.equal(argvFor(data, check, ["b.txt"]), null);
 });
 
-function git_repo() {
+function gitRepo() {
   const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-check-runner-"));
   const git = (/** @type {string[]} */ ...args) => execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
   git("init", "-b", "main");
@@ -84,7 +99,7 @@ function git_repo() {
 }
 
 test("changed_files lists the diff against HEAD plus the new files, never the dev layer", () => {
-  const root = git_repo();
+  const root = gitRepo();
   fs.writeFileSync(posix.join(root, "a.py"), "x = 2\n");
   fs.writeFileSync(posix.join(root, "b.py"), "y = 1\n");
   fs.mkdirSync(posix.join(root, "_aitna"));
@@ -94,21 +109,46 @@ test("changed_files lists the diff against HEAD plus the new files, never the de
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("changed_files keeps regular files only: a link to a directory is not one (C115)", () => {
+  // The twin asks `is_file()`; "exists" would hand the linter a directory named like a source file.
+  const root = gitRepo();
+  fs.mkdirSync(posix.join(root, "pkg"));
+  fs.symlinkSync("pkg", posix.join(root, "dir.py"));
+  fs.symlinkSync("missing", posix.join(root, "dangling.py"));
+  fs.writeFileSync(posix.join(root, "c.py"), "z = 1\n");
+  assert.deepEqual(changedFiles(data, root), ["c.py"]);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("changed_files drops the real directories git names: a replaced tracked file, a nested repository (C120)", () => {
+  // `git diff` names `a.py`, now a directory; `ls-files --others` names an untracked nested
+  // repository as `nested/`. Neither is a file; a file inside the replacing directory is one.
+  const root = gitRepo();
+  fs.rmSync(posix.join(root, "a.py"));
+  fs.mkdirSync(posix.join(root, "a.py"));
+  fs.writeFileSync(posix.join(root, "a.py", "inner.py"), "y = 1\n");
+  fs.mkdirSync(posix.join(root, "nested"));
+  execFileSync("git", ["-C", posix.join(root, "nested"), "init"], { stdio: "ignore" });
+  fs.writeFileSync(posix.join(root, "nested", "n.py"), "z = 1\n");
+  assert.deepEqual(changedFiles(data, root), ["a.py/inner.py"]);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test("a git that cannot list the changes is a ScopeError naming the command and its status", () => {
   // A -C target that no longer exists makes git exit non-zero: the message names the git
   // command and its outcome, never an interpreter exception repr (the C101 R5 neutralization).
-  const root = git_repo();
+  const root = gitRepo();
   fs.rmSync(root, { recursive: true, force: true });
-  assert.throws(() => changedFiles(data, root), (error) => {
-    return error instanceof ScopeError && /exited with status/.test(error.message);
-  });
+  assert.throws(
+    () => changedFiles(data, root),
+    (error) => {
+      return error instanceof ScopeError && /exited with status/.test(error.message);
+    },
+  );
 });
 
 test("run_checks gives one finding per command, in declaration order", () => {
-  const checks = [
-    makeCheck(data, "lint", ["ruff", "check", "{files}"]),
-    makeCheck(data, "noargs", ["true"]),
-  ];
+  const checks = [makeCheck(data, "lint", ["ruff", "check", "{files}"]), makeCheck(data, "noargs", ["true"])];
   /** @type {{argv: string[], options: {cwd: string}} | undefined} */
   let seen;
   const runner = (/** @type {string[]} */ argv, /** @type {{cwd: string}} */ options) => {
@@ -116,10 +156,13 @@ test("run_checks gives one finding per command, in declaration order", () => {
     return { returncode: 0, error: undefined };
   };
   const findings = runChecks(data, "/proj", checks, ["a.py"], runner);
-  assert.deepEqual(findings.map((f) => [f.severity, f.code, f.message]), [
-    ["ok", "check.run", "`ruff check a.py` passed"],
-    ["ok", "check.run", "`true` passed"],
-  ]);
+  assert.deepEqual(
+    findings.map((f) => [f.severity, f.code, f.message]),
+    [
+      ["ok", "check.run", "`ruff check a.py` passed"],
+      ["ok", "check.run", "`true` passed"],
+    ],
+  );
   assert.equal(findings[0].target, "[check].lint");
   assert.ok(seen !== undefined, "the runner was never called");
   assert.equal(seen.options.cwd, "/proj");
@@ -153,11 +196,14 @@ test("a spawn failure that is not a missing command is not reported as one", () 
   for (const code of ["ENOBUFS", "EACCES"]) {
     assert.throws(
       () => runChecks(data, "/proj", checks, ["a.py"], () => ({ returncode: null, error: { code } })),
-      (error) => (/** @type {{code?: string}} */ (error)).code === code,
+      (error) => /** @type {{code?: string}} */ (error).code === code,
     );
   }
   assert.throws(
-    () => runChecks(data, "/proj", checks, ["a.py"], () => { throw Object.assign(new Error("boom"), { code: "EMISC" }); }),
+    () =>
+      runChecks(data, "/proj", checks, ["a.py"], () => {
+        throw Object.assign(new Error("boom"), { code: "EMISC" });
+      }),
     /boom/,
   );
 });

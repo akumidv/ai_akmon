@@ -85,6 +85,7 @@ def severities(data: Mapping[str, Any] | None = None) -> tuple[str, ...]:
     """The closed severity vocabulary, ordered least to most severe (findings.json)."""
     return tuple(_or_read(data)["severities"])
 
+
 # A sentence terminator followed by more text — the mechanical half of "one sentence".
 # The uppercase lookahead catches the compact but still multi-sentence ``Do this.Then that.``
 # form without rejecting dots inside ordinary paths such as ``meta/CONCEPT.md``.

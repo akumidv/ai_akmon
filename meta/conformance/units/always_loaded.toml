@@ -12,8 +12,9 @@
 # "after \n", "before \n" and "anything" -- never \r or U+2028; `Path.read_text` translates \r\n and
 # \r to \n before the bytes are counted; `Path.resolve`, `Path.expanduser` and `Path.relative_to` are
 # the stdlib's, with a `RuntimeError` for a symlink loop or an unknown `~user`. A JS port gets none of
-# this for free. The table is the spec: every expected value was produced by running the Python and
-# then read against the docstrings.
+# this for free. The table is the spec, held to the Python reference row by row: `runner.py --impl
+# python` runs it as scenario `units/always_loaded` in the conformance leg of `meta/self_ci.py`, and
+# every expected value was read against the docstrings.
 #
 # The mouth is the generic one of `routing.toml` (the row format is the block comment above
 # `probe_routing` in probe.py): a row names a public function (`marked_block`, `import_chain`,

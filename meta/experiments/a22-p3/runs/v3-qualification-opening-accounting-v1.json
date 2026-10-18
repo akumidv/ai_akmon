@@ -1,0 +1,22 @@
+{
+  "charged_v3_codex_tokens": 74257,
+  "historical_envelope_debit_tokens": 7766,
+  "historical_receipt_sha256": "722350657d7bb18d04d8356c7d223460fe4723d1a3555192a252e378ae5869e0",
+  "known_observed_codex_tokens": 66491,
+  "record_type": "p3_v3_qualification_opening_accounting",
+  "route_checks_used": 2,
+  "schema": 1,
+  "source_sha256": {
+    "first_unknown_ledger": "8c68a5b94366df96225ece0dd3880a3e53fc463380a1420116f84a0bec2f1067",
+    "lean_ledger": "a918352f2108acb9fdbde653ebf22c1626098c65d1da04a46aee49398770d4cb",
+    "route_ledger": "d9ebefd4d0481af6307e3f3300dcbcc0c9716d0af0bae8b964b4bf7c20817da5",
+    "verified_source_ledger": "64ab455b03038056f08c86627618fd4f16d97be32654ea38986ee82159de4d1c"
+  },
+  "technical_subject_attempt_ids": [
+    "4f9072f1869ed6493d9af5ffa84f23e6",
+    "95e85fab70b5464fd4b520d321088003",
+    "b2e8e117e30e7be06358ef1db9e109df"
+  ],
+  "technical_subject_attempts_remaining": 21,
+  "technical_subject_attempts_used": 3
+}

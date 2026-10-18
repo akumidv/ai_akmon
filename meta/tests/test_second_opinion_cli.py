@@ -11,6 +11,7 @@ spawns the real ``claude``/``codex`` CLI.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -110,7 +111,22 @@ def test_dry_run_two_vendors_picks_other_vendor_with_default_model(tmp_path, cap
     assert command_line.startswith("claude -p --output-format text ")
     assert "--model" not in command_line  # other-vendor step: no model pin
     assert "provider=openai model=(default)" in out
-    assert "report:" in out
+    assert "report: .claude/second-opinion/code-verify-1.md" in out
+
+
+def test_dry_run_with_a_task_names_the_next_ordinal_and_creates_nothing(tmp_path, capsys):
+    """C114: ``[<task>-]<gate>-<n>.md``, n one past the largest existing ordinal of that prefix."""
+    root = _write_project(tmp_path, _TWO_VENDOR_REGISTRY, {"orchestrator": "large", "binding": {"auditor": "large"}})
+    report_dir = root / ".claude" / "second-opinion"
+    report_dir.mkdir(parents=True)
+    (report_dir / "C7-code-verify-1.md").write_text("earlier\n", encoding="utf-8")
+    (report_dir / "code-verify-4.md").write_text("no task\n", encoding="utf-8")
+    argv = ["--project-root", str(root), "--orchestrator-vendor", "anthropic", "--gate", "code-verify"]
+    argv += ["--gate-pack", str(_gate_pack(root)), "--task", "C7", "--dry-run"]
+
+    assert second_opinion.main(argv) == 0
+    assert "report: .claude/second-opinion/C7-code-verify-2.md" in capsys.readouterr().out
+    assert sorted(p.name for p in report_dir.iterdir()) == ["C7-code-verify-1.md", "code-verify-4.md"]
 
 
 # --------------------------------------------------------------------------------------
@@ -281,12 +297,16 @@ def test_package_mode_reads_the_registry_from_its_own_tree(tmp_path, capsys):
 
 def test_second_opinion_data_pins_the_structure_and_characteristic_texts():
     data = json.loads((_ROUTING_DIR / "second_opinion.json").read_text(encoding="utf-8"))
-    assert set(data) == {"prompt", "unavailable_notice", "summary"}
+    assert set(data) == {"prompt", "unavailable_notice", "report_dir_outside", "summary"}
     assert data["prompt"].startswith("You are an independent second-opinion reviewer for a akmon verify gate.")
     assert data["prompt"].endswith("Material to review:\n{{material}}\n")
     assert len(data["unavailable_notice"]) == 5
     assert data["unavailable_notice"][0] == (
         "second-opinion: skipped at gate '{{gate}}' — ladder exhausted, no model-diverse reviewer is reachable."
+    )
+    assert data["report_dir_outside"] == (
+        "second-opinion: report_dir '{{report_dir}}' resolves outside the project;"
+        " it must be a directory inside the project root."
     )
     assert data["summary"]["result_line"] == (
         "second-opinion provider={{provider}} model={{model}} gate={{gate}} exit={{exit}}"
@@ -319,3 +339,120 @@ def test_a_missing_second_opinion_json_raises_from_main(monkeypatch, tmp_path):
         second_opinion.main(
             ["--project-root", str(root), "--orchestrator-vendor", "anthropic", "--gate", "g", "--gate-pack", str(pack)]
         )
+
+
+def test_the_provider_output_is_read_with_universal_newlines(tmp_path, capsys, monkeypatch):
+    """``text=True`` turns a provider's CRLF and lone CR into LF in the report (the C115 reference)."""
+    config = {"orchestrator": "large", "binding": {"auditor": "large"}}
+    (tmp_path / "project").mkdir()
+    root = _write_project(tmp_path / "project", _TWO_VENDOR_REGISTRY, config)
+    pack = _gate_pack(root)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stand_in = bin_dir / "codex"
+    stand_in.write_text("#!/bin/sh\nprintf 'a\\r\\nb\\rc\\r\\n'\nprintf 'w\\r\\nx\\r' >&2\n", encoding="utf-8")
+    stand_in.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+
+    exit_code = second_opinion.main(
+        ["--project-root", str(root), "--provider", "anthropic", "--gate", "g", "--gate-pack", str(pack)]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    report = root / ".claude" / "second-opinion" / "g-1.md"
+    assert report.read_bytes() == b"a\nb\nc\n\n[stderr]\nw\nx\n"
+
+
+def test_an_undecodable_provider_byte_is_replaced_and_the_report_is_written(tmp_path, capsys, monkeypatch):
+    """A byte that is not UTF-8 reads as U+FFFD on both pipes; the run still writes its report (C120)."""
+    config = {"orchestrator": "large", "binding": {"auditor": "large"}}
+    (tmp_path / "project").mkdir()
+    root = _write_project(tmp_path / "project", _TWO_VENDOR_REGISTRY, config)
+    pack = _gate_pack(root)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stand_in = bin_dir / "codex"
+    stand_in.write_text("#!/bin/sh\nprintf 'ok\\377x'\nprintf 'e\\377' >&2\n", encoding="utf-8")
+    stand_in.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+
+    exit_code = second_opinion.main(
+        ["--project-root", str(root), "--provider", "anthropic", "--gate", "g", "--gate-pack", str(pack)]
+    )
+
+    assert "\ufffd" in capsys.readouterr().out
+    assert exit_code == 0
+    report = root / ".claude" / "second-opinion" / "g-1.md"
+    assert report.read_text(encoding="utf-8") == "ok\ufffdx\n\n[stderr]\ne\ufffd\n"
+
+
+# --------------------------------------------------------------------------------------
+# report_dir must resolve inside the project (C9): refused before the provider or any write
+# --------------------------------------------------------------------------------------
+
+
+def _registry_with_report_dir(report_dir: str) -> dict:
+    registry = json.loads(json.dumps(_TWO_VENDOR_REGISTRY))
+    registry["openai"]["second_opinion"]["report_dir"] = report_dir
+    return registry
+
+
+def _outside_case(kind: str, tmp_path: Path) -> tuple[str, Path]:
+    """``(configured report_dir, the outside directory it reaches)`` for one way of leaving the project."""
+    outside = tmp_path / "outside"
+    if kind == "absolute":
+        return str(outside / "reviews"), outside
+    if kind == "dotdot":
+        return "../outside/reviews", outside
+    outside.mkdir()
+    (tmp_path / "project" / "link").symlink_to(outside, target_is_directory=True)
+    return "link/reviews", outside
+
+
+@pytest.mark.parametrize("dry_run", [False, True], ids=["run", "dry-run"])
+@pytest.mark.parametrize("kind", ["absolute", "dotdot", "symlink"])
+def test_a_report_dir_outside_the_project_is_refused_before_anything_runs(tmp_path, capsys, monkeypatch, kind, dry_run):
+    (tmp_path / "project").mkdir()
+    configured, outside = _outside_case(kind, tmp_path)
+    config = {"orchestrator": "large", "binding": {"auditor": "large"}}
+    root = _write_project(tmp_path / "project", _registry_with_report_dir(configured), config)
+
+    def _fail_if_called(*_args, **_kwargs):
+        raise AssertionError("a report_dir outside the project must not reach the provider")
+
+    monkeypatch.setattr(second_opinion.subprocess, "run", _fail_if_called)
+    argv = ["--project-root", str(root), "--orchestrator-vendor", "anthropic", "--gate", "g"]
+    argv += ["--gate-pack", str(_gate_pack(root))] + (["--dry-run"] if dry_run else [])
+
+    exit_code = second_opinion.main(argv)
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert captured.err == (
+        f"second-opinion: report_dir '{configured}' resolves outside the project;"
+        " it must be a directory inside the project root.\n"
+    )
+    assert not (outside / "reviews").exists()
+
+
+def test_a_report_dir_inside_the_project_still_writes_its_report(tmp_path, capsys, monkeypatch):
+    """``..`` and a link that stay inside the project are fine; the report line names the resolved path."""
+    (tmp_path / "project").mkdir()
+    (tmp_path / "project" / "docs").mkdir()
+    (tmp_path / "project" / "link").symlink_to(tmp_path / "project" / "docs", target_is_directory=True)
+    config = {"orchestrator": "large", "binding": {"auditor": "large"}}
+    root = _write_project(tmp_path / "project", _registry_with_report_dir("link/../link/reviews"), config)
+
+    class _Completed:
+        returncode = 0
+        stdout = b"verdict: fine\n"
+        stderr = b""
+
+    monkeypatch.setattr(second_opinion.subprocess, "run", lambda *_a, **_k: _Completed())
+    argv = ["--project-root", str(root), "--orchestrator-vendor", "anthropic", "--gate", "g"]
+
+    assert second_opinion.main([*argv, "--gate-pack", str(_gate_pack(root))]) == 0
+    assert "report: docs/reviews/g-1.md" in capsys.readouterr().out
+    assert (root / "docs" / "reviews" / "g-1.md").read_text(encoding="utf-8") == "verdict: fine\n"

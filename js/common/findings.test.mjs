@@ -12,13 +12,32 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import {
-  CODE_RE, Finding, exitCode, lineSafe, printFindings, readFindingsData, render, retiredCodes, severities } from "./findings.mjs";
+  CODE_RE,
+  Finding,
+  exitCode,
+  lineSafe,
+  printFindings,
+  readFindingsData,
+  render,
+  retiredCodes,
+  severities,
+} from "./findings.mjs";
 
 const DATA_FILE = new URL("../../common/findings.json", import.meta.url);
 
 /** A finding of the given severity; every other field is a valid constant. */
-function finding(/** @type {string} */ severity = "warn", /** @type {Partial<import("./findings.mjs").FindingFields>} */ over = {}) {
-  return new Finding({ severity, code: "area.rule", message: "something is off", target: "meta/x.md", fix: "Fix it", ...over });
+function finding(
+  /** @type {string} */ severity = "warn",
+  /** @type {Partial<import("./findings.mjs").FindingFields>} */ over = {},
+) {
+  return new Finding({
+    severity,
+    code: "area.rule",
+    message: "something is off",
+    target: "meta/x.md",
+    fix: "Fix it",
+    ...over,
+  });
 }
 
 /** What `printFindings` writes while `body` runs (`process.stdout.write` swapped out, then restored). */
@@ -69,7 +88,13 @@ test("a finding is frozen and carries exactly the five fields", () => {
 test("toDict is the one serialization: five fields, a fresh object, no level key", () => {
   const f = finding("error", { target: "" });
   const first = f.toDict();
-  assert.deepEqual(first, { severity: "error", code: "area.rule", message: "something is off", target: "", fix: "Fix it" });
+  assert.deepEqual(first, {
+    severity: "error",
+    code: "area.rule",
+    message: "something is off",
+    target: "",
+    fix: "Fix it",
+  });
   assert.deepEqual(Object.keys(first), ["severity", "code", "message", "target", "fix"]);
   first.message = "changed";
   assert.equal(f.toDict().message, "something is off");
@@ -90,24 +115,51 @@ test("an argument the options object leaves out is the TypeError Python raises, 
     return "no error";
   };
   assert.equal(message(without("fix")), "TypeError: Finding.__init__() missing 1 required positional argument: 'fix'");
-  assert.equal(message(without("message", "target")), "TypeError: Finding.__init__() missing 2 required positional arguments: 'message' and 'target'");
-  assert.equal(message(without("code", "target", "fix")), "TypeError: Finding.__init__() missing 3 required positional arguments: 'code', 'target', and 'fix'");
-  assert.equal(message({ ...whole, level: "x" }), "TypeError: Finding.__init__() got an unexpected keyword argument 'level'");
+  assert.equal(
+    message(without("message", "target")),
+    "TypeError: Finding.__init__() missing 2 required positional arguments: 'message' and 'target'",
+  );
+  assert.equal(
+    message(without("code", "target", "fix")),
+    "TypeError: Finding.__init__() missing 3 required positional arguments: 'code', 'target', and 'fix'",
+  );
+  assert.equal(
+    message({ ...whole, level: "x" }),
+    "TypeError: Finding.__init__() got an unexpected keyword argument 'level'",
+  );
   assert.equal(message({ ...whole, data: /** @type {any} */ (null) }), "no error");
   // `null` is a value (Python's `None`) and reaches the validation; only an absent field is a TypeError.
-  assert.equal(message({ ...whole, fix: /** @type {any} */ (null) }), "ValueError: fix is required and must be non-empty, got None");
+  assert.equal(
+    message({ ...whole, fix: /** @type {any} */ (null) }),
+    "ValueError: fix is required and must be non-empty, got None",
+  );
 });
 
 test("the validation messages quote with Python's repr", () => {
-  assert.throws(() => finding("fatal"), { name: "ValueError", message: "severity must be one of ok | warn | error, got 'fatal'" });
-  assert.throws(() => finding("warn", { code: "Area.rule" }), { name: "ValueError", message: "code must be a dotted slug like 'area.rule', got 'Area.rule'" });
+  assert.throws(() => finding("fatal"), {
+    name: "ValueError",
+    message: "severity must be one of ok | warn | error, got 'fatal'",
+  });
+  assert.throws(() => finding("warn", { code: "Area.rule" }), {
+    name: "ValueError",
+    message: "code must be a dotted slug like 'area.rule', got 'Area.rule'",
+  });
   assert.throws(() => finding("warn", { code: "hooks.package-mode" }), {
     name: "ValueError",
     message: "code 'hooks.package-mode' is retired and must not be reused by a live check",
   });
-  assert.throws(() => finding("warn", { message: " \u00a0" }), { name: "ValueError", message: "message must be non-empty, got ' \\xa0'" });
-  assert.throws(() => finding("warn", { target: "a\nb" }), { name: "ValueError", message: "target must be one line, got 'a\\nb'" });
-  assert.throws(() => finding("warn", { fix: "Do this. Then that" }), { name: "ValueError", message: "fix must be one sentence, got 'Do this. Then that'" });
+  assert.throws(() => finding("warn", { message: " \u00a0" }), {
+    name: "ValueError",
+    message: "message must be non-empty, got ' \\xa0'",
+  });
+  assert.throws(() => finding("warn", { target: "a\nb" }), {
+    name: "ValueError",
+    message: "target must be one line, got 'a\\nb'",
+  });
+  assert.throws(() => finding("warn", { fix: "Do this. Then that" }), {
+    name: "ValueError",
+    message: "fix must be one sentence, got 'Do this. Then that'",
+  });
 });
 
 test("the sentence boundary is ASCII whitespace: a no-break space after a full stop is text", () => {
@@ -119,10 +171,25 @@ test("the sentence boundary is ASCII whitespace: a no-break space after a full s
 });
 
 test("every logical line separator is refused in message, target and fix", () => {
-  const separators = ["\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", String.fromCharCode(0x2028), String.fromCharCode(0x2029)];
+  const separators = [
+    "\n",
+    "\r",
+    "\v",
+    "\f",
+    "\x1c",
+    "\x1d",
+    "\x1e",
+    "\x85",
+    String.fromCharCode(0x2028),
+    String.fromCharCode(0x2029),
+  ];
   for (const separator of separators) {
     for (const field of /** @type {const} */ (["message", "target", "fix"])) {
-      assert.throws(() => finding("warn", { [field]: `a${separator}b` }), { name: "ValueError" }, `${field} ${separator.charCodeAt(0)}`);
+      assert.throws(
+        () => finding("warn", { [field]: `a${separator}b` }),
+        { name: "ValueError" },
+        `${field} ${separator.charCodeAt(0)}`,
+      );
     }
   }
 });
@@ -147,7 +214,11 @@ test("render: upper-cased severity, the target slot collapses, the skeleton is t
   assert.equal(render(finding("ok")), "OK area.rule meta/x.md: something is off → Fix it");
   assert.equal(render(finding("error", { target: "" })), "ERROR area.rule: something is off → Fix it");
   const data = readFindingsData();
-  data.render = { head: "{{code}}/{{severity}}", head_with_target: "{{head}}@{{target}}", line: "{{message}} <- {{head}}" };
+  data.render = {
+    head: "{{code}}/{{severity}}",
+    head_with_target: "{{head}}@{{target}}",
+    line: "{{message}} <- {{head}}",
+  };
   assert.equal(render(finding("ok"), data), "something is off <- area.rule/OK@meta/x.md");
 });
 
@@ -168,15 +239,24 @@ test("printFindings writes one canonical line per finding; quiet drops the ok on
     captured(() => printFindings(findings, { quiet: true })),
     "WARN area.rule: something is off → Fix it\nERROR area.rule meta/x.md: something is off → Fix it\n",
   );
-  assert.equal(captured(() => printFindings([], {})), "");
-  assert.equal(captured(() => printFindings([finding("ok")], { quiet: true })), "");
+  assert.equal(
+    captured(() => printFindings([], {})),
+    "",
+  );
+  assert.equal(
+    captured(() => printFindings([finding("ok")], { quiet: true })),
+    "",
+  );
 });
 
 test("printFindings takes any iterable", () => {
   function* generated() {
     yield finding("error");
   }
-  assert.equal(captured(() => printFindings(generated())), "ERROR area.rule meta/x.md: something is off → Fix it\n");
+  assert.equal(
+    captured(() => printFindings(generated())),
+    "ERROR area.rule meta/x.md: something is off → Fix it\n",
+  );
 });
 
 test("exitCode: errors fail; warnings fail only under strict", () => {

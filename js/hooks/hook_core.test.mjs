@@ -15,11 +15,35 @@ import { spawnSync } from "node:child_process";
 
 import { pyError } from "../common/pyvalue.mjs";
 import {
-  HookResult, agentNames, analysisBeforeMutationMessage, analysisWriteResult, classifyTarget, currentGitBranch,
-  delegationAskThreshold, delegationGrace, delegationNudgeMessage, delegationNudgeResult, delegationNudgeThreshold,
-  editTool, formatG, gitCommitGuardResult, hookFailureDiagnostic, hookFailureNotice, isCodePath, isPlanningDoc,
-  neutralKind, normpath, privilegeEscalationGuardResult, readTool, reportUnclassifiedShellRoute, roleOnCodeResult,
-  runtimeRootDisplay, sessionStartResult, shellTool, staleGuardrailNotice, subagentTool,
+  HookResult,
+  agentNames,
+  analysisBeforeMutationMessage,
+  analysisWriteResult,
+  classifyTarget,
+  currentGitBranch,
+  delegationAskThreshold,
+  delegationGrace,
+  delegationNudgeMessage,
+  delegationNudgeResult,
+  delegationNudgeThreshold,
+  editTool,
+  formatG,
+  gitCommitGuardResult,
+  hookFailureDiagnostic,
+  hookFailureNotice,
+  isCodePath,
+  isPlanningDoc,
+  neutralKind,
+  normpath,
+  privilegeEscalationGuardResult,
+  readTool,
+  reportUnclassifiedShellRoute,
+  roleOnCodeResult,
+  runtimeRootDisplay,
+  sessionStartResult,
+  shellTool,
+  staleGuardrailNotice,
+  subagentTool,
 } from "./hook_core.mjs";
 import { TREE_ROOT, lazyHookData } from "./hook_data.mjs";
 
@@ -36,10 +60,7 @@ function withDir(/** @type {(dir: string) => void} */ body) {
 }
 
 /** Run `body` with `TMPDIR` a fresh directory (the markers and counters land there) and `env` set. */
-function withState(
-  /** @type {Record<string, string | null>} */ env,
-  /** @type {(tmp: string) => void} */ body,
-) {
+function withState(/** @type {Record<string, string | null>} */ env, /** @type {(tmp: string) => void} */ body) {
   withDir((tmp) => {
     const names = ["TMPDIR", "TEMP", "TMP", "AITNA_ROOT", ...Object.keys(env)];
     const saved = names.map((name) => process.env[name]);
@@ -80,15 +101,26 @@ function thrown(/** @type {() => unknown} */ body) {
 
 test("HookResult: one options object, null defaults, frozen", () => {
   const result = new HookResult({ eventName: "PreToolUse", permissionDecision: "deny" });
-  assert.deepEqual({ ...result }, {
-    eventName: "PreToolUse", additionalContext: null, permissionDecision: "deny", permissionReason: null,
-    systemMessage: null, decision: null, reason: null,
-  });
+  assert.deepEqual(
+    { ...result },
+    {
+      eventName: "PreToolUse",
+      additionalContext: null,
+      permissionDecision: "deny",
+      permissionReason: null,
+      systemMessage: null,
+      decision: null,
+      reason: null,
+    },
+  );
   assert.ok(Object.isFrozen(result));
 });
 
 test("the crash report is the class name, never the message", () => {
-  assert.equal(hookFailureDiagnostic("role-on-code", pyError("KeyError", "secret/path")), "akmon role-on-code hook: KeyError");
+  assert.equal(
+    hookFailureDiagnostic("role-on-code", pyError("KeyError", "secret/path")),
+    "akmon role-on-code hook: KeyError",
+  );
   const missing = thrown(() => fs.readFileSync("/nonexistent/x"));
   assert.equal(hookFailureDiagnostic("h", missing), "akmon h hook: FileNotFoundError");
   assert.equal(hookFailureDiagnostic("h", "not an error"), "akmon h hook: Exception");
@@ -100,15 +132,36 @@ test("the crash report is the class name, never the message", () => {
 });
 
 test("the neutral kinds come from vocabulary.json; an unknown stem is a KeyError", () => {
-  assert.deepEqual([editTool(data), shellTool(data), readTool(data), subagentTool(data)], ["edit", "shell", "read", "subagent"]);
+  assert.deepEqual(
+    [editTool(data), shellTool(data), readTool(data), subagentTool(data)],
+    ["edit", "shell", "read", "subagent"],
+  );
   assert.equal(thrown(() => neutralKind(data, "nope-not-a-stem")).name, "KeyError");
 });
 
 test("normpath: os.path.normpath on every shape of separator and dot", () => {
   for (const [given, expected] of [
-    ["", "."], [".", "."], ["..", ".."], ["//x", "//x"], ["///x", "/x"], ["////x", "/x"], ["a/", "a"], ["a//b", "a/b"],
-    ["a/./b", "a/b"], ["/..", "/"], ["/../a", "/a"], ["//..", "//"], ["//a/../..", "//"], ["a/..", "."], ["../a", "../a"],
-    ["a/../..", ".."], ["./", "."], ["/./a", "/a"], ["//./a", "//a"], ["a/b/../../..", ".."], ["/a/b/../../..", "/"],
+    ["", "."],
+    [".", "."],
+    ["..", ".."],
+    ["//x", "//x"],
+    ["///x", "/x"],
+    ["////x", "/x"],
+    ["a/", "a"],
+    ["a//b", "a/b"],
+    ["a/./b", "a/b"],
+    ["/..", "/"],
+    ["/../a", "/a"],
+    ["//..", "//"],
+    ["//a/../..", "//"],
+    ["a/..", "."],
+    ["../a", "../a"],
+    ["a/../..", ".."],
+    ["./", "."],
+    ["/./a", "/a"],
+    ["//./a", "//a"],
+    ["a/b/../../..", ".."],
+    ["/a/b/../../..", "/"],
   ]) {
     assert.equal(normpath(given), expected, JSON.stringify(given));
   }
@@ -116,14 +169,38 @@ test("normpath: os.path.normpath on every shape of separator and dot", () => {
 
 test("classifyTarget with a root: project-relative, lowercased, leading slash, outside is a marker", () => {
   for (const [given, expected] of [
-    ["src/a.py", "/src/a.py"], ["SRC/A.PY", "/src/a.py"], ["./a.py", "/a.py"], ["a/../b.py", "/b.py"],
-    ["../a.py", "/__outside_project__"], ["a//b.py", "/a/b.py"], ["a/./b.py", "/a/b.py"], ["/proj/a.py", "/a.py"],
-    ["/proj//a.py", "/a.py"], ["//proj/a.py", "/a.py"], ["///proj/a.py", "/a.py"], ["/proj", "/."], ["/proj/", "/."],
-    ["/proj/..", "/__outside_project__"], ["/other/a.py", "/__outside_project__"], ["a\\b.py", "/a/b.py"],
-    ["C:\\x\\a.py", "/c:/x/a.py"], ["", "/."], [".", "/."], [" ", "/ "], ["..", "/__outside_project__"], ["src/", "/src"],
-    ["/", "/__outside_project__"], ["//", "/__outside_project__"], ["///", "/__outside_project__"], ["a.PY", "/a.py"],
-    ["/proj/docs/a.py", "/docs/a.py"], ["_AITNA/TASKS.md", "/_aitna/tasks.md"], ["/proj/./x/../y.py", "/y.py"],
-    ["/proj/x/../../y.py", "/__outside_project__"], ["é/İ.PY", "/é/i̇.py"], ["a\nb.py", "/a\nb.py"],
+    ["src/a.py", "/src/a.py"],
+    ["SRC/A.PY", "/src/a.py"],
+    ["./a.py", "/a.py"],
+    ["a/../b.py", "/b.py"],
+    ["../a.py", "/__outside_project__"],
+    ["a//b.py", "/a/b.py"],
+    ["a/./b.py", "/a/b.py"],
+    ["/proj/a.py", "/a.py"],
+    ["/proj//a.py", "/a.py"],
+    ["//proj/a.py", "/a.py"],
+    ["///proj/a.py", "/a.py"],
+    ["/proj", "/."],
+    ["/proj/", "/."],
+    ["/proj/..", "/__outside_project__"],
+    ["/other/a.py", "/__outside_project__"],
+    ["a\\b.py", "/a/b.py"],
+    ["C:\\x\\a.py", "/c:/x/a.py"],
+    ["", "/."],
+    [".", "/."],
+    [" ", "/ "],
+    ["..", "/__outside_project__"],
+    ["src/", "/src"],
+    ["/", "/__outside_project__"],
+    ["//", "/__outside_project__"],
+    ["///", "/__outside_project__"],
+    ["a.PY", "/a.py"],
+    ["/proj/docs/a.py", "/docs/a.py"],
+    ["_AITNA/TASKS.md", "/_aitna/tasks.md"],
+    ["/proj/./x/../y.py", "/y.py"],
+    ["/proj/x/../../y.py", "/__outside_project__"],
+    ["é/İ.PY", "/é/i̇.py"],
+    ["a\nb.py", "/a\nb.py"],
   ]) {
     assert.equal(classifyTarget(given, "/proj"), expected, JSON.stringify(given));
   }
@@ -131,8 +208,15 @@ test("classifyTarget with a root: project-relative, lowercased, leading slash, o
 
 test("classifyTarget without a root: an absolute path keeps its own spelling (a leading // too)", () => {
   for (const [given, expected] of [
-    ["/a/b.py", "/a/b.py"], ["//a/b.py", "//a/b.py"], ["///a/b.py", "/a/b.py"], ["/a//b/./c.py", "/a/b/c.py"],
-    ["/a/../b.py", "/a/../b.py"], ["/", "/"], ["//", "//"], ["/a/", "/a"], ["\\\\x\\y.py", "//x/y.py"],
+    ["/a/b.py", "/a/b.py"],
+    ["//a/b.py", "//a/b.py"],
+    ["///a/b.py", "/a/b.py"],
+    ["/a//b/./c.py", "/a/b/c.py"],
+    ["/a/../b.py", "/a/../b.py"],
+    ["/", "/"],
+    ["//", "//"],
+    ["/a/", "/a"],
+    ["\\\\x\\y.py", "//x/y.py"],
     ["C:/x/A.PY", "/c:/x/a.py"],
   ]) {
     assert.equal(classifyTarget(given), expected, JSON.stringify(given));
@@ -163,10 +247,24 @@ test("classifyTarget: a path no filesystem call can take raises as Python does",
 test("isCodePath: the suffix rule and the non-code segments", () => {
   withState({}, () => {
     for (const [given, expected] of /** @type {[string, boolean][]} */ ([
-      ["src/a.py", true], ["a.PY", true], [".py", false], ["a.", false], ["x.tar.gz", false], ["x.mjs", true],
-      ["Makefile", false], ["x.R", true], ["x.mm", true], ["docs/a.py", false], ["src/docs/a.py", false],
-      ["_aitna/design/a.py", false], ["_aitna/akmon/js/x.mjs", false], [".claude/x.py", false], ["../a.py", false],
-      ["a/b.py/", true], ["a.py//", true], ["/proj/src/a.py", true],
+      ["src/a.py", true],
+      ["a.PY", true],
+      [".py", false],
+      ["a.", false],
+      ["x.tar.gz", false],
+      ["x.mjs", true],
+      ["Makefile", false],
+      ["x.R", true],
+      ["x.mm", true],
+      ["docs/a.py", false],
+      ["src/docs/a.py", false],
+      ["_aitna/design/a.py", false],
+      ["_aitna/akmon/js/x.mjs", false],
+      [".claude/x.py", false],
+      ["../a.py", false],
+      ["a/b.py/", true],
+      ["a.py//", true],
+      ["/proj/src/a.py", true],
     ])) {
       assert.equal(isCodePath(data, given, "/proj"), expected, JSON.stringify(given));
     }
@@ -176,9 +274,16 @@ test("isCodePath: the suffix rule and the non-code segments", () => {
 test("isPlanningDoc: the backlog files, and a .md under a planning segment", () => {
   withState({}, () => {
     for (const [given, expected] of /** @type {[string, boolean][]} */ ([
-      ["_aitna/TASKS.md", true], ["_aitna/tasks_archive.md", true], ["_AITNA/Design/a.md", true], ["_aitna/design/a.py", false],
-      ["docs/dev/a.md", true], ["docs/b.md", false], ["_aitna/akmon/a.md", true], ["_aitna/.akmon/a.md", true],
-      ["src/_aitna/design/a.md", true], ["_aitna/design", false],
+      ["_aitna/TASKS.md", true],
+      ["_aitna/tasks_archive.md", true],
+      ["_AITNA/Design/a.md", true],
+      ["_aitna/design/a.py", false],
+      ["docs/dev/a.md", true],
+      ["docs/b.md", false],
+      ["_aitna/akmon/a.md", true],
+      ["_aitna/.akmon/a.md", true],
+      ["src/_aitna/design/a.md", true],
+      ["_aitna/design", false],
     ])) {
       assert.equal(isPlanningDoc(data, given, "/proj"), expected, JSON.stringify(given));
     }
@@ -193,8 +298,16 @@ test("isPlanningDoc: the backlog files, and a .md under a planning segment", () 
 
 test("the privilege guard is ASCII-word-bounded: another script's letter is a boundary", () => {
   for (const [command, denied] of /** @type {[string, boolean][]} */ ([
-    ["sudo ls", true], ["echo sudo", true], ["SUDO ls", false], ["pseudo ls", false], ["sudoku", false], ["sudo-x", true],
-    ["a;sudo b", true], ["ésudo ls", true], ["sudoé ls", true], ["sudo_x", false],
+    ["sudo ls", true],
+    ["echo sudo", true],
+    ["SUDO ls", false],
+    ["pseudo ls", false],
+    ["sudoku", false],
+    ["sudo-x", true],
+    ["a;sudo b", true],
+    ["ésudo ls", true],
+    ["sudoé ls", true],
+    ["sudo_x", false],
   ])) {
     assert.equal(privilegeEscalationGuardResult(data, command) !== null, denied, command);
   }
@@ -260,11 +373,19 @@ test("role-on-code and analysis-guard fire once per session on a matching edit",
   withState({}, () => {
     assert.equal(roleOnCodeResult(data, "edit", "/proj/src/a.py", "s-a", "/proj")?.eventName, "PreToolUse");
     assert.equal(roleOnCodeResult(data, "edit", "/proj/src/a.py", "s-a", "/proj"), null);
-    assert.equal(roleOnCodeResult(data, "edit", "/proj/src/b.py", "s-b", "/proj")?.additionalContext?.startsWith("[akmon] Role check"), true);
+    assert.equal(
+      roleOnCodeResult(data, "edit", "/proj/src/b.py", "s-b", "/proj")?.additionalContext?.startsWith(
+        "[akmon] Role check",
+      ),
+      true,
+    );
     assert.equal(roleOnCodeResult(data, "read", "/proj/src/c.py", "s-c", "/proj"), null);
     assert.equal(roleOnCodeResult(data, "edit", 5, "s-c", "/proj"), null);
     assert.equal(roleOnCodeResult(data, "edit", "/proj/docs/c.py", "s-c", "/proj"), null);
-    assert.equal(analysisWriteResult(data, "edit", "/proj/_aitna/TASKS.md", "s-a", "/proj")?.additionalContext, analysisBeforeMutationMessage(data));
+    assert.equal(
+      analysisWriteResult(data, "edit", "/proj/_aitna/TASKS.md", "s-a", "/proj")?.additionalContext,
+      analysisBeforeMutationMessage(data),
+    );
     assert.equal(analysisWriteResult(data, "edit", "/proj/_aitna/TASKS.md", "s-a", "/proj"), null);
     assert.equal(analysisWriteResult(data, "edit", "/proj/src/a.py", "s-d", "/proj"), null);
   });
@@ -275,7 +396,10 @@ test("the shell-route notice is claimed once per session, on stderr", () => {
     /** @type {string[]} */
     const written = [];
     const original = process.stderr.write;
-    process.stderr.write = /** @type {any} */ ((/** @type {string} */ text) => (written.push(text), true));
+    process.stderr.write = /** @type {any} */ (
+      (/** @type {string} */ text) =>
+        (written.push(text), true)
+    );
     try {
       reportUnclassifiedShellRoute(data, "s-shell");
       reportUnclassifiedShellRoute(data, "s-shell");
@@ -290,11 +414,32 @@ test("the shell-route notice is claimed once per session, on stderr", () => {
 
 test("formatG: six significant digits, half to even on the exact value, Python's exponent spelling", () => {
   for (const [value, expected] of /** @type {[number, string][]} */ ([
-    [1, "1"], [0.5, "0.5"], [2.5, "2.5"], [31, "31"], [29.5, "29.5"], [100, "100"], [1234565, "1.23456e+06"],
-    [1234575, "1.23458e+06"], [999999.5, "1e+06"], [1e16, "1e+16"], [0.0001234565, "0.000123457"],
-    [0.00001234565, "1.23456e-05"], [123456, "123456"], [1234567, "1.23457e+06"], [1e-5, "1e-05"], [0, "0"], [-0, "-0"],
-    [1e300, "1e+300"], [Infinity, "inf"], [NaN, "nan"], [33.5, "33.5"], [0.1, "0.1"], [100000, "100000"],
-    [99999.95, "99999.9"], [5e-324, "4.94066e-324"], [1500000, "1.5e+06"],
+    [1, "1"],
+    [0.5, "0.5"],
+    [2.5, "2.5"],
+    [31, "31"],
+    [29.5, "29.5"],
+    [100, "100"],
+    [1234565, "1.23456e+06"],
+    [1234575, "1.23458e+06"],
+    [999999.5, "1e+06"],
+    [1e16, "1e+16"],
+    [0.0001234565, "0.000123457"],
+    [0.00001234565, "1.23456e-05"],
+    [123456, "123456"],
+    [1234567, "1.23457e+06"],
+    [1e-5, "1e-05"],
+    [0, "0"],
+    [-0, "-0"],
+    [1e300, "1e+300"],
+    [Infinity, "inf"],
+    [NaN, "nan"],
+    [33.5, "33.5"],
+    [0.1, "0.1"],
+    [100000, "100000"],
+    [99999.95, "99999.9"],
+    [5e-324, "4.94066e-324"],
+    [1500000, "1.5e+06"],
   ])) {
     assert.equal(formatG(value), expected, String(value));
   }
@@ -360,14 +505,23 @@ test("the advisory fires once per episode; the ask fires once, never on a read; 
 });
 
 test("the drift thresholds and grace read the environment as int() does", () => {
-  withState({ AKMON_DELEGATION_GRACE: " 1_0 ", AKMON_DELEGATION_NUDGE_THRESHOLD: "٥", AKMON_DELEGATION_ASK_THRESHOLD: "3" }, () => {
-    assert.equal(delegationGrace(data), 10);
-    assert.equal(delegationNudgeThreshold(data), 5);
-    assert.equal(delegationAskThreshold(data), 5); // clamped up to the advisory
-  });
-  withState({ AKMON_DELEGATION_GRACE: "-1", AKMON_DELEGATION_NUDGE_THRESHOLD: "0", AKMON_DELEGATION_ASK_THRESHOLD: "x" }, () => {
-    assert.deepEqual([delegationGrace(data), delegationNudgeThreshold(data), delegationAskThreshold(data)], [8, 30, 120]);
-  });
+  withState(
+    { AKMON_DELEGATION_GRACE: " 1_0 ", AKMON_DELEGATION_NUDGE_THRESHOLD: "٥", AKMON_DELEGATION_ASK_THRESHOLD: "3" },
+    () => {
+      assert.equal(delegationGrace(data), 10);
+      assert.equal(delegationNudgeThreshold(data), 5);
+      assert.equal(delegationAskThreshold(data), 5); // clamped up to the advisory
+    },
+  );
+  withState(
+    { AKMON_DELEGATION_GRACE: "-1", AKMON_DELEGATION_NUDGE_THRESHOLD: "0", AKMON_DELEGATION_ASK_THRESHOLD: "x" },
+    () => {
+      assert.deepEqual(
+        [delegationGrace(data), delegationNudgeThreshold(data), delegationAskThreshold(data)],
+        [8, 30, 120],
+      );
+    },
+  );
   withState({ AKMON_DELEGATION_GRACE: "99999999999999999999" }, () => {
     assert.match(delegationNudgeMessage(data, 31), /the first 99999999999999999999 calls of a stretch nothing/);
   });
@@ -447,7 +601,10 @@ test("sessionStartResult: the roster on a mounted project, no stale notice", () 
       "- OPERATE (run/use from outside): ops",
       "No agent is active yet.",
     ]);
-    assert.match(String(result?.additionalContext), /\nAlso: read `_aitna\/memory\/` at session start \(project memory\)\.$/);
+    assert.match(
+      String(result?.additionalContext),
+      /\nAlso: read `_aitna\/memory\/` at session start \(project memory\)\.$/,
+    );
   });
 });
 
@@ -456,7 +613,10 @@ test("sessionStartResult: a package project with a stale copy says so on both ch
     project(dir, { mount: false, stale: true });
     const result = sessionStartResult(data, dir);
     const notice = staleGuardrailNotice(data, dir);
-    assert.match(String(notice), /^⚠ akmon: the rules in _aitna\/\.akmon\/ are not the ones this session's akmon ships \(guardrails\/_common\.md\)\./);
+    assert.match(
+      String(notice),
+      /^⚠ akmon: the rules in _aitna\/\.akmon\/ are not the ones this session's akmon ships \(guardrails\/_common\.md\)\./,
+    );
     assert.equal(result?.systemMessage, notice);
     assert.ok(String(result?.additionalContext).endsWith(String(notice)));
   });
@@ -493,7 +653,9 @@ test("currentGitBranch: the branch in a repository, empty outside one", () => {
       process.chdir(dir);
       assert.equal(currentGitBranch(), "");
       spawnSync("git", ["init", "-q", "-b", "feat"], { cwd: dir });
-      spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"], { cwd: dir });
+      spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"], {
+        cwd: dir,
+      });
       assert.equal(currentGitBranch(), "feat");
     } finally {
       process.chdir(here);

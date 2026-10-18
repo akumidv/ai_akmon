@@ -4,9 +4,8 @@
  * ADR 0020 D01). The Python module is the spec: the same answers, the same texts, the same exit
  * codes and the same stdout and stderr, for the commands that exist here.
  *
- * `init`, `sync`, `verify`, `check`, `path`, `hook` and `version` are real (`init` serves Node
- * package mode only, see `_init.mjs`). `update` is not ported yet: it prints the `not_ported` text
- * of `src/akmon/cli.json` and exits 2.
+ * Every command is real; `init` and `update` serve Node package mode only (`_init.mjs`,
+ * `_update.mjs`).
  *
  * `hook` is the hot path of a session — the generated wiring of a Node project names the hook
  * scripts directly, but `akmon hook <name>` is the same entry for a hand run and for the corpus —
@@ -47,23 +46,30 @@ import { embeddedTreeRoot } from "./_tree.mjs";
  * @property {string} hook_missing_name
  * @property {string} hook_path_refused
  * @property {string} hook_unknown
- * @property {string} not_ported
+ * @property {string} tool_missing_name
+ * @property {string} tool_unknown
+ * @property {string[]} tools
  */
 
 /** The tree this module executes from: `<tree>/js/akmon/cli.mjs` → `<tree>`. */
 const TREE_ROOT = posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /** The commands, in the order the Python lists them. */
-const COMMANDS = ["init", "update", "sync", "verify", "check", "path", "hook", "version"];
-
-/** The commands that are not ported yet, and the task that ports each. */
-const PORTS = new Map([["update", "C107"]]);
+const COMMANDS = ["init", "update", "sync", "verify", "check", "path", "hook", "tool", "version"];
 
 /** The line `-h` prints under the usage line (the Python's `argparse` description). */
 const DESCRIPTION = "akmon — the akmon AI-agent development standard, as an installable package.";
 
 /** The keys of `cli.json` the bundle exposes. */
-const DATA_KEYS = ["epilog", "hook_missing_name", "hook_path_refused", "hook_unknown", "not_ported"];
+const DATA_KEYS = [
+  "epilog",
+  "hook_missing_name",
+  "hook_path_refused",
+  "hook_unknown",
+  "tool_missing_name",
+  "tool_unknown",
+  "tools",
+];
 
 /**
  * The CLI text, read from `src/akmon/cli.json` on the first property access and then kept: a
@@ -73,7 +79,8 @@ const DATA_KEYS = ["epilog", "hook_missing_name", "hook_path_refused", "hook_unk
 function lazyCliData() {
   /** @type {Record<string, unknown> | null} */
   let loaded = null;
-  const file = () => (loaded ??= /** @type {Record<string, unknown>} */ (read(posix.join(TREE_ROOT, "src", "akmon", "cli.json"))));
+  const file = () =>
+    (loaded ??= /** @type {Record<string, unknown>} */ (read(posix.join(TREE_ROOT, "src", "akmon", "cli.json"))));
   /** @type {Record<string, unknown>} */
   const bundle = {};
   for (const key of DATA_KEYS) {
@@ -128,7 +135,12 @@ async function _availableHooks(hooksDir) {
     return [];
   }
   const { codePointSort } = await import("../common/sort.mjs");
-  return codePointSort(names.filter((name) => name.endsWith(".mjs")).map(_stem).filter(_isHookStem));
+  return codePointSort(
+    names
+      .filter((name) => name.endsWith(".mjs"))
+      .map(_stem)
+      .filter(_isHookStem),
+  );
 }
 
 /**
@@ -175,6 +187,36 @@ async function _cmdHook(data, argv) {
 }
 
 /**
+ * `akmon tool <name> [args...]` — run one tool out of the running tree (ADR-0020/D06).
+ *
+ * `<name>` is the tool's path under `tools/` without the suffix (`model_routing/init`), the
+ * spelling both implementations share; `cli.json` lists the tools, so a library module
+ * (`model_routing/routing`) or any other path is unknown rather than run, and so is a listed tool
+ * this tree has no port of. The tool's `main` gets the rest of `argv` verbatim.
+ * @param {CliData} data
+ * @param {string[]} argv the arguments after `tool`
+ * @returns {Promise<number>} The process exit code.
+ */
+async function _cmdTool(data, argv) {
+  const toolsDir = posix.join(TREE_ROOT, "js", "tools");
+  const available = data.tools.filter((name) => _isFile(posix.join(toolsDir, `${name}.mjs`)));
+  const listing = available.join(", ") || "(none)";
+  if (argv.length === 0) {
+    process.stderr.write(`${fill(data.tool_missing_name, { available: listing })}\n`);
+    return 2;
+  }
+  const [name, ...rest] = argv;
+  if (!available.includes(name)) {
+    const { strRepr } = await import("../common/pyvalue.mjs");
+    process.stderr.write(`${fill(data.tool_unknown, { name: strRepr(name), available: listing })}\n`);
+    return 2;
+  }
+  const tool = await import(pathToFileURL(posix.join(toolsDir, `${name}.mjs`)).href);
+  const code = await tool.main(rest);
+  return typeof code === "number" ? code : 0;
+}
+
+/**
  * The block `akmon -h` prints: the usage line, the description, the one option, and the command
  * list that `cli.json` owns.
  * @param {CliData} data
@@ -182,8 +224,7 @@ async function _cmdHook(data, argv) {
  */
 function _help(data) {
   return (
-    `usage: akmon [-h]\n\n${DESCRIPTION}\n\noptions:\n  -h, --help  show this help message and exit\n\n` +
-    data.epilog
+    `usage: akmon [-h]\n\n${DESCRIPTION}\n\noptions:\n  -h, --help  show this help message and exit\n\n` + data.epilog
   );
 }
 
@@ -221,13 +262,11 @@ export async function main(argv = process.argv.slice(2)) {
     const choices = COMMANDS.map((choice) => `'${choice}'`).join(", ");
     return _usageError(`argument command: invalid choice: '${command}' (choose from ${choices})`);
   }
-  const task = PORTS.get(command);
-  if (task !== undefined) {
-    process.stderr.write(`${fill(data.not_ported, { command, task })}\n`);
-    return 2;
-  }
   if (command === "init") {
     return (await import("./_init.mjs")).main(rest);
+  }
+  if (command === "update") {
+    return (await import("./_update.mjs")).main(rest);
   }
   if (command === "sync") {
     return (await import("../bin/sync.mjs")).main(rest);
@@ -237,6 +276,9 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === "check") {
     return (await import("../bin/check.mjs")).main(rest);
+  }
+  if (command === "tool") {
+    return _cmdTool(data, rest);
   }
   if (command === "path") {
     process.stdout.write(`${embeddedTreeRoot()}\n`);

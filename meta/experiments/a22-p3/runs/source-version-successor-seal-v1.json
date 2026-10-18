@@ -1,0 +1,28 @@
+{
+  "previous_operational_seal_sha256": "4bc20f7ad31e1265e28c62fc2d59f7a903cdcbccbdbdc9b8b44e5b2a42c67525",
+  "prior_ledger_sha256": "a918352f2108acb9fdbde653ebf22c1626098c65d1da04a46aee49398770d4cb",
+  "prior_v3_observed_tokens": 26988,
+  "proposal_approval_seal_sha256": "e47596e5d3b7f0cbd9e9b15554665cc0d3a3e1428d9c13ab11eab9bfb78f0b8a",
+  "proposal_sha256": "e3645e5e909f26e1b578a4af9897a536c642ba1b2a823e5ff0fcc188d3af5f7b",
+  "provider_calls_started": 0,
+  "record_type": "p3_v3_lean_source_operational_seal",
+  "regression_sha256": {
+    "test_a22_p3_source_version_successor.py": "b608d833e8aa845ae53e793227893b5d5df575de5d65c55202247e626c3c57ef"
+  },
+  "schema": 1,
+  "scope": [
+    "technical_source"
+  ],
+  "source_sha256": {
+    "dispatch_v3.py": "f083d867b31892864313fbf0b7370afb2899a706d5bc12a70ef7fc41eaab1db0",
+    "lean_source_protocol_v3.py": "e093b79e1313383e32c618a3ec2a0d9569e9d3a414965ece0aa7b4de58f0c3dd",
+    "lean_source_version_successor_v3.py": "dbbccd3070de0fb31ed9b5d39cb793dcf356e49e54c75592203b7352ad69a593",
+    "preflight_v3.py": "0f3a82f751a6185f5fbbf63fae0d7cd7b888b57a592534b06de731bf3fc5af8f",
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "source_phase_v3.py": "cd4e76faf340a95398306f0ab905a5c5687c3f1698ad7b36a967177ddcb6de3c",
+    "usage_ledger_v3.py": "222a1a67e3d8efcb34b3f996ca40cae513008a44b80d94f9bb5dac1ad334a803",
+    "usage_ledger_version_successor_v3.py": "8831ec9b64f72da9ba7de7da4e9f6c5359fac9837d0a6604edfdbd93a9562c51",
+    "v3_runner_version_successor.py": "a059553c4ce0a5447aa09254fbb9d2a6bd3d0c75f58f9feb50a5675313fd9b67"
+  },
+  "status": "implementation_ready_pending_exact_hash_acceptance"
+}

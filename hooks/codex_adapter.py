@@ -51,6 +51,7 @@ def _shell_tools() -> frozenset[str]:
     """
     return frozenset(_vocabulary()["codex"]["shell_tools"])
 
+
 # All four measured patch forms, one owner. A rename is spelled `*** Update File: <source>`
 # followed by `*** Move to: <destination>`, so the destination has its own literal and is
 # invisible to a pattern that reads the `File:` lines alone: the file was classified under
@@ -58,7 +59,7 @@ def _shell_tools() -> frozenset[str]:
 # keyed on the destination — a file moved *into* a sensitive path being the case that
 # costs most (C67). ADR-0012/D01 records the rename as unmeasured and refuses to widen the
 # pattern on a guess; all four literals here are now observed on codex-cli 0.149.1
-# ([N1/F4](../meta/reviews/n1-f4-codex-timeout-20260825.md)), which is what makes the
+# ([N1/F4](../meta/reviews/n1-f4-codex-timeout.md)), which is what makes the
 # widening measurement rather than inference. Kept as one alternation because these lines
 # are the single measured source of patch paths, and a second extractor is a second place
 # for the next form to be missing from.

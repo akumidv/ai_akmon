@@ -95,10 +95,16 @@ def _akmon_ruff() -> dict:
     return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["ruff"]
 
 
+# What akmon's own lint and size gates skip: experiment material is not akmon source, and its sealed
+# inputs keep their bytes (owner decision, C116). Pinned exactly, so it cannot widen.
+NOT_SOURCE = ["meta/experiments"]
+
+
 def test_akmon_runs_exactly_the_rules_it_offers():
     ruff = _akmon_ruff()
     assert ruff["extend"] == "profiles/ruff.toml"
-    assert set(ruff) <= {"extend", "target-version", "lint"}
+    assert set(ruff) <= {"extend", "target-version", "extend-exclude", "lint"}
+    assert ruff["extend-exclude"] == NOT_SOURCE
     assert set(ruff["lint"]) <= {"allowed-confusables"}  # no rule, ignore or per-file exception of its own
 
 
@@ -107,7 +113,10 @@ def test_akmon_meets_every_size_limit_without_an_exception():
     result = subprocess.run(
         [
             *(sys.executable, "-m", "ruff", "check", "--no-cache", "--ignore-noqa", "--output-format", "json"),
-            *("--config", str(PROFILE), "--select", ",".join(SIZE_FAMILY), "."),
+            *("--config", str(PROFILE), "--select", ",".join(SIZE_FAMILY)),
+            # The profile alone does not carry akmon's own exclude; the experiments are not source.
+            *(arg for path in _akmon_ruff()["extend-exclude"] for arg in ("--extend-exclude", path)),
+            ".",
         ],
         cwd=ROOT,
         capture_output=True,

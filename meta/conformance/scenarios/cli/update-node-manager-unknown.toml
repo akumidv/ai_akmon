@@ -1,0 +1,18 @@
+id = "cli/update-node-manager-unknown"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:update"]
+
+# A packageManager akmon does not drive: the move is printed with the npm spelling, never run
+# (ADR 0020 D07, ADR-0018/D03).
+[fixture]
+attach = "native"
+files = { "package.json" = "{\n  \"name\": \"corpus-consumer\",\n  \"private\": true,\n  \"packageManager\": \"deno@2.0.0\",\n  \"devDependencies\": {\n    \"akmon\": \"{{version}}\"\n  }\n}\n" }
+
+[run]
+argv = ["update", "--ref", "v99.0.0", "--project-root", "{{root}}"]
+
+[expected]
+exit = 2
+stdout = "akmon update: {{root}} · mount mode package · {{version}} → v99.0.0\n"
+stderr = "akmon update: package.json names packageManager \"deno@2.0.0\", a manager akmon does not drive. Point the pin at akmon@99.0.0 with it and install, then run `akmon init`; with npm:\n    npm install -D -E akmon@99.0.0\n"

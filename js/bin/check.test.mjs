@@ -46,8 +46,14 @@ function inProcess(/** @type {string[]} */ args) {
   const out = /** @type {string[]} */ ([]);
   const err = /** @type {string[]} */ ([]);
   const write = { out: process.stdout.write, err: process.stderr.write };
-  process.stdout.write = /** @type {typeof process.stdout.write} */ ((/** @type {string} */ text) => (out.push(text), true));
-  process.stderr.write = /** @type {typeof process.stderr.write} */ ((/** @type {string} */ text) => (err.push(text), true));
+  process.stdout.write = /** @type {typeof process.stdout.write} */ (
+    (/** @type {string} */ text) =>
+      (out.push(text), true)
+  );
+  process.stderr.write = /** @type {typeof process.stderr.write} */ (
+    (/** @type {string} */ text) =>
+      (err.push(text), true)
+  );
   try {
     return { status: main(args), stdout: out.join(""), stderr: err.join("") };
   } finally {
@@ -84,7 +90,10 @@ test("a command that is not installed is its own finding, not a crash", () => {
   const root = project(recordWith('lint = "akmon-no-such-linter {files}"\n'));
   const result = run([], root);
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /^ERROR check\.run \[check\]\.lint: `akmon-no-such-linter` is not installed or not on PATH, so the check did not run → /);
+  assert.match(
+    result.stdout,
+    /^ERROR check\.run \[check\]\.lint: `akmon-no-such-linter` is not installed or not on PATH, so the check did not run → /,
+  );
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -108,7 +117,10 @@ test("an unreadable record is the one check.config finding and exit 1", () => {
   assert.equal(result.status, 1);
   const lines = result.stdout.split("\n");
   assert.equal(lines.length, 2);
-  assert.match(lines[0], /^ERROR check\.config \.akmon\.toml \[check\]: \.akmon\.toml cannot be read as TOML: parse failed at line \d+, column \d+: /);
+  assert.match(
+    lines[0],
+    /^ERROR check\.config \.akmon\.toml \[check\]: \.akmon\.toml cannot be read as TOML: parse failed at line \d+, column \d+: /,
+  );
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -177,7 +189,10 @@ test("outside any project the fallback root comes with the notice on stderr", ()
   const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-check-bare-"));
   const result = run([], fs.realpathSync(dir));
   assert.equal(result.status, 0);
-  assert.match(result.stderr, new RegExp(`^\\[akmon\\] no project root at or above ${fs.realpathSync(dir)}: expected AGENTS\\.md `));
+  assert.match(
+    result.stderr,
+    new RegExp(`^\\[akmon\\] no project root at or above ${fs.realpathSync(dir)}: expected AGENTS\\.md `),
+  );
   assert.ok(result.stderr.endsWith("pass --project-root to name the root instead.\n"));
   assert.match(result.stdout, /^WARN check\.config /);
   fs.rmSync(dir, { recursive: true, force: true });
@@ -213,6 +228,10 @@ test("main returns the exit code and writes through process.stdout, process.stde
   assert.match(failing.stdout, /^ERROR check\.config /);
   assert.match(failing.stdout, /OK check\.run \[check\]\.lint: `true` passed/);
   assert.equal(failing.stderr, "");
-  assert.deepEqual(inProcess(["--nope"]), { status: 2, stdout: "", stderr: "akmon check: error: Unknown option '--nope'\n" });
+  assert.deepEqual(inProcess(["--nope"]), {
+    status: 2,
+    stdout: "",
+    stderr: "akmon check: error: Unknown option '--nope'\n",
+  });
   fs.rmSync(root, { recursive: true, force: true });
 });

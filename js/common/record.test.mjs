@@ -14,7 +14,14 @@ import { posix } from "node:path";
 
 import { parse as parseToml } from "../vendor/smol-toml/dist/index.js";
 import {
-  readAkmonToml, readAkmonTomlStrict, recordedEcosystem, recordedMount, recordsPackageMode, stripInlineComment, RecordError } from "./record.mjs";
+  readAkmonToml,
+  readAkmonTomlStrict,
+  recordedEcosystem,
+  recordedMount,
+  recordsPackageMode,
+  stripInlineComment,
+  RecordError,
+} from "./record.mjs";
 
 const _UNITS = new URL("../../meta/conformance/units/record.toml", import.meta.url);
 
@@ -51,7 +58,10 @@ test("every case of the units table: lenient degrades, strict refuses per the ta
   try {
     units.case.forEach((unitCase, i) => {
       const path = _recordFile(dir, unitCase.absent ? null : /** @type {string} */ (unitCase.text));
-      const expected = /** @type {{lenient?: Record<string, unknown>, strict?: Record<string, unknown>, strict_ok?: boolean}} */ (unitCase.expected);
+      const expected =
+        /** @type {{lenient?: Record<string, unknown>, strict?: Record<string, unknown>, strict_ok?: boolean}} */ (
+          unitCase.expected
+        );
       // An expected field left out is the null answer (TOML has no null): no lenient
       // value means the empty table, no strict value means the strict reader raised.
       assert.deepStrictEqual(readAkmonToml(path), expected.lenient ?? _emptyTable(), `case ${i}: lenient`);
@@ -83,12 +93,12 @@ test("a leading BOM stays out of the first key (C101), strict and lenient includ
     fs.mkdirSync(posix.join(root, "_aitna"));
     const record = posix.join(root, "_aitna", ".akmon.toml");
     // Well-formed save with a BOM: the record must still declare its mount.
-    fs.writeFileSync(record, "\uFEFFmount = \"package\"\n");
+    fs.writeFileSync(record, '\uFEFFmount = "package"\n');
     assert.equal(recordedMount(root), "package");
     assert.equal(recordsPackageMode(root), true);
     // The line parser itself — the path that used to fold the BOM into the key, forced
     // here by a header that `parse` refuses.
-    fs.writeFileSync(record, "\uFEFFmount = \"package\"\n[broke =\n");
+    fs.writeFileSync(record, '\uFEFFmount = "package"\n[broke =\n');
     assert.equal(/** @type {Record<string, unknown>} */ (readAkmonToml(record))["mount"], "package");
     // And strict must refuse the BOM the way tomllib does, not fold it in silently.
     assert.throws(() => readAkmonTomlStrict(record), RecordError);
@@ -96,6 +106,107 @@ test("a leading BOM stays out of the first key (C101), strict and lenient includ
     if (saved !== undefined) {
       process.env.AITNA_ROOT = saved;
     }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test(
+  "a record behind a directory that cannot be searched raises, as Path.is_file() does (C115)",
+  {
+    skip: process.getuid?.() === 0,
+  },
+  () => {
+    // `is_file()` swallows ENOENT, ENOTDIR, EBADF and ELOOP only: a permission error must not read
+    // as an absent record, which would silently answer the default ecosystem.
+    const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-locked-"));
+    const saved = process.env.AITNA_ROOT;
+    delete process.env.AITNA_ROOT;
+    const aitna = posix.join(root, "_aitna");
+    fs.mkdirSync(aitna);
+    fs.writeFileSync(posix.join(aitna, ".akmon.toml"), 'ecosystem = "node"\n');
+    fs.chmodSync(aitna, 0o000);
+    try {
+      assert.throws(() => recordedEcosystem(root), { code: "EACCES" });
+      assert.throws(() => readAkmonToml(posix.join(aitna, ".akmon.toml")), { code: "EACCES" });
+      assert.throws(() => readAkmonTomlStrict(posix.join(aitna, ".akmon.toml")), { code: "EACCES" });
+    } finally {
+      fs.chmodSync(aitna, 0o755);
+      if (saved !== undefined) {
+        process.env.AITNA_ROOT = saved;
+      }
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test("the line parser breaks lines where str.splitlines() does, as the Python fallback reads them", () => {
+  // `tomllib` refuses this text (a control character or U+0085 after a value is no newline to
+  // TOML), so both twins read it with their line parser. The expected table is what
+  // `common/record.py`'s fallback answers for the same bytes, measured with python3: every
+  // `splitlines` boundary — `\f`, `\x85`, U+2028, `\x1e`, `\v`, `\x1c`, `\x1d`, U+2029,
+  // `\r\n` — ends a line, where a `\r|\n` split folded the whole record into one `mount` value.
+  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-splitlines-"));
+  try {
+    const record = _recordFile(
+      dir,
+      'mount = "package"\fecosystem = "node"\x85akmon_version = "v1"\u2028[test]\x1erunner = "pytest"' +
+        '\vdepth = "2"\x1c\x1dkind = "x"\u2029tail = "y"\r\nlast = "z"\n',
+    );
+    assert.throws(() => readAkmonTomlStrict(record), RecordError);
+    assert.deepEqual(JSON.parse(JSON.stringify(readAkmonToml(record))), {
+      mount: "package",
+      ecosystem: "node",
+      akmon_version: "v1",
+      test: { runner: "pytest", depth: "2", kind: "x", tail: "y", last: "z" },
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the line parser strips what str.strip() strips, as the Python fallback reads the value", () => {
+  // `.trim()` is not `str.strip()`: it misses `\x1c`–`\x1f` and `\x85`, and it drops U+FEFF,
+  // which Python keeps. `tomllib` refuses both texts (a bare value, a control character), so
+  // both twins read them with their line parser; the expectations are what
+  // `common/record.py`'s fallback answers for the same bytes, measured with python3.
+  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-strip-"));
+  try {
+    const separator = _recordFile(dir, "mount = package\x1f\n");
+    assert.throws(() => readAkmonTomlStrict(separator), RecordError);
+    assert.deepEqual(JSON.parse(JSON.stringify(readAkmonToml(separator))), { mount: "package" });
+    // A U+FEFF that does not lead the file is data: only the first one is a byte-order mark.
+    const bom = _recordFile(dir, "mount = package﻿\n");
+    assert.throws(() => readAkmonTomlStrict(bom), RecordError);
+    assert.deepEqual(JSON.parse(JSON.stringify(readAkmonToml(bom))), { mount: "package﻿" });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an integer beyond 2**53 is the DV35 divergence: strict refuses, lenient reads the lines", () => {
+  // `tomllib` reads the number exactly; JavaScript has none, so the record is a parse error here.
+  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-bigint-"));
+  try {
+    const path = _recordFile(dir, 'mount = "package"\nsize = 9007199254740993\n');
+    assert.throws(() => readAkmonTomlStrict(path), RecordError);
+    assert.deepStrictEqual(
+      readAkmonToml(path),
+      Object.assign(_emptyTable(), { mount: "package", size: "9007199254740993" }),
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a zero-fraction float is the DV36 divergence: both readers give the number an integer gives", () => {
+  // `tomllib` gives the float 1.0; JavaScript has one number type. No reader prints a record number.
+  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-float-"));
+  try {
+    const path = _recordFile(dir, 'mount = "package"\nratio = 1.0\n');
+    const expected = Object.assign(_emptyTable(), { mount: "package", ratio: 1 });
+    assert.deepStrictEqual(readAkmonTomlStrict(path), expected);
+    assert.deepStrictEqual(readAkmonToml(path), expected);
+  } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -141,12 +252,15 @@ test("an empty mount declares nothing: null, not a default", () => {
 test("a strict RecordError names the file and where the parse failed", () => {
   const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-strict-"));
   try {
-    const record = _recordFile(dir, "mount = \"a\"\n[broke =\n");
+    const record = _recordFile(dir, 'mount = "a"\n[broke =\n');
     assert.throws(
       () => readAkmonTomlStrict(record),
       (/** @type {unknown} */ err) => {
         assert.ok(err instanceof RecordError);
-        assert.match(/** @type {Error} */ (err).message, /^\.akmon\.toml cannot be read as TOML: parse failed at line \d+, column \d+: /);
+        assert.match(
+          /** @type {Error} */ (err).message,
+          /^\.akmon\.toml cannot be read as TOML: parse failed at line \d+, column \d+: /,
+        );
         return true;
       },
     );
@@ -170,7 +284,10 @@ test("bytes that are not UTF-8 degrade leniently and are refused strictly", () =
       () => readAkmonTomlStrict(record),
       (/** @type {unknown} */ err) => {
         assert.ok(err instanceof RecordError);
-        assert.match(/** @type {Error} */ (err).message, /^\.akmon\.toml cannot be read as TOML: invalid UTF-8/);
+        assert.match(
+          /** @type {Error} */ (err).message,
+          /^\.akmon\.toml cannot be read as TOML: 'utf-8' codec can't decode the bytes: invalid UTF-8$/,
+        );
         return true;
       },
     );
@@ -214,9 +331,17 @@ function withProject(
 test("recordedEcosystem: a Node attach is named by the record, anything else is python", () => {
   withProject('mount = "package"\necosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "node"));
   // A record that predates the key: no existing Python record changes meaning.
-  withProject('mount = "package"\nakmon_version = "v0.4.0"\n', (root) => assert.equal(recordedEcosystem(root), "python"));
+  withProject('mount = "package"\nakmon_version = "v0.4.0"\n', (root) =>
+    assert.equal(recordedEcosystem(root), "python"),
+  );
   withProject(null, (root) => assert.equal(recordedEcosystem(root), "python"));
-  for (const text of ['ecosystem = ""', "ecosystem = 3", "ecosystem = true", 'ecosystem = ["node"]', '[akmon]\necosystem = "node"']) {
+  for (const text of [
+    'ecosystem = ""',
+    "ecosystem = 3",
+    "ecosystem = true",
+    'ecosystem = ["node"]',
+    '[akmon]\necosystem = "node"',
+  ]) {
     withProject(`${text}\n`, (root) => assert.equal(recordedEcosystem(root), "python"), {});
   }
 });
@@ -239,6 +364,11 @@ test("recordedEcosystem: bytes that are not UTF-8 and a directory in the record'
 });
 
 test("recordedEcosystem reads the record of the relocated dev layer", () => {
-  withProject('ecosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "python"), { aitnaRoot: "tools/ai" });
-  withProject('ecosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "node"), { relative: "tools/ai", aitnaRoot: "tools/ai" });
+  withProject('ecosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "python"), {
+    aitnaRoot: "tools/ai",
+  });
+  withProject('ecosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "node"), {
+    relative: "tools/ai",
+    aitnaRoot: "tools/ai",
+  });
 });

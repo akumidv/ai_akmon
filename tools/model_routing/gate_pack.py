@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from common import jsondata
 from common.project_root import aitna_root, resolve_project_root
+from common.report_path import create_report, report_prefix, safe_name, task_error
 
 
 def _gate_data() -> dict:
@@ -169,10 +169,13 @@ def build_plan_check_pack(gate: str, role: str, yardstick: str, zone_plan: str) 
 # --------------------------------------------------------------------------------------
 
 
-def _report_path(root: Path, gate: str, kind: str) -> Path:
-    safe_gate = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in gate).strip("-") or "gate"
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    return aitna_root(root) / "artifacts" / "gates" / f"{safe_gate}-{kind}-{stamp}.md"
+def _report_dir(root: Path) -> Path:
+    return aitna_root(root) / "artifacts" / "gates"
+
+
+def _report_prefix(gate: str, kind: str, task: str | None) -> str:
+    """``[<task>-]<gate>-<kind>``: the default pack's name before its ``-<n>.md`` ordinal (C114)."""
+    return report_prefix(f"{safe_name(gate) or 'gate'}-{kind}", task)
 
 
 def _digest(text: str, limit: int = 1200) -> str:
@@ -206,7 +209,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--coverage-map", type=Path, help="Coverage map file (full).")
     parser.add_argument("--zone-plan", type=Path, help="Zone plan file (required for --kind plan-check).")
     parser.add_argument("--dep-graph", type=Path, help="Dependency-graph excerpt file (opt-in, §9.7 #3).")
-    parser.add_argument("--out", type=Path, help="Output path. Defaults under <AITNA_ROOT>/artifacts/gates/.")
+    parser.add_argument(
+        "--task", help="Task id the pack belongs to; prefixes the default name: <task>-<gate>-<kind>-<n>.md."
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Output path. Defaults to <AITNA_ROOT>/artifacts/gates/[<task>-]<gate>-<kind>-<n>.md, n the next ordinal.",
+    )
     parser.add_argument(
         "--stdout",
         action="store_true",
@@ -216,6 +226,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.kind == "plan-check" and args.zone_plan is None:
         parser.error("--zone-plan is required for --kind plan-check")
+    if (task_problem := task_error(args.task)) is not None:
+        parser.error(task_problem)
 
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
@@ -242,9 +254,12 @@ def main(argv: list[str] | None = None) -> int:
             ),
         )
 
-    out = args.out or _report_path(root, args.gate, args.kind)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(pack, encoding="utf-8")
+    if args.out:
+        out = args.out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(pack, encoding="utf-8")
+    else:
+        out = create_report(_report_dir(root), _report_prefix(args.gate, args.kind, args.task), pack)
     try:
         rel = out.relative_to(root)
     except ValueError:

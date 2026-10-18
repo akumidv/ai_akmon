@@ -13,8 +13,15 @@ import os from "node:os";
 import { posix } from "node:path";
 
 import {
-  CodexProtocolError, CodexWiringError, DEFAULT_TIMEOUT_SECONDS, defaultRunner, expectedCodexHooks, hookTrustProblems, queryHooksList,
-  readCodexHooksData } from "./codex_hooks.mjs";
+  CodexProtocolError,
+  CodexWiringError,
+  DEFAULT_TIMEOUT_SECONDS,
+  defaultRunner,
+  expectedCodexHooks,
+  hookTrustProblems,
+  queryHooksList,
+  readCodexHooksData,
+} from "./codex_hooks.mjs";
 
 const DATA_FILE = new URL("../../common/codex_hooks.json", import.meta.url);
 const SOURCE = fs.readFileSync(new URL("./codex_hooks.mjs", import.meta.url), "utf-8");
@@ -27,11 +34,24 @@ const CANARY = "VENDOR_CANARY_7f3a";
 const CODEX = ["codex", "app-server"];
 
 const entry = (/** @type {Record<string, unknown>} */ over = {}) => ({
-  handlerType: "command", enabled: true, trustStatus: "trusted", eventName: "preToolUse", matcher: "m", command: "c1", ...over,
+  handlerType: "command",
+  enabled: true,
+  trustStatus: "trusted",
+  eventName: "preToolUse",
+  matcher: "m",
+  command: "c1",
+  ...over,
 });
-const project = (/** @type {Record<string, unknown>} */ over = {}) => ({ cwd: "/proj", hooks: [], warnings: [], errors: [], ...over });
+const project = (/** @type {Record<string, unknown>} */ over = {}) => ({
+  cwd: "/proj",
+  hooks: [],
+  warnings: [],
+  errors: [],
+  ...over,
+});
 const answer = (/** @type {unknown[]} */ rows) => JSON.stringify({ id: 2, result: { data: rows } });
-const query = (/** @type {unknown} */ raw) => queryHooksList(data, CODEX, "/proj", { runner: () => /** @type {string} */ (raw) });
+const query = (/** @type {unknown} */ raw) =>
+  queryHooksList(data, CODEX, "/proj", { runner: () => /** @type {string} */ (raw) });
 
 // --------------------------------------------------------------------------------------
 // the data file, the error classes
@@ -39,12 +59,28 @@ const query = (/** @type {unknown} */ raw) => queryHooksList(data, CODEX, "/proj
 
 test("the loader reads exactly codex_hooks.json, which carries the closed tables", () => {
   assert.deepEqual(data, JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")));
-  assert.deepEqual(Object.keys(data).toSorted(), ["event_names", "live_trust_statuses", "protocol_failures", "trust_statuses"]);
+  assert.deepEqual(Object.keys(data).toSorted(), [
+    "event_names",
+    "live_trust_statuses",
+    "protocol_failures",
+    "trust_statuses",
+  ]);
   assert.deepEqual(data.event_names, { PreToolUse: "preToolUse", SessionStart: "sessionStart" });
   assert.equal(DEFAULT_TIMEOUT_SECONDS, 5);
 });
 
-for (const kind of [CANARY, "no hooks/list response within 5.0s", null, 7, ["timeout"], undefined, { kind: "timeout" }, "constructor", "__proto__", "toString"]) {
+for (const kind of [
+  CANARY,
+  "no hooks/list response within 5.0s",
+  null,
+  7,
+  ["timeout"],
+  undefined,
+  { kind: "timeout" },
+  "constructor",
+  "__proto__",
+  "toString",
+]) {
   test(`a protocol error can only carry a fixed text: ${JSON.stringify(kind) ?? "undefined"}`, () => {
     const error = new CodexProtocolError(data, kind);
     assert.equal(error.kind, "unclassified");
@@ -68,9 +104,17 @@ test("CodexWiringError is a named Error", () => {
 });
 
 test("every raise site names a fixed kind and every kind is raised", () => {
-  const named = [...SOURCE.matchAll(/(?:new CodexProtocolError\(data, |fail\()"([a-z-]+)"\)/g)].map((match) => match[1]);
-  assert.ok(named.every((kind) => kind in data.protocol_failures), "a raise site names a kind outside the table");
-  assert.deepEqual(new Set(named), new Set(Object.keys(data.protocol_failures).filter((kind) => kind !== "unclassified")));
+  const named = [...SOURCE.matchAll(/(?:new CodexProtocolError\(data, |fail\()"([a-z-]+)"\)/g)].map(
+    (match) => match[1],
+  );
+  assert.ok(
+    named.every((kind) => kind in data.protocol_failures),
+    "a raise site names a kind outside the table",
+  );
+  assert.deepEqual(
+    new Set(named),
+    new Set(Object.keys(data.protocol_failures).filter((kind) => kind !== "unclassified")),
+  );
   // the non-literal arguments: `fail`'s own parameter, and the rebuild of a runner's error (its `kind` alone)
   const dynamic = [...SOURCE.matchAll(/new CodexProtocolError\(data, ([^"][^)]*)\)/g)].map((match) => match[1]);
   assert.deepEqual(dynamic, ["kind", "error.kind"]);
@@ -81,16 +125,38 @@ test("every raise site names a fixed kind and every kind is raised", () => {
 // --------------------------------------------------------------------------------------
 
 test("expectedCodexHooks and hookTrustProblems compose", () => {
-  const wiring = { hooks: { PreToolUse: [{ matcher: "m", hooks: [{ type: "command", command: "c1" }, { type: "command", command: "c2" }] }] } };
+  const wiring = {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "m",
+          hooks: [
+            { type: "command", command: "c1" },
+            { type: "command", command: "c2" },
+          ],
+        },
+      ],
+    },
+  };
   const expected = expectedCodexHooks(data, wiring);
-  assert.deepEqual(expected, [["preToolUse", "m", "c1"], ["preToolUse", "m", "c2"]]);
-  assert.deepEqual(hookTrustProblems(data, expected, [entry(), entry({ command: "c2", trustStatus: "untrusted" })]), { untrusted: ["c2"] });
-  assert.throws(() => expectedCodexHooks(data, []), { name: "CodexWiringError", message: "Codex wiring is not a JSON object" });
+  assert.deepEqual(expected, [
+    ["preToolUse", "m", "c1"],
+    ["preToolUse", "m", "c2"],
+  ]);
+  assert.deepEqual(hookTrustProblems(data, expected, [entry(), entry({ command: "c2", trustStatus: "untrusted" })]), {
+    untrusted: ["c2"],
+  });
+  assert.throws(() => expectedCodexHooks(data, []), {
+    name: "CodexWiringError",
+    message: "Codex wiring is not a JSON object",
+  });
 });
 
 test("an inherited key is not an event, a problem or a kind", () => {
   assert.throws(() => expectedCodexHooks(data, { hooks: { constructor: [] } }), CodexWiringError);
-  assert.deepEqual(hookTrustProblems(data, [["preToolUse", "m", "c1"]], [entry({ trustStatus: "constructor" })]), { unrecognized: ["c1"] });
+  assert.deepEqual(hookTrustProblems(data, [["preToolUse", "m", "c1"]], [entry({ trustStatus: "constructor" })]), {
+    unrecognized: ["c1"],
+  });
 });
 
 // --------------------------------------------------------------------------------------
@@ -100,7 +166,10 @@ test("an inherited key is not an event, a problem or a kind", () => {
 test("queryHooksList returns the matching cwd's hooks", async () => {
   const hooks = [entry(), entry({ command: "c2" })];
   assert.deepEqual(await query(answer([project({ hooks })])), hooks);
-  assert.deepEqual(await query(answer([project({ cwd: "/other", hooks: [entry({ enabled: "no" })] }), project({ hooks })])), hooks);
+  assert.deepEqual(
+    await query(answer([project({ cwd: "/other", hooks: [entry({ enabled: "no" })] }), project({ hooks })])),
+    hooks,
+  );
 });
 
 test("queryHooksList accepts a synchronous or an asynchronous runner", async () => {
@@ -112,14 +181,22 @@ test("queryHooksList accepts a synchronous or an asynchronous runner", async () 
 test("queryHooksList hands the runner the command, the cwd and the timeout", async () => {
   /** @type {unknown[]} */
   const seen = [];
-  await queryHooksList(data, CODEX, "/proj", { runner: (...args) => (seen.push(args), answer([project()])), timeout: 1.5 });
+  await queryHooksList(data, CODEX, "/proj", {
+    runner: (...args) => (seen.push(args), answer([project()])),
+    timeout: 1.5,
+  });
   assert.deepEqual(seen, [[CODEX, "/proj", 1.5]]);
   await queryHooksList(data, CODEX, "/proj", { runner: (...args) => (seen.push(args), answer([project()])) });
   assert.deepEqual(seen[1], [CODEX, "/proj", 5]);
 });
 
 test("queryHooksList accepts a non-command handler without a command", async () => {
-  assert.deepEqual(await query(answer([project({ hooks: [{ handlerType: "prompt", enabled: true, trustStatus: "trusted" }] })])).then((hooks) => hooks.length), 1);
+  assert.deepEqual(
+    await query(answer([project({ hooks: [{ handlerType: "prompt", enabled: true, trustStatus: "trusted" }] })])).then(
+      (hooks) => hooks.length,
+    ),
+    1,
+  );
 });
 
 /** @type {Array<[string, unknown, string]>} */
@@ -134,7 +211,11 @@ const REFUSED = [
   ["a misshapen entry", answer([{ cwd: "/proj" }]), "project-shape"],
   ["discovery errors", answer([project({ errors: [CANARY] })]), "discovery-errors"],
   ["a scalar hook element", answer([project({ hooks: [CANARY] })]), "hook-not-object"],
-  ["a hook without handlerType", answer([project({ hooks: [{ enabled: true, trustStatus: "trusted" }] })]), "hook-handler"],
+  [
+    "a hook without handlerType",
+    answer([project({ hooks: [{ enabled: true, trustStatus: "trusted" }] })]),
+    "hook-handler",
+  ],
   ["a hook with a vendor trust word", answer([project({ hooks: [entry({ trustStatus: CANARY })] })]), "hook-trust"],
   ["a command hook with a non-string matcher", answer([project({ hooks: [entry({ matcher: 3 })] })]), "hook-matcher"],
   ["a non-string response", 7, "not-json"],
@@ -152,16 +233,34 @@ for (const [label, raw, kind] of REFUSED) {
 }
 
 test("queryHooksList turns any runner failure into runner-failed without its text", async () => {
-  for (const thrown of [new Error(CANARY), Object.assign(new Error(CANARY), { code: "EPIPE" }), new TypeError(CANARY)]) {
-    await assert.rejects(queryHooksList(data, CODEX, "/proj", { runner: () => { throw thrown; } }), (error) => {
-      assert.ok(error instanceof CodexProtocolError);
-      assert.equal(error.kind, "runner-failed");
-      assert.ok(!error.message.includes(CANARY));
-      assert.equal(error.cause, undefined);
-      return true;
-    });
+  for (const thrown of [
+    new Error(CANARY),
+    Object.assign(new Error(CANARY), { code: "EPIPE" }),
+    new TypeError(CANARY),
+  ]) {
+    await assert.rejects(
+      queryHooksList(data, CODEX, "/proj", {
+        runner: () => {
+          throw thrown;
+        },
+      }),
+      (error) => {
+        assert.ok(error instanceof CodexProtocolError);
+        assert.equal(error.kind, "runner-failed");
+        assert.ok(!error.message.includes(CANARY));
+        assert.equal(error.cause, undefined);
+        return true;
+      },
+    );
   }
-  await assert.rejects(queryHooksList(data, CODEX, "/proj", { runner: async () => { throw new Error(CANARY); } }), { message: data.protocol_failures["runner-failed"] });
+  await assert.rejects(
+    queryHooksList(data, CODEX, "/proj", {
+      runner: async () => {
+        throw new Error(CANARY);
+      },
+    }),
+    { message: data.protocol_failures["runner-failed"] },
+  );
 });
 
 test("queryHooksList propagates a runner's protocol kind, rebuilt from the kind alone", async () => {
@@ -178,13 +277,20 @@ test("queryHooksList propagates a runner's protocol kind, rebuilt from the kind 
     [new Chatty(), "timeout"],
   ];
   for (const [raised, kind] of cases) {
-    await assert.rejects(queryHooksList(data, CODEX, "/proj", { runner: () => { throw raised; } }), (/** @type {any} */ error) => {
-      assert.equal(Object.getPrototypeOf(error), CodexProtocolError.prototype);
-      assert.equal(/** @type {CodexProtocolError} */ (error).kind, kind);
-      assert.equal(error.message, data.protocol_failures[kind]);
-      assert.equal(error.cause, undefined);
-      return true;
-    });
+    await assert.rejects(
+      queryHooksList(data, CODEX, "/proj", {
+        runner: () => {
+          throw raised;
+        },
+      }),
+      (/** @type {any} */ error) => {
+        assert.equal(Object.getPrototypeOf(error), CodexProtocolError.prototype);
+        assert.equal(/** @type {CodexProtocolError} */ (error).kind, kind);
+        assert.equal(error.message, data.protocol_failures[kind]);
+        assert.equal(error.cause, undefined);
+        return true;
+      },
+    );
   }
 });
 
@@ -341,7 +447,10 @@ function onLine(_line, index) {
 ${READER}`;
   await withFakeCodex(source, async (dir) => {
     await assert.rejects(defaultRunner(["codex"], dir, 5), { name: "ValueError" });
-    await assert.rejects(queryHooksList(data, ["codex"], dir, { timeout: 5 }), { name: "CodexProtocolError", message: data.protocol_failures["runner-failed"] });
+    await assert.rejects(queryHooksList(data, ["codex"], dir, { timeout: 5 }), {
+      name: "CodexProtocolError",
+      message: data.protocol_failures["runner-failed"],
+    });
   });
 });
 
@@ -394,7 +503,10 @@ process.stdin.resume();
   await withFakeCodex(source, async (dir) => {
     const pidFile = posix.join(dir, "pid");
     const started = Date.now();
-    await assert.rejects(defaultRunner(["codex", pidFile], dir, 0.3), { name: "CodexProtocolError", message: data.protocol_failures.timeout });
+    await assert.rejects(defaultRunner(["codex", pidFile], dir, 0.3), {
+      name: "CodexProtocolError",
+      message: data.protocol_failures.timeout,
+    });
     const elapsed = Date.now() - started;
     console.log(`defaultRunner SIGTERM-proof hang: returned in ${elapsed} ms (bound 300 ms + 2000 ms grace)`);
     assert.ok(elapsed >= 2200 && elapsed < 3500, `cleanup took ${elapsed} ms`);
@@ -431,22 +543,31 @@ test("defaultRunner: output that never answers ends as stdout-closed or a timeou
       return true;
     });
   });
-  await withFakeCodex(`process.stdout.write("garbage\\n"); setTimeout(() => {}, 30000); process.stdin.resume();\n`, async (dir) => {
-    await assert.rejects(defaultRunner(["codex"], dir, 0.3), { message: data.protocol_failures.timeout });
-  });
+  await withFakeCodex(
+    `process.stdout.write("garbage\\n"); setTimeout(() => {}, 30000); process.stdin.resume();\n`,
+    async (dir) => {
+      await assert.rejects(defaultRunner(["codex"], dir, 0.3), { message: data.protocol_failures.timeout });
+    },
+  );
 });
 
 test("defaultRunner: bytes that are not UTF-8 end the stream", async () => {
-  await withFakeCodex(`process.stdout.write(Buffer.from([0xff, 0xfe, 0x0a])); setTimeout(() => {}, 30000); process.stdin.resume();\n`, async (dir) => {
-    await assert.rejects(defaultRunner(["codex"], dir, 2), { message: data.protocol_failures["stdout-closed"] });
-  });
+  await withFakeCodex(
+    `process.stdout.write(Buffer.from([0xff, 0xfe, 0x0a])); setTimeout(() => {}, 30000); process.stdin.resume();\n`,
+    async (dir) => {
+      await assert.rejects(defaultRunner(["codex"], dir, 2), { message: data.protocol_failures["stdout-closed"] });
+    },
+  );
 });
 
 test("defaultRunner: an answer whose id is 2 is returned as given, even when it is not a valid response", async () => {
-  await withFakeCodex(`function onLine(_l, i) { if (i === 1) process.stdout.write('{"id": 2}\\n'); }\n${READER}`, async (dir) => {
-    assert.equal(await defaultRunner(["codex"], dir, 2), '{"id": 2}\n');
-    await assert.rejects(queryHooksList(data, ["codex"], dir), { message: data.protocol_failures["no-data"] });
-  });
+  await withFakeCodex(
+    `function onLine(_l, i) { if (i === 1) process.stdout.write('{"id": 2}\\n'); }\n${READER}`,
+    async (dir) => {
+      assert.equal(await defaultRunner(["codex"], dir, 2), '{"id": 2}\n');
+      await assert.rejects(queryHooksList(data, ["codex"], dir), { message: data.protocol_failures["no-data"] });
+    },
+  );
 });
 
 test("defaultRunner: an unstartable binary or cwd is reported by kind, not by the OS text", async () => {
@@ -474,7 +595,9 @@ test("defaultRunner: a non-executable file is unstartable", async () => {
   const dir = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-codex-test-")));
   try {
     fs.writeFileSync(posix.join(dir, "codex"), "#!/bin/sh\n", { mode: 0o644 });
-    await assert.rejects(defaultRunner([posix.join(dir, "codex")], dir, 1), { message: data.protocol_failures.unstartable });
+    await assert.rejects(defaultRunner([posix.join(dir, "codex")], dir, 1), {
+      message: data.protocol_failures.unstartable,
+    });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

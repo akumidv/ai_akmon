@@ -1211,27 +1211,45 @@ def test_hook_session_start_owner_sees_init_instruction(tmp_path):
     result = _load_hook().model_routing_result(root, {"hook_event_name": "SessionStart"})
     assert "needs initialization" in result.additional_context
     assert "needs initialization" in result.system_message
-    assert "/tools/model_routing/init.py" in result.additional_context
+    assert "model_routing/init --orchestrator" in result.additional_context
 
 
 def test_recovery_instructions_reach_the_tree_through_the_cli_in_package_mode(tmp_path):
-    """The recovery path must name a tree the project actually has, in a spelling that lasts.
+    """The recovery command must work in the tree the project actually has, in a spelling that lasts.
 
     It used to name `<AITNA_ROOT>/akmon`, which package mode does not have. Naming the
     executing tree literally would be no better: since C77 that tree is inside the wheel, so
     the literal path carries the venv's Python version and breaks on the next bump. `akmon
-    path` is the CLI's own answer and stays true wherever the venv is.
+    tool` is the installed CLI's own command and stays true wherever the venv is (ADR-0020/D06).
     """
     root = _make_package_project(tmp_path)
 
     result = _load_hook().model_routing_result(root, {"hook_event_name": "SessionStart"})
-    assert "$(akmon path)/tools/model_routing/init.py" in result.additional_context
+    assert "`akmon tool model_routing/init --orchestrator" in result.additional_context
     assert "site-packages" not in result.additional_context
     assert "_aitna/akmon/tools" not in result.additional_context
     assert "_aitna/.akmon/tools" not in result.additional_context
 
-    lines = "\n".join(routing.status_lines(_fresh_config(), REGISTRY, "$(akmon path)"))
-    assert "$(akmon path)/tools/model_routing/init.py" in lines
+    lines = "\n".join(routing.status_lines(_fresh_config(), REGISTRY, "akmon tool model_routing/init"))
+    assert "re-run `akmon tool model_routing/init --orchestrator <alias>`" in lines
+
+
+def test_tool_command_is_the_mount_script_or_the_installed_cli():
+    mounted = routing.tool_command("_aitna/akmon", "model_routing/init")
+    assert mounted == "python3 _aitna/akmon/tools/model_routing/init.py"
+    assert routing.tool_command("$(akmon path)", "model_routing/gate_pack") == "akmon tool model_routing/gate_pack"
+
+
+def test_the_akmon_path_sentinel_names_the_wheel_carrier_akmon_tool():
+    """C12: the `$(akmon path)` sentinel spells the Python carrier, `akmon tool`, never `npx akmon tool`.
+
+    The corpus folds both spellings to one `{{tool}}`, so the carrier each twin writes for the
+    sentinel is pinned here and in `routing.test.mjs` (DV34), never by a scenario.
+    """
+    assert routing.tool_command("$(akmon path)", "x") == "akmon tool x"
+    assert not routing.tool_command("$(akmon path)", "x").startswith("npx ")  # the JS twin's spelling
+    # The sentinel is an exact match: anything else is a mounted tree's script.
+    assert routing.tool_command("$(akmon path) ", "x") == "python3 $(akmon path) /tools/x.py"
 
 
 # --------------------------------------------------------------------------------------
@@ -1731,19 +1749,20 @@ def test_the_shipped_registry_carries_both_floors():
 )
 def test_the_gate_asks_only_at_or_above_its_own_floor(role, body, held):
     registry = {"gate_triggers": {"review_min_findings": 3, "architect_min_options": 2}}
-    request = routing.gate_audit_request(registry, {}, role, body)
+    request = routing.gate_audit_request(registry, {}, role, body, "akmon tool model_routing/gate_pack")
     assert (request is not None) is held
 
 
 def test_the_request_names_the_count_the_floor_and_the_routed_auditor():
     registry = {"gate_triggers": {"review_min_findings": 3}}
     config = {"binding": {"auditor": "big"}, "available": ["small", "big"]}
-    request = routing.gate_audit_request(registry, config, "review", _FINDINGS_TURN)
+    request = routing.gate_audit_request(registry, config, "review", _FINDINGS_TURN, "GP")
+    assert "over the gate-pack (`GP`)" in request
     assert "3 findings" in request
     assert "review_min_findings" in request and "floor of 3" in request
     assert "`k_auditor` (model=big)" in request
     assert "skipping" in request  # the flows allow the skip; only the silence is removed
-    assert "(model=" not in routing.gate_audit_request(registry, {}, "review", _FINDINGS_TURN)
+    assert "(model=" not in routing.gate_audit_request(registry, {}, "review", _FINDINGS_TURN, "GP")
 
 
 def test_one_hold_per_gate_and_a_changed_count_is_a_new_gate(tmp_path):
@@ -1794,6 +1813,8 @@ def test_agents_data_pins_the_structure_and_characteristic_texts():
     data = json.loads((_ROUTING_DIR / "agents.json").read_text(encoding="utf-8"))
     assert set(data) == {
         "generated_banner",
+        "generated_banners_earlier",
+        "tool_command",
         "zone_convention",
         "overlay_name",
         "local_config_rel",
@@ -1817,9 +1838,19 @@ def test_agents_data_pins_the_structure_and_characteristic_texts():
         "second_opinion_spec_errors",
     }
     assert data["generated_banner"] == (
-        "Generated by akmon tools/model_routing/init.py from registry.json — edit the registry "
+        "Generated by akmon's model_routing/init tool from registry.json — edit the registry "
         "or the project overlay, not this file."
     )
+    # The banner before C108 named the tool file; agents generated then must still be swept.
+    assert data["generated_banners_earlier"] == [
+        "Generated by akmon tools/model_routing/init.py from registry.json — edit the registry "
+        "or the project overlay, not this file."
+    ]
+    assert data["tool_command"] == {
+        "mount": "python3 {{runtime_root}}/tools/{{tool}}.py",
+        "python": "akmon tool {{tool}}",
+        "node": "npx akmon tool {{tool}}",
+    }
     assert data["zone_convention"] == "In a zoned fan-out, start each call's description with [zone:<label>]."
     assert data["overlay_name"] == "model-routing.json"
     assert data["settings_probe_names"] == ["settings.local.json", "settings.json"]

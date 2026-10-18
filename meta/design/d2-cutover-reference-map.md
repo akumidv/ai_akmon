@@ -445,7 +445,7 @@ points.
 
 ### Evidence
 
-[N5](../reviews/n5-f6-input-envelope-20260825.md) is owner-approved and dated, so it takes an
+[N5](../reviews/n5-f6-input-envelope.md) is owner-approved and dated, so it takes an
 **amendment section**, never a rewrite — **added as §12 (C95)**: axes 6 and 7 — ledger bytes/rows,
 and D2 config globs at `:152` — lost their consumer, since no `fnmatch` and no glob matcher remain
 under `hooks/`. The combined 6,000 path × glob pair cap (`:629`–`:636`) and the axis-7 boundary

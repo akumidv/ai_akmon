@@ -1,0 +1,19 @@
+{
+  "account_limit_receipt": {
+    "account_id_sha256": "dc17f02443f35278c2d94b94ee471ee5dc9f10e499726ea3d92d591eecdab320",
+    "codex_executable_sha256": "628e35487d888a28f0427fc37501da529dd3d81fcbad7a2c3421c1e8670d92e1",
+    "codex_home_sha256": "7d312168e76ff9754f403ea14c8e03d190c1271e845d8823caa3c5b3853450cd",
+    "five_hour_stop_percent": 80,
+    "limit_receipt_sha256": "174e944b4c1254a861ab3bfd43b18377527a5824503db9b06d22cccdeaa5fc4c",
+    "weekly_stop_percent": 90
+  },
+  "captured_utc": "2026-10-17T06:18:12Z",
+  "five_hour_reset_utc": "2026-10-17T11:15:43Z",
+  "five_hour_used_percent": 2,
+  "freshness_seconds": 1.242576272925362,
+  "raw_redacted_sha256": "ba680caa5a5647e062acd7832c1d76fa4b4c4f350595442f2eddb36a3467e947",
+  "source": "codex app-server account/rateLimits/read",
+  "source_version": "codex-cli 0.162.1",
+  "weekly_reset_utc": "2026-10-22T07:15:53Z",
+  "weekly_used_percent": 43
+}

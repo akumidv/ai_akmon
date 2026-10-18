@@ -16,9 +16,7 @@ from pathlib import Path
 _AKMON = next(
     parent for parent in Path(__file__).resolve().parents if (parent / "hooks").is_dir() and (parent / "bin").is_dir()
 )
-_SPEC = importlib.util.spec_from_file_location(
-    "conformance_coverage", _AKMON / "meta" / "conformance" / "coverage.py"
-)
+_SPEC = importlib.util.spec_from_file_location("conformance_coverage", _AKMON / "meta" / "conformance" / "coverage.py")
 coverage = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = coverage
 _SPEC.loader.exec_module(coverage)
@@ -101,7 +99,7 @@ def _tree(tmp_path: Path, *, dynamic_emitter: bool = False) -> Path:
         "bin/verify.py": _VERIFY,
         "bin/sync.py": _SYNC,
         "common/__init__.py": "",
-        "units/glob.toml": "",
+        "units/glob.toml": '[[case]]\npattern = "*"\nname = "a"\nexpected = true\n',
     }.items():
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -188,6 +186,15 @@ def test_population_is_derived_from_source(tmp_path: Path) -> None:
         "code:sync.stale-generated:warn",
     }
     assert population.dynamic == {"bin/verify.py::Verifier.ok", "bin/verify.py::Verifier.error"}
+
+
+def test_a_unit_table_without_a_row_is_not_population(tmp_path: Path) -> None:
+    """An emptied table, or one holding only a title, is nothing a probe can answer (C120)."""
+    root = _tree(tmp_path)
+    (root / "units" / "empty.toml").write_text("", encoding="utf-8")
+    (root / "units" / "titled.toml").write_text('title = "x"\ncase = []\n', encoding="utf-8")
+    items = coverage.derive_population(root, units_dir=root / "units").items
+    assert {item for item in items if item.startswith("unit:")} == {"unit:glob"}
 
 
 def test_complete_corpus_passes(tmp_path: Path) -> None:
@@ -327,7 +334,7 @@ def test_real_tree_derivation() -> None:
     }
     commands = {item for item in population.items if item.startswith("command:")}
     assert commands == {
-        f"command:{name}" for name in ("init", "update", "sync", "verify", "check", "path", "hook", "version")
+        f"command:{name}" for name in ("init", "update", "sync", "verify", "check", "path", "hook", "tool", "version")
     }
     # Every dynamic site in the shipped tree is reviewed, and every review names a live site.
     exceptions = coverage.load_exceptions()

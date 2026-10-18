@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { pyError } from "../common/pyvalue.mjs";
 import { normalizeTool, parsePayload, projectRoot, renderResult, runGuarded } from "./claude_adapter.mjs";
-import { HookResult } from "./hook_core.mjs";
+import { HookResult, hookFailureNotice } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 
 const data = lazyHookData();
@@ -43,8 +43,17 @@ function thrown(/** @type {() => unknown} */ body) {
 
 test("normalizeTool: Claude's edit and read tools map to the neutral kinds, the rest pass through", () => {
   for (const [given, expected] of [
-    ["Edit", "edit"], ["Write", "edit"], ["MultiEdit", "edit"], ["Read", "read"], ["Grep", "read"], ["Glob", "read"],
-    ["Bash", "Bash"], ["edit", "edit"], ["", ""], ["NotebookEdit", "NotebookEdit"], ["Task", "Task"],
+    ["Edit", "edit"],
+    ["Write", "edit"],
+    ["MultiEdit", "edit"],
+    ["Read", "read"],
+    ["Grep", "read"],
+    ["Glob", "read"],
+    ["Bash", "Bash"],
+    ["edit", "edit"],
+    ["", ""],
+    ["NotebookEdit", "NotebookEdit"],
+    ["Task", "Task"],
   ]) {
     assert.equal(normalizeTool(data, given), expected, given);
   }
@@ -52,10 +61,18 @@ test("normalizeTool: Claude's edit and read tools map to the neutral kinds, the 
 
 test("renderResult: the one document, keys in the order the Python writes them, ASCII only", () => {
   assert.equal(
-    renderResult(data, new HookResult({
-      eventName: "PreToolUse", additionalContext: "é", permissionDecision: "deny", permissionReason: "r",
-      systemMessage: "m", decision: "block", reason: "",
-    })),
+    renderResult(
+      data,
+      new HookResult({
+        eventName: "PreToolUse",
+        additionalContext: "é",
+        permissionDecision: "deny",
+        permissionReason: "r",
+        systemMessage: "m",
+        decision: "block",
+        reason: "",
+      }),
+    ),
     '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "\\u00e9", ' +
       '"permissionDecision": "deny", "permissionDecisionReason": "r"}, "decision": "block", "reason": "", "systemMessage": "m"}',
   );
@@ -67,18 +84,35 @@ test("renderResult: the one document, keys in the order the Python writes them, 
     renderResult(data, new HookResult({ eventName: "SessionStart", additionalContext: "a\nb\u2028\u{1f9ed}" })),
     '{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "a\\nb\\u2028\\ud83e\\udded"}}',
   );
-  assert.equal(renderResult(data, new HookResult({ eventName: "X", systemMessage: "" })), '{"hookSpecificOutput": {"hookEventName": "X"}, "systemMessage": ""}');
+  assert.equal(
+    renderResult(data, new HookResult({ eventName: "X", systemMessage: "" })),
+    '{"hookSpecificOutput": {"hookEventName": "X"}, "systemMessage": ""}',
+  );
   assert.equal(renderResult(data, null), null);
 });
 
 test("parsePayload: an object, else {} — and json.loads's own grammar, not JSON.parse's", () => {
   const bytes = (/** @type {string} */ text) => Buffer.from(text, "latin1");
   for (const [name, input] of /** @type {[string, string | Uint8Array][]} */ ([
-    ["empty", ""], ["blank", "  \n\t "], ["null", "null"], ["list", "[]"], ["list of one", "[1]"], ["string", '"s"'],
-    ["number", "5"], ["broken", "{"], ["BOM", "\ufeff{}"], ["trailing data", "{} x"], ["trailing comma", '{"a":1,}'],
-    ["single quotes", "{'a':1}"], ["leading zero", '{"a":01}'], ["control character", '{"a":"x\ty"}'], ["NUL", '{"a":"\0"}'],
-    ["bad UTF-8", bytes('{"a":"\xff"}')], ["a lone start byte", Buffer.from([0x7b, 0x7d, 0xc3])],
-    ["integer of 4301 digits", `{"a":${"1".repeat(4301)}}`], ["negative of 4301 digits", `{"a":-${"1".repeat(4301)}}`],
+    ["empty", ""],
+    ["blank", "  \n\t "],
+    ["null", "null"],
+    ["list", "[]"],
+    ["list of one", "[1]"],
+    ["string", '"s"'],
+    ["number", "5"],
+    ["broken", "{"],
+    ["BOM", "\ufeff{}"],
+    ["trailing data", "{} x"],
+    ["trailing comma", '{"a":1,}'],
+    ["single quotes", "{'a':1}"],
+    ["leading zero", '{"a":01}'],
+    ["control character", '{"a":"x\ty"}'],
+    ["NUL", '{"a":"\0"}'],
+    ["bad UTF-8", bytes('{"a":"\xff"}')],
+    ["a lone start byte", Buffer.from([0x7b, 0x7d, 0xc3])],
+    ["integer of 4301 digits", `{"a":${"1".repeat(4301)}}`],
+    ["negative of 4301 digits", `{"a":-${"1".repeat(4301)}}`],
     ["a list nested 9997 deep", "[".repeat(9997) + "]".repeat(9997)],
   ])) {
     assert.deepEqual(parsePayload(input), {}, name);
@@ -94,7 +128,9 @@ test("parsePayload: an object, else {} — and json.loads's own grammar, not JSO
 });
 
 test("parsePayload: NaN and Infinity are accepted as Python's json accepts them", () => {
-  const payload = parsePayload('{"tool_name":"Edit","agent_id":NaN,"up":Infinity,"down":-Infinity,"list":[NaN,-0,1E400]}');
+  const payload = parsePayload(
+    '{"tool_name":"Edit","agent_id":NaN,"up":Infinity,"down":-Infinity,"list":[NaN,-0,1E400]}',
+  );
   assert.equal(payload.tool_name, "Edit");
   assert.ok(Number.isNaN(payload.agent_id));
   assert.equal(payload.up, Infinity);
@@ -143,8 +179,14 @@ function captured(/** @type {() => number} */ body) {
   /** @type {string[]} */ const err = [];
   const stdoutWrite = process.stdout.write;
   const stderrWrite = process.stderr.write;
-  process.stdout.write = /** @type {any} */ ((/** @type {string} */ text) => (out.push(text), true));
-  process.stderr.write = /** @type {any} */ ((/** @type {string} */ text) => (err.push(text), true));
+  process.stdout.write = /** @type {any} */ (
+    (/** @type {string} */ text) =>
+      (out.push(text), true)
+  );
+  process.stderr.write = /** @type {any} */ (
+    (/** @type {string} */ text) =>
+      (err.push(text), true)
+  );
   try {
     const code = body();
     return { code, out: out.join(""), err: err.join("") };
@@ -155,34 +197,49 @@ function captured(/** @type {() => number} */ body) {
 }
 
 test("runGuarded: the document on stdout, nothing for no result, exit 0 either way", () => {
-  const spoke = captured(() => runGuarded("h", data, () => new HookResult({ eventName: "PreToolUse", additionalContext: "hi" })));
+  const spoke = captured(() =>
+    runGuarded("h", data, () => new HookResult({ eventName: "PreToolUse", additionalContext: "hi" })),
+  );
   assert.deepEqual(spoke, {
-    code: 0, err: "", out: '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "hi"}}\n',
+    code: 0,
+    err: "",
+    out: '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "hi"}}\n',
   });
-  assert.deepEqual(captured(() => runGuarded("h", data, () => null)), { code: 0, out: "", err: "" });
+  assert.deepEqual(
+    captured(() => runGuarded("h", data, () => null)),
+    { code: 0, out: "", err: "" },
+  );
 });
 
 test("runGuarded: a crash is the class on stderr and the owner's notice on stdout, never the message", () => {
-  const crashed = captured(() => runGuarded("role-on-code", data, () => {
-    throw pyError("KeyError", "secret/path");
-  }));
+  const crashed = captured(() =>
+    runGuarded("role-on-code", data, () => {
+      throw pyError("KeyError", "secret/path");
+    }),
+  );
   assert.equal(crashed.code, 0);
   assert.equal(crashed.err, "akmon role-on-code hook: KeyError\n");
   assert.equal(
     crashed.out,
     '{"systemMessage": "\\u26a0 akmon: the role-on-code hook failed (KeyError) and was skipped \\u2014 this action went ahead ' +
-      "without it. Check the setup: `akmon verify` (a mounted tree: `python3 _aitna/akmon/bin/verify.py`).\"}\n",
+      'without it. Check the setup: `akmon verify` (a mounted tree: `python3 _aitna/akmon/bin/verify.py`)."}\n',
   );
-  const system = captured(() => runGuarded("h", data, () => {
-    fs.readFileSync("/nonexistent/akmon");
-    return null;
-  }));
+  const system = captured(() =>
+    runGuarded("h", data, () => {
+      fs.readFileSync("/nonexistent/akmon");
+      return null;
+    }),
+  );
   assert.equal(system.err, "akmon h hook: FileNotFoundError\n");
   assert.equal(JSON.parse(system.out).systemMessage.includes("secret"), false);
 });
 
 test("runGuarded: a render failure is a caught crash, and the crash path reads no data file", () => {
-  const broken = /** @type {any} */ ({ get vocabulary() { throw pyError("DataFileError", "akmon data file missing: /x"); } });
+  const broken = /** @type {any} */ ({
+    get vocabulary() {
+      throw pyError("DataFileError", "akmon data file missing: /x");
+    },
+  });
   const result = captured(() => runGuarded("h", broken, () => new HookResult({ eventName: "PreToolUse" })));
   assert.equal(result.err, "akmon h hook: DataFileError\n");
   assert.match(result.out, /^\{"systemMessage": "\\u26a0 akmon: the h hook failed \(DataFileError\)/);
@@ -198,7 +255,9 @@ test("runGuarded: a render failure is a caught crash, and the crash path reads n
 function run(script, payload, env = {}) {
   const input = typeof payload === "string" || payload instanceof Uint8Array ? payload : JSON.stringify(payload);
   const result = spawnSync("node", [`${HOOKS}/${script}.mjs`], {
-    input, env: { ...process.env, AITNA_ROOT: "", AKMON_DELEGATION_GRACE: "", ...env }, encoding: "utf8",
+    input,
+    env: { ...process.env, AITNA_ROOT: "", AKMON_DELEGATION_GRACE: "", ...env },
+    encoding: "utf8",
   });
   return { stdout: result.stdout, stderr: result.stderr, status: result.status };
 }
@@ -216,16 +275,38 @@ function withProject(/** @type {(project: string, tmp: string) => void} */ body)
   });
 }
 
+test("an over-long cwd is the ordinary crash report on Claude: one stderr line, the notice, exit 0 (C121)", () => {
+  withProject((_project, tmp) => {
+    const cwd = `/${"a/".repeat(32_769)}`;
+    const crashed = run(
+      "role-on-code",
+      { tool_name: "Edit", cwd, tool_input: { file_path: "/src/app.py" } },
+      { TMPDIR: tmp },
+    );
+    assert.equal(crashed.status, 0);
+    assert.equal(crashed.stderr, "akmon role-on-code hook: ValueError\n");
+    assert.deepEqual(JSON.parse(crashed.stdout), {
+      systemMessage: hookFailureNotice("role-on-code", pyError("ValueError", "")),
+    });
+  });
+});
+
 test("role-on-code and analysis-guard run as processes: first edit speaks, the second is silent", () => {
   withProject((project, tmp) => {
     const env = { TMPDIR: tmp };
     const edit = (/** @type {string} */ file, /** @type {string} */ session) => ({
-      tool_name: "Edit", session_id: session, cwd: project, tool_input: { file_path: `${project}/${file}` },
+      tool_name: "Edit",
+      session_id: session,
+      cwd: project,
+      tool_input: { file_path: `${project}/${file}` },
     });
     const first = run("role-on-code", edit("src/a.py", "s1"), env);
     assert.equal(first.status, 0);
     assert.equal(first.stderr, "");
-    assert.match(first.stdout, /^\{"hookSpecificOutput": \{"hookEventName": "PreToolUse", "additionalContext": "\[akmon\] Role check /);
+    assert.match(
+      first.stdout,
+      /^\{"hookSpecificOutput": \{"hookEventName": "PreToolUse", "additionalContext": "\[akmon\] Role check /,
+    );
     assert.equal(run("role-on-code", edit("src/b.py", "s1"), env).stdout, "");
     assert.equal(run("role-on-code", edit("docs/c.py", "s2"), env).stdout, "");
     assert.match(run("analysis-guard", edit("_aitna/TASKS.md", "s1"), env).stdout, /Analysis-before-mutation check/);
@@ -242,15 +323,29 @@ test("git-commit-guard runs as a process: sudo and the AI trailer deny, push ask
   withProject((project, tmp) => {
     const env = { TMPDIR: tmp };
     const bash = (/** @type {unknown} */ command, /** @type {Record<string, unknown>} */ more = {}) => ({
-      tool_name: "Bash", session_id: "g1", cwd: project, permission_mode: "default", tool_input: { command }, ...more,
+      tool_name: "Bash",
+      session_id: "g1",
+      cwd: project,
+      permission_mode: "default",
+      tool_input: { command },
+      ...more,
     });
     const sudo = run("git-commit-guard", bash("sudo ls"), env);
-    assert.match(sudo.stdout, /"permissionDecision": "deny", "permissionDecisionReason": "Privilege-escalation guardrail/);
+    assert.match(
+      sudo.stdout,
+      /"permissionDecision": "deny", "permissionDecisionReason": "Privilege-escalation guardrail/,
+    );
     assert.match(sudo.stderr, /^akmon hook: a shell call may mutate the filesystem/);
     assert.equal(run("git-commit-guard", bash("sudo ls"), env).stderr, ""); // once per session
-    assert.match(run("git-commit-guard", bash("git commit -m 'Co-Authored-By: x'"), env).stdout, /"permissionDecision": "deny"/);
+    assert.match(
+      run("git-commit-guard", bash("git commit -m 'Co-Authored-By: x'"), env).stdout,
+      /"permissionDecision": "deny"/,
+    );
     assert.match(run("git-commit-guard", bash("git push"), env).stdout, /"permissionDecision": "ask"/);
-    assert.match(run("git-commit-guard", bash("git push", { permission_mode: "auto" }), env).stdout, /"permissionDecision": "deny"/);
+    assert.match(
+      run("git-commit-guard", bash("git push", { permission_mode: "auto" }), env).stdout,
+      /"permissionDecision": "deny"/,
+    );
     assert.equal(run("git-commit-guard", bash("ls"), env).stdout, "");
     assert.equal(run("git-commit-guard", { ...bash("git push"), tool_name: "Edit" }, env).stdout, "");
     // a non-string command is the TypeError re.search raises: crash-open, the command goes ahead
@@ -265,8 +360,15 @@ test("delegation-nudge runs as a process: it counts, nudges once, and a subagent
     const env = { TMPDIR: tmp };
     fs.writeFileSync(posix.join(tmp, "akmon-delegation-nudge-n1.count"), "33 30.0");
     const call = (/** @type {string} */ tool, /** @type {Record<string, unknown>} */ more = {}) =>
-      run("delegation-nudge", { tool_name: tool, session_id: "n1", cwd: project, permission_mode: "default", ...more }, env);
-    assert.match(call("Edit").stdout, /a drift score of 31 \(an edit or shell call counts 1, a read \\u00bd, the first 8 calls of a stretch nothing\)/);
+      run(
+        "delegation-nudge",
+        { tool_name: tool, session_id: "n1", cwd: project, permission_mode: "default", ...more },
+        env,
+      );
+    assert.match(
+      call("Edit").stdout,
+      /a drift score of 31 \(an edit or shell call counts 1, a read \\u00bd, the first 8 calls of a stretch nothing\)/,
+    );
     assert.equal(call("Edit").stdout, "");
     assert.equal(fs.readFileSync(posix.join(tmp, "akmon-delegation-nudge-n1.count"), "utf8"), "35 32.0");
     assert.equal(call("Read", { agent_id: "a1" }).stdout, "");
@@ -283,11 +385,17 @@ test("session-start-agent runs as a process: the roster from the payload's cwd, 
     const viaPayload = run("session-start-agent", { session_id: "x", cwd: project }, env);
     assert.match(viaPayload.stdout, /\\n- DEVELOP \(build the project\): engineer\\n/);
     assert.equal(run("session-start-agent", {}, { ...env, CLAUDE_PROJECT_DIR: project }).stdout, viaPayload.stdout);
-    assert.equal(run("session-start-agent", { cwd: "" }, { ...env, CLAUDE_PROJECT_DIR: project }).stdout, viaPayload.stdout);
+    assert.equal(
+      run("session-start-agent", { cwd: "" }, { ...env, CLAUDE_PROJECT_DIR: project }).stdout,
+      viaPayload.stdout,
+    );
     // `Path(5)` is a TypeError; the session still starts
     const crashed = run("session-start-agent", { cwd: 5 }, env);
     assert.equal(crashed.stderr, "akmon session-start-agent hook: TypeError\n");
     assert.equal(crashed.status, 0);
-    assert.equal(run("session-start-agent", "not json", { ...env, CLAUDE_PROJECT_DIR: project }).stdout, viaPayload.stdout);
+    assert.equal(
+      run("session-start-agent", "not json", { ...env, CLAUDE_PROJECT_DIR: project }).stdout,
+      viaPayload.stdout,
+    );
   });
 });

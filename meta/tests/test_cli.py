@@ -60,9 +60,11 @@ def test_cli_data_pins_its_structure():
         "hook_missing_name",
         "hook_path_refused",
         "hook_unknown",
-        "not_ported",
         "skew_version",
         "skew_commits",
+        "tool_missing_name",
+        "tool_unknown",
+        "tools",
     }
     assert _CLI_DATA["dispatched_commands"] == ["check", "sync", "verify"]
     assert _CLI_DATA["hook_missing_name"] == "akmon hook: missing hook name"
@@ -70,8 +72,6 @@ def test_cli_data_pins_its_structure():
         "akmon hook: {{name}} is a path; name the hook instead (e.g. 'role-on-code')"
     )
     assert _CLI_DATA["hook_unknown"] == "akmon hook: unknown hook {{name}}; available: {{available}}"
-    # Read by the JavaScript CLI only (init / update / verify, until they are ported).
-    assert _CLI_DATA["not_ported"] == "akmon {{command}}: not ported to the JavaScript implementation yet ({{task}})"
     assert _CLI_DATA["skew_version"] == (
         "akmon: CLI is {{cli_version}}, mounted/pinned standard is {{pinned}} — the mounted tree governs."
     )
@@ -115,6 +115,7 @@ def test_cli_data_file_error_propagates_uncaught(monkeypatch):
         cli._cmd_hook([])
     with pytest.raises(jsondata.DataFileError):
         cli.main(["version"])
+
 
 SYNC_PY = """
 def main(argv=None):
@@ -676,3 +677,48 @@ def test_embedded_tree_root_resolves_this_checkout():
     root = _tree.embedded_tree_root()
     assert (root / "bin" / "sync.py").is_file()
     assert (root / "bin" / "verify.py").is_file()
+
+
+# --------------------------------------------------------------------------------------
+# akmon tool (ADR-0020/D06, C108)
+# --------------------------------------------------------------------------------------
+
+
+def test_cli_tools_list_is_every_runnable_tool():
+    """``cli.json`` ``tools`` names exactly the ``tools/`` scripts with an entry point: a library
+    module (``routing``) is not runnable, and a new tool nobody listed would be unreachable."""
+    runnable = sorted(
+        str(path.relative_to(_AKMON / "tools").with_suffix(""))
+        for path in (_AKMON / "tools").rglob("*.py")
+        if 'if __name__ == "__main__":' in path.read_text(encoding="utf-8")
+    )
+    assert _CLI_DATA["tools"] == runnable
+
+
+def _tool_project(tmp_path: Path) -> Path:
+    """A mounted project whose tree carries one listed tool that echoes its tree and argv."""
+    root = _mounted_project(tmp_path)
+    _write(
+        root / "_aitna" / "akmon" / "tools" / "tasks" / "archive.py",
+        "import sys\nprint('mounted', sys.argv[1:])\nraise SystemExit(3)\n",
+    )
+    return root
+
+
+def test_tool_runs_the_listed_tool_from_the_controlling_tree(tmp_path, capfd):
+    root = _tool_project(tmp_path)
+    assert cli._cmd_tool(["tasks/archive", "--done", "C1"], cwd=root) == 3
+    assert capfd.readouterr().out.strip() == "mounted ['--done', 'C1']"
+
+
+def test_tool_refuses_an_unlisted_or_absent_tool_naming_the_available_ones(tmp_path, capfd):
+    root = _tool_project(tmp_path)
+    for name in ("model_routing/routing", "model_routing/init", "../bin/sync", "tasks/archive.py"):
+        assert cli._cmd_tool([name], cwd=root) == 2
+        assert capfd.readouterr().err.strip() == f"akmon tool: unknown tool {name!r}; available: tasks/archive"
+
+
+def test_tool_without_a_name_lists_the_available_ones(tmp_path, capfd):
+    root = _tool_project(tmp_path)
+    assert cli._cmd_tool([], cwd=root) == 2
+    assert capfd.readouterr().err.strip() == "akmon tool: missing tool name; available: tasks/archive"

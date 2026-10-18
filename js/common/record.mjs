@@ -3,45 +3,20 @@
  * The JavaScript twin of `common/record.py` (C103): the lenient reader degrades to the
  * same narrow line parser the Python fallback carries, so the corpus
  * (`meta/conformance/units/record.toml`) pins both twins on one tolerance. Stdlib plus
- * the vendored parser: `node:fs`, `node:path`, `node:util`, `smol-toml`.
+ * the vendored parser behind its TOML 1.0.0 fence: `node:fs`, `node:path`, `node:util`,
+ * `smol-toml`, `toml10.mjs`.
  */
 
 import fs from "node:fs";
 import { basename } from "node:path";
-import { TextDecoder } from "node:util";
 
 import { TomlError, parse } from "../vendor/smol-toml/dist/index.js";
 import { aitnaRoot } from "./project_root.mjs";
-import { pyPath } from "./pyvalue.mjs";
+import { decodeUtf8, isFile, pyPath, pySplitlines, pyStrip } from "./pyvalue.mjs";
+import { toml10Refusal } from "./toml10.mjs";
 
 const _PACKAGE_MODE = "package";
 const _ECOSYSTEM_DEFAULT = "python";
-
-/** Whether `filePath` is a regular file (a directory named like one does not count). */
-function _isFile(/** @type {string} */ filePath) {
-  try {
-    return fs.statSync(filePath).isFile();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * The record's bytes as text, refusing an invalid UTF-8 sequence instead of replacing it.
- *
- * `fs.readFileSync(path, "utf8")` never throws on bad bytes — it maps every undecodable
- * sequence to U+FFFD — so both readers would hand back a record value no disk holds where the
- * Python twin degrades (lenient) or raises (strict). `ignoreBOM` keeps a leading BOM in the
- * text as U+FEFF rather than stripping it, because that is where both readers look to keep the
- * asymmetry `meta/conformance/units/record.toml` pins: strict refuses a BOM, lenient drops one.
- *
- * @param {Buffer} bytes
- * @returns {string}
- * @throws {TypeError} when `bytes` are not valid UTF-8
- */
-function _decodeUtf8(bytes) {
-  return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-}
 
 /** An empty table: null-prototype, the shape `parse` returns, so strict and lenient agree. */
 function _emptyTable() {
@@ -61,10 +36,10 @@ function _emptyTable() {
  * @returns {string}
  */
 export function stripInlineComment(value) {
-  value = value.trim();
+  value = pyStrip(value);
   const quote = value[0];
   if (quote !== '"' && quote !== "'") {
-    return value.split("#")[0].trim();
+    return pyStrip(value.split("#")[0]);
   }
   // Scan to the *closing* quote rather than the next one: in a basic string a `\"` is an
   // escaped quote, so `indexOf` would end the value in the middle of it and hand back a
@@ -89,7 +64,9 @@ export function stripInlineComment(value) {
  * line is a `key = value` partitioned on the first `=`. A malformed header line is not a
  * section — it is read as a key=value line and its key keeps the `[`. Values become
  * strings with outer quotes stripped. A leading UTF-8 BOM is dropped before any line is
- * parsed, the way the Python fallback reads utf-8-sig.
+ * parsed, the way the Python fallback reads utf-8-sig. Lines break where `str.splitlines()`
+ * breaks them (`pySplitlines`) — `\v`, `\f`, `\x1c`–`\x1e`, `\x85`, U+2028 and U+2029 as well
+ * as `\n`, `\r` and `\r\n` — so both twins read the same keys from the same malformed text.
  *
  * @param {string} text
  * @returns {Record<string, unknown>}
@@ -103,13 +80,15 @@ function _lineParse(text) {
   if (text.charCodeAt(0) === 0xfeff) {
     text = text.slice(1);
   }
-  for (const line of text.split(/\r\n|\r|\n/)) {
-    const stripped = line.trim();
+  // No `universalNewlines` first: the twin's `read_text` translates `\r\n` and `\r` to `\n`, but
+  // `splitlines` breaks on all three alike, so the translation changes no line here.
+  for (const line of pySplitlines(text)) {
+    const stripped = pyStrip(line);
     if (!stripped || stripped.startsWith("#")) {
       continue;
     }
     if (stripped.startsWith("[") && stripped.endsWith("]")) {
-      const name = stripped.slice(1, -1).trim();
+      const name = pyStrip(stripped.slice(1, -1));
       // `setdefault`: a name already taken keeps whatever value holds it.
       section = name in data ? /** @type {Record<string, unknown>} */ (data[name]) : (data[name] = _emptyTable());
       continue;
@@ -118,9 +97,11 @@ function _lineParse(text) {
     if (eq === -1) {
       continue;
     }
-    const key = stripped.slice(0, eq).trim();
+    const key = pyStrip(stripped.slice(0, eq));
     // Two passes, as the Python's `strip('"').strip("'")`: outer double quotes, then outer singles.
-    const value = stripInlineComment(stripped.slice(eq + 1)).replace(/^"+|"+$/g, "").replace(/^'+|'+$/g, "");
+    const value = stripInlineComment(stripped.slice(eq + 1))
+      .replace(/^"+|"+$/g, "")
+      .replace(/^'+|'+$/g, "");
     section[key] = value;
   }
   return data;
@@ -150,18 +131,26 @@ export class RecordError extends Error {
  * @returns {Record<string, unknown>}
  */
 export function readAkmonToml(filePath) {
-  if (!_isFile(filePath)) {
+  if (!isFile(filePath)) {
     return _emptyTable();
   }
   let text;
   try {
-    text = _decodeUtf8(fs.readFileSync(filePath));
+    // Strict and BOM-kept (`pyvalue.decodeUtf8`): `readFileSync(path, "utf8")` maps bad bytes to
+    // U+FFFD instead of refusing them, and the readers look for the BOM in the text.
+    text = decodeUtf8(fs.readFileSync(filePath));
   } catch {
     // Degrading rather than raising is the contract both twins carry: a hook consulting the
     // record must not abort a session over a file it only reads (C69, ADR-0009/D02). Refusing
     // the bytes here also keeps them from reaching `_lineParse`, which would otherwise read a
     // U+FFFD-substituted value back out as if the file said that.
     return _emptyTable();
+  }
+  // Text `tomllib` refuses is malformed here too, though `parse` (TOML 1.1.0) would take it: a
+  // `\x` escape, a BOM, an inline table across lines (C115) — the twin reads such a file with its
+  // line parser, so this one must.
+  if (toml10Refusal(text) !== null) {
+    return _lineParse(text);
   }
   try {
     return parse(text);
@@ -179,7 +168,8 @@ export function readAkmonToml(filePath) {
 /**
  * Read `<AITNA_ROOT>/.akmon.toml` strictly: `{}` when the file is absent, the parsed
  * table otherwise, and a {@link RecordError} when it cannot be read, is not valid UTF-8, is
- * BOM-prefixed, or does not parse — no lenient fallback here, unlike {@link readAkmonToml}.
+ * BOM-prefixed, holds TOML 1.1.0-only syntax, or does not parse — no lenient fallback here,
+ * unlike {@link readAkmonToml}.
  *
  * A caller that *applies* the record (the Python rule configuration, ADR 0014 §4, read to
  * switch rules on and off) needs a loud answer: the lenient fallback flattens a nested
@@ -190,26 +180,27 @@ export function readAkmonToml(filePath) {
  */
 export function readAkmonTomlStrict(filePath) {
   const name = basename(filePath);
-  if (!_isFile(filePath)) {
+  if (!isFile(filePath)) {
     return _emptyTable();
   }
   let text;
   try {
-    text = _decodeUtf8(fs.readFileSync(filePath));
+    text = decodeUtf8(fs.readFileSync(filePath));
   } catch (exc) {
     // A file that cannot be read and a file that cannot be decoded are different failures and
-    // the message has to say which: the decoder is the only one that names the encoding, and
-    // it does so as a `TypeError`. The Python twin's detail is its codec's own sentence — what
-    // the twins share is a named error that says why, not the same words.
-    const refused = exc instanceof TypeError ? "invalid UTF-8: " : "";
+    // the message says which, as the Python twin's `{exc}` does: the decoder's
+    // `UnicodeDecodeError` names the codec, a read failure its own errno text.
     const detail = exc instanceof Error ? exc.message : String(exc);
-    throw new RecordError(`${name} cannot be read as TOML: ${refused}${detail}`);
+    throw new RecordError(`${name} cannot be read as TOML: ${detail}`);
   }
-  // Refuse a BOM before the parser decides: `parse` (unlike `tomllib`) folds one in
-  // silently, and TOML is BOM-free UTF-8. The byte is still here because `_decodeUtf8` sets
-  // `ignoreBOM`; drop that flag and this check goes blind without anything going red.
-  if (text.charCodeAt(0) === 0xfeff) {
-    throw new RecordError(`${name} cannot be read as TOML: leading UTF-8 BOM (TOML is BOM-free UTF-8)`);
+  // Refuse what `tomllib` refuses before the parser decides: `parse` reads TOML 1.1.0 and folds a
+  // BOM in silently (C115). The BOM is still in the text because `decodeUtf8` sets `ignoreBOM`;
+  // drop that flag and the fence goes blind to it without anything going red.
+  const refusal = toml10Refusal(text);
+  if (refusal !== null) {
+    throw new RecordError(
+      `${name} cannot be read as TOML: parse failed at line ${refusal.line}, column ${refusal.column}: ${refusal.reason}`,
+    );
   }
   try {
     return parse(text);

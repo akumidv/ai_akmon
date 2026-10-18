@@ -2,7 +2,7 @@
 
 Consumer-facing release notes for the **akmon standard** (repo `ai_akmon`, mounted as
 `_aitna/akmon/`). It tells a consuming project *what changed and whether it breaks them* before
-they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-model.md)):
+they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0001-release-and-roles-model.md)):
 
 - **Versioning `v0.x.y`** while pre-1.0 — bump `x` for a **breaking** change to layout, required
   files, runtime compatibility, or a role/pipeline contract; bump `y` for minor/patch.
@@ -17,6 +17,10 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
 ## Unreleased
 
 ### Breaking
+- **Python 3.12 is the floor (C122).** The package and every shipped venv-free entry point,
+  including the bare `python3` of generated hooks, require Python 3.12 or newer; 3.11 is no
+  longer supported. Check: `python3 --version` on the hook host and the interpreter that
+  installs akmon report 3.12 or newer; then rerun `akmon sync`.
 - **Decision acceptance moves from the D2 ledger to thematic ADR blocks (C94 / ADR 0016).**
   Akmon no longer ships the D2 reminder hook, session counter, `tools/d2_ledger` CLI, or the
   `Pending → Approved → Verified` / manual commit-SHA workflow. Accepted choices use stable
@@ -53,7 +57,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   "latest release" no longer counts a pre-release tag.
 - **Google's Python rules as a standard ruff configuration, and `akmon check` over the project's
   own checks (C89; ADR 0014 D01).** Each rule now sits in the layer that can hold it
-  ([ADR 0014](meta/decisions/0014-code-rules-catalog-and-language-profiles.md)): a principle for
+  ([ADR 0014](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0014-code-rules-catalog-and-language-profiles.md)): a principle for
   any language is in `guardrails/_common.md` § Code design; a rule a linter can check is in
   `profiles/ruff.toml`, akmon's Python rules as a plain ruff configuration annotated with Google
   Python Style Guide sections, which runs with or without akmon (`ruff check --config …`, or
@@ -207,9 +211,93 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   The mount deliberately carries no `*.test.mjs`: a mounted file sits inside the project's own root,
   which `node --test` and `eslint` scan by default, so a vendored project's test command would
   otherwise run akmon's suites and report failures it cannot act on (measured,
-  [M116](meta/MEASUREMENTS.md)); both carriers keep the test files, being outside any scan path.
+  [M116](https://github.com/akumidv/ai_akmon/blob/main/meta/MEASUREMENTS.md)); since C118 the wheel and the npm package drop them too.
+- **The hooks run from `node_modules/akmon` without Python (C104; ADR 0020 D05).** All nine hook
+  entry points — `analysis-guard`, `role-on-code`, `session-start-agent`, `git-commit-guard`,
+  `delegation-nudge`, `gate-audit`, `delegation-log`, `model-routing` and Codex's `codex-hook` — have
+  JavaScript twins under `js/hooks/`, held to the Python by the shared hook scenarios and unit
+  tables. A Node project's generated wiring spells them
+  `node "<anchor>/node_modules/akmon/js/hooks/<script>.mjs"` (Codex:
+  `…/codex-hook.mjs <advisory>`); the measured hook latency is p50 145–152 ms against the
+  Python's 178 ms ([M124](https://github.com/akumidv/ai_akmon/blob/main/meta/MEASUREMENTS.md)).
+  For a Python project the one visible change is in `sync`: it now recognises a Node-wired entry as
+  akmon's own and replaces it on a mode switch instead of leaving it running beside the new one.
+- **A Node project attaches and is kept in line by `npx akmon` alone (C105; ADR 0020 D05).** The
+  `bin.akmon` stub is gone: `init`, `sync`, `verify`, `check`, `path`, `hook` and `version` run on
+  node, in package mode only. `npx akmon init` attaches without a repository probe, records
+  `mount = "package"` and `ecosystem = "node"`, writes the Node variants of the akmon block and
+  `.gitignore` (`node_modules/`, no dev-layer venv), detects the package manager (`packageManager`,
+  else the lockfile, else npm) and writes a CI workflow with no Python in it (`setup-node` or
+  `setup-bun`, the install, `<exec> akmon sync --check`, `<exec> akmon verify --strict`); it runs
+  `sync` and the model-routing initializer in the same process. The JS `verify` adds the Node
+  findings: `hooks.launcher` (an error for Yarn Plug'n'Play, a `node_modules/akmon` hoisted into an
+  ancestor, or none at all) and `package.dev-pin` (akmon in `dependencies` is an error; no pin, or a
+  range, tag, `workspace:`, `file:` or URL in `devDependencies`, is a warn naming the value and
+  `npm install -D -E akmon@<version>`). The `ecosystem` key is new in `.akmon.toml`; absent, it
+  means `python`, so no existing record changes. Each implementation refuses the other's record
+  with exit 2 and one line naming the command to run instead: the Python `init`, `sync`, `verify`
+  and `update` on `ecosystem = "node"` (`npx akmon …`), the JS commands on a mounted or Python
+  record. Where the two twins knowingly differ is listed in
+  [`DIVERGENCES.md`](https://github.com/akumidv/ai_akmon/blob/main/meta/conformance/DIVERGENCES.md).
+- **`npx akmon init` records the Node project's own linters and analyzers for `akmon check`
+  (C109; ADR 0020 D07).** It reads ESLint (`eslint.config.*`, `.eslintrc*`,
+  `package.json#eslintConfig`), Biome (`biome.json[c]`), oxlint (`.oxlintrc.json`), Prettier
+  (`.prettierrc*`, `prettier.config.*`, `package.json#prettier`) and `tsc` (`tsconfig.json`), and
+  records each under `[check]` through the manager's run prefix (`npx --no-install`, `pnpm exec`,
+  `yarn`, `bunx --no-install`) — `tsc` as `<run>tsc --noEmit -p .`, without `{files}`. A record
+  that already has `[check]` is left alone; `package.json` `lint`/`typecheck` scripts are named in a
+  next step, never recorded.
+- **akmon's JavaScript/TypeScript rules as a standard oxlint configuration, and `--checks akmon`
+  on Node (C110; [ADR-0020/D09](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0020-node-consumers-js-implementation.md#d09--the-javascripttypescript-ruleset-oxlint-and-akmons-own-tooling)).**
+  `profiles/oxlint.json` holds ESLint's `recommended` as oxlint names it plus the Google style
+  rules a linter can check (the rules `tsc` already checks are off for TypeScript files);
+  `profiles/js.md` holds the ones no linter checks, and `ARCHETYPES.md` maps JavaScript/TypeScript
+  to it. A Node project with no linter now defaults to `akmon`: `init` writes `.oxlintrc.json`
+  extending `./node_modules/akmon/profiles/oxlint.json` with `env` `browser` and `node` (a step
+  says to narrow it — `extends` does not carry `env`), records `oxlint {files}` first, and names
+  the install step when `package.json` does not declare oxlint. An existing `.oxlintrc.json` is
+  never edited; a step names the `extends` line it lacks. A project with ESLint, Biome or oxlint of
+  its own still defaults to `own`. akmon's own JavaScript moved from ESLint to oxlint and oxfmt
+  (internal; nothing for a consumer to do).
 
 ### Changed
+- **A Node project may pin akmon to a release tag of the git repository (C120).** `verify`'s
+  `package.dev-pin` accepts a git dependency whose ref is an exact release tag —
+  `github:akumidv/ai_akmon#vX.Y.Z`, the `gitlab:`/`bitbucket:`/`<owner>/<repo>` shorthands and
+  `git`/`git+https`/`git+ssh` URLs with `#vX.Y.Z` — as an exact pin, so `verify --strict` passes on
+  it before the first npm publish. A branch, a `#semver:` range, a commit, no ref or a tarball URL
+  still warns, and the warning's fix now names the release-tag install too.
+- **`release_check --state --subject akmon` reads the right tree, or refuses (C120).** It reads
+  the mounted `<AITNA_ROOT>/akmon`, else the running akmon tree, so it now works inside an akmon
+  clone. Where that tree carries no `meta/` (a package carrier), it exits 2 with one line saying
+  where the development record lives, instead of a summary of `(missing)` lines and exit 0.
+- **The wheel, the npm package and a `vendored` mount carry no `meta/` and no test files (C118,
+  [ADR 0009](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0009-packaging-package-carrier-and-mount-modes.md#amendment--the-installable-carriers-ship-no-meta-c118)).**
+  akmon's development record (decisions, designs, measurements, reviews, experiments, tests, the
+  conformance corpus) and `js/**/*.test.mjs` leave the installable carriers; `submodule` and
+  `subtree` mounts, being the git tree, keep `meta/`. Nothing shipped reads `meta/` at runtime;
+  shipped documents link into it by `https://github.com/akumidv/ai_akmon/blob/main/meta/…`. A
+  fresh `vendored` copy has no `_aitna/akmon/meta/`, but re-running `init --mode vendored` over an
+  existing mount re-copies only the standard's members and leaves an old `meta/` in place:
+  `akmon verify` warns about it (`layout.vendored-leftover`, one warning per top-level entry of a
+  `vendored` mount the carrier does not ship; never in a `submodule`, `subtree` or `package`
+  project), and you remove `_aitna/akmon/meta/` by hand if you want the mount to match.
+- **Tool reports are named by task and ordinal, not by a timestamp (C114).** `gate_pack`,
+  `second_opinion`, `coverage_map` and `stats` (Python and JS) write `[<task>-]<base>-<n>.md`
+  (`<gate>-<kind>`, `<gate>`, `coverage`, `stats`) instead of `<base>-%Y%m%d-%H%M%S.md`, `n` one
+  past the highest ordinal under that exact prefix; each takes an optional `--task <id>` (a
+  `--task` with no usable characters is a usage error), and `--out` still wins. A script that globbed the old stamped names must match the new ones. JS
+  exports: `gate_pack` exposes `reportDir`/`reportPrefix` instead of `stamp`/`reportPath`,
+  `second_opinion` `reportPrefix` instead of `reportPath`.
+- **`second_opinion` refuses a `report_dir` outside the project (review C9).** A `report_dir`
+  in the registry or the project's routing overlay that resolves outside the project root is now
+  refused by both the Python and the JS tool with exit 2, before the provider runs and before
+  anything is written; the `report:` line names the resolved path. An overlay that pointed reports
+  elsewhere points them inside the project instead.
+- **`profiles/oxlint.json` no longer sets `env.es2024` (M132).** oxlint defines the ECMAScript
+  globals without it, and `extends` never carried an `env` into a project anyway: a project that
+  extends akmon's rules states its own `env` in its `.oxlintrc.json`, as the one `init` writes
+  does. Nothing to change for a project that already does.
 - **The model-routing hook no longer re-reads the whole session transcript on every prompt
   (A19/C93/D2-50).** Both transcript scans read from the end and stop at the last main-chain turn
   or role declaration, and `model-routing` reads once per run instead of twice: on a 33.6 MB
@@ -400,7 +488,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   approval, and the entries then report `enabled: true` while running nothing, silently.
   Re-approve with `/hooks` after every bump; the step is now in the package-mode procedure
   ([BOOTSTRAP](BOOTSTRAP.md) §F) as well as the mounted one. `akmon verify` still does not
-  inspect that host state ([N7 evidence](meta/reviews/n7-codex-hook-delivery-20260825.md)).
+  inspect that host state ([N7 evidence](https://github.com/akumidv/ai_akmon/blob/main/meta/reviews/n7-codex-hook-delivery.md)).
 
 ### Breaking
 - **The Python language rules moved from `guardrails/python.md` to `profiles/python.md`
@@ -476,6 +564,23 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **A realign keeps `--checks none` and `--checks own` with nothing found (C123).**
+  `akmon init --checks none` — or the same answer at the prompt — and `--checks own` when no
+  linter configuration is found now record an empty `[check]` table in
+  `<AITNA_ROOT>/.akmon.toml`, so `akmon update` (which re-runs `init --yes`) leaves the choice
+  alone instead of setting up the default and writing `.oxlintrc.json` or a ruff `extend` into the
+  project. `akmon check` and `verify` read the empty table exactly as no table. A record written
+  earlier has no table and is decided once more on its next realign; to keep the choice, add an
+  empty `[check]` table to it.
+- **Hooks no longer hang on an over-long `cwd` (C121).** A payload `cwd` longer than 4096 UTF-8
+  bytes (Linux's `PATH_MAX`) is refused before the project-root walk resolves it, and the hook
+  takes its ordinary failure exit with one stderr line (`ValueError`), the same on Python and on
+  Node — where a `cwd` of thousands of components used to keep the hook busy for minutes. The walk
+  itself is now linear in the path's depth.
+- **`second-opinion` on Python no longer crashes on a provider that prints invalid UTF-8 (C120).**
+  The provider's output is read as UTF-8 with an undecodable byte replaced by U+FFFD, as the
+  JavaScript twin reads it: the report is written and the provider's exit code returned, where the
+  run used to stop with `UnicodeDecodeError`, exit 1 and no report.
 - **The package-mode pin is read from multi-line arrays (C84):** `verify` and `init` now read
   the akmon pin from `pyproject.toml` as TOML. A pin written one requirement per line —
   `"akmon==0.4.0",` inside a multi-line `[dependency-groups]` or `dependencies` array, the
@@ -558,7 +663,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   hook that cannot see the path both print nothing. All three path-keyed PreToolUse advisories
   (role-on-code, analysis-guard, d2-ledger-reminder) now run over both endpoints of a rename.
   The rename literal is measured on codex-cli 0.149.1, not guessed
-  ([N1/F4 evidence](meta/reviews/n1-f4-codex-timeout-20260825.md)); it was rare enough that
+  ([N1/F4 evidence](https://github.com/akumidv/ai_akmon/blob/main/meta/reviews/n1-f4-codex-timeout.md)); it was rare enough that
   zero of 345 recorded real `apply_patch` calls contained one, which is why it went unseen.
 - **Model-routing recovery names a tree that exists in package mode (C37, subsequently narrowed
   by C77).** The SessionStart
@@ -617,7 +722,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   configuration change is needed. Codex host trust remains separate: a fresh consumer must trust
   the project and approve its hooks, and any later `sync` change to an approved `.codex/hooks.json`
   entry invalidates the affected approval and requires review and re-approval through `/hooks`
-  ([N7 evidence](meta/reviews/n7-codex-hook-delivery-20260825.md)). New failure signal: when an edit
+  ([N7 evidence](https://github.com/akumidv/ai_akmon/blob/main/meta/reviews/n7-codex-hook-delivery.md)). New failure signal: when an edit
   matcher fires and no path can be read from the payload, the hook says so on stderr instead of
   staying silent, so the next vendor payload change is visible rather than inert. **Known 3.9
   gap:** the package declares `requires-python >=3.9`, but `hooks/codex-hook.py` evaluates a
@@ -637,7 +742,7 @@ they bump the pin. Convention ([ADR 0001](meta/decisions/0001-release-and-roles-
   hooks. Consumers re-run `sync` to pick the new matcher up — on Codex that re-sync is a
   matcher-only change to an already approved group, so it flips every `PreToolUse` entry in that
   group to `modified`, and those entries stay inert until re-approved through `/hooks`
-  ([N7 evidence](meta/reviews/n7-codex-hook-delivery-20260825.md)). A Bash command is classified as an
+  ([N7 evidence](https://github.com/akumidv/ai_akmon/blob/main/meta/reviews/n7-codex-hook-delivery.md)). A Bash command is classified as an
   edit only when a recognized `apply_patch` invocation carries a valid patch envelope; this
   path depends on the C47/C48 fixes above. Every other Bash call stays unclassified. The three
   separately launched path-keyed hooks share one atomic marker, so exactly the first process emits
@@ -840,7 +945,7 @@ akmon and still carry old-style skill frontmatter.
 ### Added
 - **`release` role** + [release pipeline](pipelines/release.md): a subject-parameterized DEVELOP
   role (package / akmon tag / pin bump) with a two-mode cycle (lightweight cut · periodic
-  cadence). Locked in [ADR 0001](meta/decisions/0001-release-and-roles-model.md).
+  cadence). Locked in [ADR 0001](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0001-release-and-roles-model.md).
 - **`learn` role** ([learn](roles/learn.md)): the learn loop now has an owning role wrapping the
   `memory-distill` + `learning` pipelines.
 - **`decisions/`** — akmon now keeps its own ADRs (this is where standard-level decisions land,

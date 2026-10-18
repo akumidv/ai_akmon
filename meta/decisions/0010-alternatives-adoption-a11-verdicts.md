@@ -7,9 +7,9 @@
   lives in the walkthrough record, which stays the detail owner; each downstream lock —
   A12/A13/A14/A16 — gets its own ADR when it locks). Owner-verify point: D2-14.
 - **Owner:** akuminov@gmail.com
-- **References:** plan [`meta/reviews/alternatives/plan-akmon-from-alternatives-20260718.md`](../reviews/alternatives/plan-akmon-from-alternatives-20260718.md)
+- **References:** plan [`meta/reviews/alternatives/plan-akmon-from-alternatives.md`](../reviews/alternatives/plan-akmon-from-alternatives.md)
   (weakness→source why-record, §5 decisions, §6.0 priority view) · rationale
-  [`walkthrough-a11-20260717.md`](../reviews/alternatives/walkthrough-a11-20260717.md)
+  [`walkthrough-a11.md`](../reviews/alternatives/walkthrough-a11.md)
   (per-theme essence / as-is / solution / alternatives / recommendation + owner verdicts) ·
   archived backlog entry [A11](../TASKS_ARCHIVE.md) and the carriers named below (live in
   [`meta/TASKS.md`](../TASKS.md)) · ledger row D2-14 · descriptive pattern

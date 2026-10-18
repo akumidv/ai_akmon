@@ -1,0 +1,19 @@
+id = "cli/tool-nonexistent"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:tool"]
+
+# A tool the tree does not carry at all: `akmon tool` refuses it (exit 2) and names every tool
+# there is. No Python file exists to wait for a port, so the node run owes this scenario rather
+# than skipping it as pending (C116).
+
+[fixture]
+attach = "none"
+
+[run]
+argv = ["tool", "model_routing/nothing"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "akmon tool: unknown tool 'model_routing/nothing'; available: model_routing/coverage_map, model_routing/gate_pack, model_routing/init, model_routing/second_opinion, model_routing/stats, release/release_check, tasks/archive\n"

@@ -15,9 +15,10 @@ at the process boundary without either one winning on spelling:
   <name>.py"``, ``node "<anchor>/…/hooks/<name>.mjs"``, or a launcher ``"<anchor>/<rel>" hook
   <name>``). The anchor is kept: a command that does not hang from ``$CLAUDE_PROJECT_DIR`` or
   ``$(git rev-parse --show-toplevel)`` is not normalized, so an absolute path stays visible;
-- the package-mode spelling of a tool invocation (``python3 $(akmon path)/tools/<tool>.py``)
-  is one fact, ``{{tool <tool>}}`` — the Node spelling joins this rule with ``akmon tool``
-  (C108). The mounted spelling names the mount and is deliberately left as written;
+- the package-mode spelling of a tool invocation (``akmon tool <tool>`` from the wheel,
+  ``npx akmon tool <tool>`` from the npm package, ADR-0020/D06) is one fact,
+  ``{{tool <tool>}}``. The mounted spelling (``python3 <mount>/tools/<tool>.py``) names the
+  mount and is deliberately left as written;
 - a parser's own diagnostic (the text after ``invalid JSON:`` / ``cannot be read as TOML:``)
   is implementation-defined; that the file failed to parse, and which file, is spec;
 - where the project sits, where the standard tree sits, and where temp state goes, are
@@ -40,7 +41,9 @@ from dataclasses import dataclass, field
 #: that used the same version; the runner stamps it into its report.
 #: v2: the hook rule keeps the anchor and covers the launcher form; {{tool}}; {{parse-error}};
 #: point-in-time tokens only for the run day.
-NORM_VERSION = 2
+#: v3: {{tool}} is the `akmon tool` spelling of both implementations (C108), no longer
+#: `python3 $(akmon path)/tools/<tool>.py`.
+NORM_VERSION = 3
 
 # --- the tokens a scenario file may contain -------------------------------------
 
@@ -79,7 +82,7 @@ _Q = r'\\?"'
 _NAME = r"([a-z0-9][a-z0-9-]*)"
 _DIRECT_HOOK = re.compile(r"(?:python3|node) " + _Q + _ANCHOR + r'/[^"\\]*?hooks/' + _NAME + r"\.(?:py|mjs)" + _Q)
 _LAUNCHER_HOOK = re.compile(_Q + _ANCHOR + r'/[^"\\]+?' + _Q + r" hook " + _NAME)
-_TOOL = re.compile(r"python3 \$\(akmon path\)/tools/([a-z0-9_/]+)\.py")
+_TOOL = re.compile(r"(?:npx )?akmon tool ([a-z0-9_]+(?:/[a-z0-9_]+)*)")
 # The parser's own words run to the finding's fix arrow or the line end (a parser detail is only
 # ever printed inside a finding line; it may itself hold a quoted repr such as '\n').
 _PARSE_DETAIL = re.compile(r"(invalid JSON|cannot be read as TOML): .+?(?= → |$)", re.MULTILINE)

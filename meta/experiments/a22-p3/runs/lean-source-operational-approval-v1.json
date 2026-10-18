@@ -1,0 +1,27 @@
+{
+  "authorized_phases": [
+    "technical_source"
+  ],
+  "dispatch_allowed": true,
+  "implementation_acceptance": {
+    "accepted_operational_seal_sha256": "4bc20f7ad31e1265e28c62fc2d59f7a903cdcbccbdbdc9b8b44e5b2a42c67525",
+    "evidence_sha256": "f61c4969184d2ba4ec8c084de7bbb96a99caf184b50f6f699b12b5c622d672ee",
+    "message_id": "msg_01a1407c-5eaa-7bb3-aa6b-35391a49f548",
+    "owner_accepted": true
+  },
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "4bc20f7ad31e1265e28c62fc2d59f7a903cdcbccbdbdc9b8b44e5b2a42c67525",
+  "proposal_acceptance": {
+    "evidence_sha256": "ba46c40532916639b3a839063c8860126ff99fa6af34a3a8d62a68a088240326",
+    "message_id": "msg_01a1402b-806a-7a31-9fe9-a662b3f251ae",
+    "owner_accepted": true,
+    "requested_seal_sha256": "e47596e5d3b7f0cbd9e9b15554665cc0d3a3e1428d9c13ab11eab9bfb78f0b8a",
+    "scope": [
+      "technical_source"
+    ]
+  },
+  "proposal_approval_seal_sha256": "e47596e5d3b7f0cbd9e9b15554665cc0d3a3e1428d9c13ab11eab9bfb78f0b8a",
+  "proposal_sha256": "3ec1ceb924fc5c15d7d97775c06172619a61e2d482f9aa7e829ae101874045e4",
+  "record_type": "p3_v3_lean_source_operational_approval",
+  "schema": 1
+}

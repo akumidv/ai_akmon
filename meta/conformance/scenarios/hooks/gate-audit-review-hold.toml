@@ -30,6 +30,6 @@ exit = 0
 stderr = ""
 [expected.stdout_json]
 decision = "block"
-reason = "[akmon gate] This turn carries 3 findings as the review role, at or above the `review_min_findings` floor of 3 — review-flow step 4 (Calibrate) routes an `audit` pass here. Before handing off: either delegate `k_auditor` over the gate-pack (`tools/model_routing/gate_pack.py`) and fold its verdict in, or state in one line that you are skipping the audit and why. The floor is advisory; passing it in silence is not."
+reason = "[akmon gate] This turn carries 3 findings as the review role, at or above the `review_min_findings` floor of 3 — review-flow step 4 (Calibrate) routes an `audit` pass here. Before handing off: either delegate `k_auditor` over the gate-pack (`{{tool model_routing/gate_pack}}`) and fold its verdict in, or state in one line that you are skipping the audit and why. The floor is advisory; passing it in silence is not."
 [expected.stdout_json.hookSpecificOutput]
 hookEventName = "Stop"

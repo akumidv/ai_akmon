@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a14671-7aea-7230-a152-d98b27c1073a"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"🧭 agent: architect — boundary decision framing\n\nThe missing decision ground is the first consumer’s ownership model: should consumers be able to customize lint rules independently, or must all consumers receive one centrally governed lint policy?\n\nPlease provide the `owner-use` item describing that consumer’s expected linting workflow and customization needs.\n\nCHECK: owner-use"}}
+{"type":"turn.completed","usage":{"input_tokens":15883,"cached_input_tokens":4224,"cache_write_input_tokens":0,"output_tokens":143,"reasoning_output_tokens":69}}

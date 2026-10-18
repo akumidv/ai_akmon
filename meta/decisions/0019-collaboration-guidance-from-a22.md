@@ -3,8 +3,8 @@
 - **Status:** Accepted
 - **Owner:** akuminov@gmail.com
 - **References:** [A22](../TASKS.md) · [comparison design](../design/attention-frame-comparison.md) ·
-  [T2 evidence](../reviews/t2-grid-20260922.md) · [T2 audits](../reviews/t2-audit-synthesis-20260923.md) ·
-  [T3 evidence](../reviews/t3-codex-p2-20260924.md) · M83–M85, M96–M97 in
+  [T2 evidence](../reviews/t2-grid.md) · [T2 audits](../reviews/t2-audit-synthesis.md) ·
+  [T3 evidence](../reviews/t3-codex-p2.md) · M83–M85, M96–M97 in
   [MEASUREMENTS](../MEASUREMENTS.md) · [ADR 0015](0015-mission-and-resource-allocation.md)
 
 ## Context
@@ -111,7 +111,7 @@ automated audit. That question is open design work.
 
 `Decision-ID: ADR-0019/D02`
 
-**Owner accepted 2026-10-11.** For the P3 decision-ground routing experiment, Codex provider usage
+**Owner accepted.** For the P3 decision-ground routing experiment, Codex provider usage
 across the full effort is accounted against a 5,000,000-token aggregate ceiling. Debit each Codex
 provider call exactly once, including subject turns, scorer readings, route checks, technical
 attempts, and failed or defective calls. Missing or uncorrelated usage blocks further dispatch and

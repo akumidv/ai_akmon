@@ -7,6 +7,7 @@ akmon checks no code itself: these carriers pin that the ``[check]`` table is re
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import shlex
 import subprocess
@@ -125,6 +126,38 @@ def test_changed_files_are_what_differs_from_head_and_never_the_dev_layer(tmp_pa
     assert check_runner.changed_files(root) == ["new.py"]
 
 
+def test_changed_files_keep_regular_files_only(tmp_path):
+    """A link to a directory, or a dangling one, is no file a linter can be handed (the C115 reference)."""
+    root = _project(tmp_path, "")
+    (root / "old.py").write_text("x = 1\n", encoding="utf-8")
+    _git(root, "init", "-q")
+    _git(root, "add", ".")
+    _git(root, "commit", "-q", "-m", "base")
+    (root / "pkg").mkdir()
+    (root / "dir.py").symlink_to("pkg")
+    (root / "dangling.py").symlink_to("missing")
+    (root / "new.py").write_text("y = 2\n", encoding="utf-8")
+    assert check_runner.changed_files(root) == ["new.py"]
+
+
+def test_changed_files_drop_real_directories_git_names(tmp_path):
+    """A tracked file replaced by a directory (``git diff`` names ``old.py``) and an untracked nested
+    repository (``ls-files --others`` names ``nested/``) are no file either; a file inside the
+    replacing directory is one (C120)."""
+    root = _project(tmp_path, "")
+    (root / "old.py").write_text("x = 1\n", encoding="utf-8")
+    _git(root, "init", "-q")
+    _git(root, "add", ".")
+    _git(root, "commit", "-q", "-m", "base")
+    (root / "old.py").unlink()
+    (root / "old.py").mkdir()
+    (root / "old.py" / "inner.py").write_text("y = 2\n", encoding="utf-8")
+    (root / "nested").mkdir()
+    _git(root / "nested", "init", "-q")
+    (root / "nested" / "n.py").write_text("z = 3\n", encoding="utf-8")
+    assert check_runner.changed_files(root) == ["old.py/inner.py"]
+
+
 def test_verify_validates_the_check_table_and_runs_nothing(tmp_path):
     """``verify`` owns integration health: a malformed entry silently stops a check from running,
     so it is ``verify``'s business; the check's own result is ``akmon check``'s."""
@@ -139,6 +172,13 @@ def test_verify_validates_the_check_table_and_runs_nothing(tmp_path):
     verifier = verify.Verifier(root)
     verifier.check_check_config()
     assert [(f.severity, f.code) for f in verifier.findings] == [("ok", "check.config")]
+
+    # An empty table — what `init --checks none` records (C123) — reads as no table: no finding.
+    for record in ("", "[check]\n# What `akmon check` runs\n"):
+        (root / "_aitna" / ".akmon.toml").write_text(record)
+        verifier = verify.Verifier(root)
+        verifier.check_check_config()
+        assert verifier.findings == []
 
 
 # --------------------------------------------------------------------------------------
@@ -191,3 +231,9 @@ def test_a_missing_data_file_fails_from_the_public_functions(monkeypatch):
         check_runner.read_checks("not a table")
     with pytest.raises(jsondata.DataFileError):
         Check("name", ("command",))
+
+
+def test_a_negated_class_ending_at_u10fffe_matches_u10ffff_dv37():
+    """Python's answer for the case V8 gets wrong (DIVERGENCES.md DV37); ``glob.test.mjs`` pins node's."""
+    assert fnmatch.translate("[!-\U0010fffe]") == "(?s:[^\\-\U0010fffe])\\Z"
+    assert fnmatch.fnmatchcase("\U0010ffff", "[!-\U0010fffe]") is True

@@ -32,7 +32,14 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import {
-  ScopeError, changedFiles, configTarget, correctEntryFix, noChecks, readChecks, repairRecordFix, runChecks,
+  ScopeError,
+  changedFiles,
+  configTarget,
+  correctEntryFix,
+  noChecks,
+  readChecks,
+  repairRecordFix,
+  runChecks,
   scopeFix,
 } from "../common/check_runner.mjs";
 import { Finding, exitCode, printFindings, readFindingsData } from "../common/findings.mjs";
@@ -123,9 +130,7 @@ export function main(argv = process.argv.slice(2)) {
     if (!(exc instanceof RecordError)) {
       throw exc;
     }
-    printFindings(
-      [finding("error", "check.config", exc.message, configTarget(data), repairRecordFix(data))],
-    );
+    printFindings([finding("error", "check.config", exc.message, configTarget(data), repairRecordFix(data))]);
     return 1;
   }
   const { checks, problems } = readChecks(data, table);

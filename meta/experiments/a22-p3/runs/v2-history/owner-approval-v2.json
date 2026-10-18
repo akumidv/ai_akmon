@@ -1,0 +1,49 @@
+{
+  "schema": 3,
+  "record_type": "p3_v2_owner_approval",
+  "proposal_sha256": "89de386b05fbd38e70ed90da75a56c6f3aa584598314afdbb54de859c0f9b8f5",
+  "accepted_v2_seal_sha256": "dfa34f9da5ae18a6038b506170ea83226bbf026902db2951ad457b589499d0c9",
+  "owner_accepted": true,
+  "owner_acceptance_provenance": "TRANSCRIPT_EVIDENCE_NONCRYPTOGRAPHIC",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "acceptance_evidence": {
+    "record_type": "p3_owner_acceptance_transcript_evidence",
+    "accepted_utc": "2026-10-11T19:55:26Z",
+    "transcript_ref": "current conversation: user message explicitly accepting A22 P3 V2 and authorizing route_check and qualification",
+    "transcript_sha256": "c38791b22955f024b6c246e583287b64b0b3ca30333c948ede0f4523ffb0f39f",
+    "exact_quote": "Принимаю план A22 P3 V2: SHA-256 89de386b05fbd38e70ed90da75a56c6f3aa584598314afdbb54de859c0f9b8f5, seal SHA-256 dfa34f9da5ae18a6038b506170ea83226bbf026902db2951ad457b589499d0c9. Разрешаю route_check и qualification с лимитом Codex 5 млн токенов, техническим q1461, правилом OBSERVED_NO_RETRY и мной как оператором этой сессии",
+    "decision_ref": "owner acceptance and dispatch authorization in this conversation turn",
+    "proposal_sha256": "89de386b05fbd38e70ed90da75a56c6f3aa584598314afdbb54de859c0f9b8f5",
+    "accepted_v2_seal_sha256": "dfa34f9da5ae18a6038b506170ea83226bbf026902db2951ad457b589499d0c9"
+  },
+  "preflight_evidence": {
+    "record_type": "p3_v2_static_preflight_reference",
+    "path": "runs/static-preflight-20261011T193000Z/evidence.json",
+    "sha256": "f054922c6e9d2ba086855b57db2fdb92edf6cf4be8a4e71e5a3e0ed1c38757e0"
+  },
+  "authorized_phases": [
+    "route_check",
+    "qualification"
+  ],
+  "selected_resource_option": "token_only",
+  "options": {
+    "usd25": {
+      "route_rates_usd_per_million": null,
+      "estimated_total_usd": null,
+      "named_operator": null,
+      "exploratory_calls_counted": null
+    },
+    "token_only": {
+      "codex_aggregate_limit_tokens": 5000000,
+      "known_prior_codex_usage_tokens": 153614,
+      "remaining_codex_tokens_at_approval": 4846386,
+      "qwen_aggregate_limit_tokens": null,
+      "accepted_scorer_readings_per_route": 120,
+      "named_operator": "owner (this session)",
+      "exploratory_calls_counted": true
+    }
+  },
+  "preflight_status": "PASSED",
+  "dispatch_allowed": true,
+  "test_only_fixture": false
+}

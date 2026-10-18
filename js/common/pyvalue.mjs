@@ -273,11 +273,11 @@ function _strRepr(/** @type {string} */ value) {
 }
 
 /**
- * Python's `repr` of a JSON value.
+ * Python's `repr` of a JSON scalar, or null for a list or a dict.
  * @param {unknown} value
- * @returns {string}
+ * @returns {string | null}
  */
-function _pyRepr(value) {
+function _scalarRepr(value) {
   if (value === null || value === undefined) {
     return "None";
   }
@@ -296,11 +296,46 @@ function _pyRepr(value) {
     }
     return Number.isSafeInteger(value) ? String(value) : BigInt(value).toString();
   }
-  if (Array.isArray(value)) {
-    return `[${value.map(_pyRepr).join(", ")}]`;
+  return null;
+}
+
+/**
+ * Python's `repr` of a JSON value. Iterative, with an explicit stack: a payload member nested as
+ * deep as `json.loads` accepts (9996 levels) is spelled as Python spells it, where a recursive
+ * walk would exhaust V8's call stack (`RangeError`).
+ * @param {unknown} value
+ * @returns {string}
+ */
+function _pyRepr(value) {
+  /** @type {string[]} */
+  const out = [];
+  // Each entry is literal text (`text: true`) or a value still to spell, in reverse output order.
+  /** @type {{text: boolean, item: unknown}[]} */
+  const stack = [{ text: false, item: value }];
+  while (stack.length > 0) {
+    const { text, item } = /** @type {{text: boolean, item: unknown}} */ (stack.pop());
+    const scalar = text ? /** @type {string} */ (item) : _scalarRepr(item);
+    if (scalar !== null) {
+      out.push(scalar);
+      continue;
+    }
+    const isList = Array.isArray(item);
+    /** @type {{text: boolean, item: unknown}[]} */
+    const parts = [{ text: true, item: isList ? "[" : "{" }];
+    const members = isList ? item.map((element) => [null, element]) : Object.entries(/** @type {object} */ (item));
+    members.forEach(([key, element], i) => {
+      const prefix = (i > 0 ? ", " : "") + (key === null ? "" : `${_strRepr(key)}: `);
+      if (prefix !== "") {
+        parts.push({ text: true, item: prefix });
+      }
+      parts.push({ text: false, item: element });
+    });
+    parts.push({ text: true, item: isList ? "]" : "}" });
+    for (let i = parts.length - 1; i >= 0; i--) {
+      stack.push(parts[i]);
+    }
   }
-  const entries = Object.entries(/** @type {object} */ (value));
-  return `{${entries.map(([key, item]) => `${_strRepr(key)}: ${_pyRepr(item)}`).join(", ")}}`;
+  return out.join("");
 }
 
 /** Python's `str()` of a JSON value: a string is itself, everything else its `repr`. */
@@ -525,10 +560,7 @@ function _pyFloat(value) {
     return n;
   }
   if (typeof value !== "string") {
-    throw _pyError(
-      "TypeError",
-      `float() argument must be a string or a real number, not '${_pyTypeName(value)}'`,
-    );
+    throw _pyError("TypeError", `float() argument must be a string or a real number, not '${_pyTypeName(value)}'`);
   }
   return _pyFloatFromString(value);
 }
@@ -629,9 +661,19 @@ function _decode(bytes) {
   }
 }
 
+/**
+ * Python's universal-newline translation of decoded text: `\r\n` and a lone `\r` become `\n`,
+ * as a text-mode read (`read_text`, `subprocess.run(text=True)`) delivers them.
+ * @param {string} text
+ * @returns {string}
+ */
+function _universalNewlines(text) {
+  return text.replace(/\r\n?/g, "\n");
+}
+
 /** `Path.read_text(encoding="utf-8")`: strict decoding, then universal-newline translation. */
 function _readText(/** @type {string | Buffer} */ path) {
-  return _decode(fs.readFileSync(path)).replace(/\r\n?/g, "\n");
+  return _universalNewlines(_decode(fs.readFileSync(path)));
 }
 
 /** `Path.write_text(text, encoding="utf-8")` — a lone surrogate raises before the file opens. */
@@ -684,7 +726,9 @@ export function exceptionClassName(error) {
   }
   const { code, errno } = /** @type {{code?: unknown, errno?: unknown}} */ (error);
   if (typeof code === "string" && typeof errno === "number") {
-    return Object.hasOwn(_OS_ERROR_CLASSES, code) ? _OS_ERROR_CLASSES[/** @type {keyof typeof _OS_ERROR_CLASSES} */ (code)] : "OSError";
+    return Object.hasOwn(_OS_ERROR_CLASSES, code)
+      ? _OS_ERROR_CLASSES[/** @type {keyof typeof _OS_ERROR_CLASSES} */ (code)]
+      : "OSError";
   }
   // A `SyntaxError` in this tree is `JSON.parse` refusing a text: Python's `json.JSONDecodeError`.
   if (error instanceof SyntaxError) {
@@ -733,6 +777,7 @@ export {
   _isFile as isFile,
   _isDir as isDir,
   _decode as decodeUtf8,
+  _universalNewlines as universalNewlines,
   _readText as readText,
   _writeText as writeText,
   _unlinkMissingOk as unlinkMissingOk,

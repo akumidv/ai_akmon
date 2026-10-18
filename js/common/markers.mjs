@@ -123,10 +123,7 @@ export function gettempdir() {
 }
 
 /** Whether `identity` is one a marker cannot be keyed by: absent, empty or the substitute. */
-function _isUnidentified(
-  /** @type {MarkersData} */ data,
-  /** @type {string | null | undefined} */ identity,
-) {
+function _isUnidentified(/** @type {MarkersData} */ data, /** @type {string | null | undefined} */ identity) {
   return !truthy(identity) || identity === data.unidentified;
 }
 

@@ -423,10 +423,24 @@ def test_main_end_to_end_writes_report_and_prints_digest(tmp_path, capsys, monke
     assert "report:" in out
 
     report_files = list(report_dir.glob("stats-*.md"))
-    assert len(report_files) == 1
+    assert [p.name for p in report_files] == ["stats-1.md"]
     content = report_files[0].read_text(encoding="utf-8")
     assert "k_explorer" in content
     assert "42" in content
+
+
+def test_main_with_a_task_takes_the_next_ordinal_of_that_prefix(tmp_path, capsys):
+    """C114: ``<report-dir>/[<task>-]stats-<n>.md``; files of another prefix are not counted."""
+    report_dir = tmp_path / "reports"
+    report_dir.mkdir()
+    (report_dir / "C7-stats-1.md").write_text("earlier\n", encoding="utf-8")
+    (report_dir / "stats-3.md").write_text("no task\n", encoding="utf-8")
+    argv = ["--project-root", str(tmp_path), "--transcript", str(tmp_path / "absent.jsonl"), "--no-budget"]
+    argv += ["--report-dir", str(report_dir), "--task", "C7"]
+
+    assert stats.main(argv) == 0
+    assert capsys.readouterr().out.rstrip().endswith("C7-stats-2.md")
+    assert (report_dir / "C7-stats-1.md").read_text(encoding="utf-8") == "earlier\n"
 
 
 # --------------------------------------------------------------------------------------

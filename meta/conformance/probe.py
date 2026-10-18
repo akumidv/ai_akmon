@@ -1179,7 +1179,11 @@ PROBES = {
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run one probe against its unit table; print the ok/failed document, exit 1 on a miss."""
+    """Run one probe against its unit table; print the ok/answered/failed document, exit 1 on a miss.
+
+    ``answered`` is how many rows the probe answered: the runner holds it to the table's row
+    count, so a probe that skips rows — or an emptied table — cannot print a green document.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("probe", choices=sorted(PROBES))
     parser.add_argument("table", type=Path)
@@ -1188,7 +1192,7 @@ def main(argv: list[str] | None = None) -> int:
     table = tomllib.loads(args.table.read_text(encoding="utf-8"))
     results = PROBES[args.probe](Path(args.tree).resolve(), table)
     failed = [r for r in results if r["expected"] != r["actual"]]
-    document = {"ok": not failed, "failed": failed}
+    document = {"ok": not failed, "answered": len(results), "failed": failed}
     try:
         print(json.dumps(document, indent=2, ensure_ascii=False, default=str))
     except UnicodeEncodeError:  # a lone surrogate in a wrong answer has no UTF-8 spelling: escape it

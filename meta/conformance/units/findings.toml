@@ -10,8 +10,10 @@
 # JS `trim()` strips others (a BOM); `str.splitlines` names ten line separators where a JS regex
 # has to be told each; `\s` is Unicode in Python until `re.ASCII` (the Python side is `re.ASCII`, by
 # decision, so a no-break space after a full stop is text, not a boundary, in both);
-# `frozenset` answers sorted here. A JS port gets none of this for free. The table is the spec:
-# every expected value was produced by running the Python and then read against the docstrings.
+# `frozenset` answers sorted here. A JS port gets none of this for free. The table is the spec, held
+# to the Python reference row by row: `runner.py --impl python` runs it as scenario `units/findings`
+# in the conformance leg of `meta/self_ci.py`, and every expected value was read against the
+# docstrings.
 #
 # The mouth is the generic one of `routing.toml` (the row format is the block comment above
 # `probe_routing` in probe.py): a row names a public function, its JSON arguments and kwargs.

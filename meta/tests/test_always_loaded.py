@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -256,6 +257,24 @@ def test_always_loaded_json_carries_the_ratchet():
     assert data["scopes"] == ["akmon-shipped", "consumer-total"]
     assert data["caps"]["akmon-shipped"] == {"lines": 320, "bytes": 21000}
     assert data["severity"] == {"akmon-shipped": "error", "consumer-total": "warn"}
+
+
+def test_the_conformance_vocab_rows_agree_with_always_loaded_json():
+    """The `vocab/*` rows of the conformance table restate the data file by hand (both probes run
+    them as written); they are held to it here, so a data edit names the stale row (C119)."""
+    data = json.loads((Path(al.__file__).parent / "always_loaded.json").read_text(encoding="utf-8"))
+    table = tomllib.loads(
+        (_AKMON / "meta" / "conformance" / "units" / "always_loaded.toml").read_text(encoding="utf-8")
+    )
+    rows = {row["fn"]: json.loads(row["expected_json"]) for row in table["case"] if row["id"].startswith("vocab/")}
+    assert rows == {
+        "CODE": al.CODE,
+        "block_heading": data["block_heading"],
+        "shipped": data["scopes"][0],
+        "consumer": data["scopes"][1],
+        "caps": data["caps"],
+        "severity": data["severity"],
+    }
 
 
 def test_the_loader_reads_exactly_always_loaded_json(monkeypatch):

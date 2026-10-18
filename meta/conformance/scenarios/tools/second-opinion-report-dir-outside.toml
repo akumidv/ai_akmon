@@ -1,0 +1,29 @@
+id = "tools/second-opinion-report-dir-outside"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# The project overlay points the resolved vendor's report_dir out of the project (C9): reports
+# stay inside the project, so the tool refuses with one error line on stderr and exit 2 before
+# it starts the provider CLI or writes anything.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+"_aitna/model-routing.json" = """
+{"anthropic": {"second_opinion": {"report_dir": "../second-opinion-report-dir-outside"}}}
+"""
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--gate",
+  "design-align",
+  "--gate-pack",
+  "docs/gate-pack.md",
+]
+
+[expected]
+exit = 2
+stderr = "second-opinion: report_dir '../second-opinion-report-dir-outside' resolves outside the project; it must be a directory inside the project root.\n"
+stdout = ""
+file_absent = ["../second-opinion-report-dir-outside/design-align-1.md"]

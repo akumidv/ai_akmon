@@ -18,8 +18,10 @@
 # it), `session_id`/`cwd`/`tool_use_id` skip an empty string. `file_paths` strips the patch paths with
 # `str.strip()` (Unicode whitespace incl. U+2028, NEL and U+001C-U+001F), de-duplicates comparing
 # `\` as `/`, and keeps an empty path a name of only U+2028 leaves. `payload_shape` sorts keys by code
-# point (an astral key after U+E000 and U+FF5E; UTF-16 order would differ). The table is the spec:
-# every expected value was produced by running the Python and then read against the docstring.
+# point (an astral key after U+E000 and U+FF5E; UTF-16 order would differ). The table is the spec,
+# held to the Python reference row by row: `runner.py --impl python` runs it as scenario
+# `units/codex_adapter` in the conformance leg of `meta/self_ci.py`, and every expected value was
+# read against the docstring.
 #
 # The mouth is the generic one of `routing.toml` (row format: the block comment above `probe_routing`
 # in probe.py); `class_only` answers the exception class alone (a payload that is not an object is an

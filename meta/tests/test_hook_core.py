@@ -432,6 +432,7 @@ _PATH_FORM_CORPUS = (
     "notes.txt",
 )
 
+
 @pytest.mark.parametrize("relative", _PATH_FORM_CORPUS)
 def test_path_predicates_agree_on_relative_and_absolute_forms(tmp_path, relative):
     absolute = str(tmp_path / relative)

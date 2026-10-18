@@ -1,0 +1,25 @@
+id = "cli/tool-runs-archive"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:tool"]
+
+# `akmon tool <path>` runs the tool out of the controlling tree with the rest of argv verbatim
+# (ADR-0020/D06): the dry-run archive sweep, the same observable as tools/archive-dry.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/TASKS.md" = "# Tasks\n\n- C101 · seed the corpus scenarios · done · engineer · evidence in meta/conformance/\n- C102 · wire the coverage gate · active · architect\n"
+"_aitna/TASKS_ARCHIVE.md" = "# Archive\n\n## Done\n\n- T1 · older demo · done · engineer · moved 2026-08-01\n"
+
+[run]
+argv = ["tool", "tasks/archive", "--tasks", "_aitna/TASKS.md"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "would archive 1 done entry: C101\nre-run with --apply to move them\n"
+[expected.files]
+"_aitna/TASKS.md" = "# Tasks\n\n- C101 · seed the corpus scenarios · done · engineer · evidence in meta/conformance/\n- C102 · wire the coverage gate · active · architect\n"
+"_aitna/TASKS_ARCHIVE.md" = "# Archive\n\n## Done\n\n- T1 · older demo · done · engineer · moved 2026-08-01\n"

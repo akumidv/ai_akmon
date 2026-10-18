@@ -1,0 +1,33 @@
+{
+  "command": [
+    "/home/ai/.codex/packages/standalone/releases/0.162.1-x86_64-unknown-linux-musl/bin/codex",
+    "exec",
+    "--disable",
+    "memories",
+    "--disable",
+    "multi_agent",
+    "-c",
+    "web_search=\"disabled\"",
+    "-s",
+    "read-only",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "-C",
+    "/tmp/a22-p3-v3-controls-successor-runtime/control-1/scratch",
+    "-c",
+    "model_instructions_file=\"/home/ai/workspace/akmon/meta/experiments/a22-p3/arms/C.architect.system.txt\"",
+    "resume",
+    "--json",
+    "--skip-git-repo-check",
+    "01a14671-2458-7d72-89f8-8c48616411eb",
+    "-m",
+    "gpt-6-astra",
+    "-c",
+    "model_reasoning_effort=\"medium\"",
+    "The first consumer is a generator that must run without importing the library's lint configuration. Consumer-specific lint policy must remain independently changeable."
+  ],
+  "cwd": "/tmp/a22-p3-v3-controls-successor-runtime/control-1/scratch",
+  "returncode": 0,
+  "status": "accepted",
+  "stop_reason": null
+}

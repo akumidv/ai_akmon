@@ -88,6 +88,70 @@ expected = { lenient = { mount = "package", akmon_version = "v1" }, strict = { m
 text = "﻿mount = \"package\"\n"
 expected = { lenient = { mount = "package" }, strict_ok = false }
 
+[[case]]
+# A control character trailing a bare value: tomllib refuses the file, and the line parser strips
+# U+001F the way `str.strip()` does (it is no `splitlines` boundary, so the line stays whole).
+text = "mount = package\u001f\n"
+expected = { lenient = { mount = "package" }, strict_ok = false }
+
+# TOML 1.1.0 syntax (C115, ADR-0020/D10: the JS reader follows `tomllib`). The vendored
+# smol-toml reads TOML 1.1.0 and has no 1.0.0 mode; `tomllib` reads 1.0.0 and refuses each of
+# these, so the strict reader raises and the lenient one takes its line parser — in both twins.
+# A leading BOM is the same boundary: a non-string value shows that the fallback, not the parser,
+# answered (the parser would hand back the integer 1).
+
+[[case]]
+# A `\x` escape: the line parser keeps the text as written.
+text = 'mount = "a\x62c"'
+expected = { lenient = { mount = 'a\x62c' }, strict_ok = false }
+
+[[case]]
+# The `\e` escape.
+text = 'mount = "a\ec"'
+expected = { lenient = { mount = 'a\ec' }, strict_ok = false }
+
+[[case]]
+# An escaped backslash before the letter is TOML 1.0.0: no escape, the parser answers.
+text = 'mount = "a\\x"'
+expected = { lenient = { mount = 'a\x' }, strict = { mount = 'a\x' }, strict_ok = true }
+
+[[case]]
+text = "﻿mount = 1\n"
+expected = { lenient = { mount = "1" }, strict_ok = false }
+
+[[case]]
+# A trailing comma in an inline table.
+text = '''
+mount = "package"
+check = {lint = "ruff",}
+'''
+expected = { lenient = { mount = "package", check = '{lint = "ruff",}' }, strict_ok = false }
+
+[[case]]
+# An inline table across lines: each line is a line of its own to the fallback.
+text = '''
+mount = "package"
+check = {lint = "ruff",
+  test = "pytest"}
+'''
+expected = { lenient = { mount = "package", check = '{lint = "ruff",', test = "pytest" }, strict_ok = false }
+
+[[case]]
+# A time without seconds.
+text = '''
+mount = "package"
+at = 07:32
+'''
+expected = { lenient = { mount = "package", at = "07:32" }, strict_ok = false }
+
+[[case]]
+# A calendar date that does not exist (smol-toml rolls it over to March 1).
+text = '''
+mount = "package"
+at = 1979-02-29
+'''
+expected = { lenient = { mount = "package", at = "1979-02-29" }, strict_ok = false }
+
 # A TOML date, time or datetime cannot be a case here: `strict` is compared by deep equality on
 # the parsed value, and one date has no spelling both readers share (`tomllib` answers
 # `datetime.date`, smol-toml a `TomlDate` — M104). What the readers do agree on is that a date is
@@ -113,6 +177,11 @@ expected = '"back \\\\ quote # data"'
 [[strip]]
 input = '  spaced  '
 expected = 'spaced'
+
+[[strip]]
+# `str.strip()` whitespace, not `String.prototype.trim()`'s: U+001F and U+0085 are stripped.
+input = "\u001f\u0085 plain \u0085\u001f"
+expected = 'plain'
 
 # --- ecosystem: recorded_ecosystem / recordedEcosystem (C105) -------------------------------------
 # A project whose record (`<AITNA_ROOT>/.akmon.toml`, `text`; `absent = true` for no file at all;

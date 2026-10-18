@@ -11,5 +11,5 @@ table = "markers.toml"
 # row is where the two mouths are required to agree, not merely each to be green.
 [expected]
 exit = 0
-stdout = "{\n  \"ok\": true,\n  \"failed\": []\n}\n"
+stdout = "{\n  \"ok\": true,\n  \"answered\": 41,\n  \"failed\": []\n}\n"
 stderr = ""

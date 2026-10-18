@@ -1,0 +1,53 @@
+# SessionStart with a fresh recorded binding and a `.claude/settings.json` whose default model
+# differs from the recorded orchestrator, in a file that also holds a `NaN` literal: `json.loads`
+# reads it, so the binding is stale and the init instruction names the settings model (C115 —
+# the JS twin used to read the file as absent and print the status line).
+id = "hooks/model-routing-settings-nan"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:model-routing"]
+
+[fixture]
+attach = "native"
+files = { ".claude/settings.json" = """{"model": "sonnet", "spinner": NaN}""", ".claude/model-routing.local.json" = """{
+  "vendor": "anthropic",
+  "orchestrator": "opus",
+  "binding": {
+    "reasoner": "opus",
+    "worker": "haiku",
+    "mid": "sonnet",
+    "auditor": "opus",
+    "escalation": [
+      "sonnet"
+    ]
+  },
+  "second_opinion": false,
+  "second_opinion_provider": "openai",
+  "available": [
+    "haiku",
+    "sonnet",
+    "opus"
+  ],
+  "registry_hash": "6f691dfce2008872",
+  "task_kind_floors": {
+    "quant-derivation": "opus"
+  }
+}
+"""}
+
+[run]
+script = "model-routing"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-mr-settings-nan"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+systemMessage = "[akmon] Model routing needs initialization — settings default model 'sonnet' differs from configured orchestrator."
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "SessionStart"
+additionalContext = "[akmon] Model routing needs initialization — settings default model 'sonnet' differs from configured orchestrator.\nState the model you are running on and the models available in this harness, then run: `{{tool model_routing/init}} --orchestrator <your-alias> [--available <alias,...>] [--second-opinion on|off]`.\nThen ask the owner to (a) confirm the proposed tier→model binding and (b) enable or decline second-opinion review, and re-run the tool with their answers."

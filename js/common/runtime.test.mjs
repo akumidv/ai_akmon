@@ -9,8 +9,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import {
-  GENERATED_WIRING, OPTIONAL, OWN_TOOLING, REQUIRED_ON,
-  codexHooksListCommand, declaredRuntimes, harnessBinaries, harnessCommand, versionCommand } from "./runtime.mjs";
+  GENERATED_WIRING,
+  OPTIONAL,
+  OWN_TOOLING,
+  REQUIRED_ON,
+  codexHooksListCommand,
+  declaredRuntimes,
+  harnessBinaries,
+  harnessCommand,
+  versionCommand,
+} from "./runtime.mjs";
 
 const data = JSON.parse(fs.readFileSync(new URL("../../common/runtime.json", import.meta.url), "utf-8"));
 
@@ -26,13 +34,19 @@ test("the declared runtimes come from the shared data file, ordered", () => {
 
 test("the node ecosystem declares node where python declares python3", () => {
   const runtimes = declaredRuntimes(data, "node");
-  assert.deepEqual(runtimes.map((r) => r.binary), ["POSIX shell", "node", "git", "claude", "codex"]);
+  assert.deepEqual(
+    runtimes.map((r) => r.binary),
+    ["POSIX shell", "node", "git", "claude", "codex"],
+  );
   assert.deepEqual(runtimes[1], { binary: "node", population: GENERATED_WIRING, modality: "required" });
 });
 
 test("an unknown ecosystem raises a ValueError naming it", () => {
-  assert.throws(() => declaredRuntimes(data, "ruby"), (/** @type {Error} */ error) =>
-    error.name === "ValueError" && error.message === "unknown ecosystem 'ruby'; known: node, python");
+  assert.throws(
+    () => declaredRuntimes(data, "ruby"),
+    (/** @type {Error} */ error) =>
+      error.name === "ValueError" && error.message === "unknown ecosystem 'ruby'; known: node, python",
+  );
   assert.throws(() => declaredRuntimes(data, "toString"), /unknown ecosystem 'toString'/);
 });
 

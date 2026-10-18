@@ -58,7 +58,7 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   in V1. Grandfathers older ADRs.
 - [0009 — Packaging: the `akmon` package as carrier, four mount modes incl. `package`](0009-packaging-package-carrier-and-mount-modes.md)
   — one distribution (thin CLI + full tree as package data, hatchling, zero runtime deps, floor
-  Python 3.11 as amended by [ADR 0009 D04](0009-packaging-package-carrier-and-mount-modes.md#d04--python-floor-and-manifest-pin-semantics),
+  Python 3.12 as amended by [ADR 0009 D04](0009-packaging-package-carrier-and-mount-modes.md#d04--python-floor-and-manifest-pin-semantics) and C122,
   PyPI name `akmon`); mount modes `submodule|vendored|subtree|package`; `package` = dev-group pin,
   no tree in the repo, no skew by construction; as amended by C77 it runs the hooks out of the
   installed package via `akmon hook` and materializes only the guardrails `AGENTS.md` imports;

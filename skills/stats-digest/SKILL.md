@@ -23,13 +23,13 @@ never in the orchestrator.
 1. **Run the tool** (orchestrator, one cheap call — its stdout *is* the digest):
 
    ```bash
-   python3 _aitna/akmon/tools/model_routing/stats.py
+   akmon tool model_routing/stats     # a Node project: npx akmon tool model_routing/stats
    ```
 
    It parses the delegation log (`.claude/model-routing.log`) and the current session
    transcript, queries the Claude API for remaining session/week budget (degrades to
    `budget: unavailable` without blocking), writes the full report to
-   `.claude/stats/stats-<timestamp>.md`, and prints the digest. The report write is the
+   `.claude/stats/[<task>-]stats-<n>.md` (`n` the next free ordinal), and prints the digest. The report write is the
    tool's own output file — sanctioned, not a project mutation.
 
 2. **Delegate the learn-loop pass** to `k_explorer` (task kind `summarize`; read-only):
@@ -52,3 +52,4 @@ never in the orchestrator.
   session for this project.
 - `--no-budget` — skip the Claude API budget query (offline / no credentials).
 - `--report-dir PATH` — write the report elsewhere (default `.claude/stats/`).
+- `--task ID` — prefix the report name with the task id: `<task>-stats-<n>.md`.

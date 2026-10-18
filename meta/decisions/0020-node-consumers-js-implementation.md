@@ -12,7 +12,7 @@
 
 akmon reaches a consumer as a git mount or as a Python package pinned in `pyproject.toml`.
 Everything it executes is stdlib-only Python: about 12.1k lines in 36 files across `src/akmon`,
-`bin`, `common`, `hooks` and `tools` (counted 2026-09-26). A Node.js project can use the mounted
+`bin`, `common`, `hooks` and `tools` (counted at the time). A Node.js project can use the mounted
 modes, but it needs Python on the host and cannot pin akmon in `package.json`. `init` also
 detects only Python linters.
 
@@ -87,7 +87,7 @@ change. A release requires both implementations green on the whole corpus.
 The JavaScript implementation is plain ES-module JavaScript with JSDoc types, type-checked with
 `tsc --checkJs --noEmit`. The published files are the repository files, with no build step. It
 has no npm runtime dependencies and no lifecycle scripts. The floor is **Node 22**, the oldest
-maintained LTS line on 2026-09-26. The floor follows the Node LTS schedule the way the Python
+maintained LTS line at the time. The floor follows the Node LTS schedule the way the Python
 floor follows ADR-0009/D04.
 
 TOML is read by a **vendored copy of smol-toml** at a pinned version, with its licence kept and
@@ -140,9 +140,9 @@ surface is a public API under the release versioning (a breaking change is a bre
 - **Running.** Each command runs through the project's package manager, never with an implicit
   download. Each check has explicit file patterns, and TypeScript is checked as a whole project.
   `package.json` scripts are named for the owner, never auto-recorded.
-- **Offered ruleset.** For a project with no tool, it is a standard `extends` resolved from the
-  installed package by name. The tool and the rules are decided in A35 after a baseline on a real
-  Node repository; until then a Node project chooses between `own` and `none`.
+- **Offered ruleset.** For a project with no linter, akmon's rules are a standard `extends` from
+  the project's own configuration into the installed package. The tool and the rules were decided
+  in A35 after a baseline on a real Node repository: [D09](#d09--the-javascripttypescript-ruleset-oxlint-and-akmons-own-tooling).
 - **Profile.** A `js` language profile attaches when `package.json` exists and holds only rules
   that no linter checks.
 - **Update.** `akmon update` uses the detected manager's exact dev-install command. Any other
@@ -166,6 +166,85 @@ accepted, and who sees it. A difference that is neither fixed nor in the registe
 a differential run (D03) that finds one ends in one of the two. The register is the place to look
 before reading a port's behavior as a bug.
 
+### D09 — The JavaScript/TypeScript ruleset: oxlint, and akmon's own tooling
+
+`Decision-ID: ADR-0020/D09`
+
+Accepted by the owner (A35), on the baseline of
+[`reviews/a35-js-rule-baseline.md`](../reviews/a35-js-rule-baseline.md)
+(M127–M130).
+
+- **Tool.** akmon's JavaScript/TypeScript rules are a standard oxlint configuration,
+  `profiles/oxlint.json`, that runs with or without akmon. It holds ESLint's `recommended` bug
+  class, the Google JavaScript Style Guide's checkable rules, and akmon's size floor (complexity
+  10, five parameters, 50 statements, depth 4), each annotated with its section. `camelcase` is
+  carried by oxlint's `id-match`.
+- **How a project takes it.** `init --checks akmon` writes `.oxlintrc.json` with
+  `"extends": ["./node_modules/akmon/profiles/oxlint.json"]`, or names that line when the
+  project's own `.oxlintrc.json` exists. It never rewrites the project's file, and it records
+  `oxlint {files}` through the project's manager. oxlint resolves `extends` as a path, not by
+  package name. A JS config (`oxlint.config.ts`) can import a package by name, but oxlint marks
+  that form experimental, so akmon does not use it. With nothing detected, `akmon` is the default.
+- **TypeScript is `tsc`'s.** oxlint parses TypeScript itself; `typescript-eslint` is not used. In
+  `.ts` files the rules `tsc` checks are turned off (the set typescript-eslint's
+  `eslint-recommended` turns off). `tsc` under `strict` also checks Google §5.9, `this` outside a
+  class. A project's detected `tsc` is recorded beside the offered oxlint.
+- **What no tool checks** goes to the `js` profile, `profiles/js.md`, as review points. That
+  includes §5.9 in JavaScript (oxlint has no `no-invalid-this`; the ESLint rule through oxlint's
+  alpha JS plugins would cost the `eslint` package and about 2 s a run), JSDoc (§7), and default
+  exports (§3.4.2.1). Globals go in the configuration, because oxlint does not read
+  `/* global */` comments.
+- **akmon's own JavaScript** is linted by oxlint with the same `profiles/oxlint.json` (replacing
+  the earlier ESLint 10 setup) and formatted by oxfmt. Its size family is a ratchet: the files
+  over a limit are listed in akmon's `.oxlintrc.json`, and that list only shrinks (as C91 did for
+  Python). A formatter is never part of the offered ruleset: it is the project's own.
+- **Implementation points** (C110), proposed by the agent and accepted by the owner:
+  - oxfmt runs at width 120 on akmon's `.mjs/.js/.ts` only;
+  - the `.ts` override turns off the rules `tsc` checks;
+  - only a detected linter makes `own` the default; a formatter or `tsc` alone does not;
+  - the written `.oxlintrc.json` sets `env` to browser + node, and a step says to narrow it;
+  - the ruleset is reached by its path in `node_modules`, with no `exports` entry.
+
+### D10 — Parity rulings from the port's own checks
+
+`Decision-ID: ADR-0020/D10`
+
+Accepted by the owner when the JS twin was checked against the Python reference (C115–C119).
+
+- **TOML is read as `tomllib` reads it, in both twins.** The vendored smol-toml has no TOML 1.0
+  mode and accepts what `tomllib` refuses (M133), so the JS reader puts TOML 1.1.0 syntax and a
+  BOM behind `js/common/toml10.mjs`, which answers as `tomllib` does. Integers beyond 2^53 are
+  the one accepted difference
+  ([DV35](../conformance/DIVERGENCES.md)).
+- **Each carrier names its own tool command.** A generated document says `akmon tool <tool>` from
+  the wheel and `npx akmon tool <tool>` from the npm package. The corpus folds both to `{{tool}}`,
+  and one test per language pins the spelling ([DV34](../conformance/DIVERGENCES.md)).
+- **A report stays inside the project.** A `second-opinion` `report_dir` that resolves outside
+  the project root is refused by both twins before anything runs (exit 2).
+- **The host `env` is the project's.** oxlint defines the ECMAScript globals itself, and
+  `extends` does not carry `env` (M132). So `profiles/oxlint.json` sets no `env.es2024`, and a
+  project's host `env` (browser, node) lives in its own `.oxlintrc.json`.
+- **No `meta/` and no `*.test.mjs` in the npm package.** This applies to the wheel too; see the
+  [ADR 0009 amendment](0009-packaging-package-carrier-and-mount-modes.md) (C118).
+- **No way back yet.** A project whose ecosystem was switched to node cannot be returned to
+  python by the same `akmon init` surface. That path needs an amendment to D05 and is deferred
+  (A37).
+
+## Amendment — D08: input outside normal use takes the native API (C122)
+
+Accepted by the owner when the record reader's whitespace was matched to `str.strip` (C122).
+
+Parity between the two implementations is **not total, by design**. D08's product behavior is
+behavior in normal use. Input that normal use does not produce — a hand-edited or damaged file, a
+control or other code point the writer never emits, a value beyond what the format's writer
+spells — lies outside it. There the port calls the runtime's own API (`String.prototype.trim`,
+`split`, `JSON.parse`) and enters the difference in the register; it does not mirror Python. A
+mirroring helper (`js/common/pyvalue.mjs`) is for a difference that shows in normal use.
+
+The rule decides new cases and leaves the existing mirrors as they are. The C122 record reader
+keeps `pyStrip`: it reuses a helper that already existed and its cases are pinned in the unit
+tables. It is not a precedent for writing a new mirror for input outside normal use.
+
 ## Considered alternatives
 
 - **An npm wrapper that runs the Python code** (a launcher calling host `python3`, or `uvx`).
@@ -188,6 +267,13 @@ before reading a port's behavior as a bug.
   call, and shims differ per manager.
 - **Version ranges in the pin.** Rejected: the lockfile would then decide which rules the agents
   follow, not a reviewed bump.
+- **ESLint as the offered tool** (D09). It is the only tool that expresses every candidate rule
+  and resolves `extends` by package name. Not chosen: oxlint matched its findings at the same
+  file and line on 492 of 494 (tvassistant) and 86 of 88 (akmon). oxlint is 20–30 times faster
+  and installs 2 packages against 77. For TypeScript, ESLint needs `typescript-eslint`, which
+  refused TypeScript 7 (M127).
+- **Biome** (D09). Not chosen: 19 of the 29 rules are stable, with no `camelcase`, `new-cap`,
+  `max-statements` or `max-depth`, and its complexity is cognitive, not cyclomatic.
 
 ## Consequences
 

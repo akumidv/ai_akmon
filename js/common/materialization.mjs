@@ -20,18 +20,17 @@
  *   `\s`/`trim` set (which has U+FEFF and lacks `\x1c`–`\x1f` and `\x85`), so both are spelled
  *   out below;
  * - `Path.read_text(encoding="utf-8")` decodes strictly, keeps a BOM, and translates `\r\n`
- *   and `\r` to `\n` — `_readText`; a file that is not UTF-8 raises there, as it does in the
- *   twin, and is not "stale";
+ *   and `\r` to `\n` — pyvalue's `readText`; a file that is not UTF-8 raises there
+ *   (`UnicodeDecodeError`), as it does in the twin, and is not "stale";
  * - `Path.is_dir()` raises on some errors in Python 3.11/3.12 and answers false in 3.13; the
  *   hook that calls this must never raise, so it answers false here;
  * - `sorted()` on paths orders their names by code point — `codePointSort`.
  */
 
 import fs from "node:fs";
-import { TextDecoder } from "node:util";
 
 import { aitnaRoot, aitnaRootName } from "./project_root.mjs";
-import { pyPath } from "./pyvalue.mjs";
+import { pyPath, readText } from "./pyvalue.mjs";
 import { codePointSort } from "./sort.mjs";
 
 /**
@@ -88,17 +87,6 @@ function _startsWithHash(/** @type {string} */ line) {
  */
 function _isOSError(error) {
   return error instanceof Error && typeof (/** @type {{errno?: unknown}} */ (error).errno) === "number";
-}
-
-/**
- * One file's text the way `Path.read_text(encoding="utf-8")` reads it.
- * @param {string} file
- * @returns {string}
- * @throws {TypeError} when the bytes are not valid UTF-8
- */
-function _readText(file) {
-  const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(fs.readFileSync(file));
-  return text.replace(/\r\n?/g, "\n");
 }
 
 /** Whether `file` is a regular file, following links; any failure is "no". */
@@ -243,7 +231,7 @@ export function staleMaterialized(data, projectRoot, treeRoot) {
       const relative = `${directory}/${name}`;
       const source = _under(treeRoot, relative);
       try {
-        if (!_isFile(source) || _readText(_under(dest, name)) !== materializedText(data, name, _readText(source))) {
+        if (!_isFile(source) || readText(_under(dest, name)) !== materializedText(data, name, readText(source))) {
           stale.push(relative);
         }
       } catch (error) {

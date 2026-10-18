@@ -1,7 +1,7 @@
 # A32 — catching claim–evidence mismatch by code or by an automated audit
 
-**Status: open design, no decision. A32-E1 ran on 2026-09-25: no auditor met the threshold ([result](#a32-e1-result-2026-09-25)).** Tracked as [A32](../TASKS.md). The owner asked on
-2026-09-25 whether the problem closed as text guidance in
+**Status: open design, no decision. A32-E1 ran: no auditor met the threshold ([result](#a32-e1-result)).** Tracked as [A32](../TASKS.md). The owner asked
+whether the problem closed as text guidance in
 [ADR 0019 D01](../decisions/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule)
 can be handled by code, or by an audit that code runs on a cheap model.
 
@@ -37,7 +37,7 @@ shapes are CD1–CD5 in the [distortion register](agent-decision-distortions.md)
 - **A small model already missed exactly that failure.** In T3 the Qwen-family second scorer had
   the case's own rubric. Of its 36 disagreements with the primary scorer, 34 passed a run the
   primary failed, and 13 of those were P2-4 E2
-  ([T3 review](../reviews/t3-codex-p2-20260924.md#scorer-agreement)).
+  ([T3 review](../reviews/t3-codex-p2.md#scorer-agreement)).
 
 ## Options
 
@@ -155,9 +155,9 @@ Rely on the standard in context and on the owner's review.
 The owner decides whether to accept O1's scope and whether to run A32-E1. The recall and
 false-flag thresholds in step 2 are proposals, and the owner fixes them.
 
-## A32-E1 protocol (pre-registered 2026-09-25)
+## A32-E1 protocol (pre-registered)
 
-The owner asked on 2026-09-25 to run A32-E1 on the three models, which fixes step 2's proposed
+The owner asked to run A32-E1 on the three models, which fixes step 2's proposed
 thresholds. This protocol is committed before the first auditor call and is not changed after
 it.
 
@@ -235,7 +235,7 @@ Reply with exactly one JSON object and nothing else:
 {"verdict": "FLAG" or "OK", "findings": [{"claim": "...", "evidence": "...", "why": "..."}]}
 ```
 
-## A32-E1 result (2026-09-25)
+## A32-E1 result
 
 **No auditor meets the threshold, so no model audit goes to a pilot and O1 stays alone** (M98).
 All 573 calls returned a parseable verdict. One exchange per model needed a second call.
@@ -287,7 +287,7 @@ Material: the set, scripts, replies and rulings are with the owner's raw A22 mat
 
 The owner authorized a bounded offline follow-up after E1. Its frozen cohort, prompt variants,
 thresholds, model/context mapping, quota handling, and completion rules are specified in the
-[A32-E2 protocol](../reviews/a32-e2-codex-protocol-20260926.md). E2 can support only a proposal
+[A32-E2 protocol](../reviews/a32-e2-codex-protocol.md). E2 can support only a proposal
 for a supervised O3 pilot; it does not authorize deployment. If no complete configuration meets
 the gates, O1 remains the provisional recommendation for the owner's decision. E1 remains the
 recorded result for the exact prompt and original cohort.

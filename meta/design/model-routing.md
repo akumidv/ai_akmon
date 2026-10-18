@@ -377,7 +377,7 @@ channel.
 
 **Delivery — the opinion always surfaces in chat** (unlike routing switches, which are a
 silent log): the full report is written to a file
-(`.claude/second-opinion/<gate>-<n>.md`); the chat gets a **digest** — verdict, the
+(`.claude/second-opinion/[<task>-]<gate>-<n>.md`, `n` the next free ordinal); the chat gets a **digest** — verdict, the
 points where the second opinion *disagrees* with the orchestrator's analysis, and the
 file link; the call itself is recorded by the delegation-log hook (§4.4). Token cost is
 bounded: a digest per gate, opt-in only; the full report enters context only on request.
@@ -979,7 +979,7 @@ may already be deep):
    (`1500`), so an env override never prints a rounded or `0k` maximum;
 6. **the same commands on both harnesses:** `/compact` and `/new` exist under those names in
    Claude Code (`/new` is an alias of `/clear`) and in Codex, so the Codex port (C81) can name
-   them as they are ([C80 evidence](../reviews/c80-context-fill-20260912.md)).
+   them as they are ([C80 evidence](../reviews/c80-context-fill.md)).
 
 Missing/malformed `usage` → silent (never block a turn, the hook's standing rule).
 
@@ -999,7 +999,7 @@ Missing/malformed `usage` → silent (never block a turn, the hook's standing ru
 ### 12.5 Evidence behind the recommended maximum
 
 > **Status: C80 evidence; the owner's decisions taken on it are [D2-42](../D2_LEDGER.md)
-> (§12.2).** Measurements and quotes: [C80 evidence](../reviews/c80-context-fill-20260912.md).
+> (§12.2).** Measurements and quotes: [C80 evidence](../reviews/c80-context-fill.md).
 
 - **200000 is a configurable owner policy, checked against measurement.** The replay of this
   machine's transcripts measures habits, windows and reminder frequency, not model quality or

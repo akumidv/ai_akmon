@@ -1,0 +1,12 @@
+{
+  "arm": "C",
+  "attempt_class": "technical",
+  "case": "P3-01",
+  "effort": "medium",
+  "model": "gpt-5.6-luna",
+  "provenance_scope": "evaluator_only",
+  "repeat": 1,
+  "run_id": "966b65f2689e8f1f6c1de61a9abf2f33",
+  "subject_attempt_id": "cee4110331017c9a5d71e8c773bacfa2",
+  "tier": "mid"
+}

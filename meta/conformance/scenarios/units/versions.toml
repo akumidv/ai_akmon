@@ -9,5 +9,5 @@ table = "versions.toml"
 
 [expected]
 exit = 0
-stdout = "{\n  \"ok\": true,\n  \"failed\": []\n}\n"
+stdout = "{\n  \"ok\": true,\n  \"answered\": 73,\n  \"failed\": []\n}\n"
 stderr = ""

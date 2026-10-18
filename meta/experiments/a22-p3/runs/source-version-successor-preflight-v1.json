@@ -1,0 +1,22 @@
+{
+  "checks": {
+    "direct_turn_usage_only": true,
+    "exact_source_hashes": true,
+    "one_phase_scope": true,
+    "per_call_quota_gate_only": true,
+    "prior_usage_bound": true,
+    "single_cell_no_retry": true,
+    "terminal_unknown_usage_policy": true
+  },
+  "dispatch_allowed": false,
+  "network_calls": 0,
+  "operational_seal_sha256": "7c0e3e25f915e267a8d32fc3052c1a2e652ab0b4886360d8c96ecddf1726884d",
+  "proposal_approval_seal_sha256": "e47596e5d3b7f0cbd9e9b15554665cc0d3a3e1428d9c13ab11eab9bfb78f0b8a",
+  "proposal_sha256": "e3645e5e909f26e1b578a4af9897a536c642ba1b2a823e5ff0fcc188d3af5f7b",
+  "provider_calls": 0,
+  "record_type": "p3_v3_lean_source_preflight",
+  "schema": 1,
+  "status": "PASSED_OFFLINE_SOURCE_PREFLIGHT",
+  "v3_prior_ledger_sha256": "a918352f2108acb9fdbde653ebf22c1626098c65d1da04a46aee49398770d4cb",
+  "v3_prior_observed_tokens": 26988
+}

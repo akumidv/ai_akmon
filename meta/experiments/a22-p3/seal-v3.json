@@ -1,0 +1,26 @@
+{
+  "packet_seal_sha256": "62ace0ce353ce059acd2ee442589d81912ffa61d6442787dc17aebd34728dd93",
+  "proposal_sha256": "c163caa638f5d9dbc65dd405858408d5c01e0e91a399caa36ccac3e1520bd06a",
+  "record_type": "p3_v3_plan_seal",
+  "schema": 1,
+  "settings": {
+    "codex_cli": "0.156.1",
+    "codex_epoch_limit_tokens": 5000000,
+    "codex_model": "gpt-6-astra",
+    "five_hour_stop_percent": 80,
+    "qwen_cli": "0.24.7",
+    "qwen_model": "qwen3.8-27b",
+    "qwen_thinking": "default",
+    "retry_evidence_policy": "OBSERVED_NO_RETRY",
+    "weekly_stop_percent": 90
+  },
+  "source_sha256": {
+    "RUN_PLAN_V3_CLEAN_RESTART_PROPOSAL.md": "c163caa638f5d9dbc65dd405858408d5c01e0e91a399caa36ccac3e1520bd06a",
+    "dispatch_v3.py": "d0287a00948f89ab48db5232ff4fd8749802e8f569d11fcbfddb8e4ab986536b",
+    "preflight_v3.py": "0f3a82f751a6185f5fbbf63fae0d7cd7b888b57a592534b06de731bf3fc5af8f",
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "source_v3.py": "ce118c9b9497ffcd4c770bca8555820530ec54915e82cf2a73551c81480fb7c6",
+    "usage_ledger_v3.py": "fc970e7bf4c41e37675f55293bc8dc169dd23d479a2897d7b90904926dcef5e2",
+    "v3_runner.py": "e50102d2e54e2aa698b1d2cbddaa81d201104213d49409dc2dfc695fa46ba66a"
+  }
+}

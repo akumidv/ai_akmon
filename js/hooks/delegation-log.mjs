@@ -116,7 +116,10 @@ function _timestamp() {
       createRequire(import.meta.url)("node:child_process")
     );
     const done = spawnSync("date", ["+%Y-%m-%dT%H:%M:%S%z"], { encoding: "utf8", timeout: 5000 });
-    if (done.status === 0 && /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4}\n$/.test(done.stdout)) {
+    if (
+      done.status === 0 &&
+      /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4}\n$/.test(done.stdout)
+    ) {
       return done.stdout.slice(0, -1);
     }
   }

@@ -1,0 +1,21 @@
+{
+  "accepted_seal_sha256": "b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79",
+  "authentication_limit": "Local session log, not independently signed.",
+  "normalization": "Exactly one extra ASCII space after SHA-256 was removed for the sealed exact-text gate; raw_user_text preserves the actual owner message.",
+  "raw_user_text": "Подтверждаю route_checks для seal SHA-256  b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79; оператор остановки — я.",
+  "record_type": "p3_v3_route_owner_acceptance",
+  "request_log_line": 27105,
+  "request_message_id": "msg_01a73e526108f56c016ad238d0089487d2b0e0b2265b35236b",
+  "request_record_sha256": "0195e76b79bab4234f98fc6275a6204338c016a9dda99b3abcd02e940492ea45",
+  "request_text": "Фазу пока не запустил: вызовов Codex и Qwen не было. Ваше подтверждение понятно, но запечатанный допуск в [v3_successor_route_check.py](/home/ai/workspace/akmon/meta/experiments/a22-p3/v3_successor_route_check.py:149) принимает только дословный ответ с хешем seal и оператором остановки. Записать вместо ваших слов требуемую фразу значило бы исказить свидетельство согласия.\n\nПожалуйста, отправьте эту строку целиком — после неё запущу только два разрешённых одноразовых `route_checks`:\n\n> Подтверждаю route_checks для seal SHA-256 b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79; оператор остановки — я.",
+  "schema": 1,
+  "scope": [
+    "route_checks"
+  ],
+  "source_log": "/home/ai/.codex/sessions/2026/09/23/rollout-2026-09-23T09-16-25-01a0cd8d-4d82-7ac0-8b96-ce11eb0ff664.jsonl",
+  "stop_operator": "owner (current chat session)",
+  "user_log_line": 27114,
+  "user_message_id": "msg_01a145c0-f18d-7aa0-9022-4ee7d2e32564",
+  "user_record_sha256": "683d98f8f35e2d4a1440fa411ca221df910a9f9283efa534c4ca9739c24d6262",
+  "user_text": "Подтверждаю route_checks для seal SHA-256 b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79; оператор остановки — я."
+}

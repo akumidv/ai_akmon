@@ -11,7 +11,14 @@ import os from "node:os";
 import { posix } from "node:path";
 
 import {
-  AITNA_ROOT_DEFAULT, aitnaRoot, aitnaRootName, akmonMount, findProjectRoot, isProjectRoot, resolveProjectRoot } from "./project_root.mjs";
+  AITNA_ROOT_DEFAULT,
+  aitnaRoot,
+  aitnaRootName,
+  akmonMount,
+  findProjectRoot,
+  isProjectRoot,
+  resolveProjectRoot,
+} from "./project_root.mjs";
 
 function tmpdir() {
   // The twin dereferences symlinks, so the paths the assertions compare against must be the
@@ -229,6 +236,34 @@ test("path resolution matches the twin for links, `..`, and components that are 
   }
 });
 
+test("a dangling link resolves to its target, as Path.resolve() follows it (C115)", () => {
+  const base = tmpdir();
+  const tree = posix.join(base, "tree");
+  fs.mkdirSync(tree);
+  fs.mkdirSync(posix.join(base, "realdir"));
+  fs.symlinkSync("nonexistent", posix.join(tree, "dangling"));
+  fs.symlinkSync("dangling", posix.join(tree, "chain"));
+  fs.symlinkSync(posix.join(base, "abs", "missing"), posix.join(tree, "absolute"));
+  fs.symlinkSync("../realdir", posix.join(tree, "linkdir"));
+  fs.symlinkSync("linkdir/missing", posix.join(tree, "via"));
+  fs.symlinkSync("linkdir/../up", posix.join(tree, "dotdot"));
+  try {
+    for (const [shape, answer] of [
+      ["tree/dangling", "tree/nonexistent"],
+      ["tree/dangling/", "tree/nonexistent"],
+      ["tree/chain/x", "tree/nonexistent/x"],
+      ["tree/absolute/y", "abs/missing/y"],
+      ["tree/via", "realdir/missing"],
+      ["tree/dotdot", "up"],
+      ["tree/dangling/..", "tree"],
+    ]) {
+      assert.equal(resolveProjectRoot(`${base}/${shape}`, null).root, posix.join(base, answer), shape);
+    }
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("a component the kernel refuses to look up is kept as written, as Python 3.12's resolve() keeps it", () => {
   // Measured on Python 3.12.3: `Path(p).resolve()` takes any OSError from a component's lstat as
   // "not a link" — a name over NAME_MAX (ENAMETOOLONG) or a directory that cannot be searched
@@ -239,7 +274,9 @@ test("a component the kernel refuses to look up is kept as written, as Python 3.
     assert.equal(resolveProjectRoot(`${base}/${long}`, null).root, `${base}/${long}`);
     assert.equal(resolveProjectRoot(`${base}/${long}/a/b`, null).root, `${base}/${long}/a/b`);
     assert.equal(resolveProjectRoot(`${base}/${long}/../z`, null).root, `${base}/z`);
-    assert.equal(findProjectRoot(`${base}/${long}`), `${base}/${long}`);
+    // The walk itself asks `is_file()`, which on the 3.12 floor (through 3.13) lets an errno
+    // other than ENOENT, ENOTDIR, EBADF or ELOOP through: the over-long name raises (C115).
+    assert.throws(() => findProjectRoot(`${base}/${long}`), { code: "ENAMETOOLONG" });
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }
@@ -258,6 +295,23 @@ test("a directory that cannot be searched does not stop the resolution", { skip:
   }
 });
 
+test(
+  "a candidate that cannot be searched raises, as Path.is_file() does (C115)",
+  { skip: process.getuid?.() === 0 },
+  () => {
+    const base = tmpdir();
+    const locked = posix.join(base, "locked");
+    fs.mkdirSync(locked);
+    fs.chmodSync(locked, 0o000);
+    try {
+      assert.throws(() => isProjectRoot(locked), { code: "EACCES" });
+    } finally {
+      fs.chmodSync(locked, 0o755);
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  },
+);
+
 test("a symlink loop raises naming the loop, as the stdlib's RuntimeError does", () => {
   // The stdlib answers no path for a link that loops, and neither may this one: an answer built
   // on the alias would be a path no other answer agrees with. The message text is shared.
@@ -267,6 +321,54 @@ test("a symlink loop raises naming the loop, as the stdlib's RuntimeError does",
     assert.throws(() => resolveProjectRoot(posix.join(base, "self"), null), {
       message: `Symlink loop from '${posix.join(base, "self")}'`,
     });
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("an over-long start is refused before it is resolved, in one line (C121)", () => {
+  // Fuzz seed 1, case 634: 32,769 `a/` components kept the walk busy for close to a minute.
+  const start = `/${"a/".repeat(32_769)}`;
+  const began = performance.now();
+  for (const call of [() => findProjectRoot(start), () => resolveProjectRoot(null, start)]) {
+    assert.throws(call, (/** @type {Error} */ error) => {
+      assert.equal(error.name, "ValueError");
+      assert.match(error.message, /^project-root start path is 65538 bytes, over the 4096-byte bound: \/a\/a\//);
+      assert.ok(error.message.endsWith("..."));
+      assert.ok(!error.message.includes("\n"));
+      return true;
+    });
+  }
+  assert.ok(performance.now() - began < 1000);
+});
+
+test("the bound counts UTF-8 bytes of the Path spelling and is inclusive", () => {
+  const base = tmpdir();
+  try {
+    const filler = 4096 - Buffer.byteLength(base) - 1;
+    const atBound = `${base}/${"é".repeat(Math.floor(filler / 2))}${"x".repeat(filler % 2)}`;
+    assert.equal(Buffer.byteLength(atBound), 4096);
+    // At the bound the walk runs into the kernel's own limit — the OSError is_file() raises.
+    assert.throws(() => findProjectRoot(atBound), { code: "ENAMETOOLONG" });
+    // A trailing slash is not counted: `Path` drops it before the length is taken.
+    assert.throws(() => findProjectRoot(`${atBound}/`), { code: "ENAMETOOLONG" });
+    assert.throws(() => findProjectRoot(`${atBound}x`), { name: "ValueError", message: /4097 bytes/ });
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("a deep start under the bound walks in linear time", () => {
+  const base = tmpdir();
+  try {
+    let deep = base;
+    for (let level = 0; level < 600; level += 1) {
+      deep += "/a";
+      fs.mkdirSync(deep);
+    }
+    const began = performance.now();
+    assert.equal(findProjectRoot(deep), deep);
+    assert.ok(performance.now() - began < 5000);
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }

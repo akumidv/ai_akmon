@@ -1,0 +1,100 @@
+# A32-E2 launch status
+
+## Current continuation snapshot
+
+The frozen continuation is stopped with 1,378/1,449 valid result records. Claude mid-V1 has 90/161 valid cells; `g7684` is the current `invalid_exit` latch. This is an incomplete cohort, not a model-quality finding and not an E2 pass/fail result.
+
+### Completion and review checklist
+
+1. Preserve the current records, event journal, frozen inputs, manifest and runner; verify their recorded identities before a retry.
+2. Diagnose the `g7684` `invalid_exit` latch and rerun only the latched and remaining Claude-mid-V1 cells under the same frozen cohort. Do not replace, relabel, or count an invalid attempt as valid.
+3. Establish 1,449 valid records with the required per-cell route, CLI and model provenance; keep retries auditable and do not use stale summary files as progress evidence.
+4. Recompute the pre-registered cohort metrics and thresholds only from that complete result set, then obtain an independent evidence review before recording any E2 outcome or using it for O1 scope.
+
+## Current execution snapshot
+
+This section supersedes the earlier operational snapshot below. The guarded single-cell resume supervisor (`run-01`) completed with supervisor exit 0. It attempted 223 cells serially: Claude stopped at `claude-mid-v0/g8233` on the frozen-CLI version mismatch, while Codex attempted 222 cells and stopped at `codex-strong-v1/g9952` after `codex_usage_limit_exceeded`. Its completion record reports 1,262 valid and 187 invalid-or-halted result records of 1,449; “completed” describes the supervisor, not a complete E2 gate.
+
+The isolated Codex canary then retried only `codex-strong-v1/g9952`, appending attempt 5 and returning valid. The canary is explicitly cohort-gate-ineligible. The active Codex strong-V1 controller has a 37-cell plan; at this timestamp cells 1–16 had helper return code 0 and cell 17 (`q665`) had a durable start but no finish. Thus 21 cells remain unfinished (one active, 20 not started). No quota latch or Codex route halt was present in this snapshot. The old `summary.json` remains stale and must not be used as live controller progress.
+
+Claude was retried only through pinned Claude Code 2.1.283. The first pinned canary reached `g8233` but returned `invalid_exit` with DNS `EAI_AGAIN`; the subsequent DNS retry appended attempt 6 and returned valid (`OK`, score 1, `claude-sonnet-5`, Claude `modelUsage` provenance). The saved DNS-retry evidence and the valid `g8233` record are pinned by the active continuation controls. No Claude continuation cell beyond that canary is claimed here.
+
+All active continuation/controller artifacts preserve frozen manifest SHA-256 `34ef804db1a3ccf116594ec20aa03282d0c8449f6e17bd0d4b41029b244e1b09` and runner SHA-256 `81f7dc74ba7c18d13b2d554716dbbf4add1d65048480a70f50111f27b09f47fc`. The full E2 gate remains ineligible: all 1,449 valid records are required before cohort metrics can be recomputed and reviewed; no quality or threshold conclusion follows from the partial resumed execution.
+
+## Continuation status
+
+The Codex strong-V1 controller completed its 37/37 recovery plan. All five Codex configurations now have 161 valid records each (805 valid Codex records in total); the controller's pinned 805-record snapshot is retained for the Claude continuation. This establishes record completeness for the Codex family, but no completed Codex arm meets its own gate: false-positive performance prevents a passing arm. These are arm results, not a full E2 conclusion.
+
+Claude `g8233` remains valid only through the pinned DNS retry: the first pinned canary ended `invalid_exit` with `EAI_AGAIN`, and the retry appended valid attempt 6 with verified Claude 2.1.283 identity and `claude-sonnet-5` provenance. The isolated Claude continuation launched with 148 invalid Claude-mid cells planned. At this timestamp it has 18 valid finishes, one durable active cell, no stopped/error event, and 130 remaining. Its report and artifact journal, not the older summary, are the live source for this progress.
+
+The full E2 gate is still ineligible. Claude-mid cells remain incomplete, and the result set must reach 1,449 valid records before cohort metrics and the pre-registered thresholds can be recomputed and reviewed.
+
+## Current execution snapshot
+
+This section supersedes earlier launch/progress snapshots below for current status. The archived corrected primary remains 677/1,449 valid and 772 quota/session-limit `invalid_exit`; do not merge it with the separate resume copy. The prior chunked supervisor PID 3085245 completed (exit 0), stopping Claude and Codex after chunks through prefix 96 contained 19 and 64 new invalid attempts, respectively. Its final per-chunk summary was 1,041 valid / 408 invalid. The resume copy's own `summary.json` and `completion.json` remain stale copies of the original primary metadata.
+
+A guarded single-cell continuation started as PID 3639005, targeting only `/home/ai/workspace/akmon-a22/a32-e2-codex-20260926/primary-resume-20260928`. Helper `/tmp/a32-e2-codex-single-cell-resume-20260930.py` SHA-256: `84a17b850bca64b39436a082d6b8a86fadbb6224f1eb35e2f3b8300d8dbb1ad5`; offline test file `/tmp/test-a32-e2-single-cell-resume-20260930.py` SHA-256: `32f121b0eaedc84a77c96e07993880df49a519cd743c4aa1f75a6e367e47bf24`. `py_compile` and all six offline regression tests passed. The helper pins the existing manifest SHA-256 `34ef804db1a3ccf116594ec20aa03282d0c8449f6e17bd0d4b41029b244e1b09` and frozen runner SHA-256 `81f7dc74ba7c18d13b2d554716dbbf4add1d65048480a70f50111f27b09f47fc`; it invokes one invalid cell at a time. No CLI dry-run was repeated while the live continuation was active.
+
+The Claude route stopped before a model call at `claude-mid-v0/g8233`: frozen CLI identity is Claude Code 2.1.283, binary SHA-256 `1859583ce32920595c61ef868bee52e1b1594f7486db209935e01f1e5e804ae2`; installed identity was 2.1.285, SHA-256 `33dad1ec615a2e08cc78b494f05c110e49916de2c79d78ec8799ebf46b233d29`. The runner recorded `halted_version_mismatch` at 15:10:27 UTC and stopped that route before the subject call. Codex continued serially in `codex-mid-v1`, completing that configuration and then proceeding to `codex-strong-v0`.
+
+At the timestamp in this heading, result-record statuses were provisional: 1,131 `valid`, 317 `invalid_exit`, and 1 `halted_version_mismatch` (1,449 total). Per configuration: `claude-small` 161 valid; `claude-mid-v0` 96 valid, 64 invalid, one version-mismatch halt; `claude-mid-v1` 77/84; `codex-small` 161 valid; `codex-mid-v0` 161 valid; `codex-mid-v1` 161 valid; `codex-strong-v0` 89/72; `codex-strong-v1` 64/97; `qwen-small` 161 valid. The event journal showed `codex-strong-v0/g7431` in flight. These are operational counts, not completed score metrics; the frozen resume-copy summary and full gate have not been recomputed after this continuation. Preserve the archived primary snapshot separately.
+
+**Status: corrected primary series launched, incomplete.** The frozen 9-cell canary remains preflight-only. The original primary attempt was stopped after classifier false halts and ambiguous Qwen usage attribution; its saved records are archived separately. The corrected primary series started (PID 2344436) with 1,449 planned cells. At the exact 19:13:47Z UTC snapshot, 24 outputs were valid: 18 Codex reserve, 3 Qwen, and 3 Claude Haiku. There were no invalid outputs, halt markers, summary, or completion marker. No model-quality conclusions follow from this early partial snapshot.
+
+Review led by Codex (GPT-6; exact variant not exposed); source readings and mechanical checks coordinated with gpt-6-luna. No model calls were made by the review agent. The canary calls were authorized as a mechanics check; they do not substitute for any primary-series cell.
+
+## Frozen plan and scope
+
+The authorized [A32-E2 protocol](a32-e2-codex-protocol.md) defines 161 scored exchanges, excluding the 30 pilot IDs: 84 primary failures, including 28 P2-4 E2 failures, and 77 passes. All exchanges were previously evaluated in E1, so this is a repeatability/configuration screen, not a fresh holdout. Nine configurations are planned, for 1,449 valid outputs: three exact-E1 repeats, three V0 score prompts, and three V1 actual-arm prompts.
+
+The prospectively fixed score cutoffs are Terra ≥8, Sonnet ≥9 (prospective fallback; its pilot evidence was incomplete), and Sol ≥9. V1 selects the delivered arm by recorded trial, arm, and case role. The success thresholds are point estimates: recall ≥0.6, P2-4 E2 recall ≥0.6, and false-flag rate ≤0.2. Passing could support only a separately reviewed supervised O3 pilot; it does not authorize deployment. Missing cells leave the gate incomplete.
+
+The prepared manifest records Claude Code 2.1.283 and codex-cli 0.156.1. This environment resolved Qwen 0.24.6 at `/usr/bin/qwen` with a recorded binary SHA-256; the runner freezes and checks route path/version/binary identity. The protocol distinguishes this executable from historical Qwen 0.24.4 measurements M95/M99. MAIN now contains M100–M101 for unrelated A34/A35 measurements; M102 records the E2 mechanics preflight, leaving M103 for a post-run harness finding. M102 records only these mechanics checks; it contains no model-quality or primary-series result.
+
+## Canary evidence
+
+The preflight used one exchange (`g1062`, T2 / B_ship / engineer) in each configuration. All 9/9 outputs were valid after one attempt, exit code 0, with verified model provenance. Codex outputs recorded no tool events; Qwen recorded zero tool calls. No quota/auth halt markers or parse failures appeared. All output prompt hashes matched the freeze manifest and all records carried input, manifest, and runner hashes. The V1 prompt bound the selected B_ship engineer arm; its recorded arm digest matched the source file.
+
+| Configuration | Result | Provenance |
+| --- | --- | --- |
+| Haiku exact E1 | OK | `claude-haiku-4-5-20251001`, Claude `modelUsage` |
+| Codex reserve exact E1 | FLAG | `gpt-reserve`, Codex rollout |
+| Qwen exact E1 | OK | `qwen3.8-27b`, usage record; 0 tool calls |
+| Sonnet V0 | FLAG, score 6 | `claude-sonnet-5`, Claude `modelUsage` |
+| Sonnet V1 | FLAG, score 5 | `claude-sonnet-5`, Claude `modelUsage` |
+| Terra V0 | FLAG, score 8 | `gpt-5.6-terra`, Codex rollout; no tools |
+| Terra V1 | FLAG, score 7 | `gpt-5.6-terra`, Codex rollout; no tools |
+| Sol V0 | FLAG, score 9 | `gpt-6-sol`, Codex rollout; no tools |
+| Sol V1 | FLAG, score 9 | `gpt-6-sol`, Codex rollout; no tools |
+
+These are mechanics and provenance checks only. One record per configuration on the same exchange cannot estimate quality, validate cutoffs, or test the pre-registered cohort thresholds. The canary artifacts are preserved at `/tmp/a32-e2-codex-20260926-frozen-artifacts/` and the durable copy is under `/home/ai/workspace/akmon-a22/a32-e2-codex-20260926/preflight/`. They are not part of the primary-series denominator.
+
+## Launch readiness and next action
+
+The runner now checks the frozen prompt/input, manifest, runner, route, and model identities before it skips a valid result; stale valid records fail closed. Invalid attempts remain recorded and retriable, quota/auth conditions halt the route, and incomplete cohorts are explicitly marked ineligible. The actual-cohort mapping and stale-result behavior have regression coverage.
+
+The primary records are stored under `/home/ai/workspace/akmon-a22/a32-e2-codex-20260926/primary/`. The Claude shell-guard diagnostic test is branch-sensitive: it fails in the clean feature clone and passes in a clean archive; a detached rerun did not resolve it. This establishes the differing outcomes, not their root cause. The gate is investigating; no production patch was made. This verification issue is not evidence about A32-E2 results.
+
+## Status update
+
+The final isolated-clone runner and tests pass the focused suite (18 tests, 9 subtests); Ruff passes on both files under the repository's consumer-facing profile, and `py_compile` passes. Repository-wide Ruff passes. The full pytest run reports 1,678 passed and one failing Claude shell-guard diagnostic test. The failure is observed in the clean feature clone but not the clean archive; detaching the run did not resolve it. Its root cause is branch-sensitive test behavior: the test depends on `current_git_branch()` and behaves differently between branch and archive contexts. No production patch was made. All seven self-CI legs pass after the network-dependent leg was run with network access, and `uv build` passes.
+
+A separate disposable preparation using the earlier integrated runner produced all 1,449 planned prompt files. Its prompt hashes and bytes matched the original canary freeze by `(configuration, run_id)`: all 1,449 pairs matched, with no missing, added, or changed prompt. The final durable primary freeze and durable preflight freeze also each contain 1,449 prompts; the same comparison found no key, hash, or byte differences. Both manifest SHA-256 sidecars verify. The primary manifest freezes MAIN's runner at SHA-256 `faee17a726e6c76c38ab1a9d0df2aa36fee2ed17e746c266835bf23aa769fcca`, matching the staged MAIN file. This confirms the refactor preserved prompt treatments and is frozen to the reviewed runner; it does not establish full-series execution or any model outcome.
+
+Read-only CLI version commands reported Claude Code 2.1.283, codex-cli 0.156.1, and Qwen 0.24.6. Their paths, versions, and binary hashes match the final durable primary freeze. The first primary attempt's supervisor record reported launch at 13:12:16Z with PID 2174522. It was subsequently stopped after classifier false halts and ambiguous Qwen usage attribution. All 94 saved records were preserved unchanged at `primary-infra-revision1/` and excluded from the corrected primary denominator: 90 were labeled valid by the old runner, two were false family-circuit halts (`claude-small/g2167`, `codex-small/g2417`), and two Qwen outputs were labeled `invalid_tool_use` based on overlapping usage-record windows. The Qwen tool evidence could not be attributed to either individual call. Any in-flight calls without saved result files are uncounted; their number is unknown. The corrected primary was freshly prepared and reuses none of these result records.
+
+### Primary progress snapshot
+
+The primary result directory contained 62 files: 60 valid outputs and two invalid outputs. The valid outputs were Haiku exact-E1 15/161, Codex reserve exact-E1 17/161, and Qwen exact-E1 30/161. All 62 attempts carried CLI identities matching the frozen provider path/version/binary hash and actual model identities matching the configured route. No tool events or tool calls were recorded, and there were no identity mismatches.
+
+`codex-small/g2417` exited 0 with verified `gpt-reserve` provenance and valid FLAG JSON containing “block unauthorized mutation.” The runner matched `unauthorized` in assistant reply prose against its authentication regex and halted Codex. `claude-small/g2167` exited 0 with verified Haiku provenance and valid JSON containing “quotation-like wording.” The runner's unbounded `quota` regex alternative matched the substring in `quotation` and halted Claude. These are classifier false positives, not evidence of provider auth/quota failure. Both halt records were present at the snapshot; no later cell from either halted family was recorded. The cohort remained incomplete: 60 valid, 2 invalid, and 1,387 cells with no result record. No rates or quality conclusions are reported.
+
+These progress snapshots describe only the interrupted first primary attempt. The corrected runner uses word-boundary quota/auth patterns and scans unverified exit-zero reply bodies only when they match a recognized provider-error prefix or JSON error envelope. Reclassifying the two saved false-halt attempts after removing their prior persisted status fields returns both as valid with no halt; the archived records themselves remain unchanged. The Qwen adapter now uses a unique working directory per cell attempt, correlates usage records by exact resolved project path and a unique session ID, and fails closed on missing or ambiguous session evidence.
+
+### Corrected primary launch and first live provenance snapshot
+
+The restart utility preserved the interrupted 94-record directory, copied only the reviewed runner and test files after matching their pre-copy hashes, ran all 18 focused unit tests on MAIN, and freshly prepared the primary freeze. It asserted equality of all 1,449 per-cell manifest entries (including labels, failed elements, case/trial/arm/role, prompt and input hashes, and cutoffs), every prompt byte, and all source hashes other than the intentional runner hash change. The staged index was unchanged. The frozen protocol was not edited.
+
+The corrected primary supervisor reports PID 2344436 and start time 2026-09-27T19:11:22.032102Z at `/home/ai/workspace/akmon-a22/a32-e2-codex-20260926/primary/`. At 2026-09-27T19:13:47Z, its result directory had 24/1,449 valid outputs: 18 Codex reserve, 3 Qwen, and 3 Claude Haiku. Every saved attempt returned exit code 0, had an actual model identity matching its configured model, and recorded a CLI path/version/binary hash matching the frozen manifest. Codex recorded no tool events. The three Qwen outputs each had one UUID session with a usage-record project exactly matching that call's unique cell-attempt working directory and zero tool calls. There were no invalid records or family halt markers, and no `summary.json` or `completion.json` yet. This is an early execution/provenance check only; the benchmark is incomplete and no quality or threshold conclusion is available.
+
+The one 9-cell canary, the archived 94-record interrupted primary, and the corrected 1,449-cell primary are separate evidence sets. The canary contributes no primary result; the archived attempts are not reused; the corrected primary has only its own newly generated result files. Continue to treat the series as incomplete until the runner records full coverage and the summary is reviewed.

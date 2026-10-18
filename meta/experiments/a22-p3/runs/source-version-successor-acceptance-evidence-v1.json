@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "record_type": "p3_v3_lean_source_operational_acceptance_evidence",
+  "status": "unsigned_local_session_log_evidence",
+  "authentication": "Local Codex session log; no cryptographic signature or independent account authentication.",
+  "source_log": {
+    "path": "/home/ai/.codex/sessions/2026/09/23/rollout-2026-09-23T09-16-25-01a0cd8d-4d82-7ac0-8b96-ce11eb0ff664.jsonl",
+    "session_id": "01a0cd8d-4d82-7ac0-8b96-ce11eb0ff664",
+    "integrity_basis": "SHA-256 of each selected JSONL record and extracted message text"
+  },
+  "operational_seal_sha256": "7c0e3e25f915e267a8d32fc3052c1a2e652ab0b4886360d8c96ecddf1726884d",
+  "request": {
+    "message_id": "msg_01a73e526108f56c016ad222d77a5887d28678eeff7f46f5fd",
+    "turn_id": "01a144d0-daed-7a61-81da-b591823bc61a",
+    "ordinal": 25886,
+    "record_sha256": "8e7ec854389ed62e63105e216dae475181e88df76f0157d469aaed18bca46fcb",
+    "text_sha256": "540f30d94615bc7f6ff57b8bad9cb022d2a0ca5c7892a8e8a79c4b0e0680a9cf",
+    "raw_text": "Подготовил отдельный запуск A22 P3: исправил проверку версии Codex и учёл 26 988 токенов прежней попытки. [Отчёт](/home/ai/workspace/akmon/meta/reviews/a22-p3-source-version-successor-readiness.md) фиксирует результат: 10 целевых тестов и офлайн-проверка прошли. Новых вызовов модели не было; старая попытка остаётся терминальной.\n\n**Подтвердите запуск одной новой двухходовой `technical_source` ячейки** по seal SHA-256 `7c0e3e25f915e267a8d32fc3052c1a2e652ab0b4886360d8c96ecddf1726884d`, с вами как оператором остановки этой сессии.\n\nЭто подтверждение требуется [протоколом A22 P3](/home/ai/workspace/akmon/meta/experiments/a22-p3/V3_LEAN_SOURCE_PROTOCOL_PROPOSAL.md): прежнее разрешение привязано к другому хешу и не распространяется на исправленный код.\n\n<oai-mem-citation>\n<citation_entries>\nMEMORY.md:179-179|note=[checked staged and unstaged work separately]\n</citation_entries>\n<rollout_ids>\n</rollout_ids>\n</oai-mem-citation>",
+    "requested_operational_seal_sha256": "7c0e3e25f915e267a8d32fc3052c1a2e652ab0b4886360d8c96ecddf1726884d",
+    "requested_scope": [
+      "technical_source"
+    ]
+  },
+  "approval": {
+    "message_id": "msg_01a144de-de91-7dc1-8a51-fda8c315c7a4",
+    "turn_id": "01a144de-ddf1-7ff3-811a-1a8fd7b69fe4",
+    "ordinal": 25893,
+    "record_sha256": "fa6c59d28c4147dd34c8d4d1a4ce9e424f1b817d1d8c0172814cfddd1b0889ad",
+    "text_sha256": "8f7dce73a415afed6b94660ae01f1865b72bed068b0109073d39097fad899257",
+    "raw_text": "подтверждаю запуск",
+    "operational_seal_sha256": "7c0e3e25f915e267a8d32fc3052c1a2e652ab0b4886360d8c96ecddf1726884d"
+  },
+  "scope": [
+    "technical_source"
+  ],
+  "limitations": [
+    "The short acknowledgment inherits exact seal, one-cell scope, and stop-operator context from the immediately preceding request.",
+    "This records owner acceptance of the exact successor seal only; dispatch remains subject to the separate gate and fresh quota checks."
+  ]
+}

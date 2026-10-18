@@ -1,0 +1,15 @@
+{
+  "acceptance_evidence_sha256": "4090772351713431065e08a6867a151a600043be4c27ad58296b00ebd0986261",
+  "authorized_phases": [
+    "route_checks"
+  ],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79",
+  "owner_accepted": true,
+  "preflight_report_sha256": "33b0318f680cf1bd148550c71e149dcfdee6ee15cfe30801b61b8b2fddda4997",
+  "qwen_aggregate_token_ceiling": null,
+  "record_type": "p3_v3_successor_route_check_approval",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "schema": 1
+}

@@ -1,0 +1,43 @@
+id = "tools/gate-pack-task-ordinal"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/gate_pack"]
+
+# C114: with --task and no --out, the pack is named `<task>-<gate>-<kind>-<n>.md`, n one past
+# the highest existing ordinal under exactly that prefix. The untasked
+# `code-verify-plan-check-5.md` and the non-ordinal `C7-...-x.md` do not count, so the next name
+# is -2, not -6; the earlier -1 pack is left unchanged (exclusive create, never an overwrite).
+# Otherwise the plan-check pack of gate-pack-plan-check.
+
+[fixture.files]
+"docs/yardstick.md" = "All public callables read subject-first; every behaviour change ships with a test.\n"
+"docs/zone-plan.md" = "- auth\n- api\n- billing\n"
+"_aitna/artifacts/gates/C7-code-verify-plan-check-1.md" = "earlier pack\n"
+"_aitna/artifacts/gates/code-verify-plan-check-5.md" = "no task\n"
+"_aitna/artifacts/gates/C7-code-verify-plan-check-x.md" = "not an ordinal\n"
+
+[run]
+tool = "model_routing/gate_pack"
+argv = [
+  "--gate",
+  "code-verify",
+  "--role",
+  "architect",
+  "--kind",
+  "plan-check",
+  "--yardstick",
+  "docs/yardstick.md",
+  "--zone-plan",
+  "docs/zone-plan.md",
+  "--task",
+  "C7",
+]
+
+[expected]
+exit = 0
+stderr = ""
+file_absent = ["_aitna/artifacts/gates/C7-code-verify-plan-check-6.md"]
+stdout = "gate-pack kind=plan-check role=architect\npack: _aitna/artifacts/gates/C7-code-verify-plan-check-2.md\n\n# Gate-pack — code-verify\n\nrole: architect\nkind: plan-check\nQuestion: Does the plan cover the stated goal? Which zones or seams are obviously missing?\n\n## Yardstick (goal)\n\nAll public callables read subject-first; every behaviour change ships with a test.\n\n\n## Zone plan\n\n- auth\n- api\n- billing\n\n\n## What to return\n\n- Does the plan cover the stated goal (the yardstick above)?\n- Which zones or seams are obviously missing from the zone plan?\n- Check the plan against the goal, not against its own coverage map.\n"
+[expected.files]
+"_aitna/artifacts/gates/C7-code-verify-plan-check-1.md" = "earlier pack\n"
+"_aitna/artifacts/gates/C7-code-verify-plan-check-2.md" = "# Gate-pack — code-verify\n\nrole: architect\nkind: plan-check\nQuestion: Does the plan cover the stated goal? Which zones or seams are obviously missing?\n\n## Yardstick (goal)\n\nAll public callables read subject-first; every behaviour change ships with a test.\n\n\n## Zone plan\n\n- auth\n- api\n- billing\n\n\n## What to return\n\n- Does the plan cover the stated goal (the yardstick above)?\n- Which zones or seams are obviously missing from the zone plan?\n- Check the plan against the goal, not against its own coverage map.\n"

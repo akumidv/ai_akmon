@@ -41,11 +41,51 @@ def test_every_wired_hook_script_exists_in_this_tree():
     assert missing == []
 
 
+def _archetype_rows(heading: str) -> dict[str, set[str]]:
+    """One `ARCHETYPES.md` map table, keyed by its first column: the files each row links to.
+
+    `heading` is the table's first header cell (`Language`, `Environment`). The map is the
+    source of truth for which shared rules a project imports, so the dev layer's expected
+    import set is read from it, never restated here.
+    """
+    rows: dict[str, set[str]] = {}
+    inside = False
+    for line in (_ROOT / "ARCHETYPES.md").read_text(encoding="utf-8").splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if not line.startswith("|"):
+            inside = False
+        elif cells[0] == heading:
+            inside = True
+        elif inside and not set(cells[0]) <= {"-"}:
+            rows[cells[0]] = set(re.findall(r"\]\(((?:guardrails|profiles)/[\w.-]+\.md)\)", line))
+    assert rows, f"ARCHETYPES.md has no `{heading}` table"
+    return rows
+
+
+def _expected_dev_imports() -> set[str]:
+    """What the map prescribes for akmon itself: a mixed Python + JS tree with bare-interpreter hooks."""
+    languages = _archetype_rows("Language")
+    present = {"Python": (_ROOT / "pyproject.toml").is_file(), "JavaScript/TS": (_ROOT / "package.json").is_file()}
+    assert set(present) <= set(languages), "ARCHETYPES.md renamed a language row this test reads"
+    expected = set().union(*(languages[name] for name, here in present.items() if here))
+    # The environment profile covers Python that runs on a bare interpreter; akmon's hooks do.
+    if any((_ROOT / "hooks").glob("*.py")):
+        expected |= set().union(*_archetype_rows("Environment").values())
+    return expected
+
+
+def test_the_dev_layer_imports_exactly_what_the_archetype_map_prescribes():
+    """C10: akmon ships JS too, so the `js` profile is owed an import like `python` is."""
+    imports = set(re.findall(r"^@(\S+)$", _AGENTS.read_text(encoding="utf-8"), re.MULTILINE))
+    expected = _expected_dev_imports()
+    assert {"guardrails/_common.md", "profiles/python.md", "profiles/js.md"} <= expected
+    assert imports == expected
+
+
 def test_the_dev_layer_imports_its_rules_instead_of_restating_them():
     text = _AGENTS.read_text(encoding="utf-8")
     imports = set(re.findall(r"^@(\S+)$", text, re.MULTILINE))
-    assert "guardrails/_common.md" in imports
-    assert {"profiles/python.md", "profiles/python-stdlib.md"} <= imports
+    assert imports, "AGENTS.md imports nothing"
     for target in imports:
         assert (_ROOT / target).is_file(), f"AGENTS.md imports a missing file: {target}"
 
@@ -58,11 +98,7 @@ def test_the_dev_layer_does_not_restate_an_imported_rule():
     file states, because Codex does not expand nested imports.
     """
     guardrail = (_ROOT / "guardrails" / "_common.md").read_text(encoding="utf-8")
-    owned = {
-        line[3:].split("—")[0].strip().lower()
-        for line in guardrail.splitlines()
-        if line.startswith("## ")
-    }
+    owned = {line[3:].split("—")[0].strip().lower() for line in guardrail.splitlines() if line.startswith("## ")}
     mine = {
         line[3:].split("—")[0].strip().lower()
         for line in _AGENTS.read_text(encoding="utf-8").splitlines()
@@ -85,9 +121,5 @@ def test_akmon_ignores_what_it_tells_a_consumer_to_ignore():
         for line in _init._gitignore_lines(aitna)
         if line.strip() and not line.startswith("#") and aitna not in line
     ]
-    present = {
-        line.strip()
-        for line in (_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    }
+    present = {line.strip() for line in (_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines() if line.strip()}
     assert [line for line in wanted if line not in present] == []

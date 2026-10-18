@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "record_type": "p3_v3_owner_approval",
+  "proposal_sha256": null,
+  "v3_seal_sha256": null,
+  "owner_accepted": false,
+  "new_epoch_budget_accepted": false,
+  "v2_usage_exclusion_accepted": false,
+  "subscription_thresholds_accepted": false,
+  "qwen_uncapped_policy_accepted": false,
+  "observed_no_retry_accepted": false,
+  "schedule_accepted": false,
+  "named_stop_operator": null,
+  "authorized_phases": [],
+  "acceptance_evidence": null,
+  "preflight_status": "NOT_RUN",
+  "dispatch_allowed": false
+}

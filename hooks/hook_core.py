@@ -300,9 +300,7 @@ def _interactive_default_permission_mode() -> str:
 def _escalate_unattended_ask(result: HookResult, permission_mode: str | None) -> HookResult:
     if result.permission_decision != "ask" or permission_mode == _interactive_default_permission_mode():
         return result
-    suffix = jsondata.fill(
-        _hook_core_data()["escalated_ask_suffix"], {"permission_mode": repr(permission_mode)}
-    )
+    suffix = jsondata.fill(_hook_core_data()["escalated_ask_suffix"], {"permission_mode": repr(permission_mode)})
     return HookResult(
         event_name=result.event_name,
         additional_context=result.additional_context,
@@ -656,6 +654,7 @@ def analysis_write_result(
 # has no ``Task`` tool and so cannot act on the nudge at all. Subagent-originated calls are
 # detected via the payload's ``agent_id`` (present only inside a subagent) and are exempted
 # entirely: no counter touch, no advisory, no ask.
+
 
 #
 # Calibrated, not guessed (C88, ADR-0006/D02). Replayed over akmon's own Claude sessions (M72), the rule

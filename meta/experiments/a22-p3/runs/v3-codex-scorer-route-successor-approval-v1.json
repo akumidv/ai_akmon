@@ -1,0 +1,12 @@
+{
+  "acceptance_evidence_sha256": null,
+  "authorized_phases": [],
+  "dispatch_allowed": false,
+  "named_stop_operator": null,
+  "operational_seal_sha256": "043bc5f745263bc84ca6b5feb5801e51df34bf86df31c1cec740662dc7d07084",
+  "owner_accepted": false,
+  "preflight_report_sha256": null,
+  "record_type": "p3_v3_codex_scorer_route_successor_approval",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "schema": 1
+}

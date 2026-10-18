@@ -1,0 +1,17 @@
+id = "tools/release-plan-stray-positional"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:release/release_check"]
+
+# A positional after the options is refused as a usage error (exit 2, nothing on stdout), not
+# ignored. The program name before the sentence is the argument parser's own text (DV12), so
+# the shared contract is the sentence, asserted with stderr_contains.
+
+[run]
+tool = "release/release_check"
+argv = ["--plan", "v1.2.3", "extra"]
+
+[expected]
+exit = 2
+stderr_contains = ["error: unrecognized arguments: extra"]
+stdout = ""

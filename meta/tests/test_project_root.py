@@ -8,8 +8,13 @@ carrier is the guard against the copies growing back.
 
 from __future__ import annotations
 
+import os
 import re
+import sys
+import time
 from pathlib import Path
+
+import pytest
 
 from common import project_root
 
@@ -79,6 +84,55 @@ def test_a_package_project_is_found_under_a_custom_aitna_root(monkeypatch, tmp_p
     assert project_root.find_project_root(nested) == root
 
 
+def _resolve_must_not_run(*_args: object, **_kwargs: object) -> Path:
+    raise AssertionError("the bound is checked before any filesystem call")
+
+
+def test_an_over_long_start_is_refused_before_it_is_resolved(monkeypatch):
+    """C121: 32,769 ``a/`` components kept the walk busy for minutes; now it is one ValueError."""
+    start = Path("/" + "a/" * 32_769)
+    monkeypatch.setattr(Path, "resolve", _resolve_must_not_run)
+    began = time.monotonic()
+    with pytest.raises(
+        ValueError, match=r"^project-root start path is 65538 bytes, over the 4096-byte bound: /a/a/"
+    ) as refused:
+        project_root.find_project_root(start)
+    assert time.monotonic() - began < 1
+    assert "\n" not in str(refused.value)
+    assert str(refused.value).endswith("...")
+    with pytest.raises(ValueError, match="over the 4096-byte bound"):
+        project_root.resolve_project_root(None, start)
+
+
+def test_the_bound_counts_utf8_bytes_and_is_inclusive(tmp_path):
+    """4096 bytes is accepted (the walk then runs into the kernel's own limit); 4097 is refused."""
+    base = str(tmp_path.resolve())
+    filler = 4096 - len(base.encode()) - 1
+    at_bound = Path(base + "/" + "é" * (filler // 2) + "x" * (filler % 2))
+    assert len(str(at_bound).encode()) == 4096
+    with pytest.raises(OSError) as kernel:  # ENAMETOOLONG from is_file(), not the refusal
+        project_root.find_project_root(at_bound)
+    assert not isinstance(kernel.value, ValueError)
+    with pytest.raises(ValueError, match="4097 bytes"):
+        project_root.find_project_root(Path(str(at_bound) + "x"))
+
+
+def test_a_lone_surrogate_is_refused_as_resolve_refuses_it_even_when_over_long():
+    """The JS hooks check encodability before the bound; the refusal class must agree."""
+    with pytest.raises(UnicodeEncodeError):
+        project_root.find_project_root(Path("/a\ud800" + "/b" * 3000))
+
+
+def test_a_deep_start_under_the_bound_walks_in_linear_time(tmp_path):
+    deep = tmp_path.resolve()
+    for _ in range(600):  # one level at a time: mkdir(parents=True), like rmtree, recurses per level
+        deep /= "a"
+        deep.mkdir()
+    began = time.monotonic()
+    assert project_root.find_project_root(deep) == deep
+    assert time.monotonic() - began < 5
+
+
 # --------------------------------------------------------------------------------------
 # resolve_project_root — the entry-point form, where a guess must say so
 # --------------------------------------------------------------------------------------
@@ -87,6 +141,17 @@ def test_a_package_project_is_found_under_a_custom_aitna_root(monkeypatch, tmp_p
 def test_an_explicit_root_is_taken_as_given_and_says_nothing(tmp_path):
     root, notice = project_root.resolve_project_root(tmp_path)
     assert (root, notice) == (tmp_path.resolve(), None)
+
+
+def test_an_explicit_root_through_a_dangling_link_resolves_to_its_target(tmp_path):
+    """``Path.resolve()`` follows a link whose target is missing (the C115 reference)."""
+    tree = (tmp_path / "tree").resolve()
+    tree.mkdir()
+    (tree / "dangling").symlink_to("nonexistent")
+    (tree / "chain").symlink_to("dangling")
+    assert project_root.resolve_project_root(tree / "dangling")[0] == tree / "nonexistent"
+    assert project_root.resolve_project_root(tree / "chain" / "x")[0] == tree / "nonexistent" / "x"
+    assert project_root.resolve_project_root(tree / "dangling" / "..")[0] == tree
 
 
 def test_a_found_root_says_nothing_either(tmp_path):
@@ -143,6 +208,21 @@ def _redefinitions(pattern: str) -> list[str]:
         for path in (tree / directory).rglob("*.py")
         if path != owner and definition.search(path.read_text(encoding="utf-8"))
     )
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root searches any directory")
+@pytest.mark.skipif(sys.version_info >= (3, 14), reason="3.14's is_file() swallows every OSError")
+def test_a_candidate_that_cannot_be_searched_raises(tmp_path):
+    """``Path.is_file()`` lets a permission error through (the C115 reference): the walk does not
+    read an unsearchable directory as "no project here"."""
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0)
+    try:
+        with pytest.raises(PermissionError):
+            project_root.is_project_root(locked)
+    finally:
+        locked.chmod(0o755)
 
 
 def test_no_module_grows_its_own_copy_of_the_walk():

@@ -1,0 +1,10 @@
+{
+  "authorized_phases": [],
+  "dispatch_allowed": false,
+  "named_stop_operator": null,
+  "owner_accepted": false,
+  "proposal_sha256": "3ec1ceb924fc5c15d7d97775c06172619a61e2d482f9aa7e829ae101874045e4",
+  "record_type": "p3_v3_lean_source_protocol_approval",
+  "schema": 1,
+  "seal_sha256": "e47596e5d3b7f0cbd9e9b15554665cc0d3a3e1428d9c13ab11eab9bfb78f0b8a"
+}

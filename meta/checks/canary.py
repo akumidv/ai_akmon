@@ -198,9 +198,7 @@ def _collect_callables(root: Path) -> list[CallableClassification]:
             fields = _docstring_fields(node)
             in_join = path.name == _JOIN_MODULE and node.name.endswith(_JOIN_SUFFIX)
             owner_visible = (
-                not in_join
-                and path.name not in _ADAPTER_MODULES
-                and (_writes_to_stream(node) or node.name in rendered)
+                not in_join and path.name not in _ADAPTER_MODULES and (_writes_to_stream(node) or node.name in rendered)
             )
             collected.append(
                 CallableClassification(

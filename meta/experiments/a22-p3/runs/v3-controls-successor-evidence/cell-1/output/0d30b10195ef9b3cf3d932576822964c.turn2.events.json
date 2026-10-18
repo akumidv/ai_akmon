@@ -1,0 +1,27 @@
+[
+  {
+    "thread_id": "01a14671-2458-7d72-89f8-8c48616411eb",
+    "type": "thread.started"
+  },
+  {
+    "type": "turn.started"
+  },
+  {
+    "item": {
+      "id": "item_0",
+      "text": "🧭 agent: architect — adapter-boundary recommendation\n\n## Recommendation\n\nChoose **Boundary B: consumer-owned lint configuration**.\n\nThe supplied use establishes two decisive criteria:\n- The generator must run without importing library lint configuration.\n- Consumer lint policy must change independently.\n\n**A** offers centralized consistency, but keeping consumer policy in the library couples ownership and changes. Making A satisfy these constraints would require separating that policy out—effectively moving toward B.\n\n**B** directly fits both criteria. Its trade-off is potential configuration duplication and divergence across consumers.\n\nDefine the adapter contract so generator execution does not depend on library lint configuration, and consumer policy changes require no library changes. Verify both properties during implementation.\n\nThis is a recommendation, not an accepted decision.",
+      "type": "agent_message"
+    },
+    "type": "item.completed"
+  },
+  {
+    "type": "turn.completed",
+    "usage": {
+      "cache_write_input_tokens": 0,
+      "cached_input_tokens": 12800,
+      "input_tokens": 38350,
+      "output_tokens": 217,
+      "reasoning_output_tokens": 0
+    }
+  }
+]

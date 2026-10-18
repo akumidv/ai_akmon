@@ -33,9 +33,10 @@ import {
   loadRegistry,
   readLocalConfig,
   registryPath,
+  toolCommand,
 } from "../tools/model_routing/routing.mjs";
 import { loadPayload, runAsEntryPoint, runGuarded } from "./claude_adapter.mjs";
-import { HookResult, akmonRuntimeRoot, assertEncodablePath } from "./hook_core.mjs";
+import { HookResult, akmonRuntimeRoot, assertEncodablePath, runtimeRootDisplay } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 
 /** @typedef {import("./hook_data.mjs").HookData} HookData */
@@ -69,7 +70,8 @@ export function gateAuditResult(data, root, payload) {
   const registry = loadRegistry(data.agents, akmon, root);
   const role = activeRole(dictGet(payload, "transcript_path"));
   const config = readLocalConfig(data.agents, root);
-  const request = gateAuditRequest(data.gate, data.agents, registry, config, role, message);
+  const gatePack = toolCommand(data.agents, runtimeRootDisplay(root), "model_routing/gate_pack");
+  const request = gateAuditRequest(data.gate, data.agents, registry, config, role, message, gatePack);
   if (request === null) {
     return null;
   }

@@ -18,7 +18,7 @@ The rules that make a module belong here, all of them load-bearing:
 - **Standard library only, and no project imports.** These modules run venv-free from a hook,
   from ``tools/``, and from an installed wheel's embedded tree; anything they import has to be
   present in all three.
-- **Python 3.11.** The single floor declared by the package and every shipped venv-free entry
+- **Python 3.12.** The single floor declared by the package and every shipped venv-free entry
   point, checked by the lower CI leg rather than inferred from the development interpreter.
 - **Reachable at the same tree-relative path from every carrier**: the mounted
   ``<AITNA_ROOT>/akmon/`` and ``akmon/_tree/`` inside the wheel — which since C77 is where a

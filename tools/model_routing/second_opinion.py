@@ -12,7 +12,6 @@ import argparse
 import json
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -26,6 +25,7 @@ import routing
 from common import jsondata
 from common.project_root import resolve_project_root
 from common.record import records_package_mode
+from common.report_path import create_report, next_report_path, report_prefix, safe_name, task_error
 
 
 def _so_data() -> dict:
@@ -87,10 +87,30 @@ def _unavailable_notice(registry: dict, config: dict, orchestrator_vendor: str, 
     )
 
 
-def _report_path(root: Path, report_dir: str, gate: str) -> Path:
-    safe_gate = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in gate).strip("-") or "gate"
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    return root / report_dir / f"{safe_gate}-{stamp}.md"
+def _report_prefix(gate: str, task: str | None) -> str:
+    """``[<task>-]<gate>``: the review's name before its ``-<n>.md`` ordinal (C114)."""
+    return report_prefix(safe_name(gate) or "gate", task)
+
+
+def _report_dir_error(root: Path, report_dir: Path, configured: str) -> str | None:
+    """The error line for a ``report_dir`` that resolves outside ``root``, else ``None``.
+
+    Reports stay inside the project (C9): the check resolves symlinks and ``..`` first, so an
+    absolute path, a ``../outside`` and a link inside the project pointing out are all refused,
+    and it runs before the provider is started or any file is written.
+    """
+    if report_dir.resolve().is_relative_to(root.resolve()):
+        return None
+    return jsondata.fill(_so_data()["report_dir_outside"], {"report_dir": configured})
+
+
+def _decoded(data: bytes) -> str:
+    r"""A provider pipe as text: UTF-8 with an undecodable byte as U+FFFD, universal newlines.
+
+    A provider's bytes are its own; a byte that is not UTF-8 must not cost the review its report
+    (C120). ``\r\n`` and a lone ``\r`` arrive as ``\n``, as a text-mode pipe reads them (C115).
+    """
+    return data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _digest(text: str, limit: int = 1200) -> str:
@@ -111,11 +131,17 @@ def main(argv: list[str] | None = None) -> int:
         "--gate-pack", type=Path, required=True, help="Path to a built gate-pack markdown file (see gate_pack.py)."
     )
     parser.add_argument(
+        "--task",
+        help="Task id the review belongs to; the report is <report_dir>/[<task>-]<gate>-<n>.md, n the next ordinal.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print the command and target report path without running it.",
     )
     args = parser.parse_args(argv)
+    if (task_problem := task_error(args.task)) is not None:
+        parser.error(task_problem)
 
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
@@ -133,27 +159,32 @@ def main(argv: list[str] | None = None) -> int:
         provider, model = target.provider, target.model
 
     spec = routing.second_opinion_spec(registry, provider)
+    report_dir = root / str(spec["report_dir"])
+    if (outside := _report_dir_error(root, report_dir, str(spec["report_dir"]))) is not None:
+        print(outside, file=sys.stderr)
+        return 2
+    # The resolved form, so the report line is always a path under the (resolved) root.
+    report_dir = report_dir.resolve()
     material = args.gate_pack.read_text(encoding="utf-8")
     try:
         command = routing.second_opinion_command(spec, _prompt(args.gate, material), model=model)
     except routing.UnpinnableModelError as exc:
         print(f"second-opinion: {exc}", file=sys.stderr)
         return 2
-    report = _report_path(root, str(spec["report_dir"]), args.gate)
+    prefix = _report_prefix(args.gate, args.task)
 
     summary = _so_data()["summary"]
     if args.dry_run:
         print(" ".join(command))
-        print(jsondata.fill(summary["report_line"], {"path": report.relative_to(root)}))
+        print(jsondata.fill(summary["report_line"], {"path": next_report_path(report_dir, prefix).relative_to(root)}))
         print(jsondata.fill(summary["provider_line"], {"provider": provider, "model": model or "(default)"}))
         return 0
 
-    completed = subprocess.run(command, cwd=root, text=True, capture_output=True, check=False)
-    output = completed.stdout.strip()
-    if completed.stderr.strip():
-        output = f"{output}\n\n[stderr]\n{completed.stderr.strip()}".strip()
-    report.parent.mkdir(parents=True, exist_ok=True)
-    report.write_text(output + "\n", encoding="utf-8")
+    completed = subprocess.run(command, cwd=root, capture_output=True, check=False)
+    output = _decoded(completed.stdout).strip()
+    if stderr := _decoded(completed.stderr).strip():
+        output = f"{output}\n\n[stderr]\n{stderr}".strip()
+    report = create_report(report_dir, prefix, output + "\n")
     print(
         jsondata.fill(
             _so_data()["summary"]["result_line"],

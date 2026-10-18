@@ -9,6 +9,6 @@
     "moduleResolution": "nodenext",
     "types": ["node"]
   },
-  "include": ["js/**/*.mjs", "meta/conformance/**/*.mjs", "eslint.config.mjs"],
+  "include": ["js/**/*.mjs", "meta/conformance/**/*.mjs"],
   "exclude": ["js/vendor", "node_modules"]
 }

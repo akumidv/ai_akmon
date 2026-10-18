@@ -38,7 +38,7 @@
     "artifacts_empty_sentinel": "_No artifacts supplied._",
     "decisions_heading": "## Decisions register",
     "coverage_heading": "## Coverage map",
-    "coverage_empty_sentinel": "_Coverage map not provided (assemble via coverage_map.py)._",
+    "coverage_empty_sentinel": "_Coverage map not provided (assemble it with the model_routing/coverage_map tool)._",
     "dep_graph_heading": "## Dependency-graph excerpt",
     "zone_plan_heading": "## Zone plan",
     "what_to_return_heading": "## What to return",

@@ -1,0 +1,20 @@
+id = "tools/release-check-akmon-node-refused"
+ecosystem = "node"
+kind = "tool"
+covers = ["tool:release/release_check"]
+
+# --check over the akmon subject (the default subject) runs akmon's own Python release suite,
+# which the JavaScript implementation does not carry: it refuses with one line naming the Python
+# command (C108).
+[fixture]
+attach = "native"
+warmup = false
+
+[run]
+tool = "release/release_check"
+argv = ["--check", "--subject", "akmon"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "release_check: --subject akmon --check runs akmon's own Python release suite (its self-CI and pytest tests); run it with the Python implementation: python3 tools/release/release_check.py --check\n"

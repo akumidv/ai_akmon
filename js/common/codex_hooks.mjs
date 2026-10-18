@@ -336,7 +336,8 @@ async function _defaultRunner(data, command, cwd, timeoutSeconds) {
 
   const answer = new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutSeconds * 1000;
-    const timer = timeoutSeconds > 0 ? setTimeout(() => reject(fail("timeout")), Math.max(0, deadline - Date.now())) : null;
+    const timer =
+      timeoutSeconds > 0 ? setTimeout(() => reject(fail("timeout")), Math.max(0, deadline - Date.now())) : null;
     timer?.unref();
     if (timer === null) {
       reject(fail("timeout"));
@@ -408,7 +409,11 @@ async function _defaultRunner(data, command, cwd, timeoutSeconds) {
 
   try {
     child.stdin?.write(
-      hookForm({ id: _INITIALIZE_ID, method: "initialize", params: { clientInfo: { name: "akmon", title: "akmon verify", version: "1" } } }) +
+      hookForm({
+        id: _INITIALIZE_ID,
+        method: "initialize",
+        params: { clientInfo: { name: "akmon", title: "akmon verify", version: "1" } },
+      }) +
         "\n" +
         hookForm({ id: _HOOKS_LIST_ID, method: "hooks/list", params: { cwds: [cwd] } }) +
         "\n",
@@ -543,7 +548,9 @@ export function hooksListProjectEntry(data, message, cwd) {
   if (!Array.isArray(rows)) {
     throw new CodexProtocolError(data, "no-data");
   }
-  const answers = rows.filter((entry) => isDict(entry) && /** @type {Record<string, unknown>} */ (entry).cwd === String(cwd));
+  const answers = rows.filter(
+    (entry) => isDict(entry) && /** @type {Record<string, unknown>} */ (entry).cwd === String(cwd),
+  );
   if (answers.length === 0) {
     throw new CodexProtocolError(data, "no-project");
   }
@@ -574,8 +581,16 @@ export function hooksListProjectEntry(data, message, cwd) {
  * @param {{runner?: HooksListRunner, timeout?: number}} [options]
  * @returns {Promise<Array<Record<string, unknown>>>}
  */
-export async function queryHooksList(data, command, cwd, { runner = undefined, timeout = DEFAULT_TIMEOUT_SECONDS } = {}) {
-  const run = runner ?? ((/** @type {ReadonlyArray<string>} */ c, /** @type {string} */ d, /** @type {number} */ t) => _defaultRunner(data, c, d, t));
+export async function queryHooksList(
+  data,
+  command,
+  cwd,
+  { runner = undefined, timeout = DEFAULT_TIMEOUT_SECONDS } = {},
+) {
+  const run =
+    runner ??
+    ((/** @type {ReadonlyArray<string>} */ c, /** @type {string} */ d, /** @type {number} */ t) =>
+      _defaultRunner(data, c, d, t));
   const raw = await _callHooksListRunner(data, run, command, cwd, timeout);
   const message = parseHooksListMessage(data, raw);
   const entry = hooksListProjectEntry(data, message, cwd);

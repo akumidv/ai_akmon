@@ -1,0 +1,12 @@
+{
+  "acceptance_evidence_sha256": null,
+  "authorized_phases": [],
+  "dispatch_allowed": false,
+  "named_stop_operator": null,
+  "operational_seal_sha256": "4f56d59c0c73fa40419cb27d9a73dbaa1b02bcac6e4d225212f156dae2e87543",
+  "owner_accepted": false,
+  "qwen_aggregate_token_ceiling": null,
+  "record_type": "p3_v3_successor_route_check_approval",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "schema": 1
+}

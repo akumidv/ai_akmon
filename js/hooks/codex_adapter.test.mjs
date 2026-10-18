@@ -16,8 +16,18 @@ import { fileURLToPath } from "node:url";
 
 import { JSONDecodeError, jsonLoads } from "../common/pyjson.mjs";
 import {
-  command, cwd, filePaths, isApplyPatchCommand, normalizeTool, payloadShape, sessionId,
-  toolKind, toolName, toolUseId, unmeasuredPathSource, writeStderr,
+  command,
+  cwd,
+  filePaths,
+  isApplyPatchCommand,
+  normalizeTool,
+  payloadShape,
+  sessionId,
+  toolKind,
+  toolName,
+  toolUseId,
+  unmeasuredPathSource,
+  writeStderr,
 } from "./codex_adapter.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 
@@ -89,7 +99,10 @@ test("printed, quoted, truncated or malformed patch text stays shell", () => {
     ["name prefix", heredoc("xapply_patch")],
     ["no End Patch", "apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: x.py\n"],
     ["no path line", "apply_patch <<'EOF'\n*** Begin Patch\n*** End Patch\nEOF\n"],
-    ["envelope not directly after the heredoc", "apply_patch <<'EOF'\nhello\n*** Begin Patch\n*** Add File: x\n*** End Patch\n"],
+    [
+      "envelope not directly after the heredoc",
+      "apply_patch <<'EOF'\nhello\n*** Begin Patch\n*** Add File: x\n*** End Patch\n",
+    ],
     ["mismatched delimiter quotes", `apply_patch <<'EOF"\n${PATCH}`],
     ["U+2028 for line ends", heredoc("apply_patch").replaceAll("\n", "\u2028")],
     ["no-break space before the heredoc", `apply_patch\u00a0<<'EOF'\n${PATCH}`],
@@ -182,7 +195,10 @@ test("every patch path form is read, in order, with white space stripped the Pyt
   assert.deepEqual(filePaths(data, { tool_input: { command: patch } }), ["a.py", "b/c.py", "d/e.py", "f"]);
   // CRLF: the `\r` sits in the captured group until strip() takes it
   assert.deepEqual(filePaths(data, { tool_input: { command: patch.replaceAll("\n", "\r\n") } }), [
-    "a.py", "b/c.py", "d/e.py", "f",
+    "a.py",
+    "b/c.py",
+    "d/e.py",
+    "f",
   ]);
   // a line anchor sees `\n` only: U+2028 does not end the path, it is part of it
   assert.deepEqual(filePaths(data, { tool_input: { command: "*** Add File: a\u2028b\n" } }), ["a\u2028b"]);
@@ -218,7 +234,13 @@ test("the raw fallback is read as a patch only when the payload has no command",
 test("the payload shape names the keys sorted by code point, without values", () => {
   assert.equal(payloadShape(data, {}), "tool_input keys: <none>; payload keys: <none>");
   assert.equal(
-    payloadShape(data, { tool_input: { z: 1, a: 2, "\u{1F600}": 3, "\uffff": 4 }, b: 1, B: 2, "\u{1F600}": 5, "\uffff": 6 }),
+    payloadShape(data, {
+      tool_input: { z: 1, a: 2, "\u{1F600}": 3, "\uffff": 4 },
+      b: 1,
+      B: 2,
+      "\u{1F600}": 5,
+      "\uffff": 6,
+    }),
     "tool_input keys: a, z, \uffff, \u{1F600}; payload keys: B, b, tool_input, \uffff, \u{1F600}",
   );
   // the first dict among the spellings is the tool_input; a list is skipped
@@ -246,7 +268,11 @@ test("json.loads refuses an integer literal over 4300 digits with ValueError, no
   const digits = (/** @type {number} */ n) => "1".repeat(n);
   assert.doesNotThrow(() => jsonLoads(`{"x": ${digits(4300)}}`));
   for (const text of [`{"x": ${digits(4301)}}`, `{"x": -${digits(4301)}}`, `{"x": ${digits(5000)}, }`]) {
-    assert.throws(() => jsonLoads(text), (error) => error instanceof Error && error.name === "ValueError", text.slice(0, 12));
+    assert.throws(
+      () => jsonLoads(text),
+      (error) => error instanceof Error && error.name === "ValueError",
+      text.slice(0, 12),
+    );
   }
   // a syntax error before the long literal wins, as the left-to-right scan reaches it first
   assert.throws(() => jsonLoads(`{"x": , "y": ${digits(5000)}}`), JSONDecodeError);
@@ -258,14 +284,30 @@ test("json.loads refuses an integer literal over 4300 digits with ValueError, no
 
 test("json.loads raises RecursionError past 9997 levels of nesting (Python 3.12.3), not before", () => {
   assert.doesNotThrow(() => jsonLoads(`${"[".repeat(9997)}${"]".repeat(9997)}`));
-  assert.throws(() => jsonLoads(`${"[".repeat(9998)}${"]".repeat(9998)}`), (error) => error instanceof Error && error.name === "RecursionError");
-  assert.throws(() => jsonLoads(`${'{"a":'.repeat(9998)}1${"}".repeat(9998)}`), (error) => error instanceof Error && error.name === "RecursionError");
+  assert.throws(
+    () => jsonLoads(`${"[".repeat(9998)}${"]".repeat(9998)}`),
+    (error) => error instanceof Error && error.name === "RecursionError",
+  );
+  assert.throws(
+    () => jsonLoads(`${'{"a":'.repeat(9998)}1${"}".repeat(9998)}`),
+    (error) => error instanceof Error && error.name === "RecursionError",
+  );
   // brackets inside strings do not count
   assert.doesNotThrow(() => jsonLoads(`["${"[".repeat(20000)}"]`));
 });
 
 test("json.loads is JSON everywhere else: BOM, trailing commas, quotes and control characters are errors", () => {
-  for (const text of ['\ufeff{"a": 1}', '{"a": 1,}', "{'a': 1}", '{"a": 01}', '{"a": +1}', '{"a": 1.}', '{"a": "\t"}', '{"a": "\\x"}', '{"a": 1} x']) {
+  for (const text of [
+    '\ufeff{"a": 1}',
+    '{"a": 1,}',
+    "{'a': 1}",
+    '{"a": 01}',
+    '{"a": +1}',
+    '{"a": 1.}',
+    '{"a": "\t"}',
+    '{"a": "\\x"}',
+    '{"a": 1} x',
+  ]) {
     assert.throws(() => jsonLoads(text), JSONDecodeError, text);
   }
   assert.deepEqual(jsonLoads('\r\n\t {"a": "\u2028\\u2028\\ud83d\\ude00"} '), { a: "\u2028\u2028\u{1F600}" });
@@ -300,7 +342,7 @@ test("stdin: empty and blank are {}, a non-JSON text is the raw fallback, a non-
 });
 
 test("stdin: CRLF is kept (POSIX stdin has no newline translation), invalid UTF-8 is UnicodeDecodeError", () => {
-  assert.equal(loaded("{\"a\":\r\n1}"), '{"a":1}');
+  assert.equal(loaded('{"a":\r\n1}'), '{"a":1}');
   assert.equal(loaded("x\r\ny"), '{"raw":"x\\r\\ny"}');
   assert.equal(loaded(Buffer.from([0x7b, 0xff, 0x7d])), "ERR UnicodeDecodeError");
   assert.equal(loaded(Buffer.from([0xe2, 0x82])), "ERR UnicodeDecodeError"); // truncated at EOF
@@ -320,10 +362,9 @@ test("print_result: the document, key order and ASCII escapes of json.dumps; not
      const data = lazyHookData();
      adapter.printResult(data, null);
      adapter.printResult(data, new HookResult({ eventName: "PreToolUse", additionalContext: "é\\n\\u{1F600}", permissionDecision: "deny", permissionReason: "r", systemMessage: "dropped" }));
-     adapter.printResult(data, new HookResult({ eventName: "SessionStart" }));`.replaceAll(
-      '"./hook_core.mjs"',
-      JSON.stringify(new URL("./hook_core.mjs", import.meta.url).href),
-    ).replaceAll('"./hook_data.mjs"', JSON.stringify(new URL("./hook_data.mjs", import.meta.url).href)),
+     adapter.printResult(data, new HookResult({ eventName: "SessionStart" }));`
+      .replaceAll('"./hook_core.mjs"', JSON.stringify(new URL("./hook_core.mjs", import.meta.url).href))
+      .replaceAll('"./hook_data.mjs"', JSON.stringify(new URL("./hook_data.mjs", import.meta.url).href)),
   );
   assert.equal(
     run.stdout.toString(),
@@ -374,9 +415,25 @@ test("argv: exactly one route, optionally beside one `--`; anything else is Usag
     assert.match(run.stdout, /permissionDecision": "deny"/);
   }
   const refused = [
-    [], ["--"], ["--", "--"], ["--", "git-commit-guard", "--"], ["--", "--", "git-commit-guard"], ["git-commit-guard", "--", "--"],
-    ["git-commit-guard", "git-commit-guard"], ["git-commit-guard", "role-on-code"], ["-h"], ["--help"], ["--he"], ["-"], ["-x"],
-    ["git-commit-guard", "-x"], ["-x", "git-commit-guard"], [""], ["Git-Commit-Guard"], ["unknown"], ["git-commit-guard=1"],
+    [],
+    ["--"],
+    ["--", "--"],
+    ["--", "git-commit-guard", "--"],
+    ["--", "--", "git-commit-guard"],
+    ["git-commit-guard", "--", "--"],
+    ["git-commit-guard", "git-commit-guard"],
+    ["git-commit-guard", "role-on-code"],
+    ["-h"],
+    ["--help"],
+    ["--he"],
+    ["-"],
+    ["-x"],
+    ["git-commit-guard", "-x"],
+    ["-x", "git-commit-guard"],
+    [""],
+    ["Git-Commit-Guard"],
+    ["unknown"],
+    ["git-commit-guard=1"],
   ];
   for (const argv of refused) {
     const run = runHook(argv, payload);
@@ -396,14 +453,36 @@ test("a route that crashes names itself; the class is the Python one, the messag
 });
 
 test("a cwd Path.resolve() refuses is the Python exception, not a Node argument error", () => {
-  const nul = runHook(["role-on-code"], '{"tool_name": "apply_patch", "cwd": "a\\u0000b", "tool_input": {"command": ' + JSON.stringify(PATCH) + "}}");
+  const nul = runHook(
+    ["role-on-code"],
+    '{"tool_name": "apply_patch", "cwd": "a\\u0000b", "tool_input": {"command": ' + JSON.stringify(PATCH) + "}}",
+  );
   assert.equal(nul.stderr, "akmon codex-hook role-on-code hook: ValueError\n");
   const lone = runHook(["session-start"], '{"cwd": "a\\ud800b"}');
   assert.equal(lone.stderr, "akmon codex-hook session-start hook: UnicodeEncodeError\n");
 });
 
+test("an over-long cwd takes the ordinary failure exit and does not hang (C121)", () => {
+  // Fuzz seed 1, case 634: the root walk refuses the start before resolving it.
+  const cwd = `/${"a/".repeat(32_769)}`;
+  const began = performance.now();
+  for (const route of ["analysis-guard", "role-on-code", "session-start"]) {
+    const run = runHook([route], JSON.stringify({ tool_name: "apply_patch", cwd, tool_input: { command: PATCH } }));
+    assert.equal(run.status, 1, route);
+    assert.equal(run.stdout, "", route);
+    assert.equal(run.stderr, `akmon codex-hook ${route} hook: ValueError\n`, route);
+  }
+  assert.ok(performance.now() - began < 10_000);
+});
+
 test("an edit with no readable path reports once per event on stderr and prints nothing", () => {
-  const payload = JSON.stringify({ tool_name: "apply_patch", session_id: "s1", tool_use_id: "u1", tool_input: { z: 1, a: 2 }, b: 1 });
+  const payload = JSON.stringify({
+    tool_name: "apply_patch",
+    session_id: "s1",
+    tool_use_id: "u1",
+    tool_input: { z: 1, a: 2 },
+    b: 1,
+  });
   const run = runHook(["role-on-code"], payload);
   assert.equal(run.status, 0);
   assert.equal(run.stdout, "");
@@ -424,10 +503,18 @@ test("a patch through apply_patch and through an inline shell heredoc gets the s
   );
   const inline = runHook(
     ["role-on-code"],
-    JSON.stringify({ tool_name: "Bash", session_id: "s2", cwd: "{{root}}", tool_input: { command: heredoc("apply_patch", body) } }),
+    JSON.stringify({
+      tool_name: "Bash",
+      session_id: "s2",
+      cwd: "{{root}}",
+      tool_input: { command: heredoc("apply_patch", body) },
+    }),
   );
   assert.equal(direct.status, 0);
-  assert.match(direct.stdout, /^\{"hookSpecificOutput": \{"hookEventName": "PreToolUse", "additionalContext": "\[akmon\] Role check/);
+  assert.match(
+    direct.stdout,
+    /^\{"hookSpecificOutput": \{"hookEventName": "PreToolUse", "additionalContext": "\[akmon\] Role check/,
+  );
   assert.equal(inline.stdout, direct.stdout);
   assert.equal(direct.stderr, "");
 });

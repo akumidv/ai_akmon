@@ -9,7 +9,7 @@
   [ADR 0012](0012-stage1-contracts-and-vocabulary.md) (the stable half — findings envelope and
   policy-ID join) · [codex-runtime-contract](../design/codex-runtime-contract.md) ·
   [ADR 0010](0010-alternatives-adoption-a11-verdicts.md) ·
-  [N2 findings](../reviews/alternatives/n2-stage0-probes-inventory-20260807.md) ·
+  [N2 findings](../reviews/alternatives/n2-stage0-probes-inventory.md) ·
   carriers [C52 and N6/F5](../TASKS.md), [C57 and N5/F6](../TASKS_ARCHIVE.md), and N1/F4.
 
 > **C94 applicability note.** The D2 reminder entry and D2 ledger/config input axes described

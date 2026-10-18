@@ -20,8 +20,12 @@
  * - the package manager (`node_managers` of `init.json`) is detected from `package.json`
  *   `packageManager`, else the lockfile, else npm; it picks the CI workflow, the existing-workflow
  *   commands and the pin command;
- * - `--checks none` or no flag records nothing (JS/TS linter detection is C109); `own` and `akmon`
- *   are refused (`node_checks_pending`);
+ * - `[check]` records the JS/TS linters and analyzers the project is configured for (`_NODE_TOOLS`,
+ *   run through the manager's `check_run`); a project with a linter (ESLint, Biome, oxlint) defaults to
+ *   `own`, any other to `akmon` (ADR 0020 D07/D09): oxlint with akmon's rules, recorded first and
+ *   followed by the detected Prettier / `tsc`, the rules attached as a standard `extends` of the
+ *   project's `.oxlintrc.json` (written when absent, never edited when present). The project's
+ *   `lint` / `typecheck` scripts are named in a next step, never recorded;
  * - the generated surface runs **in process**: the JS `sync`, then the routing initializer;
  * - `_confirm` is the Python's: a stdin that is not a terminal confirms, a terminal is asked and
  *   one line is read synchronously (end of input is "not confirmed");
@@ -61,6 +65,8 @@ import { embeddedTreeRoot } from "./_tree.mjs";
  * @property {string} install_unlocked the CI install command when no lockfile of this manager is committed
  * @property {string} [install_berry] Yarn 2+ (`.yarnrc.yml`, or `packageManager` `yarn@2`+): `--immutable`
  * @property {string} exec the prefix that runs a local bin (`npx `, `pnpm exec `, …)
+ * @property {string} check_run the prefix that runs a project tool for `[check]` (`npx --no-install `, …)
+ * @property {string} run_script how the manager runs a `package.json` script (`npm run`, …)
  * @property {string} add_dev_exact the command that adds a dev dependency at an exact version
  * @property {string} test the project's test command
  * @property {string} ci_setup the CI steps between checkout and install
@@ -95,7 +101,13 @@ import { embeddedTreeRoot } from "./_tree.mjs";
  * @property {Record<string, string>} closing_steps
  * @property {string} node_refuses_mode
  * @property {string} node_refuses_record
- * @property {string} node_checks_pending
+ * @property {string} node_oxlint_rules the path a project's `.oxlintrc.json` extends to run akmon's rules
+ * @property {string} node_oxlintrc_text the `.oxlintrc.json` init writes (`{{rules}}`)
+ * @property {string} node_oxlintrc_wrote
+ * @property {string} node_oxlintrc_env_step
+ * @property {string} node_oxlintrc_own_step
+ * @property {string} node_oxlint_step
+ * @property {string} node_scripts_step
  * @property {string} node_mode_reason
  */
 
@@ -105,7 +117,7 @@ const CHECK_CHOICES = ["own", "akmon", "none"];
 const _PACKAGE_MODE = "package";
 
 /** A precondition the caller has to fix; reported as one line. */
-class InitError extends Error {}
+export class InitError extends Error {}
 
 /**
  * One `init` run: the project, its dev layer, the manager, and the steps left to a person.
@@ -313,14 +325,16 @@ export function declaredManager(root) {
 export function ciInstall(manager, root) {
   const declared = declaredManager(root);
   const locked = manager.lockfiles.some((lockfile) => isFile(posix.join(root, lockfile)));
-  const berry = isFile(posix.join(root, ".yarnrc.yml")) || (declared !== null && /^yarn@(?:[2-9]|[1-9][0-9])/.test(declared));
+  const berry =
+    isFile(posix.join(root, ".yarnrc.yml")) || (declared !== null && /^yarn@(?:[2-9]|[1-9][0-9])/.test(declared));
   let install = manager.install;
   if (!locked) {
     install = manager.install_unlocked;
   } else if (manager.install_berry !== undefined && berry) {
     install = manager.install_berry;
   }
-  const setup = manager.ci_setup_unpinned !== undefined && declared === null ? manager.ci_setup_unpinned : manager.ci_setup;
+  const setup =
+    manager.ci_setup_unpinned !== undefined && declared === null ? manager.ci_setup_unpinned : manager.ci_setup;
   return { setup, install };
 }
 
@@ -349,7 +363,11 @@ function _charter(data, role, focus, aitna) {
  * @returns {string}
  */
 export function mergeGitignore(existing, wanted) {
-  const present = new Set(pySplitlines(existing).map(pyStrip).filter((line) => line !== ""));
+  const present = new Set(
+    pySplitlines(existing)
+      .map(pyStrip)
+      .filter((line) => line !== ""),
+  );
   const missing = wanted.filter((line) => pyStrip(line) === "" || !present.has(pyStrip(line)));
   // Drop leading/trailing blanks and collapse a run of them left by already-present lines.
   /** @type {string[]} */
@@ -396,6 +414,7 @@ function _agentsBlock(data, { aitna, repo, ref, archetype, language }) {
     roles_hint: rolesHint,
     guardrails_dir: `${aitna}/.akmon/guardrails`,
     profiles_dir: `${aitna}/.akmon/profiles`,
+    language_profile: "js.md",
     pre_commit: link("pipelines/pre-commit.md"),
     review_flow: link("pipelines/review-flow.md"),
     design_flow: link("pipelines/design-flow.md"),
@@ -516,7 +535,11 @@ function _writeCi(data, attach, { noCi }) {
   } else {
     const { setup, install } = ciInstall(manager, attach.root);
     const steps = fill(data.ci_workflow_steps_node, { setup, install, exec: manager.exec });
-    _writeIfAbsent(posix.join(workflows, "akmon.yml"), fill(data.ci_workflow, { steps }), ".github/workflows/akmon.yml");
+    _writeIfAbsent(
+      posix.join(workflows, "akmon.yml"),
+      fill(data.ci_workflow, { steps }),
+      ".github/workflows/akmon.yml",
+    );
   }
 }
 
@@ -562,6 +585,285 @@ function _markRealignComplete(path, version) {
     return;
   }
   writeText(path, upsertTomlKey(readText(path), "last_realign", version));
+}
+
+// --------------------------------------------------------------------------------------
+// what `akmon check` runs
+// --------------------------------------------------------------------------------------
+
+const _JS_TS = ["*.js", "*.mjs", "*.cjs", "*.jsx", "*.ts", "*.mts", "*.cts", "*.tsx"];
+
+/**
+ * The JS/TS linters and analyzers a project can be configured for, in record order: how each
+ * announces its configuration (`files` exact names, `prefixes` for `<prefix>` or `<prefix>.*`,
+ * `manifestKey` a top-level `package.json` key), the command after the manager's run prefix, and
+ * the file patterns a run covers (`null`: the command takes no `{files}`).
+ * @type {{name: string, files: string[], prefixes: string[], manifestKey: string | null, command: string, patterns: string[] | null}[]}
+ */
+const _NODE_TOOLS = [
+  {
+    name: "eslint",
+    files: [
+      "eslint.config.js",
+      "eslint.config.mjs",
+      "eslint.config.cjs",
+      "eslint.config.ts",
+      "eslint.config.mts",
+      "eslint.config.cts",
+    ],
+    prefixes: [".eslintrc"],
+    manifestKey: "eslintConfig",
+    command: "eslint {files}",
+    patterns: _JS_TS,
+  },
+  {
+    name: "biome",
+    files: ["biome.json", "biome.jsonc"],
+    prefixes: [],
+    manifestKey: null,
+    command: "biome check {files}",
+    patterns: [..._JS_TS, "*.json"],
+  },
+  {
+    name: "oxlint",
+    files: [".oxlintrc.json"],
+    prefixes: [],
+    manifestKey: null,
+    command: "oxlint {files}",
+    patterns: _JS_TS,
+  },
+  {
+    name: "prettier",
+    files: [],
+    prefixes: [".prettierrc", "prettier.config"],
+    manifestKey: "prettier",
+    command: "prettier --check {files}",
+    patterns: [..._JS_TS, "*.json", "*.css", "*.md"],
+  },
+  // tsc given files ignores tsconfig.json, so it takes none and is recorded as a plain string
+  {
+    name: "tsc",
+    files: ["tsconfig.json"],
+    prefixes: [],
+    manifestKey: null,
+    command: "tsc --noEmit -p .",
+    patterns: null,
+  },
+];
+
+/**
+ * The parsed `package.json` of the project; `{}` when there is none or it is not a JSON object.
+ * @param {string} root
+ * @returns {Record<string, unknown>}
+ */
+function _manifest(root) {
+  const path = posix.join(root, "package.json");
+  if (!isFile(path)) {
+    return {};
+  }
+  try {
+    const document = JSON.parse(readText(path));
+    return document !== null && typeof document === "object" && !Array.isArray(document) ? document : {};
+  } catch (error) {
+    if (!(error instanceof SyntaxError) && /** @type {{name?: string}} */ (error).name !== "UnicodeDecodeError") {
+      throw error;
+    }
+    return {};
+  }
+}
+
+/**
+ * The tools the project is configured for, in table order — files only, nothing is run.
+ * @param {string} root
+ * @returns {{name: string, command: string, patterns: string[] | null}[]}
+ */
+export function detectNodeTools(root) {
+  /** @type {string[]} */
+  let names;
+  try {
+    names = fs.readdirSync(root);
+  } catch {
+    names = [];
+  }
+  const manifest = _manifest(root);
+  return _NODE_TOOLS.filter(
+    (tool) =>
+      tool.files.some((file) => isFile(posix.join(root, file))) ||
+      names.some((name) =>
+        tool.prefixes.some(
+          (prefix) => (name === prefix || name.startsWith(`${prefix}.`)) && isFile(posix.join(root, name)),
+        ),
+      ) ||
+      (tool.manifestKey !== null && Object.hasOwn(manifest, tool.manifestKey)),
+  );
+}
+
+/**
+ * One `[check]` entry: an inline table with `files` when the command takes `{files}`, else a plain string.
+ * @param {string} name
+ * @param {string} command
+ * @param {string[] | null} patterns
+ * @returns {string}
+ */
+function _checkLine(name, command, patterns) {
+  if (patterns === null) {
+    return `${name} = ${JSON.stringify(command)}`;
+  }
+  return `${name} = { command = ${JSON.stringify(command)}, files = [${patterns.map((p) => JSON.stringify(p)).join(", ")}] }`;
+}
+
+const _LINTERS = ["eslint", "biome", "oxlint"];
+
+/**
+ * The owner's answer when `--checks` is absent: the project's own tools when it has a linter, else
+ * akmon's rules; the defaults when nobody is asked.
+ * @param {{name: string}[]} tools
+ * @param {boolean} ask
+ * @returns {string}
+ */
+function _chooseChecks(tools, ask) {
+  const names = tools.map((tool) => tool.name).join(", ");
+  if (tools.some((tool) => _LINTERS.includes(tool.name))) {
+    if (!ask || _confirm(`akmon init: \`akmon check\` runs the project's own ${names}?`)) {
+      return "own";
+    }
+    return _confirm("akmon init: set up oxlint with akmon's JavaScript/TypeScript rules instead?") ? "akmon" : "none";
+  }
+  if (
+    !ask ||
+    _confirm(
+      "akmon init: no JavaScript/TypeScript linter configured — set up oxlint with akmon's JavaScript/TypeScript rules?",
+    )
+  ) {
+    return "akmon";
+  }
+  return tools.length > 0 ? "own" : "none";
+}
+
+/**
+ * Point the project's oxlint configuration at akmon's rules — the standard `extends`. Absent
+ * `.oxlintrc.json` is written; a present one is never edited: it either extends the rules already or
+ * gets a next step.
+ * @param {InitData} data
+ * @param {Attach} attach
+ */
+function _extendWithAkmonRules(data, { root, nextSteps }) {
+  const path = posix.join(root, ".oxlintrc.json");
+  const rules = data.node_oxlint_rules;
+  if (isFile(path)) {
+    if (!readText(path).includes(rules)) {
+      nextSteps.push(fill(data.node_oxlintrc_own_step, { rules }));
+    }
+    return;
+  }
+  writeText(path, fill(data.node_oxlintrc_text, { rules }));
+  _log(fill(data.node_oxlintrc_wrote, { rules }));
+  nextSteps.push(data.node_oxlintrc_env_step);
+}
+
+/**
+ * The next step that makes oxlint runnable, when package.json does not declare it yet.
+ * @param {InitData} data
+ * @param {Attach} attach
+ * @returns {string | null}
+ */
+function _oxlintStep(data, { root, manager }) {
+  const manifest = _manifest(root);
+  const declared = ["devDependencies", "dependencies"].some((key) => {
+    const table = manifest[key];
+    return table !== null && typeof table === "object" && Object.hasOwn(table, "oxlint");
+  });
+  return declared ? null : fill(data.node_oxlint_step, { command: `${manager.add_dev_exact} oxlint` });
+}
+
+/**
+ * The `[check]` entries and the closing next steps of the chosen mode: `own` records every
+ * detected tool; `akmon` sets up the extends and records oxlint first, then the detected non-linters.
+ * @param {InitData} data
+ * @param {Attach} attach
+ * @param {string} choice
+ * @param {ReturnType<typeof detectNodeTools>} tools
+ * @returns {ReturnType<typeof detectNodeTools>}
+ */
+function _checkEntries(data, attach, choice, tools) {
+  if (choice === "own") {
+    return tools;
+  }
+  _extendWithAkmonRules(data, attach);
+  const step = _oxlintStep(data, attach);
+  if (step !== null) {
+    attach.nextSteps.push(step);
+  }
+  const oxlint = /** @type {(typeof _NODE_TOOLS)[number]} */ (_NODE_TOOLS.find((tool) => tool.name === "oxlint"));
+  return [oxlint, ...tools.filter((tool) => !_LINTERS.includes(tool.name))];
+}
+
+/**
+ * Append the `[check]` table holding `lines` to the record — empty when there are none (the Python
+ * `_record_checks`).
+ * @param {string[]} lines the table's entries
+ * @param {string} record the record's path
+ */
+function _recordChecks(lines, record) {
+  const table = [
+    "",
+    "[check]",
+    "# What `akmon check` runs: the project's own commands, `{files}` becoming the files a run covers.",
+    ...lines,
+  ];
+  writeText(record, `${readText(record).replace(/\s+$/, "")}\n${table.join("\n")}\n`);
+}
+
+/**
+ * Decide once what `akmon check` runs and record it as `[check]` (the Python `_setup_checks`, Node
+ * variant): the project's own tools, or oxlint with akmon's rules, or nothing — `none`, or `own`
+ * when no tool is found — recorded as an empty `[check]` table, so it is a choice like the others. A record that already has a `[check]`
+ * table is left alone: a realign never changes that choice; a record written before an empty table
+ * meant nothing has no table and is decided again. The project's `lint` / `typecheck` scripts
+ * become a next step.
+ * @param {InitData} data
+ * @param {Attach} attach
+ * @param {string} record the record's path
+ * @param {string | undefined} choice `--checks`
+ * @param {{ask: boolean}} options
+ */
+function _setupChecks(data, attach, record, choice, { ask }) {
+  const { root, nextSteps, manager } = attach;
+  if (/^\[check\]/m.test(readText(record))) {
+    _log("[check] already names this project's checks — left untouched");
+    return;
+  }
+  const tools = detectNodeTools(root);
+  const chosen = choice ?? _chooseChecks(tools, ask);
+  const recordName = posix.basename(record);
+  if (chosen === "none") {
+    _recordChecks([], record);
+    _log("akmon check: no checks recorded");
+    nextSteps.push(`name the project's checks under \`[check]\` in ${recordName} when it has any`);
+  } else if (chosen === "own" && tools.length === 0) {
+    _recordChecks([], record);
+    nextSteps.push(`no linter configuration was found: name the project's checks under \`[check]\` in ${recordName}`);
+  } else {
+    const entries = _checkEntries(data, attach, chosen, tools);
+    _recordChecks(
+      entries.map((tool) => _checkLine(tool.name, manager.check_run + tool.command, tool.patterns)),
+      record,
+    );
+    _log(`akmon check will run: ${entries.map((tool) => tool.name).join(", ")} (recorded as [check])`);
+  }
+  const scripts = _manifest(root).scripts;
+  const present = ["lint", "typecheck"].filter(
+    (script) => scripts !== null && typeof scripts === "object" && Object.hasOwn(scripts, script),
+  );
+  if (present.length > 0) {
+    nextSteps.push(
+      fill(data.node_scripts_step, {
+        names: present.map((script) => `\`${script}\``).join(", "),
+        record: recordName,
+        example: `${manager.run_script} ${present[0]}`,
+      }),
+    );
+  }
 }
 
 // --------------------------------------------------------------------------------------
@@ -685,7 +987,10 @@ options:
   --language LANGUAGE   Primary language per ARCHETYPES.md (default: left unclassified).
   --no-ci               Do not write a CI workflow running sync/verify.
   --checks {own,akmon,none}
-                        Not available for Node projects yet (only 'none').
+                        What \`akmon check\` runs: the project's own linters
+                        (default when it has any), oxlint with akmon's
+                        JavaScript/TypeScript rules (default when it has
+                        none), or nothing.
   --switch-mode         Accepted; there is no mode migration to allow.
   --yes                 Do not ask for confirmation.
 `;
@@ -784,14 +1089,11 @@ function _refuseUnservedRun(data, options, root, aitna) {
   if (options.mode !== undefined && options.mode !== _PACKAGE_MODE) {
     throw new InitError(fill(data.node_refuses_mode, { mode: options.mode }));
   }
-  const found = isFile(posix.join(root, aitna, ".akmon.toml"))
-    ? unsupportedFound(readSyncData(), root)
-    : null;
+  // There is no unready-switch refusal to order against: every other mount mode, recorded or
+  // asked for, is the Python implementation's, which is what both refusals name.
+  const found = isFile(posix.join(root, aitna, ".akmon.toml")) ? unsupportedFound(readSyncData(), root) : null;
   if (found !== null) {
     throw new InitError(fill(data.node_refuses_record, { found }));
-  }
-  if (options.checks === "own" || options.checks === "akmon") {
-    throw new InitError(fill(data.node_checks_pending, { choice: options.checks }));
   }
 }
 
@@ -865,7 +1167,9 @@ async function _run(data, options, root) {
   const pinStatus = packagePinStatus(root);
   const ref = options.ref ? options.ref : tagForVersion(version);
 
-  const archetype = [options.archetype, options.language].filter((part) => part !== undefined && part !== "").join("/") || "unclassified";
+  const archetype =
+    [options.archetype, options.language].filter((part) => part !== undefined && part !== "").join("/") ||
+    "unclassified";
   // --- local layout (LOCAL layer) ----------------------------------------------------
   _writeLocalLayout(data, attach);
 
@@ -883,6 +1187,7 @@ async function _run(data, options, root) {
 
   const record = _writeAkmonToml(data, attach, { version, archetype });
   _log(`recorded ${aitna}/.akmon.toml (mount=${_PACKAGE_MODE}, akmon_version=${version || "unknown"})`);
+  _setupChecks(data, attach, record, options.checks, { ask: !options.yes });
 
   // --- generated surface: sync, then model routing -----------------------------------
   const code = await _generate(root);

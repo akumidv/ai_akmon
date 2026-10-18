@@ -24,48 +24,11 @@ path = "common/__init__.py"
 reason = "structural — ES modules have no package init; js/common is a flat module directory the C104 hooks import first"
 task = "C104"
 
-# src/akmon/: the CLI port is C105; update is C107's plan row.
+# src/akmon/: the CLI port is C105, update C107's; only the package init is left.
 [[exempt]]
 path = "src/akmon/__init__.py"
 reason = "structural — ES modules have no package init; the node-side version carrier is package.json"
 task = "C105"
 
-[[exempt]]
-path = "src/akmon/_update.py"
-reason = "the JS update for npm/pnpm/yarn/bun lands in C107, the plan row that owns update"
-task = "C107"
-
-# tools/: the tools port and `akmon tool` land in C108. tools/model_routing/routing.py is not
-# C108's: the hooks import it, so it was ported with the hooks (C104 pass 1) and is paired; init.py
-# was pulled into C105 pass 3, because a Node attach is incomplete without it. The
-# rest are listed one by one, so this list names what is outstanding and a new tool module is a
-# gap until it is paired or listed.
-[[exempt]]
-path = "tools/model_routing/coverage_map.py"
-reason = "the tools port lands in C108"
-task = "C108"
-
-[[exempt]]
-path = "tools/model_routing/gate_pack.py"
-reason = "the tools port lands in C108"
-task = "C108"
-
-[[exempt]]
-path = "tools/model_routing/second_opinion.py"
-reason = "the tools port lands in C108"
-task = "C108"
-
-[[exempt]]
-path = "tools/model_routing/stats.py"
-reason = "the tools port lands in C108"
-task = "C108"
-
-[[exempt]]
-path = "tools/release/release_check.py"
-reason = "the tools port lands in C108"
-task = "C108"
-
-[[exempt]]
-path = "tools/tasks/archive.py"
-reason = "the tools port lands in C108"
-task = "C108"
+# tools/: every tool is paired. routing.py was ported with the hooks (C104 pass 1), init.py in
+# C105 pass 3, the rest in C108; a new tool module is a gap until it is paired or listed here.

@@ -138,3 +138,26 @@ def test_an_undecodable_record_is_refused_by_name_strictly(tmp_path):
     """
     with pytest.raises(RecordError, match=r"^\.akmon\.toml cannot be read as TOML: "):
         read_akmon_toml_strict(_undecodable_record(tmp_path))
+
+
+def test_the_fallback_breaks_lines_where_str_splitlines_does(tmp_path):
+    """``tomllib`` refuses this text, so the line parser reads it, and every ``str.splitlines``
+    boundary ends a line — ``\\f``, ``\\x85``, U+2028, ``\\x1e``, ``\\v``, ``\\x1c``, ``\\x1d``,
+    U+2029, ``\\r\\n``. The JS twin pins the same bytes to the same table (record.test.mjs); its
+    inline ``\\r|\\n`` split used to fold the whole record into one ``mount`` value.
+    """
+    record = tmp_path / ".akmon.toml"
+    record.write_bytes(
+        (
+            'mount = "package"\fecosystem = "node"\x85akmon_version = "v1"\u2028[test]\x1erunner = "pytest"'
+            '\vdepth = "2"\x1c\x1dkind = "x"\u2029tail = "y"\r\nlast = "z"\n'
+        ).encode()
+    )
+    with pytest.raises(RecordError):
+        read_akmon_toml_strict(record)
+    assert read_akmon_toml(record) == {
+        "mount": "package",
+        "ecosystem": "node",
+        "akmon_version": "v1",
+        "test": {"runner": "pytest", "depth": "2", "kind": "x", "tail": "y", "last": "z"},
+    }

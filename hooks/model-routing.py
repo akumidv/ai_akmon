@@ -97,12 +97,11 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     event = payload.get("hook_event_name") or "SessionStart"
 
     aitna = aitna_root_name()
-    # Recovery instructions must name the tree this project actually has, in a spelling that
-    # keeps working: the project-relative mount when one exists, `$(akmon path)` in mode
-    # `package`, where the tree is inside the installed wheel and its literal path carries the
-    # venv's Python version (C77). Naming the mount unconditionally used to hand a package-mode
-    # session a path that is not there.
-    runtime_rel = runtime_root_display(root)
+    # Recovery instructions must name a command that works in the tree this project actually has:
+    # the mount's script when one exists, `akmon tool` from the installed wheel, whose literal
+    # path carries the venv's Python version (C77, ADR-0020/D06). Naming the mount
+    # unconditionally used to hand a package-mode session a path that is not there.
+    init_command = routing.tool_command(runtime_root_display(root), "model_routing/init")
     # An overlay `briefs` key matching no agent makes every regeneration lossy, so the
     # rebind is refused rather than run — and the reason is stated instead of swallowed (C50).
     brief_warn = routing.brief_warning(registry, aitna)
@@ -148,13 +147,13 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     reason = routing.staleness(config, registry, settings_model)
     overlay = [brief_warn] if brief_warn else []
     if reason is not None:
-        lines = routing.init_instruction(reason, runtime_rel) + overlay
+        lines = routing.init_instruction(reason, init_command) + overlay
         return HookResult(
             event_name="SessionStart",
             additional_context="\n".join(lines),
             system_message="\n".join([lines[0], *overlay, *pressure]),
         )
-    lines = routing.status_lines(config, registry, runtime_rel) + overlay
+    lines = routing.status_lines(config, registry, init_command) + overlay
     # Owner-addressed subset: the corridor warning, the fact of a rebind and — for the owner
     # alone — the context-pressure reminder at either level (its info line carries ℹ, not ⚠);
     # the steady-state status line itself stays context-only so the UI is quiet when healthy.

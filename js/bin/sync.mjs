@@ -66,7 +66,18 @@ import { generatedBanner, generatedMarker, importedDirs, materializedText } from
 import { aitnaRoot, aitnaRootName, resolveProjectRoot } from "../common/project_root.mjs";
 import { recordedEcosystem, recordedMount } from "../common/record.mjs";
 import {
-  isDir, isFile, isOSError, pyError, pyLen, pyPath, pyRepr, pySplitlines, pyStat, pyStrip, readText, writeText,
+  isDir,
+  isFile,
+  isOSError,
+  pyError,
+  pyLen,
+  pyPath,
+  pyRepr,
+  pySplitlines,
+  pyStat,
+  pyStrip,
+  readText,
+  writeText,
 } from "../common/pyvalue.mjs";
 import { codePointCompare, codePointSort } from "../common/sort.mjs";
 
@@ -344,7 +355,8 @@ function _utf8Failure(bytes) {
       at += 1;
       continue;
     }
-    const need = lead >= 0xc2 && lead <= 0xdf ? 2 : lead >= 0xe0 && lead <= 0xef ? 3 : lead >= 0xf0 && lead <= 0xf4 ? 4 : 0;
+    const need =
+      lead >= 0xc2 && lead <= 0xdf ? 2 : lead >= 0xe0 && lead <= 0xef ? 3 : lead >= 0xf0 && lead <= 0xf4 ? 4 : 0;
     /** @type {string | null} */
     let reason = null;
     let end = at + 1;
@@ -357,7 +369,14 @@ function _utf8Failure(bytes) {
       const available = bytes.length - at;
       const second = bytes[at + 1];
       let bad = 0;
-      if (available >= 2 && (!continuation(at + 1) || (lead === 0xe0 && second < 0xa0) || (lead === 0xed && second >= 0xa0) || (lead === 0xf0 && second < 0x90) || (lead === 0xf4 && second >= 0x90))) {
+      if (
+        available >= 2 &&
+        (!continuation(at + 1) ||
+          (lead === 0xe0 && second < 0xa0) ||
+          (lead === 0xed && second >= 0xa0) ||
+          (lead === 0xf0 && second < 0x90) ||
+          (lead === 0xf4 && second >= 0x90))
+      ) {
         bad = 1;
       } else if (need >= 3 && available >= 3 && !continuation(at + 2)) {
         bad = 2;
@@ -439,7 +458,10 @@ export class Result {
 
 /** The generated `CLAUDE.md` body (`sync.json`). */
 function _claudeMd(/** @type {SyncData} */ data) {
-  return fill(data.sync.vendor_pointers.claude_md, { banner: generatedBanner(data.materialization), aitna: aitnaRootName() });
+  return fill(data.sync.vendor_pointers.claude_md, {
+    banner: generatedBanner(data.materialization),
+    aitna: aitnaRootName(),
+  });
 }
 
 /** The generated Copilot instructions body (`sync.json`). */
@@ -733,7 +755,14 @@ class _JsonDecoder {
       return this.array(at + 1);
     }
     /** @type {Array<[string, Json]>} */
-    const literals = [["null", null], ["true", true], ["false", false], ["NaN", new FloatValue(NaN)], ["Infinity", new FloatValue(Infinity)], ["-Infinity", new FloatValue(-Infinity)]];
+    const literals = [
+      ["null", null],
+      ["true", true],
+      ["false", false],
+      ["NaN", new FloatValue(NaN)],
+      ["Infinity", new FloatValue(Infinity)],
+      ["-Infinity", new FloatValue(-Infinity)],
+    ];
     for (const [literal, value] of literals) {
       if (text.startsWith(literal, at)) {
         return [value, at + literal.length];
@@ -749,7 +778,8 @@ class _JsonDecoder {
    */
   number(start) {
     const { text } = this;
-    const digit = (/** @type {number} */ i) => i < text.length && text.charCodeAt(i) >= 0x30 && text.charCodeAt(i) <= 0x39;
+    const digit = (/** @type {number} */ i) =>
+      i < text.length && text.charCodeAt(i) >= 0x30 && text.charCodeAt(i) <= 0x39;
     let at = start;
     if (text[at] === "-") {
       at += 1;
@@ -839,7 +869,16 @@ class _JsonDecoder {
       const escape = text[next];
       if (escape !== "u") {
         end = next + 1;
-        const simple = /** @type {Record<string, string>} */ ({ '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" });
+        const simple = /** @type {Record<string, string>} */ ({
+          '"': '"',
+          "\\": "\\",
+          "/": "/",
+          b: "\b",
+          f: "\f",
+          n: "\n",
+          r: "\r",
+          t: "\t",
+        });
         if (!Object.hasOwn(simple, escape)) {
           throw this.fail("Invalid \\escape", end - 2);
         }
@@ -1210,7 +1249,10 @@ export function ruffExtends(data, root) {
       throw error;
     }
     for (const key of keys) {
-      table = _isPlainTable(table) && Object.hasOwn(/** @type {object} */ (table), key) ? /** @type {Json} */ (table)[key] : {};
+      table =
+        _isPlainTable(table) && Object.hasOwn(/** @type {object} */ (table), key)
+          ? /** @type {Json} */ (table)[key]
+          : {};
     }
     const value = _isPlainTable(table) ? /** @type {Json} */ (table)["extend"] : undefined;
     if (typeof value === "string") {
@@ -1309,7 +1351,13 @@ export function materializedFiles(data, root) {
   const dest = pyPath(aitnaRoot(root), ".akmon");
   const files = names
     .filter((name) => isFile(pyPath(source, name)))
-    .map((name) => new PlannedFile(pyPath(dest, name), materializedText(data.materialization, name, _readText(pyPath(source, name)))));
+    .map(
+      (name) =>
+        new PlannedFile(
+          pyPath(dest, name),
+          materializedText(data.materialization, name, _readText(pyPath(source, name))),
+        ),
+    );
   return [files, errors];
 }
 
@@ -1424,7 +1472,9 @@ export function plannedFiles(data, root) {
     codex_hooks_text: codexHooksText,
   };
   /** @type {PlannedFile[]} */
-  const files = data.sync.planned_files.map(([relative, name]) => new PlannedFile(pyPath(root, relative), generators[name](data)));
+  const files = data.sync.planned_files.map(
+    ([relative, name]) => new PlannedFile(pyPath(root, relative), generators[name](data)),
+  );
   try {
     files.push(claudeSettings(data, root));
   } catch (error) {
@@ -1704,12 +1754,23 @@ export function checkFindings(data, result, { root }) {
     for (const path of paths) {
       const relative = _relativeTo(path, root);
       const [message, fix] = one(key, relative);
-      findings.push(new Finding({ severity, code, message: lineSafe(message), target: lineSafe(relative), fix, data: record }));
+      findings.push(
+        new Finding({ severity, code, message: lineSafe(message), target: lineSafe(relative), fix, data: record }),
+      );
     }
   }
   for (const error of result.errors) {
     const [message, fix] = one("plan_error", error);
-    findings.push(new Finding({ severity: "error", code: "sync.plan-error", message: lineSafe(message), target: "", fix, data: record }));
+    findings.push(
+      new Finding({
+        severity: "error",
+        code: "sync.plan-error",
+        message: lineSafe(message),
+        target: "",
+        fix,
+        data: record,
+      }),
+    );
   }
   return findings;
 }

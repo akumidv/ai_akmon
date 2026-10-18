@@ -1,0 +1,29 @@
+{
+  "authorization_scope": [
+    "technical_source"
+  ],
+  "chat_evidence_proposal_sha256": "7ac11ab4488a3ff7b44ec291b81389e7d110a290f7dfbbc6e3981dc47e4c5999",
+  "external_evidence": {
+    "acceptance_message_id": "msg_01a13fac-74fc-7c53-b0e8-3ccd0cab5518",
+    "artifact_sha256": "f36bf2f273ae7edd202309ed139c81b062bbc8f4e82714106b5862b029c001a4",
+    "authentication": "unsigned local log evidence; not a cryptographic signature",
+    "override_message_id": "msg_01a13fd2-60d4-76c1-9534-789886872230",
+    "scope": [
+      "technical_source"
+    ],
+    "selected_log_records_sha256": "f1a7d032eb386166cb8b90be8ea8061d719b5f5e7373cad1a0b3ba4182135c40"
+  },
+  "normalization_id": "blockquote-soft-wrap-dehyphen-v1",
+  "operative_v3_seal_sha256": "58eea0362178111b0497e6fcd248dffb25b07dda295fa91de2d03205819cedde",
+  "phase": "technical_source",
+  "prior_amendment_seal_sha256": "c4977c962a4c216abdc57951c981a2691063657f8928f9201847045cd96e84a8",
+  "record_type": "p3_v3_chat_evidence_amendment_seal",
+  "schema": 1,
+  "source_sha256": {
+    "dispatch_v3.py": "d0287a00948f89ab48db5232ff4fd8749802e8f569d11fcbfddb8e4ab986536b",
+    "source_chat_evidence_v3.py": "49a8296e44f5ce0af1d013f40a98e1160fba1ee874eef6a88b0684383f2740fb",
+    "source_phase_v3.py": "8feda24ecff03fccaf58f9054e626737e4ed74c2fde61b0948987afd59195862",
+    "v3_runner.py": "794a871d414a16a7e6851b7d1673a11a627489702c489e619d3317ebe8797249"
+  },
+  "superseded_chat_evidence_seal_sha256": "4ee20a353073f91fa584fd8b49441e05e3aeeda329c55a4608b05cc5e6e65745"
+}

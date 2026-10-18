@@ -12,8 +12,14 @@ import os from "node:os";
 import { posix } from "node:path";
 
 import {
-  MARKER_MAX_AGE_SECONDS, claimDiagnosticMarker, delegationStateName, gettempdir, markerKind,
-  releaseDiagnosticMarkers, unidentifiedIdentity } from "./markers.mjs";
+  MARKER_MAX_AGE_SECONDS,
+  claimDiagnosticMarker,
+  delegationStateName,
+  gettempdir,
+  markerKind,
+  releaseDiagnosticMarkers,
+  unidentifiedIdentity,
+} from "./markers.mjs";
 
 const data = JSON.parse(fs.readFileSync(new URL("../../common/markers.json", import.meta.url), "utf-8"));
 
@@ -28,10 +34,7 @@ function withDir(/** @type {(dir: string) => void} */ body) {
 }
 
 /** Run `body` with the three tempdir variables set as given (`null`: unset), then restored. */
-function withTempEnv(
-  /** @type {Record<string, string | null>} */ values,
-  /** @type {() => void} */ body,
-) {
+function withTempEnv(/** @type {Record<string, string | null>} */ values, /** @type {() => void} */ body) {
   const names = ["TMPDIR", "TEMP", "TMP"];
   const saved = names.map((name) => process.env[name]);
   try {
@@ -131,7 +134,9 @@ test("release removes this identity's markers by kind prefix and spares keepKind
 
 test("an identity with a lone surrogate is refused, as Python's encode() refuses it", () => {
   withDir((directory) => {
-    assert.throws(() => claimDiagnosticMarker(data, "shell-route", "a\ud800b", { directory }), { name: "UnicodeEncodeError" });
+    assert.throws(() => claimDiagnosticMarker(data, "shell-route", "a\ud800b", { directory }), {
+      name: "UnicodeEncodeError",
+    });
     assert.deepEqual(fs.readdirSync(directory), []);
   });
 });
@@ -146,7 +151,10 @@ test("the vocabulary comes from the data file, and a miss is a refusal, not an i
 
 test("a delegation state name carries the identity as written, replacement patterns included", () => {
   assert.equal(delegationStateName(data, "counter", "abc"), "akmon-delegation-nudge-abc.count");
-  assert.equal(delegationStateName(data, "marker", "{{identity}}$&$1"), "akmon-delegation-nudge-{{identity}}$&$1.marker");
+  assert.equal(
+    delegationStateName(data, "marker", "{{identity}}$&$1"),
+    "akmon-delegation-nudge-{{identity}}$&$1.marker",
+  );
   assert.throws(() => delegationStateName(data, "constructor", "abc"), /no delegation state file/);
 });
 

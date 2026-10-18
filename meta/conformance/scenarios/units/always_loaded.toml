@@ -10,5 +10,5 @@ table = "always_loaded.toml"
 # The document is pinned, not just the exit code: the node run compares the same bytes.
 [expected]
 exit = 0
-stdout = "{\n  \"ok\": true,\n  \"failed\": []\n}\n"
+stdout = "{\n  \"ok\": true,\n  \"answered\": 193,\n  \"failed\": []\n}\n"
 stderr = ""

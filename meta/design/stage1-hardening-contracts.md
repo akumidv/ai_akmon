@@ -9,9 +9,9 @@
 > made fillable, plus the **tool-name half of [C46](../TASKS.md)**. The lock splits
 > implementation per shape into **C51–C59** (+ C46; C60 carries the later cap reduction, outside
 > this lock); the umbrella C40 is superseded and archived after owner acceptance. Sources:
-> [plan §Phase 0–1](../reviews/alternatives/plan-akmon-from-alternatives-20260718.md),
+> [plan §Phase 0–1](../reviews/alternatives/plan-akmon-from-alternatives.md),
 > [ADR 0010](../decisions/0010-alternatives-adoption-a11-verdicts.md),
-> [N2 findings](../reviews/alternatives/n2-stage0-probes-inventory-20260807.md).
+> [N2 findings](../reviews/alternatives/n2-stage0-probes-inventory.md).
 > The first slice of A12 locked earlier and separately:
 > [ADR 0011](../decisions/0011-agent-name-notation-k-underscore.md) (agent-name notation).
 >

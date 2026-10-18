@@ -212,14 +212,10 @@ def _skew_notice(mounted_root: Path) -> str | None:
     pinned_base, ahead = _split_version(pinned)
     cli_base, _ = _split_version(akmon.__version__)
     if pinned_base != cli_base:
-        return _jsondata().fill(
-            _data()["skew_version"], {"cli_version": akmon.__version__, "pinned": pinned}
-        )
+        return _jsondata().fill(_data()["skew_version"], {"cli_version": akmon.__version__, "pinned": pinned})
     if ahead is not None:
         commits = "commit" if ahead == "1" else "commits"
-        return _jsondata().fill(
-            _data()["skew_commits"], {"pinned": pinned, "ahead": ahead, "commits": commits}
-        )
+        return _jsondata().fill(_data()["skew_commits"], {"pinned": pinned, "ahead": ahead, "commits": commits})
     return None
 
 
@@ -366,6 +362,31 @@ def _cmd_hook(argv: list[str], *, cwd: Path | None = None) -> int:
     return _run_hook_script(script, rest)
 
 
+def _cmd_tool(argv: list[str], *, cwd: Path | None = None) -> int:
+    """``akmon tool <name> [args...]`` — run one tool out of the controlling tree (ADR-0020/D06).
+
+    ``<name>`` is the tool's path under ``tools/`` without the suffix (``model_routing/init``),
+    the spelling both implementations share; ``cli.json`` lists the tools, so a library module
+    (``model_routing/routing``) or a path outside ``tools/`` is unknown rather than run. The
+    controlling tree is the one ``path`` and ``hook`` resolve, and a listed tool the mounted tree
+    does not carry yet is unknown there too. A subprocess, not ``runpy``: a tool is run by hand or
+    by an agent, never on a hot path, and as a script it keeps the environment it was written for.
+    """
+    import subprocess  # noqa: PLC0415 — kept off the hook path (see the imports above)
+
+    tools_dir = controlling_tree_root(cwd) / "tools"
+    available = [name for name in _data()["tools"] if (tools_dir / f"{name}.py").is_file()]
+    listing = ", ".join(available) or "(none)"
+    if not argv:
+        print(_jsondata().fill(_data()["tool_missing_name"], {"available": listing}), file=sys.stderr)
+        return 2
+    name, *rest = argv
+    if name not in available:
+        print(_jsondata().fill(_data()["tool_unknown"], {"name": repr(name), "available": listing}), file=sys.stderr)
+        return 2
+    return subprocess.run([sys.executable, str(tools_dir / f"{name}.py"), *rest], check=False).returncode
+
+
 def _cmd_version() -> int:
     print(akmon.__version__)
     return 0
@@ -389,7 +410,7 @@ def _cmd_update(argv: list[str]) -> int:
     return _update.main(argv)
 
 
-_COMMANDS = ("init", "update", "sync", "verify", "check", "path", "hook", "version")
+_COMMANDS = ("init", "update", "sync", "verify", "check", "path", "hook", "tool", "version")
 
 # `argparse.add_subparsers` + a REMAINDER positional mis-parses a remainder that starts
 # with "-" (e.g. `akmon sync --check`) — a known argparse limitation. A single top-level
@@ -421,8 +442,8 @@ def _dispatch_fixed_command(parser: argparse.ArgumentParser, command: str, argv:
     """Dispatch the commands that take no script pass-through of their own."""
     if command == "path":
         return _cmd_path()
-    if command == "hook":
-        return _cmd_hook(argv)
+    if command in ("hook", "tool"):
+        return _cmd_hook(argv) if command == "hook" else _cmd_tool(argv)
     if command == "version":
         return _cmd_version()
     if command == "init":

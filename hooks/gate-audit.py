@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 from claude_adapter import load_payload, run_guarded
-from hook_core import HookResult, akmon_runtime_root, find_project_root
+from hook_core import HookResult, akmon_runtime_root, find_project_root, runtime_root_display
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools" / "model_routing"))
 
@@ -55,7 +55,8 @@ def gate_audit_result(root: Path, payload: dict) -> HookResult | None:
         return None  # a tree from before model routing has no floors to enforce
     registry = routing.load_registry(akmon, root)
     role = routing.active_role(payload.get("transcript_path"))
-    request = routing.gate_audit_request(registry, routing.read_local_config(root), role, message)
+    gate_pack = routing.tool_command(runtime_root_display(root), "model_routing/gate_pack")
+    request = routing.gate_audit_request(registry, routing.read_local_config(root), role, message, gate_pack)
     if request is None:
         return None
     if not routing.gate_audit_once(role, message, payload.get("session_id")):

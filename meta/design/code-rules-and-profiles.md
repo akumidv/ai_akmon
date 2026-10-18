@@ -93,7 +93,7 @@ directory) and a one-release alias for the old path (two paths for one file).
 ## 5. akmon's rules — `profiles/ruff.toml`
 
 A plain ruff configuration: the strict group set measured in the
-[baseline](../reviews/c89-python-rule-baseline-20260913.md), plus `BLE` and `D` with
+[baseline](../reviews/c89-python-rule-baseline.md), plus `BLE` and `D` with
 `convention = "google"`, each group annotated with the Google sections it carries; `TD002` and
 `TD003` ignored because Google's TODO carries a link, not an author; relative imports banned
 outright; test ignores as `**/`-globs; `line-length = 120`; and no `target-version`, so ruff
@@ -121,7 +121,7 @@ own file is none of akmon's business.
 
 Layers: **C** common principle · **K** checked by ruff, in `profiles/ruff.toml` · **P** profile
 prose (a review point) · **F** formatter. The two count columns are the
-[C89 baseline](../reviews/c89-python-rule-baseline-20260913.md): the attached consumer (key rules),
+[C89 baseline](../reviews/c89-python-rule-baseline.md): the attached consumer (key rules),
 akmon (strict set). `–` = not measured; `†` = an upper-bound heuristic.
 
 | § | rule | layer | ruff | consumer | akmon |
@@ -213,7 +213,9 @@ without asking, and a non-interactive run takes the defaults. A record that alre
 is left alone — a realign never changes the choice. On `akmon`, an `extend` the project already
 has is never replaced (ruff takes one; `init` names the line to change), and when ruff is not
 declared `init` names the command that adds it (`uv add --dev ruff`, `poetry add --group dev
-ruff`). Nothing is written on `own` or `none`.
+ruff`). Nothing is written into the project's configuration on `own` or `none`; `none`, and `own`
+when no tool is found, are recorded as an empty `[check]` table, so a realign keeps them too
+(C123).
 
 ## 8. akmon's own configuration
 
@@ -252,7 +254,7 @@ Decided by the owner (this session); recorded in
 **Second round** — "no reinvented wheel; the standard approach is best":
 
 5. **No linter of akmon's own.** The first round's AST checker was built, run on both trees
-   ([baseline addendum](../reviews/c89-python-rule-baseline-20260913.md)) and withdrawn.
+   ([baseline addendum](../reviews/c89-python-rule-baseline.md)) and withdrawn.
 6. **akmon's rules are a standard ruff configuration** that also runs without akmon (§5).
 7. **`akmon check` is a wrapper** over the project's own checks; their output as is, plus one
    finding per command (§7).

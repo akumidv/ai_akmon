@@ -1,0 +1,14 @@
+{
+  "acceptance_evidence_sha256": "0b5939d0f833f0dbc19753280dc2f6ce0bf68341896d249ed3d197e254b00664",
+  "authorized_phases": [
+    "codex_scorer_route_check"
+  ],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "b99e1a1c18868aa7a491f893e0fedabdbbeae574f8ea42013cdb70662e1f05fc",
+  "owner_accepted": true,
+  "preflight_report_sha256": "cc87da125835f2298b5ec6e9a968e97522c24065e673d151f6181aaf635faadf",
+  "record_type": "p3_v3_codex_scorer_route_consent_v2_approval",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "schema": 1
+}

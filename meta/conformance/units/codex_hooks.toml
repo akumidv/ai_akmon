@@ -12,8 +12,9 @@
 # is not truthiness; `repr()` of an event name picks its quote by what the name contains and escapes
 # by its own rules; a tuple is a hashable identity and a list is not. The diagnostics are a closed
 # table (design §7: no vendor text reaches an owner's screen), so each failure kind is also pinned
-# by its fixed text. A JS port gets none of this for free. The table is the spec: every expected
-# value was produced by running the Python and then read against the docstrings.
+# by its fixed text. A JS port gets none of this for free. The table is the spec, held to the Python
+# reference row by row: `runner.py --impl python` runs it as scenario `units/codex_hooks` in the
+# conformance leg of `meta/self_ci.py`, and every expected value was read against the docstrings.
 #
 # The mouth is the generic one of `routing.toml` (the row format is the block comment above
 # `probe_routing` in probe.py). A row names a public function -- or one of the four private parsers
@@ -41,7 +42,8 @@
 # the one `result.data` entry for this cwd.
 #
 # Deliberate non-pins: nesting deeper than the interpreter's recursion limit (a `RecursionError` at
-# a depth that depends on the Python version, 9997 on 3.12.3, about 990 on 3.11), a `bytes` response
+# a depth that depends on the Python version: past 9997 on 3.12, the floor (M143; 3.13 takes 9998, 3.14
+# is bounded by the stack, far deeper)), a `bytes` response
 # (the JS runner returns a string), the iteration order of an event map whose keys are integer-like
 # (insertion order in Python, ascending in JS), and `query_hooks_list` / `default_runner`
 # themselves -- they await a runner and spawn a process: pytest (meta/tests/test_codex_hooks.py) and

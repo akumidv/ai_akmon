@@ -38,6 +38,7 @@ def block_heading() -> str:
     """The heading that marks the akmon block of a project's ``AGENTS.md``."""
     return _always_loaded_data()["block_heading"]
 
+
 # An ``@``-import as the harness reads it: a token starting a line or following whitespace.
 # Code spans, fenced blocks and HTML comments are stripped first — the harness does not import
 # from them (a commented example import is documentation, not context). ASCII whitespace only

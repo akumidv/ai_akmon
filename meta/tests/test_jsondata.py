@@ -28,9 +28,7 @@ def test_read_names_the_file_when_it_is_broken(tmp_path: Path) -> None:
 
 
 def test_fill_replaces_placeholders_and_keeps_single_braces() -> None:
-    assert jsondata.fill("ruff check {files} and {{name}}", {"name": "x"}) == (
-        "ruff check {files} and x"
-    )
+    assert jsondata.fill("ruff check {files} and {{name}}", {"name": "x"}) == ("ruff check {files} and x")
 
 
 def test_fill_rejects_an_unfilled_placeholder_naming_it() -> None:

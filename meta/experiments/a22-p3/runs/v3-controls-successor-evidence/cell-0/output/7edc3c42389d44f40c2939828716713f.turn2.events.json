@@ -1,0 +1,27 @@
+[
+  {
+    "thread_id": "01a14670-ce77-7870-a532-0dbbffbdd211",
+    "type": "thread.started"
+  },
+  {
+    "type": "turn.started"
+  },
+  {
+    "item": {
+      "id": "item_0",
+      "text": "Since the evidence item is unavailable, choose the more reversible default: **Boundary B**.\n\nKeep lint configuration with each consumer, while the library may publish optional recommended rules or a preset. This avoids imposing toolchain and policy assumptions on unknown consumers. Revisit Boundary A only if lint rules are proven to enforce library-wide correctness invariants.\n\nRecord this decision as provisional, including the missing first-consumer use case and the expected cost of rule divergence.",
+      "type": "agent_message"
+    },
+    "type": "item.completed"
+  },
+  {
+    "type": "turn.completed",
+    "usage": {
+      "cache_write_input_tokens": 0,
+      "cached_input_tokens": 6784,
+      "input_tokens": 14298,
+      "output_tokens": 435,
+      "reasoning_output_tokens": 228
+    }
+  }
+]

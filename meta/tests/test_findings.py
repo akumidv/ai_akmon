@@ -594,7 +594,7 @@ def _exit_validate(monkeypatch, tmp_path, seeded, strict):
 
 
 def _exit_self_ci(monkeypatch, tmp_path, seeded, strict):
-    monkeypatch.setattr(self_ci, "_run", lambda root: list(seeded))
+    monkeypatch.setattr(self_ci, "_run", lambda root, fuzz_depth="bounded": list(seeded))
     return self_ci.main(["--strict"] if strict else [])
 
 

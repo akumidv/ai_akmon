@@ -239,7 +239,7 @@ def prepare(artifact: Path, raw: Path = RAW) -> None:
         raw / "a32-e1/labels.tsv",
         raw / "a32-e2/pilot-ids.txt",
         DESIGN,
-        REPO / "meta/reviews/a32-e2-codex-protocol-20260926.md",
+        REPO / "meta/reviews/a32-e2-codex-protocol.md",
         raw / "a32-e1/audit.py",
         raw / "a32-e2/pilot.py",
         Path(__file__).resolve(),

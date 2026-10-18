@@ -273,3 +273,54 @@ expected = true
 pattern = "[\U0001F600]"
 name = "\U0001F600"
 expected = true
+
+# Astral characters in a range (C115): the range repair orders by code point and skips past a
+# range by code point, as `str` does. Ordered by UTF-16 unit, U+10000 sorts below U+E000–U+FFFF,
+# so a valid range was dropped and a reversed one reached the regex engine as a syntax error.
+
+[[case]]
+pattern = "[-\U0001F600]"
+name = "￿"
+expected = true
+
+[[case]]
+pattern = "[-\U0001F600]"
+name = "\U0001F601"
+expected = false
+
+[[case]]
+# Reversed by code point: the range is dropped and the class is empty — never a match.
+pattern = "[\U00010000-￿]"
+name = "￿"
+expected = false
+
+[[case]]
+pattern = "[\U00010000-￿]"
+name = "\U00010000"
+expected = false
+
+[[case]]
+# A negated empty class matches any one character.
+pattern = "[!\U00010000-￿]"
+name = "b"
+expected = true
+
+[[case]]
+# The skip past `a-\U0001F600` is three code points: the second hyphen is a member, not an operator.
+pattern = "[a-\U0001F600-z]"
+name = "-"
+expected = true
+
+[[case]]
+pattern = "[a-\U0001F600-z]"
+name = "z"
+expected = true
+
+[[case]]
+pattern = "[a-\U0001F600-z]"
+name = "\U0001F600"
+expected = true
+
+# Not a row: `[!-\U0010FFFE]` against U+10FFFF is true in Python and false in node, a V8 regex
+# defect at the maximum code point (DIVERGENCES.md DV37). Every row here is owed by both twins,
+# so the case is pinned per language: `test_check_runner.py` and `glob.test.mjs`.

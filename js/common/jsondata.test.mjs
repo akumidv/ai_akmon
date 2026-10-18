@@ -58,7 +58,10 @@ test("a data file is read and parsed as its own data", () => {
   try {
     const path = posix.join(dir, "policy.json");
     fs.writeFileSync(path, '{"fixes": ["akmon sync"], "count": 2}\n');
-    assert.deepStrictEqual(/** @type {{fixes: string[], count: number}} */ (read(path)), { fixes: ["akmon sync"], count: 2 });
+    assert.deepStrictEqual(/** @type {{fixes: string[], count: number}} */ (read(path)), {
+      fixes: ["akmon sync"],
+      count: 2,
+    });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -84,7 +87,10 @@ test("an unfilled placeholder raises a DataFileError naming the key", () => {
 });
 
 test("values are inserted verbatim, in order, every occurrence", () => {
-  assert.equal(fill("{{runner}} on {{scope}}", { runner: "uv run pytest", scope: "common/" }), "uv run pytest on common/");
+  assert.equal(
+    fill("{{runner}} on {{scope}}", { runner: "uv run pytest", scope: "common/" }),
+    "uv run pytest on common/",
+  );
   assert.equal(fill("{{n}}-{{n}}", { n: "1" }), "1-1");
   // The Python's `str(value)`: a non-string value is rendered, not rejected.
   assert.equal(fill("{{count}} fixes", { count: "2" }), "2 fixes");

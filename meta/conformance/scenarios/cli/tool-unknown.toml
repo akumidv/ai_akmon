@@ -1,0 +1,19 @@
+id = "cli/tool-unknown"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:tool"]
+
+# A library module is not a tool: `akmon tool` refuses it before running anything (exit 2) and
+# names every tool the controlling tree carries — the same list on both implementations once every
+# tool is ported.
+
+[fixture]
+attach = "none"
+
+[run]
+argv = ["tool", "model_routing/routing"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "akmon tool: unknown tool 'model_routing/routing'; available: model_routing/coverage_map, model_routing/gate_pack, model_routing/init, model_routing/second_opinion, model_routing/stats, release/release_check, tasks/archive\n"

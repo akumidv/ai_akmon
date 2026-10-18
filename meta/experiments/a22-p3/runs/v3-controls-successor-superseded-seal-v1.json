@@ -1,0 +1,65 @@
+{
+  "arm_manifest_sha256": "ea5c9960c8d355de9e6edc8de07a448c97b8e6db2697376d35809a62416db64c",
+  "arm_sha256": {
+    "A": "af405183eb0c0df6f8b5f0bec0098bd3819b2bc00d3f951c6cd61c50320b2ff3",
+    "C": "d8dfbf68e8425f42872a53b5e7c9c4d96f4e02eaaa84fef5b69132fe5b4f17e7"
+  },
+  "case_sha256": "3ec981fb954cdeba5493289080dd6759bc7a48b6d5bc8630e2c72296618e7b12",
+  "cells": [
+    [
+      "A",
+      "mid",
+      "gpt-5.6-luna"
+    ],
+    [
+      "C",
+      "strongest",
+      "gpt-6-astra"
+    ],
+    [
+      "C",
+      "mid",
+      "gpt-5.6-luna"
+    ]
+  ],
+  "historical_receipt_sha256": "722350657d7bb18d04d8356c7d223460fe4723d1a3555192a252e378ae5869e0",
+  "opening_codex_tokens": 74257,
+  "opening_record_sha256": "7b85bf21fe2e324b710847611f2e5e644e6c402f1cacdb9b6d877e338466b140",
+  "original_regression_sha256": "4c92ee584d7c903bcee6f652b6ea5a86c330e9a40149e170c0e4c03624443427",
+  "packet_seal_sha256": "62ace0ce353ce059acd2ee442589d81912ffa61d6442787dc17aebd34728dd93",
+  "pinned_executable": "/home/ai/.codex/packages/standalone/releases/0.156.1-x86_64-unknown-linux-musl/bin/codex",
+  "pinned_executable_sha256": "0b2e9301d6100dddda3b9d5c80ebaeaa3a2f1962388f2f36f6b96a9f08b1f33f",
+  "predecessor_approval_sha256": "0c746b788e218e1fec5b273a99c57cb5aa04cb1aaa520d5fba049e70fb3db3ce",
+  "predecessor_ledger_sha256": "12b036587104ef66d82068753c2d63614c1ed58484f6c2a53fcdce48f8b1e2f6",
+  "predecessor_runtime": "/tmp/a22-p3-v3-controls-runtime",
+  "predecessor_seal_sha256": "0759a5324a0757b298816dc38e8e93ac8e0a6f9ad564aa949648043346232dd6",
+  "prior_route_seal_sha256": "b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79",
+  "proposal_sha256": "f9ebca17067ba991c12cada0c2b861fee799a793a1d8c6839577fdf2f52a4120",
+  "provider_calls_started": 0,
+  "record_type": "p3_v3_controls_seal",
+  "regression_sha256": "324d1698fa1b3aa85ba8391cc2f0e66230d302b5f0dca486353e7bea1308083f",
+  "route_evidence_sha256": {
+    "codex_outcome": "cccc6b52c5a01e7365d1958680035871f4d305b3312f34e7bbdbbd10686f4c18",
+    "codex_reply": "84fd17cc8dd4a8983c4b0c07fe889d788d980f7e97e8430f0c1c491c46fe1d9a",
+    "ledger": "d9ebefd4d0481af6307e3f3300dcbcc0c9716d0af0bae8b964b4bf7c20817da5",
+    "qwen_outcome": "a49eba2fe84ad8b33255be7f8ac96bcbf47b7e8a28e2f60b063cf68cbe08c0d7",
+    "qwen_reply": "0d45e713dfb25b545b89ee935f34999c7a7dce9f3b1b67b1d3479248b5a92713"
+  },
+  "schema": 1,
+  "scope": [
+    "technical_controls"
+  ],
+  "source_sha256": {
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "reconcile_v3_usage.py": "4a7bf9fe35466e2ddef6ac5b1e77cfa846846a63f2a662bffc30118609c87914",
+    "usage_ledger_v3.py": "222a1a67e3d8efcb34b3f996ca40cae513008a44b80d94f9bb5dac1ad334a803",
+    "v3_controls_successor.py": "7c5fadb5dd775b978b0fb241b9b7e461d8f715e7ce75932b8f5a7f06d6c5e04d",
+    "v3_runner_version_successor.py": "a059553c4ce0a5447aa09254fbb9d2a6bd3d0c75f58f9feb50a5675313fd9b67"
+  },
+  "status": "offline_candidate_pending_owner_acceptance",
+  "verified_source_sha256": {
+    "exchange": "bfc388fe90d663f4ed1f1527f75955d077a7aa0ca296dfd31138c1d103b6d6e1",
+    "record": "a14ef0c4615690e9d357fbcfd54e45bdd59a2a4135e817506f6587793b4dd63b",
+    "rollout": "b938527d7519d073083214e902f1330e188d4dcfa52224b0196eb9170f98f901"
+  }
+}

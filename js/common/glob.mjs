@@ -111,38 +111,43 @@ function _translateClass(body) {
  * @returns {string}
  */
 function _repairRanges(body) {
-  /** @type {string[]} */
+  // Code points, not code units, for every index and every comparison: Python indexes a str by
+  // code point and orders by code point, a JS string does both by UTF-16 unit — so an astral
+  // character would shift the `+3` skip past a range and sort below U+E000–U+FFFF (C115).
+  const points = Array.from(body);
+  /** @type {string[][]} */
   const chunks = [];
   let cut = 0;
-  let from = body.startsWith("!") ? 2 : 1;
+  let from = points[0] === "!" ? 2 : 1;
   for (;;) {
-    const at = body.indexOf("-", from);
+    const at = points.indexOf("-", from);
     if (at < 0) {
       break;
     }
-    chunks.push(body.slice(cut, at));
+    chunks.push(points.slice(cut, at));
     cut = at + 1;
     from = at + 3;
   }
-  const tail = body.slice(cut);
-  if (tail !== "") {
+  const tail = points.slice(cut);
+  if (tail.length > 0) {
     chunks.push(tail);
   } else if (chunks.length > 0) {
-    chunks[chunks.length - 1] += "-";
+    chunks[chunks.length - 1].push("-");
   }
   for (let k = chunks.length - 1; k > 0; k -= 1) {
-    // Code points, not code units: Python indexes a str by code point and a JS string by unit,
-    // so cutting a chunk that ends in an astral character would otherwise split it in half.
-    const before = Array.from(chunks[k - 1]);
-    const after = Array.from(chunks[k]);
-    if (before.at(-1) !== undefined && after[0] !== undefined && /** @type {string} */ (before.at(-1)) > after[0]) {
-      chunks[k - 1] = [...before.slice(0, -1), ...after.slice(1)].join("");
+    const last = chunks[k - 1].at(-1);
+    const first = chunks[k][0];
+    if (last !== undefined && first !== undefined && _codePoint(last) > _codePoint(first)) {
+      chunks[k - 1] = [...chunks[k - 1].slice(0, -1), ...chunks[k].slice(1)];
       chunks.splice(k, 1);
     }
   }
-  return chunks
-    .map((chunk) => chunk.replaceAll("\\", "\\\\").replaceAll("-", "\\-"))
-    .join("-");
+  return chunks.map((chunk) => chunk.join("").replaceAll("\\", "\\\\").replaceAll("-", "\\-")).join("-");
+}
+
+/** The code point of a one-character string (Python's `ord`). */
+function _codePoint(/** @type {string} */ char) {
+  return /** @type {number} */ (char.codePointAt(0));
 }
 
 /**

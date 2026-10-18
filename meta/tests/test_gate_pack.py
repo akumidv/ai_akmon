@@ -102,7 +102,7 @@ def test_full_pack_empty_artifacts_and_missing_coverage_map_sentinels():
     assert "## Artifacts" in pack
     assert "_No artifacts supplied._" in pack
     assert "## Coverage map" in pack
-    assert "_Coverage map not provided (assemble via coverage_map.py)._" in pack
+    assert "_Coverage map not provided (assemble it with the model_routing/coverage_map tool)._" in pack
 
 
 def test_full_pack_unknown_role_raises():
@@ -205,8 +205,46 @@ def test_the_default_report_path_follows_the_configured_dev_layer_root(monkeypat
         == 0
     )
     written = sorted((tmp_path / "tools" / "ai" / "artifacts" / "gates").glob("*.md"))
-    assert len(written) == 1
+    assert [p.name for p in written] == ["code-verify-full-1.md"]
     assert not (tmp_path / "_aitna").exists()
+
+
+def test_the_default_name_is_task_gate_kind_and_the_next_ordinal(tmp_path, capsys):
+    """C114: ``[<task>-]<gate>-<kind>-<n>.md``; a neighbour of another prefix is not counted."""
+    yardstick = tmp_path / "yardstick.md"
+    yardstick.write_text("Ship it.\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / "_aitna" / "akmon").mkdir(parents=True)
+    gates = tmp_path / "_aitna" / "artifacts" / "gates"
+    gates.mkdir(parents=True)
+    (gates / "C7-design-align-full-1.md").write_text("earlier\n", encoding="utf-8")
+    (gates / "design-align-full-6.md").write_text("no task\n", encoding="utf-8")
+    argv = ["--project-root", str(tmp_path), "--gate", "design-align", "--role", "architect"]
+    argv += ["--yardstick", str(yardstick), "--task", "C7"]
+
+    assert gate_pack.main(argv) == 0
+    assert "pack: _aitna/artifacts/gates/C7-design-align-full-2.md" in capsys.readouterr().out
+    assert (gates / "C7-design-align-full-1.md").read_text(encoding="utf-8") == "earlier\n"
+    assert gate_pack.main(argv[:-2]) == 0
+    assert "pack: _aitna/artifacts/gates/design-align-full-7.md" in capsys.readouterr().out
+
+
+def test_a_task_with_no_usable_characters_is_a_usage_error_and_writes_nothing(tmp_path, capsys):
+    """C114 owner decision: ``--task ///`` is refused up front, not dropped from the name."""
+    yardstick = tmp_path / "yardstick.md"
+    yardstick.write_text("Ship it.\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / "_aitna" / "akmon").mkdir(parents=True)
+    argv = ["--project-root", str(tmp_path), "--gate", "design-align", "--role", "architect"]
+    argv += ["--yardstick", str(yardstick), "--task", "///"]
+
+    with pytest.raises(SystemExit) as caught:
+        gate_pack.main(argv)
+    assert caught.value.code == 2
+    err = capsys.readouterr().err
+    assert err.startswith("usage: ")
+    assert "error: --task '///' has no usable characters (letters, digits, '_' or '-')" in err
+    assert not (tmp_path / "_aitna" / "artifacts").exists()
 
 
 # --------------------------------------------------------------------------------------
@@ -233,7 +271,9 @@ def test_gate_data_pins_the_structure_and_characteristic_texts():
     assert pack["kind_full"] == "kind: full"
     assert pack["kind_plan_check"] == "kind: plan-check"
     assert pack["artifacts_empty_sentinel"] == "_No artifacts supplied._"
-    assert pack["coverage_empty_sentinel"] == "_Coverage map not provided (assemble via coverage_map.py)._"
+    assert pack["coverage_empty_sentinel"] == (
+        "_Coverage map not provided (assemble it with the model_routing/coverage_map tool)._"
+    )
     assert data["truncation_suffix_pack"] == "\n...[truncated; see full pack]"
     assert data["truncation_suffix_report"] == "\n...[truncated; see full report]"
     cmap = data["coverage_map"]

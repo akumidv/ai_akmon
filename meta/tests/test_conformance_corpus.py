@@ -3,7 +3,7 @@
 The corpus compares normalized process output against scenario files; a silent change in the
 machinery that does the comparing moves every scenario at once without any one of them failing.
 So each rule here is pinned on its own, against synthetic inputs, with no corpus run: the
-normalization rules (NORM_VERSION 2), the scenario loader's refusals, the snapshot builder's two
+normalization rules (NORM_VERSION 3), the scenario loader's refusals, the snapshot builder's two
 refusals, the runner's line-level comparison and its ``--record`` round trip, and how
 ``release_check`` displays a suite command.
 
@@ -16,6 +16,7 @@ there itself.
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import sys
 import tomllib
 from pathlib import Path
@@ -74,8 +75,8 @@ def _n(text: str, ctx=CTX) -> str:
 # --- 1. normalize ------------------------------------------------------------------
 
 
-def test_norm_version_is_2():
-    assert norm.NORM_VERSION == 2
+def test_norm_version_is_3():
+    assert norm.NORM_VERSION == 3
 
 
 @pytest.mark.parametrize(
@@ -106,8 +107,9 @@ def test_absolute_hook_path_is_not_collapsed():
     assert _n('python3 "/tmp/p/_aitna/akmon/hooks/x.py"', bare) == 'python3 "/tmp/p/_aitna/akmon/hooks/x.py"'
 
 
-def test_tool_package_spelling_is_a_token_and_mounted_spelling_stays():
-    assert _n("python3 $(akmon path)/tools/model_routing/init.py --x") == "{{tool model_routing/init}} --x"
+@pytest.mark.parametrize("command", ["akmon tool model_routing/init --x", "npx akmon tool model_routing/init --x"])
+def test_tool_package_spelling_is_a_token_and_mounted_spelling_stays(command):
+    assert _n(command) == "{{tool model_routing/init}} --x"
     mounted = "python3 _aitna/akmon/tools/model_routing/init.py --x"
     assert _n(mounted) == mounted
 
@@ -233,6 +235,28 @@ def test_loader_refuses_unseeded_unless_recording(scen_root):
     with pytest.raises(corpus.CorpusError, match="not seeded"):
         corpus.load_scenario(path)
     assert corpus.load_scenario(path, strict_seeded=False).expected.seeded is False
+
+
+def test_loader_refuses_an_unreviewed_fuzz_draft_in_every_mode(scen_root):
+    path = _write(scen_root, "[fuzz]\nseed = 1\ncase = 552\n" + _OK_EXPECTED, "fuzz-draft")
+    for strict in (True, False):  # the judged run and the --record pass alike
+        refused = r"fuzz-draft\.toml: an unreviewed fuzz draft \(a \[fuzz\] table\)"
+        with pytest.raises(corpus.CorpusError, match=refused):
+            corpus.load_scenario(path, strict_seeded=strict)
+    with pytest.raises(corpus.CorpusError, match="unreviewed fuzz draft"):
+        corpus.load_scenarios("cli")
+    path.write_text(path.read_text().replace("[fuzz]\nseed = 1\ncase = 552\n", ""), encoding="utf-8")
+    assert corpus.load_scenario(path).id == "cli/fuzz-draft"
+
+
+def test_the_runner_refuses_a_corpus_holding_a_fuzz_draft_in_one_line(scen_root, monkeypatch, capsys):
+    _write(scen_root, "[fuzz]\nseed = 1\n" + _OK_EXPECTED, "fuzz-draft")
+    monkeypatch.setattr(sys.modules["corpus"], "CORPUS_ROOT", scen_root)  # the loader the runner reads with
+    monkeypatch.setattr(runner, "build_snapshot", lambda _repo, work: work)
+    assert runner.main(["--area", "cli"]) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1
+    assert "fuzz-draft.toml: an unreviewed fuzz draft" in err
 
 
 def test_loader_refuses_id_not_matching_path(scen_root):
@@ -448,6 +472,97 @@ def test_records_findings_only_for_shared_with_owned_line(owned):
     assert runner._records_findings(_scenario(), "hooks.launcher mentioned in prose\n") is False
 
 
+def _scenario_of(kind, run, **expected):
+    return runner.Scenario(
+        id=f"{kind}/demo",
+        ecosystem="shared",
+        kind=kind,
+        covers=(),
+        fixture=corpus.FixtureSpec(),
+        env={},
+        run=run,
+        expected=corpus.ExpectedSpec(**expected),
+    )
+
+
+def test_pending_file_waits_only_for_a_tool_that_exists(tmp_path, monkeypatch):
+    """C116: a missing tool is not "pending port" — the CLI's refusal runs; a tool scenario is an error."""
+    monkeypatch.setattr(runner, "is_ported", lambda repo, rel: rel != "tools/demo/unported.py")
+    (tmp_path / "tools" / "demo").mkdir(parents=True)
+    (tmp_path / "tools" / "demo" / "unported.py").write_text("", encoding="utf-8")
+    cli = _scenario_of("cli", corpus.RunSpec(argv=("tool", "demo/unported")), exit=0)
+    assert runner._pending_file(cli, tmp_path) == "tools/demo/unported.py"
+    missing = _scenario_of("cli", corpus.RunSpec(argv=("tool", "demo/nothing")), exit=2)
+    assert runner._pending_file(missing, tmp_path) is None  # runs on node: `unknown tool` on both
+    tool = _scenario_of("tool", corpus.RunSpec(tool="demo/nothing"), exit=0)
+    with pytest.raises(runner.CorpusError, match="does not exist"):
+        runner._pending_file(tool, tmp_path)
+    assert runner._pending_file(_scenario_of("tool", corpus.RunSpec(tool="demo/unported"), exit=0), tmp_path) == (
+        "tools/demo/unported.py"
+    )
+
+
+def test_the_unknown_tool_scenario_is_owed_by_the_node_run():
+    """The live corpus: `cli/tool-nonexistent` names no file, so the node run cannot skip it as pending."""
+    scenario = next(s for s in corpus.load_scenarios("cli") if s.id == "cli/tool-nonexistent")
+    assert not (_AKMON / "tools" / f"{scenario.run.argv[1]}.py").exists()
+    assert runner._pending_file(scenario, _AKMON) is None
+
+
+def test_table_rows_counts_every_row_family():
+    assert runner.table_rows({"case": [{}, {}], "kind": [{}], "title": "x", "list": [1, 2]}) == 3
+    assert runner.table_rows({}) == 0
+
+
+def _unit(table):
+    return _scenario_of("unit", corpus.RunSpec(probe="sort", table=table), exit=0)
+
+
+@pytest.mark.parametrize(
+    ("document", "problem"),
+    [
+        ('{"ok": true, "failed": []}', "answered None rows of sort.toml; at least one is owed"),
+        ('{"ok": true, "answered": 0, "failed": []}', "answered 0 rows of sort.toml; at least one is owed"),
+        ('{"ok": true, "answered": true, "failed": []}', "answered True rows of sort.toml; at least one is owed"),
+        ('{"ok": true, "answered": 1, "failed": []}', "answered 1 rows of sort.toml, which holds 9"),
+        ("not json", "printed no answer document for sort.toml"),
+    ],
+)
+def test_a_unit_run_must_answer_every_row_of_its_table(tmp_path, document, problem):
+    """C116: ``ok`` with nothing answered is not green; the count is the table's own row count."""
+    rows = runner.table_rows(tomllib.loads((_CONFORMANCE / "units" / "sort.toml").read_text(encoding="utf-8")))
+    assert rows == 9
+    assert runner._answered_problems(_unit("sort.toml"), f'{{"ok": true, "answered": {rows}, "failed": []}}') == []
+    assert runner._answered_problems(_unit("sort.toml"), document) == [f"units: the probe {problem}"]
+    assert problem in runner._compare(_unit("sort.toml"), 0, document, "", _ctx(tmp_path))
+
+
+def test_every_unit_scenario_pins_the_answered_count_its_table_holds():
+    for scenario in corpus.load_scenarios("units"):
+        if scenario.expected.stdout is None:
+            continue
+        table = (_CONFORMANCE / "units" / scenario.run.table).read_text(encoding="utf-8")
+        rows = runner.table_rows(tomllib.loads(table))
+        assert f'"answered": {rows},' in scenario.expected.stdout, scenario.id
+
+
+def test_every_unit_table_is_held_to_the_python_reference():
+    """The tables' provenance comments cite this run (C119): each ``units/*.toml`` is the table of
+    exactly one unit scenario in the Python implementation's scope, pinned green (the probe exits 1
+    on any row whose answer differs from the table), and self_ci's conformance leg runs the corpus
+    with the default ``--impl python`` over every area."""
+    tables = sorted(path.name for path in (_CONFORMANCE / "units").glob("*.toml"))
+    scenarios = [s for s in corpus.load_scenarios("units") if s.ecosystem in runner.IMPL_SCOPE["python"]]
+    assert sorted(s.run.table for s in scenarios) == tables
+    for scenario in scenarios:
+        assert scenario.expected.exit == 0, scenario.id
+        if scenario.expected.stdout is not None:
+            assert scenario.expected.stdout.startswith('{\n  "ok": true,\n'), scenario.id
+            assert scenario.expected.stdout.endswith('  "failed": []\n}\n'), scenario.id
+    leg = 'str(akmon_root / "meta" / "conformance" / "runner.py"), "--tree", str(akmon_root)]'
+    assert leg in inspect.getsource(self_ci._run)
+
+
 def _round_trip(tmp_path, scenario, exit_code, stdout, stderr):
     ctx = _ctx(tmp_path)
     block = runner._record_block(scenario, exit_code, stdout, stderr, ctx)
@@ -531,3 +646,25 @@ def test_display_akmon_script_is_relative():
 )
 def test_display_other_commands_are_joined_as_is(command):
     assert release_check._display(command) == " ".join(command)
+
+
+def test_an_area_named_twice_is_one_slice_in_its_first_order(tmp_path, monkeypatch):
+    """`--area x --area x` once crashed with `FileExistsError`: each scenario ran twice (C117)."""
+    loaded, judged = [], []
+    monkeypatch.setattr(runner, "_impl_version", lambda repo, impl: "9.8.7")
+    monkeypatch.setattr(runner, "build_snapshot", lambda repo, work: work / "snapshot")
+
+    def _load_area(area, strict_seeded):
+        loaded.append(area)
+        return [_scenario()]
+
+    def _judge(scenario, ctx):
+        judged.append(scenario.id)
+        return runner.Outcome(scenario.id, "pass", "")
+
+    monkeypatch.setattr(runner, "load_scenarios", _load_area)
+    monkeypatch.setattr(runner, "_judge_outcome", _judge)
+    monkeypatch.setattr(runner, "_print_report", lambda impl, version, outcomes, repo, run_gates: len(outcomes))
+    assert runner.run_scenarios(tmp_path, "python", ["cli", "units", "cli"], [], record=False) == 2
+    assert loaded == ["cli", "units"]
+    assert judged == ["cli/demo", "cli/demo"]

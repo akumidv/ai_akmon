@@ -11,8 +11,10 @@
 # *left out*: a `reason` without a `decision` is dropped, a `decision` without a `reason` is
 # emitted with `""`, an empty string is not `None`. `project_root` is the Python truthiness and
 # `isinstance` of a payload field (`cwd` of `0`, `[]`, `{}`, `true` and `""` all ask the process's
-# directory), followed by a resolve and a walk up to AGENTS.md. The table is the spec: every
-# expected value was produced by running the Python and then read against the docstring.
+# directory), followed by a resolve and a walk up to AGENTS.md. The table is the spec, held to the
+# Python reference row by row: `runner.py --impl python` runs it as scenario `units/claude_adapter`
+# in the conformance leg of `meta/self_ci.py`, and every expected value was read against the
+# docstring.
 #
 # The mouth is the generic one of `routing.toml` (row format: the block comment above `probe_routing`
 # in probe.py); the adapters build a HookResult from `{"$new": "HookResult", "fields": {...}}` (the

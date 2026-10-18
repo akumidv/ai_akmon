@@ -110,6 +110,8 @@ import { codePointCompare, codePointSort } from "../../common/sort.mjs";
  *
  * @typedef {object} AgentsData
  * @property {string} generated_banner
+ * @property {string[]} generated_banners_earlier
+ * @property {{mount: string, python: string, node: string}} tool_command
  * @property {string} zone_convention
  * @property {string} overlay_name
  * @property {string} local_config_rel
@@ -143,7 +145,6 @@ import { codePointCompare, codePointSort } from "../../common/sort.mjs";
 
 /** A parsed JSON document (registry, overlay, local config, payload): any JSON value. */
 /** @typedef {any} Json */
-
 
 /**
  * The first of `items` with the greatest code-point length — `max(items, key=len)`.
@@ -235,7 +236,6 @@ function _formatModel(template, model) {
   return out;
 }
 
-
 // --------------------------------------------------------------------------------------
 // Data accessors and the registry
 // --------------------------------------------------------------------------------------
@@ -287,6 +287,34 @@ export function agentsDirRel(data) {
  */
 export function generatedBanner(data) {
   return data.generated_banner;
+}
+
+/**
+ * Every banner a generated agent file may carry: the current one, then the ones earlier
+ * releases wrote. The obsolete sweep recognises all of them, so rewording the banner never turns
+ * an agent an earlier release generated into a hand-written one that nothing removes.
+ * @param {AgentsData} data
+ * @returns {string[]}
+ */
+export function generatedBanners(data) {
+  return [data.generated_banner, ...data.generated_banners_earlier];
+}
+
+/**
+ * How an agent runs `tool` (`model_routing/init`) from this implementation (ADR-0020/D06).
+ * `runtimeRoot` is `runtimeRootDisplay`'s answer: from a mounted tree the tool is the mount's
+ * script, as the Python spells it (a Node project is never mounted; the corpus runs both on one
+ * fixture); from the installed package it is `npx akmon tool`.
+ * @param {AgentsData} data
+ * @param {string} runtimeRoot
+ * @param {string} tool
+ * @returns {string}
+ */
+export function toolCommand(data, runtimeRoot, tool) {
+  if (runtimeRoot === "$(akmon path)") {
+    return fill(data.tool_command.node, { tool });
+  }
+  return fill(data.tool_command.mount, { runtime_root: runtimeRoot, tool });
 }
 
 /**
@@ -635,7 +663,10 @@ export function secondOpinionSpec(data, registry, provider, { required = true } 
   if (_isDict(spec)) {
     const retired = retiredSecondOpinionKeys(data).filter((key) => Object.hasOwn(spec, key));
     if (retired.length) {
-      throw _pyError("KeyError", fill(errors.retired_keys, { provider: _pyStr(provider), retired: retired.join(", ") }));
+      throw _pyError(
+        "KeyError",
+        fill(errors.retired_keys, { provider: _pyStr(provider), retired: retired.join(", ") }),
+      );
     }
     if (_truthy(spec.harness) && _truthy(spec.operation) && _truthy(spec.report_dir)) {
       return spec;
@@ -818,7 +849,10 @@ export function resolveSecondOpinion(data, registry, config, orchestratorVendor)
         typeof configured === "string" && configured && configured !== orchestratorVendor
           ? configured
           : oppositeVendor(data, registry, orchestratorVendor);
-      if (provider !== orchestratorVendor && _truthy(secondOpinionSpec(data, registry, provider, { required: false }))) {
+      if (
+        provider !== orchestratorVendor &&
+        _truthy(secondOpinionSpec(data, registry, provider, { required: false }))
+      ) {
         return new SecondOpinionTarget(provider, null);
       }
     } else if (_pyEq(step, "same-vendor-other-model")) {
@@ -873,7 +907,9 @@ export class AgentSpec {
  * @returns {AgentSpec[]}
  */
 export function agentSpecs(data) {
-  return data.agent_specs.map((raw) => new AgentSpec(raw.name, raw.tier, raw.description, raw.tools, raw.body, raw.kinds));
+  return data.agent_specs.map(
+    (raw) => new AgentSpec(raw.name, raw.tier, raw.description, raw.tools, raw.body, raw.kinds),
+  );
 }
 
 /**
@@ -886,7 +922,10 @@ function _agentModel(spec, binding) {
   if (binding.semanticFallback) {
     return null;
   }
-  return _item({ worker: binding.worker, mid: binding.mid, reasoner: binding.reasoner, auditor: binding.auditor }, spec.tier);
+  return _item(
+    { worker: binding.worker, mid: binding.mid, reasoner: binding.reasoner, auditor: binding.auditor },
+    spec.tier,
+  );
 }
 
 /**
@@ -1654,7 +1693,13 @@ export function contextFillRatio(registry, transcriptPath) {
  * @param {{markerDir?: string | null, turn?: MainTurn | null}} [options]
  * @returns {string[]}
  */
-export function contextPressureNotice(data, registry, transcriptPath, sessionId, { markerDir = null, turn = null } = {}) {
+export function contextPressureNotice(
+  data,
+  registry,
+  transcriptPath,
+  sessionId,
+  { markerDir = null, turn = null } = {},
+) {
   const policy = _get(registry, "context_pressure", {});
   // Only a share strictly between 0 and 1 is a level below the budget; anything else (absent,
   // a bool, 0, 1 or more, a string) leaves the budget's own warning alone.
@@ -1746,7 +1791,7 @@ export function bindingArtifacts(data, registry, binding, { secondOpinion, avail
 /**
  * Generated subagent definitions on disk that the current `agentSpecs()` no longer plan.
  *
- * Only files carrying `generatedBanner()` are candidates, so a hand-written agent living in
+ * Only files carrying one of `generatedBanners()` are candidates, so a hand-written agent living in
  * the same directory is never a deletion target. Without this, renaming an agent leaves its
  * old definition behind as a live duplicate (ADR 0011).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
@@ -1785,7 +1830,7 @@ export function obsoleteAgentFiles(data, root, plannedPaths) {
       }
       throw error;
     }
-    if (text.includes(generatedBanner(data))) {
+    if (generatedBanners(data).some((banner) => text.includes(banner))) {
       obsolete.push(path);
     }
   }
@@ -1942,7 +1987,9 @@ function _secondOpinionStatus(data, registry, config, orchestratorVendor) {
       "can still be run by hand, with its limits";
     return [`second-opinion=unavailable(${state})`, enabled ? warning : null];
   }
-  const harness = _pyStr(_or(_get(secondOpinionSpec(data, registry, target.provider, { required: false }), "harness"), "-"));
+  const harness = _pyStr(
+    _or(_get(secondOpinionSpec(data, registry, target.provider, { required: false }), "harness"), "-"),
+  );
   const pin = target.model ? `, model=${target.model}` : "";
   return [`second-opinion=${harness}(${state}${pin})`, null];
 }
@@ -2064,16 +2111,15 @@ function _escalationHint(config) {
 /**
  * The steady-state status injection: one binding line + self-check, plus any warning.
  *
- * `runtimeRoot` is the project-root-relative directory the routing tools actually live in —
- * `<AITNA_ROOT>/akmon` when the standard is mounted, `<AITNA_ROOT>/.akmon` in mount mode
- * `package` (ADR 0009 §4). It is passed in because only the caller knows the project root.
+ * `initCommand` is how this project runs the routing initializer (`toolCommand`). It is passed
+ * in because only the caller knows the project root.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} config
  * @param {Json} registry
- * @param {string} runtimeRoot
+ * @param {string} initCommand
  * @returns {string[]}
  */
-export function statusLines(data, config, registry, runtimeRoot) {
+export function statusLines(data, config, registry, initCommand) {
   const binding = _get(config, "binding", {});
   const orchestratorVendor = _pyStr(_or(_get(config, "vendor"), "anthropic"));
   const [secondDisplay, secondWarning] = _secondOpinionStatus(data, registry, config, orchestratorVendor);
@@ -2090,7 +2136,7 @@ export function statusLines(data, config, registry, runtimeRoot) {
       second_opinion: secondDisplay,
     }),
     fill(texts.delegation, { escalation_hint: _escalationHint(config), zone_convention: zoneConvention(data) }),
-    fill(texts.self_check, { orchestrator: _pyStr(orchestrator), runtime_root: runtimeRoot }),
+    fill(texts.self_check, { orchestrator: _pyStr(orchestrator), init_command: initCommand }),
   ];
   const warning = computeBinding(data, registry, orchestrator, _get(config, "available"), orchestratorVendor).warning;
   if (warning) {
@@ -2135,14 +2181,14 @@ export function rebindNotice(data, config, registry) {
 }
 
 /**
- * The one-time setup instruction. `runtimeRoot`: see `statusLines`.
+ * The one-time setup instruction. `initCommand`: see `statusLines`.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {string} reason
- * @param {string} runtimeRoot
+ * @param {string} initCommand
  * @returns {string[]}
  */
-export function initInstruction(data, reason, runtimeRoot) {
-  const values = { reason, runtime_root: runtimeRoot };
+export function initInstruction(data, reason, initCommand) {
+  const values = { reason, init_command: initCommand };
   return data.init_instruction.map((line) => fill(line, values));
 }
 
@@ -2300,7 +2346,12 @@ export function parseDelegationEntries(lines) {
       continue;
     }
     const parts = line.split("\t");
-    let ts, sid, subagent, model, zone, description;
+    let ts;
+    let sid;
+    let subagent;
+    let model;
+    let zone;
+    let description;
     if (parts.length >= _CURRENT_SCHEMA_COLUMNS) {
       [ts, sid, subagent, model, zone] = parts;
       description = parts.slice(5).join("\t");
@@ -2502,16 +2553,18 @@ export function gateRuleFor(data, role) {
  *
  * The floor is advisory in the flows — the orchestrator may skip it — so the request names
  * both live moves: run the audit, or say the skip out loud. What it does not allow is the
- * gate passing unmentioned, which is the whole of C25.
+ * gate passing unmentioned, which is the whole of C25. `gatePackCommand` is how this project
+ * runs the gate-pack tool (`toolCommand`).
  * @param {GateData} gateData the parsed `tools/model_routing/gate.json`
  * @param {AgentsData} agentsData the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {Json} config
  * @param {string | null} role
  * @param {string} message
+ * @param {string} gatePackCommand
  * @returns {string | null}
  */
-export function gateAuditRequest(gateData, agentsData, registry, config, role, message) {
+export function gateAuditRequest(gateData, agentsData, registry, config, role, message, gatePackCommand) {
   const rule = gateRuleFor(gateData, role);
   const threshold = rule !== null ? gateThreshold(registry, rule) : null;
   if (rule === null || threshold === null) {
@@ -2527,7 +2580,7 @@ export function gateAuditRequest(gateData, agentsData, registry, config, role, m
     `[akmon gate] This turn carries ${count} ${rule.noun} as the ${rule.role} role, at or above the ` +
     `\`${rule.trigger}\` floor of ${threshold} — ${rule.anchor} routes an \`audit\` pass here. ` +
     `Before handing off: either delegate \`k_auditor\`${model} over the gate-pack ` +
-    "(`tools/model_routing/gate_pack.py`) and fold its verdict in, or state in one line that you " +
+    `(\`${gatePackCommand}\`) and fold its verdict in, or state in one line that you ` +
     "are skipping the audit and why. The floor is advisory; passing it in silence is not."
   );
 }

@@ -44,7 +44,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=codex-cli; version=0.146.0; event=n/a; matcher=n/a
 - effect: none
 - crash-posture: unmeasured
-- evidence: N2 probe inventory (`meta/reviews/alternatives/n2-stage0-probes-inventory-20260807.md`)
+- evidence: N2 probe inventory (`meta/reviews/alternatives/n2-stage0-probes-inventory.md`)
 
 ### `AGENTS.md` entry point via generated pointer — Gemini CLI
 
@@ -98,7 +98,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=claude-code; version=2.1.221; event=PreToolUse; matcher=Bash
 - effect: deny
 - crash-posture: fail-open
-- evidence: `meta/tests/test_hook_core.py` deny contract + [ADR 0006 D02](meta/decisions/0006-orchestrator-detection-corridor-context-pressure.md) e2e wrapper runs; a crash is fail-open on 2.1.270 — the C87 guard answers it with exit 0 and an owner notice and the command runs (M69), and a hook that dies with exit 1 lets it run too (M70)
+- evidence: `meta/tests/test_hook_core.py` deny contract + [ADR 0006 D02](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0006-orchestrator-detection-corridor-context-pressure.md) e2e wrapper runs; a crash is fail-open on 2.1.270 — the C87 guard answers it with exit 0 and an owner notice and the command runs (M69), and a hook that dies with exit 1 lets it run too (M70)
 
 ### Commit guard — owner-owned commits at the tool boundary — Codex CLI
 
@@ -134,7 +134,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=claude-code; version=2.1.221; event=PreToolUse; matcher=Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob
 - effect: ask
 - crash-posture: fail-open
-- evidence: [ADR 0006 D02](meta/decisions/0006-orchestrator-detection-corridor-context-pressure.md) live run (advisory and ask both dispatched) and escalation tests; a crash is fail-open on 2.1.270 on every tool the matcher names that exists — `Bash` (M69, M70), `Read`, `Edit`, `Write`, `Agent` (M77): the C87 guard's exit 0 with an owner notice and a bare exit 1 both let the call run
+- evidence: [ADR 0006 D02](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0006-orchestrator-detection-corridor-context-pressure.md) live run (advisory and ask both dispatched) and escalation tests; a crash is fail-open on 2.1.270 on every tool the matcher names that exists — `Bash` (M69, M70), `Read`, `Edit`, `Write`, `Agent` (M77): the C87 guard's exit 0 with an owner notice and a bare exit 1 both let the call run
 
 ### Delegation log and drift nudge — Codex CLI
 
@@ -204,7 +204,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 ## Delivery is not capability, on Codex
 
 A correct `.codex/hooks.json` is not sufficient on the ordinary persisted, non-bypass path
-measured on codex-cli 0.149.1 ([N7](meta/reviews/n7-codex-hook-delivery-20260825.md)):
+measured on codex-cli 0.149.1 ([N7](https://github.com/akumidv/ai_akmon/blob/main/meta/reviews/n7-codex-hook-delivery.md)):
 project-local hooks are discovered only when `~/.codex/config.toml` carries a
 `[projects."<abs root>"]` entry for **that** root — trust does not inherit from an ancestor — and
 each entry runs only while its `trusted_hash` is current. A `sync` that changes approved wiring

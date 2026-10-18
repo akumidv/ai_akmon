@@ -1,0 +1,17 @@
+id = "tools/release-state-akmon-no-meta"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:release/release_check"]
+
+# --state over the akmon subject in the corpus fixture: no <AITNA_ROOT>/akmon is mounted, so it
+# reads the running tree, and the corpus snapshot carries no meta/ (as a package carrier ships
+# none): refused before any output, exit 2, one line naming where meta/ lives (C120).
+
+[run]
+tool = "release/release_check"
+argv = ["--state", "--subject", "akmon"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "release_check: --subject akmon --state reads akmon's development record meta/, which this akmon does not carry (a package carrier ships none); run it from the akmon git tree: a clone, or a project mounting it as a submodule or subtree\n"

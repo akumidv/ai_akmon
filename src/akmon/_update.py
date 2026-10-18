@@ -87,9 +87,7 @@ def _plan(current: str | None, target: str, *, explicit: bool) -> _Plan:
     if then is None:
         move, note = True, jsondata.fill(notes["not_a_release"], {"target": target})
     elif now is None:
-        move, note = True, jsondata.fill(
-            notes["record_no_version"], {"target": target, "current": current or "none"}
-        )
+        move, note = True, jsondata.fill(notes["record_no_version"], {"target": target, "current": current or "none"})
     elif then > now:
         move, note = True, jsondata.fill(notes["forward"], {"current": current, "target": target})
     elif then == now:
@@ -166,9 +164,7 @@ def _update_package(root: Path, aitna: str, plan: _Plan, repo: str) -> _Moved:
             raise _UpdateError(f"`uv add` failed ({code}) — see its output above")
     if not launcher.is_file():
         raise _UpdateError(
-            _jsondata().fill(
-                _data()["package_launcher_missing"], {"launcher": str(launcher.relative_to(root))}
-            )
+            _jsondata().fill(_data()["package_launcher_missing"], {"launcher": str(launcher.relative_to(root))})
         )
     return _run([str(launcher), "init", "--project-root", str(root), "--yes"], root), launcher
 
@@ -206,16 +202,12 @@ def _update_vendored(root: Path, aitna: str, plan: _Plan, repo: str) -> _Moved:
     if ref and versions.is_final(ref) and versions.split_version(ref)[0] == versions.split_version(__version__)[0]:
         return _init.main(["--project-root", str(root), "--yes"]), None
     if not plan.move and not (ref and versions.is_final(ref)):
-        raise _UpdateError(
-            _jsondata().fill(_data()["vendored_not_fetchable"], {"recorded": ref or "version"})
-        )
+        raise _UpdateError(_jsondata().fill(_data()["vendored_not_fetchable"], {"recorded": ref or "version"}))
     tag = ref if plan.move else f"v{versions.split_version(ref)[0]}"
     command = ["uvx", "--from", f"git+{repo}@{tag}", "akmon", "init", "--project-root", str(root), "--yes"]
     if shutil.which("uvx") is None:
         raise _UpdateError(
-            _jsondata().fill(
-                _data()["vendored_uvx_missing"], {"tag": tag, "command": shlex.join(command)}
-            )
+            _jsondata().fill(_data()["vendored_uvx_missing"], {"tag": tag, "command": shlex.join(command)})
         )
     _log(f"running init from akmon {tag}: {shlex.join(command)}")
     return _run(command, root), None
@@ -313,15 +305,17 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["AITNA_ROOT"] = aitna
         mode = _init._recorded_mount(root, aitna)
         if mode not in _UPDATERS:
+            raise _UpdateError(_jsondata().fill(_data()["missing_record"], {"root": str(root), "aitna": aitna}))
+        # A record the JavaScript implementation serves (C107): moving its pin is the Node manager's job.
+        ecosystem = _init._record_fields(root, aitna).get("ecosystem")
+        if isinstance(ecosystem, str) and ecosystem and ecosystem != "python":
             raise _UpdateError(
-                _jsondata().fill(_data()["missing_record"], {"root": str(root), "aitna": aitna})
+                _jsondata().fill(_data()["python_refuses_ecosystem"], {"value": ecosystem, "aitna": aitna})
             )
         current, last_realign = _recorded_versions(root, aitna)
         target = args.ref or _init._package_default_ref(args.repo, root)
         plan = _plan(current, target, explicit=args.ref is not None)
-        _log(
-            _jsondata().fill(_data()["banner"], {"root": str(root), "mode": mode, "note": plan.note})
-        )
+        _log(_jsondata().fill(_data()["banner"], {"root": str(root), "mode": mode, "note": plan.note}))
         code, launcher = _UPDATERS[mode](root, aitna, plan, args.repo)
     except (_UpdateError, _init._InitError) as exc:
         print(f"akmon update: {exc}", file=sys.stderr)

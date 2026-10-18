@@ -531,10 +531,7 @@ export function agentNames(directory) {
   return codePointSort(
     fs
       .readdirSync(base)
-      .filter(
-        (name) =>
-          isDir(pyPath(base, name)) && !name.startsWith(".") && isFile(pyPath(base, name, "README.md")),
-      ),
+      .filter((name) => isDir(pyPath(base, name)) && !name.startsWith(".") && isFile(pyPath(base, name, "README.md"))),
   );
 }
 

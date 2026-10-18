@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -60,23 +61,42 @@ def local_git_repo(monkeypatch):
 
 
 # --------------------------------------------------------------------------------------
-# The tree_members data must stay equal to the wheel's force-include list
+# The tree_members data must stay equal to the wheel's member lists
 # --------------------------------------------------------------------------------------
 
 
-def test_tree_members_match_the_wheel_force_include():
-    """Mode ``vendored`` must mount exactly what mode ``package`` ships (ADR 0009 §1 parity).
+def _wheel_tree_members() -> tuple[str, ...]:
+    """The wheel's standard-tree members, in declared order: the ``force-include`` keys, then the
+    ``only-include`` members ``sources`` maps under ``akmon/_tree/`` (``src/akmon`` is the CLI
+    package, not the tree). The split is hatchling's — force-include ignores ``exclude``, so a
+    member carrying files to drop (``js/``'s tests) is an ``only-include`` one (C118)."""
+    wheel = tomllib.loads((_AKMON / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["hatch"]["build"]
+    wheel = wheel["targets"]["wheel"]
+    forced = list(wheel["force-include"])
+    assert all(wheel["force-include"][member] == f"akmon/_tree/{member}" for member in forced)
+    mapped = [member for member in wheel["only-include"] if member != "src/akmon"]
+    assert all(wheel["sources"][member] == f"akmon/_tree/{member}" for member in mapped)
+    return (*forced, *mapped)
+
+
+def test_tree_members_match_the_wheel_members():
+    """Mode ``vendored`` must mount exactly what mode ``package`` ships (ADR 0009 D01).
 
     Both lists are hand-maintained in different files, so the equality is asserted rather
     than trusted; a member added to the wheel and forgotten here would silently produce a
     poorer vendored mount. The list lives in the shared data file (``src/akmon/init.json``)
     since C102.
     """
-    text = (_AKMON / "pyproject.toml").read_text(encoding="utf-8")
-    section = text.split("[tool.hatch.build.targets.wheel.force-include]", 1)[1]
-    section = section.split("\n[", 1)[0]
-    included = tuple(re.findall(r'^"([^"]+)"\s*=', section, flags=re.MULTILINE))
-    assert included == tuple(_INIT_DATA["tree_members"])
+    assert _wheel_tree_members() == tuple(_INIT_DATA["tree_members"])
+
+
+def test_no_carrier_member_is_the_development_record():
+    """``meta/`` is akmon's development record, not the standard: neither the wheel, the npm
+    package nor the vendored copy carries it (ADR 0009, C118 amendment)."""
+    manifest = json.loads((_AKMON / "package.json").read_text(encoding="utf-8"))
+    assert "meta" not in _INIT_DATA["tree_members"]
+    assert "meta" not in _wheel_tree_members()
+    assert not [entry for entry in manifest["files"] if entry.split("/", 1)[0] == "meta"]
 
 
 # --------------------------------------------------------------------------------------
@@ -95,7 +115,13 @@ def test_init_data_pins_its_structure():
         # the JavaScript init's own keys (C105); this file never reads them
         "node_refuses_mode",
         "node_refuses_record",
-        "node_checks_pending",
+        "node_oxlint_rules",
+        "node_oxlintrc_text",
+        "node_oxlintrc_wrote",
+        "node_oxlintrc_env_step",
+        "node_oxlintrc_own_step",
+        "node_oxlint_step",
+        "node_scripts_step",
         "node_mode_reason",
         "agents_shared_layer_node",
         "gitignore_lines_node",
@@ -461,7 +487,7 @@ def test_vendored_mount_carries_the_standard_but_not_the_development_carrier(tmp
     mount = tmp_path / "_aitna" / "akmon"
     assert (mount / "bin" / "sync.py").is_file()
     assert (mount / "hooks" / "hook_core.py").is_file()
-    assert (mount / "meta" / "TASKS.md").is_file()  # parity with the submodule (ADR 0009 §1)
+    assert not (mount / "meta").exists()  # the development record is not the standard (ADR 0009, C118)
     assert not (mount / "src").exists()  # the CLI package is the carrier, not the standard
     assert not (mount / ".git").exists()
     assert "__pycache__" in (mount / ".gitignore").read_text(encoding="utf-8")
@@ -470,8 +496,9 @@ def test_vendored_mount_carries_the_standard_but_not_the_development_carrier(tmp
 def test_the_mount_carries_the_js_runtime_but_not_its_tests(tmp_path):
     # A mounted file sits inside the consumer's project root, which `node --test` and `eslint`
     # both scan by default: with the tests mounted, a consumer's own `node --test` ran akmon's
-    # suites and reported 4 failures it could not fix (M116). The carriers keep them — a wheel or
-    # an npm package is not in anyone's scan path — the mount is the one place they are hostile.
+    # suites and reported 4 failures it could not fix (M116). Since C118 the wheel and the npm
+    # package drop them too; the copy's own ignore list still keeps the mount clean when the
+    # origin is a source checkout, which carries them.
     assert _init_vendored(tmp_path) == 0
     mounted = list((tmp_path / "_aitna" / "akmon" / "js").rglob("*.mjs"))
     assert mounted, "the mount carries no JavaScript at all"
@@ -836,6 +863,20 @@ def test_mode_switch_is_refused_without_the_flag(tmp_path, capsys):
     assert sync_mod.read_akmon_toml(tmp_path / "_aitna" / ".akmon.toml")["mount"] == "vendored"  # unchanged
 
 
+def test_a_foreign_ecosystem_record_is_refused_before_the_mode_switch(tmp_path, capsys):
+    """A record the JavaScript implementation wrote, plus a mount-mode change: the ecosystem
+    refusal answers, not the unready-switch one — the ``--switch-mode`` re-run that one advises
+    would be refused here anyway (C119)."""
+    record = 'mount = "package"\necosystem = "node"\n'
+    _write(tmp_path / "_aitna" / ".akmon.toml", record)
+    expected = _INIT_DATA["python_refuses_ecosystem"].replace("{{value}}", "node").replace("{{aitna}}", "_aitna")
+    for flags in ([], ["--switch-mode"]):
+        assert _init.main(["--mode", "vendored", *flags, "--project-root", str(tmp_path), "--yes"]) == 2
+        assert capsys.readouterr().err == f"akmon init: {expected}\n"
+    assert (tmp_path / "_aitna" / ".akmon.toml").read_text(encoding="utf-8") == record
+    assert not (tmp_path / "AGENTS.md").exists()
+
+
 def test_mode_switch_names_the_edits_it_will_not_make(tmp_path, capsys):
     assert _init_vendored(tmp_path) == 0
     _dev_pin(tmp_path)
@@ -1010,7 +1051,6 @@ def test_vendored_mount_is_populated_recursively(tmp_path):
         "tools/model_routing/routing.py",
         "roles/engineer.md",
         "pipelines/tasks.md",
-        "meta/design/packaging/README.md",
     ):
         assert (mount / relative).is_file(), relative
     # Bytecode caches are *not* asserted absent: running the mounted `bin/sync.py` creates them
@@ -1108,9 +1148,7 @@ def test_submodule_mode_refuses_a_tree_git_does_not_record(tmp_path, capsys, loc
     (consumer / "_aitna" / "akmon" / "bin").mkdir(parents=True)
     _write(consumer / "_aitna" / "akmon" / "bin" / "sync.py", "# a copy, not a submodule\n")
     _git(["init", "-q", "."], cwd=consumer)
-    code = _init.main(
-        ["--mode", "submodule", "--project-root", str(consumer), "--repo", f"file://{_AKMON}", "--yes"]
-    )
+    code = _init.main(["--mode", "submodule", "--project-root", str(consumer), "--repo", f"file://{_AKMON}", "--yes"])
     assert code == 2
     assert "does not record it as a submodule" in capsys.readouterr().err
     assert not (consumer / ".gitmodules").exists()

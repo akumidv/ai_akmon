@@ -14,8 +14,11 @@ import { JSONDecodeError, jsonLoads } from "./pyjson.mjs";
 const MODULE = fileURLToPath(new URL("./pyjson.mjs", import.meta.url));
 
 test("jsonLoads is JSON.parse for a document JSON.parse reads", () => {
-  assert.deepEqual(jsonLoads('{"a":[1,2.5,"x",null,true],"b":{"c":-0}}'), { a: [1, 2.5, "x", null, true], b: { c: -0 } });
-  assert.deepEqual(jsonLoads(' \t\r\n[] '), []);
+  assert.deepEqual(jsonLoads('{"a":[1,2.5,"x",null,true],"b":{"c":-0}}'), {
+    a: [1, 2.5, "x", null, true],
+    b: { c: -0 },
+  });
+  assert.deepEqual(jsonLoads(" \t\r\n[] "), []);
   assert.equal(jsonLoads('"s"'), "s");
 });
 

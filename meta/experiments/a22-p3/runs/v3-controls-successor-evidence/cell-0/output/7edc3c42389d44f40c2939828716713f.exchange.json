@@ -1,0 +1,36 @@
+{
+  "arm_sha256": "af405183eb0c0df6f8b5f0bec0098bd3819b2bc00d3f951c6cd61c50320b2ff3",
+  "case_sha256": "3ec981fb954cdeba5493289080dd6759bc7a48b6d5bc8630e2c72296618e7b12",
+  "rollout_sha256": "0cbd6d92b7de3794d8d771301a5de779ae26033af1cd3a308e95bdca589fdcdd",
+  "run_id": "7edc3c42389d44f40c2939828716713f",
+  "turn_evidence": [
+    {
+      "call_id": "214aaf068c24754218f69719160efd46",
+      "dispatch_sha256": "f28f037b5c2e55a69bb0a781c1f185a3569b496adb6fcd98ebc6d627114a1294",
+      "events_sha256": "e2f68a7be9a81cd418ca30998e0083b713a331735fe5ca1dd247fcb1e36ab342",
+      "stdout_sha256": "3b53e8bb9ab0ec2d89a533c8379c5390ca8b6f3c950eb14a516ad0d25a11553d",
+      "turn": 1
+    },
+    {
+      "call_id": "549e51a305daa8ef00f339871a2fb15b",
+      "dispatch_sha256": "8ec00e7ae5b834149dbf2576691db8dc9f60204bf779e7c7fa09bee806b74552",
+      "events_sha256": "bd2403bbce9f59f0d5c34d54c5b34035f463ca0dc38761b45628db784cb339ae",
+      "stdout_sha256": "04239467fe132708e711bbf8a6effd6665c2c13ad5f523b1ad9fe8702f1848c1",
+      "turn": 2
+    }
+  ],
+  "turns": [
+    "Use the first consumer’s actual linting needs as the deciding criterion:\n\n- Choose **Boundary A** if lint rules express library-wide invariants or must stay consistent across consumers.\n- Choose **Boundary B** if consumers have materially different workflows, toolchains, or policies and should control linting independently.\n- Prefer the boundary that minimizes surprise and coordination: configuration should live with the team that owns its evolution and bears failures.\n\nRecord the first consumer’s use case, ownership, and consequences of rule changes before deciding.CHECK: owner-use",
+    "Since the evidence item is unavailable, choose the more reversible default: **Boundary B**.\n\nKeep lint configuration with each consumer, while the library may publish optional recommended rules or a preset. This avoids imposing toolchain and policy assumptions on unknown consumers. Revisit Boundary A only if lint rules are proven to enforce library-wide correctness invariants.\n\nRecord this decision as provisional, including the missing first-consumer use case and the expected cost of rule divergence."
+  ],
+  "usage": [
+    {
+      "input_tokens": 5698,
+      "output_tokens": 218
+    },
+    {
+      "input_tokens": 14298,
+      "output_tokens": 435
+    }
+  ]
+}

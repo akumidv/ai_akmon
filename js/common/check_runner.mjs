@@ -7,15 +7,14 @@
  */
 
 import { spawnSync } from "node:child_process";
-import fs from "node:fs";
 import os from "node:os";
-import { posix } from "node:path";
 
 import { shlexJoin, shlexSplit } from "./shlex.mjs";
 import { fnmatchCase } from "./glob.mjs";
 import { codePointSort } from "./sort.mjs";
 import { fill } from "./jsondata.mjs";
 import { aitnaRootName } from "./project_root.mjs";
+import { isFile, pyPath } from "./pyvalue.mjs";
 
 const SPEC_KEYS = new Set(["command", "files"]);
 
@@ -135,32 +134,31 @@ export function readChecks(data, table) {
   if (table === null || table === undefined) {
     return { checks: [], problems: [] };
   }
-  const problems_data = data.problems;
+  const problemsData = data.problems;
   if (!_isTable(table)) {
-    return { checks: [], problems: [problems_data.not_table] };
+    return { checks: [], problems: [problemsData.not_table] };
   }
   /** @type {Check[]} */ const checks = [];
   /** @type {string[]} */ const problems = [];
   for (const [name, value] of Object.entries(/** @type {Record<string, unknown>} */ (table))) {
-    const spec =
-      typeof value === "string" ? { command: value } : /** @type {Record<string, unknown>} */ (value);
+    const spec = typeof value === "string" ? { command: value } : /** @type {Record<string, unknown>} */ (value);
     if (!_isTable(spec)) {
-      problems.push(fill(problems_data.bad_entry, { name: String(name) }));
+      problems.push(fill(problemsData.bad_entry, { name: String(name) }));
       continue;
     }
     const unknown = codePointSort([...new Set(Object.keys(spec).filter((key) => !SPEC_KEYS.has(key)))]);
     if (unknown.length) {
-      problems.push(fill(problems_data.unknown_key, { name: String(name), key: _jsRepr(unknown[0]) }));
+      problems.push(fill(problemsData.unknown_key, { name: String(name), key: _jsRepr(unknown[0]) }));
       continue;
     }
     const command = spec.command;
     const files = spec.files;
     if (typeof command !== "string" || command.trim() === "") {
-      problems.push(fill(problems_data.needs_command, { name: String(name) }));
+      problems.push(fill(problemsData.needs_command, { name: String(name) }));
       continue;
     }
     if (!_stringList(files === undefined ? defaultFiles(data) : files)) {
-      problems.push(fill(problems_data.bad_files, { name: String(name) }));
+      problems.push(fill(problemsData.bad_files, { name: String(name) }));
       continue;
     }
     let argv;
@@ -170,7 +168,7 @@ export function readChecks(data, table) {
       // The message is spec: `unsplit_command` is filled with it, and the Python twin fills
       // the same template with `str(ValueError)` — the bare message, not the class name.
       problems.push(
-        fill(problems_data.unsplit_command, { name: String(name), error: /** @type {Error} */ (error).message }),
+        fill(problemsData.unsplit_command, { name: String(name), error: /** @type {Error} */ (error).message }),
       );
       continue;
     }
@@ -243,9 +241,9 @@ export function changedFiles(data, root) {
     }
   }
   const devLayer = `${aitnaRootName()}/`;
-  const kept = new Set(
-    names.filter((name) => !name.startsWith(devLayer) && fs.existsSync(posix.join(root, name))),
-  );
+  // `is_file()`, not "exists": a directory or a link to one whose name matches a `files` pattern
+  // is no file a linter can be handed, and the twin drops it — the run then has nothing to do.
+  const kept = new Set(names.filter((name) => !name.startsWith(devLayer) && isFile(pyPath(root, name))));
   return codePointSort([...kept]);
 }
 
@@ -291,7 +289,7 @@ export function argvFor(data, check, changed) {
  * @returns {boolean}
  */
 function isMissingCommand(error) {
-  return (/** @type {{code?: string} | null} */ (error)?.code) === "ENOENT";
+  return /** @type {{code?: string} | null} */ (error)?.code === "ENOENT";
 }
 
 /**

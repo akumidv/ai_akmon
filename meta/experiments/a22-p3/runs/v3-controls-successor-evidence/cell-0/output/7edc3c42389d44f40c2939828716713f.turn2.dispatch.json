@@ -1,0 +1,33 @@
+{
+  "command": [
+    "/home/ai/.codex/packages/standalone/releases/0.162.1-x86_64-unknown-linux-musl/bin/codex",
+    "exec",
+    "--disable",
+    "memories",
+    "--disable",
+    "multi_agent",
+    "-c",
+    "web_search=\"disabled\"",
+    "-s",
+    "read-only",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "-C",
+    "/tmp/a22-p3-v3-controls-successor-runtime/control-0/scratch",
+    "-c",
+    "model_instructions_file=\"/home/ai/workspace/akmon/meta/experiments/a22-p3/arms/A.architect.system.txt\"",
+    "resume",
+    "--json",
+    "--skip-git-repo-check",
+    "01a14670-ce77-7870-a532-0dbbffbdd211",
+    "-m",
+    "gpt-5.6-luna",
+    "-c",
+    "model_reasoning_effort=\"medium\"",
+    "That item is not available in this setting."
+  ],
+  "cwd": "/tmp/a22-p3-v3-controls-successor-runtime/control-0/scratch",
+  "returncode": 0,
+  "status": "accepted",
+  "stop_reason": null
+}

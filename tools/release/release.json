@@ -21,7 +21,8 @@
     "charter_found": "found",
     "charter_missing": "MISSING — add it for project-specific release commands",
     "charter_line": "release charter: {{charter}} ({{note}})",
-    "git_status_header": "git status (short) [{{name}}]:"
+    "git_status_header": "git status (short) [{{name}}]:",
+    "akmon_meta_absent": "release_check: --subject akmon --state reads akmon's development record meta/, which this akmon does not carry (a package carrier ships none); run it from the akmon git tree: a clone, or a project mounting it as a submodule or subtree"
   },
   "run_check": {
     "cross_check_header": "== version ↔ changelog cross-check",
@@ -31,7 +32,8 @@
     "failed_header": "RELEASE CHECK FAILED:",
     "failed_item": "  - {{item}}",
     "all_green": "release check: all green",
-    "version_check_failed_item": "version ↔ changelog cross-check"
+    "version_check_failed_item": "version ↔ changelog cross-check",
+    "akmon_python_only": "release_check: --subject akmon --check runs akmon's own Python release suite (its self-CI and pytest tests); run it with the Python implementation: python3 tools/release/release_check.py --check"
   },
   "findings": {
     "version-literals-match": {

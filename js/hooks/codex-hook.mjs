@@ -35,12 +35,31 @@ import { claimDiagnosticMarker, markerKind, unidentifiedIdentity } from "../comm
 import { dictItem, pyIterate, pyPath } from "../common/pyvalue.mjs";
 import { fill } from "../common/jsondata.mjs";
 import {
-  command, cwd, filePaths, loadPayload, payloadShape, printResult, reportFailure, sessionId, toolKind, toolName,
-  toolUseId, unmeasuredPathSource, writeStderr,
+  command,
+  cwd,
+  filePaths,
+  loadPayload,
+  payloadShape,
+  printResult,
+  reportFailure,
+  sessionId,
+  toolKind,
+  toolName,
+  toolUseId,
+  unmeasuredPathSource,
+  writeStderr,
 } from "./codex_adapter.mjs";
 import {
-  analysisWriteResult, assertEncodablePath, editTool, findProjectRoot, gitCommitGuardResult, privilegeEscalationGuardResult,
-  reportUnclassifiedShellRoute, roleOnCodeResult, sessionStartResult, shellTool,
+  analysisWriteResult,
+  assertEncodablePath,
+  editTool,
+  findProjectRoot,
+  gitCommitGuardResult,
+  privilegeEscalationGuardResult,
+  reportUnclassifiedShellRoute,
+  roleOnCodeResult,
+  sessionStartResult,
+  shellTool,
 } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 

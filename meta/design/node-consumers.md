@@ -1,7 +1,7 @@
 # Design: Node.js consumers — a JavaScript implementation on npm (A34)
 
 > **Status: decided in [ADR 0020](../decisions/0020-node-consumers-js-implementation.md)**
-> (D01–D08). This document keeps the analysis behind it and the implementation plan (§6). Closes
+> (D01–D09). This document keeps the analysis behind it and the implementation plan (§6). Closes
 > the "Non-Python consumers" open point of the [packaging design](packaging/README.md#open-points)
 > (`meta/design/packaging/README.md:324`).
 
@@ -24,7 +24,7 @@ What is already language-neutral and needs no port: the guardrails, profiles, pi
 and skills (documents), the vendor pointers, the data files (`tools/model_routing/registry.json`),
 and the root and record *contracts*. Every executable piece is Python:
 
-| Area | Files | Lines (2026-09-26) |
+| Area | Files | Lines (when counted) |
 |---|---|---|
 | `src/akmon` (CLI: init, update, dispatch, tree) | 5 | 2 203 |
 | `bin` (sync, verify, check) | 3 | 2 597 |
@@ -53,7 +53,7 @@ Python coupling outside the code itself:
 | Profiles | `profiles/` | `python`, `python-stdlib`, `quant`, `ruff.toml`; `ARCHETYPES.md:102` reserves `js` |
 | Messages | SessionStart and others | print `python3 $(akmon path)/tools/…` |
 
-## 3. Analysis (owner discussion 2026-09-26)
+## 3. Analysis (owner discussion)
 
 ### F1 — Execution: port, not wrap
 
@@ -113,18 +113,21 @@ through the project's package manager:
 
 - **`<run>`** comes from the `packageManager` field first, then the lockfile: `package-lock.json`
   → `npx --no-install`, `pnpm-lock.yaml` → `pnpm exec`, `yarn.lock` → `yarn`,
-  `bun.lock`/`bun.lockb` → `bunx`. `--no-install` makes a missing tool a failed check, not a
-  silent download.
+  `bun.lock`/`bun.lockb` → `bunx --no-install`. `--no-install` makes a missing tool a failed check, not a
+  silent download (bun: M126).
 - **Patterns.** Node checks always record explicit `files` patterns (the implicit default is
   `*.py`).
 - **Scripts.** `package.json` `lint`/`typecheck` scripts are named in the report for the owner's
   `own` choice, never auto-recorded.
-- **Ruleset offer.** The akmon offer ships inside the package and is reached by `extends` by
-  package name (`"extends": ["akmon/biome"]` or `import akmon from "akmon/eslint"`), so nothing is
-  materialized. **Tool and rules: A35**, after a baseline on a real Node repository. Until then a
-  Node project chooses between `own` and `none`.
+- **Ruleset offer** ([ADR-0020/D09](../decisions/0020-node-consumers-js-implementation.md#d09--the-javascripttypescript-ruleset-oxlint-and-akmons-own-tooling),
+  A35). akmon's rules ship inside the package as `profiles/oxlint.json`, and the project's
+  `.oxlintrc.json` reaches them by path: `"extends": ["./node_modules/akmon/profiles/oxlint.json"]`.
+  Nothing is materialized. oxlint resolves `extends` as a path; by package name only from its
+  experimental JS config, which akmon does not use. Only a detected linter (ESLint, Biome, oxlint)
+  makes `own` the default. `akmon` records oxlint plus the detected `tsc` and Prettier, because
+  in TypeScript `tsc` carries what the ruleset leaves to it (DV25).
 
-**Landscape probe, 2026-09-26** ([MEASUREMENTS.md M100–M101](../MEASUREMENTS.md)): on npm
+**Landscape probe** ([MEASUREMENTS.md M100–M101](../MEASUREMENTS.md)): on npm
 `eslint` is at 10.11.0 (v10 latest), `@biomejs/biome` at 2.5.14 (the unscoped `biome` name is an
 unrelated package), `oxlint` 1.85.0, `prettier` 3.9.9, `typescript` 7.0.2 — the native line is
 `latest`, and its `tsc --checkJs --noEmit --allowJs` caught a planted JSDoc argument-type error,
@@ -135,7 +138,7 @@ decision stays with A35.
 
 ### F6 — Owner-decided and agent-proposed points in ADR 0020 (all confirmed)
 
-**Decided by the owner (2026-09-26):**
+**Decided by the owner:**
 
 - Python-free only in `package` mode;
 - the corpus is normative and Python is the reference;
@@ -145,12 +148,12 @@ decision stays with A35.
 - all tools ported, as a base for JS projects;
 - the hook latency budget.
 
-**Proposed by the agent, written into ADR 0020, and confirmed by the owner on 2026-09-26
-(all five points and the carried-over row):**
+**Proposed by the agent, written into ADR 0020, and confirmed by the owner (all five points and
+the carried-over row):**
 
 | Point | Block | Why proposed |
 |---|---|---|
-| Node floor 22 | D04 | oldest maintained LTS on 2026-09-26 (Node 20 ended April 2026) |
+| Node floor 22 | D04 | oldest maintained LTS at the time (Node 20 ended April 2026) |
 | `akmon tool <path>` as one subcommand in both implementations | D06 | tools need a Python-free entry; it reverses the "no command groups" stance recorded in the `update` design, with a single level only |
 | Mirrored `js/` layout + pairing gate | D03 | makes "every Python file has its JS counterpart" mechanically checkable |
 | One file list for both carriers (the wheel carries `js/`, npm carries `.py`) | D05 | a single test proves "same artifact"; costs unused files in each package |
@@ -176,8 +179,9 @@ package.json                (root; no dependencies, no `scripts` key, exact-pinn
                              devDependencies, engines node >=22)
 ```
 
-Akmon's own dev linter is ESLint 10 (`@eslint/js` recommended) — owner decision 2026-09-27. It
-is akmon-internal: it lints this repository's `js/` and does not pre-decide A35's consumer ruleset.
+akmon's own JavaScript is linted by oxlint with the ruleset it offers (`.oxlintrc.json` extends
+`profiles/oxlint.json`, with the size family's per-file exceptions, a list that only shrinks) and
+formatted by oxfmt — owner decision (ADR-0020/D09), replacing the earlier ESLint 10 setup.
 
 Both carriers ship one file list (D05). The wheel carries `js/` and the npm package carries the
 Python files, which are unused there. This keeps "same artifact, two entry points" provable by a
@@ -238,7 +242,7 @@ rules follow, and each has a single owner:
   the implementation's **native package mode**, and a mounted scenario is `python`-tagged. A
   finding code whose lines name one ecosystem's carrier (tree layout, manifest pin, launcher) is
   owned by that ecosystem; a shared scenario pins every other finding line (owner decision on
-  the C101 review, 2026-09-27; mechanics in `meta/conformance/README.md`).
+  the C101 review; mechanics in `meta/conformance/README.md`).
 - **Gates** (self-CI):
   1. both implementations pass every scenario of their scope;
   2. the coverage gate: every command, hook, tool and finding code appears in a scenario;
@@ -253,7 +257,7 @@ rules follow, and each has a single owner:
 
 ## 6. Implementation plan
 
-Ids were free on 2026-09-26 across HEAD, the main checkout and all worktrees. Order is dependency
+Ids were free at the time across HEAD, the main checkout and all worktrees. Order is dependency
 order. Stages: **0** spec · **1** data-first · **2** minimum Python-free slice · **3** full port ·
 **4** checks and rules · **5** proof and publish.
 
@@ -275,7 +279,7 @@ order. Stages: **0** spec · **1** data-first · **2** minimum Python-free slice
 | C112 | 5 | Docs | C105, C108, C109 | README, BOOTSTRAP (Node path), MODEL, ARCHETYPES, packaging open point closed, skills naming `akmon tool`; citation check green |
 | V5 | 5 | First npm publish (owner) | C101–C106, N10, V1 sequencing as V4 | `npm view akmon version` == the released tag |
 
-C104 runs in two passes (owner decision 2026-10-04), each ending at a master-control review.
+C104 runs in two passes (owner decision), each ending at a master-control review.
 
 - **Pass 1 — what the hooks stand on.** `common/markers`, `common/materialization` and
   `tools/model_routing/routing` ported to `js/common/` and `js/tools/model_routing/`, each with
@@ -286,12 +290,12 @@ C104 runs in two passes (owner decision 2026-10-04), each ending at a master-con
   scenarios); Node wiring and marker in `bin/sync.py` / `bin/sync.json` and the matching part of
   the JS `sync`; the `hooks/*` exemption removed; the JS latency measured against the Python
   baseline (M122) with the P5 levers if it loses.
-  **Done (2026-10-07):** all of it except the JS half of the Node wiring — the JS `sync` is C105's, so C104 carries the Node
+  **Done:** all of it except the JS half of the Node wiring — the JS `sync` is C105's, so C104 carries the Node
   *marker* in `bin/sync.json` (recognised by the Python `sync`, pinned by tests) and the spelling waits for the JS `sync`;
   until then a node project of the hook corpus is synced by the Python reference. JS p50 145–152 ms against Python 178 ms
-  ([M124](../MEASUREMENTS.md)). Evidence: [C104 evidence](../reviews/c104-evidence-20261004.md).
+  ([M124](../MEASUREMENTS.md)). Evidence: [C104 evidence](../reviews/c104-evidence.md).
 
-C105 runs in three passes (plan 2026-10-11, each ending at a master-control review), cut so that each ends with a command
+C105 runs in three passes (each ending at a master-control review), cut so that each ends with a command
 the corpus can run on node:
 
 - **Pass 1 — the writer.** `ecosystem` in the integration record (absent means `python`; only the JS `init` writes `node`);
@@ -303,18 +307,46 @@ the corpus can run on node:
 - **Pass 2 — the reader.** `common/always_loaded`, `common/codex_hooks`, `bin/verify` and the Node findings (Yarn PnP, a pin in
   the wrong class or not exact, `node_modules/akmon` missing), the per-ecosystem runtime declaration
   (`common/runtime.json`, `meta/checks/runtime.py` joined to both implementations' wiring).
-  **Done (2026-10-11), with two review decisions folded in:** the Python `sync` and `verify` refuse a record naming another
+  **Done, with two review decisions folded in:** the Python `sync` and `verify` refuse a record naming another
   ecosystem, and a hoisted `node_modules/akmon` is a `hooks.launcher` error with its fix. Exactness of the pin is a warning
   of `package.dev-pin`, not a code of its own: the coverage gate derives codes from the Python implementation.
 - **Pass 3 — attach.** `init` for `package`/`node` (writes `ecosystem = "node"`, the AGENTS.md block, the Node CI template
   without Python, the `.gitignore` lines), `_tree`, the refusal of the mounted modes with the pointer to the Python
   implementation; `update` stays C107's.
-  **Done (2026-10-11):** plus `tools/model_routing/init` pulled forward from C108 (a Node attach is incomplete without the
+  **Done:** plus `tools/model_routing/init` pulled forward from C108 (a Node attach is incomplete without the
   subagent definitions and the routing config, and the initializer is thin over the C104 `routing` port). The CI template
   follows the detected package manager (`packageManager`, else the lockfile, else npm). JS/TS linter setup stays C109's.
 
+C107 **done:** the JS `update` moves the pin with the detected manager's `add_dev_exact` (the table `init`
+uses), prints the command for any other manager or a missing binary, and runs `init` and the checks from the project's
+installed CLI. Without `--ref` the target is the newest final release on the npm registry (DV26). The Python `update`
+refuses a Node record. [Evidence](../reviews/c107-evidence.md).
+
+C108 runs in two passes. **Pass 1 (done):** `akmon tool <path>` in both CLIs (the
+tool list in `src/akmon/cli.json`); the messages that named tool files now name the executing implementation's command
+(`python3 <mount>/tools/<path>.py` from a mount, `akmon tool <path>` from the wheel, `npx akmon tool <path>` from the npm
+package) — the routing self-check and init instruction, the gate-audit hold; the generated agent banner names no file,
+and the banner earlier releases wrote is still swept; the `exports` map and its documented API (`tools/README.md`); the
+`coverage_map`, `gate_pack`, `second_opinion` and `tasks/archive` ports. **Pass 2 (done):** the `stats` and `release/release_check` ports, their exports;
+the JS `release_check --subject akmon --check` is refused (akmon's own suite is Python's, DV30); no tool is exempt from
+pairing any more.
+[Evidence](../reviews/c108-evidence.md).
+
+C109 (done): the JS `init` detects the §3 F5 tools and records them as `[check]` through the manager's
+`check_run` (`npx --no-install`, `pnpm exec`, `yarn`, `bunx --no-install`, M126), with explicit `files` patterns and `tsc` as a plain
+command; `lint`/`typecheck` scripts are named in a next step, never recorded. `--checks own` is served; `--checks akmon`
+stayed refused and the default with nothing detected was `none` until C110.
+[Evidence](../reviews/c109-evidence.md).
+
+C110 (done): with no linter detected the default is `akmon`. It writes `.oxlintrc.json` extending
+`./node_modules/akmon/profiles/oxlint.json` (`env` browser + node, with a step to narrow it), or names the line when the
+project's own `.oxlintrc.json` exists. It records oxlint plus the detected `tsc` and Prettier (DV25), and names the
+oxlint dev-install command. The AGENTS block's profile example is `js.md` on Node. akmon's own JS moved to oxlint and
+oxfmt (width 120, M131), and the size family is a shrinking per-file list checked by `meta/tests/test_oxlint_profile.py`.
+[Evidence](../reviews/c110-evidence.md).
+
 `routing.py` belongs to C104 and not to C108 because `gate-audit`, `delegation-log` and
-`model-routing` import it: measured on 2026-10-04, 87 of its 91 definitions and 1317 of its 1688
+`model-routing` import it: when measured, 87 of its 91 definitions and 1317 of its 1688
 lines are reachable from those three hooks. The four definitions outside that reach
 (`second_opinion_command`, `second_opinion_unavailability`, `context_fill_ratio`,
 `UnpinnableModelError`) travel with the file, so the pair stays whole. C108 keeps the other
@@ -331,8 +363,10 @@ implementations and, from C103 on, `npm pack --dry-run` against the wheel's file
   project root" point.
 - **Where Python behavior is ambiguous** (found while seeding C101), each case is resolved once
   and becomes a scenario. The resolutions are listed in the C101 evidence, not decided here.
-- **Scoped fallback name** (`@akmon/cli`) if `akmon` on npm is taken before V5 (free on
-  2026-09-26).
+- **Mounted Python `init` in a Node repository** detects only the Python tools and, with none,
+  offers ruff — ADR 0020 D02 keeps linter detection in each ecosystem's own implementation, so
+  this conforms, but a Node project attached in a mounted mode gets a Python offer (C126).
+- **Scoped fallback name** (`@akmon/cli`) if `akmon` on npm is taken before V5 (free at the time).
 - **`init` writing the dev-layer exclusion.** The consumer's eslint/tsconfig must ignore
   `_aitna/**` (§4, M116); today `init` detects those tools but leaves the exclusion to the
   project. Whether it should *edit* a project's config, only report the gap as a finding, or
@@ -361,5 +395,5 @@ node:test, npm pack --dry-run). Do not commit — the owner commits.
 
 Known before this work: `meta/tests/test_adapters.py::test_the_claude_shell_diagnostic_leaves_the_guard_decision_intact`
 failed on the pre-A34 tree (1 failed, 1562 passed). **Stale as of the A22 tree:** the A22
-commit updated that test, and the full suite is green including it (1669 passed on 2026-09-26,
+commit updated that test, and the full suite is green including it (1669 passed at the time,
 C101 evidence resolution 3). The corpus pins the current first-Bash-call diagnostic behavior.

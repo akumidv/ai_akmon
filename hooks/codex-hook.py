@@ -85,8 +85,10 @@ def _report_unreadable_target(payload: dict, name: str) -> None:
     # session/tool-use pair as the event identity so one malformed edit produces one
     # diagnostic, while a later malformed edit remains visible. A missing component
     # repeats fail-visible instead of creating a global marker that can hide drift.
-    if sid != unidentified_identity() and event_id and not claim_diagnostic_marker(
-        marker_kind("codex_unreadable_target"), f"{sid}\0{event_id}"
+    if (
+        sid != unidentified_identity()
+        and event_id
+        and not claim_diagnostic_marker(marker_kind("codex_unreadable_target"), f"{sid}\0{event_id}")
     ):
         return
     print(
@@ -109,8 +111,10 @@ def _report_unmeasured_path_source(payload: dict) -> None:
     """
     sid = session_id(payload)
     event_id = tool_use_id(payload)
-    if sid != unidentified_identity() and event_id and not claim_diagnostic_marker(
-        marker_kind("codex_unmeasured_path"), f"{sid}\0{event_id}"
+    if (
+        sid != unidentified_identity()
+        and event_id
+        and not claim_diagnostic_marker(marker_kind("codex_unmeasured_path"), f"{sid}\0{event_id}")
     ):
         return
     print(

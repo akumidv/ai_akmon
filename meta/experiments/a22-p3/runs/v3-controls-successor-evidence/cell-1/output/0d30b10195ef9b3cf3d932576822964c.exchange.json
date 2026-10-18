@@ -1,0 +1,36 @@
+{
+  "arm_sha256": "d8dfbf68e8425f42872a53b5e7c9c4d96f4e02eaaa84fef5b69132fe5b4f17e7",
+  "case_sha256": "3ec981fb954cdeba5493289080dd6759bc7a48b6d5bc8630e2c72296618e7b12",
+  "rollout_sha256": "c36639c1d4403de875fa7aad0b7e8fe66ea069a2787a846ad7055f2ae51466ca",
+  "run_id": "0d30b10195ef9b3cf3d932576822964c",
+  "turn_evidence": [
+    {
+      "call_id": "1820567c9c32d0097e4ab5d62946d32b",
+      "dispatch_sha256": "ffd2bfc5c02031c9ff313811726b771283ac6b01f89afb90008f059044a1f12d",
+      "events_sha256": "9dfab137a0d7ffdd9dad04b3003c8a4ee66bd3a95d2f7fd60a4c536dd56209d6",
+      "stdout_sha256": "adddc07ef927d9f73591326a98c79a73054c45cd096d00d5f6734a7b490a45ef",
+      "turn": 1
+    },
+    {
+      "call_id": "6712e449ab1bc260284482fd60be072a",
+      "dispatch_sha256": "b8482a8f5f820f2faa36c59c3ac4817da8cc1da5251afd4375cc3a8737b3458c",
+      "events_sha256": "a6223bcb6de57dc93ed35438f7d7dcf4befa2cff91d65ae3319fb17074fda760",
+      "stdout_sha256": "3d7fcffe1aab6496d5b1cfec3f57e512726431390b97cbbcdbd2aa53333dcf00",
+      "turn": 2
+    }
+  ],
+  "turns": [
+    "🧭 agent: architect — adapter-boundary decision\n\nTechnical viability alone does not distinguish A from B. We need the first consumer’s intended use and the consequences of central versus consumer-owned lint configuration before recommending a boundary. Delegation is unavailable in this no-tool setting.\n\nCHECK: owner-use",
+    "🧭 agent: architect — adapter-boundary recommendation\n\n## Recommendation\n\nChoose **Boundary B: consumer-owned lint configuration**.\n\nThe supplied use establishes two decisive criteria:\n- The generator must run without importing library lint configuration.\n- Consumer lint policy must change independently.\n\n**A** offers centralized consistency, but keeping consumer policy in the library couples ownership and changes. Making A satisfy these constraints would require separating that policy out—effectively moving toward B.\n\n**B** directly fits both criteria. Its trade-off is potential configuration duplication and divergence across consumers.\n\nDefine the adapter contract so generator execution does not depend on library lint configuration, and consumer policy changes require no library changes. Verify both properties during implementation.\n\nThis is a recommendation, not an accepted decision."
+  ],
+  "usage": [
+    {
+      "input_tokens": 17899,
+      "output_tokens": 63
+    },
+    {
+      "input_tokens": 38350,
+      "output_tokens": 217
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "record_type": "p3_v3_codex_scorer_route_owner_direction",
+  "source": "unsigned local Codex session log",
+  "source_log": "/home/ai/.codex/sessions/2026/09/23/rollout-2026-09-23T09-16-25-01a0cd8d-4d82-7ac0-8b96-ce11eb0ff664.jsonl",
+  "source_line": 30005,
+  "user_message_id": "msg_01a14691-dc64-79d1-a426-d7dcf847cabd",
+  "user_record_sha256": "bcc7d0e1838ba151bb9632896af92df317c103d3b55d257c201911d8b03050a8",
+  "user_text_sha256": "78f25bdb5da7a50539ac4383c93966e43052684f29db6a6768fc94d0107e80c0",
+  "text_fidelity": "exact extracted user text including line break and indentation; local record is not cryptographically signed",
+  "visible_user_text": "Подтверждаю codex_scorer_route_check для seal SHA-256\n  043bc5f745263bc84ca6b5feb5801e51df34bf86df31c1cec740662dc7d07084; оператор остановки — я. Давай исправим модель подтверждения, уберем оператора остановки - это очевидно я. И уберем хеш, достаточно писать название скрипта или сути работ.",
+  "accepted_predecessor_seal_sha256": "043bc5f745263bc84ca6b5feb5801e51df34bf86df31c1cec740662dc7d07084",
+  "accepted_scope": ["codex_scorer_route_check"],
+  "approval_wording_amendment": "scope name or substance suffices; owner need not repeat seal hash or stop-operator phrase",
+  "provider_calls_authorized": 1,
+  "provider_calls_started": 0
+}

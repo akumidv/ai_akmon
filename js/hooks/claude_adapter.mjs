@@ -26,13 +26,7 @@ import { fileURLToPath } from "node:url";
 
 import { hookForm } from "../common/json_writer.mjs";
 import { JSONDecodeError, jsonLoads, readStdinBytes } from "../common/pyjson.mjs";
-import {
-  decodeUtf8,
-  dictGet,
-  dictItem,
-  isDict,
-  pyPath,
-} from "../common/pyvalue.mjs";
+import { decodeUtf8, dictGet, dictItem, isDict, pyPath } from "../common/pyvalue.mjs";
 import {
   assertEncodablePath,
   editTool,

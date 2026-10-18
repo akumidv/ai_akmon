@@ -26,13 +26,14 @@
  * Twin notes:
  * - `hook_event_name` is arbitrary JSON, echoed as `hookEventName` when it is not
  *   `SessionStart`: `5` and `["x"]` are echoed, `[]` and `{}` are falsy and mean `SessionStart`;
- * - the settings files are read as strict UTF-8 text and parsed by `JSON.parse`: a syntax error
- *   skips the file as `JSONDecodeError` does, any other failure is a crash. Python's `json.loads`
- *   also accepts the literals `NaN`/`Infinity`/`-Infinity` (a file holding one is read there and
- *   skipped here) and raises `RecursionError` on a very deep document; only `model` is read.
+ * - the settings files are read as strict UTF-8 text and parsed by `jsonLoads` — Python's
+ *   `json.loads`, the `NaN`/`Infinity`/`-Infinity` literals included (C115): a `JSONDecodeError`
+ *   skips the file, any other failure (a `RecursionError` on a very deep document) is a crash;
+ *   only `model` is read.
  */
 
 import { aitnaRootName, findProjectRoot } from "../common/project_root.mjs";
+import { JSONDecodeError, jsonLoads } from "../common/pyjson.mjs";
 import { dictGet, isDict, isDir, isFile, pyEq, pyError, pyPath, readText, truthy } from "../common/pyvalue.mjs";
 import {
   briefWarning,
@@ -49,6 +50,7 @@ import {
   staleness,
   statusLines,
   suppressedRebindWarning,
+  toolCommand,
 } from "../tools/model_routing/routing.mjs";
 import { loadPayload, runAsEntryPoint, runGuarded } from "./claude_adapter.mjs";
 import { HookResult, akmonRuntimeRoot, assertEncodablePath, runtimeRootDisplay } from "./hook_core.mjs";
@@ -71,9 +73,10 @@ function _settingsModel(data, projectRoot) {
     }
     let settings;
     try {
-      settings = JSON.parse(readText(path));
+      // `json.loads`, not `JSON.parse`: a `NaN` or `Infinity` is JSON to the twin (C115).
+      settings = jsonLoads(readText(path));
     } catch (error) {
-      if (error instanceof SyntaxError) {
+      if (error instanceof JSONDecodeError) {
         continue;
       }
       throw error;
@@ -123,12 +126,11 @@ export function modelRoutingResult(data, root, payload) {
   const event = truthy(hookEvent) ? hookEvent : "SessionStart";
 
   const aitna = aitnaRootName();
-  // Recovery instructions must name the tree this project actually has, in a spelling that
-  // keeps working: the project-relative mount when one exists, `$(akmon path)` in mode
-  // `package`, where the tree is inside the installed wheel and its literal path carries the
-  // venv's Python version (C77). Naming the mount unconditionally used to hand a package-mode
-  // session a path that is not there.
-  const runtimeRel = runtimeRootDisplay(root);
+  // Recovery instructions must name a command that works in the tree this project actually has:
+  // the mount's script when one exists, `akmon tool` from the installed package, whose literal
+  // path would carry the install layout (C77, ADR-0020/D06). Naming the mount unconditionally
+  // used to hand a package-mode session a path that is not there.
+  const initCommand = toolCommand(data.agents, runtimeRootDisplay(root), "model_routing/init");
   // An overlay `briefs` key matching no agent makes every regeneration lossy, so the
   // rebind is refused rather than run — and the reason is stated instead of swallowed (C50).
   const briefWarn = briefWarning(data.agents, registry, aitna);
@@ -180,14 +182,14 @@ export function modelRoutingResult(data, root, payload) {
   const reason = staleness(data.agents, config, registry, settingsModel);
   const overlay = briefWarn ? [briefWarn] : [];
   if (reason !== null) {
-    const lines = [...initInstruction(data.agents, reason, runtimeRel), ...overlay];
+    const lines = [...initInstruction(data.agents, reason, initCommand), ...overlay];
     return new HookResult({
       eventName: "SessionStart",
       additionalContext: lines.join("\n"),
       systemMessage: [lines[0], ...overlay, ...pressure].join("\n"),
     });
   }
-  const lines = [...statusLines(data.agents, config, registry, runtimeRel), ...overlay];
+  const lines = [...statusLines(data.agents, config, registry, initCommand), ...overlay];
   // Owner-addressed subset: the corridor warning, the fact of a rebind and — for the owner
   // alone — the context-pressure reminder at either level (its info line carries ℹ, not ⚠);
   // the steady-state status line itself stays context-only so the UI is quiet when healthy.

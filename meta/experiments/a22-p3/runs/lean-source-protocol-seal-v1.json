@@ -1,0 +1,25 @@
+{
+  "dispatch_allowed": false,
+  "owner_accepted": false,
+  "previous_chat_evidence_seal_sha256": "3d0f931f47a54f0d101e99e63e33182b1f447704ff340e9f9257c7ea15f89667",
+  "previous_usage_parser_seal_sha256": "8d3f6aa2abfa7102ababe6c0cd904218ba13547bba4e49a739be289ac73f0404",
+  "proposal_sha256": "3ec1ceb924fc5c15d7d97775c06172619a61e2d482f9aa7e829ae101874045e4",
+  "record_type": "p3_v3_lean_source_protocol_seal",
+  "regression_sha256": {
+    "test_a22_p3_lean_source_protocol_v3.py": "959e3ab9c80357f42ec843062e836674f0dd1edd1bc0bdb7f0151381f4136457",
+    "test_a22_p3_source_phase_v3.py": "6830a31bb0cbc8d83fd964cb52010103abf92fd9462a81b9b40945eaa388f43d"
+  },
+  "schema": 1,
+  "scope": [
+    "technical_source"
+  ],
+  "source_sha256": {
+    "dispatch_v3.py": "f083d867b31892864313fbf0b7370afb2899a706d5bc12a70ef7fc41eaab1db0",
+    "lean_source_protocol_v3.py": "8d76878e51cda237ce96cb2db7a06eadf540c98a5c6f3f5b609e5f127cb1ff1b",
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "source_phase_v3.py": "cd4e76faf340a95398306f0ab905a5c5687c3f1698ad7b36a967177ddcb6de3c",
+    "usage_ledger_v3.py": "222a1a67e3d8efcb34b3f996ca40cae513008a44b80d94f9bb5dac1ad334a803",
+    "v3_runner.py": "8a006dff375b619e63d7bb66c3b866827fdd719b4fe168bdc50b37293247f5f1"
+  },
+  "status": "proposal_only_not_accepted"
+}

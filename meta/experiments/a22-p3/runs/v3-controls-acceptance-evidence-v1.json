@@ -1,0 +1,20 @@
+{
+  "accepted_accounting_exception": true,
+  "accepted_seal_sha256": "0759a5324a0757b298816dc38e8e93ac8e0a6f9ad564aa949648043346232dd6",
+  "authentication_limit": "Local session log, not independently signed.",
+  "record_type": "p3_v3_controls_owner_acceptance",
+  "request_log_line": 28891,
+  "request_message_id": "msg_01a73e526108f56c016ad27088b68087d28533e50bbcc87f0b",
+  "request_record_sha256": "94229a109e978aaaee77a4089ab29a6a031d9a164447e5f5c22e8dc0292a44a0",
+  "request_text": "Подготовил запуск трёх оставшихся технических контролей A/mid, C/strongest и C/mid. Исторический вызов учтён отдельной квитанцией на 7 766 токенов; исходная запись `UNKNOWN_USAGE` сохранена. Стартовый баланс V3 — 74 257 токенов.\n\n[План и runner](/home/ai/workspace/akmon/meta/experiments/a22-p3/V3_CONTROLS_PROPOSAL.md), [отчёт готовности](/home/ai/workspace/akmon/meta/reviews/a22-p3-v3-controls-readiness.md) и seal готовы. Офлайн-проверка прошла, 14 целевых тестов и Ruff — тоже. **Провайдерских вызовов пока не было.** Qwen с thinking остаётся условием последующей фазы скоринга; эти три контроля выполняет Codex.\n\nПодтверждаете запуск **только `technical_controls`** для seal SHA-256 `0759a5324a0757b298816dc38e8e93ac8e0a6f9ad564aa949648043346232dd6`, с вами как оператором остановки?\n\nПовторное подтверждение нужно потому, что принятое правило A22 требует разрешения для точного seal каждой фазы. Ваше «Подтверждаю. Запускай» утвердило исключение по учёту до создания этого seal; [запись допуска](/home/ai/workspace/akmon/meta/experiments/a22-p3/runs/v3-controls-approval-v1.json) пока закрыта.",
+  "schema": 1,
+  "scope": [
+    "technical_controls"
+  ],
+  "source_log": "/home/ai/.codex/sessions/2026/09/23/rollout-2026-09-23T09-16-25-01a0cd8d-4d82-7ac0-8b96-ce11eb0ff664.jsonl",
+  "stop_operator": "owner (current chat session)",
+  "user_log_line": 28907,
+  "user_message_id": "msg_01a1460a-3914-7081-92ae-5f43ec6e522c",
+  "user_record_sha256": "6d09b9e4254dc0d1afcffe1bd62b3f48460d76f33490cc9397ab87e10b0e73e1",
+  "user_text": "повторно подтверждаю\nПодтверждаю запуск только technical_controls для seal SHA-256 0759a5324a0757b298816dc38e8e93ac8e0a6f9ad564aa949648043346232dd6 со мной как оператормо остановки"
+}

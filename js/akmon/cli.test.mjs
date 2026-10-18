@@ -24,8 +24,18 @@ const manifest = JSON.parse(fs.readFileSync(posix.join(TREE, "package.json"), "u
 
 /** The hook stems a Python `hooks/` lists, as the corpus pins them (`cli/hook-unknown`). */
 const HOOK_STEMS = [
-  "analysis-guard", "claude_adapter", "codex-hook", "codex_adapter", "delegation-log", "delegation-nudge",
-  "gate-audit", "git-commit-guard", "hook_core", "model-routing", "role-on-code", "session-start-agent",
+  "analysis-guard",
+  "claude_adapter",
+  "codex-hook",
+  "codex_adapter",
+  "delegation-log",
+  "delegation-nudge",
+  "gate-audit",
+  "git-commit-guard",
+  "hook_core",
+  "model-routing",
+  "role-on-code",
+  "session-start-agent",
 ];
 
 function tmpdir() {
@@ -37,7 +47,10 @@ function project() {
   const root = fs.realpathSync(tmpdir());
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# project\n");
   fs.mkdirSync(posix.join(root, "_aitna"));
-  fs.writeFileSync(posix.join(root, "_aitna", ".akmon.toml"), 'mount = "package"\n[check]\nlint = "echo checked {files}"\n');
+  fs.writeFileSync(
+    posix.join(root, "_aitna", ".akmon.toml"),
+    'mount = "package"\n[check]\nlint = "echo checked {files}"\n',
+  );
   return root;
 }
 
@@ -53,7 +66,10 @@ function spawnNode(script, args, options = {}) {
   const env = { ...process.env, TMPDIR: tmpdir() };
   delete env.AITNA_ROOT;
   const result = spawnSync(process.execPath, [script, ...args], {
-    cwd: options.cwd ?? os.tmpdir(), env, encoding: "utf8", input: options.input ?? "",
+    cwd: options.cwd ?? os.tmpdir(),
+    env,
+    encoding: "utf8",
+    input: options.input ?? "",
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
@@ -68,8 +84,14 @@ async function inProcess(/** @type {string[]} */ args) {
   const out = /** @type {string[]} */ ([]);
   const err = /** @type {string[]} */ ([]);
   const write = { out: process.stdout.write, err: process.stderr.write };
-  process.stdout.write = /** @type {typeof process.stdout.write} */ ((/** @type {string} */ text) => (out.push(text), true));
-  process.stderr.write = /** @type {typeof process.stderr.write} */ ((/** @type {string} */ text) => (err.push(text), true));
+  process.stdout.write = /** @type {typeof process.stdout.write} */ (
+    (/** @type {string} */ text) =>
+      (out.push(text), true)
+  );
+  process.stderr.write = /** @type {typeof process.stderr.write} */ (
+    (/** @type {string} */ text) =>
+      (err.push(text), true)
+  );
   try {
     return { status: await main(args), stdout: out.join(""), stderr: err.join("") };
   } finally {
@@ -102,7 +124,7 @@ test("imported rather than run, the module writes nothing and leaves the exit co
 
 test("the exit code is process.exitCode: the run ends by itself, never through process.exit", () => {
   assert.ok(!/process\.exit\(/.test(fs.readFileSync(CLI, "utf8")));
-  assert.equal(akmon(["update"]).status, 2);
+  assert.equal(akmon(["update", "--no-such-flag"]).status, 2);
 });
 
 // -- the lean hot path -------------------------------------------------------------------------
@@ -114,6 +136,7 @@ test("the static imports of the CLI are the few a hook run needs; every command 
   const dynamics = [...source.matchAll(/\bimport\("([^"]+)"\)/g)].map((match) => match[1]);
   assert.ok(dynamics.includes("../bin/sync.mjs") && dynamics.includes("../bin/check.mjs"));
   assert.ok(dynamics.includes("../bin/verify.mjs") && dynamics.includes("./_init.mjs"));
+  assert.ok(dynamics.includes("./_update.mjs"));
   assert.ok(!/findings|parseArgs|node:util/.test(statics.join(" ")));
 });
 
@@ -132,16 +155,51 @@ test("path prints the real path of the running tree, whatever the cwd", async ()
   fs.rmSync(elsewhere, { recursive: true, force: true });
 });
 
-// -- the commands that are not ported ---------------------------------------------------------
+// -- tool (C108) -------------------------------------------------------------------------------
 
-test("update names the task that ports it, with or without arguments", async () => {
-  const tasks = { update: "C107" };
-  for (const [command, task] of Object.entries(tasks)) {
-    const expected = `akmon ${command}: not ported to the JavaScript implementation yet (${task})\n`;
-    assert.deepEqual(await inProcess([command]), { status: 2, stdout: "", stderr: expected });
-    assert.deepEqual(akmon([command, "--help"]), { status: 2, stdout: "", stderr: expected });
+test("tool runs a listed tool's main with the rest of argv, as node runs the tool itself", async () => {
+  const direct = spawnSync(process.execPath, [`${TREE}/js/tools/tasks/archive.mjs`, "--bogus"], { encoding: "utf8" });
+  assert.deepEqual(await inProcess(["tool", "tasks/archive", "--bogus"]), {
+    status: direct.status,
+    stdout: direct.stdout,
+    stderr: direct.stderr,
+  });
+  assert.equal(direct.status, 2);
+});
+
+test("tool refuses an unlisted or unported name and a missing one, listing what it has", async () => {
+  const available = /** @type {string[]} */ (cliData.tools)
+    .filter((name) => fs.existsSync(`${TREE}/js/tools/${name}.mjs`))
+    .join(", ");
+  assert.ok(
+    available.split(", ").includes("tasks/archive") && !available.split(", ").includes("model_routing/routing"),
+  );
+  for (const name of ["model_routing/routing", "../bin/sync", "tasks/archive.mjs"]) {
+    assert.deepEqual(await inProcess(["tool", name]), {
+      status: 2,
+      stdout: "",
+      stderr: `akmon tool: unknown tool '${name}'; available: ${available}\n`,
+    });
   }
-  assert.equal(cliData.not_ported, "akmon {{command}}: not ported to the JavaScript implementation yet ({{task}})");
+  assert.deepEqual(await inProcess(["tool"]), {
+    status: 2,
+    stdout: "",
+    stderr: `akmon tool: missing tool name; available: ${available}\n`,
+  });
+});
+
+// -- update (C107) -----------------------------------------------------------------------------
+
+test("update is dispatched to the JavaScript update, flags passed through", async () => {
+  const help = akmon(["update", "--help"]);
+  assert.equal(help.status, 0);
+  assert.ok(help.stdout.startsWith("usage: akmon update "));
+  assert.deepEqual(await inProcess(["update", "--bogus"]), {
+    status: 2,
+    stdout: "",
+    stderr: "akmon update: error: Unknown option '--bogus'\n",
+  });
+  assert.ok(!Object.hasOwn(cliData, "not_ported"));
 });
 
 // -- the top level -----------------------------------------------------------------------------
@@ -158,17 +216,21 @@ test("-h and --help print the usage block with the command list of cli.json, exi
 
 test("a missing or unknown command is one usage line on stderr and exit 2", async () => {
   assert.deepEqual(await inProcess([]), {
-    status: 2, stdout: "", stderr: "akmon: error: the following arguments are required: command\n",
+    status: 2,
+    stdout: "",
+    stderr: "akmon: error: the following arguments are required: command\n",
   });
   assert.deepEqual(akmon(["--bogus"]), {
-    status: 2, stdout: "", stderr: "akmon: error: the following arguments are required: command\n",
+    status: 2,
+    stdout: "",
+    stderr: "akmon: error: the following arguments are required: command\n",
   });
   assert.deepEqual(akmon(["frobnicate"]), {
     status: 2,
     stdout: "",
     stderr:
       "akmon: error: argument command: invalid choice: 'frobnicate' " +
-      "(choose from 'init', 'update', 'sync', 'verify', 'check', 'path', 'hook', 'version')\n",
+      "(choose from 'init', 'update', 'sync', 'verify', 'check', 'path', 'hook', 'tool', 'version')\n",
   });
 });
 
@@ -189,7 +251,9 @@ test("check is the check command: same output and exit code as running bin/check
 test("sync is the sync command: same output and exit code as running bin/sync.mjs", () => {
   const root = project();
   for (const args of [["--check"], ["--dry-run"], ["--bogus"]]) {
-    const direct = spawnNode(posix.join(TREE, "js", "bin", "sync.mjs"), [...args, "--project-root", root], { cwd: root });
+    const direct = spawnNode(posix.join(TREE, "js", "bin", "sync.mjs"), [...args, "--project-root", root], {
+      cwd: root,
+    });
     const viaCli = akmon(["sync", ...args, "--project-root", root], { cwd: root });
     assert.deepEqual(viaCli, direct, args.join(" "));
   }
@@ -199,7 +263,9 @@ test("sync is the sync command: same output and exit code as running bin/sync.mj
 test("verify is the verify command: same output and exit code as running bin/verify.mjs", () => {
   const root = project();
   for (const args of [["--quiet"], ["--help"], ["--bogus"]]) {
-    const direct = spawnNode(posix.join(TREE, "js", "bin", "verify.mjs"), [...args, "--project-root", root], { cwd: root });
+    const direct = spawnNode(posix.join(TREE, "js", "bin", "verify.mjs"), [...args, "--project-root", root], {
+      cwd: root,
+    });
     const viaCli = akmon(["verify", ...args, "--project-root", root], { cwd: root });
     assert.deepEqual(viaCli, direct, args.join(" "));
   }
@@ -210,7 +276,9 @@ test("verify is the verify command: same output and exit code as running bin/ver
 
 test("hook without a name is refused with the data text and exit 2", async () => {
   assert.deepEqual(await inProcess(["hook"]), {
-    status: 2, stdout: "", stderr: "akmon hook: missing hook name\n",
+    status: 2,
+    stdout: "",
+    stderr: "akmon hook: missing hook name\n",
   });
 });
 
@@ -240,13 +308,22 @@ test("hook names the hooks it has when it is given an unknown one: no data bundl
       name,
     );
   }
-  const onDisk = fs.readdirSync(HOOKS).filter((name) => name.endsWith(".mjs") && !name.endsWith(".test.mjs"))
-    .map((name) => name.slice(0, -4)).filter((stem) => stem !== "hook_data").sort();
+  const onDisk = fs
+    .readdirSync(HOOKS)
+    .filter((name) => name.endsWith(".mjs") && !name.endsWith(".test.mjs"))
+    .map((name) => name.slice(0, -4))
+    .filter((stem) => stem !== "hook_data")
+    .sort();
   assert.deepEqual(onDisk, HOOK_STEMS);
 });
 
 /** The same payload through `akmon hook <args>` and through `node js/hooks/<script>.mjs <rest>`. */
-function sameAsDirect(/** @type {string} */ script, /** @type {string[]} */ rest, /** @type {unknown} */ payload, /** @type {string} */ cwd) {
+function sameAsDirect(
+  /** @type {string} */ script,
+  /** @type {string[]} */ rest,
+  /** @type {unknown} */ payload,
+  /** @type {string} */ cwd,
+) {
   const input = JSON.stringify(payload);
   const direct = spawnNode(posix.join(HOOKS, `${script}.mjs`), rest, { cwd, input });
   const viaCli = akmon(["hook", script, ...rest], { cwd, input });
@@ -257,14 +334,27 @@ function sameAsDirect(/** @type {string} */ script, /** @type {string[]} */ rest
 test("hook runs a Claude hook in process: byte for byte what node runs on the script itself", () => {
   const root = project();
   const result = sameAsDirect(
-    "role-on-code", [],
-    { hook_event_name: "PreToolUse", tool_name: "Edit", session_id: "sess-ro", cwd: root, tool_input: { file_path: `${root}/src/app.py` } },
+    "role-on-code",
+    [],
+    {
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      session_id: "sess-ro",
+      cwd: root,
+      tool_input: { file_path: `${root}/src/app.py` },
+    },
     root,
   );
   assert.equal(result.status, 0);
-  assert.match(JSON.parse(result.stdout).hookSpecificOutput.additionalContext, /^\[akmon\] Role check — you are editing project code\./);
+  assert.match(
+    JSON.parse(result.stdout).hookSpecificOutput.additionalContext,
+    /^\[akmon\] Role check — you are editing project code\./,
+  );
   // a name with the suffix is the same hook; a silent hook is silent in both
-  const silent = akmon(["hook", "role-on-code.mjs"], { cwd: root, input: JSON.stringify({ tool_name: "Edit", cwd: root, tool_input: { file_path: `${root}/README.md` } }) });
+  const silent = akmon(["hook", "role-on-code.mjs"], {
+    cwd: root,
+    input: JSON.stringify({ tool_name: "Edit", cwd: root, tool_input: { file_path: `${root}/README.md` } }),
+  });
   assert.deepEqual(silent, { status: 0, stdout: "", stderr: "" });
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -277,14 +367,27 @@ test("hook runs the Codex dispatcher with the rest of the arguments as its route
   assert.equal(result.status, 0);
   assert.match(JSON.parse(result.stdout).hookSpecificOutput.additionalContext, /^\[akmon\] Role check/);
   // the dispatcher's own refusals reach the owner the same way: one crash line, exit 1
-  assert.deepEqual(sameAsDirect("codex-hook", [], payload, root), { status: 1, stdout: "", stderr: "akmon codex-hook hook: UsageError\n" });
-  assert.deepEqual(sameAsDirect("codex-hook", ["nope"], payload, root), { status: 1, stdout: "", stderr: "akmon codex-hook hook: UsageError\n" });
+  assert.deepEqual(sameAsDirect("codex-hook", [], payload, root), {
+    status: 1,
+    stdout: "",
+    stderr: "akmon codex-hook hook: UsageError\n",
+  });
+  assert.deepEqual(sameAsDirect("codex-hook", ["nope"], payload, root), {
+    status: 1,
+    stdout: "",
+    stderr: "akmon codex-hook hook: UsageError\n",
+  });
   fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("hook model-routing reports through the same single document as the script", () => {
   const root = project();
-  const result = sameAsDirect("model-routing", [], { hook_event_name: "SessionStart", session_id: "sess-mr", cwd: root, source: "startup" }, root);
+  const result = sameAsDirect(
+    "model-routing",
+    [],
+    { hook_event_name: "SessionStart", session_id: "sess-mr", cwd: root, source: "startup" },
+    root,
+  );
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
   fs.rmSync(root, { recursive: true, force: true });

@@ -26,6 +26,13 @@ from pathlib import Path
 # ``AITNA_ROOT`` only when the chosen root is not this one.
 AITNA_ROOT_DEFAULT = "_aitna"
 
+# The longest start path the walk accepts, in UTF-8 bytes: Linux's PATH_MAX. No longer path
+# names anything the kernel can look up, and resolving one costs time quadratic in its depth.
+_START_PATH_MAX_BYTES = 4096
+
+# How much of a refused start path its error message quotes.
+_REFUSED_PREFIX_CHARS = 40
+
 
 def aitna_root_name() -> str:
     """The configured dev-layer root, as a project-root-relative POSIX path (default ``_aitna``)."""
@@ -63,25 +70,62 @@ def is_project_root(candidate: Path) -> bool:
     return (aitna / "akmon").exists() or (aitna / ".akmon.toml").is_file()
 
 
+def _bounded_start(start: Path | None = None) -> Path:
+    """``start`` (default: the cwd), refused when its string is longer than the walk accepts.
+
+    The bound is checked on the string before any filesystem call — ``resolve()`` included —
+    because the cost it guards is in those calls: a start of 32,769 ``a/`` components kept a hook
+    resolving it for minutes (C121). The length is counted in UTF-8, with a lone surrogate (an
+    undecodable byte in a ``cwd``) as three bytes, the way the JavaScript twin counts it.
+
+    Raises:
+        UnicodeEncodeError: the start path holds a surrogate the filesystem encoding refuses.
+        ValueError: the start path's string is longer than ``_START_PATH_MAX_BYTES``.
+    """
+    origin = start if start is not None else Path.cwd()
+    text = str(origin)
+    # A path no filesystem call can take (a lone surrogate) is refused first, as ``resolve()``
+    # refuses it: the JavaScript hooks check that before the bound, so the two twins name the
+    # same failure for an over-long path that is also unencodable.
+    os.fsencode(text)
+    size = len(text.encode("utf-8", "surrogatepass"))
+    if size > _START_PATH_MAX_BYTES:
+        raise ValueError(
+            f"project-root start path is {size} bytes, over the {_START_PATH_MAX_BYTES}-byte bound: "
+            f"{text[:_REFUSED_PREFIX_CHARS]}..."
+        )
+    return origin
+
+
 def find_project_root(start: Path | None = None) -> Path:
     """Walk up from ``start`` (default: the cwd) to the nearest project root, else ``start``.
 
     The fallback is deliberate and stays: a hook must not abort a session because it was
     invoked outside a project. Callers that *write* under the result must not use it bare —
     ``resolve_project_root`` hands them the same path plus the sentence to print, because
-    there the fallback is a guess with a file written on top of it.
+    there the fallback is a guess with a file written on top of it. A start path longer than
+    ``_START_PATH_MAX_BYTES`` is not a fallback: it is refused with a ``ValueError`` before it is
+    resolved (``_bounded_start``), and a hook takes that as its ordinary failure exit (C121).
+
+    The walk is linear: each step is the candidate's parent, until the parent stops changing.
 
     ``hooks/hook_core.py`` imports this rather than repeating it. That was previously deferred
     on the belief that it waited on the C69/ADR-0009/D02 fork; it does not. That fork is about which
     *tree* the hooks read (``akmon_runtime_root``), not about where the project root is, and the
     only real dependency — that this package sit beside ``hooks/`` — holds in every carrier by
     construction, since C77 leaves the hooks running inside the tree that ships them.
+
+    Raises:
+        ValueError: the start path is longer than ``_START_PATH_MAX_BYTES``.
     """
-    current = (start or Path.cwd()).resolve()
-    for candidate in (current, *current.parents):
-        if is_project_root(candidate):
-            return candidate
-    return current
+    current = _bounded_start(start).resolve()
+    candidate = current
+    while not is_project_root(candidate):
+        parent = candidate.parent
+        if parent == candidate:
+            return current
+        candidate = parent
+    return candidate
 
 
 def resolve_project_root(explicit: Path | None, start: Path | None = None) -> tuple[Path, str | None]:
@@ -94,7 +138,7 @@ def resolve_project_root(explicit: Path | None, start: Path | None = None) -> tu
     """
     if explicit is not None:
         return explicit.resolve(), None
-    origin = (start or Path.cwd()).resolve()
+    origin = _bounded_start(start).resolve()
     found = find_project_root(origin)
     if is_project_root(found):
         return found, None

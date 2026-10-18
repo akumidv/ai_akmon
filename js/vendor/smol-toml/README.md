@@ -5,7 +5,7 @@ the `LICENSE` here is the upstream licence, kept per the decision).
 
 ## What is vendored and why
 
-[ADR-0020/D04](../../../meta/decisions/0020-node-consumers-js-implementation.md#d04--form-of-the-javascript-implementation)
+[ADR-0020/D04](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0020-node-consumers-js-implementation.md#d04--form-of-the-javascript-implementation)
 pins the form of the JavaScript implementation: TOML is read by a **vendored copy of smol-toml at a
 pinned version**, licence kept, verified against the official `toml-test` suite, and updated only
 through a recorded task. This directory is that vendored copy: the upstream `dist/` build output,
@@ -79,7 +79,7 @@ the decoder adapter, over the `files-toml-1.0.0` subset: the TOML version the Py
 | toml-test version | `v2.2.0` |
 | Binary | release asset <https://github.com/toml-lang/toml-test/releases/download/v2.2.0/toml-test-v2.2.0-linux-amd64.gz> (the sha256 below is of the **extracted** `toml-test-v2.2.0-linux-amd64` binary) |
 | Binary sha256 | `78b74b9d4136f9561a2c57778920d3c6646ead41079d1b36fc1629641187df30` |
-| Decoder adapter | [`meta/conformance/tomltest/decoder.mjs`](../../../meta/conformance/tomltest/decoder.mjs) |
+| Decoder adapter | [`meta/conformance/tomltest/decoder.mjs`](https://github.com/akumidv/ai_akmon/blob/main/meta/conformance/tomltest/decoder.mjs) |
 | Subset | `files-toml-1.0.0` (205 valid + 474 invalid cases) |
 
 Result, recorded 2026-09-27 (task C103) — **679 passed / 0 failed under each Node floor**:
@@ -91,9 +91,13 @@ Result, recorded 2026-09-27 (task C103) — **679 passed / 0 failed under each N
 
 The adapter applies, around the 1.1.0-capable parser, the 1.0.0 strictness smol-toml tolerates by
 design (its README footnotes): fatal UTF-8 decoding of stdin, `integersAsBigInt` parsing for full
-int/float type preservation, and a raw-text pre-scan rejecting `\x` byte escapes, line breaks at an
-inline table's own level, trailing commas before an inline table's `}`, and date/time literals with
-out-of-range parts, non-existent calendar dates, or a time part without seconds.
+int/float type preservation, and the TOML 1.0.0 fence akmon's record reader runs,
+[`js/common/toml10.mjs`](https://github.com/akumidv/ai_akmon/blob/main/js/common/toml10.mjs)
+`toml10Refusal`: `\x` and `\e` escapes, line breaks at an inline table's own level, trailing commas
+before an inline table's `}`, and date/time literals with out-of-range parts, non-existent calendar
+dates, or a time part without seconds. The table above was recorded with the adapter's own earlier
+pre-scan; re-run after the move to `toml10Refusal` (C117), with the same binary, subset and Node
+versions: 679 passed / 0 failed under each floor.
 
 ### Skipped cases (67)
 

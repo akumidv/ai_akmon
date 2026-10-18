@@ -69,6 +69,28 @@ def generated_banner() -> str:
     return _agents_data()["generated_banner"]
 
 
+def generated_banners() -> tuple[str, ...]:
+    """Every banner a generated agent file may carry: the current one, then the ones earlier releases wrote.
+
+    The obsolete sweep recognises all of them, so rewording the banner never turns an agent an
+    earlier release generated into a hand-written one that nothing removes.
+    """
+    return (generated_banner(), *_agents_data()["generated_banners_earlier"])
+
+
+def tool_command(runtime_root: str, tool: str) -> str:
+    """How an agent runs ``tool`` (``model_routing/init``) from this implementation (ADR-0020/D06).
+
+    ``runtime_root`` is ``hook_core.runtime_root_display``'s answer: from a mounted tree the
+    tool is the mount's script (no CLI is installed there); from the wheel it is ``akmon tool``,
+    the command the package installs.
+    """
+    texts = _agents_data()["tool_command"]
+    if runtime_root == "$(akmon path)":
+        return jsondata.fill(texts["python"], {"tool": tool})
+    return jsondata.fill(texts["mount"], {"runtime_root": runtime_root, "tool": tool})
+
+
 def settings_probe_names() -> tuple[str, ...]:
     """The ``.claude`` settings files the default-model probe reads, local first (single owner)."""
     return tuple(_agents_data()["settings_probe_names"])
@@ -195,13 +217,9 @@ def compute_binding(
             # top rung, reproducing the pre-corridor below-top warning.
             orch_rank, floor_rank = rungs.index(orchestrator), rungs.index(floor_rung)
             if orch_rank < floor_rank:
-                warning = jsondata.fill(
-                    warnings["below_floor"], {"orchestrator": orchestrator, "floor": floor_rung}
-                )
+                warning = jsondata.fill(warnings["below_floor"], {"orchestrator": orchestrator, "floor": floor_rung})
             elif orch_rank == len(rungs) - 1 and floor_rank < len(rungs) - 1:
-                warning = jsondata.fill(
-                    warnings["reserved_top"], {"orchestrator": orchestrator, "floor": floor_rung}
-                )
+                warning = jsondata.fill(warnings["reserved_top"], {"orchestrator": orchestrator, "floor": floor_rung})
 
     provider = opposite_vendor(registry, vendor)
     second_opinion = registry.get(provider, {}).get("second_opinion", {})
@@ -279,9 +297,7 @@ def second_opinion_spec(registry: dict, provider: str, *, required: bool = True)
     if isinstance(spec, dict):
         retired = [key for key in retired_second_opinion_keys() if key in spec]
         if retired:
-            raise KeyError(
-                jsondata.fill(errors["retired_keys"], {"provider": provider, "retired": ", ".join(retired)})
-            )
+            raise KeyError(jsondata.fill(errors["retired_keys"], {"provider": provider, "retired": ", ".join(retired)}))
         if spec.get("harness") and spec.get("operation") and spec.get("report_dir"):
             return spec
     if required:
@@ -328,11 +344,7 @@ class UnpinnableModelError(ValueError):
     """A second opinion asked for a model its vendor declares no ``model_flag`` to pin (C97)."""
 
     def __init__(self, harness: str, model: str) -> None:
-        super().__init__(
-            jsondata.fill(
-                _agents_data()["unpinnable_model"], {"model": repr(model), "harness": harness}
-            )
-        )
+        super().__init__(jsondata.fill(_agents_data()["unpinnable_model"], {"model": repr(model), "harness": harness}))
 
 
 def second_opinion_unavailability(registry: dict, config: dict, orchestrator_vendor: str) -> str:
@@ -942,7 +954,7 @@ def recommended_max_context(registry: dict, model_id: str | None) -> int:
     hard limit sits below the default), else ``recommended_max``. The shipped 200000 is a
     configurable owner policy checked against measurement — above where sessions get compacted
     in practice, below the 258,400-token window Codex reports for OpenAI models — C80
-    (meta/reviews/c80-context-fill-20260912.md).
+    (meta/reviews/c80-context-fill.md).
     """
     try:
         override = int(os.environ.get(RECOMMENDED_MAX_ENV, ""))
@@ -1075,7 +1087,7 @@ def binding_artifacts(
 def obsolete_agent_files(root: Path, planned_paths: Iterable[Path]) -> list[Path]:
     """Generated subagent definitions on disk that the current ``agent_specs()`` no longer plan.
 
-    Only files carrying ``generated_banner()`` are candidates, so a hand-written agent living in
+    Only files carrying one of ``generated_banners()`` are candidates, so a hand-written agent living in
     the same directory is never a deletion target. Without this, renaming an agent leaves its
     old definition behind as a live duplicate — the harness keeps offering both, the stale one
     still pinned to a model, and nothing warns (``bin/sync.py`` prunes only skills, ADR 0011).
@@ -1092,7 +1104,7 @@ def obsolete_agent_files(root: Path, planned_paths: Iterable[Path]) -> list[Path
             text = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        if generated_banner() in text:
+        if any(banner in text for banner in generated_banners()):
             obsolete.append(path)
     return obsolete
 
@@ -1289,14 +1301,12 @@ def _escalation_hint(config: dict) -> str:
     return f" (escalation path: {' → '.join(str(rung) for rung in path)})"
 
 
-def status_lines(config: dict, registry: dict, runtime_root: str) -> list[str]:
+def status_lines(config: dict, registry: dict, init_command: str) -> list[str]:
     """The steady-state status injection: one binding line + self-check, plus any warning.
 
-    ``runtime_root`` is the project-root-relative directory the routing tools actually live in
-    — ``<AITNA_ROOT>/akmon`` when the standard is mounted, ``<AITNA_ROOT>/.akmon`` in mount mode
-    ``package``, where there is no mount at all (ADR 0009 §4). It is passed in rather than
-    derived here because only the caller knows the project root; naming the mount
-    unconditionally used to hand a package-mode session a path that does not exist.
+    ``init_command`` is how this project runs the routing initializer (``tool_command``). It is
+    passed in rather than derived here because only the caller knows the project root; naming
+    the mount unconditionally used to hand a package-mode session a path that does not exist.
     """
     binding = config.get("binding", {})
     orchestrator_vendor = str(config.get("vendor") or "anthropic")
@@ -1320,7 +1330,7 @@ def status_lines(config: dict, registry: dict, runtime_root: str) -> list[str]:
             texts["delegation"],
             {"escalation_hint": _escalation_hint(config), "zone_convention": zone_convention()},
         ),
-        jsondata.fill(texts["self_check"], {"orchestrator": orchestrator, "runtime_root": runtime_root}),
+        jsondata.fill(texts["self_check"], {"orchestrator": orchestrator, "init_command": init_command}),
     ]
     warning = compute_binding(registry, orchestrator, config.get("available"), orchestrator_vendor).warning
     if warning:
@@ -1360,13 +1370,13 @@ def rebind_notice(config: dict, registry: dict) -> list[str]:
     return lines
 
 
-def init_instruction(reason: str, runtime_root: str) -> list[str]:
+def init_instruction(reason: str, init_command: str) -> list[str]:
     """The one-time setup instruction.
 
-    ``runtime_root``: see ``status_lines`` — the recovery path must name the tree this
-    project actually has, mounted or materialized.
+    ``init_command``: see ``status_lines`` — the recovery command must work in the tree this
+    project actually has, mounted or installed.
     """
-    values = {"reason": reason, "runtime_root": runtime_root}
+    values = {"reason": reason, "init_command": init_command}
     return [jsondata.fill(line, values) for line in _agents_data()["init_instruction"]]
 
 
@@ -1649,12 +1659,15 @@ def gate_rule_for(role: str | None) -> GateRule | None:
     return next((rule for rule in gate_rules() if rule.role == role), None)
 
 
-def gate_audit_request(registry: dict, config: dict, role: str | None, message: str) -> str | None:
+def gate_audit_request(
+    registry: dict, config: dict, role: str | None, message: str, gate_pack_command: str
+) -> str | None:
     """The one thing the gate asks for when a role's count reached its floor, else None.
 
     The floor is advisory in the flows — the orchestrator may skip it — so the request names
     both live moves: run the audit, or say the skip out loud. What it does not allow is the
-    gate passing unmentioned, which is the whole of C25.
+    gate passing unmentioned, which is the whole of C25. ``gate_pack_command`` is how this
+    project runs the gate-pack tool (``tool_command``).
     """
     rule = gate_rule_for(role)
     threshold = gate_threshold(registry, rule) if rule is not None else None
@@ -1669,7 +1682,7 @@ def gate_audit_request(registry: dict, config: dict, role: str | None, message: 
         f"[akmon gate] This turn carries {count} {rule.noun} as the {rule.role} role, at or above the "
         f"`{rule.trigger}` floor of {threshold} — {rule.anchor} routes an `audit` pass here. "
         f"Before handing off: either delegate `k_auditor`{model} over the gate-pack "
-        "(`tools/model_routing/gate_pack.py`) and fold its verdict in, or state in one line that you "
+        f"(`{gate_pack_command}`) and fold its verdict in, or state in one line that you "
         "are skipping the audit and why. The floor is advisory; passing it in silence is not."
     )
 

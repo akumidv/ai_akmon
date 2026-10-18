@@ -31,6 +31,9 @@ test("loaded through a link (a manager's node_modules/akmon) it still answers th
     `import { embeddedTreeRoot } from ${JSON.stringify(posix.join(dir, "node_modules", "akmon", "js", "akmon", "_tree.mjs"))};\nprocess.stdout.write(embeddedTreeRoot());\n`,
   );
   const result = spawnSync(process.execPath, [script], { encoding: "utf8", cwd: os.tmpdir() });
-  assert.deepEqual({ status: result.status, stdout: result.stdout, stderr: result.stderr }, { status: 0, stdout: TREE, stderr: "" });
+  assert.deepEqual(
+    { status: result.status, stdout: result.stdout, stderr: result.stderr },
+    { status: 0, stdout: TREE, stderr: "" },
+  );
   fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -1,0 +1,12 @@
+{
+  "arm": "C",
+  "attempt_class": "technical",
+  "case": "P3-01",
+  "effort": "medium",
+  "model": "gpt-6-astra",
+  "provenance_scope": "evaluator_only",
+  "repeat": 1,
+  "run_id": "0d30b10195ef9b3cf3d932576822964c",
+  "subject_attempt_id": "f8618c748bb2fb6494c249b99767a7e2",
+  "tier": "strongest"
+}

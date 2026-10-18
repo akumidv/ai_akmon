@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a14670-ce77-7870-a532-0dbbffbdd211"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Use the first consumer’s actual linting needs as the deciding criterion:\n\n- Choose **Boundary A** if lint rules express library-wide invariants or must stay consistent across consumers.\n- Choose **Boundary B** if consumers have materially different workflows, toolchains, or policies and should control linting independently.\n- Prefer the boundary that minimizes surprise and coordination: configuration should live with the team that owns its evolution and bears failures.\n\nRecord the first consumer’s use case, ownership, and consequences of rule changes before deciding.CHECK: owner-use"}}
+{"type":"turn.completed","usage":{"input_tokens":5698,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":218,"reasoning_output_tokens":106}}

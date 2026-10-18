@@ -5,6 +5,7 @@ covers = ["command:update"]
 
 [fixture]
 attach = "native"
+warmup = false
 remove = ["_aitna/.akmon.toml"]
 name = "base"
 

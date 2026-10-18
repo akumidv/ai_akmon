@@ -12,8 +12,7 @@ def _tree(tmp_path: Path) -> Path:
     decisions.mkdir(parents=True)
     aliases = ", ".join(f"D2-{number}" for number in range(1, 52))
     (decisions / "0001-topic.md").write_text(
-        "# 0001 — Topic\n\n### D01 — Choice\n\n"
-        f"`Decision-ID: ADR-0001/D01`  \n`Legacy-ID: {aliases}`\n",
+        f"# 0001 — Topic\n\n### D01 — Choice\n\n`Decision-ID: ADR-0001/D01`  \n`Legacy-ID: {aliases}`\n",
         encoding="utf-8",
     )
     (tmp_path / "meta" / "TASKS.md").write_text("# Tasks\n", encoding="utf-8")
@@ -30,9 +29,7 @@ def test_complete_current_owner_map_is_clean(tmp_path):
 
 def test_duplicate_decision_id_is_rejected(tmp_path):
     root = _tree(tmp_path)
-    (root / "meta" / "decisions" / "0001-other.md").write_text(
-        "`Decision-ID: ADR-0001/D01`\n", encoding="utf-8"
-    )
+    (root / "meta" / "decisions" / "0001-other.md").write_text("`Decision-ID: ADR-0001/D01`\n", encoding="utf-8")
     assert _codes(root) == ["decision.duplicate-id"]
 
 

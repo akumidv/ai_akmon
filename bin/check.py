@@ -53,9 +53,7 @@ def main(argv: list[str] | None = None) -> int:
         print_findings([Finding("error", "check.config", str(exc), config_target(), repair_record_fix())])
         return 1
     checks, problems = read_checks(table)
-    findings = [
-        Finding("error", "check.config", problem, config_target(), correct_entry_fix()) for problem in problems
-    ]
+    findings = [Finding("error", "check.config", problem, config_target(), correct_entry_fix()) for problem in problems]
     if not checks and not problems:
         message, fix = no_checks()
         findings.append(Finding("warn", "check.config", message, config_target(), fix))

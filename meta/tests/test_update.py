@@ -59,6 +59,17 @@ def test_update_data_pins_its_structure():
         "closing_review",
         "closing_bump",
         "closing_codex",
+        "python_refuses_ecosystem",
+        # Read by the JavaScript update only (C107, Node package mode).
+        "node_refuses_record",
+        "node_pin_not_dev",
+        "node_registry_unreachable",
+        "node_registry_no_release",
+        "node_manager_unknown",
+        "node_manager_missing",
+        "node_move_failed",
+        "node_launcher_missing",
+        "closing_staged_node",
     }
     assert set(_UPDATE_DATA["plan_notes"]) == {
         "not_a_release",

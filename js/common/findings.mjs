@@ -154,7 +154,10 @@ export class Finding {
     const missing = _FIELDS.filter((key) => fields[/** @type {keyof FindingFields} */ (key)] === undefined);
     if (missing.length > 0) {
       const noun = missing.length === 1 ? "argument" : "arguments";
-      throw pyError("TypeError", `Finding.__init__() missing ${missing.length} required positional ${noun}: ${_quotedList(missing)}`);
+      throw pyError(
+        "TypeError",
+        `Finding.__init__() missing ${missing.length} required positional ${noun}: ${_quotedList(missing)}`,
+      );
     }
     const { severity, code, message, target, fix } = fields;
     const data = _orRead(fields.data);
@@ -174,7 +177,10 @@ export class Finding {
   /** @param {FindingsData} data */
   _validateSeverity(data) {
     if (!severities(data).includes(this.severity)) {
-      throw pyError("ValueError", `severity must be one of ${severities(data).join(" | ")}, got ${pyRepr(this.severity)}`);
+      throw pyError(
+        "ValueError",
+        `severity must be one of ${severities(data).join(" | ")}, got ${pyRepr(this.severity)}`,
+      );
     }
   }
 

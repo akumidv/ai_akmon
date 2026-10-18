@@ -15,6 +15,8 @@ akmon layer in a project. Also carries **ready prompts for the user**.
 > the reference behind what it wrote, or as the manual path when you would rather attach by
 > hand. One exception is deliberate: `--mode subtree` prints the `git subtree add` command for
 > you to run instead of running it, because that command *commits* (§A10).
+> On a **Node project** `npx akmon init` does the same mechanical half in package mode, with no
+> Python anywhere (§G); the steps below hold, with the Node spellings §G names.
 
 Source of rules: [README.md](README.md) (the three axes, the layer decision tree, the
 learn loop) and [ARCHETYPES.md](ARCHETYPES.md) (archetypes + the guardrail/profile
@@ -157,6 +159,17 @@ Attach akmon to this project with the CLI, then finish the judgement steps:
 an offline copy). Then classify the project per ARCHETYPES.md, import the language profile
 into the AGENTS.md akmon block, pin `[test].runner` in <AITNA_ROOT>/.akmon.toml, and
 run `akmon verify --strict`. Show the diff, do not commit.
+```
+
+For a Node project (§G):
+
+```
+Attach akmon to this Node project with the npm package, then finish the judgement steps:
+  npm install -D -E akmon   (or the project's manager: pnpm add -D -E / yarn add -D -E / bun add -d --exact)
+  npx akmon init
+Then classify the project per ARCHETYPES.md, import the language profile into the AGENTS.md
+akmon block, pin `[test].runner` in <AITNA_ROOT>/.akmon.toml to the project's own test command,
+and run `npx akmon verify --strict`. Show the diff, do not commit.
 ```
 
 The prompts below are the **manual** path — use them when the CLI is unavailable, or when a
@@ -363,7 +376,9 @@ python3 _aitna/akmon/bin/verify.py --strict
 Both commands are stdlib-only and can run immediately after checkout, before dependency
 installation. `sync.py --check` exits non-zero when generated pointers are stale or
 missing; `verify.py --strict` validates the wider akmon structure and treats warnings
-as failures for CI.
+as failures for CI. A Node project runs `npx akmon sync --check` and
+`npx akmon verify --strict` after its dependency install instead (§G), since the commands
+come from `node_modules/akmon`.
 
 ---
 
@@ -533,3 +548,58 @@ Alongside the mounted modes (`submodule` — this document's default — plus `v
   not touch*, voids that group's host approval. Measured on codex-cli 0.149.1: such entries
   keep reporting `enabled: true`, run nothing, and say nothing. Review and re-approve them
   with `/hooks` after every bump; no akmon check reports this state.
+
+---
+
+## G. Node project — the npm package
+
+A Node project attaches in mode `package` through the npm carrier and runs akmon's JavaScript
+implementation: the CLI, the hooks and the tools come from `node_modules/akmon`, and nothing in
+the project or its CI needs Python. Everything in §F holds, with these Node spellings.
+
+- **Pin first, then attach.** akmon is a **dev** dependency at an exact version, through the
+  project's own manager: `npm install -D -E akmon` (`pnpm add -D -E akmon`, `yarn add -D -E akmon`,
+  `bun add -d --exact akmon`). Then `npx akmon init` (`pnpm exec`, `yarn`, `bunx` likewise).
+  `init` serves only mode `package` here, probes no repository, and exits 1 while
+  `devDependencies` has no akmon pin. `verify` reports a pin in `dependencies`,
+  `optionalDependencies` or `peerDependencies` as an error, and a range, dist-tag, `workspace:`,
+  `file:` or URL pin as a warning (`package.dev-pin`), because two installs of such a pin can
+  resolve different versions. The npm package ships from the first release after v0.3.0 (no
+  earlier tag carries it), and until it is on npm there is no registry version to pin:
+  `npm install -D github:akumidv/ai_akmon#vX.Y.Z` at that release or later installs and runs, and `package.dev-pin`
+  accepts a git dependency at a release tag `#vX.Y.Z` as exact; a branch, a `#semver:` range or
+  a commit still warns.
+- **What `init` writes.** `.akmon.toml` with `mount = "package"` and `ecosystem = "node"`; the
+  Node variant of the `AGENTS.md` akmon block (links to the standard by GitHub tag URL, as in §F);
+  `.gitignore` entries with `node_modules/` and no dev-layer venv; the hook wiring and vendor
+  pointers via `sync`; model-routing init; and, unless `--no-ci`, `.github/workflows/akmon.yml`:
+  `setup-node` (or `setup-bun`), the project's install, then `akmon sync --check` and
+  `akmon verify --strict` through the manager. The manager is read from `packageManager` in
+  `package.json`, else the lockfile, else npm.
+- **The hooks run from `node_modules`.** The generated wiring reads
+  `node "$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/<hook>.mjs"` (Codex:
+  `…/codex-hook.mjs <advisory>`). `verify` reports `hooks.launcher` as an error when that path
+  cannot exist: Yarn Plug'n'Play (no `node_modules`), akmon hoisted into an ancestor directory
+  (a workspace root above the project), or no install at all.
+- **Checks.** `init` records the project's own ESLint, Biome, oxlint, Prettier and `tsc` under
+  `[check]` through the manager's run prefix; `tsc` runs as `tsc --noEmit -p .`, without
+  `{files}`. A project with none gets `--checks akmon` by default: an `.oxlintrc.json` that
+  `extends` `./node_modules/akmon/profiles/oxlint.json`, with `env` `browser` and `node`. Narrow
+  that `env` to where the code runs — `extends` does not carry `env`, so it is the project's own
+  setting. An `.oxlintrc.json` the project already has is never edited; `init` names the
+  `extends` line it lacks. `--checks own|akmon|none` overrides the default.
+- **`[test].runner`** is the project's own test command (`npm test`, `pnpm test`, …); there is no
+  dev-layer venv to build (§A5).
+- **Tools** run as `npx akmon tool <path>` (e.g. `npx akmon tool tasks/archive --help`), the same
+  paths as `akmon tool` on Python. The tools are also importable modules through the package's
+  `exports` (`akmon/tools/model_routing/init`, …).
+- **Bump.** `npx akmon update` moves the pin with the manager's own exact-version command to the
+  newest release (`--ref vX.Y.Z` for a specific one; an older one is a rollback it announces),
+  then runs `init`, `sync --check` and `verify --strict`, and never commits; for a manager it does
+  not know it prints the command instead. It asks the npm registry for the newest version, so
+  until the first publish move the git-tag pin by hand and run `npx akmon init`. The Codex
+  `/hooks` re-approval of §F applies after every bump.
+- **One implementation per record.** The Python CLI refuses a record with `ecosystem = "node"`
+  (exit 2, naming the `npx akmon` command to run), and the JavaScript CLI refuses a mounted or
+  Python record the same way. A Node attach cannot yet be moved back to a Python one through
+  `akmon init`.

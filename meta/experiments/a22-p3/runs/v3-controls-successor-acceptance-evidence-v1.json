@@ -1,0 +1,23 @@
+{
+  "accepted_accounting_exception": true,
+  "accepted_seal_sha256": "d3d513feead984a755167e446eee9a9d84f6ba32f9cfd4c8cad0b96c5ecd2103",
+  "authentication_limit": "Local session log, not independently signed.",
+  "normalization": "Context-resolved acceptance of the immediately preceding exact-seal question. user_text is an interpretation, not a verbatim quote; raw_user_text is preserved.",
+  "prior_accounting_acceptance_sha256": "e34cf210e7ceb71e8e8cbd80e2f506a9d417758c65719be9cc783de51d93cc42",
+  "raw_user_text": "подверждаю запуск",
+  "record_type": "p3_v3_controls_owner_acceptance",
+  "request_log_line": 29405,
+  "request_message_id": "msg_01a73e526108f56c016ad2857a77cc87d2a99b15414e9b9cd3",
+  "request_record_sha256": "83776dde3b6a993c5dc43d0eab95d5316e6ce15092d628f8ddef197431c8c73c",
+  "request_text": "Пакет переведён на установленный **Codex CLI 0.162.1**. Офлайн-допуск и три целевых теста прошли; проверка подписки показала 71% за пять часов и 38% за неделю. Вызовов модели пока не было. [Пакет и ограничения](/home/ai/workspace/akmon/meta/experiments/a22-p3/V3_CONTROLS_SUCCESSOR_PROPOSAL.md), [отчёт](/home/ai/workspace/akmon/meta/reviews/a22-p3-v3-controls-startup-stop.md).\n\nПодтвердите запуск **только `technical_controls`** для нового seal SHA-256 `d3d513feead984a755167e446eee9a9d84f6ba32f9cfd4c8cad0b96c5ecd2103`, с вами как оператором остановки. Принятый протокол A22 требует согласия с точным seal; прежнее подтверждение относилось к пакету с другой версией CLI.",
+  "schema": 1,
+  "scope": [
+    "technical_controls"
+  ],
+  "source_log": "/home/ai/.codex/sessions/2026/09/23/rollout-2026-09-23T09-16-25-01a0cd8d-4d82-7ac0-8b96-ce11eb0ff664.jsonl",
+  "stop_operator": "owner (current chat session)",
+  "user_log_line": 29412,
+  "user_message_id": "msg_01a1466f-0762-71f0-9a58-bff83022a632",
+  "user_record_sha256": "efa3a91bc310688ca6e1e3055817a752395196298dde5e8674db7fb86baee53f",
+  "user_text": "подверждаю запуск [in reply to technical_controls seal d3d513feead984a755167e446eee9a9d84f6ba32f9cfd4c8cad0b96c5ecd2103, with the owner as оператор остановки]"
+}

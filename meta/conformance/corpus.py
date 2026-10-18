@@ -210,6 +210,9 @@ def load_scenario(path: Path, *, strict_seeded: bool = True) -> Scenario:
     """
     with path.open("rb") as handle:
         data = tomllib.load(handle)
+    if "fuzz" in data:
+        # A fuzz draft (fuzz.py --emit) carries [fuzz] until a human has read it as a spec.
+        raise CorpusError(f"{path}: an unreviewed fuzz draft (a [fuzz] table); review it, then remove the table")
     scenario_id = str(path.relative_to(CORPUS_ROOT / "scenarios").with_suffix(""))
     if data.get("id") != scenario_id:
         raise CorpusError(f"{path}: id {data.get('id')!r} does not match its file path {scenario_id!r}")
@@ -300,6 +303,7 @@ SNAPSHOT_FILES = (
     "common/check_runner.py",
     "common/project_root.py",
     "common/record.py",
+    "common/report_path.py",
     "common/runtime.json",
     "common/runtime.py",
     "common/versions.py",

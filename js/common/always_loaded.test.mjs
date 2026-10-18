@@ -12,8 +12,22 @@ import os from "node:os";
 import { posix } from "node:path";
 
 import {
-  CODE, Cap, Member, Population, blockHeading, caps, consumer, importChain, markedBlock, over, populations, readAlwaysLoadedData,
-  report, severity, shipped } from "./always_loaded.mjs";
+  CODE,
+  Cap,
+  Member,
+  Population,
+  blockHeading,
+  caps,
+  consumer,
+  importChain,
+  markedBlock,
+  over,
+  populations,
+  readAlwaysLoadedData,
+  report,
+  severity,
+  shipped,
+} from "./always_loaded.mjs";
 
 const DATA_FILE = new URL("../../common/always_loaded.json", import.meta.url);
 const data = readAlwaysLoadedData();
@@ -47,7 +61,12 @@ test("the readers answer what the data file carries", () => {
 });
 
 test("the readers follow the data they are handed, not the file", () => {
-  const other = { block_heading: "## X", scopes: ["a", "b"], caps: { a: { lines: 1, bytes: 2 }, b: { lines: 3, bytes: 4 } }, severity: { a: "warn", b: "error" } };
+  const other = {
+    block_heading: "## X",
+    scopes: ["a", "b"],
+    caps: { a: { lines: 1, bytes: 2 }, b: { lines: 3, bytes: 4 } },
+    severity: { a: "warn", b: "error" },
+  };
   assert.equal(blockHeading(other), "## X");
   assert.equal(shipped(other), "a");
   assert.equal(consumer(other), "b");
@@ -86,9 +105,9 @@ test("a Population keeps its members as a copy of what it was given", () => {
 });
 
 test("lines and size are the Python measures, and sums have no separator", () => {
-  const member = new Member("m", "a\r\nb é");
+  const member = new Member("m", "a\r\nb\u2028é");
   assert.equal(member.lines, 2 + 1);
-  assert.equal(member.size, Buffer.byteLength("a\r\nb é", "utf8"));
+  assert.equal(member.size, Buffer.byteLength("a\r\nb\u2028é", "utf8"));
   const population = new Population("s", [new Member("a", "no newline"), new Member("b", "next\n")]);
   assert.equal(population.lines, 2);
   assert.equal(population.size, "no newlinenext\n".length);
@@ -101,10 +120,17 @@ test("the shipped scope counts block, chain and selected once; the consumer scop
     const selected = [posix.join(root, "_aitna/.akmon/profiles/python.md"), posix.join(root, COMMON)];
     const found = /** @type {Record<string, Population>} */ (populations(data, agents, root, selected));
     const names = (/** @type {Population} */ population) => population.members.map((member) => member.name);
-    assert.deepEqual(names(found["akmon-shipped"]), ["AGENTS.md (akmon block)", COMMON, "_aitna/.akmon/profiles/python.md"]);
+    assert.deepEqual(names(found["akmon-shipped"]), [
+      "AGENTS.md (akmon block)",
+      COMMON,
+      "_aitna/.akmon/profiles/python.md",
+    ]);
     assert.deepEqual(names(found["consumer-total"]), ["AGENTS.md", COMMON, "_aitna/.akmon/profiles/python.md"]);
     assert.equal(found["akmon-shipped"].lines, BLOCK.split("\n").length - 1 + 2 + 1);
-    assert.equal(found["consumer-total"].size - found["akmon-shipped"].size, Buffer.byteLength(agents) - Buffer.byteLength(BLOCK));
+    assert.equal(
+      found["consumer-total"].size - found["akmon-shipped"].size,
+      Buffer.byteLength(agents) - Buffer.byteLength(BLOCK),
+    );
   });
 });
 
@@ -118,11 +144,15 @@ test("changing one member moves the shipped count by exactly that member", () =>
   /** @type {Population[]} */
   const first = [];
   withProject({}, (root) => {
-    first.push(/** @type {Record<string, Population>} */ (populations(data, `# A\n\n${BLOCK}${TAIL}`, root))["akmon-shipped"]);
+    first.push(
+      /** @type {Record<string, Population>} */ (populations(data, `# A\n\n${BLOCK}${TAIL}`, root))["akmon-shipped"],
+    );
   });
   const [before] = first;
   withProject({ [COMMON]: "rule one\nrule two\nrule three\n" }, (root) => {
-    const after = /** @type {Record<string, Population>} */ (populations(data, `# A\n\n${BLOCK}${TAIL}`, root))["akmon-shipped"];
+    const after = /** @type {Record<string, Population>} */ (populations(data, `# A\n\n${BLOCK}${TAIL}`, root))[
+      "akmon-shipped"
+    ];
     assert.deepEqual([after.lines - before.lines, after.size - before.size], [1, Buffer.byteLength("rule three\n")]);
   });
 });

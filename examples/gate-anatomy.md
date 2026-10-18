@@ -2,7 +2,7 @@
 
 A real gate, end to end: the top-down architecture audit **of akmon itself**, run with
 akmon's own mechanism (session of 2026-07-05, recorded in
-[meta/reviews/review-20260705.md](../meta/reviews/review-20260705.md)). Every step below
+[meta/reviews/architecture-audit.md](https://github.com/akumidv/ai_akmon/blob/main/meta/reviews/architecture-audit.md)). Every step below
 happened; quotes are from the session's gate artifacts. Gate artifacts live in the
 consuming project's `_aitna/artifacts/gates/<stamp>-<slug>/` and are **gitignored**
 (per-session process material, not repo content) — which is why this page inlines what it

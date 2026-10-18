@@ -79,3 +79,14 @@ def test_the_dev_lock_agrees_with_the_manifest_pins():
     # Every entry dev, transitively: that is what proves the dev tooling installs no runtime
     # dependency graph alongside the carrier.
     assert [name for name, entry in _LOCK["packages"].items() if name and not entry.get("dev")] == []
+
+
+def test_the_exports_map_is_the_tool_module_api():
+    """ADR-0020/D06: the JS tools are a public module API through ``exports`` — every tool ``akmon
+    tool`` runs that has a JS port, under its tool path, and nothing else but the manifest. Deep
+    imports of the rest of ``js/`` (hooks, ``common``, ``routing``) are not part of it, so changing
+    them is not a breaking release; a tool missing here would be runnable but not importable."""
+    tools = json.loads((_AKMON / "src" / "akmon" / "cli.json").read_text(encoding="utf-8"))["tools"]
+    ported = [tool for tool in tools if (_AKMON / "js" / "tools" / f"{tool}.mjs").is_file()]
+    expected = {"./package.json": "./package.json"} | {f"./tools/{tool}": f"./js/tools/{tool}.mjs" for tool in ported}
+    assert _MANIFEST["exports"] == expected

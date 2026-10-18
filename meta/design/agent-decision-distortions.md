@@ -95,7 +95,7 @@ must show:
 
 ## Where the instrument lives: the ai-bias project
 
-The owner decided on 2026-09-25. Agent bias research is to become a separate project, **ai-bias**,
+The owner decided. Agent bias research is to become a separate project, **ai-bias**,
 possibly once A33 is taken up. Its first material is what A22 produced:
 - the packet instruments of T1–T3: cases, check outputs, rubrics and leakage lists;
 - the run scripts;

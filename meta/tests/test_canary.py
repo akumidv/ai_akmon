@@ -167,8 +167,8 @@ def test_dual_classification_is_rejected(tmp_path):
     _rewrite(
         root,
         "hooks/hook_core.py",
-        "    Policy ID: example.no-thing\n    \"\"\"",
-        "    Policy ID: example.no-thing\n    Runtime classification: operational\n    \"\"\"",
+        '    Policy ID: example.no-thing\n    """',
+        '    Policy ID: example.no-thing\n    Runtime classification: operational\n    """',
     )
     assert "canary.dual-classification" in _codes(root)
 

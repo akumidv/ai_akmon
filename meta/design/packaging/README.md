@@ -5,8 +5,8 @@
 > [ADR 0009](../../decisions/0009-packaging-package-carrier-and-mount-modes.md) (backlog A10),
 > Accepted by the owner (D2-12 verified). Implementation is C37: the CLI, `init` in all four
 > mount modes, package mode and the docs cut-over exist and are covered on the current development
-> interpreter by tests, the self-CI package leg and a live network probe. C68/D2-34 supersedes the
-> former Python 3.9 clause with one **Python >=3.11** floor for the package and every shipped
+> interpreter by tests, the self-CI package leg and a live network probe. C68/D2-34 superseded the
+> former Python 3.9 clause with one Python >=3.11 floor, raised by C122 to **Python >=3.12**, for the package and every shipped
 > venv-free entry point; the [floor note](python-39-floor.md) preserves the measured reason.
 > What "landed" does **not** yet mean here: the work is under owner review and uncommitted
 > (D5 — the owner commits). C37 owns the carrier and local/git-pin adoption, not publication.
@@ -247,13 +247,18 @@ a submodule" let a `vendored → submodule` switch finish green with no `.gitmod
   (`cli.py` + `init` implementation); build backend hatchling; console script
   `akmon = akmon.cli:main`. **Zero runtime dependencies** — the stdlib-only property is a
   contract, verify should assert it stays true.
-- The standard tree ships as package data (hatchling force-include of the repo tree at
-  build time, excluding `.git`, `__pycache__`, `tests/` fixtures' caches). Whether
-  `meta/` (the DEVELOP tree) ships too: **yes for parity** — the submodule carries it, a
-  vendored mount must not be a second, poorer flavor of the standard. *(lock)*
-- Python floor: **3.11** for the package and all shipped venv-free entry points, including the
-  bare `python3` used by generated hooks in every carrier. Python 3.9/3.10 are unsupported;
-  zero runtime dependencies remains unchanged. *(D2-34 lock; supersedes only D2-12's floor)*
+- The standard tree ships as package data (hatchling force-include of the repo tree's
+  top-level members at build time; `js/` through `only-include` + `sources`, because
+  force-include ignores `exclude`), excluding `.git`, `__pycache__` and the caches. `meta/` (the
+  DEVELOP tree) does **not** ship, and neither do test files (`js/**/*.test.mjs`): the wheel, the
+  npm package and a vendored mount carry what runs or is read in a consumer, and carry the same
+  file set as each other; `submodule` and `subtree` keep `meta/` because they are the git tree,
+  not a build. Shipped prose links into `meta/` by absolute repository URL. *(lock; C118
+  amendment of [ADR 0009](../../decisions/0009-packaging-package-carrier-and-mount-modes.md#amendment--the-installable-carriers-ship-no-meta-c118), superseding the earlier "yes for parity")*
+- Python floor: **3.12** for the package and all shipped venv-free entry points, including the
+  bare `python3` used by generated hooks in every carrier. Python 3.9/3.10/3.11 are unsupported;
+  zero runtime dependencies remains unchanged. *(D2-34 lock, raised by the C122 amendment of
+  ADR 0009; supersedes only D2-12's floor)*
 - Name: `akmon` on PyPI — both `akmon` and fallback `ai-akmon` returned 404 when checked for
   D2-12; availability is historical evidence rather than a reservation, so registration still
   happens at first publish. *(lock)*
@@ -321,18 +326,11 @@ plan they were.*
   and the wiring is committed. Locked for now as a requirement of the mode, with `verify`'s
   `hooks.launcher` reporting it; the eventual answer is a small locator shim, not an absolute
   path in a shared file.
-- **Non-Python consumers** — *decided in [ADR 0020](../../decisions/0020-node-consumers-js-implementation.md)
-  (design [A34](../node-consumers.md)); the text below is the original open point.* (e.g. a JS project like tvassistant): the manifest-pin flavor
-  of `package` mode is Python-specific, but nothing else is — the CLI is stdlib-only and
-  `uvx akmon init/sync/verify` runs ephemerally wherever uv exists, with the pin
-  recorded in `.akmon.toml` instead of a manifest. C77 removes the materialized hook copy, so
-  persistent hook execution still needs the project-local launcher required by package mode;
-  an ephemeral `uvx` invocation alone does not provide it. Candidate flavors, in cost order:
-  (a) document `uvx`-driven `package` mode for any-language repos — no new code beyond C37; (b) an
-  npm wrapper package (`akmon` on npm shelling to `uvx akmon` / bundling the tree) so JS
-  projects pin in `package.json` `devDependencies` the way Python ones pin in
-  `pyproject.toml`; (c) mounted modes (submodule/vendored) keep working for any language
-  today. Decide after the alphavar pilot.
+- **Non-Python consumers** — *closed by [ADR 0020](../../decisions/0020-node-consumers-js-implementation.md)
+  (design [A34](../node-consumers.md)).* Neither a documented `uvx` route nor an npm wrapper
+  over Python: akmon ships a JavaScript implementation in the same tree, published on npm, and a
+  Node project pins it in `package.json` `devDependencies` and runs CLI, hooks and tools with no
+  Python (C101–C112). Mounted modes stay Python-only. Consumer path: BOOTSTRAP §G.
 - **Developing akmon while consuming it as a package:** the dev bench is a plain clone
   of `ai_akmon` (self-hosted: `meta/` carries its own backlog/tests/self-CI). For
   co-development against a consumer, override the pin locally — uv: `[tool.uv.sources]

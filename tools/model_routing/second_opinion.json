@@ -7,6 +7,7 @@
     "  what you can still run by hand: hand this gate pack to a subagent on this same model in a fresh context (no session history, no prior reasoning).",
     "  its limits, to record with any result: it removes anchoring on the author's own output; it does not remove shared model priors. It is a self-check, not a second opinion, and must not be filed as one."
   ],
+  "report_dir_outside": "second-opinion: report_dir '{{report_dir}}' resolves outside the project; it must be a directory inside the project root.",
   "summary": {
     "report_line": "report: {{path}}",
     "provider_line": "provider={{provider}} model={{model}}",

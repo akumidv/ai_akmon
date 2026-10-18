@@ -1,0 +1,40 @@
+id = "tools/gate-pack-task-empty"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/gate_pack"]
+
+# C114 owner decision: a --task with no usable characters (here `///`) is a usage refusal, not
+# "no task": exit 2, nothing on stdout, the error sentence on stderr, and no pack written (the
+# silent fallback would have been `code-verify-plan-check-1.md`). Otherwise the plan-check run of
+# gate-pack-plan-check. The usage banner around the sentence is the argument parser's own text,
+# so the shared contract is the sentence, asserted with stderr_contains.
+
+[fixture]
+attach = "native"
+
+[fixture.files]
+"docs/yardstick.md" = "All public callables read subject-first; every behaviour change ships with a test.\n"
+"docs/zone-plan.md" = "- auth\n- api\n- billing\n"
+
+[run]
+tool = "model_routing/gate_pack"
+argv = [
+  "--gate",
+  "code-verify",
+  "--role",
+  "architect",
+  "--kind",
+  "plan-check",
+  "--yardstick",
+  "docs/yardstick.md",
+  "--zone-plan",
+  "docs/zone-plan.md",
+  "--task",
+  "///",
+]
+
+[expected]
+exit = 2
+stderr_contains = ["error: --task '///' has no usable characters (letters, digits, '_' or '-')"]
+stdout = ""
+file_absent = ["_aitna/artifacts/gates/code-verify-plan-check-1.md"]

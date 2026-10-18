@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import time
 import urllib.request
 from collections import Counter
 from collections.abc import Callable, Iterable
@@ -33,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import routing
 
 from common import jsondata
+from common.report_path import create_report, report_prefix, task_error
 
 
 def _stats_data() -> dict:
@@ -448,9 +448,7 @@ def _render_delegations_section(delegation: DelegationStats | None) -> list[str]
         *data["delegations_table_header"],
     ]
     lines.extend(
-        jsondata.fill(
-            data["delegations_table_row"], {"subagent": subagent, "model": model, "count": count}
-        )
+        jsondata.fill(data["delegations_table_row"], {"subagent": subagent, "model": model, "count": count})
         for (subagent, model), count in sorted(delegation.per_pair.items())
     )
     return lines
@@ -579,9 +577,7 @@ def render_report(
 
     lines.append(data["separator"])
     sources = data["sources_found"] if transcript_path else data["sources_not_found"]
-    lines.append(
-        jsondata.fill(sources, {"path": transcript_path, "delegation_log": routing.delegation_log_rel()})
-    )
+    lines.append(jsondata.fill(sources, {"path": transcript_path, "delegation_log": routing.delegation_log_rel()}))
     return "\n".join(lines) + "\n"
 
 
@@ -681,7 +677,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--transcript", type=Path, help="Override the main session transcript path.")
     parser.add_argument("--no-budget", action="store_true", help="Skip the Claude API budget call.")
     parser.add_argument("--report-dir", type=Path, help="Override the report output directory.")
+    parser.add_argument(
+        "--task",
+        help="Task id the report belongs to; the report is <report-dir>/[<task>-]stats-<n>.md, n the next ordinal.",
+    )
     args = parser.parse_args(argv)
+    if (task_problem := task_error(args.task)) is not None:
+        parser.error(task_problem)
 
     root = args.project_root.resolve()
 
@@ -699,13 +701,12 @@ def main(argv: list[str] | None = None) -> int:
     budget = BudgetSummary(unavailable="skipped (--no-budget)") if args.no_budget else budget_summary()
 
     report_dir = args.report_dir or (root / report_dir_rel())
-    report_dir.mkdir(parents=True, exist_ok=True)
-    report_file = report_dir / f"stats-{time.strftime('%Y%m%d-%H%M%S')}.md"
-    report_file.write_text(
+    report_file = create_report(
+        report_dir,
+        report_prefix("stats", args.task),
         render_report(
             SessionRef(session_stem, transcript_path), delegation, transcript_stats, subagent_records, budget
         ),
-        encoding="utf-8",
     )
 
     print(render_digest(delegation, transcript_stats, subagent_records, budget, report_file))
