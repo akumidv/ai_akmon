@@ -27,7 +27,7 @@ on every project regardless of role.
 6. **Generated pointers in sync** — run `python3 _aitna/akmon/bin/sync.py --check`
    when the project uses akmon. If it reports drift, run `python3 _aitna/akmon/bin/sync.py`,
    review the generated files, and include the deterministic pointers in the owner's commit.
-7. **Keystone verify** — run `python3 _aitna/akmon/bin/verify.py --strict` to validate
+7. **Akmon verify** — run `python3 _aitna/akmon/bin/verify.py --strict` to validate
    AGENTS anchors, generated pointers, hooks, skills, memory, secrets ignore rules, and
    CI/preflight wiring.
 8. **Secrets check** — no real key/token/credential in the diff (code, config, fixtures,

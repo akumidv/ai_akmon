@@ -404,6 +404,7 @@ def test_package_refuses_a_pin_uv_add_cannot_move_in_place(tmp_path, monkeypatch
 def test_vendored_runs_init_from_the_target_release_through_uvx(tmp_path, monkeypatch):
     root = _attached(tmp_path, "vendored")
     calls = _Calls(monkeypatch)
+    monkeypatch.setattr(_update, "__version__", "0.5.0.dev0")  # a CLI that is not the target release
     monkeypatch.setattr(_update.shutil, "which", lambda name: f"/usr/bin/{name}")
     assert _update.main(["--project-root", str(root), "--ref", "v0.4.0"]) == 0
     assert calls.run == [["uvx", "--from", f"git+{REPO}@v0.4.0", "akmon", "init", "--project-root", str(root), "--yes"]]
@@ -435,6 +436,7 @@ def test_vendored_realigns_with_this_cli_only_when_it_is_the_pinned_release(
 def test_vendored_without_uvx_prints_the_command(tmp_path, monkeypatch, capsys):
     root = _attached(tmp_path, "vendored")
     calls = _Calls(monkeypatch)
+    monkeypatch.setattr(_update, "__version__", "0.5.0.dev0")  # a CLI that is not the target release
     monkeypatch.setattr(_update.shutil, "which", lambda name: None)
     assert _update.main(["--project-root", str(root), "--ref", "v0.4.0"]) == 2
     assert f"uvx --from git+{REPO}@v0.4.0 akmon init" in capsys.readouterr().err

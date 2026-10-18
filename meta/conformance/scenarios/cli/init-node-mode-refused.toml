@@ -15,5 +15,5 @@ argv = ["init", "--mode", "vendored", "--yes", "--project-root", "{{root}}"]
 
 [expected]
 exit = 2
-stderr = "akmon init: this project is attached by the Python implementation of akmon (a mounted attach is Node only for a repository with package.json and no Python files); run it, or pass `--ecosystem node` to attach it with this JavaScript implementation:\n    uvx --from git+https://github.com/akumidv/ai_akmon@main akmon init --mode vendored\n"
+stderr = "akmon init: this project is attached by the Python implementation of akmon (a mounted attach is Node only for a repository with package.json and no Python files); run it, or pass `--ecosystem node` to attach it with this JavaScript implementation:\n    uvx --from git+https://github.com/akumidv/ai_akmon@{{ref}} akmon init --mode vendored\n"
 stdout = ""

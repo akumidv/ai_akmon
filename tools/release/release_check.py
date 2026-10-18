@@ -49,7 +49,14 @@ sys.path.insert(0, str(AKMON_ROOT))
 
 from common import jsondata  # noqa: E402
 from common.findings import Finding, exit_code, line_safe, print_findings  # noqa: E402
-from common.project_root import aitna_root, aitna_root_name, resolve_project_root  # noqa: E402
+from common.project_root import (  # noqa: E402
+    aitna_root,
+    aitna_root_name,
+    akmon_mount,
+    find_project_root,
+    is_project_root,
+    resolve_project_root,
+)
 from common.record import read_akmon_toml  # noqa: E402
 from common.versions import is_final, semver_spelling, split_version  # noqa: E402
 
@@ -793,7 +800,22 @@ def _run_commands(root: Path, commands: list[list[str]]) -> list[str]:
 # --------------------------------------------------------------------------------------
 
 
-def run_plan(version: str, subject: str) -> int:
+def _mount_path(tree: Path) -> str | None:
+    """``tree``'s path from the project root that mounts it, or None when no project mounts it.
+
+    The akmon tag is cut from ``tree`` — the tree ``--check`` reads, ``AKMON_ROOT``. A consumer
+    that mounts it (submodule or subtree) has it at ``<AITNA_ROOT>/akmon`` below its own root,
+    and the owner runs the plan from there after a ``cd``; akmon's own repository is that tree
+    already, so it takes no ``cd`` (C130).
+    """
+    project = find_project_root(tree)
+    mount = akmon_mount(project)
+    if not is_project_root(project) or mount.resolve() != tree.resolve():
+        return None
+    return mount.relative_to(project).as_posix()
+
+
+def run_plan(version: str, subject: str, tree: Path = AKMON_ROOT) -> int:
     """The owner-run command set, with the version bump ahead of the staging step.
 
     The order is load-bearing, not cosmetic. Until C54 this plan staged ``CHANGELOG.md`` and
@@ -801,6 +823,9 @@ def run_plan(version: str, subject: str) -> int:
     ``0.3.0.dev0``: the procedure produced the exact mismatch a checker would then report, and a
     checker reporting a defect its own procedure keeps re-creating is theatre. So the bump comes
     first, every version literal is named, and every one of them is staged explicitly.
+
+    ``tree`` is the akmon tree the tag is cut from; the plan opens with a ``cd`` into it only
+    when a consuming project mounts it (``_mount_path``).
     """
     plan = _release_data()["run_plan"]
     if not _VERSION_RE.match(version):
@@ -810,8 +835,9 @@ def run_plan(version: str, subject: str) -> int:
     facts = plan["subjects"][subject]
     lines = [*plan["header"], ""]
     if subject == "akmon":
-        lines.append(jsondata.fill(facts["cd_line"], {"aitna_root": aitna_root_name()}))
-        lines.append("")
+        mount = _mount_path(tree)
+        if mount is not None:
+            lines += [jsondata.fill(facts["cd_line"], {"mount": mount}), ""]
         # The plan's version is validated above as vX.Y.Z, so the literal is final and its
         # SemVer spelling is derived by the shared logic, never spelled by hand.
         lines.append(jsondata.fill(facts["semver_note"], {"semver": semver_spelling(literal)}))

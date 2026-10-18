@@ -16,6 +16,12 @@ SPEC.loader.exec_module(runner)
 
 
 class PromptTests(unittest.TestCase):
+    # The raw A22 package is external data on the experiment host, not in this repository; the
+    # frozen runner pins its location, so the cohort check runs only where that package exists.
+    @unittest.skipUnless(
+        (runner.RAW / "a32-e1" / "labels.tsv").is_file(),
+        f"data-dependent: the raw A22 package is absent at {runner.RAW}",
+    )
     def test_real_cohort_maps_to_recorded_trial_arms(self):
         labels, ids, data = runner.load_inputs(runner.RAW)
         self.assertEqual(len(ids), 161)

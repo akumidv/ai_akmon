@@ -18,5 +18,5 @@ argv = ["init", "--mode", "subtree", "--repo", "{{repo}}", "--project-root", "{{
 
 [expected]
 exit = 2
-stderr = "akmon init: mode 'subtree' needs one command `init` must not run for you — `git subtree add` creates commits, and commits are the owner's (D5). Run it, then re-run init:\n    git subtree add --prefix _aitna/akmon {{repo}} main --squash\n    node _aitna/akmon/js/akmon/cli.mjs init --mode subtree --ref main\n"
+stderr = "akmon init: mode 'subtree' needs one command `init` must not run for you — `git subtree add` creates commits, and commits are the owner's (D5). Run it, then re-run init:\n    git subtree add --prefix _aitna/akmon {{repo}} {{ref}} --squash\n    node _aitna/akmon/js/akmon/cli.mjs init --mode subtree --ref {{ref}}\n"
 stdout = "akmon init: attaching to {{root}}\nakmon init: mount mode: subtree (requested) · dev layer: _aitna/\n"

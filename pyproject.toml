@@ -1,6 +1,6 @@
 [project]
 name = "akmon"
-version = "0.4.0.dev0"
+version = "0.4.0"
 description = "Akmon is AI-agent development standard, as an installable package."
 readme = "README.md"
 license = "Apache-2.0"
@@ -86,7 +86,10 @@ extend = "profiles/ruff.toml"
 target-version = "py312"
 # Experiment material is not akmon source: its inputs are sealed by hash (seal*.json), so their
 # bytes cannot be reformatted or brought under the rules (owner decision, C116).
-extend-exclude = ["meta/experiments"]
+# The A22 P3 suite is parked until A22 resumes (owner decision, C132): its tests are skipped by
+# meta/tests/conftest.py and its files leave lint here; drop this entry, that skip and the pin in
+# meta/tests/test_ruff_profile.py to resume it.
+extend-exclude = ["meta/experiments", "meta/tests/test_a22_p3_*.py"]
 
 [tool.ruff.lint]
 # ℹ is the notice glyph akmon's hooks print — meant, not a mistyped `i`.

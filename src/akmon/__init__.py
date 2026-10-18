@@ -12,7 +12,7 @@ from __future__ import annotations
 # must stay literally equal to that literal — `tools/release/release_check.py` checks it — and
 # is used only when the package is not installed (e.g. run from a source checkout without
 # `pip install` / `uv pip install -e`).
-_STATIC_VERSION = "0.4.0.dev0"
+_STATIC_VERSION = "0.4.0"
 
 __all__ = ["__version__"]
 

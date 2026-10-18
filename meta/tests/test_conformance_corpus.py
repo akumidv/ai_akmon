@@ -251,6 +251,39 @@ def test_loader_accepts_a_single_non_exit_assertion(scen_root, field):
     assert scenario.expected.exit == 2
 
 
+def test_a_payload_json_loads_to_the_same_document_as_a_payload_table(scen_root):
+    as_table = corpus.load_scenario(_write(scen_root, '[run.payload]\ncwd = "{{root}}"\nn.a = 1\n' + _OK_EXPECTED))
+    body = "payload_json = '''\n" + '{"cwd": "{{root}}",\n "n": {"a": 1}}\n' + "'''\n"
+    as_json = corpus.load_scenario(_write(scen_root, body + _OK_EXPECTED, "json"))
+    assert as_json.run.payload == as_table.run.payload == {"cwd": "{{root}}", "n": {"a": 1}}
+
+
+def test_a_payload_json_carries_a_nesting_tomllib_refuses_as_a_dotted_key(scen_root):
+    """M152: ``tomllib`` refuses a key of more than ``sys.getrecursionlimit()`` parts."""
+    depth = 5000
+    with pytest.raises(RecursionError, match="TOML key has more than"):
+        tomllib.loads("n" + ".a" * depth + " = 1\n")
+    body = "payload_json = '" + '{"n": ' + '{"a": ' * depth + "1" + "}" * (depth + 1) + "'\n"
+    node, levels = corpus.load_scenario(_write(scen_root, body + _OK_EXPECTED)).run.payload["n"], 0
+    while isinstance(node, dict):
+        node, levels = node["a"], levels + 1
+    assert (levels, node) == (depth, 1)
+
+
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        ("payload_json = '{}'\n[run.payload]\na = 1\n", "mutually exclusive"),
+        ("payload_json = '[1]'\n", "must be a JSON object, got list"),
+        ("payload_json = '{\"a\": '\n", "not a JSON text"),
+        ("payload_json = 1\n", "not a JSON text"),
+    ],
+)
+def test_loader_refuses_a_payload_json_that_is_not_the_one_json_object(scen_root, body, match):
+    with pytest.raises(corpus.CorpusError, match=match):
+        corpus.load_scenario(_write(scen_root, body + _OK_EXPECTED))
+
+
 def test_loader_refuses_unseeded_unless_recording(scen_root):
     path = _write(scen_root, "")
     with pytest.raises(corpus.CorpusError, match="not seeded"):
@@ -477,6 +510,24 @@ def _scenario(ecosystem="shared", covers=(), **expected):
 
 def _ctx(tmp_path):
     return norm.Ctx(root=str(tmp_path), mount="", tree="/w/tree", tmp="/w/tmp", version="9.8.7", days=(DAY,))
+
+
+@pytest.mark.parametrize(("version", "printed"), [("9.8.7", "v9.8.7"), ("9.8.7.dev0", "main"), ("9.8.7-dev.0", "main")])
+def test_the_ref_token_holds_at_a_release_and_at_a_development_version(tmp_path, owned, version, printed):
+    """``{{ref}}`` is the ref the running version names: its release tag when final, else ``main``."""
+    ctx = norm.Ctx(root=str(tmp_path), mount="", tree="/w/tree", tmp="/w/tmp", version=version, days=(DAY,))
+    scenario = _scenario(stdout="", stderr="npx github:o/r#{{ref}} init\n", findings=None)
+    assert runner._compare(scenario, 0, "", f"npx github:o/r#{printed} init\n", ctx) == ""
+    other = "main" if printed != "main" else "v9.8.7"
+    assert "stderr:" in runner._compare(scenario, 0, "", f"npx github:o/r#{other} init\n", ctx)
+
+
+def test_a_re_record_keeps_the_ref_token_while_the_output_still_matches_it(tmp_path, owned):
+    scenario = _scenario(stdout="", stderr="git subtree add x {{ref}} --squash\n")
+    block = runner._record_block(scenario, 0, "", "git subtree add x v9.8.7 --squash\n", _ctx(tmp_path))
+    assert 'stderr = "git subtree add x {{ref}} --squash\\n"' in block
+    block = runner._record_block(scenario, 0, "", "git subtree add x v1.0.0 --squash\n", _ctx(tmp_path))
+    assert 'stderr = "git subtree add x v1.0.0 --squash\\n"' in block
 
 
 def test_compare_reports_stderr_contains_mismatch(tmp_path, owned):

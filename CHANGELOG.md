@@ -16,6 +16,8 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
 
 ## Unreleased
 
+## v0.4.0
+
 ### Breaking
 - **Python 3.12 is the floor (C122).** The package and every shipped venv-free entry point,
   including the bare `python3` of generated hooks, require Python 3.12 or newer; 3.11 is no
@@ -678,6 +680,9 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **`release_check --plan` prints its `cd` only for a mounted akmon tree (C130).** In akmon's own
+  repository the plan no longer opens with `cd _aitna/akmon`; a consumer's mount is named by its
+  real `<AITNA_ROOT>/akmon` path.
 - **Diagnostic markers no longer stay silent on a planted or skewed path (C36).** A marker dated
   more than 60 s ahead of the clock is stale; only a regular file the current user owns, read with
   `lstat`, counts as a claim; a marker that vanishes mid-claim is claimed again; an unreadable

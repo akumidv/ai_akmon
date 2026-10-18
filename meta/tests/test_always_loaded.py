@@ -306,3 +306,10 @@ def test_a_missing_data_file_fails_from_the_public_functions(monkeypatch):
         al.populations("# A\n\n## Dev layer — akmon\n", Path("/tmp"))
     with pytest.raises(jsondata.DataFileError):
         al.caps()
+
+
+def test_an_import_through_a_symlink_loop_is_refused_on_every_interpreter(tmp_path):
+    """The ``chain/link-loop`` unit row: the 3.12 floor's ``RuntimeError``, on 3.13 too (M154)."""
+    (tmp_path / "loop.md").symlink_to("loop.md")
+    with pytest.raises(RuntimeError, match="Symlink loop from"):
+        al.import_chain("@loop.md\n", tmp_path, root=tmp_path)

@@ -25,6 +25,7 @@ base fixture before the scenario's own files: ``NATIVE_LAYERS`` for ``native``, 
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -84,7 +85,7 @@ class RunSpec:
 
     script: str = ""  # hook: hooks/<script>.py (python) | js/hooks/<script>.mjs (node)
     args: tuple[str, ...] = ()
-    payload: dict | None = None  # hook: the stdin JSON document
+    payload: dict | None = None  # hook: the stdin JSON document (run.payload or run.payload_json)
     argv: tuple[str, ...] = ()  # cli: console argv; tool: argv after the tool path
     tool: str = ""  # tool: tools/<tool>.py
     probe: str = ""  # unit: probe subcommand
@@ -146,12 +147,33 @@ def _parse_fixture(path: Path, data: dict) -> FixtureSpec:
     )
 
 
+def _payload(path: Path, data: dict) -> dict | None:
+    """The hook's stdin document: ``payload`` as a TOML table, or ``payload_json`` as its JSON text.
+
+    ``payload_json`` carries a document TOML cannot nest: ``tomllib`` refuses a dotted key or
+    header of more than ``sys.getrecursionlimit()`` parts (M152) and nests inline tables by
+    recursion, while ``json.loads`` takes a five-thousand-deep object. Either spelling loads to
+    the same ``RunSpec.payload``, so the runner and both implementations see one document.
+    """
+    if "payload_json" not in data:
+        return data.get("payload")
+    if "payload" in data:
+        raise CorpusError(f"{path}: run.payload and run.payload_json are mutually exclusive")
+    try:
+        payload = json.loads(data["payload_json"])
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise CorpusError(f"{path}: run.payload_json is not a JSON text json.loads reads ({exc})") from exc
+    if not isinstance(payload, dict):
+        raise CorpusError(f"{path}: run.payload_json must be a JSON object, got {type(payload).__name__}")
+    return payload
+
+
 def _parse_run(path: Path, kind: str, data: dict) -> RunSpec:
     """The [run] table, checked for the invocation fields the scenario's kind requires."""
     run = RunSpec(
         script=data.get("script", ""),
         args=tuple(data.get("args", ())),
-        payload=data.get("payload"),
+        payload=_payload(path, data),
         argv=tuple(data.get("argv", ())),
         tool=data.get("tool", ""),
         probe=data.get("probe", ""),
