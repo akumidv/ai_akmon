@@ -1045,8 +1045,8 @@ def _without_empty_checks(text: str) -> str | None:
     """``text``, the record, with its ``[check]`` table cut out when the table records nothing, else ``None``.
 
     Nothing is comment lines only, blank lines aside — what ``--checks none``, or ``own`` with
-    nothing found, writes, and any other table with no key. A sub-table or a second ``[check]`` table is the owner's (C123) and
-    stays. The JavaScript twin is ``withoutEmptyChecks``.
+    nothing found, writes, and any other table with no key. A sub-table or a second ``[check]``
+    table is the owner's (C123) and stays. The JavaScript twin is ``withoutEmptyChecks``.
     """
     lines = text.split("\n")
     headers = [line for line in lines if re.match(r"\s*\[\[?\s*check\s*[.\]]", line)]
