@@ -1,0 +1,13 @@
+{
+  "acceptance_basis": "owner requested a fresh A rerun after the Qwen output-cap failure in this chat",
+  "authorized_phases": [
+    "qualification"
+  ],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "dc0fbe12a14b0318ac00522160942dda8084aa17e2beef2905ce562cd709db79",
+  "owner_accepted": true,
+  "preflight_sha256": "37e3db92f3591a06f493eced2b558ac4510667afbb2b5d98966e41e8cbbb47d5",
+  "record_type": "p3_v3_qualification_headroom_owner_approval",
+  "schema": 1
+}

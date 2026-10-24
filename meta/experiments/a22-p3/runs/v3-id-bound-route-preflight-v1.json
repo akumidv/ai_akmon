@@ -1,0 +1,8 @@
+{
+  "dispatch_allowed": false,
+  "opening_codex_tokens": 559835,
+  "operational_seal_sha256": "834c7d135a793be7b22c0d02d299a59fff3c38a3496aba343b9110eb6d76c61f",
+  "planned_calls": 2,
+  "provider_calls": 0,
+  "status": "PASSED_OFFLINE_ID_BOUND_ROUTE_PREFLIGHT"
+}

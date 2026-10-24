@@ -1,0 +1,9 @@
+{
+  "dispatch_allowed": false,
+  "gateway_probe": "verified_tls_handshake_without_api_request",
+  "opening_codex_tokens": 701010,
+  "operational_seal_sha256": "dc0fbe12a14b0318ac00522160942dda8084aa17e2beef2905ce562cd709db79",
+  "planned_calls": 128,
+  "provider_calls": 0,
+  "status": "PASSED_OFFLINE_QUALIFICATION_SUCCESSOR_PREFLIGHT"
+}

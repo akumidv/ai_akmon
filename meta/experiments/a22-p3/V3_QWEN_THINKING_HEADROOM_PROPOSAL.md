@@ -1,0 +1,13 @@
+# A22 P3 V3 Qwen thinking headroom successor proposal
+
+The header-optional A qualification stopped terminally on its first Qwen scorer (M162): one correlated Qwen request spent the complete 5,000-token output allowance on thinking and returned no final answer. Three prior Codex calls were accepted, but no A cell is complete. Preserve that seal and runtime; none of its calls can be replayed, repaired, or counted in a fresh qualification.
+
+## Owner decision proposed
+
+Authorize preparation of a **separate unscored mechanics packet** with Qwen's provider-default thinking and a 16,000-token local output setting. The route test should use a fresh opaque packet ID and a blinded scorer packet matched to the failed qualification packet's input size and four-element structure, without exposing evaluator keys. Freeze the exact source, request, effective settings, model ID, parser, usage limits, gateway check, schedule, seal, and default-deny approval before any provider call. Inspect the sealed packet and oracle independently before dispatch.
+
+After explicit authorization of that exact route packet, run **one** Qwen CLI process with `maxRetries: 0`, one observed request, zero tools, no visible retry/error markers, correlated usage, and a complete raw three-column E1–E4 TSV. Keep the existing optional-header-only normalization: an exact missing header may be inserted; no prose, wrong IDs, missing elements, or incomplete rows may be repaired. A process that exhausts 16,000 output tokens without final TSV, changes settings beyond the already accepted CLI mutation, or fails any evidence check stops terminally. Do not automatically retry or increase the cap again. The route packet is unscored and cannot contribute to an A map.
+
+If this mechanics check passes, prepare and independently review a **fresh A qualification successor** with new blind IDs, schedule, runtime, seal, approval and opening Codex V3-only charge of 701,010 / 5,000,000. Keep the 32-cell/four-call design, A qualification floor, models, scorer criteria, `OBSERVED_NO_RETRY` evidence limit, 80% five-hour and 90% weekly Codex subscription stops, and B/C default-deny boundary. Freeze the validated Qwen output setting in that successor. If the route check fails, report the actual response/usage shape and reconsider the scorer route or protocol before another A attempt.
+
+This proposal authorizes no provider call and changes no sealed input. It asks for a targeted increase of Qwen's *per-call* output allowance because the observed 5,000-token bound prevented any final text. Qwen has no aggregate token ceiling in the accepted resource rule; the Codex 5,000,000-token ceiling and separate subscription stops remain unchanged.

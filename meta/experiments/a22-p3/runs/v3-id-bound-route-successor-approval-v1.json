@@ -1,0 +1,13 @@
+{
+  "acceptance_basis": "owner directed a new separately sealed route launch after the terminal DNS attempt in this chat",
+  "authorized_phases": [
+    "id_bound_route_successor_checks"
+  ],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "eb1b8ab4f5d6bd78654683667a270dcf38e81287c7a1a90ba22d454be72004eb",
+  "owner_accepted": true,
+  "preflight_sha256": "2623f7effa79842b8249275d747cfe140834c3aca7661280ec58edc28b67d763",
+  "record_type": "p3_v3_id_bound_route_successor_approval",
+  "schema": 1
+}

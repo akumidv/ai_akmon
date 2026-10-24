@@ -1,0 +1,11 @@
+{
+  "acceptance_basis": "owner explicitly accepted the exact header-optional A qualification package in this chat",
+  "authorized_phases": ["qualification"],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "adccd64a2c30828359a6b76e9164b15fd2744c6a481cb39cd7d75cc28590abd6",
+  "owner_accepted": true,
+  "preflight_sha256": "06163ebc04fb12b28fbf8a31f0fc5d91a78799ace313c834054bd4054746b810",
+  "record_type": "p3_v3_qualification_header_optional_owner_approval",
+  "schema": 1
+}

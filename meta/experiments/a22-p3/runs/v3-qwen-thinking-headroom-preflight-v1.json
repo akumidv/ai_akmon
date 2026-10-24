@@ -1,0 +1,7 @@
+{
+  "dispatch_allowed": false,
+  "gateway_probe": "verified_tls_handshake",
+  "provider_calls": 0,
+  "seal_sha256": "a7cb652284891f090866a25f85b70da472c31f712f36815374f384a1d0628f80",
+  "status": "passed"
+}

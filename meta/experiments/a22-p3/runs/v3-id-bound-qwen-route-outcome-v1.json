@@ -1,0 +1,25 @@
+{
+  "call_id": "gf6006db4e19348d8827e6bda63483668",
+  "canonical_reply_sha256": null,
+  "evidence_sha256": {
+    "events.json": "cc00fe7ba941dbdec2f8875113311bb055b8be1e6cd21bb5b3468d98a509c491",
+    "prepared.json": "c71c0fdff9971caff0ea69573ae9efa1031b2f1d1a75182a064dbfeddb688771",
+    "qwen-settings.json": "b07e747772d543c40514c8dc972d937cec1b2f4875326d534c048625153e4530",
+    "stderr.raw": "60a24b00d2c8ab71c99f8d42b2204305b300dca99ccc9a5d018a4ad55d39d625",
+    "stdout.raw": "61cc6d1a88946a8c92a1b9e0e066f628ad865c2743f6703d3b2f34f674f2193b"
+  },
+  "failure_class": "ValueError",
+  "packet_sha256": "531994af036c8bf7f161c3a053f3370e58fc1c10de924e313b09f57de10a1c93",
+  "prompt_sha256": "f6ae7717c4b2daa4495c6a5e9a251cff8c671fed967000a30cb917bc4bc142c3",
+  "qualification_data": false,
+  "raw_reply_sha256": null,
+  "record_type": "p3_v3_id_bound_scorer_route_outcome",
+  "request_sha256": "49f97cca26c302ff94e3a40690ee796c2c7810a21a608ab7776b1893ae6c5271",
+  "retry_authorized": false,
+  "route": "qwen",
+  "scored_p3": false,
+  "seal_sha256": "834c7d135a793be7b22c0d02d299a59fff3c38a3496aba343b9110eb6d76c61f",
+  "session_id": "18958a9f-e3bb-46fd-9b71-6decf7907978",
+  "status": "failed",
+  "usage": null
+}

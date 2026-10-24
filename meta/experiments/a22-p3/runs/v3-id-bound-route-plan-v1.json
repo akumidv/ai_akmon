@@ -1,0 +1,15 @@
+{
+  "calls": [
+    {
+      "call_id": "gf6006db4e19348d8827e6bda63483668",
+      "route": "qwen"
+    },
+    {
+      "call_id": "gc2c82bd9c9ac452e98cf86b174530d7c",
+      "route": "codex"
+    }
+  ],
+  "packet_sha256": "531994af036c8bf7f161c3a053f3370e58fc1c10de924e313b09f57de10a1c93",
+  "prompt_sha256": "f6ae7717c4b2daa4495c6a5e9a251cff8c671fed967000a30cb917bc4bc142c3",
+  "record_type": "p3_v3_id_bound_route_plan"
+}

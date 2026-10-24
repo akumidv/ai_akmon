@@ -1,0 +1,29 @@
+{
+  "gateway_sha256": "bbd47adf6d63de664183f85ad4d8a62ff7cfb942ea06c7125330abb78aaf4c04",
+  "max_retries": 0,
+  "max_tools": 0,
+  "packet_sha256": "b2aec0ef7ec9d45f842724821af61d73cea8fd13456721a2a4e2c28c1efd032f",
+  "plan_sha256": "69d6c9d830ffe4bfb62c71f780c7159072195a60a766ff213d4df69ceabd2cfa",
+  "predecessor_sha256": {
+    "failure": "ab6efce23c1ff58639a4ab51d057e4741a752d7c15d2c167de19e873c53b0605",
+    "ledger": "a69fc8e07310e1913977cb9232233ce8f998e41ef3062a09b027a02754bf3ef5",
+    "packet": "763e3b6133375e4f25db6f9706d7ed986d3566c70462910da9d9fd14bdbe9a2e"
+  },
+  "prompt_sha256": "f6ae7717c4b2daa4495c6a5e9a251cff8c671fed967000a30cb917bc4bc142c3",
+  "proposal_sha256": "aec01f5e651dfb059872c29ffdf0f958027b6d19049daafa42ae75bd9ebffd09",
+  "qwen_cli_version": "0.24.7",
+  "qwen_model": "qwen3.8-27b",
+  "qwen_output_setting": 16000,
+  "record_type": "p3_v3_qwen_thinking_headroom_seal",
+  "runtime": "/tmp/a22-p3-v3-qwen-thinking-headroom-runtime",
+  "schema": 1,
+  "scope": "one_unscored_qwen_mechanics_call",
+  "settings_sha256": "b721d4f5357df01e5936e786407e7b561f8998a1f3adea4e58c070af59f721ba",
+  "source_sha256": {
+    "parser": "c00e460234abd9aa1b37d6df788f3685016014e191799cd1eb53fe27c8bcc32c",
+    "route": "5947219962ce3d7f8defefafb1f705acc414bf274c89cff1de8f872ddbc604d5",
+    "runner": "37cd349b5c7f8f753dc69a95ab4672d2c359fc0355876b098658e36e09910f27"
+  },
+  "status": "offline_candidate_pending_owner_acceptance",
+  "thinking": "omitted; provider default retained"
+}

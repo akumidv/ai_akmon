@@ -1,0 +1,10 @@
+{
+  "acceptance_basis": "owner requested the new call and fresh A rerun in this chat",
+  "authorized_phases": [
+    "qwen_thinking_headroom_route"
+  ],
+  "dispatch_allowed": true,
+  "owner_accepted": true,
+  "preflight_sha256": "71efd2bf7add474d54f772975e2981aab030f89efd56a7f18e662aec2c691690",
+  "seal_sha256": "a7cb652284891f090866a25f85b70da472c31f712f36815374f384a1d0628f80"
+}

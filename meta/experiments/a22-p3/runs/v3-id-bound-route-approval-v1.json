@@ -1,0 +1,13 @@
+{
+  "acceptance_basis": "owner separately accepted the exact identity-bound route package in this chat",
+  "authorized_phases": [
+    "id_bound_route_checks"
+  ],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "834c7d135a793be7b22c0d02d299a59fff3c38a3496aba343b9110eb6d76c61f",
+  "owner_accepted": true,
+  "preflight_sha256": "3fcaf928bca1b46c30e413c2e4ff2563417ab946ecc59b802cc985d9a214011e",
+  "record_type": "p3_v3_id_bound_route_approval",
+  "schema": 1
+}

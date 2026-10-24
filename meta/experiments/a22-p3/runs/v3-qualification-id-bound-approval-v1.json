@@ -1,0 +1,13 @@
+{
+  "acceptance_basis": "owner explicitly accepted the exact qualification successor package in this chat",
+  "authorized_phases": [
+    "qualification"
+  ],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "d31dbbf3db8a661d0a600f1a318d1a5e11b0efa025aa2c5d079f666cb905730a",
+  "owner_accepted": true,
+  "preflight_sha256": "1fd1a0b3425df3760a64bc2845d92d10531d2e431045999c66eafc799370c0be",
+  "record_type": "p3_v3_qualification_id_bound_owner_approval",
+  "schema": 1
+}

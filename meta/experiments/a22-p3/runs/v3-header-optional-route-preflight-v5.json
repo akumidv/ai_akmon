@@ -1,0 +1,9 @@
+{
+  "dispatch_allowed": false,
+  "gateway_probe": "not_run_offline",
+  "opening_codex_tokens": 636645,
+  "operational_seal_sha256": "74a03452ea5487ff47ec5e94f7f2c3328b332d96e4695c9e64fdeffffc3aa892",
+  "planned_calls": 4,
+  "provider_calls": 0,
+  "status": "PENDING_LIVE_TRANSPORT_AND_PINNED_CLI_CHECKS"
+}

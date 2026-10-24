@@ -1,0 +1,15 @@
+{
+  "element_ids": [
+    "E1",
+    "E2",
+    "E3",
+    "E4"
+  ],
+  "packet_id": "g0794b3ec6fd4d188",
+  "prior_call_id": "g23e7e80443058fe5f97e0f1ea095bb12",
+  "prior_packet_id": "ga7abfd14c574b6d7",
+  "provider_calls": 1,
+  "record_type": "p3_v3_qwen_thinking_headroom_plan",
+  "schema": 1,
+  "scored": false
+}

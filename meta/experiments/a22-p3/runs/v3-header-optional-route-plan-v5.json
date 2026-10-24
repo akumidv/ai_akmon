@@ -1,0 +1,30 @@
+{
+  "calls": [
+    {
+      "call_id": "gd9c97537bfa14809a06fbe6e44c1f528",
+      "packet_key": "prior_route",
+      "route": "qwen"
+    },
+    {
+      "call_id": "g1667f2171efd4352bfc8ce979aeedb4d",
+      "packet_key": "prior_route",
+      "route": "codex"
+    },
+    {
+      "call_id": "g30e44c54b0344313a77ef4a4bc5c5ad2",
+      "packet_key": "identity_bound",
+      "route": "qwen"
+    },
+    {
+      "call_id": "gaf7c199724804b03908ef63dde420f83",
+      "packet_key": "identity_bound",
+      "route": "codex"
+    }
+  ],
+  "packet_sha256": {
+    "identity_bound": "e379225c9e454115f949233bb326a9415946d9e52f38588c1aac9cfda3f17b62",
+    "prior_route": "531994af036c8bf7f161c3a053f3370e58fc1c10de924e313b09f57de10a1c93"
+  },
+  "prompt_sha256": "f6ae7717c4b2daa4495c6a5e9a251cff8c671fed967000a30cb917bc4bc142c3",
+  "record_type": "p3_v3_header_optional_route_plan"
+}

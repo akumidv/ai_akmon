@@ -139,6 +139,53 @@ dispatch, the implementation must enforce these fields and account for all Codex
 once; the scorer routes must pass their fresh one-shot checks under the accepted conditions; and a
 named human stop operator must be recorded. No operator identity was supplied in this decision.
 
+### D03 — Prospective P3 scorer packet identity binding
+
+`Decision-ID: ADR-0019/D03`
+
+**Owner accepted for implementation.** After the terminal V3 qualification successor
+returned four E rows with an opaque packet ID missing its final character (M152),
+the next scorer response contract removes the model-authored packet ID. Each
+scorer receives exactly one blind packet per call and returns only `element`,
+`verdict`, and `reason` TSV columns. A fail-closed parser requires one row for
+each expected element and no extra row or text. The runner derives the packet
+ID only from the frozen scheduled call and writes a separate canonical
+four-column TSV for downstream qualification. Preserve both raw and canonical
+bytes and hashes, bound to the packet, request, call, model, usage and ledger.
+Do not alter the E-element rubric, two independent scorers, same-repeat
+qualification rule, or prior failed call. Near-match ID normalization is not
+accepted. The [design proposal](../experiments/a22-p3/V3_SCORER_ID_BINDING_PROPOSAL.md)
+records the alternatives and verification criteria.
+
+This decision does not authorize route checks or qualification dispatch. New
+code and prompt, fresh IDs/schedule, source and evidence hashes, offline
+preflight, route mechanics for both scorer paths and an exact owner-accepted
+operational seal are still required under D02's resource and stop conditions.
+
+### D04 — Prospective fixed-header insertion for complete scorer rows
+
+`Decision-ID: ADR-0019/D04`
+
+**Owner accepted for prospective implementation.** After the terminal
+identity-bound A qualification omitted only its fixed TSV header (M155), a
+new scorer parser may accept either the exact `element`, `verdict`, `reason`
+header or complete headerless three-column E rows. It inserts only that fixed
+header in a separate normalized representation. Every data row must still
+have the exact three-column shape, an expected unique E identifier, a PASS or
+FAIL verdict, and a nonblank reason; all expected elements and no extra text
+are required. The parser records whether it observed or inserted the header,
+preserves the raw reply, and binds the packet ID only from sealed call metadata
+as in D03. It never supplies or changes a verdict or reason. The old failed
+reply, source, seal, and ledger remain terminal and unchanged.
+
+This decision authorizes implementation, not retrospective reclassification,
+provider dispatch, qualification, or B/C comparison. A separate seal and
+unscored route checks on two distinct blinded packets for both scorer models
+must pass before a fresh qualification package is proposed. The
+[design proposal](../experiments/a22-p3/V3_HEADER_OPTIONAL_SCORER_PROPOSAL.md)
+records alternatives and failure conditions; D02's resource and stop limits
+continue to apply.
+
 ## Rejected alternatives
 
 - **Adopt the clause.** Rejected: it added no detected benefit over the standard on two vendors,

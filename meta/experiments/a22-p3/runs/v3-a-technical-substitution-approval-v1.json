@@ -1,0 +1,12 @@
+{
+  "acceptance_basis": "owner accepted one infrastructure-invalid Codex scorer substitution in this chat",
+  "authorized_phases": [
+    "a_technical_substitution_and_remainder"
+  ],
+  "dispatch_allowed": true,
+  "owner_accepted": true,
+  "preflight_sha256": "ed6d59469b61b626fe30d77e2c376b20d9d9186aa085811f2fe88a59ba823cd3",
+  "record_type": "p3_v3_a_technical_substitution_approval",
+  "schema": 1,
+  "seal_sha256": "16578e766a69ea6781922db8e9c4e1f4f97c1bc01f28f28b6c1fa9ad01cac0eb"
+}

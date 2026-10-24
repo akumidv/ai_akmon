@@ -1,0 +1,9 @@
+{
+  "dispatch_allowed": false,
+  "gateway_probe": "verified_tls_handshake_without_api_request",
+  "opening_codex_tokens": 559835,
+  "operational_seal_sha256": "eb1b8ab4f5d6bd78654683667a270dcf38e81287c7a1a90ba22d454be72004eb",
+  "planned_calls": 2,
+  "provider_calls": 0,
+  "status": "PASSED_ID_BOUND_ROUTE_SUCCESSOR_PREFLIGHT"
+}

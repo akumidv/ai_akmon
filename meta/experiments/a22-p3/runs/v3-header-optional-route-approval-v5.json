@@ -1,0 +1,11 @@
+{
+  "acceptance_basis": "owner confirmed launch of the prospective two-packet header-optional route in this chat",
+  "authorized_phases": ["header_optional_unscored_route_checks"],
+  "dispatch_allowed": true,
+  "named_stop_operator": "owner (current chat session)",
+  "operational_seal_sha256": "74a03452ea5487ff47ec5e94f7f2c3328b332d96e4695c9e64fdeffffc3aa892",
+  "owner_accepted": true,
+  "preflight_sha256": "d0dda09b216f7010b2278bab5c6f3d0cbe02fa25417b93a04a8b58d2bff05f2a",
+  "record_type": "p3_v3_header_optional_route_approval",
+  "schema": 1
+}

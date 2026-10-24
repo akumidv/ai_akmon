@@ -1,0 +1,12 @@
+{
+  "carried_accepted_calls": 87,
+  "failed_call_charged": 12326,
+  "new_call_id": "ge4b433391f471b68a96a8886db66d1b7",
+  "new_provider_calls": 41,
+  "old_call_id": "g5376e16aaacf81449d53c09a549fe89b",
+  "opening_codex_tokens": 1489919,
+  "record_type": "p3_v3_a_technical_substitution_plan",
+  "replaced_position": 87,
+  "request_sha256": "ef62b4586ab76387e4ddcd6d55d09b09d1d78cdef4fccbd2adb57d2c0cef6727",
+  "schema": 1
+}

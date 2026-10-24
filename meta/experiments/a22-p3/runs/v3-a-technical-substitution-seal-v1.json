@@ -1,0 +1,65 @@
+{
+  "codex_limit_tokens": 5000000,
+  "failed_artifact_sha256": {
+    "events.json": "9c108649966fbd1810b0a744e2f025b15d8d111823a27c9852e62e6c7b1d9930",
+    "failure.json": "45b7acf0f76f2150a1c7144bda3b0e4f38105538a078af7be4fd64fdae01b094",
+    "packet.md": "259437d17fd3045ad71d0086864289c70c875fae05911b0ca2c957b51ef687eb",
+    "prepared.json": "8c2cdbbe734ee7e2ce8bc8c26c40364121a140a10988e80bfc242f1af35a042f",
+    "quota-before.json": "f6a378e486dd0a8486bcb5bde7e89cefe1f40f3485057f7c5b63abb88d941e77",
+    "reply.raw.tsv": "914306fe753fcd686aa9e315a4e06e467739ee0111bf935efa788c78318771a2",
+    "reply.tsv": "af007c65899769af9f4a4b59538bc5623989929a6f89e0d7e8651ca51b388de3",
+    "rollout.jsonl": "50dea3dffdfd478346781bea975d20e2c108d40c2f78c5521018d81bc8a4f38c",
+    "stderr.raw": "de554a99a2bfa4f1eabb38f62c2b590777a9164f34e7ab1651bcf0b1768df0a6",
+    "stdout.raw": "4d2b2423f3bb9f2545e59e58b9b51166ba96d948c18c05e206dc5b2c86687cb6"
+  },
+  "failed_evidence_sha256": "45b7acf0f76f2150a1c7144bda3b0e4f38105538a078af7be4fd64fdae01b094",
+  "failed_prepared_sha256": "8c2cdbbe734ee7e2ce8bc8c26c40364121a140a10988e80bfc242f1af35a042f",
+  "five_hour_stop_percent": 80,
+  "headroom_effective_qwen_settings": {
+    "dispatch_environment": {
+      "QWEN_CODE_MAX_OUTPUT_TOKENS": "16000",
+      "QWEN_CODE_SYSTEM_SETTINGS_PATH": "<call-root>/qwen-settings.json",
+      "QWEN_CODE_UNATTENDED_RETRY": "0"
+    },
+    "effective_sha256": "c99c4a01d23b022e9d758ba8707dd7fb27bb6cc222dfb7a27bec7abb12716932",
+    "gateway_sha256": "bbd47adf6d63de664183f85ad4d8a62ff7cfb942ea06c7125330abb78aaf4c04",
+    "meta_sha256": "a153f20d2325555704ca99bdce7729871313607b455fcaa4a52a765eb23a50ee",
+    "overlay_sha256": "b721d4f5357df01e5936e786407e7b561f8998a1f3adea4e58c070af59f721ba"
+  },
+  "headroom_route_outcome_sha256": "09dd609ca8c1d9462677de8915529dbae843b90562436f175979ea5397dff518",
+  "model_ids": {
+    "codex_scorer": "gpt-6-astra",
+    "qwen_scorer": "qwen3.8-27b",
+    "subject_mid": "gpt-5.6-luna",
+    "subject_strongest": "gpt-6-astra"
+  },
+  "opening_codex_tokens": 1489919,
+  "original_approval_sha256": "ca810550660a72b7360b0537116d2f7eba59d04140232abbef85b60444de00b2",
+  "original_ledger_sha256": "6207da3908ba1623c293069f56bc23b6a05965b6bbdb4e6397c5f235b80b8da8",
+  "original_seal_sha256": "dc0fbe12a14b0318ac00522160942dda8084aa17e2beef2905ce562cd709db79",
+  "plan_sha256": "19c2966f48bd95342630aa811e1d1a3963ab9351f7f71e5d3c8b456122667ad9",
+  "planned_new_calls": 41,
+  "proposal_sha256": "7fb16b4c085114006acdd2017ce09921f26f9a742a5ab4cef4ed38164006089f",
+  "provider_calls_started": 0,
+  "qwen_output_setting": 16000,
+  "record_type": "p3_v3_a_technical_substitution_seal",
+  "regression_sha256": "d0d95e643dafaea4bb44bb2b9234c2e07dcbc00aaf782d6a82390221cf87ac61",
+  "replacement_exchange_sha256": "e67da7b485ab14e141a676d3d87766431950986c22b3e12bb85f909b07cece68",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "runtime_root": "/tmp/a22-p3-v3-a-technical-substitution-runtime",
+  "schedule_sha256": "d2e4e58363ab8809d2c765bc5bef3264c568ca966a9cbc929e45ab4cd16ca115",
+  "schema": 1,
+  "scope": "one_invalid_scorer_substitution_plus_remaining_a_calls",
+  "source_sha256": {
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "scorer_route_check.py": "5947219962ce3d7f8defefafb1f705acc414bf274c89cff1de8f872ddbc604d5",
+    "successors/v3_qualification_headroom.py": "049a544952ad2c0da647f38d9870af7bbcd42eb144c5a72e4e6f54ada1c8a51e",
+    "successors/v3_qualification_headroom_packet.py": "2214572ebff1977af81d4dbb44c7d313854e7e8e62e43761404c0830a48d7234",
+    "successors/v3_qualification_headroom_reduce.py": "3a3553babfa57728c5f9fda9ef2a972d1dc3508780beeb3769edc64b18d7532c",
+    "successors/v3_qualification_headroom_schedule.py": "0070d1fb0134567cb5b59b752ed7b2879f0f52d86537767c7153ab4a72768c6b",
+    "successors/v3_qualification_technical_substitution.py": "6e99efd7dd32982a65e653bbd0519820713abf773585bfc2a9fc3cbb4fd3afbb",
+    "v3_scorer_header_optional.py": "c00e460234abd9aa1b37d6df788f3685016014e191799cd1eb53fe27c8bcc32c"
+  },
+  "status": "offline_candidate_pending_owner_acceptance",
+  "weekly_stop_percent": 90
+}
