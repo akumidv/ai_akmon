@@ -9,7 +9,7 @@
     "arms/A.architect.system.txt": "af405183eb0c0df6f8b5f0bec0098bd3819b2bc00d3f951c6cd61c50320b2ff3",
     "arms/B.architect.system.txt": "e8bc7f1433973a49a60ca9e3beba4b215984a6fe2ff5436d22b144221de9ff3f",
     "arms/C.architect.system.txt": "d8dfbf68e8425f42872a53b5e7c9c4d96f4e02eaaa84fef5b69132fe5b4f17e7",
-    "arms/manifest.json": "ea5c9960c8d355de9e6edc8de07a448c97b8e6db2697376d35809a62416db64c",
+    "arms/manifest.json": "4d60d19f8d4a8df26cc6ffd707d49b1abba9661f7486f67b98fc05119ecbc53c",
     "build_arms.py": "511b4905bafb8149c12f70618d72c83bd27ca0fea45aff9d5abc48321c47b977",
     "build_cases.py": "9777cd369b4bd090ffabe95ab28a7e13adde4a428cc58aa0e32e76046fc8527c",
     "build_single_packet.py": "6fe59e0856be88fbe746eaebffe96c1a4feaad33e777e4be321bc90e1b57269e",
@@ -35,5 +35,5 @@
     "scoring/scorer-prompt.txt": "7d875d7eb91f2f06d2c0b869f6f6f21b23d5240d4de00bb96aa3dba89c583ce5",
     "usage_ledger_v2.py": "61ce859e0951c589e351ea79fcebc460b121845850d6bd2d46518037c9574316"
   },
-  "git_head": "1fd9de284526982c87499baa04fae7974196dfa9"
+  "git_head": "e94c5aeef400820255ae0853d0349d1439e423e7"
 }

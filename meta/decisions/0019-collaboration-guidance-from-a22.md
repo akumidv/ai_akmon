@@ -186,6 +186,37 @@ must pass before a fresh qualification package is proposed. The
 records alternatives and failure conditions; D02's resource and stop limits
 continue to apply.
 
+### D05 — Bounded technical replacement after transport-invalid A calls
+
+`Decision-ID: ADR-0019/D05`
+
+**Owner accepted D-A22-TRANSPORT.** A prospective A successor may replace calls whose
+captured Codex CLI evidence contains a WebSocket HTTP 503, provided the failure has
+correlated usage and the frozen validator records it as terminal and unscored. Across
+the original A run and all successors, at most eight such transport-invalid calls may
+be eligible for technical replacement; three have already occurred, leaving at most
+five further failures under this policy. Every failed call remains in the evidence
+chain and is charged against the V3-only 5,000,000-token Codex ceiling. A replacement
+is a fresh, blind, single CLI invocation with a new call ID and the same frozen
+model, prompt, case, arm, scorer criteria and request bytes. It is never an in-call
+retry or retrospective acceptance of a reply carrying a 503 marker. Selection for
+replacement uses transport evidence only, without evaluating the failed answer.
+
+The bounded preapproved path covers a scorer or the first subject turn. A second
+subject turn must stop on failure: its session may have changed, so replacing it
+requires a separate pair-restart design. Any other error, missing or uncorrelated
+usage, evidence mismatch, exhausted eight-failure allowance, or quota/aggregate
+ceiling stop ends dispatch. Keep the 80% five-hour and 90% weekly gates, one
+observed CLI invocation with no observed retry per attempt, and the original A
+matrix and reduction. No failed reply enters the primary result. B/C remains a
+separate authorization.
+
+This is policy acceptance, including advance permission for replacements inside
+the stated bound. It does not bless the terminal predecessor seals, bypass a new
+successor's independent review and live preflight, or authorize unreviewed code
+to dispatch. The new successor must hash-bind all predecessor evidence and enforce
+the bound before its first provider call.
+
 ## Rejected alternatives
 
 - **Adopt the clause.** Rejected: it added no detected benefit over the standard on two vendors,

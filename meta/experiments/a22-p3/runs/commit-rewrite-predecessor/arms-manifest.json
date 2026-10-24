@@ -1,0 +1,46 @@
+{
+  "repository_commit": "b84d19a72894bd4ff296ce7d9414cdf3b49cb414",
+  "repository_dirty_sha256": "657bf4872c4ead01f6a8bc53378071dd824440f27801dbff39da439e638c4f5a",
+  "protocol_sha256": "af405183eb0c0df6f8b5f0bec0098bd3819b2bc00d3f951c6cd61c50320b2ff3",
+  "clause_sha256": "a54af5eac215240561534bfc73f7b5edc507f274da47084bb5cc51a89b1694e1",
+  "parts": {
+    "AGENTS.md": {
+      "bytes": 4569,
+      "sha256": "91912d926fbe21fcac0dd56e298a42e3f2ba58aa0d7b975936ad1916859d369a"
+    },
+    "guardrails/_common.md": {
+      "bytes": 11251,
+      "sha256": "536b1b6ecfc5731b7b92dcdff3470a59fd81ac160af1fc0cff2d67caa66023a0"
+    },
+    "profiles/python.md": {
+      "bytes": 5400,
+      "sha256": "fb3a74d911b8525bcfdd01e2775e735e056edc364ef1ca6dc844bfbc2cf98d72"
+    },
+    "profiles/python-stdlib.md": {
+      "bytes": 1265,
+      "sha256": "51d9aeaa51eea2a06ee63909134fb7ef0c2b9e46557b488e6d2624238d7d5aa8"
+    },
+    "roles/architect.md": {
+      "bytes": 11298,
+      "sha256": "ee50e2481c5b61831ef76ee1aafa81448090b413bf6ccec9f6a90f5ed61a1972"
+    },
+    "pipelines/design-flow.md": {
+      "bytes": 9731,
+      "sha256": "8d6ad08959588faf621858b1d49860383aea4470e24d37a9a67c4ff70a1df931"
+    }
+  },
+  "arms": {
+    "A": {
+      "bytes": 268,
+      "sha256": "af405183eb0c0df6f8b5f0bec0098bd3819b2bc00d3f951c6cd61c50320b2ff3"
+    },
+    "B": {
+      "bytes": 43993,
+      "sha256": "e8bc7f1433973a49a60ca9e3beba4b215984a6fe2ff5436d22b144221de9ff3f"
+    },
+    "C": {
+      "bytes": 44592,
+      "sha256": "d8dfbf68e8425f42872a53b5e7c9c4d96f4e02eaaa84fef5b69132fe5b4f17e7"
+    }
+  }
+}
