@@ -137,6 +137,7 @@ import { codePointCompare, codePointSort } from "../../common/sort.mjs";
  * @property {{warn: string, info: string}} context_pressure
  * @property {{no_config: string, registry_changed: string, model_mismatch: string}} staleness
  * @property {{retired_keys: string, no_usable_spec: string}} second_opinion_spec_errors
+ * @property {{order: string, auditor_unknown: string, auditor_unlisted: string}} ladder_errors
  */
 
 /**
@@ -434,6 +435,7 @@ export class Binding {
    * @param {boolean} [semanticFallback]
    * @param {string | null} [warning]
    * @param {Json} [secondOpinionCli]
+   * @param {string | null} [auditorOptIn]
    */
   constructor(
     vendor,
@@ -446,6 +448,7 @@ export class Binding {
     semanticFallback = false,
     warning = null,
     secondOpinionCli = null,
+    auditorOptIn = null,
   ) {
     this.vendor = vendor;
     this.orchestrator = orchestrator;
@@ -457,6 +460,7 @@ export class Binding {
     this.semanticFallback = semanticFallback;
     this.warning = warning;
     this.secondOpinionCli = secondOpinionCli;
+    this.auditorOptIn = auditorOptIn;
     Object.freeze(this);
   }
 }
@@ -490,28 +494,115 @@ function _or(/** @type {Json} */ value, /** @type {Json} */ fallback) {
 }
 
 /**
+ * The ladder `vendor` binds on, weakest to strongest, and whether it is the semantic one.
+ *
+ * A non-empty `available` list is the ladder, minus the vendor's auditor-only rungs (their
+ * order kept); otherwise the vendor's committed `harness_rungs`; otherwise the semantic labels,
+ * flagged `true` (ADR-0004/D04). The single place that decides it — every caller that needs
+ * rungs asks here.
+ * @param {Json} registry
+ * @param {string} vendor
+ * @param {Json} available
+ * @returns {[string[], boolean]}
+ */
+export function selectionLadder(registry, vendor, available) {
+  const vendorData = _get(registry, vendor, {});
+  if (Array.isArray(available) && available.length > 0) {
+    const auditorOnly = _or(_get(vendorData, "auditor_only_rungs"), []);
+    const rungs = available.filter((alias) => !_contains(auditorOnly, alias));
+    if (rungs.length > 0) {
+      return [rungs, false];
+    }
+  }
+  const committed = _get(vendorData, "harness_rungs");
+  if (_truthy(committed)) {
+    return [[..._iterate(committed)], false];
+  }
+  return [_semanticRungs(vendorData), true];
+}
+
+/**
+ * Raise `ValueError` when `available` inverts the order of `vendor`'s committed ladder.
+ *
+ * Only the aliases `available` shares with `harness_rungs` are ranked: an unknown alias or an
+ * auditor-only one never decides it, and a vendor with no committed ladder accepts any order.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} vendor
+ * @param {string[]} available
+ */
+export function checkLadderOrder(data, registry, vendor, available) {
+  const committed = [..._iterate(_or(_get(_get(registry, vendor, {}), "harness_rungs"), []))];
+  const shared = available.filter((alias) => committed.includes(alias));
+  const ranked = [...shared].sort((a, b) => committed.indexOf(a) - committed.indexOf(b));
+  if (shared.some((alias, position) => alias !== ranked[position])) {
+    throw _pyError(
+      "ValueError",
+      fill(data.ladder_errors.order, { given: available.join(","), vendor, expected: committed.join(",") }),
+    );
+  }
+}
+
+/**
+ * Raise `ValueError` unless `alias` may be the opted-in auditor of `vendor` (ADR-0004/D04).
+ *
+ * It must be an auditor-only rung or a rung of the ladder, and when an `available` list is given
+ * it must be listed there.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} vendor
+ * @param {string[] | null} available
+ * @param {string} alias
+ */
+export function checkAuditorOptIn(data, registry, vendor, available, alias) {
+  const [rungs, semantic] = selectionLadder(registry, vendor, available);
+  const auditorOnly = [..._iterate(_or(_get(_get(registry, vendor, {}), "auditor_only_rungs"), []))];
+  const ladder = semantic ? [] : rungs;
+  if (!auditorOnly.includes(alias) && !ladder.includes(alias)) {
+    throw _pyError(
+      "ValueError",
+      fill(data.ladder_errors.auditor_unknown, {
+        alias,
+        vendor,
+        ladder: ladder.join(","),
+        auditor_only: auditorOnly.join(","),
+      }),
+    );
+  }
+  if (Array.isArray(available) && available.length > 0 && !available.includes(alias)) {
+    throw _pyError("ValueError", fill(data.ladder_errors.auditor_unlisted, { alias, given: available.join(",") }));
+  }
+}
+
+/**
  * Bind tiers to model aliases from a semantic vendor policy (MODEL.md § Capability tiers).
  *
- * `available` is the concrete, local, discovery-derived ladder ordered weakest → strongest.
- * The shared registry stores only the selection policy. Without `available` the binding uses
- * semantic fallback labels and carries a warning; generated file-backed agents then omit concrete
- * model frontmatter instead of pretending those labels are valid vendor model ids.
+ * The ladder comes from `selectionLadder`: `available` (the local, discovery-derived list,
+ * weakest → strongest, auditor-only rungs removed) or the vendor's committed `harness_rungs`.
+ * A vendor with neither binds semantic labels with a warning; generated file-backed agents then
+ * omit concrete model frontmatter instead of pretending those labels are valid vendor model ids.
+ * The auditor is `auditorOptIn` when given, else the top of the ladder; an auditor-only rung is
+ * never the worker, mid, reasoner or an escalation step (ADR-0004/D04).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {Json} orchestrator
  * @param {Json} [available]
  * @param {string} [vendor]
+ * @param {string | null} [auditorOptIn]
  * @returns {Binding}
  */
-export function computeBinding(data, registry, orchestrator, available = null, vendor = "anthropic") {
+export function computeBinding(
+  data,
+  registry,
+  orchestrator,
+  available = null,
+  vendor = "anthropic",
+  auditorOptIn = null,
+) {
   const vendorData = _item(registry, vendor);
-  const semantic = !_truthy(available);
-  let rungs = _truthy(available) ? [..._iterate(available)] : _semanticRungs(vendorData);
-  if (rungs.length === 0) {
-    rungs = _semanticRungs(vendorData);
-  }
+  const [rungs, semantic] = selectionLadder(registry, vendor, available);
 
-  const auditor = rungs[rungs.length - 1]; // pinned max, always — unlike the now-dynamic reasoner
+  const auditor = _or(auditorOptIn, rungs[rungs.length - 1]); // pinned max unless the owner opted in — unlike the now-dynamic reasoner
   const worker = rungs[0];
   const workerPos = _index(rungs, worker);
   const mid = rungs[Math.min(workerPos + 1, rungs.length - 1)];
@@ -568,6 +659,7 @@ export function computeBinding(data, registry, orchestrator, available = null, v
     semantic,
     warning,
     _get(secondOpinion, "harness"),
+    auditorOptIn,
   );
 }
 
@@ -786,7 +878,7 @@ export function secondOpinionUnavailability(data, registry, config, orchestrator
       vendor !== orchestratorVendor && _truthy(secondOpinionSpec(data, registry, vendor, { required: false })),
   );
   const configured = _get(config, "second_opinion_provider");
-  const rungs = _or(_get(config, "available"), null) ?? _semanticRungs(_get(registry, orchestratorVendor, {}));
+  const [rungs] = selectionLadder(registry, orchestratorVendor, _get(config, "available"));
   const orchestrator = _pyStr(_or(_get(config, "orchestrator"), "?"));
   const auditor = _pyStr(_or(_get(_get(config, "binding", {}), "auditor"), "?"));
   const against = `the orchestrator '${orchestrator}' and the auditor '${auditor}'`;
@@ -884,7 +976,7 @@ export function resolveSecondOpinion(data, registry, config, orchestratorVendor)
       }
       let model = _get(config, "second_opinion_fallback_model");
       if (!_truthy(model)) {
-        const rungs = _or(_get(config, "available"), null) ?? _semanticRungs(_get(registry, provider, {}));
+        const [rungs] = selectionLadder(registry, provider, _get(config, "available"));
         model = secondOpinionFallbackModel(rungs, orchestrator, auditor);
       }
       if (_truthy(model)) {
@@ -1219,12 +1311,11 @@ export function boundModelFor(data, config, subagentType) {
     return null;
   }
   const available = config.available;
-  if (
-    !Array.isArray(available) ||
-    available.length === 0 ||
-    !available.every((alias) => typeof alias === "string") ||
-    !available.includes(model)
-  ) {
+  if (!Array.isArray(available) || available.length === 0 || !available.every((alias) => typeof alias === "string")) {
+    return null;
+  }
+  // The opted-in auditor is an auditor-only rung: pinned although the ladder never lists it.
+  if (!available.includes(model) && !(spec.tier === "auditor" && model === config.auditor_opt_in)) {
     return null;
   }
   return model;
@@ -1630,6 +1721,24 @@ export function detectOrchestrator(transcriptPath, available, { turn = null } = 
   return resolveAlias(modelId, available);
 }
 
+/**
+ * The aliases orchestrator detection recognises: the recorded ladder plus the vendor's
+ * auditor-only rungs. Empty without a recorded ladder (the semantic case), so detection stays
+ * silent there as before.
+ * @param {Json} registry
+ * @param {Json} config
+ * @returns {string[]}
+ */
+export function detectionAliases(registry, config) {
+  const ladder = _isDict(config) ? _get(config, "available") : null;
+  if (!Array.isArray(ladder) || ladder.length === 0) {
+    return [];
+  }
+  const vendor = _pyStr(_or(_get(config, "vendor"), "anthropic"));
+  const auditorOnly = _or(_get(_get(registry, vendor, {}), "auditor_only_rungs"), []);
+  return [...ladder, ...[..._iterate(auditorOnly)].filter((alias) => !ladder.includes(alias))];
+}
+
 // --------------------------------------------------------------------------------------
 // Context-pressure detection (design §12, ADR 0006) — the tokens axis of runtime weakness
 // --------------------------------------------------------------------------------------
@@ -1948,7 +2057,8 @@ export function rebindTo(data, root, registry, config, orchestrator, { write = t
   const available = _get(config, "available");
   const secondOpinion = _truthy(_get(config, "second_opinion"));
   const vendor = _pyStr(_or(_get(config, "vendor"), "anthropic"));
-  const binding = computeBinding(data, registry, orchestrator, available, vendor);
+  const auditorOptIn = _or(_get(config, "auditor_opt_in"), null);
+  const binding = computeBinding(data, registry, orchestrator, available, vendor, auditorOptIn);
   const files = bindingArtifacts(data, registry, binding, { secondOpinion, available });
   const changed = writeArtifacts(root, files, { write });
   removeObsoleteAgents(
@@ -1962,6 +2072,9 @@ export function rebindTo(data, root, registry, config, orchestrator, { write = t
 
 /**
  * The per-user resolved config written to `localConfigRel()` (binding, opt-ins, staleness hash).
+ *
+ * `available` records the ladder the binding resolved (`selectionLadder`) — none in the semantic
+ * case — so the runtime readers need no `--available` of their own.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Binding} binding
  * @param {Json} registry
@@ -1969,6 +2082,7 @@ export function rebindTo(data, root, registry, config, orchestrator, { write = t
  * @returns {Record<string, Json>}
  */
 export function localConfig(data, binding, registry, { secondOpinion, available }) {
+  const [rungs, semantic] = selectionLadder(registry, binding.vendor, available);
   /** @type {Record<string, Json>} */
   const config = {
     vendor: binding.vendor,
@@ -1982,12 +2096,12 @@ export function localConfig(data, binding, registry, { secondOpinion, available 
     },
     second_opinion: secondOpinion,
     second_opinion_provider: oppositeVendor(data, registry, binding.vendor),
-    available: available ?? null,
+    available: semantic ? null : rungs,
+    auditor_opt_in: binding.auditorOptIn,
     registry_hash: registryHash(registry),
-    task_kind_floors: taskKindFloors(registry, _or(available, []), binding.vendor),
+    task_kind_floors: taskKindFloors(registry, semantic ? [] : rungs, binding.vendor),
   };
   if (config.second_opinion_provider === binding.vendor) {
-    const rungs = _truthy(available) ? [..._iterate(available)] : _semanticRungs(_get(registry, binding.vendor, {}));
     config.second_opinion_fallback_model = secondOpinionFallbackModel(rungs, binding.orchestrator, binding.auditor);
   }
   return config;
@@ -2223,7 +2337,14 @@ export function statusLines(data, config, registry, initCommand) {
     fill(texts.delegation, { escalation_hint: _escalationHint(config), zone_convention: zoneConvention(data) }),
     fill(texts.self_check, { orchestrator: _pyStr(orchestrator), init_command: initCommand }),
   ];
-  const warning = computeBinding(data, registry, orchestrator, _get(config, "available"), orchestratorVendor).warning;
+  const warning = computeBinding(
+    data,
+    registry,
+    orchestrator,
+    _get(config, "available"),
+    orchestratorVendor,
+    _or(_get(config, "auditor_opt_in"), null),
+  ).warning;
   if (warning) {
     lines.push(`⚠ ${warning}`);
   }
@@ -2257,7 +2378,14 @@ export function rebindNotice(data, config, registry) {
       mid: _pyStr(_get(binding, "mid", "?")),
     }),
   ];
-  const warning = computeBinding(data, registry, orchestrator, _get(config, "available"), vendor).warning;
+  const warning = computeBinding(
+    data,
+    registry,
+    orchestrator,
+    _get(config, "available"),
+    vendor,
+    _or(_get(config, "auditor_opt_in"), null),
+  ).warning;
   if (warning) {
     lines.push(`⚠ ${warning}`);
   }

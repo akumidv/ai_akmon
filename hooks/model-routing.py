@@ -112,7 +112,7 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     # One transcript read per run (A19): detection and the pressure notice below share it.
     transcript = payload.get("transcript_path")
     turn = routing.last_main_turn(transcript)
-    detected = routing.detect_orchestrator(transcript, config.get("available"), turn=turn)
+    detected = routing.detect_orchestrator(transcript, routing.detection_aliases(registry, config), turn=turn)
     switched = bool(detected and config and detected != config.get("orchestrator"))
     rebound = switched and brief_warn is None
     if rebound:

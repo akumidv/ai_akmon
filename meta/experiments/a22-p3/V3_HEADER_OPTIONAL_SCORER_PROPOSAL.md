@@ -1,6 +1,6 @@
 # A22 P3 V3 prospective scorer header handling
 
-**Owner direction:** after M155, accept a narrow prospective repair for a three-column scorer reply that omits only its fixed TSV header. The M155 call and its seal remain terminal. This design authorizes no retrospective score, retry, qualification reading, or B/C comparison.
+**Owner direction:** after M158, accept a narrow prospective repair for a three-column scorer reply that omits only its fixed TSV header. The M158 call and its seal remain terminal. This design authorizes no retrospective score, retry, qualification reading, or B/C comparison.
 
 ## Problem and fixed scope
 

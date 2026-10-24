@@ -76,6 +76,26 @@ def _task_statuses(data: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(data["task_statuses"])
 
 
+def _ladder_problem(spec: Mapping[str, Any]) -> str | None:
+    """Why a vendor's committed ladder is malformed (ADR-0004/D04), or ``None`` when it is well-formed or absent."""
+    rungs = spec.get("harness_rungs")
+    auditor_only = spec.get("auditor_only_rungs")
+    if rungs is not None and (
+        not isinstance(rungs, list)
+        or not rungs
+        or not all(isinstance(rung, str) and rung for rung in rungs)
+        or len(set(rungs)) != len(rungs)
+    ):
+        return "harness_rungs must be a non-empty list of unique non-empty strings"
+    if auditor_only is not None and (
+        not isinstance(auditor_only, list) or not all(isinstance(rung, str) for rung in auditor_only)
+    ):
+        return "auditor_only_rungs must be a list of strings"
+    if rungs is not None and auditor_only is not None and set(rungs) & set(auditor_only):
+        return "auditor_only_rungs must not repeat a harness_rungs alias"
+    return None
+
+
 def _reasoner_policy_values(data: Mapping[str, Any]) -> tuple[str, ...]:
     """The registry values a vendor's reasoner selection may name (``verify.json``).
 
@@ -1181,6 +1201,22 @@ class Verifier:
                     f"model-routing {vendor} semantic_fallback must name worker/mid/reasoner/orchestrator",
                     target=f"tools/model_routing/registry.json#{vendor}",
                     fix="Name a model for each of worker, mid, reasoner and orchestrator in semantic_fallback.",
+                )
+            ladder_problem = _ladder_problem(spec)
+            if ladder_problem is not None:
+                self.error(
+                    "routing.ladder",
+                    f"model-routing {vendor} {ladder_problem}",
+                    target=f"tools/model_routing/registry.json#{vendor}",
+                    fix="Make harness_rungs a non-empty list of unique aliases, weakest first, and "
+                    "auditor_only_rungs a list of aliases that are not among them.",
+                )
+            elif spec.get("harness_rungs") is not None or spec.get("auditor_only_rungs") is not None:
+                self.ok(
+                    "routing.ladder",
+                    f"model-routing {vendor} harness ladder is well-formed",
+                    target=f"tools/model_routing/registry.json#{vendor}",
+                    fix="Keep harness_rungs ordered weakest to strongest and auditor_only_rungs disjoint from it.",
                 )
             second = spec.get("second_opinion")
             if not isinstance(second, dict):

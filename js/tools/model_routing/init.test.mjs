@@ -88,7 +88,7 @@ test("an unreadable or non-object settings file is skipped, not an error", () =>
     const root = project({ ".claude/settings.json": text });
     const result = run(["--project-root", root, "--check"]);
     assert.equal(result.code, 1);
-    assert.match(result.stdout, /orchestrator=strongest /);
+    assert.match(result.stdout, /orchestrator=opus /);
   }
 });
 
@@ -144,4 +144,93 @@ test("usage errors are one stderr line and exit 2; --help exits 0", () => {
   const help = run(["--help"]);
   assert.equal(help.code, 0);
   assert.match(help.stdout, /^usage: init\.mjs /);
+});
+
+/**
+ * The `model:` line of a generated definition, or null when it carries none.
+ * @param {string} root
+ * @param {string} agent
+ * @returns {string | null}
+ */
+function modelLine(root, agent) {
+  const text = fs.readFileSync(path.join(root, ".claude", "agents", `${agent}.md`), "utf8");
+  return text.match(/^model: (.+)$/m)?.[1] ?? null;
+}
+
+/**
+ * The recorded local config of a scratch project.
+ * @param {string} root
+ * @returns {Record<string, any>}
+ */
+function localConfig(root) {
+  return JSON.parse(fs.readFileSync(path.join(root, ".claude", "model-routing.local.json"), "utf8"));
+}
+
+test("without --available the committed ladder binds, every delegate is pinned and the ladder is recorded", () => {
+  const root = project();
+  assert.equal(run(["--project-root", root]).code, 0);
+  for (const agent of ["k_explorer", "k_mechanic", "k_validator"]) {
+    assert.equal(modelLine(root, agent), "haiku", agent);
+  }
+  assert.equal(modelLine(root, "k_implementer"), "sonnet");
+  assert.equal(modelLine(root, "k_reasoner"), "opus");
+  assert.equal(modelLine(root, "k_auditor"), "opus");
+  const config = localConfig(root);
+  assert.deepEqual(config.available, ["haiku", "sonnet", "opus"]);
+  assert.equal(config.auditor_opt_in, null);
+});
+
+test("an auditor-only alias in --available never binds below the auditor", () => {
+  const root = project();
+  const result = run(["--project-root", root, "--available", "haiku,sonnet,opus,fable"]);
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet /);
+  assert.equal(modelLine(root, "k_auditor"), "opus");
+  assert.deepEqual(localConfig(root).available, ["haiku", "sonnet", "opus"]);
+});
+
+test("--auditor fable pins the auditor and records the opt-in", () => {
+  const root = project();
+  assert.equal(run(["--project-root", root, "--auditor", "fable"]).code, 0);
+  assert.equal(modelLine(root, "k_auditor"), "fable");
+  assert.equal(modelLine(root, "k_reasoner"), "opus");
+  const config = localConfig(root);
+  assert.equal(config.auditor_opt_in, "fable");
+  assert.equal(config.binding.auditor, "fable");
+  assert.deepEqual(config.available, ["haiku", "sonnet", "opus"]);
+});
+
+test("a refused --auditor or an inverted --available is one error line, exit 2 and no files", () => {
+  const cases = [
+    {
+      argv: ["--available", "haiku,sonnet,opus", "--auditor", "fable"],
+      error: /^error: --auditor fable must also be listed in --available \(haiku,sonnet,opus\)\n$/,
+    },
+    {
+      argv: ["--auditor", "nope"],
+      error: /^error: --auditor nope is not a rung of the anthropic ladder \(haiku,sonnet,opus\)[^\n]*\n$/,
+    },
+    {
+      argv: ["--available", "opus,sonnet,haiku,fable"],
+      error: /^error: --available opus,sonnet,haiku,fable is out of order: [^\n]*haiku,sonnet,opus[^\n]*\n$/,
+    },
+  ];
+  for (const { argv, error } of cases) {
+    const root = project();
+    const result = run(["--project-root", root, ...argv]);
+    assert.equal(result.code, 2, argv.join(" "));
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, error);
+    assert.equal(fs.existsSync(path.join(root, ".claude")), false);
+  }
+});
+
+test("the openai vendor binds its own committed ladder", () => {
+  const root = project();
+  assert.equal(run(["--project-root", root, "--vendor", "openai"]).code, 0);
+  assert.equal(modelLine(root, "k_explorer"), "luna");
+  assert.equal(modelLine(root, "k_implementer"), "terra");
+  assert.equal(modelLine(root, "k_auditor"), "sol");
+  assert.deepEqual(localConfig(root).available, ["luna", "terra", "sol"]);
+  assert.equal(run(["--project-root", project(), "--vendor", "openai", "--auditor", "astra"]).code, 0);
 });

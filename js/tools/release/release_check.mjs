@@ -33,7 +33,7 @@
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TextDecoder, parseArgs } from "node:util";
 
@@ -41,7 +41,15 @@ import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { Finding, exitCode, lineSafe, printFindings } from "../../common/findings.mjs";
 import { fill, read } from "../../common/jsondata.mjs";
 import { JSONDecodeError, jsonLoads } from "../../common/pyjson.mjs";
-import { aitnaRoot, aitnaRootName, resolveProjectRoot } from "../../common/project_root.mjs";
+import {
+  aitnaRoot,
+  aitnaRootName,
+  akmonMount,
+  findProjectRoot,
+  isProjectRoot,
+  resolvePath,
+  resolveProjectRoot,
+} from "../../common/project_root.mjs";
 import {
   isDict,
   isDir,
@@ -822,13 +830,31 @@ export function runCheck(data, root, subject) {
 // --------------------------------------------------------------------------------------
 
 /**
- * The owner-run command set, with the version bump ahead of the staging step.
+ * `tree`'s path from the project root that mounts it, or null when no project mounts it: akmon's
+ * own repository is the tree the tag is cut from already, so it takes no `cd` (C130; see the
+ * Python).
+ * @param {string} tree
+ * @returns {string | null}
+ */
+function _mountPath(tree) {
+  const project = findProjectRoot(tree);
+  const mount = akmonMount(project);
+  if (!isProjectRoot(project) || resolvePath(mount) !== resolvePath(tree)) {
+    return null;
+  }
+  return posix.relative(project, mount);
+}
+
+/**
+ * The owner-run command set, with the version bump ahead of the staging step. The akmon plan
+ * opens with a `cd` into `tree`, the tree the tag is cut from, only when a project mounts it.
  * @param {ReleaseData} data
  * @param {string} version
  * @param {string} subject
+ * @param {string} [tree] the akmon tree the tag is cut from (default: the running one)
  * @returns {number}
  */
-export function runPlan(data, version, subject) {
+export function runPlan(data, version, subject, tree = embeddedTreeRoot()) {
   const plan = data.run_plan;
   if (!VERSION_RE.test(version)) {
     process.stderr.write(`${fill(plan.error_version, { version: pyRepr(version) })}\n`);
@@ -839,8 +865,10 @@ export function runPlan(data, version, subject) {
   /** @type {string[]} */
   const lines = [...plan.header, ""];
   if (subject === "akmon") {
-    lines.push(fill(facts.cd_line, { aitna_root: aitnaRootName() }));
-    lines.push("");
+    const mount = _mountPath(tree);
+    if (mount !== null) {
+      lines.push(fill(facts.cd_line, { mount }), "");
+    }
     // The plan's version is validated above as vX.Y.Z, so the literal is final and its
     // SemVer spelling is derived by the shared logic, never spelled by hand.
     lines.push(fill(facts.semver_note, { semver: semverSpelling(literal) }));

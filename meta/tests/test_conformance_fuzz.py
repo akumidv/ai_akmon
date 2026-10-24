@@ -369,6 +369,20 @@ def test_a_draft_of_an_unspellable_stdin_carries_its_bytes_and_still_loads(tmp_p
     assert 'stdin_base64 = "TmFO"' in text
 
 
+def test_a_draft_of_the_deep_seed_spells_no_deep_key_and_loads(tmp_path, monkeypatch):
+    """M152: a seed nested past ``SEED_WALK_DEPTH`` holds a Raw leaf, so its draft writes no
+    ``[run.payload]`` header of the thousand-plus parts ``tomllib`` refuses — it carries the stdin
+    in ``[fuzz].stdin_base64`` and still loads."""
+    seed = next(s for s in SEEDS if s.name == "hooks/delegation-nudge-deep-tool-name")
+    document = seed.payload
+    case = fuzz.Case(4, seed, ("drop-key:session_id",), fuzz.encode_document(document, ascii_only=True), document)
+    python = _observed(stdout="", effects={})
+    text = fuzz.draft_scenario(case, 7, {"python": python, "node": _observed(stdout="", exit=1)}, ("exit",))
+    assert "[run.payload" not in text
+    scenario = _load_draft(tmp_path, monkeypatch, text, "fuzz-delegation-nudge-s7-c4")
+    assert scenario.run.payload is None
+
+
 def test_only_plain_documents_have_a_payload_spelling():
     for document in ({"a": None}, {"a": "\ud800"}, {"a": 2**64}, {"a": fuzz.Raw("-0")}, {}):
         assert fuzz.payload_toml(fuzz.Case(0, SEEDS[0], (), b"", document)) is None

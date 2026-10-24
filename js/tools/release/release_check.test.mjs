@@ -181,6 +181,42 @@ test("runPlan for the akmon subject names the derived SemVer spelling", () => {
   assert.match(result.stdout, /release reopened would read 0\.5\.0-dev\.0/);
 });
 
+test("runPlan has no cd line in akmon's own repository (C130)", () => {
+  const root = tree({ "AGENTS.md": "x\n" });
+  const result = capture(() => runPlan(DATA, "v9.9.9", "akmon", root));
+  assert.equal(result.code, 0);
+  assert.doesNotMatch(result.stdout, /^cd /m);
+  assert.equal(result.stdout.split("\n")[4].startsWith("#    The npm carrier takes the SemVer spelling"), true);
+});
+
+for (const [aitna, mount] of /** @type {[string | null, string][]} */ ([
+  [null, "_aitna/akmon"],
+  ["tools/ai", "tools/ai/akmon"],
+])) {
+  test(`runPlan cds into the mounted tree ${mount} (C130)`, () => {
+    const saved = process.env.AITNA_ROOT;
+    if (aitna === null) {
+      delete process.env.AITNA_ROOT;
+    } else {
+      process.env.AITNA_ROOT = aitna;
+    }
+    try {
+      const root = tree({ "AGENTS.md": "x\n", [`${mount}/AGENTS.md`]: "x\n" });
+      const result = capture(() => runPlan(DATA, "v9.9.9", "akmon", path.join(root, mount)));
+      assert.equal(result.code, 0);
+      const lines = result.stdout.split("\n");
+      assert.equal(lines[4], `cd ${mount}            # tag is cut from the submodule's own tree`);
+      assert.equal(lines[5], "");
+    } finally {
+      if (saved === undefined) {
+        delete process.env.AITNA_ROOT;
+      } else {
+        process.env.AITNA_ROOT = saved;
+      }
+    }
+  });
+}
+
 test("runState summarizes a package project root", () => {
   const root = tree({
     "TASKS.md": "- C1 · a · done · e\n- C2 · b · active · e\n",

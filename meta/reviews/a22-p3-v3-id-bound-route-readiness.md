@@ -6,9 +6,9 @@ preflighted and default-deny. No provider call was made. The fresh A
 qualification candidate cannot be sealed or dispatched until both new route
 checks pass and their evidence is bound to its own seal and approval.
 
-The terminal qualification successor remains closed at call 31 (M152). Its
+The terminal qualification successor remains closed at call 31 (M155). Its
 hash-verified reply omitted the final `f` from the packet ID on every E row;
-the prior report and M152 have been corrected. The saved packet is reused only
+the prior report and M155 have been corrected. The saved packet is reused only
 as an unscored mechanics fixture. No failed reading is repaired, reclassified
 or carried into the new 32-cell dataset.
 

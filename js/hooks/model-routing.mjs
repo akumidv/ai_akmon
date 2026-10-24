@@ -38,6 +38,7 @@ import { dictGet, isDict, isDir, isFile, pyEq, pyError, pyPath, readText, truthy
 import {
   briefWarning,
   contextPressureNotice,
+  detectionAliases,
   detectOrchestrator,
   initInstruction,
   lastMainTurn,
@@ -141,7 +142,7 @@ export function modelRoutingResult(data, root, payload) {
   // One transcript read per run (A19): detection and the pressure notice below share it.
   const transcript = dictGet(payload, "transcript_path");
   const turn = lastMainTurn(transcript);
-  const detected = detectOrchestrator(transcript, dictGet(config, "available"), { turn });
+  const detected = detectOrchestrator(transcript, detectionAliases(registry, config), { turn });
   const switched = truthy(detected) && truthy(config) && !pyEq(detected, dictGet(config, "orchestrator"));
   const rebound = switched && briefWarn === null;
   if (rebound) {

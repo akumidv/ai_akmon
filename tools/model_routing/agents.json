@@ -113,10 +113,15 @@
   },
   "unpinnable_model": "second opinion needs model {{model}} on {{harness}}, but the registry declares no model_flag for that vendor — an unpinned run would not be model-diverse. Declare the measured flag in the vendor's second_opinion block, or route this gate another way.",
   "compute_binding_warnings": {
-    "semantic": "using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally",
+    "semantic": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally",
     "not_in_list": "orchestrator '{{orchestrator}}' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias",
     "below_floor": "orchestrator={{orchestrator}} is below the orchestration floor ({{floor}}) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check",
     "reserved_top": "orchestrator={{orchestrator}} runs on the auditor's reserved top rung — orchestration does not need it; consider /model down to {{floor}}"
+  },
+  "ladder_errors": {
+    "order": "--available {{given}} is out of order: the {{vendor}} ladder runs weakest to strongest as {{expected}}; list the aliases it shares with that ladder in that order",
+    "auditor_unknown": "--auditor {{alias}} is not a rung of the {{vendor}} ladder ({{ladder}}) or one of its auditor-only rungs ({{auditor_only}})",
+    "auditor_unlisted": "--auditor {{alias}} must also be listed in --available ({{given}})"
   },
   "role_matrix_warning": "role/task-kind: {{subagent}} ({{kinds}}) is outside the active role '{{role}}' — it routes {{allowed}}.",
   "role_matrix_directive": "role/task-kind: {{subagent}} ({{kinds}}) is outside the active role '{{role}}', which routes {{allowed}} — re-route this work to an agent with an allowed kind, or declare the role switch before delegating it.",

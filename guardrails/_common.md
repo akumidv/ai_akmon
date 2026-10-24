@@ -65,6 +65,8 @@ offered" and "branch for non-trivial work" are not machine-checked.
   implementation; record the accepted scope in a thematic ADR block. Verify the resulting
   implementation against that intent and its evidence, without requesting acceptance of
   unchanged design again. Passing tests and plausibility are necessary, not sufficient.
+- **Owner decision requests (every role):** use stable **D-TOPIC** codes, following
+  [design-flow § Decision requests](../pipelines/design-flow.md#decision-requests).
 
 ## Analysis before mutation
 

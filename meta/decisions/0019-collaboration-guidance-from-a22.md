@@ -144,7 +144,7 @@ named human stop operator must be recorded. No operator identity was supplied in
 `Decision-ID: ADR-0019/D03`
 
 **Owner accepted for implementation.** After the terminal V3 qualification successor
-returned four E rows with an opaque packet ID missing its final character (M152),
+returned four E rows with an opaque packet ID missing its final character (M155),
 the next scorer response contract removes the model-authored packet ID. Each
 scorer receives exactly one blind packet per call and returns only `element`,
 `verdict`, and `reason` TSV columns. A fail-closed parser requires one row for
@@ -167,7 +167,7 @@ operational seal are still required under D02's resource and stop conditions.
 `Decision-ID: ADR-0019/D04`
 
 **Owner accepted for prospective implementation.** After the terminal
-identity-bound A qualification omitted only its fixed TSV header (M155), a
+identity-bound A qualification omitted only its fixed TSV header (M158), a
 new scorer parser may accept either the exact `element`, `verdict`, `reason`
 header or complete headerless three-column E rows. It inserts only that fixed
 header in a separate normalized representation. Every data row must still

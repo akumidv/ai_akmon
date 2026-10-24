@@ -169,7 +169,7 @@ this policy; the tiers are how tokens buy quality where leverage is highest. The
 |---|---|---|
 | **orchestrator** | decompose · route · synthesize · owner dialogue | the session's own model — never overridden |
 | **reasoner** | load-bearing drafting: deep debugging, design forks, quant derivation, plan drafts | the orchestrator's rung by default; per-kind floors; escalates on signal |
-| **auditor** | clean-context audit of a whole gate's material (`audit`) | the **maximal** available rung, always — the highest-leverage check |
+| **auditor** | clean-context audit of a whole gate's material (`audit`) | the **top of the ladder**, or the auditor-only rung the owner opted into — the highest-leverage check |
 | **worker** | delegable realization: exploration, summaries, mechanical edits, gate loops | cheapest adequate rung (`mid` rung for `implement-under-spec`) |
 | **second-opinion** | independent review of decisions and code | a *different vendor's* model, opt-in |
 
@@ -197,12 +197,17 @@ delegate — the question is "which row is this?", not "is it worth delegating?"
 **escalation ladder** (start at the cheapest adequate rung; move up one rung only on failure
 signals: gates red twice, the delegate flags uncertainty, a contested fork emerges).
 
-Model names never enter shared process docs or the committed registry as current truth. The
-registry records a **semantic selection policy per vendor** (weakest→strongest local discovery
-order, worker = lowest, reasoner = the orchestrator's rung, orchestrator floor = highest); concrete model aliases
-come from local discovery or an explicit `--available` list and are written only to gitignored
-local config / generated harness files. If discovery is unavailable, the binding falls back to
-semantic labels and warns instead of pretending those labels are real model ids. A SessionStart
+The registry records a **selection policy per vendor** (worker = lowest, reasoner = the
+orchestrator's rung, orchestrator floor = a named alias or the highest) and, for a vendor whose
+harness names its model families by stable aliases, that vendor's **committed harness ladder**
+and its **auditor-only rung** — the rung above the ladder, bound to no other tier and used as
+the auditor only on the owner's opt-in.
+The ladder binds without further input, so every generated delegate carries a concrete model;
+the registry owns the aliases, this document names none. An explicit `--available` list (which
+must keep the ladder's order) replaces it for the local setup and is written only to gitignored
+local config / generated harness files. Only a vendor with no committed ladder and no list falls
+back to semantic labels, and warns that its delegates run on the orchestrator's model instead of
+pretending those labels are real model ids. A SessionStart
 hook displays the binding and a PreToolUse hook logs each delegation at zero token cost. The
 static below-floor warning is a **weak prior**, not a gate: with the auditor on, the
 whole-gate audit is the authoritative check on whether the session model was strong enough, so a

@@ -244,6 +244,40 @@ def test_reasoner_policy_rejects_unknown_value(tmp_path):
     assert any("semantic selection_policy" in message for message in errors), errors
 
 
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"harness_rungs": []}, "harness_rungs must be a non-empty list of unique non-empty strings"),
+        ({"harness_rungs": ["a", "a"]}, "harness_rungs must be a non-empty list of unique non-empty strings"),
+        ({"harness_rungs": ["a", ""]}, "harness_rungs must be a non-empty list of unique non-empty strings"),
+        ({"harness_rungs": "a"}, "harness_rungs must be a non-empty list of unique non-empty strings"),
+        ({"auditor_only_rungs": "z"}, "auditor_only_rungs must be a list of strings"),
+        ({"auditor_only_rungs": [1]}, "auditor_only_rungs must be a list of strings"),
+        ({"auditor_only_rungs": ["opus"]}, "auditor_only_rungs must not repeat a harness_rungs alias"),
+    ],
+)
+def test_registry_ladder_shape_is_checked(change, message):
+    import json
+
+    registry = json.loads((_AKMON_ROOT / "tools" / "model_routing" / "registry.json").read_text(encoding="utf-8"))
+    registry["anthropic"].update(change)
+    verifier = verify.Verifier(_AKMON_ROOT)
+    verifier._check_model_routing_registry(registry)
+    assert f"model-routing anthropic {message}" in _messages(verifier.findings, "error")
+
+
+def test_registry_without_a_committed_ladder_is_still_valid():
+    import json
+
+    registry = json.loads((_AKMON_ROOT / "tools" / "model_routing" / "registry.json").read_text(encoding="utf-8"))
+    del registry["anthropic"]["harness_rungs"]
+    del registry["anthropic"]["auditor_only_rungs"]
+    verifier = verify.Verifier(_AKMON_ROOT)
+    verifier._check_model_routing_registry(registry)
+    assert not [f for f in verifier.findings if f.code == "routing.ladder" and f.target.endswith("#anthropic")]
+    assert not _messages(verifier.findings, "error")
+
+
 # --------------------------------------------------------------------------------------
 # USE-surface isolation (ADR 0003 §6): the surface must not name dev artifacts
 # --------------------------------------------------------------------------------------

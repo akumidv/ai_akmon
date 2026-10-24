@@ -34,6 +34,11 @@ def _load_init():
 
 
 REGISTRY = json.loads((_ROUTING_DIR / "registry.json").read_text(encoding="utf-8"))
+# A vendor that commits no ladder: the only way to reach the semantic labels (ADR-0004/D04).
+SEMANTIC_REGISTRY = json.loads(json.dumps(REGISTRY))
+for _vendor in ("anthropic", "openai"):
+    del SEMANTIC_REGISTRY[_vendor]["harness_rungs"]
+    del SEMANTIC_REGISTRY[_vendor]["auditor_only_rungs"]
 
 
 # --------------------------------------------------------------------------------------
@@ -68,8 +73,8 @@ def test_binding_corridor_below_floor_warns():
     binding = routing.compute_binding(REGISTRY, "sonnet", available=["haiku", "sonnet", "opus", "fable"])
     assert binding.warning is not None
     assert "below the orchestration floor (opus)" in binding.warning
-    # The binding itself is unchanged — the warning is advisory only.
-    assert binding.auditor == "fable"
+    # The binding itself is unchanged — the warning is advisory only; fable is auditor-only.
+    assert binding.auditor == "opus"
 
 
 def test_binding_corridor_healthy_orchestrator_is_silent():
@@ -78,10 +83,13 @@ def test_binding_corridor_healthy_orchestrator_is_silent():
 
 
 def test_binding_corridor_reserved_top_rung_warns_wasteful():
-    binding = routing.compute_binding(REGISTRY, "fable", available=["haiku", "sonnet", "opus", "fable"])
+    # The shipped floor is the top of the ladder, so lower the floor to open the wasteful arm.
+    registry = json.loads(json.dumps(REGISTRY))
+    registry["anthropic"]["selection_policy"]["orchestrator_floor"] = "sonnet"
+    binding = routing.compute_binding(registry, "opus")
     assert binding.warning is not None
     assert "reserved top rung" in binding.warning
-    assert "/model down to opus" in binding.warning
+    assert "/model down to sonnet" in binding.warning
 
 
 def test_binding_corridor_collapse_to_floor_without_top_is_silent():
@@ -142,8 +150,8 @@ def test_binding_openai_policy_for_codex_models():
 
 
 def test_binding_without_available_uses_semantic_fallback_and_omits_agent_models():
-    binding = routing.compute_binding(REGISTRY, "strongest")
-    files = routing.generated_agent_files(REGISTRY, binding)
+    binding = routing.compute_binding(SEMANTIC_REGISTRY, "strongest")
+    files = routing.generated_agent_files(SEMANTIC_REGISTRY, binding)
 
     assert binding.semantic_fallback is True
     assert binding.worker == "worker"
@@ -151,6 +159,7 @@ def test_binding_without_available_uses_semantic_fallback_and_omits_agent_models
     assert binding.reasoner == "strongest"
     assert binding.auditor == "strongest"
     assert binding.warning is not None
+    assert "orchestrator's model" in binding.warning
     assert "model:" not in files[".claude/agents/k_explorer.md"]
 
 
@@ -503,10 +512,23 @@ def test_local_config_carries_auditor_and_task_kind_floors():
     assert real["task_kind_floors"] == {"quant-derivation": "opus"}
 
 
-def test_local_config_no_task_kind_floors_without_available():
-    binding = routing.compute_binding(REGISTRY, "large")
-    config = routing.local_config(binding, REGISTRY, second_opinion=False, available=None)
+def test_local_config_no_task_kind_floors_without_a_ladder():
+    binding = routing.compute_binding(SEMANTIC_REGISTRY, "large")
+    config = routing.local_config(binding, SEMANTIC_REGISTRY, second_opinion=False, available=None)
+    assert config["available"] is None
     assert config["task_kind_floors"] == {}
+
+
+def test_local_config_records_the_resolved_ladder_and_the_auditor_opt_in():
+    binding = routing.compute_binding(REGISTRY, "opus", None, "anthropic", "fable")
+    config = routing.local_config(binding, REGISTRY, second_opinion=False, available=None)
+    assert config["available"] == LADDER
+    assert config["auditor_opt_in"] == "fable"
+    assert config["binding"]["auditor"] == "fable"
+    assert config["task_kind_floors"] == {"quant-derivation": "opus"}
+    # An auditor-only alias in a given list is not part of the recorded ladder.
+    listed = routing.local_config(binding, REGISTRY, second_opinion=False, available=AVAILABLE)
+    assert listed["available"] == LADDER
 
 
 def test_local_config_carries_fallback_model_when_provider_equals_vendor(tmp_path):
@@ -598,7 +620,7 @@ def test_bound_model_for_skips_semantic_fallback_token():
     ``local_config`` can produce, so it passed while the reachable one reported ``worker``
     and ``strongest`` as if they were models.
     """
-    registry = routing.load_registry(_AKMON)
+    registry = SEMANTIC_REGISTRY
     binding = routing.compute_binding(registry, "opus", None, "anthropic")
     assert binding.semantic_fallback is True
     config = routing.local_config(registry=registry, binding=binding, second_opinion=False, available=None)
@@ -888,6 +910,7 @@ def test_init_preserves_second_opinion_when_flag_omitted(tmp_path):
 # --------------------------------------------------------------------------------------
 
 AVAILABLE = ["haiku", "sonnet", "opus", "fable"]
+LADDER = ["haiku", "sonnet", "opus"]  # the shipped anthropic harness ladder: fable is auditor-only
 
 
 def test_resolve_alias_matches_substring_and_prefers_longest():
@@ -954,14 +977,14 @@ def test_detect_orchestrator_none_when_missing_empty_or_malformed(tmp_path):
 def test_rebind_to_recomputes_binding_and_regenerates_artifacts(tmp_path):
     root = _make_project(tmp_path)
     init = _load_init()
-    assert init.main(["--project-root", str(root), "--orchestrator", "fable", "--available", ",".join(AVAILABLE)]) == 0
+    assert init.main(["--project-root", str(root), "--orchestrator", "sonnet", "--available", ",".join(LADDER)]) == 0
     registry = routing.load_registry(root / "_aitna" / "akmon", root)
     config = json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
-    assert config["binding"]["reasoner"] == "fable"
+    assert config["binding"]["reasoner"] == "sonnet"
 
     binding, changed = routing.rebind_to(root, registry, config, "opus")
     assert binding.reasoner == "opus"  # dynamic reasoner follows the new orchestrator
-    assert binding.auditor == "fable"  # pinned max, unchanged
+    assert binding.auditor == "opus"  # pinned max, unchanged
     assert changed  # files were rewritten
     new_config = json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
     assert new_config["orchestrator"] == "opus"
@@ -1047,7 +1070,7 @@ def _init_project(tmp_path: Path, orchestrator: str = "fable") -> Path:
     root = _make_project(tmp_path)
     assert (
         _load_init().main(
-            ["--project-root", str(root), "--orchestrator", orchestrator, "--available", ",".join(AVAILABLE)]
+            ["--project-root", str(root), "--orchestrator", orchestrator, "--available", ",".join(LADDER)]
         )
         == 0
     )
@@ -1103,7 +1126,7 @@ def _break_overlay(root: Path) -> None:
 
 
 def test_hook_refuses_the_rebind_while_the_overlay_briefs_are_unusable(tmp_path):
-    root = _init_project(tmp_path, "fable")
+    root = _init_project(tmp_path, "sonnet")
     _break_overlay(root)
     transcript = tmp_path / "t.jsonl"
     _write_transcript(transcript, [_assistant("claude-opus-4-8")])
@@ -1117,13 +1140,13 @@ def test_hook_refuses_the_rebind_while_the_overlay_briefs_are_unusable(tmp_path)
     for delivered in (result.additional_context, result.system_message):
         assert "k_gone" in delivered
         assert "_aitna/model-routing.json" in delivered
-    assert "model: fable" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
+    assert "model: sonnet" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
     config = json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
-    assert config["orchestrator"] == "fable"
+    assert config["orchestrator"] == "sonnet"
 
 
 def test_hook_user_prompt_submit_reports_the_suppressed_rebind_once_per_episode(tmp_path, monkeypatch):
-    root = _init_project(tmp_path, "fable")
+    root = _init_project(tmp_path, "sonnet")
     marker_dir = tmp_path / "markers"
     marker_dir.mkdir()
     monkeypatch.setattr(routing.tempfile, "gettempdir", lambda: str(marker_dir))
@@ -1139,7 +1162,7 @@ def test_hook_user_prompt_submit_reports_the_suppressed_rebind_once_per_episode(
     assert "k_gone" in result.additional_context
     assert "k_gone" in result.system_message  # owner-addressed → dual-channel (requirement 11)
     assert "orchestrator model changed" not in result.additional_context  # no rebind happened to announce
-    assert "model: fable" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
+    assert "model: sonnet" in (root / ".claude" / "agents" / "k_reasoner.md").read_text(encoding="utf-8")
 
     repeated = _load_hook().model_routing_result(
         root,
@@ -1148,7 +1171,7 @@ def test_hook_user_prompt_submit_reports_the_suppressed_rebind_once_per_episode(
     assert repeated is None
 
     # A different refused target is a new episode and must be owner-visible again.
-    _write_transcript(transcript, [_assistant("claude-sonnet-4-6")])
+    _write_transcript(transcript, [_assistant("claude-haiku-4-5")])
     changed = _load_hook().model_routing_result(
         root,
         {"hook_event_name": "UserPromptSubmit", "transcript_path": str(transcript), "session_id": "session-c50"},
@@ -1156,7 +1179,7 @@ def test_hook_user_prompt_submit_reports_the_suppressed_rebind_once_per_episode(
     assert "k_gone" in changed.system_message
 
     # Clearing the condition resets the episode; the original target then re-arms.
-    _write_transcript(transcript, [_assistant("claude-fable-5")])
+    _write_transcript(transcript, [_assistant("claude-sonnet-4-6")])
     assert (
         _load_hook().model_routing_result(
             root,
@@ -1229,12 +1252,12 @@ def test_hook_rebind_migrates_legacy_brief_key_and_prunes_old_generated_agent(tm
 
 
 def test_hook_session_start_owner_sees_corridor_warning(tmp_path):
-    # fable orchestrator on a ladder whose floor (opus) sits lower → the wasteful arm,
+    # A sonnet orchestrator sits below the opus floor → the corridor warning,
     # surfaced to the owner as systemMessage while the status line stays in context.
-    root = _init_project(tmp_path, "fable")
+    root = _init_project(tmp_path, "sonnet")
     result = _load_hook().model_routing_result(root, {"hook_event_name": "SessionStart"})
-    assert "reserved top rung" in result.additional_context
-    assert "reserved top rung" in result.system_message
+    assert "below the orchestration floor (opus)" in result.additional_context
+    assert "below the orchestration floor (opus)" in result.system_message
     assert "model routing:" not in (result.system_message or "")  # status line is context-only
 
 
@@ -1597,7 +1620,7 @@ def _ladder_config(orchestrator: str, ladder: list[str]) -> dict:
     return routing.local_config(binding, REGISTRY, second_opinion=False, available=ladder)
 
 
-_LADDER = ["haiku", "sonnet", "opus", "fable"]
+_LADDER = ["haiku", "sonnet", "opus"]
 
 
 def test_floor_gap_when_the_reasoner_follows_an_orchestrator_below_the_corridor():
@@ -1630,9 +1653,13 @@ def test_rebind_notice_carries_the_floor_gap():
 def test_status_lines_name_the_escalation_path_only_with_a_bound_ladder():
     bound = "\n".join(routing.status_lines(_ladder_config("large", ["small", "medium", "large"]), REGISTRY, "x"))
     assert "(escalation path: medium)" in bound
-    binding = routing.compute_binding(REGISTRY, "large", available=None)
-    semantic = routing.local_config(binding, REGISTRY, second_opinion=False, available=None)
-    assert "escalation path" not in "\n".join(routing.status_lines(semantic, REGISTRY, "x"))
+    binding = routing.compute_binding(SEMANTIC_REGISTRY, "large", available=None)
+    semantic = routing.local_config(binding, SEMANTIC_REGISTRY, second_opinion=False, available=None)
+    assert "escalation path" not in "\n".join(routing.status_lines(semantic, SEMANTIC_REGISTRY, "x"))
+    committed = routing.local_config(
+        routing.compute_binding(REGISTRY, "opus"), REGISTRY, second_opinion=False, available=None
+    )
+    assert "(escalation path: sonnet)" in "\n".join(routing.status_lines(committed, REGISTRY, "x"))
 
 
 def test_delegation_floor_warning_is_conditional_on_the_kind_and_silenced_by_an_override():
@@ -1641,7 +1668,6 @@ def test_delegation_floor_warning_is_conditional_on_the_kind_and_silenced_by_an_
     assert warning is not None
     assert "quant-derivation (floor opus)" in warning
     assert routing.delegation_floor_warning(config, "k_reasoner", "opus") is None
-    assert routing.delegation_floor_warning(config, "k_reasoner", "fable") is None
     assert routing.delegation_floor_warning(config, "k_reasoner", "sonnet") is not None
     assert routing.delegation_floor_warning(config, "k_explorer", None) is None
 
@@ -1941,6 +1967,7 @@ def test_agents_data_pins_the_structure_and_characteristic_texts():
         "context_pressure",
         "staleness",
         "second_opinion_spec_errors",
+        "ladder_errors",
     }
     assert data["generated_banner"] == (
         "Generated by akmon's model_routing/init tool from registry.json — edit the registry "
@@ -2025,3 +2052,223 @@ def test_a_missing_gate_json_raises_from_gate_rules(monkeypatch):
         routing.gate_rules()
     with pytest.raises(jsondata.DataFileError):
         routing.gate_rule_for("review")
+
+
+# --------------------------------------------------------------------------------------
+# ADR-0004/D04 — the committed harness ladder, the auditor-only rung, the order check
+# --------------------------------------------------------------------------------------
+
+
+def _agent_model(root: Path, agent: str) -> str | None:
+    text = (root / ".claude" / "agents" / f"{agent}.md").read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if line.startswith("model: ")]
+    return lines[0].removeprefix("model: ") if lines else None
+
+
+def _recorded_config(root: Path) -> dict:
+    return json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
+
+
+def test_selection_ladder_prefers_the_given_list_then_the_committed_ladder_then_semantic():
+    assert routing.selection_ladder(REGISTRY, "anthropic", ["small", "large"]) == (["small", "large"], False)
+    assert routing.selection_ladder(REGISTRY, "anthropic", None) == (LADDER, False)
+    assert routing.selection_ladder(REGISTRY, "anthropic", []) == (LADDER, False)
+    assert routing.selection_ladder(REGISTRY, "openai", None) == (["luna", "terra", "sol"], False)
+    assert routing.selection_ladder(SEMANTIC_REGISTRY, "anthropic", None) == (["worker", "mid", "strongest"], True)
+
+
+def test_selection_ladder_strips_auditor_only_rungs_and_keeps_the_order():
+    assert routing.selection_ladder(REGISTRY, "anthropic", ["haiku", "fable", "sonnet", "opus"])[0] == LADDER
+    assert routing.selection_ladder(REGISTRY, "openai", ["luna", "terra", "sol", "astra"])[0] == [
+        "luna",
+        "terra",
+        "sol",
+    ]
+    # A list holding nothing but auditor-only rungs binds nothing: the committed ladder answers.
+    assert routing.selection_ladder(REGISTRY, "anthropic", ["fable"]) == (LADDER, False)
+
+
+def test_check_ladder_order_accepts_the_committed_order_and_ignores_other_aliases():
+    routing.check_ladder_order(REGISTRY, "anthropic", ["haiku", "sonnet", "opus", "fable"])
+    routing.check_ladder_order(REGISTRY, "anthropic", ["fable", "haiku", "mystery", "opus"])
+    routing.check_ladder_order(REGISTRY, "anthropic", ["opus"])
+    routing.check_ladder_order(SEMANTIC_REGISTRY, "anthropic", ["opus", "haiku"])  # no committed ladder: any order
+
+
+@pytest.mark.parametrize(
+    "given", [["opus", "sonnet", "haiku", "fable"], ["sonnet", "haiku"], ["haiku", "opus", "sonnet"]]
+)
+def test_check_ladder_order_raises_naming_the_list_and_the_expected_order(given):
+    with pytest.raises(ValueError, match="haiku,sonnet,opus") as raised:
+        routing.check_ladder_order(REGISTRY, "anthropic", given)
+    assert ",".join(given) in str(raised.value)
+
+
+def test_check_auditor_opt_in_accepts_an_auditor_only_rung_or_a_ladder_rung():
+    routing.check_auditor_opt_in(REGISTRY, "anthropic", None, "fable")
+    routing.check_auditor_opt_in(REGISTRY, "anthropic", None, "sonnet")
+    routing.check_auditor_opt_in(REGISTRY, "anthropic", ["haiku", "sonnet", "opus", "fable"], "fable")
+    routing.check_auditor_opt_in(REGISTRY, "openai", None, "astra")
+
+
+def test_check_auditor_opt_in_refuses_an_unknown_alias_and_an_unlisted_one():
+    with pytest.raises(ValueError, match="--auditor mystery is not a rung"):
+        routing.check_auditor_opt_in(REGISTRY, "anthropic", None, "mystery")
+    with pytest.raises(ValueError, match=r"--auditor astra is not a rung of the anthropic ladder"):
+        routing.check_auditor_opt_in(REGISTRY, "anthropic", None, "astra")
+    with pytest.raises(ValueError, match=r"must also be listed in --available \(haiku,sonnet,opus\)"):
+        routing.check_auditor_opt_in(REGISTRY, "anthropic", ["haiku", "sonnet", "opus"], "fable")
+
+
+def test_binding_binds_the_committed_ladder_without_available():
+    binding = routing.compute_binding(REGISTRY, "opus")
+    assert binding.semantic_fallback is False
+    assert (binding.worker, binding.mid, binding.reasoner, binding.auditor) == ("haiku", "sonnet", "opus", "opus")
+    assert binding.escalation == ("sonnet",)
+    assert binding.warning is None
+    assert binding.auditor_opt_in is None
+
+
+def test_binding_never_binds_an_auditor_only_rung_below_the_auditor():
+    for orchestrator in ("sonnet", "opus", "fable"):
+        binding = routing.compute_binding(REGISTRY, orchestrator, ["haiku", "sonnet", "opus", "fable"])
+        assert "fable" not in (binding.worker, binding.mid, binding.reasoner, binding.auditor, *binding.escalation)
+    # An unordered list (with the auditor-only alias first) no longer inverts the ladder here.
+    binding = routing.compute_binding(REGISTRY, "opus", ["fable", "haiku", "sonnet", "opus"])
+    assert (binding.worker, binding.mid, binding.auditor) == ("haiku", "sonnet", "opus")
+
+
+def test_binding_opt_in_sets_only_the_auditor():
+    binding = routing.compute_binding(REGISTRY, "opus", None, "anthropic", "fable")
+    assert binding.auditor == "fable"
+    assert binding.auditor_opt_in == "fable"
+    assert (binding.worker, binding.mid, binding.reasoner, binding.escalation) == (
+        "haiku",
+        "sonnet",
+        "opus",
+        ("sonnet",),
+    )
+    assert binding.warning is None
+
+
+def test_openai_binds_its_committed_ladder_by_default():
+    binding = routing.compute_binding(REGISTRY, "sol", None, "openai")
+    assert (binding.worker, binding.mid, binding.reasoner, binding.auditor) == ("luna", "terra", "sol", "sol")
+    assert routing.compute_binding(REGISTRY, "sol", None, "openai", "astra").auditor == "astra"
+
+
+def test_bound_model_for_reports_the_opted_in_auditor_outside_the_ladder():
+    config = {
+        "binding": {"worker": "haiku", "mid": "sonnet", "reasoner": "opus", "auditor": "fable"},
+        "available": LADDER,
+        "auditor_opt_in": "fable",
+    }
+    assert routing.bound_model_for(config, "k_auditor") == "fable"
+    assert routing.bound_model_for(config, "k_explorer") == "haiku"
+    # Without the recorded opt-in the same value outside the ladder is refused, and it never pins a worker tier.
+    assert routing.bound_model_for({**config, "auditor_opt_in": None}, "k_auditor") is None
+    assert routing.bound_model_for({**config, "binding": {"worker": "fable"}}, "k_explorer") is None
+
+
+def test_detection_aliases_are_the_ladder_plus_the_auditor_only_rungs():
+    config = {"vendor": "anthropic", "available": LADDER}
+    assert routing.detection_aliases(REGISTRY, config) == ["haiku", "sonnet", "opus", "fable"]
+    assert routing.detection_aliases(REGISTRY, {"vendor": "anthropic", "available": None}) == []
+    assert routing.detection_aliases(REGISTRY, {}) == []
+
+
+def test_rebind_to_reuses_the_recorded_auditor_opt_in(tmp_path):
+    root = _make_project(tmp_path)
+    assert _load_init().main(["--project-root", str(root), "--orchestrator", "sonnet", "--auditor", "fable"]) == 0
+    registry = routing.load_registry(root / "_aitna" / "akmon", root)
+    config = _recorded_config(root)
+    assert config["auditor_opt_in"] == "fable"
+
+    binding, _ = routing.rebind_to(root, registry, config, "opus")
+    assert binding.auditor == "fable"
+    assert _agent_model(root, "k_auditor") == "fable"
+    assert _agent_model(root, "k_reasoner") == "opus"
+    assert _recorded_config(root)["auditor_opt_in"] == "fable"
+
+
+def test_init_without_available_pins_every_delegate_to_the_committed_ladder(tmp_path):
+    root = _make_project(tmp_path)
+    assert _load_init().main(["--project-root", str(root)]) == 0
+    for agent in ("k_explorer", "k_mechanic", "k_validator"):
+        assert _agent_model(root, agent) == "haiku"
+    assert _agent_model(root, "k_implementer") == "sonnet"
+    assert _agent_model(root, "k_reasoner") == "opus"  # follows the orchestrator, the top of the ladder
+    assert _agent_model(root, "k_auditor") == "opus"
+    config = _recorded_config(root)
+    assert config["orchestrator"] == "opus"
+    assert config["available"] == LADDER
+    assert config["auditor_opt_in"] is None
+
+
+def test_init_with_an_auditor_only_alias_listed_never_binds_it_below_the_auditor(tmp_path):
+    root = _make_project(tmp_path)
+    assert _load_init().main(["--project-root", str(root), "--available", "haiku,sonnet,opus,fable"]) == 0
+    assert [_agent_model(root, agent) for agent in ("k_explorer", "k_implementer", "k_reasoner", "k_auditor")] == [
+        "haiku",
+        "sonnet",
+        "opus",
+        "opus",
+    ]
+    config = _recorded_config(root)
+    assert config["orchestrator"] == "opus"
+    assert config["available"] == LADDER
+
+
+def test_init_auditor_opt_in_pins_the_auditor_and_records_it(tmp_path):
+    root = _make_project(tmp_path)
+    assert _load_init().main(["--project-root", str(root), "--auditor", "fable"]) == 0
+    assert _agent_model(root, "k_auditor") == "fable"
+    assert _agent_model(root, "k_reasoner") == "opus"
+    config = _recorded_config(root)
+    assert config["auditor_opt_in"] == "fable"
+    assert config["binding"]["auditor"] == "fable"
+    assert config["available"] == LADDER
+    # Without the flag there is no opt-in.
+    assert _load_init().main(["--project-root", str(root)]) == 0
+    assert _recorded_config(root)["auditor_opt_in"] is None
+    assert _agent_model(root, "k_auditor") == "opus"
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (
+            ["--available", "haiku,sonnet,opus", "--auditor", "fable"],
+            "--auditor fable must also be listed in --available",
+        ),
+        (["--auditor", "mystery"], "--auditor mystery is not a rung of the anthropic ladder"),
+        (["--available", "opus,sonnet,haiku,fable"], "--available opus,sonnet,haiku,fable is out of order"),
+    ],
+)
+def test_init_refuses_a_bad_ladder_or_auditor_in_one_line_and_writes_nothing(tmp_path, capsys, argv, message):
+    root = _make_project(tmp_path)
+    assert _load_init().main(["--project-root", str(root), *argv]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith(f"error: {message}")
+    assert len(captured.err.splitlines()) == 1
+    assert not (root / ".claude").exists()
+
+
+def test_init_binds_the_openai_ladder_for_the_openai_vendor(tmp_path):
+    root = _make_project(tmp_path)
+    assert _load_init().main(["--project-root", str(root), "--vendor", "openai", "--auditor", "astra"]) == 0
+    assert [_agent_model(root, agent) for agent in ("k_explorer", "k_implementer", "k_reasoner", "k_auditor")] == [
+        "luna",
+        "terra",
+        "sol",
+        "astra",
+    ]
+    assert _recorded_config(root)["available"] == ["luna", "terra", "sol"]
+
+
+def test_the_shipped_ladder_data_is_well_formed():
+    for vendor in ("anthropic", "openai"):
+        rungs = REGISTRY[vendor]["harness_rungs"]
+        assert rungs and len(set(rungs)) == len(rungs)
+        assert set(REGISTRY[vendor]["auditor_only_rungs"]).isdisjoint(rungs)

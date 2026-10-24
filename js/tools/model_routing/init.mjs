@@ -5,11 +5,13 @@
  * was into C104). The Python module is the spec: the same files in the same bytes, the same
  * stdout lines, the same `error:` lines, the same exit codes.
  *
- * Computes the tier→model binding from the registry's semantic selection policy (relative to the
- * orchestrating model) and writes the generated artifacts:
+ * Computes the tier→model binding from the registry's selection policy over the vendor's committed
+ * harness ladder (or an `--available` list), relative to the orchestrating model, and writes the
+ * generated artifacts:
  *
  * - `.claude/agents/k_*.md` — subagent definitions (per-user, gitignored; concrete `model:`
- *   frontmatter only when `--available` provides concrete aliases);
+ *   frontmatter whenever a ladder binds — the vendor's committed one or `--available` — and
+ *   omitted only for a vendor with neither);
  * - `.claude/model-routing.local.json` — the resolved binding, the second-opinion opt-in and the
  *   registry hash.
  *
@@ -42,11 +44,14 @@ import { dictGet, isDict, isFile, pyPath, pyStrip, readText, truthy, writeText }
 import {
   BriefError,
   bindingArtifacts,
+  checkAuditorOptIn,
+  checkLadderOrder,
   computeBinding,
   loadRegistry,
   localConfigRel,
   overlayName,
   removeObsoleteAgents,
+  selectionLadder,
   settingsProbeNames,
   vendorsWithRoutingPolicy,
 } from "./routing.mjs";
@@ -61,7 +66,7 @@ const PROG = "init.mjs";
 
 const USAGE = `usage: ${PROG} [-h] [--project-root PROJECT_ROOT] [--vendor VENDOR]
                [--orchestrator ORCHESTRATOR] [--available AVAILABLE]
-               [--second-opinion {on,off}] [--check] [--dry-run]
+               [--auditor AUDITOR] [--second-opinion {on,off}] [--check] [--dry-run]
 
 options:
   -h, --help            show this help message and exit
@@ -71,7 +76,10 @@ options:
   --orchestrator ORCHESTRATOR
                         Alias of the model the session runs on (only the agent knows it).
   --available AVAILABLE
-                        Comma-separated model aliases available in the harness.
+                        Comma-separated model aliases available in the harness, weakest first;
+                        defaults to the vendor's committed ladder.
+  --auditor AUDITOR     Opt in to this rung as the auditor: an auditor-only rung of the vendor (e.g.
+                        fable) or one of its ladder; with --available it must be listed there.
   --second-opinion {on,off}
                         Enable cross-vendor review (opt-in).
   --check               Do not write; exit 1 when generated files are stale.
@@ -143,7 +151,7 @@ function _existingSecondOpinion(data, projectRoot) {
  * Parse the arguments.
  * @param {string[]} argv
  * @returns {{projectRoot: string | null, vendor: string, orchestrator: string | null, available: string | null,
- *   secondOpinion: string | null, check: boolean, dryRun: boolean, help: boolean} | string} the options, or the one-line usage error
+ *   auditor: string | null, secondOpinion: string | null, check: boolean, dryRun: boolean, help: boolean} | string} the options, or the one-line usage error
  */
 function _parse(argv) {
   try {
@@ -154,6 +162,7 @@ function _parse(argv) {
         vendor: { type: "string" },
         orchestrator: { type: "string" },
         available: { type: "string" },
+        auditor: { type: "string" },
         "second-opinion": { type: "string" },
         check: { type: "boolean" },
         "dry-run": { type: "boolean" },
@@ -171,6 +180,7 @@ function _parse(argv) {
       vendor: /** @type {string | undefined} */ (values.vendor) ?? "anthropic",
       orchestrator: /** @type {string | undefined} */ (values.orchestrator) ?? null,
       available: /** @type {string | undefined} */ (values.available) ?? null,
+      auditor: /** @type {string | undefined} */ (values.auditor) ?? null,
       secondOpinion,
       check: values.check === true,
       dryRun: values["dry-run"] === true,
@@ -194,6 +204,39 @@ function _parse(argv) {
  */
 function _rel(root, path) {
   return posix.relative(root, path);
+}
+
+/**
+ * The validated `--available` list and the orchestrator alias; a `ValueError` names a refused flag.
+ *
+ * The orchestrator is `--orchestrator`, else the settings model, else the top of the ladder (the
+ * vendor's committed one without `--available`), else the semantic label.
+ * @param {AgentsData} data
+ * @param {{vendor: string, orchestrator: string | null, available: string | null, auditor: string | null}} options
+ * @param {Json} registry
+ * @param {string} root
+ * @returns {[string[] | null, string]}
+ */
+function _bindingInputs(data, options, registry, root) {
+  const available = options.available
+    ? options.available
+        .split(",")
+        .map((alias) => pyStrip(alias))
+        .filter((alias) => alias !== "")
+    : null;
+  if (available && available.length > 0) {
+    checkLadderOrder(data, registry, options.vendor, available);
+  }
+  if (options.auditor) {
+    checkAuditorOptIn(data, registry, options.vendor, available, options.auditor);
+  }
+  const [rungs, semantic] = selectionLadder(registry, options.vendor, available);
+  const fallback = dictGet(dictGet(registry, options.vendor), "semantic_fallback", {});
+  const orchestrator =
+    (options.orchestrator || null) ??
+    _settingsModel(data, root) ??
+    (semantic ? dictGet(fallback, "orchestrator", "strongest") : rungs[rungs.length - 1]);
+  return [available, orchestrator];
 }
 
 /**
@@ -224,23 +267,21 @@ export function main(argv = process.argv.slice(2)) {
     process.stderr.write(`${PROG}: error: --vendor must be one of: ${vendors.join(", ")}\n`);
     return 2;
   }
-  const available = options.available
-    ? options.available
-        .split(",")
-        .map((alias) => pyStrip(alias))
-        .filter((alias) => alias !== "")
-    : null;
-  const fallback = dictGet(dictGet(registry, options.vendor), "semantic_fallback", {});
-  const orchestrator =
-    (options.orchestrator || null) ??
-    _settingsModel(data, root) ??
-    (available && available.length > 0
-      ? available[available.length - 1]
-      : dictGet(fallback, "orchestrator", "strongest"));
+  /** @type {string[] | null} */ let available;
+  /** @type {string} */ let orchestrator;
+  try {
+    [available, orchestrator] = _bindingInputs(data, options, registry, root);
+  } catch (exc) {
+    if (!(exc instanceof Error) || exc.name !== "ValueError") {
+      throw exc;
+    }
+    process.stderr.write(`error: ${exc.message}\n`);
+    return 2;
+  }
   const secondOpinion =
     options.secondOpinion === null ? _existingSecondOpinion(data, root) : options.secondOpinion === "on";
 
-  const binding = computeBinding(data, registry, orchestrator, available, options.vendor);
+  const binding = computeBinding(data, registry, orchestrator, available, options.vendor, options.auditor || null);
   /** @type {Record<string, string>} */ let artifacts;
   try {
     artifacts = bindingArtifacts(data, registry, binding, { secondOpinion, available });

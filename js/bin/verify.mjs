@@ -457,6 +457,36 @@ function _pinSpelling(value) {
 }
 
 /**
+ * Why a vendor's committed ladder is malformed (ADR-0004/D04), or null when it is well-formed or absent.
+ * @param {Json} spec
+ * @returns {string | null}
+ */
+function _ladderProblem(spec) {
+  const rungs = dictGet(spec, "harness_rungs");
+  const auditorOnly = dictGet(spec, "auditor_only_rungs");
+  if (
+    rungs !== null &&
+    (!Array.isArray(rungs) ||
+      rungs.length === 0 ||
+      !rungs.every((rung) => typeof rung === "string" && rung.length > 0) ||
+      new Set(rungs).size !== rungs.length)
+  ) {
+    return "harness_rungs must be a non-empty list of unique non-empty strings";
+  }
+  if (auditorOnly !== null && (!Array.isArray(auditorOnly) || !auditorOnly.every((rung) => typeof rung === "string"))) {
+    return "auditor_only_rungs must be a list of strings";
+  }
+  if (
+    rungs !== null &&
+    auditorOnly !== null &&
+    auditorOnly.some((/** @type {string} */ rung) => rungs.includes(rung))
+  ) {
+    return "auditor_only_rungs must not repeat a harness_rungs alias";
+  }
+  return null;
+}
+
+/**
  * A skill's frontmatter as `key → value` (a nested key is `parent.child`), in file order.
  * @typedef {Map<string, string>} Frontmatter
  */
@@ -1668,6 +1698,20 @@ export class Verifier {
             fix: "Name a model for each of worker, mid, reasoner and orchestrator in semantic_fallback.",
           },
         );
+      }
+      const ladderProblem = _ladderProblem(spec);
+      if (ladderProblem !== null) {
+        this.error("routing.ladder", `model-routing ${vendor} ${ladderProblem}`, {
+          target,
+          fix:
+            "Make harness_rungs a non-empty list of unique aliases, weakest first, and " +
+            "auditor_only_rungs a list of aliases that are not among them.",
+        });
+      } else if (dictGet(spec, "harness_rungs") !== null || dictGet(spec, "auditor_only_rungs") !== null) {
+        this.ok("routing.ladder", `model-routing ${vendor} harness ladder is well-formed`, {
+          target,
+          fix: "Keep harness_rungs ordered weakest to strongest and auditor_only_rungs disjoint from it.",
+        });
       }
       const second = dictGet(spec, "second_opinion");
       if (!isDict(second)) {

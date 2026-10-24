@@ -8,6 +8,8 @@
       "auditor": "highest",
       "orchestrator_floor": "opus"
     },
+    "harness_rungs": ["haiku", "sonnet", "opus"],
+    "auditor_only_rungs": ["fable"],
     "second_opinion": {
       "harness": "claude",
       "operation": "review",
@@ -31,6 +33,8 @@
       "auditor": "highest",
       "orchestrator_floor": "highest"
     },
+    "harness_rungs": ["luna", "terra", "sol"],
+    "auditor_only_rungs": ["astra"],
     "second_opinion": {
       "harness": "codex",
       "operation": "review",

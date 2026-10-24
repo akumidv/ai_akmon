@@ -24,7 +24,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from common import jsondata
+from common import jsondata, project_root
 
 CODE = "caps.always-loaded"
 
@@ -149,8 +149,8 @@ def import_chain(text: str, base: Path, *, root: Path) -> list[Path]:
     while pending:
         target, directory = pending.pop(0)
         path = Path(target).expanduser()
-        path = (path if path.is_absolute() else directory / path).resolve()
-        if path in seen or not path.is_file() or not path.is_relative_to(root.resolve()):
+        path = project_root.resolve_path(path if path.is_absolute() else directory / path)
+        if path in seen or not path.is_file() or not path.is_relative_to(project_root.resolve_path(root)):
             continue
         seen.append(path)
         pending.extend((nested, path.parent) for nested in _imports(path.read_text(encoding="utf-8")))
@@ -160,11 +160,12 @@ def import_chain(text: str, base: Path, *, root: Path) -> list[Path]:
 def _union(root: Path, head: Member, chain: list[Path], selected: list[Path]) -> tuple[Member, ...]:
     members, seen = [head], set()
     for path in [*chain, *selected]:
-        resolved = path.resolve()
+        resolved = project_root.resolve_path(path)
         if resolved in seen or not resolved.is_file():
             continue
         seen.add(resolved)
-        members.append(Member(str(resolved.relative_to(root.resolve())), resolved.read_text(encoding="utf-8")))
+        relative = resolved.relative_to(project_root.resolve_path(root))
+        members.append(Member(str(relative), resolved.read_text(encoding="utf-8")))
     return tuple(members)
 
 

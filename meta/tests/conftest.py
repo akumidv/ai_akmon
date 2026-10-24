@@ -29,6 +29,20 @@ from self_ci import path_without  # noqa: E402
 
 from common.runtime import codex_hooks_list_command  # noqa: E402
 
+# The A22 P3 suite is parked until A22 resumes (owner decision, C132); pyproject.toml's
+# `[tool.ruff] extend-exclude` carries the same glob out of lint. Resume it by dropping this skip,
+# that entry and its pin in test_ruff_profile.py's NOT_SOURCE.
+_PARKED_A22_P3 = "test_a22_p3_*.py"
+_PARKED_REASON = "C132: the A22 P3 suite is parked until A22 resumes"
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Skip every test of a parked suite, from this one place rather than in each file."""
+    parked = pytest.mark.skip(reason=_PARKED_REASON)
+    for item in items:
+        if item.path.resolve().parent == Path(__file__).resolve().parent and item.path.match(_PARKED_A22_P3):
+            item.add_marker(parked)
+
 
 @pytest.fixture(scope="session")
 def _codex_free_path(tmp_path_factory) -> str:

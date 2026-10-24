@@ -28,7 +28,8 @@ files = { ".claude/model-routing.local.json" = """{
     "sonnet",
     "opus"
   ],
-  "registry_hash": "ae8dd3324f10bb96",
+  "auditor_opt_in": null,
+  "registry_hash": "ef29a31a0c559db7",
   "task_kind_floors": {
     "quant-derivation": "opus"
   }

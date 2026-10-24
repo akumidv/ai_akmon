@@ -154,6 +154,18 @@ def test_an_explicit_root_through_a_dangling_link_resolves_to_its_target(tmp_pat
     assert project_root.resolve_project_root(tree / "dangling" / "..")[0] == tree
 
 
+def test_a_symlink_loop_is_refused_on_every_interpreter(tmp_path):
+    """M154: 3.13's ``Path.resolve()`` answers a loop unresolved; the 3.12 floor (and the JS twin) raise."""
+    tree = tmp_path.resolve()
+    (tree / "loop").symlink_to("loop")
+    for start in (tree / "loop", tree / "loop" / "x"):
+        with pytest.raises(RuntimeError, match="Symlink loop from"):
+            project_root.resolve_path(start)
+        with pytest.raises(RuntimeError, match="Symlink loop from"):
+            project_root.resolve_project_root(start)
+    assert project_root.resolve_path(tree / "missing" / "..") == tree
+
+
 def test_a_found_root_says_nothing_either(tmp_path):
     root = _mounted_root(tmp_path)
     nested = root / "src" / "pkg"

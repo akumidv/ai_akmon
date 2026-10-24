@@ -16,6 +16,28 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
 
 ## Unreleased
 
+### Changed
+- **Owner decision requests have stable mnemonic codes (A44).** Requests such as
+  **D-ORDER** and **D-SLICE** can be answered by code in any order or subset; unanswered
+  items stay open. The common guardrail links the convention in design-flow. Ordinary
+  unambiguous acceptance still works without a code; accepted ADR block IDs keep their role.
+- **Model routing binds a committed harness ladder when no `--available` list is given (C147,
+  [ADR-0004/D04](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0004-model-routing-capability-tiers.md#d04--committed-harness-ladder-and-opt-in-auditor-rung)).**
+  The registry now carries `harness_rungs` and `auditor_only_rungs` per vendor, so the generated
+  `.claude/agents/k_*.md` pin a concrete `model:` and no delegate silently inherits the
+  orchestrator's model; the rung above the ladder is the auditor only on `init --auditor <alias>`,
+  recorded in the local configuration as `auditor_opt_in`. The recorded `available` is the
+  resolved ladder. Check: re-run `model_routing/init` (the registry hash changed, so the hook
+  asks for it) and confirm the agent files carry `model:` lines.
+- **`model_routing/init` refuses an inverted `--available` list.** The aliases the list shares
+  with the committed ladder must keep its weakest-to-strongest order; one error line, exit 2,
+  nothing written. An auditor-only alias in the list is dropped from the ladder it binds.
+- **`akmon verify` checks the committed ladder's shape** (`routing.ladder`): `harness_rungs` a
+  non-empty list of unique non-empty strings, `auditor_only_rungs` a list disjoint from it. A
+  project overlay that sets neither is unaffected.
+
+## v0.4.0
+
 ### Breaking
 - **Python 3.12 is the floor (C122).** The package and every shipped venv-free entry point,
   including the bare `python3` of generated hooks, require Python 3.12 or newer; 3.11 is no
@@ -678,6 +700,13 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   deliver load-bearing instructions to Codex.
 
 ### Fixed
+- **A symlink loop on a project path is refused on Python 3.13 too (M154).** 3.13's
+  `Path.resolve()` answers a loop unresolved where 3.12 raises; root discovery and the
+  always-loaded import chain now raise `RuntimeError("Symlink loop from …")` on every supported
+  interpreter, as the JavaScript implementation does.
+- **`release_check --plan` prints its `cd` only for a mounted akmon tree (C130).** In akmon's own
+  repository the plan no longer opens with `cd _aitna/akmon`; a consumer's mount is named by its
+  real `<AITNA_ROOT>/akmon` path.
 - **Diagnostic markers no longer stay silent on a planted or skewed path (C36).** A marker dated
   more than 60 s ahead of the clock is stale; only a regular file the current user owns, read with
   `lstat`, counts as a claim; a marker that vanishes mid-claim is claimed again; an unreadable

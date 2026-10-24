@@ -1451,6 +1451,33 @@ test("routing registry: the shipped one is ok; a broken policy, fallback and sec
         "error routing.vendor-present tools/model_routing/registry.json#openai model-routing registry is missing vendor 'openai'",
       ),
     );
+    const withLadder = (/** @type {object} */ change) => {
+      registry({ anthropic: { ...vendor, ...change }, openai: vendor });
+      return check();
+    };
+    assert.ok(
+      withLadder({ harness_rungs: ["a", "b"], auditor_only_rungs: ["z"] }).includes(
+        "ok routing.ladder tools/model_routing/registry.json#anthropic model-routing anthropic harness ladder is well-formed",
+      ),
+    );
+    for (const [change, message] of /** @type {[object, string][]} */ ([
+      [{ harness_rungs: [] }, "harness_rungs must be a non-empty list of unique non-empty strings"],
+      [{ harness_rungs: ["a", "a"] }, "harness_rungs must be a non-empty list of unique non-empty strings"],
+      [{ harness_rungs: ["a", ""] }, "harness_rungs must be a non-empty list of unique non-empty strings"],
+      [{ harness_rungs: "a" }, "harness_rungs must be a non-empty list of unique non-empty strings"],
+      [{ auditor_only_rungs: "z" }, "auditor_only_rungs must be a list of strings"],
+      [{ auditor_only_rungs: [1] }, "auditor_only_rungs must be a list of strings"],
+      [{ harness_rungs: ["a"], auditor_only_rungs: ["a"] }, "auditor_only_rungs must not repeat a harness_rungs alias"],
+    ])) {
+      assert.ok(
+        withLadder(change).some(
+          (line) =>
+            line.startsWith("error routing.ladder tools/model_routing/registry.json#anthropic ") &&
+            line.endsWith(`model-routing anthropic ${message}`),
+        ),
+        message,
+      );
+    }
     registry({ anthropic: { ...vendor, second_opinion: 3 }, openai: [] });
     const shapes = check();
     assert.ok(

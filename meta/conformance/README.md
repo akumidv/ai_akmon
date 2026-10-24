@@ -92,6 +92,8 @@ AITNA_ROOT = "_aitna"
 script = "role-on-code"   # hook: the hook name (python: hooks/<script>.py | node: js/hooks/<script>.mjs)
 args = []                 # hook: extra argv
 payload = { ... }         # hook: the stdin JSON document (tokens materialized)
+payload_json = '''{…}'''  # hook: the same document as JSON text, for a nesting TOML refuses
+                          # (tomllib: a key of more than 1000 parts, M152); not with payload
 argv = ["sync", "--check"]# cli: console argv; tool: argv after the tool path
 tool = "model_routing/init"  # tool: tools/<tool>.py (C108: `akmon tool <tool>` in both)
 probe = "versions"        # unit: probe subcommand
@@ -140,6 +142,18 @@ match exactly**. Rules, in normative order (see `normalize.py`):
 5. **Point-in-time**: the running version → `{{version}}`; datetimes and `YYYYMMDD-HHMMSS`
    stamps → `{{ts}}` and bare dates → `{{date}}` **only for the run's own day(s)**. A date from
    any other day came from a fixture and is compared literally.
+
+One token is spelled the other way, in the expectation rather than the output: **`{{ref}}`**, the
+ref the running version names — `v{{version}}` for a final release, `main` for any other version
+(`_init._tag_for_version` and its JS twin; "final" is `common/versions.py::is_final`). An output
+that names that ref (an `npx …#<ref>` or `uvx …@<ref>` command, a `git subtree add … <ref>`) is
+written with `{{ref}}` in `stdout`, `stderr`, `stderr_contains`, `findings` and `[expected.files]`,
+so the scenario holds at a development version and at a release alike. No rule normalizes `main`
+in the output — it means other things too. A `--record` keeps an expectation's own spelling while
+the output still matches it, so a re-record does not drop the token; one that changed is written
+out in full, and its `{{ref}}` is the reviewer's to restore. Where the ref changes more than a
+word (a submodule attach pins the release tag, and at a development version finds none), the
+scenario names its ref with `--ref` instead.
 
 Changing a rule, or adding one, is a corpus version change: bump `NORM_VERSION` in
 `normalize.py` and say what changed here. v2 (C101 review): rule 1 keeps the anchor and covers

@@ -10,7 +10,7 @@ partial cell do not become cells in a fresh dataset.
 ## Problem and invariant
 
 In the failed Qwen reply, all four TSV rows used `gf04a4422bf50dd1` while the
-packet and frozen schedule used `gf04a4422bf50dd1f` (M152). The strict parser
+packet and frozen schedule used `gf04a4422bf50dd1f` (M155). The strict parser
 correctly rejected the reply. The cause of the omitted final character is not
 observable from this single call. The scoring criteria, two independent blind
 readings, exact E1–E4 coverage, same-repeat qualification rule, and no-retry
@@ -50,7 +50,7 @@ imperfect copy of an opaque identifier must not be silently corrected.
 ## Prospective verification and dispatch gates
 
 - Keep prior seals, approval, raw reply, and failure record byte-for-byte.
-  Correct only the unsealed report, task and M152 account of what was observed.
+  Correct only the unsealed report, task and M155 account of what was observed.
 - If option 2 is accepted, implement a pure raw-to-canonical parser with tests
   for exact E coverage, duplicates, extra text, malformed columns, blank
   reasons, invalid verdicts, packet/call mismatch, and tampered raw/canonical

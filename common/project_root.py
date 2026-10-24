@@ -16,6 +16,7 @@ all. There is no second definition left: ``hooks/hook_core.py`` imports from her
 
 from __future__ import annotations
 
+import errno
 import os
 from pathlib import Path
 
@@ -32,6 +33,27 @@ _START_PATH_MAX_BYTES = 4096
 
 # How much of a refused start path its error message quotes.
 _REFUSED_PREFIX_CHARS = 40
+
+
+def resolve_path(path: Path) -> Path:
+    """``path.resolve()`` that refuses a symlink loop on every interpreter, as the 3.12 floor does.
+
+    CPython 3.12 raises ``RuntimeError("Symlink loop from '<path>'")`` for a loop even in
+    non-strict mode; 3.13 stopped raising there and answers the path unresolved (M154). The
+    floor's answer is the spec — the JavaScript twin ``resolvePath`` and the corpus tables
+    follow it — so the loop is asked of the strict walk first, which reports it on every
+    interpreter, and any other failure of that walk (a missing component, a file used as a
+    directory) is the non-strict answer's to give.
+
+    Raises:
+        RuntimeError: a symlink on the path loops.
+    """
+    try:
+        return path.resolve(strict=True)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise RuntimeError(f"Symlink loop from {exc.filename!r}") from exc
+    return path.resolve()
 
 
 def aitna_root_name() -> str:
@@ -118,7 +140,7 @@ def find_project_root(start: Path | None = None) -> Path:
     Raises:
         ValueError: the start path is longer than ``_START_PATH_MAX_BYTES``.
     """
-    current = _bounded_start(start).resolve()
+    current = resolve_path(_bounded_start(start))
     candidate = current
     while not is_project_root(candidate):
         parent = candidate.parent
@@ -137,8 +159,8 @@ def resolve_project_root(explicit: Path | None, start: Path | None = None) -> tu
     root looks exactly like one under the right root, which is the failure C73 was filed for.
     """
     if explicit is not None:
-        return explicit.resolve(), None
-    origin = _bounded_start(start).resolve()
+        return resolve_path(explicit), None
+    origin = resolve_path(_bounded_start(start))
     found = find_project_root(origin)
     if is_project_root(found):
         return found, None

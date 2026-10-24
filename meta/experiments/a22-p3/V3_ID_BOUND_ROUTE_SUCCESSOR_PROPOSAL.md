@@ -1,6 +1,6 @@
 # A22 P3 V3 identity-bound scorer route successor
 
-The first identity-bound Qwen route was terminal on `getaddrinfo EAI_AGAIN` before a model response (M153). Its plan, seal, approval, failed public outcome and private three-event ledger remain immutable. This successor binds their hashes and uses fresh call IDs, outcome files and a private runtime; it neither retries nor reclassifies that attempt.
+The first identity-bound Qwen route was terminal on `getaddrinfo EAI_AGAIN` before a model response (M156). Its plan, seal, approval, failed public outcome and private three-event ledger remain immutable. This successor binds their hashes and uses fresh call IDs, outcome files and a private runtime; it neither retries nor reclassifies that attempt.
 
 The new route checks remain two unscored one-shot mechanics calls, Qwen then Codex, on the identical saved blind packet and three-column scorer prompt. The runner attaches the frozen packet ID to a separate canonical four-column TSV and validates E1–E4. A route pass establishes format and evidence correlation for this packet only. Qualification requires a further fresh seal, preflight and authorization.
 

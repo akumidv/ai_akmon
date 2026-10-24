@@ -142,7 +142,7 @@
       "akmon": {
         "commit_subject": "akmon",
         "staged_files": "CHANGELOG.md package-lock.json package.json pyproject.toml src/akmon/__init__.py",
-        "cd_line": "cd {{aitna_root}}/akmon            # tag is cut from the submodule's own tree",
+        "cd_line": "cd {{mount}}            # tag is cut from the submodule's own tree",
         "semver_note": "#    The npm carrier takes the SemVer spelling the shared version logic derives from that literal — {{semver}} — never a hand-computed number.",
         "cycle_note": [
           "# 4. After the push, reopen the cycle: set pyproject.toml and src/akmon/__init__.py to",

@@ -23,8 +23,9 @@
 # pins when the id does not.
 #
 # Families (the `id` prefix): `data` — the agents.json/gate.json accessors and the roster; `reg` —
-# paths, overlay loading, the canonical hash; `bind` — compute_binding's ladder, corridor and
-# semantic fallback; `so` — the second-opinion spec, ladder, command and its refusal texts; `gen` —
+# paths, overlay loading, the canonical hash; `bind` — compute_binding's ladder (the committed
+# harness ladder, the auditor-only rung and the order check of ADR-0004/D04), corridor and semantic
+# fallback (a `$registry` with the vendor's `unset` ladder keys); `so` — the second-opinion spec, ladder, command and its refusal texts; `gen` —
 # generated agent files, the description wrap and the overlay briefs; `mark` — the two marker
 # throttles (suppressed rebind, gate audit) with their file effects; `tx` — the transcript tail
 # readers over synthetic JSONL; `ctx` — context fill, the recommended maximum and the pressure
@@ -148,7 +149,7 @@ expected_json = 'null'
 id = "data/binding-defaults"
 fn = "Binding"
 kwargs_json = '{"vendor": "v", "orchestrator": "o", "reasoner": "r", "worker": "w", "mid": "m", "auditor": "a", "escalation": []}'
-expected_json = '{"vendor": "v", "orchestrator": "o", "reasoner": "r", "worker": "w", "mid": "m", "auditor": "a", "escalation": [], "semantic_fallback": false, "warning": null, "second_opinion_cli": null}'
+expected_json = '{"vendor": "v", "orchestrator": "o", "reasoner": "r", "worker": "w", "mid": "m", "auditor": "a", "escalation": [], "semantic_fallback": false, "warning": null, "second_opinion_cli": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "data/floor-gap-fields"
@@ -268,108 +269,323 @@ expected_json = '"{{registry_hash}}"'
 id = "bind/top-orchestrator"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "large", ["small", "medium", "large"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/reasoner-follows-orchestrator"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "medium", ["small", "medium", "large"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/corridor-below-floor"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "sonnet", ["haiku", "sonnet", "opus", "fable"]]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "sonnet", "reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet", "opus"], "semantic_fallback": false, "warning": "orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "codex"}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "sonnet", "reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
 
 [[case]]
 id = "bind/corridor-healthy"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus", ["haiku", "sonnet", "opus", "fable"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet", "opus"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
 
 [[case]]
+# The shipped floor is the top of the ladder, so a lower floor opens the wasteful arm on the committed ladder.
 id = "bind/corridor-reserved-top"
 fn = "compute_binding"
-args_json = '[{"$registry": {}}, "fable", ["haiku", "sonnet", "opus", "fable"]]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "fable", "reasoner": "fable", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet", "opus"], "semantic_fallback": false, "warning": "orchestrator=fable runs on the auditor's reserved top rung — orchestration does not need it; consider /model down to opus", "second_opinion_cli": "codex"}'''
+args_json = '[{"$registry": {"merge": {"anthropic": {"selection_policy": {"orchestrator_floor": "sonnet"}}}}}, "opus"]'
+expected_json = '''{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator=opus runs on the auditor's reserved top rung — orchestration does not need it; consider /model down to sonnet", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
 
 [[case]]
 # The ladder tops out at the floor: floor == top, both arms silent (the accepted degraded mode).
 id = "bind/corridor-collapse-to-floor"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus", ["haiku", "sonnet", "opus"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/openai-relative-floor"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "medium", ["small", "medium", "large"], "openai"]'
-expected_json = '''{"vendor": "openai", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator=medium is below the orchestration floor (large) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "claude"}'''
+expected_json = '''{"vendor": "openai", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator=medium is below the orchestration floor (large) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "claude", "auditor_opt_in": null}'''
 
 [[case]]
 id = "bind/openai-top"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "large", ["small", "medium", "large"], "openai"]'
-expected_json = '{"vendor": "openai", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude"}'
+expected_json = '{"vendor": "openai", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/unknown-orchestrator"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "mystery-model", ["small", "medium", "large"]]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "mystery-model", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator 'mystery-model' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "second_opinion_cli": "codex"}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "mystery-model", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator 'mystery-model' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
 
 [[case]]
 id = "bind/two-rungs"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "medium", ["small", "medium"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "medium", "escalation": [], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "medium", "escalation": [], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/single-rung"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "only", ["only"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "only", "reasoner": "only", "worker": "only", "mid": "only", "auditor": "only", "escalation": [], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "only", "reasoner": "only", "worker": "only", "mid": "only", "auditor": "only", "escalation": [], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/semantic-fallback"
 fn = "compute_binding"
-args_json = '[{"$registry": {}}, "strongest"]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "strongest", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": ["mid"], "semantic_fallback": true, "warning": "using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally", "second_opinion_cli": "codex"}'
+args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "strongest"]'
+expected_json = '''{"vendor": "anthropic", "orchestrator": "strongest", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": ["mid"], "semantic_fallback": true, "warning": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
 
 [[case]]
 # An empty list is no list (Python truthiness): semantic fallback, not an index error.
 id = "bind/semantic-empty-list"
 fn = "compute_binding"
-args_json = '[{"$registry": {}}, "x", []]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "x", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": ["mid"], "semantic_fallback": true, "warning": "using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally", "second_opinion_cli": "codex"}'
+args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "x", []]'
+expected_json = '''{"vendor": "anthropic", "orchestrator": "x", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": ["mid"], "semantic_fallback": true, "warning": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
 
 [[case]]
 # Semantic labels de-duplicate in order; a falsy label falls back to its default.
 id = "bind/semantic-overlay-labels"
 fn = "compute_binding"
-args_json = '[{"$registry": {"merge": {"anthropic": {"semantic_fallback": {"worker": "w", "mid": "w", "reasoner": "", "auditor": "top"}}}}}, "o"]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "o", "reasoner": "strongest", "worker": "w", "mid": "strongest", "auditor": "top", "escalation": ["strongest"], "semantic_fallback": true, "warning": "using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally", "second_opinion_cli": "codex"}'
+args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}, "merge": {"anthropic": {"semantic_fallback": {"worker": "w", "mid": "w", "reasoner": "", "auditor": "top"}}}}}, "o"]'
+expected_json = '''{"vendor": "anthropic", "orchestrator": "o", "reasoner": "strongest", "worker": "w", "mid": "strongest", "auditor": "top", "escalation": ["strongest"], "semantic_fallback": true, "warning": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+
+[[case]]
+# ADR-0004/D04: with no list the vendor's committed harness ladder binds, and nothing is semantic.
+id = "bind/ladder-default"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "opus"]'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+
+[[case]]
+# The reasoner follows an orchestrator on the committed ladder; the corridor warns below the floor.
+id = "bind/ladder-default-mid-orchestrator"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "sonnet"]'
+expected_json = '''{"vendor": "anthropic", "orchestrator": "sonnet", "reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+
+[[case]]
+# An auditor-only alias in the list never binds, wherever it stands: worker is the first ladder rung, not "fable".
+id = "bind/ladder-auditor-only-stripped"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "opus", ["fable", "haiku", "sonnet", "opus"]]'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+
+[[case]]
+# A session on the auditor-only rung is not on the ladder: the reasoner falls back to the top and the corridor cannot rank it.
+id = "bind/ladder-auditor-only-orchestrator"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "fable"]'
+expected_json = '''{"vendor": "anthropic", "orchestrator": "fable", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator 'fable' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+
+[[case]]
+# The opt-in moves only the auditor and is recorded on the binding.
+id = "bind/ladder-auditor-opt-in"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "opus", null, "anthropic", "fable"]'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": "fable"}'
+
+[[case]]
+# An opt-in may also name a rung of the ladder.
+id = "bind/ladder-auditor-opt-in-ladder-rung"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "opus", null, "anthropic", "sonnet"]'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "sonnet", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": "sonnet"}'
+
+[[case]]
+id = "bind/ladder-openai-default"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "sol", null, "openai"]'
+expected_json = '{"vendor": "openai", "orchestrator": "sol", "reasoner": "sol", "worker": "luna", "mid": "terra", "auditor": "sol", "escalation": ["terra"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": null}'
+
+[[case]]
+id = "bind/ladder-openai-opt-in"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "sol", null, "openai", "astra"]'
+expected_json = '{"vendor": "openai", "orchestrator": "sol", "reasoner": "sol", "worker": "luna", "mid": "terra", "auditor": "astra", "escalation": ["terra"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": "astra"}'
+
+[[case]]
+# An empty list is no list: the committed ladder answers, not an index error.
+id = "bind/ladder-empty-list-is-default"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "opus", []]'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+
+[[case]]
+# A list holding nothing but auditor-only rungs binds nothing: the committed ladder answers.
+id = "bind/ladder-only-auditor-only-is-default"
+fn = "compute_binding"
+args_json = '[{"$registry": {}}, "opus", ["fable"]]'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+
+[[case]]
+# A vendor with no committed ladder binds a given list as it always did.
+id = "bind/ladder-semantic-vendor-with-list"
+fn = "compute_binding"
+args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "c", ["a", "b", "c"]]'
+expected_json = '{"vendor": "anthropic", "orchestrator": "c", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+
+[[case]]
+id = "bind/selection-ladder-default"
+fn = "selection_ladder"
+args_json = '[{"$registry": {}}, "anthropic", null]'
+expected_json = '[["haiku", "sonnet", "opus"], false]'
+
+[[case]]
+id = "bind/selection-ladder-given"
+fn = "selection_ladder"
+args_json = '[{"$registry": {}}, "anthropic", ["small", "large"]]'
+expected_json = '[["small", "large"], false]'
+
+[[case]]
+id = "bind/selection-ladder-stripped"
+fn = "selection_ladder"
+args_json = '[{"$registry": {}}, "anthropic", ["haiku", "fable", "sonnet", "opus"]]'
+expected_json = '[["haiku", "sonnet", "opus"], false]'
+
+[[case]]
+id = "bind/selection-ladder-openai"
+fn = "selection_ladder"
+args_json = '[{"$registry": {}}, "openai", ["luna", "terra", "sol", "astra"]]'
+expected_json = '[["luna", "terra", "sol"], false]'
+
+[[case]]
+# Only a vendor with no committed ladder answers the semantic labels, flagged.
+id = "bind/selection-ladder-semantic"
+fn = "selection_ladder"
+args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "anthropic", null]'
+expected_json = '[["worker", "mid", "strongest"], true]'
+
+[[case]]
+# In order (and nothing is returned): the check raises or says nothing.
+id = "bind/check-ladder-order-ok"
+fn = "check_ladder_order"
+args_json = '[{"$registry": {}}, "anthropic", ["haiku", "sonnet", "opus", "fable"]]'
+expected_json = 'null'
+
+[[case]]
+# An auditor-only or unknown alias does not take part in the order.
+id = "bind/check-ladder-order-ignores-others"
+fn = "check_ladder_order"
+args_json = '[{"$registry": {}}, "anthropic", ["fable", "haiku", "mystery", "opus"]]'
+expected_json = 'null'
+
+[[case]]
+# An inverted list is refused, naming the given list and the expected order.
+id = "bind/check-ladder-order-inverted"
+fn = "check_ladder_order"
+args_json = '[{"$registry": {}}, "anthropic", ["opus", "sonnet", "haiku", "fable"]]'
+expected_json = '{"error": "ValueError", "message": "--available opus,sonnet,haiku,fable is out of order: the anthropic ladder runs weakest to strongest as haiku,sonnet,opus; list the aliases it shares with that ladder in that order"}'
+
+[[case]]
+id = "bind/check-ladder-order-one-swap"
+fn = "check_ladder_order"
+args_json = '[{"$registry": {}}, "anthropic", ["haiku", "opus", "sonnet"]]'
+expected_json = '{"error": "ValueError", "message": "--available haiku,opus,sonnet is out of order: the anthropic ladder runs weakest to strongest as haiku,sonnet,opus; list the aliases it shares with that ladder in that order"}'
+
+[[case]]
+id = "bind/check-ladder-order-openai"
+fn = "check_ladder_order"
+args_json = '[{"$registry": {}}, "openai", ["sol", "luna"]]'
+expected_json = '{"error": "ValueError", "message": "--available sol,luna is out of order: the openai ladder runs weakest to strongest as luna,terra,sol; list the aliases it shares with that ladder in that order"}'
+
+[[case]]
+# No committed ladder, no order to keep.
+id = "bind/check-ladder-order-semantic-vendor"
+fn = "check_ladder_order"
+args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "anthropic", ["opus", "haiku"]]'
+expected_json = 'null'
+
+[[case]]
+id = "bind/check-auditor-opt-in-ok"
+fn = "check_auditor_opt_in"
+args_json = '[{"$registry": {}}, "anthropic", null, "fable"]'
+expected_json = 'null'
+
+[[case]]
+id = "bind/check-auditor-opt-in-listed"
+fn = "check_auditor_opt_in"
+args_json = '[{"$registry": {}}, "anthropic", ["haiku", "sonnet", "opus", "fable"], "fable"]'
+expected_json = 'null'
+
+[[case]]
+id = "bind/check-auditor-opt-in-unknown"
+fn = "check_auditor_opt_in"
+args_json = '[{"$registry": {}}, "anthropic", null, "mystery"]'
+expected_json = '{"error": "ValueError", "message": "--auditor mystery is not a rung of the anthropic ladder (haiku,sonnet,opus) or one of its auditor-only rungs (fable)"}'
+
+[[case]]
+id = "bind/check-auditor-opt-in-other-vendor-rung"
+fn = "check_auditor_opt_in"
+args_json = '[{"$registry": {}}, "anthropic", null, "astra"]'
+expected_json = '{"error": "ValueError", "message": "--auditor astra is not a rung of the anthropic ladder (haiku,sonnet,opus) or one of its auditor-only rungs (fable)"}'
+
+[[case]]
+# With a list given, the alias must be on it.
+id = "bind/check-auditor-opt-in-unlisted"
+fn = "check_auditor_opt_in"
+args_json = '[{"$registry": {}}, "anthropic", ["haiku", "sonnet", "opus"], "fable"]'
+expected_json = '{"error": "ValueError", "message": "--auditor fable must also be listed in --available (haiku,sonnet,opus)"}'
+
+[[case]]
+# Orchestrator detection recognises the ladder plus the vendor's auditor-only rungs.
+id = "stat/detection-aliases"
+fn = "detection_aliases"
+args_json = '[{"$registry": {}}, {"vendor": "anthropic", "available": ["haiku", "sonnet", "opus"]}]'
+expected_json = '["haiku", "sonnet", "opus", "fable"]'
+
+[[case]]
+# No recorded ladder (the semantic case): nothing to recognise.
+id = "stat/detection-aliases-no-ladder"
+fn = "detection_aliases"
+args_json = '[{"$registry": {}}, {"vendor": "anthropic", "available": null}]'
+expected_json = '[]'
+
+[[case]]
+# `available` records the resolved ladder, so the runtime readers need no list of their own.
+id = "art/local-config-default-ladder"
+fn = "local_config"
+args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}}, {"$registry": {}}]'
+kwargs_json = '{"second_opinion": false, "available": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": false, "second_opinion_provider": "openai", "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "opus"}}'
+
+[[case]]
+# The opt-in is recorded; an auditor-only alias in a given list is not part of the recorded ladder.
+id = "art/local-config-auditor-opt-in"
+fn = "local_config"
+args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"], "auditor_opt_in": "fable"}}, {"$registry": {}}]'
+kwargs_json = '{"second_opinion": false, "available": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"]}, "second_opinion": false, "second_opinion_provider": "openai", "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable", "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "opus"}}'
+
+[[case]]
+id = "art/local-config-auditor-only-stripped"
+fn = "local_config"
+args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}}, {"$registry": {}}]'
+kwargs_json = '{"second_opinion": false, "available": ["haiku", "sonnet", "opus", "fable"]}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": false, "second_opinion_provider": "openai", "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "opus"}}'
 
 [[case]]
 # A non-"orchestrator" reasoner policy takes the top rung; a literal floor ranks the corridor.
 id = "bind/policy-highest-literal-floor"
 fn = "compute_binding"
 args_json = '[{"$registry": {"set": {"solo": {"selection_policy": {"reasoner": "highest", "orchestrator_floor": "b"}}}}}, "a", ["a", "b", "c"], "solo"]'
-expected_json = '''{"vendor": "solo", "orchestrator": "a", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": "orchestrator=a is below the orchestration floor (b) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "claude"}'''
+expected_json = '''{"vendor": "solo", "orchestrator": "a", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": "orchestrator=a is below the orchestration floor (b) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "claude", "auditor_opt_in": null}'''
 
 [[case]]
 id = "bind/no-policy-defaults"
 fn = "compute_binding"
 args_json = '[{"$registry": {"set": {"solo": {}}}}, "c", ["a", "b", "c"], "solo"]'
-expected_json = '{"vendor": "solo", "orchestrator": "c", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude"}'
+expected_json = '{"vendor": "solo", "orchestrator": "c", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": null}'
 
 [[case]]
 # A single vendor: no other provider, so the second-opinion harness is its own.
 id = "bind/single-vendor-second-opinion-cli"
 fn = "compute_binding"
 args_json = '[{"$registry": {"drop": ["openai"]}}, "large", ["small", "medium", "large"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/unknown-vendor"
@@ -389,7 +605,7 @@ expected_json = '{}'
 # On the real ladder the floor is opus — the rung a healthy orchestrator, and so the reasoner, sits on.
 id = "bind/task-kind-floors-corridor"
 fn = "task_kind_floors"
-args_json = '[{"$registry": {}}, ["haiku", "sonnet", "opus", "fable"]]'
+args_json = '[{"$registry": {}}, ["haiku", "sonnet", "opus"]]'
 expected_json = '{"quant-derivation": "opus"}'
 
 [[case]]
@@ -556,7 +772,7 @@ expected_json = '{"provider": "anthropic", "model": "tiny"}'
 # Without `available` the semantic rungs are walked: worker, mid, strongest.
 id = "so/resolve-semantic-rungs"
 fn = "resolve_second_opinion"
-args_json = '[{"$registry": {"drop": ["openai"]}}, {"orchestrator": "strongest", "binding": {"auditor": "strongest"}}, "anthropic"]'
+args_json = '[{"$registry": {"drop": ["openai"], "unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, {"orchestrator": "strongest", "binding": {"auditor": "strongest"}}, "anthropic"]'
 expected_json = '{"provider": "anthropic", "model": "mid"}'
 
 [[case]]
@@ -1518,7 +1734,7 @@ id = "art/local-config"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}, {"$registry": {}}]'
 kwargs_json = '{"second_opinion": true, "available": ["small", "medium", "large"]}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": true, "second_opinion_provider": "openai", "available": ["small", "medium", "large"], "registry_hash": "{{registry_hash}}", "task_kind_floors": {}}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": true, "second_opinion_provider": "openai", "available": ["small", "medium", "large"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}}'
 
 [[case]]
 # A single vendor is its own provider, so the config records the same-vendor fallback model.
@@ -1526,14 +1742,14 @@ id = "art/local-config-single-vendor"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}, {"$registry": {"drop": ["openai"]}}]'
 kwargs_json = '{"second_opinion": false, "available": ["small", "medium", "large"]}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": false, "second_opinion_provider": "anthropic", "available": ["small", "medium", "large"], "registry_hash": "{{registry_hash}}", "task_kind_floors": {}, "second_opinion_fallback_model": "medium"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": false, "second_opinion_provider": "anthropic", "available": ["small", "medium", "large"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}, "second_opinion_fallback_model": "medium"}'
 
 [[case]]
 id = "art/local-config-semantic-single-vendor"
 fn = "local_config"
-args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "strongest", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": [], "semantic_fallback": true}}, {"$registry": {"drop": ["openai"]}}]'
+args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "strongest", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": [], "semantic_fallback": true}}, {"$registry": {"drop": ["openai"], "unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}]'
 kwargs_json = '{"second_opinion": false, "available": null}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "strongest", "binding": {"reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": []}, "second_opinion": false, "second_opinion_provider": "anthropic", "available": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}, "second_opinion_fallback_model": "mid"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "strongest", "binding": {"reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": []}, "second_opinion": false, "second_opinion_provider": "anthropic", "available": null, "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}, "second_opinion_fallback_model": "mid"}'
 
 [[case]]
 # The local config is written as indent-2 JSON with a newline, ASCII-escaped, after the agents.
@@ -1542,7 +1758,7 @@ fn = "binding_artifacts"
 args_json = '[{"$registry": {"set": {"note": "café"}}}, {"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}]'
 kwargs_json = '{"second_opinion": true, "available": ["small", "medium", "large"]}'
 ordered = true
-expected_json = '''[[".claude/agents/k_explorer.md", "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n"], [".claude/agents/k_mechanic.md", "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n"], [".claude/agents/k_validator.md", "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n"], [".claude/agents/k_implementer.md", "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n"], [".claude/agents/k_reasoner.md", "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n"], [".claude/agents/k_auditor.md", "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n"], [".claude/model-routing.local.json", "{\n  \"vendor\": \"anthropic\",\n  \"orchestrator\": \"large\",\n  \"binding\": {\n    \"reasoner\": \"large\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"second_opinion_provider\": \"openai\",\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {}\n}\n"]]'''
+expected_json = '''[[".claude/agents/k_explorer.md", "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n"], [".claude/agents/k_mechanic.md", "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n"], [".claude/agents/k_validator.md", "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n"], [".claude/agents/k_implementer.md", "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n"], [".claude/agents/k_reasoner.md", "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n"], [".claude/agents/k_auditor.md", "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n"], [".claude/model-routing.local.json", "{\n  \"vendor\": \"anthropic\",\n  \"orchestrator\": \"large\",\n  \"binding\": {\n    \"reasoner\": \"large\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"second_opinion_provider\": \"openai\",\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"auditor_opt_in\": null,\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {}\n}\n"]]'''
 
 [[case]]
 id = "art/staleness-fresh"
@@ -1718,7 +1934,7 @@ fn = "rebind_to"
 args_json = '[{"$path": "{{dir}}"}, {"$registry": {}}, {"available": ["small", "medium", "large"], "second_opinion": 1, "vendor": "openai"}, "medium"]'
 files = { ".claude/agents/k-oldname.md" = "Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file.\n", ".claude/agents/mine.md" = "mine\n" }
 tree = ".claude"
-expected_json = '''{"value": [{"vendor": "openai", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator=medium is below the orchestration floor (large) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "claude"}, ["{{dir}}/.claude/agents/k_explorer.md", "{{dir}}/.claude/agents/k_mechanic.md", "{{dir}}/.claude/agents/k_validator.md", "{{dir}}/.claude/agents/k_implementer.md", "{{dir}}/.claude/agents/k_reasoner.md", "{{dir}}/.claude/agents/k_auditor.md", "{{dir}}/.claude/model-routing.local.json"]], "tree": {"agents/k_auditor.md": "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n", "agents/k_explorer.md": "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n", "agents/k_implementer.md": "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n", "agents/k_mechanic.md": "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n", "agents/k_reasoner.md": "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n", "agents/k_validator.md": "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n", "agents/mine.md": "mine\n", "model-routing.local.json": "{\n  \"vendor\": \"openai\",\n  \"orchestrator\": \"medium\",\n  \"binding\": {\n    \"reasoner\": \"medium\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"second_opinion_provider\": \"anthropic\",\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {\n    \"quant-derivation\": \"large\"\n  }\n}\n"}}'''
+expected_json = '''{"value": [{"vendor": "openai", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator=medium is below the orchestration floor (large) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "claude", "auditor_opt_in": null}, ["{{dir}}/.claude/agents/k_explorer.md", "{{dir}}/.claude/agents/k_mechanic.md", "{{dir}}/.claude/agents/k_validator.md", "{{dir}}/.claude/agents/k_implementer.md", "{{dir}}/.claude/agents/k_reasoner.md", "{{dir}}/.claude/agents/k_auditor.md", "{{dir}}/.claude/model-routing.local.json"]], "tree": {"agents/k_auditor.md": "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n", "agents/k_explorer.md": "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n", "agents/k_implementer.md": "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n", "agents/k_mechanic.md": "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n", "agents/k_reasoner.md": "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n", "agents/k_validator.md": "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n", "agents/mine.md": "mine\n", "model-routing.local.json": "{\n  \"vendor\": \"openai\",\n  \"orchestrator\": \"medium\",\n  \"binding\": {\n    \"reasoner\": \"medium\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"second_opinion_provider\": \"anthropic\",\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"auditor_opt_in\": null,\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {\n    \"quant-derivation\": \"large\"\n  }\n}\n"}}'''
 
 [[case]]
 # Idempotent: the same rebind again changes nothing.
@@ -1726,7 +1942,7 @@ id = "art/rebind-to-idempotent"
 fn = "rebind_to"
 args_json = '[{"$path": "{{dir}}"}, {"$registry": {}}, {"available": ["small", "medium", "large"]}, "large"]'
 setup_json = '[{"fn": "rebind_to", "args": [{"$path": "{{dir}}"}, {"$registry": {}}, {"available": ["small", "medium", "large"]}, "large"]}]'
-expected_json = '[{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex"}, []]'
+expected_json = '[{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}, []]'
 
 [[case]]
 id = "art/rebind-to-dry-run"
@@ -1735,7 +1951,7 @@ args_json = '[{"$path": "{{dir}}"}, {"$registry": {}}, {}, "x"]'
 kwargs_json = '{"write": false}'
 files = { ".claude/agents/k-oldname.md" = "Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file.\n" }
 tree = ".claude"
-expected_json = '''{"value": [{"vendor": "anthropic", "orchestrator": "x", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": ["mid"], "semantic_fallback": true, "warning": "using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally", "second_opinion_cli": "codex"}, ["{{dir}}/.claude/agents/k_explorer.md", "{{dir}}/.claude/agents/k_mechanic.md", "{{dir}}/.claude/agents/k_validator.md", "{{dir}}/.claude/agents/k_implementer.md", "{{dir}}/.claude/agents/k_reasoner.md", "{{dir}}/.claude/agents/k_auditor.md", "{{dir}}/.claude/model-routing.local.json"]], "tree": {"agents/k-oldname.md": "Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file.\n"}}'''
+expected_json = '''{"value": [{"vendor": "anthropic", "orchestrator": "x", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator 'x' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "second_opinion_cli": "codex", "auditor_opt_in": null}, ["{{dir}}/.claude/agents/k_explorer.md", "{{dir}}/.claude/agents/k_mechanic.md", "{{dir}}/.claude/agents/k_validator.md", "{{dir}}/.claude/agents/k_implementer.md", "{{dir}}/.claude/agents/k_reasoner.md", "{{dir}}/.claude/agents/k_auditor.md", "{{dir}}/.claude/model-routing.local.json"]], "tree": {"agents/k-oldname.md": "Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file.\n"}}'''
 
 # --- stat: status, rebind and init lines; floors, bound models, the role matrix -----------------
 
@@ -1748,8 +1964,8 @@ expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=lar
 [[case]]
 id = "stat/status-corridor-and-floor-gap"
 fn = "status_lines"
-args_json = '[{"vendor": "anthropic", "orchestrator": "sonnet", "binding": {"reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet", "opus"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus", "fable"], "task_kind_floors": {"quant-derivation": "fable"}}, {"$registry": {}}, "akmon tool model_routing/init"]'
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=sonnet · reasoner=sonnet · auditor=fable · worker=haiku · mid=sonnet · second-opinion=codex(off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet → opus). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'sonnet', re-run `akmon tool model_routing/init --orchestrator <alias>`.", "⚠ orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "⚠ task kind quant-derivation has a fable floor, but k_reasoner is bound to sonnet — delegate quant-derivation with model=fable."]'''
+args_json = '[{"vendor": "anthropic", "orchestrator": "sonnet", "binding": {"reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable", "task_kind_floors": {"quant-derivation": "opus"}}, {"$registry": {}}, "akmon tool model_routing/init"]'
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=sonnet · reasoner=sonnet · auditor=fable · worker=haiku · mid=sonnet · second-opinion=codex(off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'sonnet', re-run `akmon tool model_routing/init --orchestrator <alias>`.", "⚠ orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "⚠ task kind quant-derivation has a opus floor, but k_reasoner is bound to sonnet — delegate quant-derivation with model=opus."]'''
 
 [[case]]
 id = "stat/status-same-vendor-pin"
@@ -1773,8 +1989,8 @@ expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=onl
 # Semantic: no escalation hint without a ladder; missing binding fields read "?".
 id = "stat/status-semantic"
 fn = "status_lines"
-args_json = '[{"orchestrator": "strongest", "binding": {"escalation": ["mid"]}}, {"$registry": {}}, "x"]'
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=strongest · reasoner=? · auditor=? · worker=? · mid=? · second-opinion=codex(off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'strongest', re-run `x --orchestrator <alias>`.", "⚠ using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally"]'''
+args_json = '[{"orchestrator": "strongest", "binding": {"escalation": ["mid"]}}, {"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "x"]'
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=strongest · reasoner=? · auditor=? · worker=? · mid=? · second-opinion=codex(off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'strongest', re-run `x --orchestrator <alias>`.", "⚠ using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally"]'''
 
 [[case]]
 id = "stat/status-retired-key"
@@ -1785,14 +2001,14 @@ expected_json = '''{"error": "KeyError", "message": "second-opinion provider 'op
 [[case]]
 id = "stat/rebind-notice-weak"
 fn = "rebind_notice"
-args_json = '[{"orchestrator": "haiku", "vendor": "anthropic", "available": ["haiku", "sonnet", "opus", "fable"], "binding": {"reasoner": "haiku", "auditor": "fable", "worker": "haiku", "mid": "sonnet"}, "task_kind_floors": {"quant-derivation": "fable"}}, {"$registry": {}}]'
-expected_json = '''["[akmon] orchestrator model changed → haiku; subagent binding updated: reasoner=haiku · auditor=fable · worker=haiku · mid=sonnet. Regenerated k_* agents follow the new model.", "⚠ orchestrator=haiku is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "⚠ task kind quant-derivation has a fable floor, but k_reasoner is bound to haiku — delegate quant-derivation with model=fable."]'''
+args_json = '[{"orchestrator": "haiku", "vendor": "anthropic", "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable", "binding": {"reasoner": "haiku", "auditor": "fable", "worker": "haiku", "mid": "sonnet"}, "task_kind_floors": {"quant-derivation": "opus"}}, {"$registry": {}}]'
+expected_json = '''["[akmon] orchestrator model changed → haiku; subagent binding updated: reasoner=haiku · auditor=fable · worker=haiku · mid=sonnet. Regenerated k_* agents follow the new model.", "⚠ orchestrator=haiku is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "⚠ task kind quant-derivation has a opus floor, but k_reasoner is bound to haiku — delegate quant-derivation with model=opus."]'''
 
 [[case]]
 id = "stat/rebind-notice-empty-config"
 fn = "rebind_notice"
-args_json = '[{}, {"$registry": {}}]'
-expected_json = '["[akmon] orchestrator model changed → ?; subagent binding updated: reasoner=? · auditor=? · worker=? · mid=?. Regenerated k_* agents follow the new model.", "⚠ using semantic model labels because no concrete model list was provided; run model discovery or pass --available to bind vendor aliases locally"]'
+args_json = '[{}, {"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}]'
+expected_json = '''["[akmon] orchestrator model changed → ?; subagent binding updated: reasoner=? · auditor=? · worker=? · mid=?. Regenerated k_* agents follow the new model.", "⚠ using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally"]'''
 
 [[case]]
 id = "stat/init-instruction"
@@ -1858,14 +2074,29 @@ expected_json = 'null'
 [[case]]
 id = "stat/bound-model-worker"
 fn = "bound_model_for"
-args_json = '[{"binding": {"worker": "haiku", "mid": "sonnet", "reasoner": "opus", "auditor": "fable"}, "available": ["haiku", "sonnet", "opus", "fable"]}, "k_explorer"]'
+args_json = '[{"binding": {"worker": "haiku", "mid": "sonnet", "reasoner": "opus", "auditor": "fable"}, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable"}, "k_explorer"]'
 expected_json = '"haiku"'
 
 [[case]]
+# The opted-in auditor is an auditor-only rung: pinned although the recorded ladder never lists it.
 id = "stat/bound-model-auditor"
 fn = "bound_model_for"
-args_json = '[{"binding": {"worker": "haiku", "mid": "sonnet", "reasoner": "opus", "auditor": "fable"}, "available": ["haiku", "sonnet", "opus", "fable"]}, "k_auditor"]'
+args_json = '[{"binding": {"worker": "haiku", "mid": "sonnet", "reasoner": "opus", "auditor": "fable"}, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable"}, "k_auditor"]'
 expected_json = '"fable"'
+
+[[case]]
+# Without the recorded opt-in a value outside the ladder is refused, as a hand-edited config would be.
+id = "stat/bound-model-auditor-no-opt-in"
+fn = "bound_model_for"
+args_json = '[{"binding": {"worker": "haiku", "mid": "sonnet", "reasoner": "opus", "auditor": "fable"}, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": null}, "k_auditor"]'
+expected_json = 'null'
+
+[[case]]
+# The opt-in pins the auditor tier only: no other tier may name an alias outside the ladder.
+id = "stat/bound-model-opt-in-other-tier"
+fn = "bound_model_for"
+args_json = '[{"binding": {"worker": "fable"}, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable"}, "k_explorer"]'
+expected_json = 'null'
 
 [[case]]
 id = "stat/bound-model-host-builtin"

@@ -96,8 +96,9 @@ def _akmon_ruff() -> dict:
 
 
 # What akmon's own lint and size gates skip: experiment material is not akmon source, and its sealed
-# inputs keep their bytes (owner decision, C116). Pinned exactly, so it cannot widen.
-NOT_SOURCE = ["meta/experiments"]
+# inputs keep their bytes (owner decision, C116); the A22 P3 suite is parked until A22 resumes
+# (owner decision, C132). Pinned exactly, so it cannot widen.
+NOT_SOURCE = ["meta/experiments", "meta/tests/test_a22_p3_*.py"]
 
 
 def test_akmon_runs_exactly_the_rules_it_offers():
@@ -114,7 +115,7 @@ def test_akmon_meets_every_size_limit_without_an_exception():
         [
             *(sys.executable, "-m", "ruff", "check", "--no-cache", "--ignore-noqa", "--output-format", "json"),
             *("--config", str(PROFILE), "--select", ",".join(SIZE_FAMILY)),
-            # The profile alone does not carry akmon's own exclude; the experiments are not source.
+            # The profile alone does not carry akmon's own exclude: the experiments and the parked suite.
             *(arg for path in _akmon_ruff()["extend-exclude"] for arg in ("--extend-exclude", path)),
             ".",
         ],

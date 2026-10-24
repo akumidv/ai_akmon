@@ -1,6 +1,6 @@
 # A22 P3 V3 Qwen thinking headroom successor proposal
 
-The header-optional A qualification stopped terminally on its first Qwen scorer (M162): one correlated Qwen request spent the complete 5,000-token output allowance on thinking and returned no final answer. Three prior Codex calls were accepted, but no A cell is complete. Preserve that seal and runtime; none of its calls can be replayed, repaired, or counted in a fresh qualification.
+The header-optional A qualification stopped terminally on its first Qwen scorer (M165): one correlated Qwen request spent the complete 5,000-token output allowance on thinking and returned no final answer. Three prior Codex calls were accepted, but no A cell is complete. Preserve that seal and runtime; none of its calls can be replayed, repaired, or counted in a fresh qualification.
 
 ## Owner decision proposed
 

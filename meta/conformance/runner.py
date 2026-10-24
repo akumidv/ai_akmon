@@ -61,6 +61,8 @@ from coverage import check_coverage, load_exceptions, table_rows  # noqa: E402
 from normalize import NORM_VERSION, Ctx, normalize  # noqa: E402
 from pairing import check_pairing, is_ported  # noqa: E402
 
+from common import versions  # noqa: E402
+
 IMPL_SCOPE = {"python": ("shared", "python"), "node": ("shared", "node")}
 #: The Python file that owns each CLI command: the node implementation runs a CLI scenario only when
 #: that file has its port (``pairing.is_ported``). ``path``, ``hook`` and ``version`` live in the dispatcher.
@@ -557,9 +559,45 @@ def _cover_problems(covers: tuple[str, ...], stdout: str) -> list[str]:
     return [f"covers 'code:{code}': no finding line of the actual stdout carries it" for code in missing]
 
 
+#: The release ref the running version names, as an expectation spells it: ``v{{version}}`` for a
+#: final release, ``main`` for any other version (``_init._tag_for_version`` and its JS twin). A
+#: scenario writes it where an output names that ref, so it holds at a development version and at
+#: a release alike.
+REF_PLACEHOLDER = "{{ref}}"
+
+
+def ref_spelling(version: str) -> str:
+    """What :data:`REF_PLACEHOLDER` stands for at ``version``, in normalized form."""
+    return "v{{version}}" if versions.is_final(version) else "main"
+
+
+def _expand_ref(expected: ExpectedSpec, ctx: Ctx) -> ExpectedSpec:
+    """``expected`` with :data:`REF_PLACEHOLDER` spelled for the running version in its text expectations."""
+    ref = ref_spelling(ctx.version)
+
+    def spell(text: str) -> str:
+        return text.replace(REF_PLACEHOLDER, ref)
+
+    return dataclasses.replace(
+        expected,
+        stdout=None if expected.stdout is None else spell(expected.stdout),
+        stderr=None if expected.stderr is None else spell(expected.stderr),
+        stderr_contains=tuple(spell(item) for item in expected.stderr_contains),
+        findings=None if expected.findings is None else tuple(spell(line) for line in expected.findings),
+        files={relative: spell(text) for relative, text in expected.files.items()},
+    )
+
+
+def _kept(written: str | None, recorded: str, ctx: Ctx) -> str:
+    """The text a re-record writes: the scenario's own spelling (tokens and all) when it still holds."""
+    if written is not None and written.replace(REF_PLACEHOLDER, ref_spelling(ctx.version)) == recorded:
+        return written
+    return recorded
+
+
 def _compare(scenario: Scenario, exit_code: int, stdout: str, stderr: str, ctx: Ctx) -> str:
     """Empty string on match; a diff of every mismatch on failure."""
-    expected = scenario.expected
+    expected = _expand_ref(scenario.expected, ctx)
     actual_stdout = normalize(stdout, ctx)
     actual_stderr = normalize(stderr, ctx)
     problems: list[str] = []
@@ -633,14 +671,14 @@ def _record_block(scenario: Scenario, exit_code: int, stdout: str, stderr: str, 
     if expected.stderr_contains:  # hand-written, never recorded: keep it as the author left it
         lines.append(f"stderr_contains = [{', '.join(_toml_string(item) for item in expected.stderr_contains)}]")
     else:
-        lines.append(f"stderr = {_toml_string(normalize(stderr, ctx))}")
+        lines.append(f"stderr = {_toml_string(_kept(expected.stderr, normalize(stderr, ctx), ctx))}")
     if expected.stdout_json is not None:
         tables.append(_toml_tables(_normalize_leaves(json.loads(stdout), ctx), "expected.stdout_json"))
     elif _records_findings(scenario, normalize(stdout, ctx)):
         recorded = finding_lines(normalize(stdout, ctx), owned_codes())
         lines.append("findings = [" + "".join(f"\n  {_toml_string(line)}," for line in recorded) + "\n]")
     else:
-        lines.append(f"stdout = {_toml_string(normalize(stdout, ctx))}")
+        lines.append(f"stdout = {_toml_string(_kept(expected.stdout, normalize(stdout, ctx), ctx))}")
     if expected.file_absent:
         lines.append(f"file_absent = [{', '.join(_toml_string(item) for item in expected.file_absent)}]")
     if expected.files:
@@ -648,7 +686,7 @@ def _record_block(scenario: Scenario, exit_code: int, stdout: str, stderr: str, 
         for relative in expected.files:
             target = proj / relative
             actual = normalize(target.read_text(encoding="utf-8"), ctx) if target.is_file() else "<missing>"
-            tables.append(f"{_toml_string(relative)} = {_toml_string(actual)}")
+            tables.append(f"{_toml_string(relative)} = {_toml_string(_kept(expected.files[relative], actual, ctx))}")
     return "\n".join(lines + tables)
 
 

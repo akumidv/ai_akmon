@@ -431,6 +431,37 @@ def test_the_cycle_note_reopens_every_carrier_and_derives_the_npm_one(capsys):
     assert "9.9.9-dev.0" in note  # derived from the plan's own version, never spelled by hand
 
 
+# C130: the plan's `cd` names the tree the tag is cut from — the one --check reads — and only
+# when a consuming project mounts it; in akmon's own repository that tree is the root already.
+
+
+def _plan_for_tree(capsys, tree: Path) -> list[str]:
+    assert release_check.run_plan("v9.9.9", "akmon", tree) == 0
+    return capsys.readouterr().out.splitlines()
+
+
+def test_the_plan_has_no_cd_in_akmons_own_repository(tmp_path, capsys):
+    (tmp_path / "AGENTS.md").write_text("x\n", encoding="utf-8")
+    lines = _plan_for_tree(capsys, tmp_path)
+    assert [line for line in lines if line.startswith("cd ")] == []
+    assert lines[4].startswith("#    The npm carrier takes the SemVer spelling")
+
+
+@pytest.mark.parametrize(("aitna", "mount"), [(None, "_aitna/akmon"), ("tools/ai", "tools/ai/akmon")])
+def test_the_plan_cds_into_the_mounted_tree(tmp_path, capsys, monkeypatch, aitna, mount):
+    if aitna is None:
+        monkeypatch.delenv("AITNA_ROOT", raising=False)
+    else:
+        monkeypatch.setenv("AITNA_ROOT", aitna)
+    (tmp_path / "AGENTS.md").write_text("x\n", encoding="utf-8")
+    tree = tmp_path / mount
+    tree.mkdir(parents=True)
+    (tree / "AGENTS.md").write_text("x\n", encoding="utf-8")
+    lines = _plan_for_tree(capsys, tree)
+    assert lines[4] == f"cd {mount}            # tag is cut from the submodule's own tree"
+    assert lines[5] == ""
+
+
 _FALSE_TAG_CLAIM_RE = re.compile(
     r"(?:cut|deriv|produc|deduc)\w*\s+the\s+(?:real\s+)?version\s+from\s+the\s+git\s+tag",
     re.IGNORECASE,
