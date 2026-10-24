@@ -761,7 +761,8 @@ def probe_materialization(repo: Path, table: dict) -> list[dict]:
 # export). Arguments are plain JSON with four constructors the mouth resolves first — an object
 # keyed `$path` is a path (`Path` here, the string on the JS side); `$registry` is the tree's
 # shipped registry.json with its `set` keys replaced, its `merge` object deep-merged and its
-# `drop` keys removed; `$call` is another public function's answer to `args`/`kwargs`, one
+# `drop` keys removed and, per vendor, its `unset` keys deleted (a vendor with no `harness_rungs` is the
+# semantic-fallback case); `$call` is another public function's answer to `args`/`kwargs`, one
 # element of it when `pick` names an index; `$new` is a dataclass built from its snake_case
 # `fields` — and every string may hold `{{dir}}`, the row's scratch directory. Keyword-only parameters ride
 # in `kwargs_json`. The answer is JSON: a dataclass is an object keyed by its field names, a tuple
@@ -845,6 +846,9 @@ def _routing_registry(module: types.ModuleType, world: dict, change: dict) -> di
     registry = _routing_deep_merge(registry, _routing_arg(module, world, change.get("merge", {})))
     for key in change.get("drop", []):
         registry.pop(key, None)
+    for vendor, keys in change.get("unset", {}).items():
+        for key in keys:
+            registry[vendor].pop(key, None)
     world["hashes"].add(_routing_hash(registry))
     return registry
 

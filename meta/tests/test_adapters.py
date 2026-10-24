@@ -844,13 +844,18 @@ def test_delegation_log_allowed_agent_stays_silent(tmp_path, monkeypatch, capsys
     assert emitted["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
 
 
-def _bound_config(available, orchestrator="opus"):
-    """A local routing config as ``routing.local_config`` writes it, bound or semantic."""
+def _bound_config(available, orchestrator="opus", *, semantic=False):
+    """A local routing config as ``routing.local_config`` writes it, bound or semantic.
+
+    The semantic case needs a vendor that commits no ladder, so ``semantic`` drops the shipped one.
+    """
     akmon_root = Path(hook_core.__file__).parent.parent
     sys.path.insert(0, str(akmon_root / "tools" / "model_routing"))
     import routing
 
     registry = routing.load_registry(akmon_root)
+    if semantic:
+        del registry["anthropic"]["harness_rungs"]
     binding = routing.compute_binding(registry, orchestrator, available, "anthropic")
     return routing.local_config(registry=registry, binding=binding, second_opinion=False, available=available)
 
@@ -890,7 +895,7 @@ def test_delegation_log_reports_no_model_without_a_bound_ladder(tmp_path, monkey
         encoding="utf-8",
     )
     payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
-    config = _bound_config(None)
+    config = _bound_config(None, semantic=True)
     assert config["binding"]["worker"] == "worker"  # the label the old guard let through
     _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, config=config)
 

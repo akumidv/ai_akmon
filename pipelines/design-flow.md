@@ -111,6 +111,43 @@ recording it before agreement.
 - **Design backlog** — separate from the implementation backlog; same index format and the same
   no-dates rule ([tasks](tasks.md)).
 
+## Decision requests
+
+Label every request for an owner decision with a bold, uppercase mnemonic code such as
+**D-ORDER** or **D-SLICE**. The code identifies one bounded choice, not its display position.
+Keep it stable across reordering, turns and session resumption; never reassign it to another
+choice. Qualify it with the task ID when topics collide, for example **D-A44-ORDER**. A material
+change to the requested scope gets a new code and an explicit link saying which request it
+replaces; preserve the earlier scope and response.
+
+Each item states the requested choice and enough context to answer it independently. Give
+labelled options when the choice is bounded, and a recommendation with its reason when there
+is a basis for one. Questions requiring owner knowledge may remain open rather than inventing
+options or a recommendation.
+
+The owner may reply with a code plus an option label or free text, in any order and for any
+subset of requests. Match each response by code, not by position; omitted or unresolved items
+stay pending. A bare code identifies an item but does not accept it. Ordinary unambiguous
+acceptance without a code remains valid; clarify only ambiguous references or scope. These
+codes do not add a new approval gate or require confirmation of unchanged decisions.
+
+For example, two requests might be:
+
+- **D-ORDER** — Choose processing order: **A** preserves input order; **B** sorts by priority.
+  Recommend **A** because existing callers depend on input order.
+- **D-SLICE** — Choose rollout scope: **A** changes every consumer; **B** starts with one
+  consumer. Recommend **B** because it gives a bounded compatibility check.
+
+The owner can answer `D-SLICE: B, start with the reporting consumer`, leaving **D-ORDER**
+pending, then later answer `D-ORDER: A, callers must retain their current order`. The replies
+resolve the requests in reverse order without quoting either question.
+
+In the existing living design or task, preserve the request code, scope and option definitions,
+the owner's choice and rationale, and the accepted ADR block link where significant. Retain the
+request code in that ADR block so the accepted scope can be traced to the response. Use these
+existing records, not a separate request ledger. Request codes identify the owner dialogue;
+they are distinct from, and do not replace, the canonical `Decision-ID` of an accepted block.
+
 ## Decision blocks and later changes
 
 Record a significant commitment whose rationale future work needs: a shared contract,

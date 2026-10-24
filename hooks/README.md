@@ -66,7 +66,8 @@ project-local hook surface.
   the orchestrator sits below the orchestration floor or on the auditor's reserved top
   rung), or the init instruction on a missing/stale config (run
   [`../tools/model_routing/init.py`](../tools/model_routing/init.py), confirm the binding +
-  second-opinion opt-in with the owner — the one-time setup that records the available ladder).
+  second-opinion opt-in with the owner — the one-time setup that records the ladder in force and any
+  auditor opt-in).
   UserPromptSubmit is silent unless a switch just landed (one-line rebind notice) or the
   **context fill reached a new pressure level** (design §12: info at 0.85, warn at 1.0 of the recommended context budget for a session carrying one task, not the model's limit; `AKMON_CONTEXT_RECOMMENDED_MAX` overrides it per user or project; each level once,
   reset when the fill drops below the info level; the reminder goes to the owner only, as

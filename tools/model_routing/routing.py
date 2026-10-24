@@ -17,7 +17,7 @@ import re
 import shlex
 import sys
 import tempfile
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
@@ -146,6 +146,7 @@ class Binding:
     semantic_fallback: bool = False
     warning: str | None = None
     second_opinion_cli: str | None = None
+    auditor_opt_in: str | None = None
 
 
 def _semantic_rungs(vendor_data: dict) -> list[str]:
@@ -163,26 +164,88 @@ def _semantic_rungs(vendor_data: dict) -> list[str]:
     return rungs
 
 
+def selection_ladder(registry: dict, vendor: str, available: Sequence[str] | None) -> tuple[list[str], bool]:
+    """The ladder ``vendor`` binds on, weakest to strongest, and whether it is the semantic one.
+
+    A non-empty ``available`` list is the ladder, minus the vendor's auditor-only rungs (their
+    order kept); otherwise the vendor's committed ``harness_rungs``; otherwise the semantic
+    labels, flagged ``True`` (ADR-0004/D04). The single place that decides it — every caller
+    that needs rungs asks here.
+    """
+    vendor_data = registry.get(vendor, {})
+    if isinstance(available, list) and available:
+        auditor_only = vendor_data.get("auditor_only_rungs") or []
+        rungs = [alias for alias in available if alias not in auditor_only]
+        if rungs:
+            return rungs, False
+    committed = vendor_data.get("harness_rungs")
+    if committed:
+        return list(committed), False
+    return _semantic_rungs(vendor_data), True
+
+
+def check_ladder_order(registry: dict, vendor: str, available: Sequence[str]) -> None:
+    """Raise ``ValueError`` when ``available`` inverts the order of ``vendor``'s committed ladder.
+
+    Only the aliases ``available`` shares with ``harness_rungs`` are ranked: an unknown alias or
+    an auditor-only one never decides it, and a vendor with no committed ladder accepts any order.
+    """
+    committed = registry.get(vendor, {}).get("harness_rungs") or []
+    shared = [alias for alias in available if alias in committed]
+    if shared != sorted(shared, key=committed.index):
+        raise ValueError(
+            jsondata.fill(
+                _agents_data()["ladder_errors"]["order"],
+                {"given": ",".join(available), "vendor": vendor, "expected": ",".join(committed)},
+            )
+        )
+
+
+def check_auditor_opt_in(registry: dict, vendor: str, available: Sequence[str] | None, alias: str) -> None:
+    """Raise ``ValueError`` unless ``alias`` may be the opted-in auditor of ``vendor`` (ADR-0004/D04).
+
+    It must be an auditor-only rung or a rung of the ladder, and when an ``available`` list is
+    given it must be listed there.
+    """
+    rungs, semantic = selection_ladder(registry, vendor, available)
+    auditor_only = list(registry.get(vendor, {}).get("auditor_only_rungs") or [])
+    texts = _agents_data()["ladder_errors"]
+    if alias not in [*auditor_only, *([] if semantic else rungs)]:
+        raise ValueError(
+            jsondata.fill(
+                texts["auditor_unknown"],
+                {
+                    "alias": alias,
+                    "vendor": vendor,
+                    "ladder": ",".join([] if semantic else rungs),
+                    "auditor_only": ",".join(auditor_only),
+                },
+            )
+        )
+    if available and alias not in available:
+        raise ValueError(jsondata.fill(texts["auditor_unlisted"], {"alias": alias, "given": ",".join(available)}))
+
+
 def compute_binding(
     registry: dict,
     orchestrator: str,
     available: list[str] | None = None,
     vendor: str = "anthropic",
+    auditor_opt_in: str | None = None,
 ) -> Binding:
     """Bind tiers to model aliases from a semantic vendor policy (MODEL.md § Capability tiers).
 
-    ``available`` is the concrete, local, discovery-derived ladder ordered weakest → strongest.
-    The shared registry stores only the selection policy. Without ``available`` the binding uses
-    semantic fallback labels and carries a warning; generated file-backed agents then omit concrete
-    model frontmatter instead of pretending those labels are valid vendor model ids.
+    The ladder comes from ``selection_ladder``: ``available`` (the local, discovery-derived list,
+    weakest → strongest, auditor-only rungs removed) or the vendor's committed ``harness_rungs``.
+    A vendor with neither binds semantic labels with a warning; generated file-backed agents then
+    omit concrete model frontmatter instead of pretending those labels are valid vendor model ids.
+    The auditor is ``auditor_opt_in`` when given, else the top of the ladder; an auditor-only rung
+    is never the worker, mid, reasoner or an escalation step (ADR-0004/D04).
     """
     vendor_data = registry[vendor]
-    semantic = not available
-    rungs = list(available) if available else _semantic_rungs(vendor_data)
-    if not rungs:
-        rungs = _semantic_rungs(vendor_data)
+    rungs, semantic = selection_ladder(registry, vendor, available)
 
-    auditor = rungs[-1]  # pinned max, always — unlike the now-dynamic reasoner
+    auditor = auditor_opt_in or rungs[-1]  # pinned max unless the owner opted in — unlike the now-dynamic reasoner
     worker = rungs[0]
     worker_pos = rungs.index(worker)
     mid = rungs[min(worker_pos + 1, len(rungs) - 1)]
@@ -233,6 +296,7 @@ def compute_binding(
         semantic_fallback=semantic,
         warning=warning,
         second_opinion_cli=second_opinion.get("harness"),
+        auditor_opt_in=auditor_opt_in,
     )
 
 
@@ -384,7 +448,7 @@ def second_opinion_unavailability(registry: dict, config: dict, orchestrator_ven
         if vendor != orchestrator_vendor and second_opinion_spec(registry, vendor, required=False)
     ]
     configured = config.get("second_opinion_provider")
-    rungs = config.get("available") or _semantic_rungs(registry.get(orchestrator_vendor, {}))
+    rungs, _ = selection_ladder(registry, orchestrator_vendor, config.get("available"))
     orchestrator = str(config.get("orchestrator") or "?")
     auditor = str(config.get("binding", {}).get("auditor") or "?")
     against = f"the orchestrator '{orchestrator}' and the auditor '{auditor}'"
@@ -466,7 +530,7 @@ def resolve_second_opinion(registry: dict, config: dict, orchestrator_vendor: st
                 continue
             model = config.get("second_opinion_fallback_model")
             if not model:
-                rungs = config.get("available") or _semantic_rungs(registry.get(provider, {}))
+                rungs, _ = selection_ladder(registry, provider, config.get("available"))
                 model = second_opinion_fallback_model(rungs, orchestrator, auditor)
             if model:
                 return SecondOpinionTarget(provider, str(model))
@@ -704,12 +768,10 @@ def bound_model_for(config: dict, subagent_type: str) -> str | None:
     if not isinstance(model, str) or not model:
         return None
     available = config.get("available")
-    if (
-        not isinstance(available, list)
-        or not available
-        or not all(isinstance(alias, str) for alias in available)
-        or model not in available
-    ):
+    if not isinstance(available, list) or not available or not all(isinstance(alias, str) for alias in available):
+        return None
+    # The opted-in auditor is an auditor-only rung: pinned although the ladder never lists it.
+    if model not in available and not (spec.tier == "auditor" and model == config.get("auditor_opt_in")):
         return None
     return model
 
@@ -947,6 +1009,18 @@ def detect_orchestrator(
     return resolve_alias(model_id, available)
 
 
+def detection_aliases(registry: dict, config: dict) -> list[str]:
+    """The aliases orchestrator detection recognises: the recorded ladder plus the vendor's auditor-only rungs.
+
+    Empty without a recorded ladder (the semantic case), so detection stays silent there as before.
+    """
+    ladder = config.get("available") if isinstance(config, dict) else None
+    if not isinstance(ladder, list) or not ladder:
+        return []
+    auditor_only = registry.get(str(config.get("vendor") or "anthropic"), {}).get("auditor_only_rungs") or []
+    return [*ladder, *(alias for alias in auditor_only if alias not in ladder)]
+
+
 # --------------------------------------------------------------------------------------
 # Context-pressure detection (design §12, ADR 0006) — the tokens axis of runtime weakness
 # --------------------------------------------------------------------------------------
@@ -1178,7 +1252,8 @@ def rebind_to(
     available = config.get("available")
     second_opinion = bool(config.get("second_opinion"))
     vendor = str(config.get("vendor") or "anthropic")
-    binding = compute_binding(registry, orchestrator, available, vendor)
+    auditor_opt_in = config.get("auditor_opt_in") or None
+    binding = compute_binding(registry, orchestrator, available, vendor, auditor_opt_in)
     files = binding_artifacts(registry, binding, second_opinion=second_opinion, available=available)
     changed = write_artifacts(root, files, write=write)
     remove_obsolete_agents(root, (root / rel for rel in files), write=write)
@@ -1186,7 +1261,12 @@ def rebind_to(
 
 
 def local_config(binding: Binding, registry: dict, *, second_opinion: bool, available: list[str] | None) -> dict:
-    """The per-user resolved config written to ``local_config_rel()`` (binding, opt-ins, staleness hash)."""
+    """The per-user resolved config written to ``local_config_rel()`` (binding, opt-ins, staleness hash).
+
+    ``available`` records the ladder the binding resolved (``selection_ladder``) — none in the
+    semantic case — so the runtime readers need no ``--available`` of their own.
+    """
+    rungs, semantic = selection_ladder(registry, binding.vendor, available)
     config = {
         "vendor": binding.vendor,
         "orchestrator": binding.orchestrator,
@@ -1199,13 +1279,13 @@ def local_config(binding: Binding, registry: dict, *, second_opinion: bool, avai
         },
         "second_opinion": second_opinion,
         "second_opinion_provider": opposite_vendor(registry, binding.vendor),
-        "available": available,
+        "available": None if semantic else rungs,
+        "auditor_opt_in": binding.auditor_opt_in,
         "registry_hash": registry_hash(registry),
-        "task_kind_floors": task_kind_floors(registry, available or [], binding.vendor),
+        "task_kind_floors": task_kind_floors(registry, [] if semantic else rungs, binding.vendor),
     }
     provider = config["second_opinion_provider"]
     if provider == binding.vendor:
-        rungs = list(available) if available else _semantic_rungs(registry.get(binding.vendor, {}))
         config["second_opinion_fallback_model"] = second_opinion_fallback_model(
             rungs, binding.orchestrator, binding.auditor
         )
@@ -1386,7 +1466,9 @@ def status_lines(config: dict, registry: dict, init_command: str) -> list[str]:
         ),
         jsondata.fill(texts["self_check"], {"orchestrator": orchestrator, "init_command": init_command}),
     ]
-    warning = compute_binding(registry, orchestrator, config.get("available"), orchestrator_vendor).warning
+    warning = compute_binding(
+        registry, orchestrator, config.get("available"), orchestrator_vendor, config.get("auditor_opt_in") or None
+    ).warning
     if warning:
         lines.append(f"⚠ {warning}")
     if second_warning:
@@ -1417,7 +1499,9 @@ def rebind_notice(config: dict, registry: dict) -> list[str]:
             },
         ),
     ]
-    warning = compute_binding(registry, orchestrator, config.get("available"), vendor).warning
+    warning = compute_binding(
+        registry, orchestrator, config.get("available"), vendor, config.get("auditor_opt_in") or None
+    ).warning
     if warning:
         lines.append(f"⚠ {warning}")
     lines.extend(floor_gap_lines(config))

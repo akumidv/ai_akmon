@@ -16,6 +16,26 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
 
 ## Unreleased
 
+### Changed
+- **Owner decision requests have stable mnemonic codes (A44).** Requests such as
+  **D-ORDER** and **D-SLICE** can be answered by code in any order or subset; unanswered
+  items stay open. The common guardrail links the convention in design-flow. Ordinary
+  unambiguous acceptance still works without a code; accepted ADR block IDs keep their role.
+- **Model routing binds a committed harness ladder when no `--available` list is given (C147,
+  [ADR-0004/D04](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0004-model-routing-capability-tiers.md#d04--committed-harness-ladder-and-opt-in-auditor-rung)).**
+  The registry now carries `harness_rungs` and `auditor_only_rungs` per vendor, so the generated
+  `.claude/agents/k_*.md` pin a concrete `model:` and no delegate silently inherits the
+  orchestrator's model; the rung above the ladder is the auditor only on `init --auditor <alias>`,
+  recorded in the local configuration as `auditor_opt_in`. The recorded `available` is the
+  resolved ladder. Check: re-run `model_routing/init` (the registry hash changed, so the hook
+  asks for it) and confirm the agent files carry `model:` lines.
+- **`model_routing/init` refuses an inverted `--available` list.** The aliases the list shares
+  with the committed ladder must keep its weakest-to-strongest order; one error line, exit 2,
+  nothing written. An auditor-only alias in the list is dropped from the ladder it binds.
+- **`akmon verify` checks the committed ladder's shape** (`routing.ladder`): `harness_rungs` a
+  non-empty list of unique non-empty strings, `auditor_only_rungs` a list disjoint from it. A
+  project overlay that sets neither is unaffected.
+
 ## v0.4.0
 
 ### Breaking

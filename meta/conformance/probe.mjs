@@ -1252,6 +1252,8 @@ const ROUTING_DATA_PARAMS = {
       "overlayPath",
       "loadRegistry",
       "computeBinding",
+      "checkLadderOrder",
+      "checkAuditorOptIn",
       "oppositeVendor",
       "retiredSecondOpinionKeys",
       "secondOpinionSpec",
@@ -1301,6 +1303,7 @@ const ROUTING_CLASS_FIELDS = /** @type {Record<string, string[]>} */ ({
     "semantic_fallback",
     "warning",
     "second_opinion_cli",
+    "auditor_opt_in",
   ],
   SecondOpinionTarget: ["provider", "model"],
   AgentSpec: ["name", "tier", "description", "tools", "body", "kinds"],
@@ -1440,6 +1443,11 @@ function routingConstructed(ctx, value) {
     registry = routingDeepMerge(registry, routingArg(ctx, change.merge ?? {}));
     for (const key of change.drop ?? []) {
       delete registry[key];
+    }
+    for (const [vendor, keys] of Object.entries(change.unset ?? {})) {
+      for (const key of /** @type {string[]} */ (keys)) {
+        delete registry[vendor][key];
+      }
     }
     ctx.hashes.add(createHash("sha256").update(ctx.canonicalForm(registry), "utf8").digest("hex").slice(0, 16));
     return registry;

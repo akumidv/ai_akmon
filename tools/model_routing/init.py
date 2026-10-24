@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Initialize model routing for a akmon-consuming project.
 
-Computes the tier→model binding from the registry's semantic selection policy (relative
-to the orchestrating model) and writes the generated artifacts:
+Computes the tier→model binding from the registry's selection policy over the vendor's
+committed harness ladder (or an ``--available`` list), relative to the orchestrating model,
+and writes the generated artifacts:
 
 - ``.claude/agents/k_*.md`` — subagent definitions (per-user, gitignored: the frontmatter
   pins each delegate to a model chosen for *this* session's orchestrator, and the
   SessionStart hook rewrites them whenever it changes, so committing one would commit
-  somebody else's session. Concrete ``model:`` frontmatter is emitted only when local model
-  discovery / ``--available`` provides concrete aliases);
+  somebody else's session. Concrete ``model:`` frontmatter is emitted whenever a ladder
+  binds — the vendor's committed one or ``--available`` — and omitted only for a vendor
+  with neither);
 - ``.claude/model-routing.local.json`` — the resolved binding + second-opinion opt-in +
   registry hash (per-user, gitignored like ``.env``).
 
@@ -85,6 +87,44 @@ def _existing_second_opinion(project_root: Path) -> bool:
     return bool(_existing_config(project_root).get("second_opinion"))
 
 
+def _binding_inputs(args: argparse.Namespace, registry: dict, root: Path) -> tuple[list[str] | None, str]:
+    """The validated ``--available`` list and the orchestrator alias; ``ValueError`` names a refused flag.
+
+    The orchestrator is ``--orchestrator``, else the settings model, else the top of the ladder
+    (the vendor's committed one without ``--available``), else the semantic label.
+    """
+    available = [alias.strip() for alias in args.available.split(",") if alias.strip()] if args.available else None
+    if available:
+        routing.check_ladder_order(registry, args.vendor, available)
+    if args.auditor:
+        routing.check_auditor_opt_in(registry, args.vendor, available, args.auditor)
+    rungs, semantic = routing.selection_ladder(registry, args.vendor, available)
+    fallback = registry[args.vendor].get("semantic_fallback", {})
+    orchestrator = (
+        args.orchestrator
+        or _settings_model(root)
+        or (fallback.get("orchestrator", "strongest") if semantic else rungs[-1])
+    )
+    return available, orchestrator
+
+
+def _write_planned(root: Path, planned: dict[Path, str], *, write: bool) -> list[Path]:
+    """Report each planned file as ``ok`` / ``updated`` / ``would update``, writing the changed ones when asked."""
+    changed = []
+    for path, content in planned.items():
+        current = path.read_text(encoding="utf-8") if path.is_file() else None
+        if current == content:
+            print(f"ok: {path.relative_to(root)}")
+            continue
+        changed.append(path)
+        action = "would update" if not write else "updated"
+        print(f"{action}: {path.relative_to(root)}")
+        if write:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+    return changed
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: compute the binding and write (or check) the generated routing artifacts."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -95,7 +135,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Orchestrator vendor selection policy to use (default: anthropic).",
     )
     parser.add_argument("--orchestrator", help="Alias of the model the session runs on (only the agent knows it).")
-    parser.add_argument("--available", help="Comma-separated model aliases available in the harness.")
+    parser.add_argument(
+        "--available",
+        help="Comma-separated model aliases available in the harness, weakest first; "
+        "defaults to the vendor's committed ladder.",
+    )
+    parser.add_argument(
+        "--auditor",
+        help="Opt in to this rung as the auditor: an auditor-only rung of the vendor (e.g. fable) "
+        "or one of its ladder; with --available it must be listed there.",
+    )
     parser.add_argument("--second-opinion", choices=("on", "off"), help="Enable cross-vendor review (opt-in).")
     parser.add_argument("--check", action="store_true", help="Do not write; exit 1 when generated files are stale.")
     parser.add_argument("--dry-run", action="store_true", help="Print changes without writing them.")
@@ -109,16 +158,14 @@ def main(argv: list[str] | None = None) -> int:
     vendors = routing.vendors_with_routing_policy(registry)
     if args.vendor not in vendors:
         parser.error(f"--vendor must be one of: {', '.join(vendors)}")
-    available = [alias.strip() for alias in args.available.split(",") if alias.strip()] if args.available else None
-    fallback = registry[args.vendor].get("semantic_fallback", {})
-    orchestrator = (
-        args.orchestrator
-        or _settings_model(root)
-        or (available[-1] if available else fallback.get("orchestrator", "strongest"))
-    )
+    try:
+        available, orchestrator = _binding_inputs(args, registry, root)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     second_opinion = _existing_second_opinion(root) if args.second_opinion is None else args.second_opinion == "on"
 
-    binding = routing.compute_binding(registry, orchestrator, available, args.vendor)
+    binding = routing.compute_binding(registry, orchestrator, available, args.vendor, args.auditor or None)
     try:
         artifacts = routing.binding_artifacts(registry, binding, second_opinion=second_opinion, available=available)
     except routing.BriefError as exc:
@@ -131,18 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     planned: dict[Path, str] = {root / rel: content for rel, content in artifacts.items()}
 
     write = not args.check and not args.dry_run
-    changed = []
-    for path, content in planned.items():
-        current = path.read_text(encoding="utf-8") if path.is_file() else None
-        if current == content:
-            print(f"ok: {path.relative_to(root)}")
-            continue
-        changed.append(path)
-        action = "would update" if not write else "updated"
-        print(f"{action}: {path.relative_to(root)}")
-        if write:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
+    changed = _write_planned(root, planned, write=write)
 
     for path in routing.remove_obsolete_agents(root, planned, write=write):
         changed.append(path)

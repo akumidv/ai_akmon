@@ -44,7 +44,9 @@ observability are code, not prose; cross-vendor review is offered opt-in.
    (semantic policy, local available list, orchestrator model)**: reasoner = top available
    rung (a same-model subagent when the orchestrator already is the top — context
    isolation persists); worker = lowest available rung; `mid` rung serves
-   `implement-under-spec`.
+   `implement-under-spec`. Narrowed by
+   [D04](#d04--committed-harness-ladder-and-opt-in-auditor-rung): a vendor whose harness
+   takes stable aliases commits that ladder.
 4. **The orchestrator is whatever the user launched, and is always displayed.** The
    session-start status line names it; if it ranks below the local highest rung, the hook
    adds a warning and suggests switching up. Advice only —
@@ -140,3 +142,31 @@ Transcript consumers searching for the last qualifying record read from the end 
 answer is established. The routing hook shares one transcript read per run. A record-count window
 is rejected because it can discard an early declaration still governing the session; invalid
 UTF-8 records are skipped rather than making the advisory hook fail.
+
+### D04 — Committed harness ladder and opt-in auditor rung
+
+`Decision-ID: ADR-0004/D04`
+
+A vendor whose harness names its model families by stable aliases commits that ladder in the
+registry, weakest to strongest: Anthropic `haiku`, `sonnet`, `opus`; OpenAI `luna`, `terra`,
+`sol`. The ladder binds the tiers when no `--available` list is given, so generated agents carry
+a concrete model and no delegate silently inherits the orchestrator's model. Semantic labels
+remain only for a vendor with no committed ladder.
+
+A rung above the ladder — Anthropic `fable`, OpenAI `astra` — is auditor-only. It is never bound
+to the worker, mid or reasoner tier, never enters the escalation path, and serves as the auditor
+only when the owner opts in with `init --auditor <alias>`, recorded in the local configuration;
+when `--available` is given it must list that alias. Without the opt-in the auditor is the top
+of the ladder.
+
+An `--available` list must keep the committed ladder's order for the aliases it shares with it;
+`init` refuses an inverted list rather than binding a reversed ladder.
+
+Codex takes concrete model ids, so an OpenAI family resolves to a slug from the local Codex model
+catalog, the newest generation of each family independently; an unresolved family passes no
+`--model` and Codex runs its own default.
+
+Rejected: semantic labels as the default for a vendor with stable aliases, because every delegate
+then runs on the orchestrator's model; admitting the auditor-only rung by detecting it as the
+session model, because it is not launched as a CLI session; and resolving every family to one
+newest generation, because that collapses all tiers onto one model.

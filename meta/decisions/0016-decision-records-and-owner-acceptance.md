@@ -52,6 +52,25 @@ measurement, its task/evidence owner. Historical reports retain their original l
 alias is navigation and provenance, never status. Checks enforce uniqueness and resolution but
 do not recreate approval stages.
 
+### D04 — Addressable owner decision requests
+
+`Decision-ID: ADR-0016/D04`
+
+**Owner accepted:** adopt the mnemonic question notation seen in da-pricer for requests
+for decisions, so answers can identify their subject without quoting it and arrive in any
+order. [Design-flow](../../pipelines/design-flow.md#decision-requests) owns the operative
+convention; the common guardrail makes it apply across roles.
+
+Request codes identify open choices; accepted ADR block IDs continue to identify durable
+commitments. Matching answers belongs in the existing design/task records and their links
+to accepted blocks, preserving D01's single-owner boundary. This adds no approval gate or
+required owner reply formula. It adopts the owner's requested convention without claiming
+an experimentally measured improvement in attention cost; A22's evaluation remains open.
+
+Positional numbering was rejected because reordering changes the apparent target of an
+answer. Quoting each question was rejected because it adds work to a short reply. Revisit
+the convention if collisions or changed scope make answer matching ambiguous.
+
 ## Consequences
 
 - ADR status is only `Accepted` or `Superseded`; unfinished reasoning is not an ADR.

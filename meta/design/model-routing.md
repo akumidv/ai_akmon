@@ -63,12 +63,12 @@ Owner requirements:
 ## 2. Vocabulary — tiers, and the task-kind matrix that feeds them
 
 akmon is LLM-agnostic, so the routing vocabulary is abstract **capability tiers**;
-concrete model names live only in local discovery/config, not in the committed standard.
+concrete model aliases live in the registry's committed ladder (§3) and the local config, never in process prose.
 
 | Tier | Operation | Who runs it |
 |---|---|---|
 | **orchestrator** | decompose, route, integrate results, dialogue with the owner | the main session — whatever model the user runs |
-| **reasoner** | load-bearing synthesis: architecture forks, contested decisions, complex debugging, quant math derivation | top rung of the ladder (§3), as a subagent |
+| **reasoner** | load-bearing synthesis: architecture forks, contested decisions, complex debugging, quant math derivation | the orchestrator's rung of the ladder (§3), as a subagent |
 | **worker** | delegable realization: exploration, summaries, mechanical edits, tests-under-spec, doc-sync | cheapest adequate rung, as a subagent |
 | **auditor** | independent review of architecture decisions and code | a *different vendor's* model (e.g. Codex), opt-in |
 
@@ -109,22 +109,29 @@ re-read on every subsequent turn. The second benefit applies even when tiers sha
 Floor rule (guardrail line, §6): **do not burn the orchestrator or reasoner tier on
 mechanical work; route by task kind, not by the whole task's prestige.**
 
-## 3. Binding — semantic policy + local discovery
+## 3. Binding — selection policy over a committed ladder
 
-Requirement 7 rules out static per-model tables. The committed registry records a
-**semantic selection policy** per vendor, not a current model list: local discovery supplies
-the concrete aliases in weakest→strongest order, and the policy selects lowest/mid/highest
-rungs from that local list. Model churn therefore updates only gitignored local config, not
-the shared standard.
+Requirement 7 rules out per-model tables of *current* models. The committed registry records a
+**selection policy** per vendor and, for a vendor whose harness names its model families by
+stable aliases, that vendor's **harness ladder** (`harness_rungs`, weakest→strongest) and its
+**auditor-only rungs** (`auditor_only_rungs`) — decided in
+[ADR-0004/D04](../decisions/0004-model-routing-capability-tiers.md#d04--committed-harness-ladder-and-opt-in-auditor-rung),
+which owns the aliases' role and the opt-in. The policy selects lowest/mid/highest rungs from
+the ladder in force: an explicit local `--available` list (which must keep the committed
+order; the auditor-only aliases are dropped from it), else the committed ladder, else — for a
+vendor with neither — semantic labels. The aliases themselves live in the registry only.
 
-The tier→model binding is a **pure function of (semantic policy, local available list,
-orchestrator model)**:
+The tier→model binding is a **pure function of (selection policy, ladder in force,
+orchestrator model, auditor opt-in)**:
 
-- **reasoner** = the top rung *available in the harness*. If the orchestrator *is* the
-  top rung, reasoner work still runs as a subagent of the same model — the
-  context-isolation benefit persists.
-- **worker** = the lowest available rung; the `mid` rung serves `implement-under-spec`.
-- **escalation path** = the rungs between worker and reasoner, in ladder order.
+- **reasoner** = the orchestrator's rung (the top rung when the orchestrator is off the
+  ladder). If the orchestrator *is* the top rung, reasoner work still runs as a subagent of
+  the same model — the context-isolation benefit persists.
+- **worker** = the lowest rung of the ladder; the `mid` rung serves `implement-under-spec`.
+- **escalation path** = the rungs between worker and the top, in ladder order.
+- **auditor** = the top of the ladder, or the auditor-only rung the owner opted into with
+  `init --auditor <alias>` (recorded in the local config as `auditor_opt_in`); an auditor-only
+  rung never becomes worker, mid, reasoner or an escalation step.
 - **second-opinion** = a different vendor's entry, independent of the local model list.
 - **orchestrator** = whatever the user launched — the binding never overrides it, but
   (requirement 9) the hook warns when it leaves the **healthy corridor**
@@ -136,18 +143,19 @@ orchestrator model)**:
   - **on the top rung while the floor sits lower**: wasteful — the top rung is the
     auditor's reserved tier (§9.3); orchestration doesn't need it; suggest `/model`
     down to the floor.
-  - **degenerate collapse, no warning:** when the ladder tops out at the floor (e.g. no
-    `fable` locally — `available` ends at `opus`), `floor == top`, both conditions go
+  - **degenerate collapse, no warning:** when the ladder tops out at the floor (the
+    committed Anthropic ladder does — it ends at `opus`), `floor == top`, both conditions go
     silent, and orchestrator = reasoner = auditor = the floor. That is the accepted
-    degraded mode, not an anomaly.
+    degraded mode, not an anomaly; the auditor-only opt-in is how the auditor rises above it.
   - a floor alias absent from the local ladder disables the corridor (nothing to rank
     against — only the existing unknown-orchestrator warning remains); a vendor may keep
     the relative `"highest"` floor (openai does), which reproduces the pre-corridor
     below-top warning and never fires the wasteful arm.
 
-If discovery is unavailable, the binding uses semantic fallback labels (`worker`, `mid`,
-`strongest`) and warns. File-backed generated agents omit concrete `model:` frontmatter in
-that mode instead of pretending semantic labels are valid vendor model ids.
+A vendor with no committed ladder and no `--available` list binds semantic fallback labels
+(`worker`, `mid`, `strongest`) and warns that its delegates run on the orchestrator's model.
+File-backed generated agents omit concrete `model:` frontmatter in that mode instead of
+pretending semantic labels are valid vendor model ids.
 
 **Orchestrator detection is transcript-driven** (the model the main chain actually ran on,
 read as code — no owner action per session after the one-time setup):
@@ -193,11 +201,15 @@ The single owner of model-selection policy *and* task-kind knowledge (requiremen
       "reasoner": "highest",
       "orchestrator_floor": "highest"
     },
+    "harness_rungs": ["…"],
+    "auditor_only_rungs": ["…"],
     "second_opinion": {"harness": "claude", "operation": "review", "report_dir": ".codex/second-opinion/"},
     "semantic_fallback": {"worker": "worker", "mid": "mid", "reasoner": "strongest", "orchestrator": "strongest"}
   },
   "openai": {
     "selection_policy": {"available_order": "weakest-to-strongest", "worker": "lowest", "mid": "next-after-worker", "reasoner": "highest", "orchestrator_floor": "highest"},
+    "harness_rungs": ["…"],
+    "auditor_only_rungs": ["…"],
     "second_opinion": {"harness": "codex", "operation": "review", "report_dir": ".claude/second-opinion/"},
     "semantic_fallback": {"worker": "worker", "mid": "mid", "reasoner": "strongest", "orchestrator": "strongest"}
   },
@@ -263,15 +275,17 @@ in the consumer's repository, and akmon owns two rules about them (C50):
 ### 4.2 Init tool (code) — `_aitna/akmon/tools/model_routing/`
 
 Run as `python _aitna/akmon/tools/model_routing/init.py [--orchestrator <alias>]
-[--available <ids>] [--second-opinion on|off]` (stdlib-only, idempotent):
+[--available <ids>] [--auditor <alias>] [--second-opinion on|off]` (stdlib-only, idempotent):
 
 1. Resolves the orchestrator (flag from the agent — only it sees its harness — else the
-   settings default) and the available models.
-2. Computes the tier→model binding from the semantic policy (§3), local available list,
-   and the task-kind matrix.
+   settings default, else the top of the ladder) and the ladder in force (§3); refuses, in
+   one line and writing nothing, an `--available` list that inverts the committed order or an
+   `--auditor` that is not an auditor-only rung or a listed one.
+2. Computes the tier→model binding from the selection policy and ladder (§3), the auditor
+   opt-in and the task-kind matrix.
 3. Emits generated artifacts (banner: *generated — edit registry/config, not this file*):
-   - `.claude/agents/k_*.md` — subagent definitions with concrete `model:` frontmatter only
-     when local discovery / `--available` provides aliases, plus a role brief carrying the
+   - `.claude/agents/k_*.md` — subagent definitions with concrete `model:` frontmatter
+     whenever a ladder binds (the committed one or `--available`), plus a role brief carrying the
      task kinds each serves; includes `k_auditor` for the auditor tier. **Gitignored and regenerated**
      (the model is per-user; §3), by init here and by the hook each time the orchestrator
      moves;
@@ -336,7 +350,7 @@ the log:
   explicit call override, inherits the session's model — measured in the N2 probes, and the
   reason ordinary built-in dispatch remains counted under the `-` requested-model bucket
   rather than attributed to a named model;
-- a **semantic-fallback binding** (no recorded `available` ladder) pins nothing either: the
+- a **semantic-fallback binding** (a vendor with no committed ladder, so no recorded `available` ladder) pins nothing either: the
   generated agent files carry no `model:` line in that mode, so the host again inherits the
   session's model. The tier values there are labels (`worker`, `strongest`), not vendor
   aliases, and must never be shown as models — in the console line, in this record, or in
@@ -439,8 +453,8 @@ During work (orchestrator):
   the task-kind matrix + delegation-as-default. *Revisit-if:* the matrix rows prove
   indistinguishable in practice.
 - **Per-orchestrator-model binding tables in the registry** — rejected: N models × M
-  tiers duplicates one fact many times and drifts. Semantic policy + local discovery
-  states the selection rule once without committing volatile aliases (requirement 7).
+  tiers duplicates one fact many times and drifts. A selection policy over one committed
+  ladder per vendor states the rule once (requirement 7; ADR-0004/D04 owns the ladder).
 - **Numeric complexity scoring (points for ambiguity/blast-radius → score bands →
   models)** — rejected: the scores are still the orchestrator's judgment, plus ceremony;
   a named task-kind list is checkable, a score is not.
