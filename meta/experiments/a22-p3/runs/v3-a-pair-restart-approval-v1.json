@@ -1,0 +1,10 @@
+{
+  "acceptance_basis": "owner accepted D-A22-PAIR-RESTART option A in this chat",
+  "authorized_phases": ["a_subject_pair_restart"],
+  "dispatch_allowed": true,
+  "owner_accepted": true,
+  "preflight_sha256": "122b6464b9b6d0eb366fe4c231aa0aa50d8faeaecde05fbb0274a8e89da83673",
+  "record_type": "p3_v3_a_pair_restart_approval",
+  "schema": 1,
+  "seal_sha256": "69b6b7a8048ebc207a20b9f7169b9927b4474e61415813cee74d567b03594916"
+}

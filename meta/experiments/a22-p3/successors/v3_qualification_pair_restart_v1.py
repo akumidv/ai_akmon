@@ -17,9 +17,8 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import scorer_route_check as scorer
-import v3_qualification_headroom as prior
 import v3_qualification_bounded_transport_v1 as previous
-import v3_qualification_second_technical_substitution_v1 as second
+import v3_qualification_headroom as prior
 import v3_qualification_technical_substitution_v2 as first
 
 HERE = Path(__file__).resolve().parent.parent
@@ -32,6 +31,7 @@ PREFLIGHT = RUNS / "v3-a-pair-restart-preflight-v1.json"
 APPROVAL = RUNS / "v3-a-pair-restart-approval-v1.json"
 RUNTIME = Path("/tmp/a22-p3-v3-a-pair-restart-v1-runtime")
 LEDGER = RUNTIME / "qualification-events.jsonl"
+ATTEMPT_OUTCOME = RUNTIME / "subject-attempt-outcome.json"
 ACCEPTED_PREFIX = 96
 NEW_CALLS = 32
 OPENING = 1_608_025
@@ -47,6 +47,7 @@ ORIGINAL_BASE = {
     "verify_schedule": prior.schedule.verify_schedule,
     "call_plan": prior.call_plan,
     "packet_render": prior.packet.render,
+    "header": prior._header,
 }
 
 
@@ -76,12 +77,16 @@ def verify_schedule(candidate: dict[str, Any]) -> None:
     if plan.get("replaced_positions") != [96, 97] or plan.get("old_call_ids") != target["subject_call_ids"]:
         raise SubstitutionError("pair target differs")
     new_ids = [plan.get("new_subject_attempt_id"), *plan.get("new_call_ids", [])]
-    if len(new_ids) != 3 or len(set(new_ids)) != 3 or any(
-        not isinstance(x, str)
-        or len(x) != 33
-        or not x.startswith("g")
-        or any(c not in "0123456789abcdef" for c in x[1:])
-        for x in new_ids
+    if (
+        len(new_ids) != 3
+        or len(set(new_ids)) != 3
+        or any(
+            not isinstance(x, str)
+            or len(x) != 33
+            or not x.startswith("g")
+            or any(c not in "0123456789abcdef" for c in x[1:])
+            for x in new_ids
+        )
     ):
         raise SubstitutionError("new pair IDs are malformed or reused")
     all_old = {
@@ -139,6 +144,39 @@ def full_plan() -> list[dict[str, Any]]:
     return result
 
 
+def attempt_registry() -> dict[str, Any]:
+    """Keep historical technical attempts distinct from the pending primary pair."""
+    plan = read(PLAN)
+    row = read(previous.SCHEDULE)["cells"][24]
+    first_failed, first_superseded = plan["historical_first_call_ids"]
+    return {
+        "cell_run_id": row["run_id"],
+        "packet_id": row["packet_id"],
+        "historical": [
+            {
+                "origin_first_call_id": first_failed,
+                "scheduled_attempt_id_alias": row["subject_attempt_id"],
+                "classification": "technical",
+                "terminal_status": "failed_turn_1_http_503",
+            },
+            {
+                "origin_first_call_id": first_superseded,
+                "scheduled_attempt_id_alias": row["subject_attempt_id"],
+                "classification": "technical",
+                "terminal_status": "superseded_after_failed_turn_2_http_503",
+                "second_call_id": plan["old_call_ids"][1],
+            },
+        ],
+        "current": {
+            "subject_attempt_id": plan["new_subject_attempt_id"],
+            "first_call_id": plan["new_call_ids"][0],
+            "second_call_id": plan["new_call_ids"][1],
+            "status": "planned",
+            "replaces": plan["historical_first_call_ids"],
+        },
+    }
+
+
 def validate_predecessor() -> dict[str, Any]:
     """Bind the fourth failed call and superseded first turn without accepting either."""
     previous.verify_seal()
@@ -173,6 +211,7 @@ def validate_predecessor() -> dict[str, Any]:
             raise SubstitutionError("fourth predecessor ledger cardinality differs")
         first_reserved, first_done = rows[1:3]
         old_steps = previous.full_plan()[96:98]
+        first_result = previous.RUNTIME / "evidence" / old_steps[0]["call_id"] / "result.json"
         if (
             first_reserved.get("event") != "reserved"
             or first_done.get("event") != "completed"
@@ -180,7 +219,7 @@ def validate_predecessor() -> dict[str, Any]:
             or first_reserved.get("call") != old_steps[0]
             or first_done.get("call") != old_steps[0]
             or first_done.get("usage") != {"input_tokens": 5_758, "output_tokens": 176}
-            or first_done.get("evidence_sha256") != sha(previous.RUNTIME / "evidence" / old_steps[0]["call_id"] / "result.json")
+            or first_done.get("evidence_sha256") != sha(first_result)
             or first_reserved.get("request_sha256") != plan["first_request_sha256"]
         ):
             raise SubstitutionError("superseded first turn differs")
@@ -228,7 +267,7 @@ def validate_predecessor() -> dict[str, Any]:
             "accepted_prefix": ACCEPTED_PREFIX,
             "superseded_accepted_calls": count,
             "predecessor_ledger_sha256": sha(previous.LEDGER),
-            "superseded_first_result_sha256": sha(previous.RUNTIME / "evidence" / old_steps[0]["call_id"] / "result.json"),
+            "superseded_first_result_sha256": sha(first_result),
             "failed_evidence_sha256": sha(root / "failure.json"),
         }
     finally:
@@ -246,7 +285,8 @@ def seal_body() -> dict[str, Any]:
     if prior.sha_bytes(case["subject"]["turn1"].encode()) != plan["first_request_sha256"]:
         raise SubstitutionError("frozen first-turn prompt differs")
     old_first_reply = read(old_roots[0] / "result.json")["reply"]
-    if prior.sha_bytes(prior.source._second_prompt(case, old_first_reply)[2].encode()) != plan["failed_second_request_sha256"]:
+    old_second_prompt = prior.source._second_prompt(case, old_first_reply)[2]
+    if prior.sha_bytes(old_second_prompt.encode()) != plan["failed_second_request_sha256"]:
         raise SubstitutionError("failed second prompt is not derived from predecessor first reply")
     sources = (
         "successors/v3_qualification_pair_restart_v1.py",
@@ -303,8 +343,12 @@ def seal_body() -> dict[str, Any]:
             call_id: {
                 name: sha(root / name)
                 for name in (
-                    "source.events.json", "source.stdout.txt", "source.stderr.txt",
-                    "source.dispatch.json", "prepared.json", "quota-before.json",
+                    "source.events.json",
+                    "source.stdout.txt",
+                    "source.stderr.txt",
+                    "source.dispatch.json",
+                    "prepared.json",
+                    "quota-before.json",
                     *(("result.json",) if i == 0 else ("failure.json",)),
                 )
             }
@@ -312,6 +356,7 @@ def seal_body() -> dict[str, Any]:
         },
         "first_prompt_sha256": plan["first_request_sha256"],
         "failed_second_prompt_sha256": plan["failed_second_request_sha256"],
+        "attempt_registry_sha256": prior.digest(attempt_registry()),
         "headroom_route_outcome_sha256": sha(prior.headroom.RUNTIME / "outcome.json"),
         "headroom_effective_qwen_settings": read(ORIGINAL_BASE["seal"])["headroom_effective_qwen_settings"],
         "source_sha256": {name: sha(HERE / name) for name in sources},
@@ -417,6 +462,7 @@ def _configure_base() -> None:
     prior.schedule.SCHEDULE = SCHEDULE
     prior.schedule.verify_schedule = verify_schedule
     prior.call_plan = lambda: full_plan()[ACCEPTED_PREFIX:]
+    prior._header = lambda: {**ORIGINAL_BASE["header"](), "subject_attempts": attempt_registry()}
 
 
 def _reset_base() -> None:
@@ -431,11 +477,43 @@ def _reset_base() -> None:
     prior.schedule.verify_schedule = ORIGINAL_BASE["verify_schedule"]
     prior.call_plan = ORIGINAL_BASE["call_plan"]
     prior.packet.render = ORIGINAL_BASE["packet_render"]
+    prior._header = ORIGINAL_BASE["header"]
 
 
 def _state() -> tuple[int, int]:
     _configure_base()
     return prior._state() if LEDGER.exists() else (0, OPENING)
+
+
+def _record_attempt_outcome() -> None:
+    """Persist a D02 class when the first restarted cell has terminal evidence."""
+    _configure_base()
+    rows = prior._rows()
+    first_cell = rows[2::2][:4]
+    failed = next((item for item in first_cell if item.get("status") == "failed"), None)
+    classification = "technical" if failed else "scored" if len(first_cell) == 4 else None
+    if classification is None:
+        if ATTEMPT_OUTCOME.exists():
+            raise SubstitutionError("premature subject-attempt outcome")
+        return
+    event_count = 2 * (first_cell.index(failed) + 1) if failed else 8
+    prefix = "".join(json.dumps(item, sort_keys=True) + "\n" for item in rows[: event_count + 1]).encode()
+    expected = {
+        "schema": 1,
+        "record_type": "p3_v3_a_subject_attempt_outcome",
+        "subject_attempt_id": read(PLAN)["new_subject_attempt_id"],
+        "origin_first_call_id": read(PLAN)["new_call_ids"][0],
+        "replaces": read(PLAN)["historical_first_call_ids"],
+        "classification": classification,
+        "terminal_call_id": (failed or first_cell[-1])["call"]["call_id"],
+        "ledger_event_count": event_count,
+        "ledger_prefix_sha256": prior.sha_bytes(prefix),
+    }
+    if ATTEMPT_OUTCOME.exists():
+        if read(ATTEMPT_OUTCOME) != expected:
+            raise SubstitutionError("subject-attempt outcome differs from ledger")
+    else:
+        prior.write_json(ATTEMPT_OUTCOME, expected)
 
 
 def advance() -> dict[str, Any]:
@@ -451,7 +529,11 @@ def advance() -> dict[str, Any]:
             (RUNTIME / "exchanges").mkdir(mode=0o700)
             _configure_base()
             prior.write_new(LEDGER, (json.dumps(prior._header(), sort_keys=True) + "\n").encode())
+        _record_attempt_outcome()
         count, charged = _state()
+        completed_subject_attempts = len({row["run_id"] for row in read(SCHEDULE)["cells"][:24]})
+        if completed_subject_attempts + len(attempt_registry()["historical"]) + 1 > 120:
+            raise SubstitutionError("D02 subject-attempt ceiling exhausted")
         if read(PLAN)["predecessor_transport_failures"] >= read(PLAN)["transport_failure_limit"]:
             raise SubstitutionError("transport replacement ceiling exhausted")
         if count == NEW_CALLS:
@@ -463,7 +545,12 @@ def advance() -> dict[str, Any]:
         step = full_plan()[ACCEPTED_PREFIX + count]
         if step["route"] == "qwen":
             prior.route.check_gateway_tls()
-        result = prior._call(step, charged)
+        try:
+            result = prior._call(step, charged)
+        except BaseException:
+            _record_attempt_outcome()
+            raise
+        _record_attempt_outcome()
         result["completed_new_calls"] = count + 1
         result["charged_codex_tokens"] = charged + (sum(result["usage"].values()) if step["route"] == "codex" else 0)
         return result
@@ -475,9 +562,13 @@ def advance() -> dict[str, Any]:
 def reduce_accepted() -> dict[str, Any]:
     verify_seal()
     verify_approval(dispatch=True)
+    _record_attempt_outcome()
     count, charged = _state()
     if count != NEW_CALLS:
         raise SubstitutionError("successor has fewer than 32 accepted calls")
+    _record_attempt_outcome()
+    if read(ATTEMPT_OUTCOME)["classification"] != "scored":
+        raise SubstitutionError("current subject attempt did not become scored")
     candidate = read(SCHEDULE)
     readings: dict[str, dict[str, str]] = {}
     for row in candidate["cells"]:
@@ -500,6 +591,11 @@ def reduce_accepted() -> dict[str, Any]:
     primary = prior.reduce_module.reduce(readings, candidate=candidate)
     return {
         "primary": primary,
+        "subject_attempts": {
+            **attempt_registry(),
+            "current": {**attempt_registry()["current"], "classification": "scored"},
+        },
+        "subject_attempt_outcome_sha256": sha(ATTEMPT_OUTCOME),
         "charged_codex_tokens": charged,
         "accepted_new_calls": count,
         "carried_calls": ACCEPTED_PREFIX,
@@ -519,6 +615,8 @@ def main() -> None:
         print(json.dumps(reduce_accepted(), sort_keys=True))
     else:
         verify_seal()
+        if LEDGER.exists():
+            _record_attempt_outcome()
         count, charged = _state()
         print(
             json.dumps(

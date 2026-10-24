@@ -1,0 +1,15 @@
+{
+  "codex_cli_version": "codex-cli 0.162.1",
+  "codex_executable_sha256": "628e35487d888a28f0427fc37501da529dd3d81fcbad7a2c3421c1e8670d92e1",
+  "dispatch_allowed": false,
+  "gateway_probe": "verified_tls_handshake_without_api_request",
+  "opening_codex_tokens": 1608025,
+  "planned_new_calls": 32,
+  "provider_calls": 0,
+  "qwen_cli_version": "0.24.7",
+  "qwen_effective_settings_sha256": "c99c4a01d23b022e9d758ba8707dd7fb27bb6cc222dfb7a27bec7abb12716932",
+  "qwen_executable": "/usr/lib/node_modules/@qwen-code/qwen-code/cli-entry.js",
+  "qwen_executable_sha256": "06c2be3fcb1b451931d3e100acc7edd3ff748c74189f6fcc70300b5cd758f8e6",
+  "seal_sha256": "69b6b7a8048ebc207a20b9f7169b9927b4474e61415813cee74d567b03594916",
+  "status": "passed"
+}

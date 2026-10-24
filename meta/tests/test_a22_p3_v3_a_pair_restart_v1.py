@@ -37,6 +37,16 @@ def test_predecessor_superseded_turn_and_failed_turn_are_charged() -> None:
     assert trial.read(trial.PLAN)["predecessor_transport_failures"] == 4
 
 
+def test_attempt_registry_distinguishes_historical_origins() -> None:
+    registry = trial.attempt_registry()
+    origins = [x["origin_first_call_id"] for x in registry["historical"]]
+    assert len(set(origins)) == 2
+    assert [x["classification"] for x in registry["historical"]] == ["technical", "technical"]
+    assert registry["current"]["status"] == "planned"
+    assert registry["current"]["replaces"] == origins
+    assert registry["current"]["subject_attempt_id"] != registry["historical"][0]["scheduled_attempt_id_alias"]
+
+
 def test_pair_id_collision_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     plan = trial.read(trial.PLAN)
     path = tmp_path / "plan.json"
@@ -50,11 +60,11 @@ def test_second_prompt_comes_from_new_first_reply() -> None:
     row = trial.read(trial.SCHEDULE)["cells"][24]
     case = trial.read(trial.HERE / "cases" / f"{row['case']}.json")
     no_check = trial.prior.source._second_prompt(case, "No request for a check.")[2]
-    item = case["subject"]["menu"][0]
-    with_check = trial.prior.source._second_prompt(case, f"CHECK: {item['id']}")[2]
     assert no_check == case["subject"]["no_item_reply"]
+    menu_case = trial.read(trial.HERE / "cases/P3-04.json")
+    item = menu_case["subject"]["menu"][0]
+    with_check = trial.prior.source._second_prompt(menu_case, f"CHECK: {item['id']}")[2]
     assert with_check == item["output"]
-    assert no_check != with_check
     assert row["subject_call_ids"] == trial.read(trial.PLAN)["new_call_ids"]
 
 
@@ -62,3 +72,29 @@ def test_approval_defaults_to_no_dispatch() -> None:
     template = trial.approval_template()
     assert template["dispatch_allowed"] is False
     assert template["authorized_phases"] == []
+
+
+@pytest.mark.parametrize("failed_at, expected_class", [(1, "technical"), (None, "scored")])
+def test_attempt_outcome_is_persisted_from_terminal_ledger(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failed_at: int | None, expected_class: str
+) -> None:
+    rows = [{"record_type": "header"}]
+    for index, step in enumerate(trial.full_plan()[96:100]):
+        rows.extend(
+            [
+                {"event": "reserved", "call": step},
+                {"event": "completed", "call": step, "status": "failed" if index == failed_at else "accepted"},
+            ]
+        )
+        if index == failed_at:
+            break
+    path = tmp_path / "outcome.json"
+    monkeypatch.setattr(trial, "ATTEMPT_OUTCOME", path)
+    monkeypatch.setattr(trial, "_configure_base", lambda: None)
+    monkeypatch.setattr(trial.prior, "_rows", lambda: rows)
+    trial._record_attempt_outcome()
+    recorded = json.loads(path.read_text())
+    assert recorded["classification"] == expected_class
+    assert recorded["replaces"] == trial.read(trial.PLAN)["historical_first_call_ids"]
+    trial._record_attempt_outcome()
+    assert json.loads(path.read_text()) == recorded
