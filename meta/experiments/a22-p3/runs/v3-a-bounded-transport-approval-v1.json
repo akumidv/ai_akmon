@@ -1,0 +1,12 @@
+{
+  "acceptance_basis": "owner accepted bounded A22 transport recovery in this chat",
+  "authorized_phases": [
+    "a_bounded_transport_recovery"
+  ],
+  "dispatch_allowed": true,
+  "owner_accepted": true,
+  "preflight_sha256": "5ac1e96472f23411f92949be8a1e48c09e1a2b04c32a6043bfa203f3d1c0df6b",
+  "record_type": "p3_v3_a_bounded_transport_approval",
+  "schema": 1,
+  "seal_sha256": "a803d4e584c7b2b33866139c710e2a4269b67808548ec96de3da0bee862350ec"
+}

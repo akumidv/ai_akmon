@@ -63,3 +63,17 @@ migration release, scoped in [V1](../TASKS.md). Cheapest now — alphavar is the
 - Older ADRs and design docs keep the `keystone`/`_forge` names (grandfathered per V1); this ADR + the
   README naming section are the canonical vocabulary going forward.
 - The reservoir means future entities are named by lookup, not invention — reducing future naming forks.
+
+## Amendment — the reservoir gains lemnos (A51)
+
+**lemnos** (Λῆμνος) joins the reservoir of §4. It names a **general repository**: the one place from
+which a developer works on their whole ecosystem. It holds its own `_aitna/` apparatus beside the
+projects registered in it, and no product code. The island is where the smith god's forge stood, so it
+belongs to the scene of this ADR — a volcano (`aitna`) and an island (`lemnos`) are two places of one
+smith, and the nesting reads the same way: an ordinary project is one workshop with its apparatus
+inside it, a `lemnos` repository is the island that holds many.
+
+An ordinary project takes no name for being a workshop; only the general repository does. Whether
+`lemnos` is a value of the archetype field or a separate axis, and what it changes in behaviour, is
+decided in the ADR block that A51 produces, not here. This amendment only reserves and places the
+name.

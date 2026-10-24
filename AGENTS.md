@@ -44,6 +44,9 @@ the shipped block states it directly: Codex does not expand nested `@` imports i
 - Start with `README.md`, `MODEL.md`, and `meta/TASKS.md`; architecture decisions live in
   `meta/decisions/` and living designs in `meta/design/`.
 - Record non-trivial implementation work in `meta/TASKS.md` before code.
+- To look for alternatives to a design choice, or to check a decision against how other projects
+  solved it, open [`meta/reviews/alternatives/`](meta/reviews/alternatives/README.md). It is
+  material for akmon's own development, not part of what a consumer receives.
 - Significant architecture choices require explicit owner acceptance and a stable decision
   block in a thematic ADR under `meta/decisions/`. Open choices stay in design/tasks;
   implementation evidence and remaining verification stay with the implementing task.

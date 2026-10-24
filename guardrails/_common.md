@@ -65,8 +65,15 @@ offered" and "branch for non-trivial work" are not machine-checked.
   implementation; record the accepted scope in a thematic ADR block. Verify the resulting
   implementation against that intent and its evidence, without requesting acceptance of
   unchanged design again. Passing tests and plausibility are necessary, not sufficient.
-- **Owner decision requests (every role):** use stable **D-TOPIC** codes, following
+- **Owner decision requests (every role):** use stable **D-TOPIC** codes (**D-C139-TOPIC** when the
+  request belongs to a task), following
   [design-flow § Decision requests](../pipelines/design-flow.md#decision-requests).
+- **A code in a reply to the owner carries its gist.** A task id (`C138`) or a decision code
+  (`D-ORDER`) is followed by 3–5 words saying what it is — up to 10 for a complex task — and a verdict
+  is stated as the action to take, not as a label. A bare code tells the owner nothing.
+- **Narrate in the body, collect the asks at the end.** A reply that asks for or leaves pending an
+  owner action ends with one `Needed from you` block, grouped by what the owner must do, every line
+  carrying its own code, and nothing after it ([design-flow § Where requests sit in a reply](../pipelines/design-flow.md#where-requests-sit-in-a-reply)).
 
 ## Analysis before mutation
 
@@ -120,6 +127,15 @@ design→code reminder; the switch itself is not observable, so the restatement 
 - Change only what the task needs; no stray edits, no unrelated refactors riding along.
 - A material design gap goes back to the [architect](../roles/architect.md) role — do not
   improvise load-bearing architecture inside a code task.
+
+## Plan shape — reach a result, then refine it
+
+- **A plan's first deliverable is the coarsest scale at which its acceptance condition can already
+  be met;** refinements come after it, each a branch that returns to that trunk with the condition
+  still met ([MODEL.md](../MODEL.md) § Mission and priorities). A plan that finishes every part in
+  detail before any part works has no result until its last step.
+
+Not machine-checked; how to carry it beyond prose is open task A52.
 
 ## Route by task kind — the tier floor
 

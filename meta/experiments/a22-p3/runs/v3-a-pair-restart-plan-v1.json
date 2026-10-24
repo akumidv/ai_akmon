@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "record_type": "p3_v3_a_pair_restart_plan",
+  "replaced_positions": [96, 97],
+  "old_call_ids": ["gaf1c096b38359b39b26ccc238a839761", "g6d0853c9c1c83c02c47535b5d6dd6ae2"],
+  "historical_first_call_ids": ["g2b3d24f77858c85f834a333661d78f05", "gaf1c096b38359b39b26ccc238a839761"],
+  "old_subject_attempt_id": "g2bd46b6ec3af44c95880f5d6081277e0",
+  "new_subject_attempt_id": "g014d3cfe13f7d15b3ed3d90cda35cc85",
+  "new_call_ids": ["g12b45cc894893a0587eb173921c1e14f", "g13dfd90c6a4700a603a1d82b279780e9"],
+  "carried_accepted_calls": 96,
+  "new_provider_calls": 32,
+  "opening_codex_tokens": 1608025,
+  "superseded_first_turn_charged": 5934,
+  "failed_second_turn_charged": 14575,
+  "first_request_sha256": "1f5de0656ab20059655aa12b4710195fbcb77e1b0e29e9266f8f43ee760e497e",
+  "failed_second_request_sha256": "2ecb197a8db6cea76740890837978a9ed46d92fa492d661249c60fa98c68cbd9",
+  "transport_failure_limit": 8,
+  "predecessor_transport_failures": 4
+}

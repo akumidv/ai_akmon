@@ -39,6 +39,12 @@ already provides mechanisms for the second priority. The fuller human-interactio
 protocol is under design: this mission adds no new approval gate, report-length limit,
 automatic decision reopening, or autonomous acceptance authority.
 
+**Reach a result, then refine it.** Fix the acceptance condition at the coarsest scale at
+which the work is already a deliverable, and reach it first. Refine afterwards, each
+refinement a branch that returns to the trunk with the condition still met. A plan whose
+parts are each finished in full detail before any part works has no result until its last
+step, and a plan stopped midway leaves nothing usable.
+
 ## Decision records and verification
 
 Keep open questions in design/tasks and significant accepted commitments in thematic

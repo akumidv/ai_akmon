@@ -255,7 +255,7 @@ def test_always_loaded_json_carries_the_ratchet():
     assert set(data) == {"block_heading", "scopes", "caps", "severity"}
     assert data["block_heading"] == "## Dev layer — akmon"
     assert data["scopes"] == ["akmon-shipped", "consumer-total"]
-    assert data["caps"]["akmon-shipped"] == {"lines": 320, "bytes": 21000}
+    assert data["caps"]["akmon-shipped"] == {"lines": 384, "bytes": 25200}
     assert data["severity"] == {"akmon-shipped": "error", "consumer-total": "warn"}
 
 

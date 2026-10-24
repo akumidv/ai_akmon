@@ -71,6 +71,16 @@ Positional numbering was rejected because reordering changes the apparent target
 answer. Quoting each question was rejected because it adds work to a short reply. Revisit
 the convention if collisions or changed scope make answer matching ambiguous.
 
+> **Amendment — owner-approved: a request code lives only while its request is open, and every
+> kind of request carries one.** The convention covers every request to the owner — a decision, a
+> question, a confirmation or a go-ahead — not only a decision. When a request is answered, the
+> choice and its rationale go into the record that owns the commitment (the accepted block, with
+> the options it weighed) and the code is dropped: it is not retained in the ADR block. A code
+> therefore has to be unique only among open requests and may be reused once its request is
+> closed; durable identity stays with the block ID. The sentence of
+> [design-flow](../../pipelines/design-flow.md#where-requests-sit-in-a-reply) that retained the
+> code in the block is replaced accordingly.
+
 ## Consequences
 
 - ADR status is only `Accepted` or `Superseded`; unfinished reasoning is not an ADR.

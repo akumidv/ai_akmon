@@ -217,6 +217,33 @@ successor's independent review and live preflight, or authorize unreviewed code
 to dispatch. The new successor must hash-bind all predecessor evidence and enforce
 the bound before its first provider call.
 
+### D06 — Restart the subject pair after a transport-invalid second turn
+
+`Decision-ID: ADR-0019/D06`
+
+**Owner accepted D-A22-PAIR-RESTART, option A.** Carry the 96 accepted A calls through
+cell 24. The accepted first turn and transport-invalid second turn of cell 25 remain
+charged technical evidence; neither enters the primary pair or scorer packet. Keep
+the earlier failed first-turn attempt separately. Distinguish the two historical
+attempts by their immutable first-call IDs because their scheduled attempt ID was
+reused. Allocate a new attempt ID and two new call IDs, retaining the cell run and
+packet IDs and binding both historical attempts as replaced provenance.
+
+Use a fresh Codex session and isolated home and scratch directories. The new first
+prompt has the same frozen bytes; construct the second prompt only from the new
+accepted first reply with the pinned prompt function, and resume that session.
+This explicitly permits the second prompt bytes to differ from the failed historical
+request. The exception is limited to this pair and does not accept the old reply.
+The original case, arm, model, schedule, scorer criteria and D02 attempt cap remain.
+
+Bind all four HTTP 503 failures, terminal ledgers, usage and artifacts, including
+the superseded reply, in a distinct reviewed seal. Charge 1,608,025 observed V3
+Codex tokens at opening and retain D05's eight-event ceiling, 5,000,000-token
+aggregate ceiling, quota stops and observed-no-retry rule. A new failure stops the
+sealed generation. B/C comparison stays outside this decision. The
+[accepted design](../experiments/a22-p3/V3_A_SUBJECT_PAIR_RESTART_PROPOSAL.md)
+specifies the pair identity, reduction and replay requirements.
+
 ## Rejected alternatives
 
 - **Adopt the clause.** Rejected: it added no detected benefit over the standard on two vendors,

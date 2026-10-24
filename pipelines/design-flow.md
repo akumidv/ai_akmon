@@ -115,10 +115,11 @@ recording it before agreement.
 
 Label every request for an owner decision with a bold, uppercase mnemonic code such as
 **D-ORDER** or **D-SLICE**. The code identifies one bounded choice, not its display position.
-Keep it stable across reordering, turns and session resumption; never reassign it to another
-choice. Qualify it with the task ID when topics collide, for example **D-A44-ORDER**. A material
-change to the requested scope gets a new code and an explicit link saying which request it
-replaces; preserve the earlier scope and response.
+Keep it stable across reordering, turns and session resumption for as long as the request is
+open, and never assign it to another open choice. A request that belongs to a task — a question, a
+decision or a confirmation — carries the task ID, for example **D-C139-GATES**; a request outside any
+task is the plain **D-ORDER**, with no further qualifier. A material change to the requested scope gets a new code; the earlier
+request is closed and its response goes into the record as below.
 
 Each item states the requested choice and enough context to answer it independently. Give
 labelled options when the choice is bounded, and a recommendation with its reason when there
@@ -142,11 +143,24 @@ The owner can answer `D-SLICE: B, start with the reporting consumer`, leaving **
 pending, then later answer `D-ORDER: A, callers must retain their current order`. The replies
 resolve the requests in reverse order without quoting either question.
 
-In the existing living design or task, preserve the request code, scope and option definitions,
-the owner's choice and rationale, and the accepted ADR block link where significant. Retain the
-request code in that ADR block so the accepted scope can be traced to the response. Use these
-existing records, not a separate request ledger. Request codes identify the owner dialogue;
-they are distinct from, and do not replace, the canonical `Decision-ID` of an accepted block.
+### Where requests sit in a reply
+
+Narrate in the body, collect at the end. The body of a turn explains the essence of the work, the
+ideas and the contradictions found, and the grounds for each question, so the owner follows the
+reasoning without hunting for it. Every turn that asks for, or leaves pending, an owner action
+**ends** with one closing block headed `Needed from you` and nothing after it. It lists each pending
+request on one line — its code, a 3–10 word gist, the options and the recommendation — grouped by
+what the owner must do (decide, confirm a record, supply or run something), and it says when
+nothing is needed. **Every line carries a code, confirmations and go-aheads included:** the owner
+answers by copying the code, so a line without one has to be quoted in full. Requests are not scattered through the body, and the block does not restate the
+body's reasoning: a reader who skips to the end must find the whole list there.
+
+While a request is open, its code, scope and option definitions live in the existing living
+design or task. When it is answered, the owner's choice and rationale go into the record that
+owns the commitment — the accepted ADR block, with the options it weighed — and the code is
+dropped; it is not retained in the ADR block. Use these existing records, not a separate request
+ledger. A code identifies an open request and may be reused once it closes; the durable identity
+of an accepted block is its `Decision-ID`.
 
 ## Decision blocks and later changes
 

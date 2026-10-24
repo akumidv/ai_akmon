@@ -1,0 +1,14 @@
+{
+  "carried_accepted_calls": 96,
+  "failed_call_charged": 5954,
+  "new_call_id": "gaf1c096b38359b39b26ccc238a839761",
+  "new_provider_calls": 32,
+  "old_call_id": "g2b3d24f77858c85f834a333661d78f05",
+  "opening_codex_tokens": 1587516,
+  "predecessor_transport_failures": 3,
+  "record_type": "p3_v3_a_bounded_transport_plan",
+  "replaced_position": 96,
+  "request_sha256": "1f5de0656ab20059655aa12b4710195fbcb77e1b0e29e9266f8f43ee760e497e",
+  "schema": 1,
+  "transport_failure_limit": 8
+}

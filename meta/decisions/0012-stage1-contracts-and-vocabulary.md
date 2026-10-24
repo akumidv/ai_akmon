@@ -353,6 +353,25 @@ Each scope must satisfy both inclusive dimensions. Decimal bytes are normative: 
 > all stand as written. Lowering the target remains C60's work, and it is the ratchet — not this
 > amendment — that holds the shape between now and then.
 
+> **Amendment — D-CAP, owner-approved: the shipped cap rises by one fifth to make room for the
+> guardrail text the backlog already holds.** The shipped chain sits exactly on its cap (320 lines),
+> so no rule can be added to the common guardrail or a language profile without a `self_ci` error,
+> and the owner has accepted several rules that must land (a code in an owner-facing reply carries
+> its gist; A42's rules with their named checkers; N13's attention principles; A41's lockfile policy
+> in the language profiles). The owner chose to raise the cap and not to shrink the guardrail now;
+> shrinking stays a separate task.
+>
+> | scope | inclusive cap | checker and result |
+> |---|---|---|
+> | akmon-shipped | `≤384 lines` and `≤25,200 bytes` | `self_ci`: error |
+> | consumer total | `≤634 lines` and `≤38,200 bytes` | `verify.py`: warn; exit 1 under `--strict` only |
+>
+> The shipped pair is the previous pair raised by 20%. The consumer pair keeps the construction of
+> the C56 amendment — the shipped pair plus the hand-owned allowance of 250 lines / 13,000 bytes,
+> unchanged — so a consumer's own room does not shrink. Everything else stands as written, and the
+> ratchet remains the thing that holds the shape: the new numbers are a ceiling for accepted
+> additions, not a target, and lowering it remains the later shrinking task's work.
+
 Both checks emit the exact stable code `caps.always-loaded`. Their target distinguishes the scope,
 and the diagnostic reports that scope's measured line and byte counts beside both caps. Enforcement
 and rendering use the same counters; stale or hard-coded output is a contract failure.

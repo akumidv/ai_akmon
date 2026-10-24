@@ -165,9 +165,9 @@ one-declaration rule are stable contracts; no N1 measurement can amend them.
 **F18 closes the §6 fork exposed by the same final pass.** One cap over the whole always-loaded
 surface either makes akmon dictate the size of a consumer-owned `AGENTS.md`, or reduces akmon's own
 fully controlled guardrail budget to an advisory. **Owner choice F18/A:** keep two populations and
-two strengths. The akmon-shipped population has an inclusive cap of 320 lines and 21,000 decimal
-bytes and is an error in `self_ci`; the whole consumer population has an inclusive cap of 570 lines
-and 34,000 decimal bytes and emits a warn in `verify.py`, with the existing strict policy turning
+two strengths. The akmon-shipped population has an inclusive cap of 384 lines and 25,200 decimal
+bytes and is an error in `self_ci`; the whole consumer population has an inclusive cap of 634 lines
+and 38,200 decimal bytes and emits a warn in `verify.py`, with the existing strict policy turning
 that warning into a non-zero exit without changing its severity. Both use the stable C51 code
 `caps.always-loaded`. *Rejected: one hard consumer-total cap*, which lets akmon fail a project over
 hand-owned prose. *Rejected: one warn-only cap*, which makes growth of akmon-owned context
@@ -1254,8 +1254,8 @@ C53 and C58 both write into the measured chain and C56 reports the post-change v
 
 | scope | inclusive cap | finding when over cap | checker |
 |---|---|---|---|
-| akmon-shipped always-loaded | **320 lines / 21,000 bytes** | `error`, code `caps.always-loaded` | `self_ci` |
-| consumer total always-loaded | **570 lines / 34,000 bytes** | `warn`, code `caps.always-loaded`; severity remains `warn` under strict mode | `verify.py` (`--strict` exits non-zero) |
+| akmon-shipped always-loaded | **384 lines / 25,200 bytes** | `error`, code `caps.always-loaded` | `self_ci` |
+| consumer total always-loaded | **634 lines / 38,200 bytes** | `warn`, code `caps.always-loaded`; severity remains `warn` under strict mode | `verify.py` (`--strict` exits non-zero) |
 
 The strengths differ because the largest consumer-total member is hand-owned: a normal verify run
 must not fail a project over its own `AGENTS.md`. Akmon's shipped population is wholly ours, so its
@@ -1282,7 +1282,7 @@ and lowers the caps. C60's relocation-versus-deletion fork remains in-task and o
   or 459/460/461 consumer-total lines while bytes remain below their cap. Cap−1 and cap pass; cap+1
   alone emits exactly one `caps.always-loaded` finding with the scope's declared severity;
 - **inclusive byte boundaries:** for each scope, fixtures measure exactly
-  20,999/21,000/21,001 shipped bytes or 33,999/34,000/34,001 consumer-total bytes while lines remain
+  25,199/25,200/25,201 shipped bytes or 38,199/38,200/38,201 consumer-total bytes while lines remain
   below their cap. Cap−1 and cap pass; cap+1 alone emits exactly one `caps.always-loaded` finding
   with the scope's declared severity;
 - **severity and strict matrix:** shipped cap+1 is one `error caps.always-loaded` and makes

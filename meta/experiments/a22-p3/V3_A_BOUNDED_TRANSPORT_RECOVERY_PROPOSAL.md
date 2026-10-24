@@ -2,7 +2,7 @@
 
 ## Accepted policy and remaining execution gate
 
-ADR 0019 D05 accepts at most eight objectively transport-invalid Codex calls eligible for technical replacement across the A chain. The first three have already occurred: two scorers and the first subject turn of cell 25. This proposal specifies that standing policy; it is not a seal or dispatch approval. A reviewed immutable successor packet and live preflight still gate its first call. Within that packet, another qualifying HTTP 503 may be replaced under D05 without asking the owner again, up to the chain limit. A new successor generation may be needed to preserve each terminal ledger rather than mutating it.
+ADR 0019 D05 accepts at most eight objectively transport-invalid Codex calls eligible for technical replacement across the A chain. The first three have already occurred: two scorers and the first subject turn of cell 25. This proposal specifies that standing policy; it is not a seal or dispatch approval. A reviewed immutable successor packet and live preflight still gate its first call. This successor stops on any further failed call. A later qualifying HTTP 503 may be replaced under D05 without asking the owner again, up to the chain limit, by preparing a distinct reviewed and sealed successor that preserves the terminal ledger.
 
 ## Current successor
 
@@ -10,7 +10,7 @@ Carry forward 96 accepted calls and 24 complete cells. Keep all three failed cal
 
 ## Subsequent transport failure
 
-A failed scorer or first subject turn may be replaced only when sealed event/stderr evidence identifies exactly one WebSocket HTTP 503, its usage correlates, and the frozen runner recorded a terminal failure. The new generation hash-binds its predecessor ledger and failed artifacts, keeps the failed attempt charged, and changes only that slot's call ID. The replacement uses identical request bytes and a fresh blind session. Its result is accepted only through the unchanged validator. A failed second subject turn, any other error marker, ambiguous usage, altered packet, exhausted failure allowance, quota stop or aggregate ceiling stop blocks further dispatch. Do not inspect a failed answer to choose whether to substitute.
+A failed scorer or first subject turn may be replaced only when sealed event/stderr evidence identifies exactly one WebSocket HTTP 503, its usage correlates, and the frozen runner recorded a terminal failure. A new generation hash-binds its predecessor ledger and failed artifacts, keeps the failed attempt charged, and changes only that slot's call ID. The replacement uses identical request bytes and a fresh blind session. Its result is accepted only through the unchanged validator. A failed second subject turn, any other error marker, ambiguous usage, altered packet, exhausted failure allowance, quota stop or aggregate ceiling stop blocks further dispatch. Do not inspect a failed answer to choose whether to substitute.
 
 Primary reduction uses exactly one accepted subject pair and two accepted scorer readings per cell. Historical invalid replies never enter that reduction. Sensitivity calculations, if any, are separately labelled and cannot promote failed calls. B/C remains unauthorized.
 
