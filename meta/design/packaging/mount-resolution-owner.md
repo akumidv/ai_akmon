@@ -1,7 +1,7 @@
 # Design note: who answers "which standard tree does this project run?"
 
 > **Closed — [C69](../../TASKS_ARCHIVE.md), owner-verified at
-> [D2-26](../../D2_LEDGER.md) and landed in `07f46ad`; kept because the measurement below
+> [D2-26](../../D2_LEDGER.md) and landed in `b4f02f2`; kept because the measurement below
 > is why.** Provenance:
 > C37 review side finding, measured on this tree. **The decision: the recorded `mount` is a veto
 > over the directory check, not a replacement for it** — records `package` → the materialization,

@@ -1,7 +1,7 @@
 # C102 inventory — data-first reduction
 
 **Status: STOP 1 — candidate list, awaiting owner approval. No code changed.**
-Baseline: `main` @ `8fdb3ff`; corpus 131/131 green; coverage gate ok (125 derived items).
+Baseline: `main` @ `afbed47`; corpus 131/131 green; coverage gate ok (125 derived items).
 
 ## Owner-accepted decisions
 

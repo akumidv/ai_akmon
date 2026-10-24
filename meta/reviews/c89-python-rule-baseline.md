@@ -14,7 +14,7 @@
 
 ## Corpus
 
-- **akmon** — the working tree at `ca042e4` plus the uncommitted changes of this session: 65
+- **akmon** — the working tree at `60284b4` plus the uncommitted changes of this session: 65
   tracked `*.py` files (40 source, 25 test modules).
 - **The attached consumer** (the alphavar pilot) — its tree at `d2932ce`, read only: 235
   tracked `*.py` files outside `_aitna/`, all parsed without a syntax error.

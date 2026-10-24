@@ -1,9 +1,9 @@
 # 0006 — Transcript-driven orchestrator detection, corridor warning, context pressure
 
 - **Status:** Accepted (extends [0004](0004-model-routing-capability-tiers.md)/[0005](0005-synthesizer-gate-audit-and-role-routing.md);
-  revises 0004's committed-agents point; implementation C22–C23). C22 landed in `7312972`, Claude
-  only (Codex pending); the context-pressure amendment below landed in `920fe69`, and its C80
-  amendment landed in `996fdea`.
+  revises 0004's committed-agents point; implementation C22–C23). C22 landed in `91888bb`, Claude
+  only (Codex pending); the context-pressure amendment below landed in `7ba3ea8`, and its C80
+  amendment landed in `0541b7a`.
 - **Owner:** akuminov@gmail.com
 - **References:** design source [`meta/design/model-routing.md` §1 (req 9–12), §3, §4.3, §12](../design/model-routing.md) ·
   C22 and C23 landed ([archive](../TASKS_ARCHIVE.md)).
@@ -65,8 +65,8 @@ already reads records per-turn `usage`.
 - Registry deltas: `orchestrator_floor: "opus"` (anthropic) + the `context_pressure`
   block — both change the registry hash, so existing local configs go stale once and
   re-init.
-- Implementation: C22 (detection + corridor + two-channel delivery) landed in `7312972`; C23
-  (context pressure) landed in `920fe69`; its C80 amendment landed in `996fdea`. Both tasks are
+- Implementation: C22 (detection + corridor + two-channel delivery) landed in `91888bb`; C23
+  (context pressure) landed in `7ba3ea8`; its C80 amendment landed in `0541b7a`. Both tasks are
   archived. Their legacy D2 identifiers remain aliases and historical provenance, not workflow
   states.
 

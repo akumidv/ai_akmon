@@ -950,7 +950,7 @@ and no check reads either of them.
 
 This is not a hypothetical. **The defect shipped in the last release**: the tree at tag
 `v0.3.0` carries `version = "0.3.0.dev0"`, so a wheel built from the reviewed state is named
-`0.3.0.dev0`; the follow-up commit `1a9ab0f`, subject "v0.3.0 package version", then set the
+`0.3.0.dev0`; the follow-up commit `b2c6763`, subject "v0.3.0 package version", then set the
 literal to `0.4.0` — the string `0.3.0` never existed in the tree at all. It reproduces because
 the release plan (`release_check.run_plan`) tells the owner to stage `CHANGELOG.md` and never
 mentions a version literal, while `__init__.py` asserts in a comment that "the release pipeline

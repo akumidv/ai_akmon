@@ -1,9 +1,9 @@
 {
-  "acceptance_basis": null,
-  "authorized_phases": [],
-  "dispatch_allowed": false,
-  "owner_accepted": false,
-  "preflight_sha256": null,
+  "acceptance_basis": "owner accepted a second infrastructure-invalid Codex scorer substitution in this chat",
+  "authorized_phases": ["a_second_technical_substitution_and_remainder"],
+  "dispatch_allowed": true,
+  "owner_accepted": true,
+  "preflight_sha256": "86c03df21a30797e976e71c08df2a9a8d631201384e39a50220d7a7e4a4ae02d",
   "record_type": "p3_v3_a_second_technical_substitution_approval",
   "schema": 1,
   "seal_sha256": "37eb26ca0a098013828e467d041eb63cc0246ef26e6e2fe52e09d65865c1218a"
