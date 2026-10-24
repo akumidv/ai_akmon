@@ -114,3 +114,9 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   behind `akmon tool` and exported for JS projects; Node checks per ADR 0014; a native port may
   diverge in the runtime layer, never in product behavior, each divergence registered. Narrows ADR 0009
   D01/D02 for executable code.
+- [0021 — The athlos: bounded work, deferred handoff, and its adjudication](0021-athlos-deferred-work-packages-and-handoff.md)
+  — an **athlos** (ἆθλον) is the bounded labor, held distinct from its frame (`zone`, already a
+  delegation-ledger column) and from its doer (`k_*`); a work package written during work, not by
+  waking a large session; one `deferred` backlog line and a composed resume prompt; the pressure
+  notice names the package before `/compact` (amends 0006/D03's advice text only). D05 and four open
+  requests (handle transfer, the frame word, the middle holder, the briefs' trigger) stay unaccepted.
