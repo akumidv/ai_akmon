@@ -1,0 +1,10 @@
+{
+  "acceptance_basis": null,
+  "authorized_phases": [],
+  "dispatch_allowed": false,
+  "owner_accepted": false,
+  "preflight_sha256": null,
+  "record_type": "p3_v3_a_second_technical_substitution_approval",
+  "schema": 1,
+  "seal_sha256": "37eb26ca0a098013828e467d041eb63cc0246ef26e6e2fe52e09d65865c1218a"
+}

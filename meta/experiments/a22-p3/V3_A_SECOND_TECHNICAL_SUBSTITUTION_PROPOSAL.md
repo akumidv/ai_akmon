@@ -1,0 +1,17 @@
+# A22 P3 V3 A — second infrastructure-invalid scorer substitution proposal
+
+## Decision requested
+
+Accept one **additional, prospective, narrowly targeted** technical substitution for the Codex scorer at global A position 96 (zero-based index 95). The first substitution succeeded, but its separate v2 run stopped on another WebSocket HTTP 503 at this later scorer. The v2 seal is terminal and its one-time exception cannot dispatch another call. This proposal authorizes no provider call; a new source, plan, schedule, seal, independent review, live preflight, and separate owner acceptance of that exact packet are required before dispatch.
+
+## Fixed evidence and call accounting
+
+The original headroom run has 87 accepted calls, followed by one failed, charged Codex scorer at position 88. The v2 technical-substitution run has eight accepted calls: the first replacement and seven later calls. Its ninth call, a different Codex scorer for cell 24, is failed and charged, not an accepted reading. The v2 ledger SHA-256 is `bee0749e5fd20e6048d2b5aa91614dcf87b0c9b66a3b0c26955db3dcdd724acb`; its failed scorer call ID is `g3b83b6b857d3f34ef081f2a39f0215a6`. Its redacted stderr records WebSocket HTTP 503; `failure.json` says terminal and retry unauthorized, with 12,307 input and 280 output tokens. The failed answer is not used to choose this path.
+
+The successor must replay validators over the original 87 and the v2 eight accepted calls, hash-bind both predecessor ledgers and each failed call's evidence, and carry forward their 95 accepted results without reissuing them. It must verify both failures are the specific captured infrastructure errors, keep both failed calls charged and unscored, and reject any change to accepted results, packets, run IDs, model assignments, prompts, scorer criteria, or order. Only the failed scorer's call ID at global position 96 may change. Its replacement receives the same frozen cell-24 packet and request bytes, in a fresh blind Codex scorer session. The remaining 32 calls retain their prior IDs and order. The new run has exactly 33 planned provider calls: one replacement plus 32 remaining.
+
+## Gates and stopping rule
+
+Opening V3-only Codex charge is 1,569,103 / 5,000,000 tokens, including both failures. Qwen has no aggregate token ceiling and retains provider-default thinking with the 16,000-token local output setting. Before every Codex call, require fresh interpretable subscription telemetry below 80% five-hour and 90% weekly, the same account/executable binding, and the existing conservative aggregate headroom check. Preserve `OBSERVED_NO_RETRY`, exact scorer TSV/packet-ID validation, one-session and direct-usage checks, and zero observed tool/retry/error markers. Any new terminal provider failure stops this successor; there is no automatic third substitution. Diagnose the repeated transport failures before deciding another route or full rerun.
+
+After all 33 calls are accepted, compute the primary A reduction from the 95 carried accepted readings and 33 new accepted readings only. A separate sensitivity calculation may examine each failed scorer's verdict only after that primary reduction is frozen, and must never promote either failure to a primary reading. B/C comparison is a separate phase and remains unauthorized. The alternative to this bounded carryover is a fully fresh 128-call A run under a new schedule and seal; it would spend substantially more calls while leaving the two transport failures terminal.

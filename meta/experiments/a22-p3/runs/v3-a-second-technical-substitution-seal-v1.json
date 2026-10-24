@@ -1,0 +1,69 @@
+{
+  "codex_limit_tokens": 5000000,
+  "failed_artifact_sha256": {
+    "events.json": "012d1030bd632bb6261951f37dbe607d58d32e8c79b927cb0d9435ad36cf3d9b",
+    "failure.json": "281305f8fa1ff60fa2ee71300acb5373b6cdbc25c25907cb6c56bc07e8abde88",
+    "packet.md": "c999d57a69fea307f2c7c81c4dea68f6048a959535805390925cf7b9d29abda3",
+    "prepared.json": "c27f8dc25e698872ce6234faef3d387375f06d2fee77e67d61de5fe2acc859d1",
+    "quota-before.json": "718f6a2f3c6fa8e20468cf100fdc97f3e38c43d71fcdacd886b3f4858640076c",
+    "reply.raw.tsv": "3a150648ef9edbb7d7a0339d508fa554fc2f920ca8b0ef7cd994b76d70dce655",
+    "reply.tsv": "46b38c568d6f3d92e675372720052c3cc3ec4da00da0c375c83c08ba3b9a8ec7",
+    "rollout.jsonl": "6fbc7143fc97c72a2d9c6b8ccf81b9cc7d82d3da92fa252c9fa0c6fb48b33820",
+    "stderr.raw": "8645d59d5c926854a126ba765a1afa7fa8eb8f659ab7d3e3d4f81a37ef24685b",
+    "stdout.raw": "627d2531dbbe56cca68e2c6fb9f8644993b1ba1cf07dae43116068c201ebb90f"
+  },
+  "failed_evidence_sha256": "281305f8fa1ff60fa2ee71300acb5373b6cdbc25c25907cb6c56bc07e8abde88",
+  "five_hour_stop_percent": 80,
+  "headroom_effective_qwen_settings": {
+    "dispatch_environment": {
+      "QWEN_CODE_MAX_OUTPUT_TOKENS": "16000",
+      "QWEN_CODE_SYSTEM_SETTINGS_PATH": "<call-root>/qwen-settings.json",
+      "QWEN_CODE_UNATTENDED_RETRY": "0"
+    },
+    "effective_sha256": "c99c4a01d23b022e9d758ba8707dd7fb27bb6cc222dfb7a27bec7abb12716932",
+    "gateway_sha256": "bbd47adf6d63de664183f85ad4d8a62ff7cfb942ea06c7125330abb78aaf4c04",
+    "meta_sha256": "a153f20d2325555704ca99bdce7729871313607b455fcaa4a52a765eb23a50ee",
+    "overlay_sha256": "b721d4f5357df01e5936e786407e7b561f8998a1f3adea4e58c070af59f721ba"
+  },
+  "headroom_route_outcome_sha256": "09dd609ca8c1d9462677de8915529dbae843b90562436f175979ea5397dff518",
+  "model_ids": {
+    "codex_scorer": "gpt-6-astra",
+    "qwen_scorer": "qwen3.8-27b",
+    "subject_mid": "gpt-5.6-luna",
+    "subject_strongest": "gpt-6-astra"
+  },
+  "opening_codex_tokens": 1569103,
+  "original_ledger_sha256": "6207da3908ba1623c293069f56bc23b6a05965b6bbdb4e6397c5f235b80b8da8",
+  "original_seal_sha256": "dc0fbe12a14b0318ac00522160942dda8084aa17e2beef2905ce562cd709db79",
+  "plan_sha256": "6e443bb8b1a01498cc0c6b81e274602d9253d5384e928b630eef215897750b8e",
+  "planned_new_calls": 33,
+  "pre_dispatch_reconciliation_sha256": "e86269879533805335a4be48770e5dabf8c706fa67f3856836d975cdc3492ad6",
+  "predecessor_approval_sha256": "014c560021cccafee5e432abe298eeaa9e0f63bdcf0b75fee463ddcd6568e8d7",
+  "predecessor_ledger_sha256": "bee0749e5fd20e6048d2b5aa91614dcf87b0c9b66a3b0c26955db3dcdd724acb",
+  "predecessor_preflight_sha256": "616d728637920baee45b61d63f0d9033627573499149e905432db44704a6e61d",
+  "predecessor_seal_sha256": "55b6b326eff6503da9a36bd71a3a523c681902eb650b9f9f0cb1a3e5399f8ebf",
+  "proposal_sha256": "82db87bfd8d681114baea24f0e0414d082706d1739335f7d2ff82fd7d6e98722",
+  "provider_calls_started": 0,
+  "qwen_output_setting": 16000,
+  "record_type": "p3_v3_a_second_technical_substitution_seal",
+  "regression_sha256": "218d6bd2335b55414c8f0998d60dfde417dddaf2d7f4bf750146f9492f33cd92",
+  "replacement_exchange_sha256": "ef35a6db6c2ecfdb40ba86ac43c9ff09eac9b62bd5b607d66f4514e76e41f342",
+  "retry_evidence_policy": "OBSERVED_NO_RETRY",
+  "runtime_root": "/tmp/a22-p3-v3-a-second-technical-substitution-v1-runtime",
+  "schedule_sha256": "1c3473ea97c99a256f2aa66ebcf46e3f9f82984324d36a0eec2067cccb55821f",
+  "schema": 1,
+  "scope": "one_second_invalid_scorer_substitution_plus_remaining_a_calls",
+  "source_sha256": {
+    "quota_adapter_v3.py": "fa4227c844f74ea9838a7d83826638120609998f0376fd49310d0a2601c12f84",
+    "scorer_route_check.py": "5947219962ce3d7f8defefafb1f705acc414bf274c89cff1de8f872ddbc604d5",
+    "successors/v3_qualification_headroom.py": "049a544952ad2c0da647f38d9870af7bbcd42eb144c5a72e4e6f54ada1c8a51e",
+    "successors/v3_qualification_headroom_packet.py": "2214572ebff1977af81d4dbb44c7d313854e7e8e62e43761404c0830a48d7234",
+    "successors/v3_qualification_headroom_reduce.py": "3a3553babfa57728c5f9fda9ef2a972d1dc3508780beeb3769edc64b18d7532c",
+    "successors/v3_qualification_headroom_schedule.py": "0070d1fb0134567cb5b59b752ed7b2879f0f52d86537767c7153ab4a72768c6b",
+    "successors/v3_qualification_second_technical_substitution_v1.py": "58691b2fe6ef3b2390faba27f2a03f960a3e6c5babb977303bba833c8e6ed74e",
+    "successors/v3_qualification_technical_substitution_v2.py": "10e78617477b580429d5c122d00bf5293162db97a48f44addbb404806f42b016",
+    "v3_scorer_header_optional.py": "c00e460234abd9aa1b37d6df788f3685016014e191799cd1eb53fe27c8bcc32c"
+  },
+  "status": "offline_candidate_pending_owner_acceptance",
+  "weekly_stop_percent": 90
+}
