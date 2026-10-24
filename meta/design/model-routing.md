@@ -931,7 +931,7 @@ cross-model tiering of its built-ins by task economics — akmon's core addition
 ## 12. Runtime weakness signals — context pressure and the intelligence axis
 
 > **Status: built ([ADR 0006](../decisions/0006-orchestrator-detection-corridor-context-pressure.md);
-> C23 — owner-verified at [D2-38](../D2_LEDGER.md), landed in `920fe69`; amended by C80 at D2-42, owner-verified, landed in `996fdea`).** Requirement 12.
+> C23 — owner-verified at [D2-38](../D2_LEDGER.md), landed in `7ba3ea8`; amended by C80 at D2-42, owner-verified, landed in `0541b7a`).** Requirement 12.
 
 A model can be "weak" for the running session on two axes; each already has (or now gets)
 a distinct detector — no overlap:
@@ -1075,10 +1075,10 @@ Missing/malformed `usage` → silent (never block a turn, the hook's standing ru
 ## 13. Delegation drift — from prose to a forcing function
 
 > **Status: axis-1 built (advisory + hard ask + the C28d subagent exemption), owner-verified
-> at [D2-8/D2-9](../D2_LEDGER.md) and landed in `7312972`.
+> at [D2-8/D2-9](../D2_LEDGER.md) and landed in `91888bb`.
 > C28a live-verified: no tool-category exemption, but a background/child-session
 > enforcement gap surfaced (D2-10); C31 closed it with ask→deny outside the interactive default
-> (D2-11, landed in `ac54a5a`). Axis-2 planned (C29).** Requirement: make
+> (D2-11, landed in `b2b1b4b`). Axis-2 planned (C29).** Requirement: make
 > delegation *actually happen*, not just be documented.
 
 ### 13.1 Problem — the standard said "delegate" seven times and the orchestrator still didn't

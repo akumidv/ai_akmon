@@ -3,7 +3,7 @@
 Task: C102 (design [node-consumers.md §6](../design/node-consumers.md#6-implementation-plan)).
 Inventory and owner approval: [c102-inventory.md](c102-inventory.md)
 (all 22 files, approved in the proposed order).
-Branch: `main`, uncommitted — the owner commits. Baseline before the work: `main` @ `8fdb3ff`,
+Branch: `main`, uncommitted — the owner commits. Baseline before the work: `main` @ `afbed47`,
 corpus 131/131.
 
 ## Owner-accepted decisions
@@ -161,7 +161,7 @@ design docs says akmon. History keeps the old name: ADR 0008, the archive, past 
 released CHANGELOG entries and V1's description.
 
 **Stale citations.** The moves shifted code lines under `path:line` citations in live docs;
-a sweep comparing each cited line at `8fdb3ff` and now found 23 (11 in
+a sweep comparing each cited line at `afbed47` and now found 23 (11 in
 `meta/design/node-consumers.md` §2, 12 across `meta/TASKS.md` and three other design docs),
 several already wrong before C102. All now cite `path::name` or the data file's key.
 

@@ -2,7 +2,7 @@
 
 - **Status:** Base ADR accepted — owner-locked (D2-12 verified; backlog A10 done).
   Implementation is [C37](../TASKS.md). The C68 floor amendment (D2-34) and the
-  C77 execute-from-the-package amendment (D2-35) are owner-verified and landed in `db9ad7e`.
+  C77 execute-from-the-package amendment (D2-35) are owner-verified and landed in `c73fa2c`.
   For executable code, D01/D02's single-implementation premise is narrowed by
   [ADR-0020/D01](0020-node-consumers-js-implementation.md#d01--two-implementations-one-normative-behavioral-spec)
   (a JavaScript implementation for Node package mode) and by its D02 amendment (C129: a mounted

@@ -211,15 +211,15 @@ task under a different name. Ordinary accepted records need a clear accepted sco
 and preserved history, not another manually maintained commit field.
 
 An on-demand Git check supports the owner's point on a real example. D2-44 first
-appears on the inspected branch in `0617402` already under `## Approved`; `4c6acee`
-still has it there. `bc52998` moves it to `## Verified` with `0617402` as the stored
+appears on the inspected branch in `9d81a91` already under `## Approved`; `cc36213`
+still has it there. `ec9f1d7` moves it to `## Verified` with `9d81a91` as the stored
 commit. The acceptance-bearing snapshot was recoverable without that later field.
 These hashes identify this research example, not mandatory metadata for future
 decision records. Read-only commands used for the check included:
 
 ```bash
 git log --format='%h %s' -S'D2-44' -- meta/D2_LEDGER.md
-git show 0617402:meta/D2_LEDGER.md | awk '/^## / { section = $0 } /^\| D2-44 \|/ { print section; print $0 }'
+git show 9d81a91:meta/D2_LEDGER.md | awk '/^## / { section = $0 } /^\| D2-44 \|/ { print section; print $0 }'
 ```
 
 Search must identify the acceptance of that decision in context, not the first
@@ -443,7 +443,7 @@ establish a need for manual commit-hash fields or a second verification transiti
 | `hooks/hook_core.py`, `hooks/model-routing.py`, wrappers and adapter tests | Old add/approve/verify advice and counts must not treat accepted decisions as an attention queue |
 | Task-linked evidence and any affected status digest | Keep unresolved work visible without copying every task state or imposing owner time logging |
 
-This map was checked against a checkout based on `4c6acee6450f0bb1ce9de72c58ec2a83a4556a63`
+This map was checked against a checkout based on `cc36213177c2055b28350cc1bb8b4b6d9b22f089`
 with parallel uncommitted changes. It is a routing aid, not a frozen test baseline or
 current status board. Re-read relevant worktree and staged diffs before edits; hook,
 findings, initialization, routing and task-archive work already overlaps these areas.

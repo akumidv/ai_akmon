@@ -411,9 +411,9 @@ is machine-checkable — which is exactly why it needs a written owner.
   `hooks/hook_core.py::_segments_match` and `tools/d2_ledger/d2_ledger.py::_segments_match`.
   Neither exists, and both named carriers are gone from `meta/tests/test_hook_core.py`. **A
   mechanical history audit (C95) then found something stronger: the memoization never landed in any
-  commit.** Both copies carried the plain recursive body from `0198d97` until `816eb52` removed
+  commit.** Both copies carried the plain recursive body from `0198d97` until `9b3bcc8` removed
   them, and neither carrier test name occurs anywhere in the history of that test file — only in
-  the row's own prose, written by `816eb52`. The row is archived as superseded *and* unlanded, not
+  the row's own prose, written by `9b3bcc8`. The row is archived as superseded *and* unlanded, not
   as delivered work whose subject was later removed.
 - **C52** — enumerates nine spawned entry points including `d2-ledger-reminder`, and concludes
   "changes five and adds four". The population is now **eight spawned files** — seven Claude
@@ -477,7 +477,7 @@ instead of a ledger gate.
 Thirteen rows still carry a status of the form "awaiting the owner's commit", "verify on its sha"
 or "awaiting only the owner's close-out": A19, C57, C66, C76, C78, C85, C87, C88, C89, C90, C91,
 C92, C93 — and three of them additionally spell their gate as "D2-45/46/47 owner-approved". The
-work landed in `0617402`, `920fe69`, `07f46ad`, `c41eeb1` and `816eb52`. Under ADR 0016 D01 a
+work landed in `9d81a91`, `7ba3ea8`, `b4f02f2`, `e7e6b9e` and `9b3bcc8`. Under ADR 0016 D01 a
 landing hash is not a status, so these rows wait on a transition that no longer exists: each is
 either archived or restated as the work that actually remains.
 

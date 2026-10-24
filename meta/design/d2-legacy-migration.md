@@ -91,7 +91,7 @@ and model/effort routing changes.
   exclusion boundary.
 - **Work/evidence:** A22/C86 continue to own the unaccepted collaboration design and
   implementation. Product differentiation remains intent, not measured superiority.
-- **History:** retain `D2-44` as a legacy alias; do not copy `0617402` into a new
+- **History:** retain `D2-44` as a legacy alias; do not copy `9d81a91` into a new
   approval field.
 
 This case demonstrates that a Verified row can migrate without reapproval while its

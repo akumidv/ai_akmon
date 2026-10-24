@@ -19,7 +19,7 @@ runs the hook inside this checkout's tree. No harness was involved: the hooks we
 directly, so the row carries no Claude Code or Codex version.
 
 Host: Intel Xeon E5-2695 v2, 4 vCPU, Linux 6.8.0-139, load average 1.53 when the first pass began.
-Python 3.12.3, Node v24.21.0, akmon 0.4.0.dev0 (84b9e86).
+Python 3.12.3, Node v24.21.0, akmon 0.4.0.dev0 (6ab57fa).
 
 ## Result
 

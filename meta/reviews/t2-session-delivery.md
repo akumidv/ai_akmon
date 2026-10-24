@@ -61,7 +61,7 @@ build of the same version string.
 ## Re-check of the analysis's unrecorded facts
 
 The A22 analysis kept four working-tree facts that no record held. Re-run against akmon's source
-at `e006489` and the consumer, pinned to akmon `bc52998` (installed `0.4.0.dev0`), all four
+at `ee083c2` and the consumer, pinned to akmon `ec9f1d7` (installed `0.4.0.dev0`), all four
 reproduce unchanged; none needs a record of its own.
 
 | Fact | Reproduced | Disposition |
