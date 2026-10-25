@@ -52,6 +52,11 @@ One task = **one line**:
 - **goal** — ≤12 words, the outcome. Not the plan.
 - **detail link** — design doc, accepted ADR block, or task/evidence record. Required once
   detail exists; omit only for a one-line task that needs none.
+- **A paragraph is the size criterion for a task** in `TASKS.md`, project or local. A task whose
+  description does not fit one — how to reproduce it, data, a longer statement — is one file,
+  `<DEV>/tasks/<id>-<name>.md` (a local task: `<DEV>/local/tasks/<id>-<name>.md`), linked as its
+  detail. It holds the task's own description, not a decision (an ADR block) or an open design
+  question (a design doc).
 
 A short multi-line note under an entry is allowed **only** for a genuine loose end that has no
 other home yet — and that is a signal to write the design doc, not to grow the entry.
@@ -79,34 +84,38 @@ scheme applies to the live backlog and every new task. Don't renumber history.
 
 `<DEV>` is the dev-layer root, `<AITNA_ROOT>` (default `_aitna`).
 Everything a session resumes from lives under `<DEV>/local/`, **gitignored by one rule**. Raw
-material read once (another model's review, an export, a work area) lives in `.tmp/` at the project
-root, also ignored and inside the project so no outside permission is needed; nothing a successor
-needs to resume from is kept there.
+material read once (another model's review, an export, a work area) lives in `.tmp/` at the
+project root, also ignored and inside the project so no outside permission is needed; nothing a
+task or a plan needs is kept there.
 
 ```
 <DEV>/TASKS.md  TASKS_ARCHIVE.md        tracked project index
 <DEV>/local/TASKS.md  TASKS_ARCHIVE.md  local index — the same row format
-<DEV>/local/handoff/<id>-<name>/        work set aside for another session: HANDOFF, RESUME, prompts
-<DEV>/local/plans/<id>-<name>/          a plan's working document and the material it rests on
-<DEV>/local/tasks/<id>-<name>/          the material of a task not set aside: BRIEF, EVIDENCE, probes/, reports
+<DEV>/tasks/<id>-<name>.md              a project task's description, when it does not fit a paragraph
+<DEV>/local/tasks/<id>-<name>.md        a local task's description, when it does not fit a paragraph
+<DEV>/local/plans/<id>-<name>.md        a plan: one working document
+<DEV>/local/handoff/<id>-<name>/        a self-sufficient kit: HANDOFF, RESUME, prompts, and the evidence,
+                                        probes and reports a task or a plan needs beyond its file
 <DEV>/skills/                           development skills, apart from the shipped root `skills/`
 ```
 
 - **Id.** A local row's id is the project id when the row is the local companion of a project task
   (its status stays in the project row), otherwise `_T<n>`: `_T` marks the row local, `<n>` counts
   over the local index and its archive and is never reused. A slug is not an id. The id leads the
-  folder name, `local/<kind>/<id>-<name>/`, where `<name>` is a short kebab name of its subject,
-  and every such folder has a row; local rows are exempt from the typed id, which governs the
-  project backlog. A folder is placed by its purpose — set aside, a plan, or
-  a task's material — so its use is read from its place.
+  name, `local/<kind>/<id>-<name>`, where `<name>` is a short kebab name of its subject, and every
+  plan, task file and handoff folder has a row; local rows are exempt from the typed id, which
+  governs the project backlog. A handoff is a session package with a row of its own (status
+  `handoff`, token `members`) and stands on its own: the material a task's file or a plan's one
+  document cannot hold lives in it. It carries no copy of the local rows or the plan until the
+  owner says a transfer to another machine needs them.
 - **Direction.** A local record may reference project material. A tracked file never references a
   path under `local/`: a tracked reference is dead on every other machine. Promoting a local record
   is refused while a local reference remains in it. Once `verify` carries the check, a tracked file that
   links or names a path under `local/` is an error; a local slug written in prose cannot be
   checked and is a rule only.
-- **No per-task folder in the project tree.** A task's requirements are its row and its detail
-  link; its materials are local. A finished local task stays in the local archive until the owner
-  prunes it.
+- **No per-task folder in the project tree.** A task's requirements are its row, a paragraph, or
+  one description file linked from the row; its working materials are local. A finished local task
+  stays in the local archive until the owner prunes it.
 - **Handoff.** The line of a work package set aside for another session goes to the local index with
   the status `handoff`, which only the local index has; a project row is not changed by it.
 - **Resume prompts** name paths from the project root only.

@@ -2,7 +2,7 @@
 
 Status: **layout accepted** by [ADR 0023](../adr/0023-project-documents-layout.md); this
 document keeps the analysis, the alternatives and the migration steps. Owner: [A64](../../meta/TASKS.md)
-(records and owner documents), [C159](../../meta/TASKS.md) (path accessor), [C160](../../meta/TASKS.md)
+(records and owner documents), [C159](../../meta/TASKS.md) (path accessor), [C160](../../meta/TASKS_ARCHIVE.md)
 (akmon's own move). The move of akmon's records is done in the working copy; the accessor has
 not started.
 

@@ -123,8 +123,9 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
 - [0022 — The local layer, its index, and the plan](0022-local-layer-index-and-plans.md)
   — one ignored `<DEV>/local/` for everything a session resumes from (`meta/local/` in akmon), raw
   material in `.tmp/`; references run local → project only; a local index in the project row format
-  whose local-only rows carry an id `_T<n>`, material grouped in `handoff/`, `plans/`, `tasks/`
-  folders, no per-task folder in the tracked tree; a plan is a goal-bearing working document
+  whose local-only rows carry an id `_T<n>`, a plan is one file in `plans/`, a task one row or
+  one `tasks/` file, a handoff kit in `handoff/` holds the rest; no per-task folder in the tracked
+  tree; a plan is a goal-bearing working document
   with S.M.A.R.T. criteria, not a queue and not kept in history; pipelines own the facts, two skills
   (`plan`, `roadmap`) own the procedure, development skills in `<DEV>/skills/`; the dev root is
   resolved by code. Supersedes 0021/D01's path and 0021/D02's line home in part; amends 0002's scope.

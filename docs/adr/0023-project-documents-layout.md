@@ -11,7 +11,7 @@
 - **References:** [design: document layout](../design/document-layout.md) (analysis, alternatives,
   migration steps) · [0022](0022-local-layer-index-and-plans.md) (the local layer and the dev root) ·
   [pipelines/tasks.md](../../pipelines/tasks.md) · live tasks [A64](../../meta/TASKS.md), [C159](../../meta/TASKS.md),
-  [C160](../../meta/TASKS.md), [C157](../../meta/TASKS.md).
+  [C160](../../meta/TASKS_ARCHIVE.md), [C157](../../meta/TASKS.md).
 
 ## Context
 

@@ -8,7 +8,9 @@ the compensation.
 The entries are the recurring ways agents in this project have misjudged what their evidence
 supports. They behave like human decision biases:
 - they are systematic;
-- they survive good intentions and explicit rules — a text rule against them did not help
+- A22's tested claim-calibration clause did not improve on the full standard on Claude or
+  Codex, and its worked-examples arm did not improve on the full standard on Codex. This does
+  not show that text rules generally fail or that the tested additions have no effect
   ([ADR 0019 D01](../adr/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule));
 - they differ between models and can change with each new model.
 
@@ -55,8 +57,8 @@ With the full akmon standard in context, failures fell on every model measured:
 - Claude: 1 of 6 on each model (M83);
 - Codex: 2 of 9 and 7 of 12 (M96).
 
-Neither text addition improved on that (ADR 0019 D01). The distortion that best survives the
-standard is CD4.
+Neither tested addition improved on the full standard (ADR 0019 D01). Among the measured
+Codex cases under that arm, CD4/P2-4 was the only case that failed on both models (2/3 each).
 - **Codex.** P2-4 failed 2 of 3 under `B_full` on both models, and failed under every arm. Almost
   every failure was one element: the check the agent requested could not show whether the hooks
   run. CD1 on `gpt-5.6-luna` came next, at 2 of 3. CD5 on `gpt-6-astra` disappeared under every

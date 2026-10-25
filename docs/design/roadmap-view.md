@@ -43,7 +43,7 @@ trunk's first branch, and the part consumers feel most, so it ships in the same 
 Read by code from `TASKS.md` rows, never typed by hand:
 
 - **sources**: the rows of the project index and of the local index ([ADR 0022](../adr/0022-local-layer-index-and-plans.md) D04). A local row's id is `_T<n>` and carries no role letter; a plan row lists its `members`. A tracked output is drawn from the project index only.
-- **node**: id, gist (the title), label (at most three words, see [the focus line](#the-focus-line)), status, kind letter, role derived from the letter.
+- **node**: id, gist (the title), label (short, about three words, see [the focus line](#the-focus-line)), status, kind letter, role derived from the letter.
 - **hard edge** `after`: from `blocked (after X)`, `waits for X`, and `after X` in a row. A done
   node never blocks.
 - **soft edge** `relates`: from `relates X` and from in-text task ids; it never blocks.
@@ -61,8 +61,12 @@ An edge a program cannot read from the row is a **proposal**, not a fact: see th
 ## The focus line
 
 A trunk the owner cannot place is lost after the first break, and so is a model after a compaction.
-Both outputs therefore open with one line, **goal › now › next**, each a label of at most three
-words, for example `roadmap skill › hand-run trunk › plan-graph ADR`:
+Both outputs therefore open with one line, **goal › now › next**, each a short label, about three
+words and not a hard cap, for example `roadmap skill › hand-run trunk › plan-graph ADR`:
+
+- **The whole view is compact: it fits one screen and reads at a glance.** Brevity of the labels
+  serves that, not the other way round. A trunk longer than the screen is cut at a whole node and
+  the overflow is named (`+12 more`); the height is set in the tool's data file and a test pins it.
 
 - **goal**: the explicit pick; **now**: the active frontier nodes of the trunk, the critical path
   first; **next**: the first node that finishing *now* unblocks.
@@ -70,6 +74,11 @@ words, for example `roadmap skill › hand-run trunk › plan-graph ADR`:
   guardrail's rule for a code in a reply, applied to the tool's own output.
 - The line is in the digest, a few tokens, because the digest is cut from the graph and the label
   is a node field; the view adds nothing the digest lacks.
+- **No recovery or attention benefit is claimed.** [ADR 0019 D08](../adr/0019-collaboration-guidance-from-a22.md#d08--close-the-cold-resumption-pilot-without-a-new-rule)
+  closed the cold-resumption pilot: in three offline cases ordinary records sufficed and a pointer
+  corrected no failure (M177–M179), and owner attention saved is unmeasured. The line is the
+  owner's requirement for the owner's view; its worth for the model is part of the with-and-without
+  digest measurement, not an assumption.
 
 Where the label comes from is open (**D-FOCUS-LABEL**):
 
@@ -151,6 +160,37 @@ Today every skill under `skills/` is shipped (`bin/sync.py` skill sources), so w
 skill lives and how `sync` leaves it out is an open decision (D-SKILL-PROCESS), to be settled
 with A55.
 
+**Three skills, one boundary** ([ADR 0022](../adr/0022-local-layer-index-and-plans.md) D05 splits the first two):
+
+| Skill | When it runs | Does | Never does |
+|---|---|---|---|
+| `plan` (A61, user skill) | once, with the owner, when a change spans several tasks | forms the plan document and the member rows: initial statement, target, criteria, the dependencies the graph is read from | compute the trunk or the frontier |
+| `roadmap` (C154, user skill) | every session where a plan graph exists | reads the digest and the focus line, picks the next trunk step, keeps refinements attached, opens reports with the focus line | write the plan or an edge |
+| skill authoring (A58, process skill in `meta/skills/`) | when a skill is made or changed | the process both others are written under (A56's points), distilled from the work | restate either skill's procedure |
+
+The tool (C152) is the single owner of the graph computation; both user skills link the facts in
+design-flow § Plans and pipelines/tasks.md instead of repeating them. Order: A58's first pass makes
+C154; A61 is its second product and is written after A58 is accepted, so the process is applied
+twice and never hand-built twice.
+
+What the A22 results bound ([ADR 0019](../adr/0019-collaboration-guidance-from-a22.md), M83–M85, M96–M98),
+each a constraint and none a proof that a skill helps:
+
+- **State only what the standard in context does not.** The full standard measurably reduced
+  failures, while one added clause or two worked examples did not on top of it (M84, M97). Each
+  skill therefore links the pipelines for the facts and carries only its procedure, and an
+  instruction is added one at a time and measured.
+- **The measured failure is a missing or wrong verification ground, not a lost thread.** With the
+  project's verification command absent, models took shown CI output as verification (M85). So the
+  plan names, for each frontier node, the check that shows it done, and "done" is never read from a
+  claim.
+- **A generic small-model judge did not detect these failures** (M98, recall 0.23–0.58). The
+  annotation delegate stays a gated proposal layer (C153), never a checker.
+- **A22 supports neither splitting `plan` from `roadmap` nor merging them;** the split rests on
+  their different triggers (ADR 0022 D05). Each skill's benefit is a hypothesis until its evals run,
+  and consumer-side guidance moved models less than guidance about the project itself (M83,
+  confounded), so the evals include a case without the skill.
+
 Authoring principles carried into A58, on top of A56's eight points:
 
 - **Minimal sufficiency** is the first criterion: a skill, a reference, a tool or a generated file
@@ -186,9 +226,13 @@ branches                      ├── C153 annotation proposals ────�
 - **D-SKILL-PROCESS** — the location half is answered: development skills live in `<DEV>/skills/`
   ([ADR 0022](../adr/0022-local-layer-index-and-plans.md) D05), `meta/skills/` in akmon, apart from the shipped
   `skills/`; how a harness discovers them is A62.
-- **D-FOCUS-LABEL** — where the three-word label of a node comes from (table above).
-- **D-PLAN-GOAL** — how a plan row names its main goal: `members` lists the scope and does not
-  say which member is the goal, while [design-flow § Plans](../../pipelines/design-flow.md#plans) has the owner name one.
+- **Decided (D-FOCUS-LABEL):** until the hand run, labels are authored in the plan document and a
+  node it does not name prints the first three title words marked `default`; the source is settled
+  afterwards, with D-EDGE-FIELD. The length is short, not exactly three words; compactness of the
+  whole view is the requirement.
+- **Decided (D-PLAN-GOAL):** the hand run proposes how a plan row names its main goal: `members`
+  lists the scope and does not say which member is the goal, while
+  [design-flow § Plans](../../pipelines/design-flow.md#plans) has the owner name one.
 - **D-EDGE-FIELD** — whether a structured dependency field is ever added to the task row; not
   needed for the trunk, because the unparsed list measures how much the free-text parse misses.
 - **D-A59-REQ** — the requirements for the sessions branch.

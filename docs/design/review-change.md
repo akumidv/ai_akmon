@@ -61,7 +61,7 @@ Ref names, API caps and CLI JSON shapes are verified per forge and recorded in
 
 ## Pack
 
-Written under the gitignored local layer, `<DEV>/local/tasks/<id>-<name>/review-<n>/`, where `<id>` is the
+Written under the gitignored local layer, `<DEV>/local/handoff/<id>-<name>/review-<n>/`, where `<id>` is the
 local row's id (a project id, or `_T<n>` for a local-only row)
 ([ADR 0022/D01](../adr/0022-local-layer-index-and-plans.md#d01--the-local-layer-and-the-raw-material-home)), ordinal per
 `common/report_path.py`, so the previous round survives for a re-review.

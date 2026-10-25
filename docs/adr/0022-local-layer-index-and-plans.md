@@ -11,8 +11,11 @@
   its own, `handoff`, for work set aside in the local index (D03); and that the roadmap tool reads the
   project index plus the local index (D04).
 - **Decided by the owner afterwards:** material under `<DEV>/local/` is grouped by purpose in three
-  folders, `handoff/`, `plans/` and `tasks/` (**D01**), and a local-only row's id is `_T<n>`, a prefix
-  that marks it local and keeps its number apart from the project backlog's (**D03**).
+  places, `handoff/`, `plans/` and `tasks/` (**D01**); a plan is one document and a handoff is a
+  self-sufficient kit that holds the material a task or a plan needs beyond its own file (**D01**); a
+  task whose description does not fit a paragraph is one file, `<DEV>/tasks/<id>-<name>.md` in the
+  project and `<DEV>/local/tasks/<id>-<name>.md` locally (**D03**); and a local-only row's id is
+  `_T<n>`, a prefix that marks it local and keeps its number apart from the project backlog's (**D03**).
 - **Not part of this record:** where project documents live against the dev layer is
   [0023](0023-project-documents-layout.md).
 - **Owner:** akuminov@gmail.com
@@ -54,7 +57,8 @@ steps of one task (A39) and a trunk over backlog rows with a goal (the roadmap d
 2. A reference may point from local to project material and never the other way; a record that
    still holds a local reference is not promoted (**D02**).
 3. Local work has an index in the project row format; a local-only row's id is `_T<n>`, and a task
-   has no folder in the project tree. A deferral line goes to the local index (**D03**).
+   has no folder in the project tree, only a row and, when a paragraph is too small, one file. A
+   deferral line goes to the local index (**D03**).
 4. A plan is a working document for an architectural or product change that needs several tasks and
    states its target and S.M.A.R.T. criteria. It is not a queue and it is not kept in history;
    decisions found in it become ADR or design records that it links (**D04**).
@@ -69,12 +73,16 @@ steps of one task (A39) and a trunk over backlog rows with a goal (the roadmap d
   name is narrower than the content now that "plan" is an entity.
 - **A tracked per-task folder in the project tree as the promoted twin of local material.** Rejected by
   the owner: materials of a task are local by nature, and the task requirements already live in the
-  row and its detail link.
+  row and its detail link. What the project keeps for a task is at most one description file, which
+  is the task's statement and not its material (**D03**).
+- **A folder per task or per plan for its material.** Replaced by the owner's rule: a plan is one
+  document and a task is a row or one file; what either needs beyond that goes into the handoff kit,
+  so there is one kind of folder, not three.
 - **A slug or a bare letter as the local id.** A slug is the shape of a question or decision code
   and says nothing of a task's age; a letter collides with the type letters of 0002. `_T<n>` marks
   the row local and counts on its own.
 - **One flat `local/<key>/` folder.** Rejected by the owner: folders of unclear purpose pile up; the
-  three kind folders say what a folder is for.
+  the three places say what each is for.
 - **A plan as a new kind of index.** A second notation and a second parser. The members of a plan
   stay rows of the existing indexes and the graph is read from their dependencies; the plan document
   itself is not an index. The roadmap tool reads both indexes (**D04**).
@@ -117,16 +125,20 @@ records, resume prompts, briefs, evidence and probes. It is gitignored by one ru
 Material is grouped by purpose, so a folder's use is read from its place and not guessed from its
 name:
 
-| Folder | Holds |
+| Place | Holds |
 |---|---|
-| `<DEV>/local/handoff/<id>-<name>/` | work set aside for another session: `HANDOFF.md`, `RESUME.md`, prompts |
-| `<DEV>/local/plans/<id>-<name>/` | a plan's working document and the material it rests on |
-| `<DEV>/local/tasks/<id>-<name>/` | the material of a task that is not set aside: briefs, evidence, probes, reports, review packs |
+| `<DEV>/local/handoff/<id>-<name>/` | a self-sufficient kit for a task or a plan: `HANDOFF.md`, `RESUME.md`, prompts, and the evidence, probes, reports, briefs and review packs the task or plan needs beyond its own file |
+| `<DEV>/local/plans/<id>-<name>.md` | a plan: one working document |
+| `<DEV>/local/tasks/<id>-<name>.md` | a local task's description, when it does not fit a paragraph (**D03**) |
 
-`<id>` is the id of the row that owns the folder: a project id when the row is the local companion
-of one backlog task, `_T<n>` otherwise (**D03**), never a date. `<name>` is a short kebab name of what
-the folder is about (`_T3-athlos-0021`), so a listing reads without opening the index; the row's id
-stays `<id>` alone.
+A plan and a task each stay one file. Material beyond that is not given a folder of its own: it goes
+into the handoff kit of the task or plan, which carries no copy of a local row or of the plan unless
+the owner says a transfer to another machine needs it. Delivery between machines is the owner's.
+
+`<id>` is the id of the row that owns the file or folder: a project id when the row is the local
+companion of one backlog task, `_T<n>` otherwise (**D03**), never a date. `<name>` is a short kebab name of what
+the file or folder is about (`_T3-athlos-0021`), so a listing reads without opening the index; the
+row's id stays `<id>` alone.
 
 Raw material read once — another model's review, an export, a history-rewrite work area — lives in
 `.tmp/` at the project root, gitignored, inside the project so an agent needs no permission outside
@@ -169,14 +181,17 @@ names a question or a decision (`D-TOPIC`), which are short-lived, while a local
 many sessions and its number must not meet a project id. A companion row carries the status of the
 local work only, never a copy of the project status. The local index has one status token more than
 the project index, `handoff`: work set aside for another session, to be resumed from its package.
-`deferred` keeps one meaning in both indexes, a deliberate not-now. Every `local/<kind>/<id>-<name>/` folder
-has a row, written by whatever creates the folder — the C150 helper for a package, the `plan` skill
-for a plan, the author by hand otherwise; C156 warns on a folder without one. `_T<n>` carries no
-role letter, so [0002](0002-task-id-convention.md), which types the project backlog's ids, is
+`deferred` keeps one meaning in both indexes, a deliberate not-now. Every `handoff/` folder,
+`plans/` file and `tasks/` file has a row, written by whatever creates it — the C150
+helper for a package, the `plan` skill for a plan, the author by hand otherwise; C156 warns on a file
+or folder without one. `_T<n>` carries no role letter, so [0002](0002-task-id-convention.md), which types the project backlog's ids, is
 narrowed in scope: it does not govern local rows and no role is derived from `_T`.
 
-A task has no folder in the project tree. Its requirements are the row and its detail link;
-materials are local. A finished local task is kept, marked done in the local archive, and pruned at
+A task has no folder in the project tree. Its requirements are the row, a paragraph, and its detail
+link; a description that does not fit a paragraph (how to reproduce, data, a longer statement) is one
+file, `<DEV>/tasks/<id>-<name>.md` in the project (tracked) and `<DEV>/local/tasks/<id>-<name>.md`
+for a local row, linked as the row's detail. That file is the task's own description, not a decision
+or an open design question. Materials are local, in the handoff kit. A finished local task is kept, marked done in the local archive, and pruned at
 the owner's discretion.
 
 Deferring ([0021/D02](0021-athlos-deferred-work-packages-and-handoff.md#d02--backlog-line-and-composed-resume-prompt))
