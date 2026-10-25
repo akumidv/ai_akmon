@@ -77,14 +77,14 @@ definition (here), an agent its incarnation in a project (`_aitna/agents/`).
 Does this artifact help DEVELOP this project — or USE it from outside?
 ├─ DEVELOP ─► common to all my projects, or specific to this one?
 │            ├─ common       → SHARED → _aitna/akmon/   (this submodule)
-│            └─ this project  → LOCAL  → _aitna/{skills,tools,memory,agents}/
+│            └─ this project  → LOCAL  → _aitna/{skills,tools,memory,agents,local}/
 └─ USE from outside ► USAGE → root skills/ (+ tools/ where applicable)
 ```
 
 | Layer | Job | Consumer | Lives in |
 |---|---|---|---|
 | **SHARED** | assist development in general | any of my projects | `_aitna/akmon/` |
-| **LOCAL** | assist development of *this* project | this repo's developer | `_aitna/{skills,tools,memory,agents}/` |
+| **LOCAL** | assist development of *this* project | this repo's developer | `_aitna/{skills,tools,memory,agents,local}/` |
 | **USAGE** | assist *using* what the project exposes | a downstream project | root `skills/` (+ `tools/`) |
 
 SHARED+LOCAL point inward (building this repo); USAGE points outward.
@@ -92,6 +92,19 @@ SHARED+LOCAL point inward (building this repo); USAGE points outward.
 `_aitna/` is the **default** dev-layer root, not a hard-coded literal: a project may relocate it
 by declaring `AITNA_ROOT` (a project-root-relative path, e.g. `tools/ai`); akmon then mounts at
 `<AITNA_ROOT>/akmon` and the tooling derives every path from it. Unset → `_aitna`.
+
+The LOCAL layer also holds the working state of a session: `<DEV>/local/`, gitignored, indexed in
+the project row format and never referenced from a tracked file
+([tasks](pipelines/tasks.md#the-local-layer)). `<DEV>` is the dev-layer root, `<AITNA_ROOT>`.
+Development skills live in `<DEV>/skills/`, apart from the shipped root `skills/`.
+
+**Where project documents live.** Lasting knowledge — what a newcomer reads to learn how the project
+is built and why — lives in the project's `docs/`: decisions in `docs/adr/`, living designs in
+`docs/design/`, beside the architecture and the use documentation. The process and what it found
+live in `<DEV>`: the backlog, the roadmap, reviews, measurements, experiments, benchmarks. A
+document may cite that evidence; the evidence is not a document to read first. The two paths are
+resolved by code, so a project that already keeps its decisions elsewhere keeps them there and,
+once the accessor ships, declares it in `<AITNA_ROOT>/.akmon.toml`.
 
 ## 3. Role vs agent — the DEVELOP triad
 

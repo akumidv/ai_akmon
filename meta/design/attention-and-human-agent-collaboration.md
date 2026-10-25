@@ -123,16 +123,30 @@ behavioral experiment, or automatic acceptance. A22 is active; C86 remains block
 The mission and decision-record carrier are accepted in ADR 0015 and ADR 0016;
 the broader interaction behavior remains under evaluation.
 
-**Next action: prepare the fresh-task and cold-resumption pilot.** Claim calibration
-is disposed as no new rule in [ADR 0019 D01](../decisions/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule) on T2/T3 evidence. The decision-ground routing P3 packet completed its A qualification, but failed the pre-registered pair-coverage floor (M176); the owner accepted [ADR 0019 D07](../decisions/0019-collaboration-guidance-from-a22.md#d07--stop-the-current-p3-comparison-at-its-qualification-floor). B/C was not run, so P3 gives no clause-benefit or equivalence verdict. The routing clause remains outside operative guidance. A22 is active; C86 remains blocked.
+**Next action: dispose of A22's remaining scope.** Claim calibration is disposed
+as no new rule in [ADR 0019 D01](../decisions/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule) on T2/T3 evidence. The decision-ground routing P3 packet completed its A qualification, but failed the pre-registered pair-coverage floor (M176); the owner accepted [ADR 0019 D07](../decisions/0019-collaboration-guidance-from-a22.md#d07--stop-the-current-p3-comparison-at-its-qualification-floor). B/C was not run, so P3 gives no clause-benefit or equivalence verdict. The routing clause remains outside operative guidance. The owner closed the cold-resumption pilot without a new rule or live transfer in [ADR 0019 D08](../decisions/0019-collaboration-guidance-from-a22.md#d08--close-the-cold-resumption-pilot-without-a-new-rule). A22 is active; C86 remains blocked.
 
-The next design output is the [fresh-task and cold-resumption pilot draft](a22-fresh-task-resumption-pilot.md), built from the [paired traces and acceptance questions](attention-frame-comparison.md#paired-traces-for-a-pilot). It must test transfer to fresh owner-facing work and recovery of goal, accepted rationale, limitations, unresolved work and next authorized action after a pause, without repeated intake. Agree to its scope, budget and stop conditions before execution. T2's delivery/project-match question remains in [A30](../TASKS.md); claim-evidence failures under the current standard remain in [A32](../TASKS.md). Do not restart the completed claim-calibration comparison or the terminal P3 packet.
+The [fresh-task and cold-resumption pilot record](a22-fresh-task-resumption-pilot.md) covers selected offline recovery cases. It found no pointer recovery gain; the accepted disposition stops this branch before live transfer. T2's delivery/project-match question remains in [A30](../TASKS.md); claim-evidence failures under the current standard remain in [A32](../TASKS.md). Do not restart the completed claim-calibration comparison or the terminal P3 packet.
+
+### Proposed overall A22 disposition — owner choice pending
+
+**Recommendation:** close the current A22 evaluation without a further operative
+interaction rule or C86 implementation. The evaluated claim-calibration additions
+did not clear their pre-set benefit margin ([D01](../decisions/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule)); the P3 decision-ground routing comparison stopped at its qualification floor before B/C, so it supplies no benefit or equivalence verdict ([D07](../decisions/0019-collaboration-guidance-from-a22.md#d07--stop-the-current-p3-comparison-at-its-qualification-floor)); and the selected cold-resumption cases showed no pointer recovery gain ([D08](../decisions/0019-collaboration-guidance-from-a22.md#d08--close-the-cold-resumption-pilot-without-a-new-rule)). These grounds support retaining current guidance now, not a general claim that the candidate behaviours cannot help. A30 still owns the T2 delivery/project-match confound and A32 the remaining claim-evidence failures; neither becomes completed by this disposition.
+
+The owner can accept that bounded no-implementation outcome, or name a specific
+remaining interaction change worth a new prospective comparison. A further P3
+comparison needs its own design and authorization under D07; a new resumption
+experiment needs its own scope under D08. Until the owner chooses, A22 remains
+active and C86 blocked. Acceptance of the no-implementation outcome would be
+recorded in ADR 0019, then A22 and C86 can be closed with C86 explicitly marked
+as no implementation required, not as shipped work.
 
 The first applied A22 refinement is [decision work and the former D2 register](decision-workflow-and-d2-register.md).
 It records two recent Claude episodes and an adjacent Codex review, the actual SHA
 guarantee, competing ADR practices, and the separation of open design work, accepted
 decisions, and implementation evidence now accepted in ADR 0016. The decision-record
-carrier is settled; broader A22 behavioral comparison and pilot results remain open.
+carrier is settled; the broader A22 disposition remains open.
 The proposed `Frame` extensions — intended-use framing, accessible-fact investigation
 before asking, focused questions for owner-only knowledge, and reuse of known
 answers without premature menus — remain A22 design candidates. Compare them with the
@@ -1008,7 +1022,8 @@ cards and historical candidate assessments. The external review motivated an AP2
 refinement, not a reset of discovery. The claim-calibration comparisons T1 and T2
 ran under their own agreed scope and budget. Decision-ground routing reached a
 complete A qualification and stopped at its frozen floor (M176, ADR 0019 D07);
-the fresh owner-facing pilot and cold resumption remain. Any further model-running
+the cold-resumption pilot has completed its selected offline screen and is disposed
+without live transfer under ADR 0019 D08. Any further model-running
 experiment has its own explicit execution scope and budget. This plan launches neither Codex nor Claude and authorizes no new
 operative interaction rules. A conversational pilot does not require a new runtime
 framework; it also does not authorize tool use outside the underlying task.
@@ -1017,7 +1032,8 @@ framework; it also does not authorize tool use outside the underlying task.
 
 These are the original ordered design outputs, not a second task-status board.
 Steps 1–3 are historical; step 4 stopped at P3's qualification floor under ADR 0019
-D07. The current preparation begins with step 5.
+D07; step 5 completed its selected offline screen under ADR 0019 D08. Step 6
+remains open for A22's broader scope.
 
 1. **Prepare the claim-calibration packet.** In the comparison document, capture the
    baseline text supplied to the subject — quoted from the current operative files, with
@@ -1041,10 +1057,12 @@ D07. The current preparation begins with step 5.
    inspectable fact/owner priority and consequential/reversible pairs, including useful
    early menus. Do not bundle its clause into step 3. Preparation can proceed while
    an unrelated external verification gap is open; execution has its own agreed scope.
-5. **Check fresh-task use and cold resumption.** Test whether the existing decision/task
-   record preserves rationale and unresolved work. A repeated owner assessment of the
-   same learned case is not independent evidence. Record observed rework separately
-   from hypothetical avoided cost; unavailable attention/time/token measures stay unknown.
+5. **Check fresh-task use and cold resumption.** The selected offline cases tested
+   whether existing decision/task records preserve rationale and unresolved work.
+   No pointer recovery gain was observed; live transfer was not run under D08.
+   A repeated owner assessment of the same learned case is not independent evidence.
+   Record observed rework separately from hypothetical avoided cost; unavailable
+   attention/time/token measures stay unknown.
 6. **Dispose of the selected scope.** Present evidence for a minimal change, an
    examples-only/no-new-rule outcome, or further bounded investigation. Record owner
    acceptance of significant commitments through the existing ADR process. Give C86

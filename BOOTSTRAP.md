@@ -65,6 +65,12 @@ When the user asks "attach akmon", the agent:
    ```
    and, if the archetype exports USAGE (e.g. `package`), the root `skills/`.
 
+   **Where the project's own records go.** Decisions go to `docs/adr/` and living designs to
+   `docs/design/`; the backlog, reviews, measurements and experiments stay in `_aitna/`. Create
+   neither docs folder at attach: the first record creates its folder. If the project already keeps
+   a decision log elsewhere (`docs/decisions`, `doc/adr`), keep it there and, once the path accessor
+   ships, declare the path in `_aitna/.akmon.toml` instead of moving it.
+
    **Pin the test environment (`[test].runner`).** Some agent tooling needs Python with `pytest`
    (e.g. the akmon unit tests, or any future deps-bearing tool). **Use what the project already
    has; only build a venv when there is none.** Decide the runner once, here, and record it in the
@@ -339,6 +345,10 @@ development and is read only at attach/verify/bump time.
 # dev-layer venv (non-Python projects; provisioned in §A step 5)
 _aitna/.venv/
 
+# local layer (index, plans, handoffs, session state) and raw material — never committed
+_aitna/local/
+.tmp/
+
 # akmon model routing — per-user/per-session artifacts (never committed)
 .claude/model-routing.local.json
 .claude/model-routing.log
@@ -350,7 +360,11 @@ _aitna/.venv/
 
 `_aitna/memory/` is **committed** (shared project memory). `_aitna/akmon/` is the
 submodule. `_aitna/.venv/` (if provisioned) is **local-only** — a per-checkout dev tool
-environment, never committed.
+environment, never committed. `_aitna/local/` is **local-only** for the same reason: the local index, the
+plan of a change in progress and the handoff to the next session (brief, resume prompt, evidence,
+probes) live there and never reach the index, and no tracked file links into it. `.tmp/` holds raw
+material read once. Anything meant to *stay* is not local material — a decision goes to an ADR block,
+a design to `design/`, remaining work to `TASKS.md`.
 
 **Generated pointer commit policy.** Files written by
 `python3 _aitna/akmon/bin/sync.py` are deterministic pointers, not sources of truth.

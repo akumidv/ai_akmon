@@ -95,18 +95,20 @@ used elsewhere). `shared` vs `local` is a **development-only** distinction.
 = the shared (SHARED) subset of that · everything else (`docs/`, root `skills/`) = the
 product and its use (USAGE).
 
-**Dev docs — split "understand the project" from "the development process" (recommended).**
+**Dev docs — split "understand the project" from "the development process".**
 Two kinds of dev documentation are easy to conflate; place them by their reader:
 
 | Reader need | Examples | Home |
 |---|---|---|
-| **Understand the project** (a new developer onboarding) | architecture/requirements, accepted decisions (ADRs), a project overview | `docs/dev/` (project docs) |
-| **Run the development process** (how *we* build it) | dev-process rules, verification ledgers, in-progress design concepts (living concept + rejected branches + design backlog) | `_aitna/` (the dev layer) |
+| **Understand the project** (a new developer onboarding) | accepted decisions (ADRs), living designs, architecture, requirements, a project overview | `docs/` — `docs/adr/`, `docs/design/`, the rest flat (project docs) |
+| **Run the development process** (how *we* build it) | backlog and roadmap, reviews, measurements, experiments, benchmarks, dev-process rules | `_aitna/` (the dev layer) |
 
-The test: *does a newcomer read it to learn how the project is built, or is it how we
-manage building it?* The first is stable knowledge (project docs); the second is process
-(the dev layer). A small project may keep both in `docs/dev/`; the split earns its keep once
-the process docs grow. (This is a guideline, not a hard archetype requirement.)
+The test: *does a newcomer read it to learn how the project is built, or is it a record of how
+we managed and measured the building?* The first is stable knowledge (project docs); the second
+is process and evidence (the dev layer). A document may cite evidence; evidence is not a document
+a newcomer needs first. Settled by [ADR 0023](decisions/0023-project-documents-layout.md); the
+analysis is [design: document layout](design/document-layout.md). akmon applies it to its own
+records after C160; until then they are in `meta/decisions/` and `meta/design/`.
 
 **Scope boundary — what this tree does NOT cover (yet).** The tree spans DEVELOP and USE.
 It does **not** cover a third mode, **OPERATE** — an agent that *acts in the world at

@@ -1,0 +1,7 @@
+## C98 handoff
+
+C98 is **active, with the design decision open**. Its goal is to make the gate’s section anchor recognize the material that review and architect replies actually contain. C25’s Claude Stop-hook mechanism, 3/2 count floors, and hold-once behavior are already accepted; the trigger choice belongs to C98. [C98 task](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:201) · [C25 task](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:70) · [design §9.5](/tmp/akmon-a22-resumption-pilot/meta/design/model-routing.md:681)
+
+The old replay found **zero holds** across 1,139 main-chain turns because the counted section never opened. The Unicode word split is fixed. The working-language clause is also recorded: reply section headings use English, while prose follows the owner’s language. The replay corpus predates that clause, so its zero holds do **not** settle the replacement trigger. [C98 task](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:201) · [guardrail](/tmp/akmon-a22-resumption-pilot/guardrails/_common.md:11)
+
+The owner’s open choices are to widen the role-specific heading anchor, count whole-turn items, or trigger from the role declaration without counting. **Next authorized step:** repeat the replay on turns written under the language clause, then return the measured result to design-flow for the owner’s choice. No new trigger is selected in the records. This investigation made no edits and ran no tests. [C98 task](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:201)

@@ -46,8 +46,7 @@ Read by code from `TASKS.md` rows, never typed by hand:
 - **hard edge** `after`: from `blocked (after X)`, `waits for X`, and `after X` in a row. A done
   node never blocks.
 - **soft edge** `relates`: from `relates X` and from in-text task ids; it never blocks.
-- **goal**: an explicit pick of one or more task ids, the same pick A21's first axis and A39's
-  local plan select on. The tool never guesses a goal.
+- **goal**: an explicit pick of one or more task ids, the same pick A21's first axis selects on. The tool never guesses a goal.
 - **trunk**: the goal's transitive `after`-closure over not-done nodes, ordered topologically,
   with the longest chain by effort marked as the critical path.
 - **frontier**: trunk nodes whose hard prerequisites are all done — what can start now.
@@ -67,11 +66,16 @@ to it. Rules:
 
 - The model never rewrites the parsed graph. It returns a **proposal diff** — missing edges, an
   impact weight, an effort class — into a sidecar the orchestrator accepts or rejects row by row.
-- The proposal is made by the lightest tier, as a named delegate with a fixed role: a
-  **secretary** (working name; `scribe` and `clerk` are the alternatives — D-ROLE-NAME). It is a
-  task kind of its own, `plan-annotate`, routed to the worker tier. Its remit is not specific to
-  this tool: it is the pre-set helper for any management bookkeeping, athlos work packages
-  included; an implementer role is the fallback if a separate delegate buys nothing.
+- **No standing role.** A persona with a name implies authority that the head session keeps (a
+  tier changes who drafts, never who decides; ADR 0021/D04 and D06), and every other bookkeeping
+  duty it could take is already carried without a model: status comes from the backlog, the work
+  package fields and git; the athlos resume prompt is composed by a tool (ADR 0021/D02); watching a
+  running session on the owner's request is the existing `summarize` kind on a transcript.
+- **Only if the measurement earns it,** the lightest tier gets a task kind of its own,
+  `plan-annotate`, routed to the worker tier, with a spec named for what it does, as the other
+  delegates are: `k_annotator`. The gate is the share of task-id mentions the deterministic parse
+  leaves without an edge (the `unparsed` list, measured by the hand run S1): few, and C153 is
+  deleted; many, and the kind is added.
 - **Priorities** are two numbers per node: *impact* on the goal's acceptance and on technical
   debt (1–5), and *effort* (S, M, L). Impact for a node on the trunk is derived by code from the
   graph (how many nodes it unblocks, whether it is on the critical path); the model adds only
@@ -144,14 +148,14 @@ Goal: **a `roadmap` skill, shipped, whose digest and view come from code.**
 ```
 trunk   A50 accepted ──▶ C152 tool ──▶ N17 delivery probe ──▶ A58 process skill ──▶ C154 roadmap skill
                               │                                      ▲
-branches                      ├── C153 secretary proposals ──────────┤ (returns: weights feed the digest)
+branches                      ├── C153 annotation proposals ────────┤ (returns: weights feed the digest)
                               ├── A59 sessions view ─────────────────┘ (returns: same renderer)
                               └── A56 closes after C142, C141 ───────▶ checklist reused by A58
 ```
 
 ## Open
 
-- **D-ROLE-NAME** — the working name of the annotation delegate.
+- **Decided:** no standing role (a "secretary"); if the C153 gate passes, the spec is `k_annotator` on task kind `plan-annotate`.
 - **D-SKILL-PROCESS** — where a process skill lives and how it stays out of a consumer's tree.
 - **D-EDGE-FIELD** — whether a structured dependency field is ever added to the task row; not
   needed for the trunk, because the unparsed list measures how much the free-text parse misses.

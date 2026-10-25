@@ -14,6 +14,9 @@ __pycache__/
 __pycache__
 .pytest_cache
 /.tmp
+
+# akmon's dev root is meta/, so its local layer is meta/local/ (everything a session resumes from).
+/meta/local/
 .ipynb_checkpoints
 scripts/_*
 /data
@@ -38,8 +41,6 @@ node_modules/
 *.env
 !*.env.example
 
-# Local backlog / review scratch
-TASKS-local.md
 
 
 # akmon runs its own hooks on this repository (C99), so it ignores what it tells a

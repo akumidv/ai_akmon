@@ -111,6 +111,28 @@ recording it before agreement.
 - **Design backlog** — separate from the implementation backlog; same index format and the same
   no-dates rule ([tasks](tasks.md)).
 
+## Plans
+
+A **plan** is the working document for an architectural or product change that needs work across
+several tasks. It holds, in order:
+
+1. **Initial statement** — the problem as it was posed.
+2. **Target state** — the change to the project the plan heads for, in one paragraph.
+3. **Criteria** — the target stated as S.M.A.R.T.: specific, measurable, achievable, relevant and
+   time-bound (a milestone, not a date).
+4. **Graph** — the member tasks and their dependencies: a trunk first (the smallest set that meets
+   the criteria), then refinements that return to it ([MODEL.md](../MODEL.md) § Mission and
+   priorities). What can run in parallel is read from the graph.
+5. **Decisions and open questions** — each with its code ([Decision requests](#decision-requests)).
+
+Tasks run one after another with no target are not a plan; that is a handoff. A set of backlog
+tasks becomes a plan when the owner names a main goal among them and the tasks are formed into a
+graph. A work that decomposes is raised as a product task in `TASKS.md`; the plan stays a **local
+working document** ([tasks](tasks.md#the-local-layer)), is not kept in project history and is not
+promoted. A decision it contains is first written as an ADR block or a design doc, and the plan
+links it. After the work lands, the result is the changes themselves — archived rows, decision and
+design records.
+
 ## Decision requests
 
 Label every request for an owner decision with a bold, uppercase mnemonic code such as

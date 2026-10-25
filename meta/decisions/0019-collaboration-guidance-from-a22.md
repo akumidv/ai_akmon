@@ -102,10 +102,10 @@ roles or pipelines. The existing standard in context remains the guidance for cl
 because it measurably changes this behaviour and neither addition improved on it on either
 vendor. C86 implements nothing for claim calibration.
 
-The block covers claim calibration only. Decision-ground routing, the owner-facing pilot and
-cold resumption are separate A22 steps and still open. The block makes no choice about
-non-textual means of catching the remaining failures, such as a deterministic check or an
-automated audit. That question is open design work.
+The block covers claim calibration only. Decision-ground routing and cold resumption
+have separate dispositions below; the broader A22 scope remains open. The block makes
+no choice about non-textual means of catching the remaining failures, such as a
+deterministic check or an automated audit. That question is open design work.
 
 ### D02 — P3 resource and attempt accounting
 
@@ -261,6 +261,27 @@ change this packet's floor or add post-result repeats. A further clause comparis
 would need a separate prospective design and authorization. Continue A22 with
 design of the fresh-task and cold-resumption pilot. This decision authorizes
 preparation, not pilot execution, provider calls or an operative rule.
+
+### D08 — Close the cold-resumption pilot without a new rule
+
+`Decision-ID: ADR-0019/D08`
+
+**Owner accepted the cold-resumption branch disposition.** In the selected offline
+[A44](../reviews/a22-cold-resumption-codex-gpt-6-sol-pilot.md),
+[C98](../reviews/a22-c98-cold-resumption-codex-gpt-6-sol-pilot.md), and
+[C33](../reviews/a22-c33-cold-resumption-codex-gpt-6-sol-pilot.md) pairs, both
+arms recovered the task in each case (M177–M179). No pointer corrected an
+observed recovery failure. A44 breached its resource and model-routing controls;
+C98 and C33 used descendant-inclusive gates and simple-model readers, but their
+different reader counts do not isolate a token-cost effect. The small selected
+offline set establishes neither equivalence nor saved owner attention.
+
+Close this pilot branch at the completed offline screen. Retain ordinary repository
+discovery without a standing resume-point rule, and do not run a live transfer on
+the current evidence because no recovery gap was demonstrated. The
+[pilot record](../design/a22-fresh-task-resumption-pilot.md) remains evidence, not
+operative guidance. This decision does not close A22 as a whole or unblock C86;
+any new resumption mechanism or experiment needs its own prospective scope.
 
 ## Rejected alternatives
 

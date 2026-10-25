@@ -1,0 +1,29 @@
+{
+  "worktree": "/tmp/akmon-a22-resumption-pilot",
+  "head": "f3f5235f3aa4e6a58ed8237fd295597e3df034cd",
+  "runtime": "/tmp/a22-resumption-c98-runtime",
+  "root_model": "gpt-6-sol",
+  "reader_model": "gpt-6-luna",
+  "cli_version": "codex-cli 0.162.1",
+  "reasoning_effort": "medium",
+  "first_arm_gate": 1200000,
+  "pair_gate": 2500000,
+  "arms": {
+    "current": "C98_CURRENT.md",
+    "pointer": "C98_POINTER.md"
+  },
+  "source_sha256": {
+    "AGENTS.md": "09b24f6f191b14d1f438e89b56b09e4e9611c5a40afdf44780609dee6573f525",
+    "README.md": "09e737ec15ad1c5eddc11c9aabd30712f4d3c73e7c0c9cc82e6577454f22bf18",
+    "MODEL.md": "3e5b1433094da5618c63805a30305a4d00e1d46beedc0177304808fe3ad42f18",
+    "meta/TASKS.md": "e9b54996a65f707e0e3d3304e5f434b39bb6006e73293779f7363906440487cb",
+    "meta/design/model-routing.md": "7c8aa47dde26c7f641e29f93a23f8e129d192dab66fa38d75c258f71714a0cff",
+    "guardrails/_common.md": "31c7965eae77c2d638d504001be29c45055437ad1635481252d85369bffcd1b4"
+  },
+  "packet_sha256": {
+    "C98_CURRENT.md": "b460246cce52d1d2527391cb5e7e9256ba66be96476da672374213640a04ecea",
+    "C98_POINTER.md": "48456fd26b67b98d6d9cec0a60d1449d381a2b4e1c0515ed69ddfec2fe1d24c8",
+    "C98_KEY.md": "bd417ab7c9cc6fedd299e6601972520283973d3a4973fe3c0624d6634f851052",
+    "run_c98_pair.py": "6d09e2a6d394e3db3d4877f92a3bac1209d553d47d289d58c457cf3b536695a5"
+  }
+}

@@ -1,0 +1,19 @@
+# Answer X
+
+## C98 handoff
+
+C98 is **active, with the design decision open**. Its goal is to make the gate’s section anchor recognize the material that review and architect replies actually contain. C25’s Claude Stop-hook mechanism, 3/2 count floors, and hold-once behavior are already accepted; the trigger choice belongs to C98. [C98 task](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:201) · [C25 task](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:70) · [design §9.5](/tmp/akmon-a22-resumption-pilot/meta/design/model-routing.md:681)
+
+The old replay found **zero holds** across 1,139 main-chain turns because the counted section never opened. The Unicode word split is fixed. The working-language clause is also recorded: reply section headings use English, while prose follows the owner’s language. The replay corpus predates that clause, so its zero holds do **not** settle the replacement trigger. [C98 task](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:201) · [guardrail](/tmp/akmon-a22-resumption-pilot/guardrails/_common.md:11)
+
+The owner’s open choices are to widen the role-specific heading anchor, count whole-turn items, or trigger from the role declaration without counting. **Next authorized step:** repeat the replay on turns written under the language clause, then return the measured result to design-flow for the owner’s choice. No new trigger is selected in the records. This investigation made no edits and ran no tests. [C98 task](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:201)
+# Answer Y
+
+## C98 handoff
+
+- **Goal and state:** C98 investigates why the accepted gate audit count trigger never catches real role output. It is **active**, with measurement complete and the design decision open. The existing replay found zero held turns across 18 sessions and 1,139 main-chain turns; seven recent review files also counted zero. [C98 task record](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:201)
+- **Settled ground:** The count floors and structural counting rule remain part of the gate design. The Unicode heading split has been fixed, and the working-language rule now calls for English section headings with prose in the owner’s language. The Claude Stop hook has been shown to hold a turn; that establishes the mechanism, not that this anchor catches ordinary reports. [Gate design](/tmp/akmon-a22-resumption-pilot/meta/design/model-routing.md:681) · [Language rule](/tmp/akmon-a22-resumption-pilot/guardrails/_common.md:11) · [C25 record](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:70)
+- **Open choice and evidence limit:** The owner has not chosen whether to revise the heading anchor and role pairing, count whole turns, or trigger from the role declaration. The measured corpus predates the English-heading rule, so it cannot establish how that rule changes real counts. Counting whole turns did fire in the old replay, but could demand an audit where there are no findings to audit. Codex gate wiring has a separate live-probe dependency. [C98 task record](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:201) · [C128 record](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:110)
+- **Next authorized action:** When turns written under the heading rule are available, rerun the recorded replay and bring its result through design-flow before selecting an anchor change. This investigation made no selection or change. The separate fresh-resumption pilot remains a draft and grants no execution authority. [C98 task record](/tmp/akmon-a22-resumption-pilot/meta/TASKS.md:201) · [Pilot execution gate](/tmp/akmon-a22-resumption-pilot/meta/design/a22-fresh-task-resumption-pilot.md:40)
+
+The checkout was clean; no files were edited and no tests were run.

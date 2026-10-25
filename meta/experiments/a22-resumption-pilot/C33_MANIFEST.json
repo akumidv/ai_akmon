@@ -1,0 +1,33 @@
+{
+  "worktree": "/tmp/akmon-a22-resumption-pilot",
+  "head": "f3f5235f3aa4e6a58ed8237fd295597e3df034cd",
+  "runtime": "/tmp/a22-resumption-c33-runtime",
+  "root_model": "gpt-6-sol",
+  "reader_model": "gpt-6-luna",
+  "cli_version": "codex-cli 0.162.1",
+  "reasoning_effort": "medium",
+  "first_arm_gate": 1200000,
+  "pair_gate": 2500000,
+  "arms": {
+    "current": "C33_CURRENT.md",
+    "pointer": "C33_POINTER.md"
+  },
+  "source_sha256": {
+    "AGENTS.md": "09b24f6f191b14d1f438e89b56b09e4e9611c5a40afdf44780609dee6573f525",
+    "README.md": "09e737ec15ad1c5eddc11c9aabd30712f4d3c73e7c0c9cc82e6577454f22bf18",
+    "MODEL.md": "3e5b1433094da5618c63805a30305a4d00e1d46beedc0177304808fe3ad42f18",
+    "meta/TASKS.md": "e9b54996a65f707e0e3d3304e5f434b39bb6006e73293779f7363906440487cb",
+    "meta/MEASUREMENTS.md": "b8200771af8e066c991b672766c35c1a62a6a9827d6aaafd404877cf489a2f1b",
+    "meta/design/model-routing.md": "7c8aa47dde26c7f641e29f93a23f8e129d192dab66fa38d75c258f71714a0cff",
+    "guardrails/_common.md": "31c7965eae77c2d638d504001be29c45055437ad1635481252d85369bffcd1b4",
+    "meta/decisions/0006-orchestrator-detection-corridor-context-pressure.md": "8456cf007906e5d7fc6a2899199e9aac9725962b718bb5f58b264f121a2e6dc9",
+    "meta/reviews/architecture-audit.md": "efac78de3fb65852a18781e541512c7d04f647a5fcd2e32e2f5c2eafed4995c2"
+  },
+  "packet_sha256": {
+    "C33_CURRENT.md": "9b9bcf8c23a34ee99a5bdab300b7fca44e37d66c99a80c24278523c88b5e4745",
+    "C33_POINTER.md": "041134ae154ce88e8b794b8980e7db1ce3b67c9871c43e6966461ba17b74d417",
+    "C33_KEY.md": "2fb4633f971ce4c9747b9087ea41b6f9928ce3ea6322bd4cee51c8397289b744",
+    "run_c33_pair.py": "3ed2e68064d37c4776793a6c6ce1ded80af30d12e8f2e876cf00c111492eda5e",
+    "run_c98_pair.py": "6d09e2a6d394e3db3d4877f92a3bac1209d553d47d289d58c457cf3b536695a5"
+  }
+}

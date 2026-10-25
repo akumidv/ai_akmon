@@ -38,6 +38,7 @@ One task = **one line**:
   `[#…]` is provenance, not the id. Distinct from the trailing `[detail](link)`.
 - **status** — exactly one of `active | blocked | deferred | done`. `blocked` = waiting on an
   external dependency; `deferred` = a deliberate not-now (still a real intent, just parked).
+  The local index adds `handoff` — set aside for another session, resumed from its package.
 - **a status must be checkable.** "complete in the tree", "done locally" and their variants are not
   statuses: they describe an uncommitted working copy nobody else can verify, and they outlive the
   code they claim — a task can end up asserting finished work that no commit ever carried and whose
@@ -67,9 +68,49 @@ scheme applies to the live backlog and every new task. Don't renumber history.
   `tools/tasks/archive.py` (`--tasks <path>`; `--done <id>…` closes named entries then sweeps,
   `--apply` to write) — it works on **any** `TASKS.md` in this format, akmon's or a consuming
   project's `_aitna/TASKS.md`.
-- **Detail** — lives in `design/` docs, thematic `decisions/` ADR blocks, or task/evidence
+- **Detail** — lives in `docs/design/` docs, thematic `docs/adr/` ADR blocks, or task/evidence
   records. `TASKS.md` links; it does not duplicate.
+- **`<DEV>/local/`** — the ignored local layer: the local index and the materials of local work,
+  owned by [The local layer](#the-local-layer) below. It is input, not a record: what local work
+  concludes becomes a `docs/design/` doc, an ADR block, or a `TASKS.md` row.
 - An optional **Status** block at the top of `TASKS.md` is fine: ≤5 lines, current focus only.
+
+## The local layer
+
+`<DEV>` is the dev-layer root, `<AITNA_ROOT>` (default `_aitna`).
+Everything a session resumes from lives under `<DEV>/local/`, **gitignored by one rule**. Raw
+material read once (another model's review, an export, a work area) lives in `.tmp/` at the project
+root, also ignored and inside the project so no outside permission is needed; nothing a successor
+needs to resume from is kept there.
+
+```
+<DEV>/TASKS.md  TASKS_ARCHIVE.md        tracked project index
+<DEV>/local/TASKS.md  TASKS_ARCHIVE.md  local index — the same row format
+<DEV>/local/handoff/<id>-<name>/        work set aside for another session: HANDOFF, RESUME, prompts
+<DEV>/local/plans/<id>-<name>/          a plan's working document and the material it rests on
+<DEV>/local/tasks/<id>-<name>/          the material of a task not set aside: BRIEF, EVIDENCE, probes/, reports
+<DEV>/skills/                           development skills, apart from the shipped root `skills/`
+```
+
+- **Id.** A local row's id is the project id when the row is the local companion of a project task
+  (its status stays in the project row), otherwise `_T<n>`: `_T` marks the row local, `<n>` counts
+  over the local index and its archive and is never reused. A slug is not an id. The id leads the
+  folder name, `local/<kind>/<id>-<name>/`, where `<name>` is a short kebab name of its subject,
+  and every such folder has a row; local rows are exempt from the typed id, which governs the
+  project backlog. A folder is placed by its purpose — set aside, a plan, or
+  a task's material — so its use is read from its place.
+- **Direction.** A local record may reference project material. A tracked file never references a
+  path under `local/`: a tracked reference is dead on every other machine. Promoting a local record
+  is refused while a local reference remains in it. Once `verify` carries the check, a tracked file that
+  links or names a path under `local/` is an error; a local slug written in prose cannot be
+  checked and is a rule only.
+- **No per-task folder in the project tree.** A task's requirements are its row and its detail
+  link; its materials are local. A finished local task stays in the local archive until the owner
+  prunes it.
+- **Handoff.** The line of a work package set aside for another session goes to the local index with
+  the status `handoff`, which only the local index has; a project row is not changed by it.
+- **Resume prompts** name paths from the project root only.
+- **A plan** is a local working document, not a record: [design-flow § Plans](design-flow.md#plans).
 
 ## When to write
 
@@ -99,7 +140,7 @@ Reusable *knowledge* found mid-task goes to `_aitna/memory/` via the learn loop,
 
 | Kind of detail | Lives in | TASKS.md does |
 | --- | --- | --- |
-| Open design question and alternatives | `design/` doc or task detail | link it |
+| Open design question and alternatives | `docs/design/` doc or task detail | link it |
 | Accepted architecture / math / data commitment and rationale | the owning thematic ADR block | link its stable ID/anchor |
 | Implementation conformance / missing measurements / residuals | the implementing or investigating task's evidence | link the evidence and remaining work |
 | Step-by-step plan | the design doc's touch-list | link it |
@@ -114,7 +155,7 @@ dependency and remaining work visible without a parallel decision-status ledger.
 Do **not** write dates in `TASKS.md`, `TASKS_ARCHIVE.md`, design docs, or ADRs. The commit
 history is the authoritative timeline — a date in the prose is redundant, goes stale, and burns
 tokens. Need "when did X land"? `git log`. (This rule is akmon-wide, not task-only; design
-docs and `decisions/` ADRs follow it too — order ADRs by their number, not a date.)
+docs and `docs/adr/` ADRs follow it too — order ADRs by their number, not a date.)
 
 ## Thresholds (enforced by `verify.py`)
 

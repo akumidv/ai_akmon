@@ -42,8 +42,15 @@ the shipped block states it directly: Codex does not expand nested `@` imports i
 ## Project contract
 
 - Start with `README.md`, `MODEL.md`, and `meta/TASKS.md`; architecture decisions live in
-  `meta/decisions/` and living designs in `meta/design/`.
+  `meta/decisions/` and living designs in `meta/design/`. These two move to `docs/adr/` and
+  `docs/design/` after C159 and C160 ([ADR 0023](meta/decisions/0023-project-documents-layout.md));
+  reviews, measurements, experiments and the backlog stay in `meta/`. Until the move, use the
+  paths above.
 - Record non-trivial implementation work in `meta/TASKS.md` before code.
+- **`<DEV>` is `meta/`.** akmon has no `_aitna/`; its dev-layer root is `meta/`, so its local layer
+  is `meta/local/` and its development skills would live in `meta/skills/`
+  ([ADR 0022](meta/decisions/0022-local-layer-index-and-plans.md)). The root is to be resolved by
+  code (C157); this line tells a reader.
 - To look for alternatives to a design choice, or to check a decision against how other projects
   solved it, open [`meta/reviews/alternatives/`](meta/reviews/alternatives/README.md). It is
   material for akmon's own development, not part of what a consumer receives.

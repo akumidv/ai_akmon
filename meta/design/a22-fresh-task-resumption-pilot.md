@@ -1,4 +1,14 @@
-# A22 fresh-task and cold-resumption pilot — draft
+# A22 fresh-task and cold-resumption pilot
+
+The offline screen covers [A44](../reviews/a22-cold-resumption-codex-gpt-6-sol-pilot.md),
+[C98](../reviews/a22-c98-cold-resumption-codex-gpt-6-sol-pilot.md) and
+[C33](../reviews/a22-c33-cold-resumption-codex-gpt-6-sol-pilot.md). Both arms
+recovered each case (M177–M179). A44 breached its resource controls; C98 and
+C33 used automated descendant-inclusive gates and simple-model readers.
+No pointer corrected an observed recovery failure. The owner accepted
+[ADR 0019 D08](../decisions/0019-collaboration-guidance-from-a22.md#d08--close-the-cold-resumption-pilot-without-a-new-rule):
+close this pilot branch without a standing resume-point rule or live transfer.
+A22's broader disposition remains open.
 
 ## Question and boundary
 
@@ -16,7 +26,7 @@ Use two conditions on the same authorized task state:
 - **Current practice:** the agent receives the normal repository entry point and the task request, then reads the relevant task, decision and evidence records as needed.
 - **Resume point:** the same inputs plus one short pointer assembled only from those records. It names the goal, accepted choice and reason, unresolved material issue, evidence limit, and next authorized action, with links to the owning records. It gives no new authority or private answer key. The pointer is an evaluation input, not a new standing report or source of truth.
 
-The first deliverable is one complete cold-resumption comparison on a held-out task state, with the two answers and their evidence trace. Expand only after it is interpretable. A later transfer check uses one genuine fresh owner-facing task and a new session boundary; no known defect is planted in real work.
+The first deliverable was one complete cold-resumption comparison on a held-out task state. The later C98 and C33 cases tested changed evidence and acceptance boundaries. A live transfer check would use one genuine fresh owner-facing task and a new session boundary only if an offline recovery gap warranted it; none was observed here.
 
 ## Case selection and controls
 
@@ -37,10 +47,28 @@ Compare the two conditions on these observable failures before weighing effort. 
 
 If current practice passes and the pointer adds no useful recovery, retain the smaller contract. If the pointer improves recovery without a material regression, propose the smallest reusable form and seek a separate operative decision. If both fail, revise the premise or the record quality before adding a skill, hook or questionnaire. Any material false closure stops a candidate from being recommended.
 
+## Pilot disposition and continuation
+
+The three offline pairs found no recovery advantage for a standing pointer.
+Their small selected sample cannot prove equivalence or owner attention saved.
+The owner accepted retention of ordinary repository discovery and closure of
+this pilot branch without a new rule or live transfer. This closes the
+cold-resumption branch only; A22's broader disposition and any other
+interaction scope remain open.
+
+For task-level continuation in this pilot, the [runner](../experiments/a22-resumption-pilot/run_c98_pair.py)
+turns a frozen task case into a sequential two-arm run: it checks source and
+packet hashes, clean HEAD, model routing, all descendant usage and stopping
+gates before advancing. A planned next case that passes these controls can
+run without another routine confirmation. Ask the owner for an open design
+choice, missing owner-only ground, work affecting another project, or a new
+experimental branch outside the agreed question. A failed gate stops the
+dependent call and is reported with retained evidence.
+
 ## Alternatives and execution gate
 
 - **Current practice only** is cheapest and may already recover enough context, but cannot measure the pointer's contribution.
 - **A long handoff or mandatory questionnaire** may carry more detail, but adds owner and maintenance cost before a demonstrated gap. Keep it out of the first comparison.
-- **Recommended draft:** the bounded two-condition comparison above, followed by one live transfer check only if the offline evidence warrants it.
+- **Accepted disposition:** no standing pointer or live transfer on the completed offline screen; retain the existing records and report their limits.
 
-This is a design proposal. Before execution, review exact case dossiers, source and answer-key separation, model/harness pins, blinded evaluation, the session and token budget, stopping conditions, and the live task's authority. Record the accepted scope separately. Neither [ADR 0019 D07](../decisions/0019-collaboration-guidance-from-a22.md#d07--stop-the-current-p3-comparison-at-its-qualification-floor) nor the old P3 resource ceiling authorizes a pilot call. A22 stays active and C86 blocked until the owner accepts a final outcome and any implementation scope.
+For any new case, review exact dossiers, source and answer-key separation, model/harness pins, blinded evaluation, the session and token budget, stopping conditions, and any live task's authority before execution. Neither [ADR 0019 D07](../decisions/0019-collaboration-guidance-from-a22.md#d07--stop-the-current-p3-comparison-at-its-qualification-floor) nor the old P3 resource ceiling applies to a new pilot call. A22 stays active and C86 blocked until the owner accepts a final outcome and any implementation scope.

@@ -2,7 +2,7 @@
 
 Architecture Decision Records for the **akmon standard itself** (SHARED — they travel with
 the submodule into every consuming project). This is the standard's analogue of a project's
-`docs/dev/decisions/`: a consuming project records its *own* domain/architecture ADRs there, and
+`docs/adr/`: a consuming project records its *own* domain/architecture ADRs there, and
 inherits akmon's ADRs here.
 
 Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipelines/tasks.md) §No dates):
@@ -120,3 +120,17 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   waking a large session; one `deferred` backlog line and a composed resume prompt; the pressure
   notice names the package before `/compact` (amends 0006/D03's advice text only). D05 and four open
   requests (handle transfer, the frame word, the middle holder, the briefs' trigger) stay unaccepted.
+- [0022 — The local layer, its index, and the plan](0022-local-layer-index-and-plans.md)
+  — one ignored `<DEV>/local/` for everything a session resumes from (`meta/local/` in akmon), raw
+  material in `.tmp/`; references run local → project only; a local index in the project row format
+  whose local-only rows carry an id `_T<n>`, material grouped in `handoff/`, `plans/`, `tasks/`
+  folders, no per-task folder in the tracked tree; a plan is a goal-bearing working document
+  with S.M.A.R.T. criteria, not a queue and not kept in history; pipelines own the facts, two skills
+  (`plan`, `roadmap`) own the procedure, development skills in `<DEV>/skills/`; the dev root is
+  resolved by code. Supersedes 0021/D01's path and 0021/D02's line home in part; amends 0002's scope.
+- [0023 — Where project documents live](0023-project-documents-layout.md)
+  — lasting knowledge in `docs/` (`docs/adr/` for decisions, `docs/design/` for living designs, flat);
+  process and evidence (tasks, roadmap, reviews, measurements, experiments, benchmarks, local layer) in
+  `<DEV>`; one code accessor resolves the paths, detects an existing project directory and takes an
+  override in `.akmon.toml`; akmon migrates its own `meta/decisions` and `meta/design` after the
+  dev-root accessor, in one commit.

@@ -151,6 +151,8 @@ owner needs. The named labor is the third member, not a synonym for either of th
 
 `Decision-ID: ADR-0021/D01`
 
+*Superseded in part by [ADR-0022/D01](0022-local-layer-index-and-plans.md#d01--the-local-layer-and-the-raw-material-home): the package record is `<DEV>/local/handoff/<id>-<name>/HANDOFF.md`, not `local/packages/<task-id>/`; the ignore rule and the guard are C155 and C156, not one C150 step.*
+
 The unit of handoff is a **work package**: one bounded batch a fresh session can take on alone, with
 its own resume record at `<AITNA_ROOT>/local/packages/<task-id>/HANDOFF.md` — under the local root
 A39 names, beside the plan it links and never copies. The batch's raw material sits in the same
@@ -173,6 +175,8 @@ is a falsification of the field set, not a reason to write a longer record.
 ### D02 — Backlog line and composed resume prompt
 
 `Decision-ID: ADR-0021/D02`
+
+*Superseded in part by [ADR-0022/D03](0022-local-layer-index-and-plans.md#d03--the-local-index-and-keys): the `deferred` line is appended to the local index, not to the project backlog.*
 
 Deferring appends **one** line to the project backlog in the
 [backlog format](../../pipelines/tasks.md) with status `deferred` — the entry is the index, the
