@@ -178,6 +178,10 @@ const _DATE_RE = new RegExp(`(?<![${_WORD}])[0-9]{4}-[0-9]{2}-[0-9]{2}(?![${_WOR
 // A backlog entry's `·`-separated fields (pipelines/tasks.md): id, title, status, goal, detail.
 // Reading the status field needs at least the first three.
 const _MIN_STATUS_FIELDS = 3;
+
+// A CommonMark code fence opens with at most three leading spaces (C158); four makes the line
+// indented code, whose own backticks are literal text and must join the inline-code pairing.
+const _MAX_FENCE_INDENT = 3;
 const _DELEGATION_DEFAULT_RE = new RegExp(
   `(?<![${_WORD}])delegation[${_SPACE}]+is[${_SPACE}]+the[${_SPACE}]+default(?![${_WORD}])`,
   "i",
@@ -255,6 +259,56 @@ function _stripChars(text, chars) {
     end -= 1;
   }
   return text.slice(start, end);
+}
+
+/**
+ * The marker of a code-fence line (three backticks or three tildes, at most three leading spaces),
+ * else null. Named without backticks in this comment on purpose: a code span opened here swallows
+ * the `@param` tag below it and tsc loses the parameter type.
+ * @param {string} line
+ * @returns {string|null}
+ */
+function _fenceMarker(line) {
+  const body = line.replace(/^ +/, "");
+  if (line.length - body.length > _MAX_FENCE_INDENT) {
+    return null;
+  }
+  for (const marker of ["```", "~~~"]) {
+    if (body.startsWith(marker)) {
+      return marker;
+    }
+  }
+  return null;
+}
+
+/**
+ * Inline-code spans of a Markdown file, paired per line and never inside a fenced code block.
+ *
+ * A fence's own backticks must not join the pairing (C158): paired over the whole file, a closed
+ * fence leaves a span boundary in the next prose line, so the inline-code path that follows the
+ * block is read as prose and passes the check unseen.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function _inlineCodeSpans(text) {
+  /** @type {string[]} */
+  const spans = [];
+  let openFence = null;
+  for (const line of text.split("\n")) {
+    const marker = _fenceMarker(line);
+    if (openFence === null) {
+      if (marker === null) {
+        for (const match of line.matchAll(_INLINE_CODE_RE)) {
+          spans.push(match[1]);
+        }
+      } else {
+        openFence = marker;
+      }
+    } else if (marker === openFence) {
+      openFence = null;
+    }
+  }
+  return spans;
 }
 
 /**
@@ -752,7 +806,8 @@ export class Verifier {
     for (const match of text.matchAll(_DEV_NAME_RE)) {
       found.push(`${relative} → names ${match[0]}`);
     }
-    const spans = [...text.matchAll(_LINK_RE), ...text.matchAll(_INLINE_CODE_RE)].map((match) => match[1]);
+    const linkSpans = [...text.matchAll(_LINK_RE)].map((match) => match[1]);
+    const spans = [...linkSpans, ..._inlineCodeSpans(text)];
     for (const span of spans) {
       const path = pyStrip(span) !== "" ? pySplit(span)[0].split("#")[0] : "";
       if (this.data.dev_path_tokens.some((token) => path.includes(token))) {

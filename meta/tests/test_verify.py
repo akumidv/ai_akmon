@@ -315,6 +315,25 @@ def test_dev_path_in_inline_code_is_isolation_error(tmp_path):
     assert any("path meta/reviews/x.md" in m for m in _isolation_errors(verifier))
 
 
+def test_dev_path_after_a_code_fence_is_isolation_error(tmp_path):
+    """C158: a fence's own backticks must not join the inline-code pairing.
+
+    Paired over the whole file, a closed fence leaves a span boundary in the next prose line, so
+    the dev-tree path in the inline code that follows the block is read as prose and passes the
+    check unseen.
+    """
+    root = _make_project(tmp_path)
+    _use_doc(root).write_text(
+        "# architect\n\nThe gate runs:\n\n```bash\nakmon verify\n```\n\nIt reads `meta/reviews/x.md` first.\n",
+        encoding="utf-8",
+    )
+    verifier = verify.Verifier(root)
+    verifier.run()
+    errors = _isolation_errors(verifier)
+    assert any("path meta/reviews/x.md" in m for m in errors), errors
+    assert not any("path bash" in m for m in errors), errors
+
+
 def test_dev_path_in_markdown_link_is_isolation_error(tmp_path):
     root = _make_project(tmp_path)
     _use_doc(root).write_text("# architect\n\nSee [the record](../../decisions/0001-x.md).\n", encoding="utf-8")

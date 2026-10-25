@@ -1,9 +1,11 @@
 # 0022 — The local layer, its index, and the plan
 
-- **Status:** Accepted for **D01–D06**. The owner decided each choice in session: the local root,
+- **Status:** Accepted for **D01–D08**. The owner decided each choice in session: the local root,
   akmon's symmetric dev root, the raw-material home, the direction of references between local and
   project material, the nature and lifecycle of a plan, the split between a pipeline and two skills,
-  the home of development skills, and that a project's dev root is resolved by code. The form of
+  the home of development skills (**D05**) and which skills those are (**D07**), the id a piece of
+  material carries (**D08**), and that a project's
+  dev root is resolved by code. The form of
   that code is not part of this record (**D06**, task **C157**). Implementation has not started.
 - **Confirmed by the owner afterwards:** the three provisions the architect derived — the id
   exemption of local rows and the narrowing of 0002 (D03), a companion row carrying no copy of its
@@ -236,7 +238,8 @@ the owner, reading every session.
 
 Development skills — those that serve how a project is developed — live in `<DEV>/skills/` (akmon:
 `meta/skills/`), apart from the shipped root `skills/`. This fixes where a process skill lives
-(the location half of A58's open request); how a harness discovers them is A62.
+(the location half of A58's open request); how a harness discovers them is A62, and which skills are
+development skills is **D07**.
 
 ### D06 — The dev root is resolved by code
 
@@ -248,3 +251,54 @@ accessor resolves akmon's own repository to `meta/`. The form of the declaration
 repository is recognized, how a relocated root is stated, how the fallback behaves when discovery
 fails — is the work of C157 and is not decided here; it records its own decision block before code.
 `AGENTS.md` states the fact for readers.
+
+### D07 — Which skills are development skills
+
+`Decision-ID: ADR-0022/D07`
+
+D05 fixes where development skills live. Reading it alone invites the wrong question — whether akmon's
+own `release` and `stats-digest` belong in `<DEV>/skills/` because both describe *developing*
+something. **The test is whose work the skill serves, not what it is about.**
+
+- A skill a consumer's session can carry out in its own repository is a **user skill**: it lives in root
+  `skills/` and is selected per A55. `release` (land a package, a tag or a pin bump) and `stats-digest`
+  (the owner's work statistics) are user skills. akmon consuming them itself is not a second class —
+  the same way akmon runs its own hooks and its own `verify`.
+- A skill that names what only this repository's development has — its tracker addresses and endpoints,
+  publishing to PyPI and npm, the standard-tree build — is a **development skill**: `<DEV>/skills/`,
+  never shipped.
+- A development skill **specializes** a shipped one instead of forking it: an akmon publisher links
+  `release` for the procedure and adds the two publish routes of its own. The D05 layering of pipeline
+  facts under skill procedure applies between skills as well as under them.
+
+The class a skill belongs to is read from the skill (its `description` and its A55 applicability
+condition), not from which directory it happens to sit in; A62 keeps the discovery design, and which of
+the candidate development skills get written, and under what names, is the owner's.
+
+### D08 — The id a material carries is its owner id
+
+`Decision-ID: ADR-0022/D08`
+
+D01 names a file or folder by the id of the row that owns it, and D03 gives a row a project id only when
+it is the companion of a project task. A kit under a plan is neither, so the two sentences together
+issue it a fresh `_T<n>` — which is how plan `_T5` came to keep its kit under the name `_T7`, and what
+made the pair hard to tie together in a listing. The owner's intent is the other way, and is now the
+rule: **material carries the id of the row it serves.**
+
+- A kit, a probe, a report or an evidence file is `<id>-<name>`, where `<id>` is the row it **serves**:
+  the plan's `_T<n>`, or the project id of the task it serves. `<name>` says which piece it is, so
+  several kits stand under one id — `handoff/_T5-roadmap-view/`, `handoff/_T5-sessions-branch/` — and a
+  listing ties each back to its plan without opening the index.
+- Uniqueness moves from the id to the **path**: one id may lead several names, and what does not repeat
+  is the pair `<id>-<name>`. D03's rule that a local number is never reused stands — it speaks of rows,
+  and a kit under a row no longer asks for one.
+- A kit owned by a row takes **no row of its own**: the row it serves lists it under a new token, `kits`.
+  The status `handoff` keeps its D03 meaning for work set aside for another session. A package that
+  serves no row keeps its own `_T<n>` and its own row — and a record is not a row, so a kit held for an
+  ADR is named by its own number and puts the record in `<name>` (`_T3-athlos-0021`), linking the record
+  from the row's `relates`.
+- What follows for the code that enforces this: **C156** warns on a folder whose leading id names no
+  row, not on a folder with no row of its own; **C150**'s helper writes the `kits` entry of the row it
+  packs for; **C152** reads `kits` beside `members`, and a tracked output still carries no local row
+  (**D02**). The token belongs to the row format, so `pipelines/tasks.md` § Id states it; this block
+  decides it.

@@ -19,7 +19,7 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
-DESIGN = REPO / "meta/design/claim-evidence-checks.md"
+DESIGN = REPO / "docs/design/claim-evidence-checks.md"
 RAW = Path("/home/ai/workspace/akmon-a22")
 DEFAULT_ARTIFACTS = Path(tempfile.gettempdir()) / "a32-e2-codex-20260926-artifacts"
 SOURCE_COUNT = 191

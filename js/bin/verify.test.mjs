@@ -1330,6 +1330,25 @@ test("isolation: roles/*.md, skills/**/*.md, tools/**/*.md and the top-level fil
   });
 });
 
+test("isolation: a closed code fence does not shift the inline-code pairing (C158)", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    const tree = posix.join(scratch, "tree");
+    put(
+      tree,
+      "roles/a.md",
+      "# architect\n\nThe gate runs:\n\n```bash\nakmon verify\n```\n\nIt reads `meta/reviews/x.md` first.\n",
+    );
+    const verifier = new Verifier(root);
+    verifier.standardRoot = tree;
+    verifier.checkUseSurfaceIsolation();
+    const [[severity, , message]] = of(verifier, "isolation.use-surface");
+    assert.equal(severity, "error");
+    const parts = message.slice(message.indexOf("): ") + 3).split("; ");
+    assert.deepEqual(parts, ["standard tree:roles/a.md → path meta/reviews/x.md"]);
+  });
+});
+
 test("isolation: a clean tree is ok, and a standard tree that is not a directory is silent", async () => {
   await withScratch((scratch) => {
     const root = project(scratch);

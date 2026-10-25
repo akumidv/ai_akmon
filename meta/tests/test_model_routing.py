@@ -1958,6 +1958,8 @@ def test_agents_data_pins_the_structure_and_characteristic_texts():
         "unlabelled_fanout_directive",
         "second_opinion_unavailability",
         "unpinnable_model",
+        "opinion_skip_reasons",
+        "opinion_ladder_unknown",
         "compute_binding_warnings",
         "role_matrix_warning",
         "role_matrix_directive",

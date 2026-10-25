@@ -136,3 +136,14 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   override in `.akmon.toml`; akmon moved its own `meta/decisions` and `meta/design` to `docs/adr` and
   `docs/design` in one commit; names for `requirements/`, `guides/` and `reference/`, and what stays
   with a skill.
+- [0024 — The second opinion is chosen by model priors, down one locally-prioritised ladder](0024-second-opinion-by-model-priors.md)
+  — a provider is a **carrier × priors** pair and diversity is tested on a closed family vocabulary,
+  never on the vendor; one `providers` table replaces the four owners of the answer; a prior is
+  **declared, not snooped** — local overlay → project → akmon's own knowledge → ask, with no carrier
+  settings file, dot-directory, environment value or live probe consulted and `PATH` presence the only
+  host fact; an owner may **declare a carrier outright** (an argv list, a `{model}` placeholder, the
+  prompt by argv or stdin, `family` required, `repo` honestly `unknown` unless stated), so a harness
+  akmon never measured still gives a second opinion as config rather than as a release; one flat
+  `carrier[:model]` ladder, team default replaced whole locally; a reviewer differs in harness, model
+  **and** family, same family only as the disclosed last resort; `claude`/`codex`/`qwen` ship (qwen
+  with its probe), the gateway shape ships with no row. Supersedes 0005 item 5; retains 0004/D02.

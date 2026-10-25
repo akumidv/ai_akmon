@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import sys
 import tempfile
 from collections.abc import Iterable, Iterator, Sequence
@@ -486,6 +487,7 @@ class SecondOpinionTarget:
 
     provider: str
     model: str | None  # None = the provider CLI's default model (other-vendor case)
+    family: str | None = None  # the priors that answer (ADR-0024/D01); None on the retired vendor path
 
 
 def resolve_second_opinion(registry: dict, config: dict, orchestrator_vendor: str) -> SecondOpinionTarget | None:
@@ -535,6 +537,193 @@ def resolve_second_opinion(registry: dict, config: dict, orchestrator_vendor: st
             if model:
                 return SecondOpinionTarget(provider, str(model))
     return None
+
+
+# --------------------------------------------------------------------------------------
+# The provider ladder (ADR-0024/D05-D12): one order, diversity tested on priors
+# --------------------------------------------------------------------------------------
+
+#: Rank 2 is the second opinion; 3 a third; 4 an arbiter. One walk answers them all (ADR-0024/D06).
+OPINION_RANK_SECOND = 2
+
+
+@dataclass(frozen=True)
+class SecondOpinionSession:
+    """The working session as the ladder sees it: its carrier, the family that answers, its model."""
+
+    provider: str
+    family: str | None
+    model: str | None = None
+
+
+def opinion_ladder(registry: dict) -> tuple[str, ...]:
+    """The one flat ladder — team-committed, or replaced whole by the local overlay (ADR-0024/D05)."""
+    policy = registry.get("second_opinion_policy")
+    ladder = policy.get("ladder") if isinstance(policy, dict) else None
+    return tuple(str(entry) for entry in ladder or ())
+
+
+def providers(registry: dict) -> dict:
+    """The provider table — the single owner of every provider row (ADR-0024/D02)."""
+    rows = registry.get("providers")
+    return rows if isinstance(rows, dict) else {}
+
+
+def provider_row(registry: dict, provider: str) -> dict:
+    """One row by id. A ladder id the table does not declare is a named error, never a silent skip."""
+    row = providers(registry).get(provider)
+    if isinstance(row, dict):
+        return row
+    text = jsondata.fill(_agents_data()["opinion_ladder_unknown"], {"provider": provider})
+    raise KeyError(text)
+
+
+def carrier_present(registry: dict, provider: str) -> bool:
+    """Whether the carrier's executable resolves on `PATH` — a yes-or-no about a binary, nothing more.
+
+    This is the one host fact the resolver takes (ADR-0024/D11): it reads no carrier settings file, no
+    developer dot-directory and no environment value, and never invokes the carrier to ask what it is,
+    so the same code answers the same way on the owner's host and on a consumer's.
+    """
+    row = provider_row(registry, provider)
+    argv = row.get("argv")
+    binary = str(row.get("requires_command") or (argv[0] if isinstance(argv, list) and argv else ""))
+    return bool(binary) and shutil.which(binary) is not None
+
+
+def opinion_model(registry: dict, provider: str) -> str | None:
+    """The model the second opinion takes inside ``provider``: its strongest declared one.
+
+    This rule belongs to the second opinion alone (ADR-0024/D14) and reads the provider table's
+    ``models`` and nothing else — never the tier binding's rungs, which answer a different consumer's
+    question and would let a reviewer inherit a `worker`'s list. No declared list means the answer is
+    ``None``: the carrier's own default, the one honest value left. A rule nobody implemented raises,
+    because silently picking by some other order would be an unstated policy.
+    """
+    policy = registry.get("second_opinion_policy")
+    rule = str(policy.get("model_rule", "max")) if isinstance(policy, dict) else "max"
+    if rule != "max":
+        raise ValueError(f"second opinion: unknown model_rule {rule!r}; the only rule implemented is 'max'")
+    models = provider_row(registry, provider).get("models")
+    if not isinstance(models, list) or not models:
+        return None
+    return str(models[-1])
+
+
+def _walk_opinion_ladder(
+    registry: dict, session: SecondOpinionSession
+) -> tuple[list[tuple[str, str | None]], list[tuple[str, str]]]:
+    """The one top-down walk: the admissible chain, and every provider passed over with its reason.
+
+    Two skips carry the design (ADR-0024/D06): the session's own carrier, and any provider whose
+    family or concrete model is already spoken for — a different harness answering with the same
+    mind, or the same model under another name, buys no diversity. The compared model is the one the
+    consumer's rule resolves (D14), not only a ladder pin, or two providers answering with the same
+    weights would both pass. ``families``/``models`` record which provider holds each, so a reason
+    names the owner rather than only refusing. Rank is a position in the *resulting* chain, so a skip
+    never leaves a hole the report must explain.
+    """
+    reasons = _agents_data()["opinion_skip_reasons"]
+    chain: list[tuple[str, str | None]] = []
+    skips: list[tuple[str, str]] = []
+    families: dict[str, str] = {}
+    models: dict[str, str] = {}
+    if session.family:
+        families[str(session.family)] = session.provider
+    if session.model:
+        models[str(session.model)] = session.provider
+    for entry in opinion_ladder(registry):
+        provider, _, pinned = entry.partition(":")
+        row = provider_row(registry, provider)
+        if provider == session.provider:
+            skips.append((provider, str(reasons["self"])))
+            continue
+        if not carrier_present(registry, provider):
+            skips.append((provider, str(reasons["absent"])))
+            continue
+        family = row.get("family")
+        if not family:
+            skips.append((provider, str(reasons["priors_unknown"])))
+            continue
+        if str(family) in families:
+            skips.append((provider, jsondata.fill(reasons["same_priors"], {"owner": families[str(family)]})))
+            continue
+        chosen = pinned or opinion_model(registry, provider)
+        if chosen and chosen in models:
+            skips.append((provider, jsondata.fill(reasons["same_model"], {"owner": models[chosen]})))
+            continue
+        families[str(family)] = provider
+        if chosen:
+            models[chosen] = provider
+        chain.append((provider, chosen or None))
+    return chain, skips
+
+
+def resolve_opinion_chain(
+    registry: dict, session: SecondOpinionSession, *, rank: int = OPINION_RANK_SECOND
+) -> SecondOpinionTarget | None:
+    """The provider at ``rank`` of the chain the walk produced, or ``None`` past its end.
+
+    ``None`` says the chain is empty or shorter than asked; the caller then takes the disclosed last
+    resort (ADR-0024/D07) rather than arriving at the same model without saying so.
+    """
+    chain, _ = _walk_opinion_ladder(registry, session)
+    index = rank - OPINION_RANK_SECOND
+    if not 0 <= index < len(chain):
+        return None
+    provider, pinned = chain[index]
+    family = providers(registry)[provider].get("family")
+    return SecondOpinionTarget(provider, pinned, str(family) if family else None)
+
+
+def opinion_skips(registry: dict, session: SecondOpinionSession) -> tuple[tuple[str, str], ...]:
+    """Every provider passed over and why — the ledger that travels with the report (ADR-0024/D08)."""
+    return tuple(_walk_opinion_ladder(registry, session)[1])
+
+
+def opinion_repo(registry: dict, provider: str) -> str:
+    """What the reviewer could see: derived for a carrier akmon ships, stated or unknown for the rest.
+
+    A knob would let a report claim repository access a bare completion cannot have, so a harness
+    carrier is ``worktree``, a tool carrier is ``none``, and a carrier its owner declared with
+    nothing said reports ``unknown`` instead of the optimistic reading (ADR-0024/D10, D12).
+    """
+    row = provider_row(registry, provider)
+    stated = row.get("repo")
+    if stated:
+        return str(stated)
+    if row.get("argv"):
+        return "unknown"
+    return "none" if row.get("carrier") == "tool" or row.get("raw_model") else "worktree"
+
+
+def opinion_command(registry: dict, provider: str, *, model: str | None = None, prompt: str | None = None) -> list[str]:
+    """The argv for one provider: the command map for a shipped carrier, the owner's own list for a declared one.
+
+    A declared ``argv`` is a list and is never split or handed to a shell (ADR-0024/D12) — the config
+    the owner wrote is the trust boundary, and a command string would make every value in it a
+    candidate command. ``{model}`` is the one placeholder, and a pin with nowhere to go raises
+    ``UnpinnableModelError`` rather than shipping an unpinned run filed as a diverse one (C97).
+    """
+    row = provider_row(registry, provider)
+    argv = row.get("argv")
+    if isinstance(argv, list):
+        parts = [str(part) for part in argv]
+        if model:
+            if not any("{model}" in part for part in parts):
+                raise UnpinnableModelError(provider, str(model))
+            parts = [part.replace("{model}", str(model)) for part in parts]
+        else:
+            parts = [part for part in parts if "{model}" not in part]
+        if prompt and str(row.get("prompt", "argv")) != "stdin":
+            parts.append(str(prompt))
+        return parts
+    spec: dict = {"harness": provider, "operation": str(row.get("operation", "review"))}
+    if row.get("model_flag"):
+        spec["model_flag"] = str(row["model_flag"])
+    built = second_opinion_command(spec, str(prompt or ""), model=model)
+    # The map builder always ends with the prompt; a caller that has none must not ship an empty argv element.
+    return built[:-1] if not prompt else built
 
 
 # --------------------------------------------------------------------------------------

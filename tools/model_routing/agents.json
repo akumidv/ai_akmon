@@ -112,6 +112,14 @@
     "same_vendor_diverse_rung": "same-vendor-other-model: on '{{vendor}}' the rungs {{rungs}} against {{against}}"
   },
   "unpinnable_model": "second opinion needs model {{model}} on {{harness}}, but the registry declares no model_flag for that vendor — an unpinned run would not be model-diverse. Declare the measured flag in the vendor's second_opinion block, or route this gate another way.",
+  "opinion_skip_reasons": {
+    "self": "self",
+    "absent": "carrier absent",
+    "priors_unknown": "priors unknown",
+    "same_priors": "same priors as {{owner}}",
+    "same_model": "same model as {{owner}}"
+  },
+  "opinion_ladder_unknown": "second opinion: the ladder names '{{provider}}', which the providers table does not declare",
   "compute_binding_warnings": {
     "semantic": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally",
     "not_in_list": "orchestrator '{{orchestrator}}' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias",

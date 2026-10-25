@@ -44,6 +44,11 @@ function is quality per unit of **tokens + owner attention**; only tokens had a 
 5. **`second-opinion` requires *model* diversity, not vendor branding:** preference ladder
    as registry data — another vendor's model → the same vendor's *different* model → never
    the same model as author or auditor.
+   **Superseded by [ADR 0024](0024-second-opinion-by-model-priors.md)** (the intent survives, the
+   mechanism does not): the ladder named priors and the resolver compared vendor names, so a carrier
+   pointed at another vendor's family passed for diverse, and a session on a carrier with no vendor
+   block had no route to a second opinion at all. The family, the one `providers` table and the
+   locally-prioritised ladder are owned there.
 6. **New task kind `plan-draft` (tier reasoner, own matrix row)** — decomposition drafts
    (zone plan, risks, ordering) are delegable on leverage signals; *adopting* a plan, route,
    or synthesis is never delegated (the precise invariant reading). The synthesizer gains a

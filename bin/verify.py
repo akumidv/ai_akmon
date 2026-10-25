@@ -56,6 +56,10 @@ _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b", re.ASCII)
 # detail. Reading the status field needs at least the first three.
 _MIN_STATUS_FIELDS = 3
 
+# A CommonMark code fence opens with at most three leading spaces (C158); four makes the line
+# indented code, whose own backticks are literal text and must join the inline-code pairing.
+_MAX_FENCE_INDENT = 3
+
 
 def read_verify_data() -> dict[str, Any]:
     """The shared verify text and tables (``verify.json``, beside this launcher).
@@ -191,6 +195,38 @@ _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 def _dev_path_tokens(data: Mapping[str, Any]) -> tuple[str, ...]:
     """Path fragments that only ever point into akmon's own development tree (``verify.json``)."""
     return tuple(data["dev_path_tokens"])
+
+
+def _fence_marker(line: str) -> str | None:
+    """The marker of a code-fence line (```` ``` ```` or ``~~~``, at most three leading spaces), else ``None``."""
+    body = line.lstrip(" ")
+    if len(line) - len(body) > _MAX_FENCE_INDENT:
+        return None
+    for marker in ("```", "~~~"):
+        if body.startswith(marker):
+            return marker
+    return None
+
+
+def _inline_code_spans(text: str) -> list[str]:
+    """Inline-code spans of a Markdown file, paired per line and never inside a fenced code block.
+
+    A fence's own backticks must not join the pairing (C158): paired over the whole file, a closed
+    fence leaves a span boundary in the next prose line, so the inline-code path that follows the
+    block is read as prose and passes the check unseen.
+    """
+    spans: list[str] = []
+    open_fence: str | None = None
+    for line in text.splitlines():
+        marker = _fence_marker(line)
+        if open_fence is None:
+            if marker is None:
+                spans.extend(_INLINE_CODE_RE.findall(line))
+            else:
+                open_fence = marker
+        elif marker == open_fence:
+            open_fence = None
+    return spans
 
 
 def _vendor_pointers(data: Mapping[str, Any]) -> dict[str, list]:
@@ -375,7 +411,7 @@ class Verifier:
         for cite_re in (_NUMBERED_DR_RE, _ROADMAP_CITE_RE):
             found.extend(f"{relative} → cites {cite}" for cite in cite_re.findall(text))
         found.extend(f"{relative} → names {name}" for name in _DEV_NAME_RE.findall(text))
-        for span in (*_LINK_RE.findall(text), *_INLINE_CODE_RE.findall(text)):
+        for span in (*_LINK_RE.findall(text), *_inline_code_spans(text)):
             path = span.split()[0].split("#", 1)[0] if span.strip() else ""
             if any(token in path for token in _dev_path_tokens(self.data)):
                 found.append(f"{relative} → path {span}")
