@@ -244,6 +244,24 @@ sealed generation. B/C comparison stays outside this decision. The
 [accepted design](../experiments/a22-p3/V3_A_SUBJECT_PAIR_RESTART_PROPOSAL.md)
 specifies the pair identity, reduction and replay requirements.
 
+### D07 — Stop the current P3 comparison at its qualification floor
+
+`Decision-ID: ADR-0019/D07`
+
+**Owner accepted D-A22-P3-DISPOSITION.** The complete V3 A qualification has five
+qualifying case × tier strata but represents only three of the four required case
+pairs (M176). The `material-reversible` pair is absent. The pre-registered floor
+therefore fails, and the current P3 packet stops before B/C. No B/C effect,
+equivalence, or decision to adopt the decision-ground routing clause follows from
+this A-only result. Keep the clause outside operative guidance.
+
+Retain the sealed inputs, raw runtimes, failed-call history and independently
+replayed [A reduction](../reviews/a22-p3-v3-a-pair-restart-attempt.md). Do not
+change this packet's floor or add post-result repeats. A further clause comparison
+would need a separate prospective design and authorization. Continue A22 with
+design of the fresh-task and cold-resumption pilot. This decision authorizes
+preparation, not pilot execution, provider calls or an operative rule.
+
 ## Rejected alternatives
 
 - **Adopt the clause.** Rejected: it added no detected benefit over the standard on two vendors,

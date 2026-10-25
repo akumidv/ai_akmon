@@ -123,31 +123,10 @@ behavioral experiment, or automatic acceptance. A22 is active; C86 remains block
 The mission and decision-record carrier are accepted in ADR 0015 and ADR 0016;
 the broader interaction behavior remains under evaluation.
 
-**Next action: packet P3 for decision-ground routing on T2's instrument. Claim calibration is disposed — no new rule, [ADR 0019 D01](../decisions/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule): neither the clause nor the examples beat the standard in context on Claude ([T2](attention-frame-comparison.md#result-of-t2)) or Codex ([T3](attention-frame-comparison.md#result-of-t3)). Whether code or an automated audit can catch the failures remaining under the standard is [A32](../TASKS.md).** The fresh-task pilot and a cold-resumption case follow ([A22](../TASKS.md)). T2 is closed: its result stands as measured on Claude ([M83–M85](../MEASUREMENTS.md)), and two independent audits reproduced it and bounded its readings ([audit synthesis](../reviews/t2-audit-synthesis.md)). The owner kept the clause open rather than take a disposition on one vendor's result. T3 has now supplied the second vendor, [measured on Codex](../reviews/t3-codex-p2.md) (M96–M97). With no benefit on either vendor, the positive controls, which test only what an addition costs, do not run. Cases about the consumer's own project, which separate the delivery confound, are [A30](../TASKS.md) and do not gate A22. T1's
-[B-vs-C block](attention-frame-comparison.md#result-of-the-b-vs-c-block) was non-informative by
-construction, so [trial T2](attention-frame-comparison.md#trial-t2--delivery-and-clause-comparison)
-rebuilt the packet with script-assembled arms and hardened cases.
-[Its result](attention-frame-comparison.md#result-of-t2): what a governed consumer session receives
-does as well as no guidance, the standard in context does much better, and no benefit of the
-candidate clause over the standard was detected — a one-run, reading-sensitive gap, not
-evidence of equivalence. The
-[claim-calibration packet P1](attention-frame-comparison.md#claim-calibration-packet-p1)
-holds the supplied baseline, one candidate clause, three paired cases with positive
-controls and a case-level rubric;
-[trial proposal T1](attention-frame-comparison.md#trial-proposal-t1--a-bounded-claim-calibration-comparison)
-holds the fixed conditions, the run grid and ceiling, the resource limit, the stopping
-conditions and the fresh variations. The owner settled its three open questions: the
-**Anthropic route only** — the model pin is declared data on that side alone, and the
-cross-vendor gap is carried as [C97](../TASKS.md) rather than repaired inside the trial;
-**P1-1's execution control in scope**, as one recorded run in the wired consumer project; and
-**the caps as proposed**. Unavailable external source checks remain explicit gaps. No model
-comparison or owner-facing pilot has run. Do not restart AP0, the mission discussion, or
-the completed D2 carrier redesign.
+**Next action: prepare the fresh-task and cold-resumption pilot.** Claim calibration
+is disposed as no new rule in [ADR 0019 D01](../decisions/0019-collaboration-guidance-from-a22.md#d01--no-new-claim-calibration-rule) on T2/T3 evidence. The decision-ground routing P3 packet completed its A qualification, but failed the pre-registered pair-coverage floor (M176); the owner accepted [ADR 0019 D07](../decisions/0019-collaboration-guidance-from-a22.md#d07--stop-the-current-p3-comparison-at-its-qualification-floor). B/C was not run, so P3 gives no clause-benefit or equivalence verdict. The routing clause remains outside operative guidance. A22 is active; C86 remains blocked.
 
-The milestone is an executed bounded comparison, not more general research. Re-read the
-current files and relevant staged/unstaged diff before editing; historical session
-excerpts do not establish current implementation or acceptance. The agreed caps bound the
-trial: a result needing more runs than they allow is reported as incomplete, not extended.
+The next design output is the [fresh-task and cold-resumption pilot draft](a22-fresh-task-resumption-pilot.md), built from the [paired traces and acceptance questions](attention-frame-comparison.md#paired-traces-for-a-pilot). It must test transfer to fresh owner-facing work and recovery of goal, accepted rationale, limitations, unresolved work and next authorized action after a pause, without repeated intake. Agree to its scope, budget and stop conditions before execution. T2's delivery/project-match question remains in [A30](../TASKS.md); claim-evidence failures under the current standard remain in [A32](../TASKS.md). Do not restart the completed claim-calibration comparison or the terminal P3 packet.
 
 The first applied A22 refinement is [decision work and the former D2 register](decision-workflow-and-d2-register.md).
 It records two recent Claude episodes and an adjacent Codex review, the actual SHA
@@ -1025,18 +1004,20 @@ changed, determine whether this is merely a context-restoration problem.
 
 AP0 has the owner's applied obstacle and a bounded follow-up sample. The
 [inspectable AP2 comparison](attention-frame-comparison.md) prepares the three case
-cards and historical candidate assessments. The external review motivates an AP2
-refinement, not a reset of discovery or a completed trial. The claim-calibration
-comparisons T1 and T2 ran under their own agreed scope and budget; decision-ground routing,
-a fresh owner-facing pilot and cold resumption remain to be done, and any further
-model-running experiment has its own explicit execution scope and budget. This plan launches neither Codex nor Claude and authorizes no new
+cards and historical candidate assessments. The external review motivated an AP2
+refinement, not a reset of discovery. The claim-calibration comparisons T1 and T2
+ran under their own agreed scope and budget. Decision-ground routing reached a
+complete A qualification and stopped at its frozen floor (M176, ADR 0019 D07);
+the fresh owner-facing pilot and cold resumption remain. Any further model-running
+experiment has its own explicit execution scope and budget. This plan launches neither Codex nor Claude and authorizes no new
 operative interaction rules. A conversational pilot does not require a new runtime
 framework; it also does not authorize tool use outside the underlying task.
 
 ### Next-session steps
 
-These are ordered design outputs, not a second task-status board. Begin with step 1;
-continue to the next independent preparation step when its prerequisites are available.
+These are the original ordered design outputs, not a second task-status board.
+Steps 1–3 are historical; step 4 stopped at P3's qualification floor under ADR 0019
+D07. The current preparation begins with step 5.
 
 1. **Prepare the claim-calibration packet.** In the comparison document, capture the
    baseline text supplied to the subject — quoted from the current operative files, with

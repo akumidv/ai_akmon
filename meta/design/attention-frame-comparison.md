@@ -1166,7 +1166,11 @@ creating routine intake ceremony. If current guidance performs equally well, ret
 contract and use the cases as examples. If both fail, revise the premise rather than add a skill,
 hook, questionnaire, or semantic checker.
 
-## Packet P3 — decision-ground routing (draft, not authorized to run)
+## Packet P3 — decision-ground routing
+
+The sections below preserve the prospective design and its pre-execution gate.
+The completed A qualification and accepted disposition are recorded at the end
+of this packet; the design text alone did not authorize dispatch.
 
 ### Decision and boundary
 
@@ -1305,6 +1309,13 @@ separate scorer-call/token/spend cap, separately from the prior T2/T3
 authorizations. A
 positive P3 result would support a later owner decision on guidance; it would
 not itself make this clause operative.
+
+### Result of P3 V3 A qualification
+
+The completed A grid has 32 cells and both fixed scorer readings for each cell
+([M176](../MEASUREMENTS.md), [Codex GPT-6 attempt review](../reviews/a22-p3-v3-a-pair-restart-attempt.md)). Seven same-repeat runs failed under both scorers, covering five case × tier strata but only three of four required pairs. Neither P3-05 nor P3-06 qualified, leaving the `material-reversible` pair absent. The frozen rule requires at least four strata **and** every pair. Its status is `FLOOR_FAILED`; B/C was not run and the result cannot estimate a clause benefit or establish equivalence.
+
+The owner accepted [ADR 0019 D07](../decisions/0019-collaboration-guidance-from-a22.md#d07--stop-the-current-p3-comparison-at-its-qualification-floor): this bounded packet stops here, with no change to operative guidance. Any further clause comparison would be a new prospective design. A22 proceeds to prepare the fresh-task and cold-resumption pilot.
 
 ## Sources and traceability
 
