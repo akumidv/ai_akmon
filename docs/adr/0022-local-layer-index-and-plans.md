@@ -137,7 +137,8 @@ A plan and a task each stay one file. Material beyond that is not given a folder
 into the handoff kit of the task or plan, which carries no copy of a local row or of the plan unless
 the owner says a transfer to another machine needs it. Delivery between machines is the owner's.
 
-`<id>` is the id of the row that owns the file or folder: a project id when the row is the local
+`<id>` is the id of the row that owns the file or folder — the row it **serves**, which for a kit under
+a plan or a task is that plan's or task's id (**D08**) — a project id when the row is the local
 companion of one backlog task, `_T<n>` otherwise (**D03**), never a date. `<name>` is a short kebab name of what
 the file or folder is about (`_T3-athlos-0021`), so a listing reads without opening the index; the
 row's id stays `<id>` alone.
@@ -183,10 +184,11 @@ names a question or a decision (`D-TOPIC`), which are short-lived, while a local
 many sessions and its number must not meet a project id. A companion row carries the status of the
 local work only, never a copy of the project status. The local index has one status token more than
 the project index, `handoff`: work set aside for another session, to be resumed from its package.
-`deferred` keeps one meaning in both indexes, a deliberate not-now. Every `handoff/` folder,
-`plans/` file and `tasks/` file has a row, written by whatever creates it — the C150
-helper for a package, the `plan` skill for a plan, the author by hand otherwise; C156 warns on a file
-or folder without one. `_T<n>` carries no role letter, so [0002](0002-task-id-convention.md), which types the project backlog's ids, is
+`deferred` keeps one meaning in both indexes, a deliberate not-now. Every `plans/` file and `tasks/`
+file has a row, and a `handoff/` kit has one only when no row owns it (**D08**); rows are written by
+whatever creates them — the C150
+helper for a package, the `plan` skill for a plan, the author by hand otherwise. C156 warns on a file
+or folder that neither has a row nor is named by one under `kits`. `_T<n>` carries no role letter, so [0002](0002-task-id-convention.md), which types the project backlog's ids, is
 narrowed in scope: it does not govern local rows and no role is derived from `_T`.
 
 A task has no folder in the project tree. Its requirements are the row, a paragraph, and its detail

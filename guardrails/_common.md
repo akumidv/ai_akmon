@@ -73,7 +73,8 @@ offered" and "branch for non-trivial work" are not machine-checked.
   is stated as the action to take, not as a label. A bare code tells the owner nothing.
 - **Narrate in the body, collect the asks at the end.** A reply that asks for or leaves pending an
   owner action ends with one `Needed from you` block, grouped by what the owner must do, every line
-  carrying its own code, and nothing after it ([design-flow § Where requests sit in a reply](../pipelines/design-flow.md#where-requests-sit-in-a-reply)).
+  carrying its own code, and nothing after it; the body carries the same code in-line where it argues
+  that question ([design-flow § Where requests sit in a reply](../pipelines/design-flow.md#where-requests-sit-in-a-reply)).
 
 ## Analysis before mutation
 

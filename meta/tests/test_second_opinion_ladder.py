@@ -220,7 +220,7 @@ _PRIORS_REGISTRY = {
     },
 }
 
-_ALL_PRESENT = ("claude", "codex", "qwen", "homi", "sphinx", "myqwen", "nomodel")
+_ALL_PRESENT = ("claude", "codex", "qwen", "homi", "sphinx", "myqwen", "nomodel", "nodefault")
 
 
 @pytest.fixture

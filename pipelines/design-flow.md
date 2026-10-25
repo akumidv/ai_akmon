@@ -174,8 +174,16 @@ reasoning without hunting for it. Every turn that asks for, or leaves pending, a
 request on one line — its code, a 3–10 word gist, the options and the recommendation — grouped by
 what the owner must do (decide, confirm a record, supply or run something), and it says when
 nothing is needed. **Every line carries a code, confirmations and go-aheads included:** the owner
-answers by copying the code, so a line without one has to be quoted in full. Requests are not scattered through the body, and the block does not restate the
-body's reasoning: a reader who skips to the end must find the whole list there.
+answers by copying the code, so a line without one has to be quoted in full.
+
+**The body names the code where it argues the question.** The paragraph that gives a request's
+grounds, its description or the reasoning behind its recommendation carries that request's code
+in-line, in bold, at the point it begins — without it the reader cannot tie the closing line back to
+the reasoning, or the reasoning forward to the line. The code in the body is a label on the
+narration, not the ask: the options and the ask itself are not repeated there. The block does not
+restate the body's reasoning, and the asks are not scattered through the body: a reader who skips to
+the end must find the whole list there, and a reader of the body must see which question each
+passage is about.
 
 While a request is open, its code, scope and option definitions live in the existing living
 design or task. When it is answered, the owner's choice and rationale go into the record that
