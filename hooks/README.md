@@ -32,7 +32,7 @@ project-local hook surface.
   [`../guardrails/_common.md`](../guardrails/_common.md) "Commits & ownership": denies an AI
   `Co-Authored-By` trailer; asks the owner before `push`/`tag`/`merge` and before a `commit`
   on the default branch (landing history). Runs as a **PreToolUse → Bash** hook, and carries the
-  neutral **unclassified-shell-route diagnostic** ([ADR 0012 D02](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0012-stage1-contracts-and-vocabulary.md)): the advisories below key off a
+  neutral **unclassified-shell-route diagnostic** ([ADR 0012 D02](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0012-stage1-contracts-and-vocabulary.md)): the advisories below key off a
   file path, so a write that arrives through the shell is invisible to them on Claude as well —
   said once per session on the hook process's stderr, never blocking, never model context.
 - [`session-start-agent.py`](session-start-agent.py) — Claude SessionStart wrapper for the
@@ -134,7 +134,7 @@ project-local hook surface.
   atomic marker for a reliable session/tool-use pair, the next bad event emits again, and missing
   identity repeats fail-visible.
   Whether Codex surfaces that stderr to the owner is unverified (design
-  [codex-runtime-contract.md](https://github.com/akumidv/ai_akmon/blob/main/meta/design/codex-runtime-contract.md) § PreToolUse routes).
+  [codex-runtime-contract.md](https://github.com/akumidv/ai_akmon/blob/main/docs/design/codex-runtime-contract.md) § PreToolUse routes).
   Commit enforcement, delegation log/nudge, named-agent generation, and model routing are
   deliberately not wired. N2 proved hard `deny` on the headless patch route, but the exact
   Bash+git `deny`/`ask` matrix, `permission_mode` delivery, and TUI/headless equivalence remain
@@ -147,7 +147,7 @@ project-local hook surface.
 ## Crash posture (C87)
 
 Every spawned entry point runs under one top-level guard: the seven Claude wrappers and
-`codex-hook.py` ([ADR 0013 D01](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0013-hook-survivability-and-crash-posture.md)).
+`codex-hook.py` ([ADR 0013 D01](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0013-hook-survivability-and-crash-posture.md)).
 A crash never blocks the action, and it is always reported:
 
 - **stderr:** one line, `akmon <hook> hook: <ExceptionClass>`. It never carries the exception's

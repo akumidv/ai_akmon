@@ -12,7 +12,7 @@ the prior report and M155 have been corrected. The saved packet is reused only
 as an unscored mechanics fixture. No failed reading is repaired, reclassified
 or carried into the new 32-cell dataset.
 
-[ADR 0019 D03](../decisions/0019-collaboration-guidance-from-a22.md#d03--prospective-p3-scorer-packet-identity-binding)
+[ADR 0019 D03](../../docs/adr/0019-collaboration-guidance-from-a22.md#d03--prospective-p3-scorer-packet-identity-binding)
 records the accepted prospective format. The [identity proposal](../experiments/a22-p3/V3_SCORER_ID_BINDING_PROPOSAL.md)
 explains the alternatives. The [new parser](../experiments/a22-p3/v3_scorer_id_binding.py)
 requires exactly E1–E4 with PASS/FAIL and nonblank reasons, rejects extra

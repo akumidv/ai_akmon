@@ -1,6 +1,6 @@
 # C105 evidence — the JS CLI for Node package mode
 
-Task: [C105](../TASKS.md). Plan: three passes ([design §6](../design/node-consumers.md#6-implementation-plan)). Each
+Task: [C105](../TASKS.md). Plan: three passes ([design §6](../../docs/design/node-consumers.md#6-implementation-plan)). Each
 pass ends at a master-control review. ADR 0020 D08 (a native port, divergences registered) applies:
 [`meta/conformance/DIVERGENCES.md`](../conformance/DIVERGENCES.md).
 

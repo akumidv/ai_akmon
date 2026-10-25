@@ -1,6 +1,6 @@
 # C101 evidence — conformance corpus seeded against Python
 
-Task: C101 (design [node-consumers.md §6](../design/node-consumers.md#6-implementation-plan)).
+Task: C101 (design [node-consumers.md §6](../../docs/design/node-consumers.md#6-implementation-plan)).
 Implementation under test: the Python tree at `0.4.0.dev0` (the normative reference while the
 corpus is being seeded, per ADR 0020 D01).
 

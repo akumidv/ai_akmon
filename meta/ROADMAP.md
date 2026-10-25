@@ -14,13 +14,13 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
    goals and future-use knowledge, plans, truthful proportional reporting, useful
    disagreement, and resumption without repeated context reconstruction. The former D2
    workflow is the first case study, not the boundary; its replacement is recorded in
-   [ADR 0016](decisions/0016-decision-records-and-owner-acceptance.md). Start with the
-   [research and AP0–AP5 plan](design/attention-and-human-agent-collaboration.md#refinement-and-implementation-plan)
+   [ADR 0016](../docs/adr/0016-decision-records-and-owner-acceptance.md). Start with the
+   [research and AP0–AP5 plan](../docs/design/attention-and-human-agent-collaboration.md#refinement-and-implementation-plan)
    and its design/implementation tasks A22/C86.
 2. **Token efficiency for quality.** Develop the existing roles, subagent delegation,
    model selection, skills, and hook controls against the cost of errors and rework.
    Check achieved quality and actual routing/delivery evidence, not agent counts or
-   nominal model settings. Reuse [model-routing](design/model-routing.md); do not create
+   nominal model settings. Reuse [model-routing](../docs/design/model-routing.md); do not create
    a competing routing policy under the attention initiative.
 
 These are connected priorities under the [mission](../MODEL.md#mission-and-priorities),
@@ -79,11 +79,11 @@ correctness, and explicitly locked task dependencies remain in force.
   that bumps the pin can silently inherit a changed role or guardrail.
 - **Why it matters.** A standard that retunes itself (the learn loop) must let consumers
   know *what changed and whether it breaks them* — otherwise promotion is unsafe at scale.
-- **Resolution.** Locked in [ADR 0001](decisions/0001-release-and-roles-model.md): a
+- **Resolution.** Locked in [ADR 0001](../docs/adr/0001-release-and-roles-model.md): a
   subject-parameterized `release` DEVELOP role + two-mode pipeline, `learn` extracted as a
   sibling role, `v0.x.y` versioning, one-job-per-artifact (archive vs release notes vs tag vs
   downstream bump record), and a `CHANGELOG.md` with an `Unreleased` section. Implementation is
-  phased via backlog T10–T15 (design: [release-versioning.md](design/release-versioning.md)).
+  phased via backlog T10–T15 (design: [release-versioning.md](../docs/design/release-versioning.md)).
 
 ### O3. Cross-agent contract (Claude / Codex / Gemini) — PARTIALLY DONE
 
@@ -91,7 +91,7 @@ correctness, and explicitly locked task dependencies remain in force.
   and source skill-root linkage, AGENTS.md stays hand-reviewed. **Remaining (v2):** how
   `AGENTS.md` ↔ skills/roles relate *beyond thin pointers* — e.g. a generated AGENTS skill
   block from one source without clobbering project text. Framed as a parked design skeleton
-  ([design/cross-agent-contract-v2.md](design/cross-agent-contract-v2.md), backlog T16).
+  ([docs/design/cross-agent-contract-v2.md](../docs/design/cross-agent-contract-v2.md), backlog T16).
 - **Gap.** README §7 declares "source of truth = markdown + code; vendors get generated
   pointers via `sync.py`" — an initial stdlib-only `bin/sync.py` now writes the basic
   pointer set and Claude hook wiring; `bin/verify.py` validates the project contract;
@@ -142,7 +142,7 @@ correctness, and explicitly locked task dependencies remain in force.
 akmon is built to survive a change of carrier; carrier expansion serves the mission:
 
 - **Current.** The [README](../README.md) owns supported mount modes and installation
-  status; the [packaging design](design/packaging/README.md) owns their rationale.
+  status; the [packaging design](../docs/design/packaging/README.md) owns their rationale.
   Do not treat the package carrier as merely a future design or confuse an implemented
   CLI with public package publication.
 - **Possible hybrid.** Governance/docs retain their versioned source while executable

@@ -1,8 +1,8 @@
 # C110 evidence — akmon's JS ruleset and `--checks akmon` for Node
 
-Task: [C110](../TASKS.md), with the A35 deliverables. Plan row: [design §6](../design/node-consumers.md#6-implementation-plan):
+Task: [C110](../TASKS.md), with the A35 deliverables. Plan row: [design §6](../../docs/design/node-consumers.md#6-implementation-plan):
 `extends` written into the project's own config, never over one it chose; a scenario per config format.
-Decision: [ADR-0020/D09](../decisions/0020-node-consumers-js-implementation.md#d09--the-javascripttypescript-ruleset-oxlint-and-akmons-own-tooling)
+Decision: [ADR-0020/D09](../../docs/adr/0020-node-consumers-js-implementation.md#d09--the-javascripttypescript-ruleset-oxlint-and-akmons-own-tooling)
 (owner), on the [A35 baseline](a35-js-rule-baseline.md). Divergence: DV25 (rewritten).
 
 Owner review: the owner accepted every C110 decision, including the five implementation points

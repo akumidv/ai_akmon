@@ -17,7 +17,7 @@ different callers need the same answer and must not disagree about it:
   repository are still the previous release's until someone runs ``akmon sync``.
 
 Two owners of one file format is exactly the split this repository has paid for before (see
-``meta/design/packaging/mount-resolution-owner.md``), so the banner rule and the comparison
+``docs/design/packaging/mount-resolution-owner.md``), so the banner rule and the comparison
 live here and the callers hold no copy of either.
 
 Stdlib-only and venv-free by contract, like every module in ``common/``.

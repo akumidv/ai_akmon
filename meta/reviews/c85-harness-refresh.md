@@ -164,7 +164,7 @@ marker.
 does not withhold the prompt. The status is `Completed`/`Failed` per hook; it is a status
 channel, not a text one. The generated `statusMessage` did not appear in `exec` output, and
 whether an interactive session shows it is unprobed. Owner-addressed prose still has no measured
-Codex channel ([design](../design/codex-runtime-contract.md)). `SessionStart` and `PreToolUse`
+Codex channel ([design](../../docs/design/codex-runtime-contract.md)). `SessionStart` and `PreToolUse`
 were not exercised for exit 1. Their fail-open rests on the timeout rows M14 and M60, and a
 timeout is a different failure from an exit.
 

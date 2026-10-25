@@ -34,7 +34,7 @@ findings = [
   "OK agents.profile-import AGENTS.md: every profile import in AGENTS.md resolves → Keep each profile import under @_aitna/.akmon/profiles/.",
   "OK pointers.vendor-agents-link: vendor pointers point at AGENTS.md → Keep every vendor pointer aimed at AGENTS.md.",
   "OK agents.skill-roots AGENTS.md: AGENTS.md references source skill roots → Keep the source skill roots named in AGENTS.md.",
-  "OK caps.always-loaded AGENTS.md: consumer-total: lines=35/570 bytes=1509/34000 → Keep AGENTS.md and the guardrails it imports within the always-loaded cap",
+  "OK caps.always-loaded AGENTS.md: consumer-total: lines=35/634 bytes=1509/38200 → Keep AGENTS.md and the guardrails it imports within the always-loaded cap",
   "OK charters.role-link _aitna/agents/engineer/README.md: _aitna/agents/engineer/README.md links a akmon role → Keep the akmon role link in this charter.",
   "OK memory.index _aitna/memory/README.md: _aitna/memory/README.md exists → Keep README.md as the memory index.",
   "OK memory.index-coverage _aitna/memory: memory index mentions all memory markdown files → Keep every memory file listed in the index.",

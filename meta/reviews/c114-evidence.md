@@ -54,7 +54,7 @@ uncommitted until the owner lands them.
   `C7-code-verify-plan-check-x.md`. It expects `-2`, `-1` unchanged and no `-6`. The new
   `tools/gate-pack-task-empty` runs `--task ///` and expects exit 2, the usage sentence on stderr, an empty
   stdout and no `code-verify-plan-check-1.md`.
-- **Docs**: `skills/stats-digest/SKILL.md` (report name, `--task` flag), `meta/design/model-routing.md`
+- **Docs**: `skills/stats-digest/SKILL.md` (report name, `--task` flag), `docs/design/model-routing.md`
   (second-opinion report name).
 
 ## Evidence

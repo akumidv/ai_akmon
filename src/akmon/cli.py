@@ -1,7 +1,7 @@
 """``akmon`` console entry point — a thin CLI dispatching to the standard tree.
 
 ``init`` / ``sync`` / ``verify`` / ``path`` / ``hook`` / ``version`` per the CLI contract in
-``meta/design/packaging/README.md``. ``init`` (all four mount modes) lives in
+``docs/design/packaging/README.md``. ``init`` (all four mount modes) lives in
 ``akmon._init``; this module keeps only the dispatch rules.
 
 ``hook`` is the entry point the generated vendor wiring names in mode ``package`` (C77): it

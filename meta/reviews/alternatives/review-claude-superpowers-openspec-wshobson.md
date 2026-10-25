@@ -141,14 +141,14 @@ gates" — the artifact chain orders context dependencies, it does not gate.
    rewrites a spec; it declares `ADDED / MODIFIED / REMOVED` requirements.
    This is what makes spec-driven work viable on brownfield code ("specify a
    change to a 50,000-line app without documenting the whole thing"). akmon's
-   `meta/design/` docs are whole-document snapshots — nothing marks what a
+   `docs/design/` docs are whole-document snapshots — nothing marks what a
    given piece of work *changes*, so design docs drift from reality silently.
    *(new — W21)*
 
 2. **Archive-folds-into-truth lifecycle.** On completion, a change's deltas
    merge into the canonical specs and the folder moves to a dated archive —
    the loop *closes* and the specs describe the new reality. akmon has
-   `meta/TASKS.md`, `meta/design/`, `meta/decisions/`, the D2 ledger — but no
+   `meta/TASKS.md`, `docs/design/`, `docs/adr/`, the D2 ledger — but no
    closing step that reconciles a finished task with the design docs it
    invalidated. This is the specs analog of akmon's learn loop
    (CAPTURE→…→PROPAGATE) and pairs naturally with it. *(W21)*
@@ -180,7 +180,7 @@ gates" — the artifact chain orders context dependencies, it does not gate.
 ### 2.3. Do not borrow
 
 - **The directory structure wholesale.** The landscape review's warning stands:
-  `openspec/changes/` beside `meta/TASKS.md` + `meta/design/` + D2 would be a
+  `openspec/changes/` beside `meta/TASKS.md` + `docs/design/` + D2 would be a
   second source of truth. Adopt the *lifecycle semantics* (deltas, archive
   merge) into akmon's existing carriers, not the folders.
 - **Requirements ceremony for every change.** OpenSpec itself concedes trivial
@@ -299,7 +299,7 @@ For the owner walkthrough; numbering continues the plan's W-series:
 | W18 | Model routing has no cost heuristics ("turn count beats token price", mid-tier floor for reviewers) and no "explicit model per dispatch" rule | Superpowers 1.2-2, wshobson 3.2-7 | Phase 2 |
 | W19 | No context-hygiene contract for delegation: bulk artifacts pasted into dispatches/reports instead of moved as files | Superpowers 1.2-3 | Phase 2 |
 | W20 | No execution-progress ledger surviving compaction; orchestrator re-dispatch of completed work is unguarded | Superpowers 1.2-4 | Phase 1 (cheap: `_aitna/` convention) |
-| W21 | Design docs have no change lifecycle: no delta records, no archive-merge step reconciling finished work with `meta/design/` | OpenSpec 2.2-1/2 | Phase 2 (architect pass first) |
+| W21 | Design docs have no change lifecycle: no delta records, no archive-merge step reconciling finished work with `docs/design/` | OpenSpec 2.2-1/2 | Phase 2 (architect pass first) |
 | W22 | akmon tooling (`sync --check`, `verify`, `self_ci`) emits prose only: no shared diagnostic envelope, no machine-readable `fix` strings | OpenSpec 2.2-3 | Phase 1–2 |
 | W23 | Source/generated boundary not declared or checked; no numeric progressive-disclosure caps | wshobson 3.2-1/5 | Phase 0 (declare) + Phase 1 (check) |
 

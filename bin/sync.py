@@ -852,7 +852,7 @@ def _materialized_files(root: Path, data: Mapping[str, Any] | None = None) -> tu
     and stay true. And it fails harder than the wiring did: a hook command with a missing
     executable at least runs, while an unresolved ``@``-import produces no diagnostic anywhere.
     Codex does not expand the import at all (it reads ``AGENTS.md`` literally — see
-    ``meta/design/codex-runtime-contract.md``), so the copy serves the one harness that does.
+    ``docs/design/codex-runtime-contract.md``), so the copy serves the one harness that does.
 
     Outside package mode nothing is written, but the import errors are still returned: the
     mount is imported directly, and a target it lacks is just as silent there.

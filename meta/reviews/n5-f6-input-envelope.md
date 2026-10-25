@@ -1,8 +1,8 @@
 # N5 — F6 input envelope, measurement rounds 1–3
 
 > **What this is.** The first evidence round for owner choice **F6/C**
-> ([stage-1 lock §2](../design/stage1-hardening-contracts.md)), owned by
-> [N5](../TASKS_ARCHIVE.md) and gating [D2-23](../decisions/0013-hook-survivability-and-crash-posture.md#d02--bounded-input-and-timeout-evidence-sequence),
+> ([stage-1 lock §2](../../docs/design/stage1-hardening-contracts.md)), owned by
+> [N5](../TASKS_ARCHIVE.md) and gating [D2-23](../../docs/adr/0013-hook-survivability-and-crash-posture.md#d02--bounded-input-and-timeout-evidence-sequence),
 > whose alias now resolves to ADR-0013/D02 (C95), and which in turn gates only C52.
 > Rounds 1–2 answer most of F6's four questions — *which axes exist*, *which entries consume them*,
 > *what a real consumer measures today*, and *what the combined supported corpus is*. Round 1

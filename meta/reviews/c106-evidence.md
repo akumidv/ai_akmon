@@ -1,6 +1,6 @@
 # C106 evidence — the npm smoke with no Python on PATH
 
-Task: [C106](../TASKS.md). Plan row: [design §6](../design/node-consumers.md#6-implementation-plan) — the npm smoke in
+Task: [C106](../TASKS.md). Plan row: [design §6](../../docs/design/node-consumers.md#6-implementation-plan) — the npm smoke in
 self-CI: pack, install, attach and run every hook with Python hidden. Follow-ups of the review live in
 [C124](../TASKS.md) (npm smoke hardening).
 

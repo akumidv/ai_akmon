@@ -10,7 +10,7 @@
 >
 > So the guard's channel is the exit code on Codex and `systemMessage` on Claude.
 > Rows M69–M71 in [MEASUREMENTS](../MEASUREMENTS.md). Owned by [C87](../TASKS_ARCHIVE.md); the decision is
-> D2-45, amending [ADR 0013](../decisions/0013-hook-survivability-and-crash-posture.md) F3.
+> D2-45, amending [ADR 0013](../../docs/adr/0013-hook-survivability-and-crash-posture.md) F3.
 
 ## Codex — a hook that exits 1 (0.154.0)
 

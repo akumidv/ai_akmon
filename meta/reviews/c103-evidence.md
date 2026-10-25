@@ -1,6 +1,6 @@
 # C103 evidence — JS foundation
 
-Task: C103 (design [node-consumers.md §6](../design/node-consumers.md#6-implementation-plan)).
+Task: C103 (design [node-consumers.md §6](../../docs/design/node-consumers.md#6-implementation-plan)).
 Prerequisites: C101 ([review](c101-review.md)), C102 ([inventory](c102-inventory.md),
 [evidence](c102-evidence.md)). Branch: `main`, uncommitted — the owner commits.
 Baseline: `main` @ `7cb5ee1` (C102), corpus 131/131, pytest 1833.

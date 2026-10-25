@@ -42,20 +42,19 @@ the shipped block states it directly: Codex does not expand nested `@` imports i
 ## Project contract
 
 - Start with `README.md`, `MODEL.md`, and `meta/TASKS.md`; architecture decisions live in
-  `meta/decisions/` and living designs in `meta/design/`. These two move to `docs/adr/` and
-  `docs/design/` after C159 and C160 ([ADR 0023](meta/decisions/0023-project-documents-layout.md));
-  reviews, measurements, experiments and the backlog stay in `meta/`. Until the move, use the
-  paths above.
+  `docs/adr/` and living designs in `docs/design/`
+  ([ADR 0023](docs/adr/0023-project-documents-layout.md)); reviews, measurements, experiments and the
+  backlog stay in `meta/`.
 - Record non-trivial implementation work in `meta/TASKS.md` before code.
 - **`<DEV>` is `meta/`.** akmon has no `_aitna/`; its dev-layer root is `meta/`, so its local layer
   is `meta/local/` and its development skills would live in `meta/skills/`
-  ([ADR 0022](meta/decisions/0022-local-layer-index-and-plans.md)). The root is to be resolved by
+  ([ADR 0022](docs/adr/0022-local-layer-index-and-plans.md)). The root is to be resolved by
   code (C157); this line tells a reader.
 - To look for alternatives to a design choice, or to check a decision against how other projects
   solved it, open [`meta/reviews/alternatives/`](meta/reviews/alternatives/README.md). It is
   material for akmon's own development, not part of what a consumer receives.
 - Significant architecture choices require explicit owner acceptance and a stable decision
-  block in a thematic ADR under `meta/decisions/`. Open choices stay in design/tasks;
+  block in a thematic ADR under `docs/adr/`. Open choices stay in design/tasks;
   implementation evidence and remaining verification stay with the implementing task.
 - Harness and vendor facts that took an experiment — not what vendor docs state plainly — live in
   `meta/MEASUREMENTS.md` with the version they were verified on. Grep it before a probe, cite a

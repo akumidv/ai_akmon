@@ -230,7 +230,7 @@ def test_the_shipped_leg_is_an_error_over_either_dimension(monkeypatch, cap, sev
 
 def test_the_caps_in_code_are_the_numbers_the_adr_carries():
     """The ratchet is a decision; code and ADR cannot drift apart silently."""
-    adr = (_AKMON / "meta/decisions/0012-stage1-contracts-and-vocabulary.md").read_text(encoding="utf-8")
+    adr = (_AKMON / "docs/adr/0012-stage1-contracts-and-vocabulary.md").read_text(encoding="utf-8")
     for scope in (al.shipped(), al.consumer()):
         cap = al.caps()[scope]
         assert f"`\u2264{cap.lines} lines` and `\u2264{cap.bytes:,} bytes`" in adr

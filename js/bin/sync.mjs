@@ -1544,7 +1544,7 @@ export function importedStandardFiles(data, root) {
  *
  * The guardrails are the one exception. The import lives in `AGENTS.md`: a committed, hand-owned
  * file shared by every developer, and Codex does not expand the import at all (it reads `AGENTS.md`
- * literally — see `meta/design/codex-runtime-contract.md`), so the copy serves the one harness that
+ * literally — see `docs/design/codex-runtime-contract.md`), so the copy serves the one harness that
  * does not follow the import and makes the rule files a reviewed part of the repository.
  *
  * Outside package mode nothing is written, but the import errors are still returned.

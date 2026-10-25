@@ -5,7 +5,7 @@ the `LICENSE` here is the upstream licence, kept per the decision).
 
 ## What is vendored and why
 
-[ADR-0020/D04](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0020-node-consumers-js-implementation.md#d04--form-of-the-javascript-implementation)
+[ADR-0020/D04](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0020-node-consumers-js-implementation.md#d04--form-of-the-javascript-implementation)
 pins the form of the JavaScript implementation: TOML is read by a **vendored copy of smol-toml at a
 pinned version**, licence kept, verified against the official `toml-test` suite, and updated only
 through a recorded task. This directory is that vendored copy: the upstream `dist/` build output,

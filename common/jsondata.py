@@ -2,7 +2,7 @@
 
 akmon ships data next to the code that reads it: policy tables, message texts, matcher
 and path lists. Both permanent implementations read the same files (ADR 0020 D03, design
-[node-consumers.md](../meta/design/node-consumers.md)): Python with stdlib ``json``, Node
+[node-consumers.md](../docs/design/node-consumers.md)): Python with stdlib ``json``, Node
 with ``JSON.parse`` — so a text or table is written once and the corpus proves both
 spell it identically.
 

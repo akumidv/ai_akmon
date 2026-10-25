@@ -1,4 +1,4 @@
-"""Session-statistics digest (design: meta/design/model-routing.md §4.4, task C13).
+"""Session-statistics digest (design: docs/design/model-routing.md §4.4, task C13).
 
 Parses the delegation log, the session transcript(s), and (optionally) the Claude API
 usage endpoint to produce an on-demand digest of a session's routing activity: how much

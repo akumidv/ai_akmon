@@ -7,7 +7,7 @@ did with the findings. It serves akmon's development only and is not shipped to 
 
 Open it when you look for alternatives to a design choice, or want to check a decision against how
 other projects solved the same thing. It supplies ideas and comparison material. A finding here is
-not an akmon decision: decisions live in [`meta/decisions/`](../../decisions/), execution in
+not an akmon decision: decisions live in [`docs/adr/`](../../../docs/adr), execution in
 [`meta/TASKS.md`](../../TASKS.md).
 
 ## Index
@@ -25,7 +25,7 @@ not an akmon decision: decisions live in [`meta/decisions/`](../../decisions/), 
 | [n2-stage0-probes-inventory.md](n2-stage0-probes-inventory.md) | inventory | vendor delivery probes | what a subagent actually receives on Claude and on Codex, plus the guardrail-to-hook invariant inventory |
 
 The plan is the register that merges the reviews. The walkthrough and
-[ADR 0010](../../decisions/0010-alternatives-adoption-a11-verdicts.md) are where its verdicts were
+[ADR 0010](../../../docs/adr/0010-alternatives-adoption-a11-verdicts.md) are where its verdicts were
 accepted. The files do not name an author beyond the `claude` or `codex` tag in the file name.
 `review-claude-warp.md` is short and covers Warp's orchestration pages only; product analysis is
 deferred as task A48.

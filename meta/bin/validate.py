@@ -40,7 +40,7 @@ _DEV_LAYER_FILES = (
     "meta/CONCEPT.md",
     "meta/ROADMAP.md",
     "meta/TASKS.md",
-    "meta/decisions/README.md",
+    "docs/adr/README.md",
     "meta/self_ci.py",
     "meta/tests/conftest.py",
     "meta/tests/test_verify.py",

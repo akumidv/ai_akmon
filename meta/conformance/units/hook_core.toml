@@ -3210,7 +3210,7 @@ expected_json = 'true'
 [[case]]
 id = "planning/mount-nested-md"
 fn = "is_planning_doc"
-args_json = '["_aitna/akmon/meta/design/a.md", {"$path": "{{dir}}/proj"}]'
+args_json = '["_aitna/akmon/docs/design/a.md", {"$path": "{{dir}}/proj"}]'
 expected_json = 'true'
 
 [[case]]

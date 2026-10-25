@@ -258,11 +258,19 @@ def test_a_payload_json_loads_to_the_same_document_as_a_payload_table(scen_root)
     assert as_json.run.payload == as_table.run.payload == {"cwd": "{{root}}", "n": {"a": 1}}
 
 
-def test_a_payload_json_carries_a_nesting_tomllib_refuses_as_a_dotted_key(scen_root):
+def test_tomllib_refuses_a_key_of_more_than_the_recursion_limit_parts():
     """M152: ``tomllib`` refuses a key of more than ``sys.getrecursionlimit()`` parts."""
+    try:
+        tomllib.loads("n" + ".a" * 5000 + " = 1\n")
+    except RecursionError as refusal:
+        assert "TOML key has more than" in str(refusal)
+    else:
+        # The refusal arrived in a patch release (M152), so the premise is not shown on an older one.
+        pytest.skip("this interpreter's tomllib accepts a deeply dotted key")
+
+
+def test_a_payload_json_carries_a_nesting_tomllib_refuses_as_a_dotted_key(scen_root):
     depth = 5000
-    with pytest.raises(RecursionError, match="TOML key has more than"):
-        tomllib.loads("n" + ".a" * depth + " = 1\n")
     body = "payload_json = '" + '{"n": ' + '{"a": ' * depth + "1" + "}" * (depth + 1) + "'\n"
     node, levels = corpus.load_scenario(_write(scen_root, body + _OK_EXPECTED)).run.payload["n"], 0
     while isinstance(node, dict):

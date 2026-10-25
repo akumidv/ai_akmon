@@ -1,0 +1,141 @@
+# 0006 — Transcript-driven orchestrator detection, corridor warning, context pressure
+
+- **Status:** Accepted (extends [0004](0004-model-routing-capability-tiers.md)/[0005](0005-synthesizer-gate-audit-and-role-routing.md);
+  revises 0004's committed-agents point; implementation C22–C23). C22 landed in `91888bb`, Claude
+  only (Codex pending); the context-pressure amendment below landed in `7ba3ea8`, and its C80
+  amendment landed in `0541b7a`.
+- **Owner:** akuminov@gmail.com
+- **References:** design source [`docs/design/model-routing.md` §1 (req 9–12), §3, §4.3, §12](../design/model-routing.md) ·
+  C22 and C23 landed ([archive](../../meta/TASKS_ARCHIVE.md)).
+
+## Context
+
+ADR 0004 bound subagent tiers to the orchestrating model but had no mechanism to *know*
+that model: init recorded it once, a mid-session `/model` switch silently left the `k-*`
+`model:` frontmatter bound to a stale orchestrator. Its floor warning was also inverted
+in practice: with `orchestrator_floor: "highest"`, running on the healthy target (`opus`)
+warned, while running the orchestrator on the synthesizer's reserved top rung (`fable`)
+— the actually wasteful case — stayed silent. Two further gaps surfaced in live use:
+hook warnings went out only as `additionalContext`, which the host UI never shows the
+owner (the model saw warnings the owner did not); and the second runtime weakness axis —
+the context window filling up — had no detector at all, although the transcript the hook
+already reads records per-turn `usage`.
+
+## Decision
+
+1. **The orchestrator is detected, never chosen, by the hook** — from the session
+   transcript (`transcript_path`): the last main-chain assistant `message.model`
+   (sidechain/subagent turns skipped), mapped to a local alias. Runs at SessionStart and
+   every UserPromptSubmit; when the detected alias differs from the recorded one, the
+   binding is recomputed and the `k-*` defs regenerated, so **subagent models follow a
+   mid-session `/model` switch** with one-turn lag. Only the one-time `init.py` setup
+   (the `available` ladder + second-opinion opt-in) stays explicit.
+2. **Generated `k-*` agent defs are gitignored + regenerated, not committed** — *revising
+   ADR 0004 §8 decision 3*: the `model:` frontmatter now tracks the local orchestrator,
+   making the files per-user by construction; committing them churns across users and
+   models. The committed source is the registry + project overlay.
+3. **The floor warning becomes a corridor:** healthy is `floor ≤ orchestrator < top`,
+   with `orchestrator_floor` a *named* alias (anthropic: `opus`). Below the floor → warn
+   (too weak, `/model` up); on the top rung while the floor sits lower → warn (the
+   synthesizer's reserved tier, wasteful, `/model` down). When the local ladder tops out
+   at the floor (no `fable`), `floor == top` and everything collapses to the floor
+   silently — the accepted degraded mode. A floor alias absent from the ladder disables
+   the corridor; a relative `"highest"` floor (openai keeps it) reproduces the old
+   below-top warning. Both warnings stay advisory — the owner's choice stands, and the
+   synthesizer's level verdict (ADR 0005) remains the authoritative intelligence check.
+4. **Owner-facing hook output goes out on two channels:** everything addressed to the
+   owner — init instruction, corridor warning, rebind notice, context-pressure warning —
+   is returned as `systemMessage` (UI-visible) *in addition to* `additionalContext`
+   (model-visible). The steady-state status line stays context-only. A warning only the
+   model sees is a defect.
+5. **Context pressure is detected** (design §12): the same transcript pass reads the last
+   main-chain `usage`; `fill = input + cache_read + cache_creation` against the model's
+   window (registry data: `window_default`/`windows`/`warn_ratios`). Banded warnings
+   (0.85 plan / 0.95 critical), throttled by band via a per-session marker, reset when a
+   compaction drops the fill back below the lowest band. The hook informs; compaction
+   and checkpointing stay the owner's move.
+
+## Consequences
+
+- `routing.py` gains detection (`detect_orchestrator`/`resolve_alias`), shared artifact
+  generation + rebind (`binding_artifacts`/`write_artifacts`/`rebind_to`), the corridor
+  warning in `compute_binding`, and the context-pressure detector; the model-routing hook
+  runs on SessionStart **and** UserPromptSubmit (wired by `sync.py`); consumers gitignore
+  `.claude/agents/k-*.md` (BOOTSTRAP §D).
+- Registry deltas: `orchestrator_floor: "opus"` (anthropic) + the `context_pressure`
+  block — both change the registry hash, so existing local configs go stale once and
+  re-init.
+- Implementation: C22 (detection + corridor + two-channel delivery) landed in `91888bb`; C23
+  (context pressure) landed in `7ba3ea8`; its C80 amendment landed in `0541b7a`. Both tasks are
+  archived. Their legacy D2 identifiers remain aliases and historical provenance, not workflow
+  states.
+
+## Amendment — context pressure is a share of a recommended maximum (D2-38)
+
+Decision 5 measured the fill against "the model's window". That number is not in the transcript,
+so it had to be registry data — and the data was already wrong when checked: main-chain
+`claude-opus-5` turns on this machine reach 411,203 tokens with no compaction, while the block
+assumed a 200k window. Each model release would make it wrong again, and a larger limit does not
+move the point where quality degrades.
+
+The bands are therefore shares of a **recommended maximum context**, not of the model's limit
+(owner-directed; the accepted scope is [ADR-0006/D03](#d03--recommended-context-budget-and-pressure-delivery)). The registry block's `window_default`/`windows` become `recommended_max`
+(default 200000) and `recommended_max_by_alias` (alias-substring exceptions, longest match — e.g.
+a model whose hard limit sits below the default); `warn_ratios` is unchanged. A share above 100%
+is reported as such. The rename changes the registry hash, so local routing configs go stale once
+and re-init; an overlay still using the old keys is ignored. Carrier:
+`tools/model_routing/routing.py::recommended_max_context`; the operative decision is
+[ADR-0006/D03](#d03--recommended-context-budget-and-pressure-delivery), with detail in
+[design §12.2](../design/model-routing.md).
+
+## Amendment — a one-task context budget: info at 0.85, warn at 1.0 (D2-42)
+
+The recommended maximum is the recommended active-context budget for a session intended to carry
+one task: a session carries the task it is solving, not its history — fewer tokens, less drift
+from the task, less forgetting — and the reminder says so (owner-directed). The hook knows
+neither the task nor what it needs; it sees only the fill, so it is a pressure sensor, and the
+boundary between tasks is A21's. 200000 stays — a configurable owner policy, checked against
+measurement: above where sessions get compacted in practice, below the 258,400-token window
+Codex reports for OpenAI models (C80). Decision 5's two bands give way to two levels: **info** at
+`info_ratio` 0.85 (`/compact`) and **warn** at the budget itself, 1.0 (`/compact`; new task:
+`/new`) — the share and the command, nothing else. *Revising decision 4 for this one notice:* the
+reminder goes to the owner only, as `systemMessage`; the model has nothing to act on, and the
+line would spend the context it warns about. `warn_ratios` is replaced by `info_ratio`. Warn fires once
+per pressure episode and nothing repeats past 100% — the model may allow more, and going on is
+the developer's call. A fill below the info level ends the episode whatever lowered it —
+decision 5's "a compaction drops the fill" names one cause, not the mechanism. `AKMON_CONTEXT_RECOMMENDED_MAX`
+overrides the budget per user or project. The operative decision is
+[ADR-0006/D03](#d03--recommended-context-budget-and-pressure-delivery), with detail in
+[design §12.2](../design/model-routing.md).
+
+## Addressable accepted decision blocks
+
+### D01 — Active role and orchestrator detection
+
+`Decision-ID: ADR-0006/D01`
+`Legacy-ID: D2-4, D2-37`
+
+Akmon derives the active role and orchestrating model from the last qualifying main-chain
+transcript record rather than a second writable marker. Detection and rebind are delivered only on
+measured vendor routes; absence of a Codex delivery path is not parity.
+
+### D02 — Delegation nudge and unattended posture
+
+`Decision-ID: ADR-0006/D02`
+`Legacy-ID: D2-8, D2-9, D2-10, D2-11, D2-46`
+
+The nudge tracks an undelegated stretch on the main orchestrator only. The first eight calls score
+nothing; reads weigh one half, edit and shell calls one; advisory is 30 and ask is 120. A read never
+carries or spends the ask. An ask actually formed outside interactive default mode becomes a deny.
+The old 10/20 equal-weight rule is historical, and shell command text is not classified merely to
+lower its score.
+
+### D03 — Recommended context budget and pressure delivery
+
+`Decision-ID: ADR-0006/D03`
+`Legacy-ID: D2-38, D2-42`
+
+Context pressure is measured against a configurable recommended one-task budget, not a claimed
+model limit. The current default is 200,000 tokens, with owner-only info at 0.85 and warn at 1.0,
+once per pressure episode; dropping below info resets the episode. The sensor cannot infer task
+identity, and its notice does not add to model context.

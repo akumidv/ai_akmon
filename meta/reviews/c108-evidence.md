@@ -1,6 +1,6 @@
 # C108 evidence — tools port + `akmon tool`
 
-Task: [C108](../TASKS.md). Plan row: [design §6](../design/node-consumers.md#6-implementation-plan) — every `tools/`
+Task: [C108](../TASKS.md). Plan row: [design §6](../../docs/design/node-consumers.md#6-implementation-plan) — every `tools/`
 module in `js/tools/` passes the tool corpus; `akmon tool <path>` in Python and JS; messages name the executing
 implementation's command; `exports` map with a documented module API. Decision: ADR 0020 D06. ADR 0020 D08 applies:
 [`meta/conformance/DIVERGENCES.md`](../conformance/DIVERGENCES.md).

@@ -47,8 +47,8 @@ OpenSpec owns proposal, requirements/scenarios, design, and tasks per change. It
 offers useful proposal → requirements → design → tasks traceability, exploration
 before commitment, archiving, living specifications, and cross-repository stores.
 
-The risk is a second source of truth beside `meta/TASKS.md`, `meta/design/`,
-`meta/decisions/`, and the D2 ledger. Akmon should adopt stronger lifecycle
+The risk is a second source of truth beside `meta/TASKS.md`, `docs/design/`,
+`docs/adr/`, and the D2 ledger. Akmon should adopt stronger lifecycle
 checks before copying OpenSpec's directory structure.
 
 ### Spec Kit

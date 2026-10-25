@@ -1,7 +1,7 @@
 # Divergence register
 
 Where the JavaScript implementation differs from the Python one **on purpose**
-([ADR 0020 D08](../decisions/0020-node-consumers-js-implementation.md)). The port is native: it keeps
+([ADR 0020 D08](../../docs/adr/0020-node-consumers-js-implementation.md)). The port is native: it keeps
 the platform's own behavior where the runtime's standard differs from Python's, and it never
 differs in product behavior — a hook decision, the bytes of a written file, a `verify` finding, a
 `check` result, or the text an owner reads in normal use.
@@ -9,7 +9,7 @@ differs in product behavior — a hook decision, the bytes of a written file, a 
 Parity is not total, by design: on input that normal use does not produce — a hand-edited or damaged
 file, a code point the writer never emits — the port keeps the runtime's own API and the difference
 is a row here, not a mirror of Python
-([ADR 0020 amendment to D08](../decisions/0020-node-consumers-js-implementation.md#amendment--d08-input-outside-normal-use-takes-the-native-api-c122)).
+([ADR 0020 amendment to D08](../../docs/adr/0020-node-consumers-js-implementation.md#amendment--d08-input-outside-normal-use-takes-the-native-api-c122)).
 
 A difference not listed here and not fixed is a defect. The differential run (ADR 0020 D03) ends
 every finding in one of the two: a fix in the implementation that is wrong, or a row below.

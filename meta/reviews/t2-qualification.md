@@ -5,7 +5,7 @@
 > changed-premise case, is passed by both tiers without guidance and leaves the grid. Scoring was
 > done by a separate agent that never saw the clause, the arm, the tier or the run records; a second
 > scorer on a 25 % sample agreed on 22 of 23 elements and on every case verdict. Owned by A22 and
-> [trial T2](../design/attention-frame-comparison.md#trial-t2--delivery-and-clause-comparison);
+> [trial T2](../../docs/design/attention-frame-comparison.md#trial-t2--delivery-and-clause-comparison);
 > row M82 in [MEASUREMENTS](../MEASUREMENTS.md).
 
 ## What ran
@@ -13,7 +13,7 @@
 | Held | Value |
 | --- | --- |
 | Arm | `A` — the role sentence and the one-check protocol |
-| Cases | P2-1 … P2-5, as fixed in [packet P2](../design/attention-frame-comparison.md#delivery-and-clause-packet-p2) |
+| Cases | P2-1 … P2-5, as fixed in [packet P2](../../docs/design/attention-frame-comparison.md#delivery-and-clause-packet-p2) |
 | Tiers | the registry's strongest rung and its `mid` rung, Anthropic route |
 | Repeats | two per case × tier — 20 runs |
 | Harness | Claude Code 2.1.278; every run verified from its transcript (system prompt byte-equal to the arm, no tools, no instruction files, cwd outside any repository, user messages as sent) |

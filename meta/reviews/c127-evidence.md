@@ -1,6 +1,6 @@
 # C127 evidence — `init` writes the language-profile import, `verify` warns on a missing or unresolved one
 
-Task: [C127](../TASKS.md). Decision: [ADR-0014/D02](../decisions/0014-code-rules-catalog-and-language-profiles.md#d02--init-writes-the-language-profile-import-verify-warns-on-a-missing-or-unresolved-one),
+Task: [C127](../TASKS.md). Decision: [ADR-0014/D02](../../docs/adr/0014-code-rules-catalog-and-language-profiles.md#d02--init-writes-the-language-profile-import-verify-warns-on-a-missing-or-unresolved-one),
 the owner's option (a) from the C127 review. It makes ADR 0014 D01 §2 ("language profiles attach automatically") true at
 attach time. ADR 0020 D01/D03: both implementations, identical behaviour.
 
@@ -46,8 +46,8 @@ attach time. ADR 0020 D01/D03: both implementations, identical behaviour.
   profile for a project with the manifest or a declared language. `ARCHETYPES.md:94` adds that `init` writes the import
   and `verify` warns. `BOOTSTRAP.md:159` and `:171` (the B0 prompts) ask to check the imports `init` wrote instead of
   adding one.
-- **Design.** `meta/design/node-consumers.md:344` (the C110 note on the `js.md` example) and
-  `meta/design/code-rules-and-profiles.md:83` point at ADR-0014/D02.
+- **Design.** `docs/design/node-consumers.md:344` (the C110 note on the `js.md` example) and
+  `docs/design/code-rules-and-profiles.md:83` point at ADR-0014/D02.
 - **Self-CI.** `meta/self_ci.py:331` (wheel smoke: `profiles/python.md` is now materialized) and `:559` (npm smoke:
   `profiles/js.md`). `meta/checks/always_loaded.py:46` builds the block with the largest profile's import line, as
   `init` writes it.

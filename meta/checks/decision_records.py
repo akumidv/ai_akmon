@@ -20,7 +20,7 @@ _EXPECTED_LEGACY = frozenset(range(1, 52))
 
 
 def _owners(root: Path) -> list[Path]:
-    decisions = sorted((root / "meta" / "decisions").glob("[0-9][0-9][0-9][0-9]-*.md"))
+    decisions = sorted((root / "docs" / "adr").glob("[0-9][0-9][0-9][0-9]-*.md"))
     tasks = root / "meta" / "TASKS.md"
     return [*decisions, *([tasks] if tasks.is_file() else [])]
 
@@ -35,7 +35,7 @@ def _collect_records(root: Path) -> tuple[dict[str, list[str]], dict[int, list[s
     decision_locations: dict[str, list[str]] = defaultdict(list)
     legacy_locations: dict[int, list[str]] = defaultdict(list)
     for path in _owners(root):
-        file_number = path.name[:4] if path.parent.name == "decisions" else None
+        file_number = path.name[:4] if path.parent.name == "adr" else None
         for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if decision := _DECISION_LINE.match(line):
                 identifier, declared_number = decision.groups()
@@ -89,7 +89,7 @@ def _legacy_findings(legacy_locations: dict[int, list[str]]) -> list[Finding]:
                     "error",
                     "decision.legacy-missing",
                     f"D2-{legacy_id} has no canonical alias in current ADRs or meta/TASKS.md",
-                    "meta/decisions, meta/TASKS.md",
+                    "docs/adr, meta/TASKS.md",
                     f"Add exactly one `Legacy-ID: D2-{legacy_id}` at its current semantic owner.",
                 )
             )
@@ -130,7 +130,7 @@ def check_decision_records(root: Path) -> list[Finding]:
                 "ok",
                 "decision.records",
                 "decision block IDs are unique and every D2-1..D2-51 alias resolves once from a current owner",
-                "meta/decisions, meta/TASKS.md",
+                "docs/adr, meta/TASKS.md",
                 "Keep decision blocks unique and legacy aliases canonical without recreating D2 status.",
             )
         )

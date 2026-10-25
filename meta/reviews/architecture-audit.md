@@ -91,7 +91,7 @@ is stale on "anchors missing from operative docs" — they are present now.
    3 of 6, engineer.md:54–55 4 of 10. Partial duplication is drift primed to happen:
    go link-only, or generate the lines from the registry.
 7. **USE-surface leak (design defect; C35).** `skills/stats-digest/SKILL.md:11` links
-   `../../meta/design/model-routing.md` — a consumer-facing skill citing the dev tree,
+   `../../docs/design/model-routing.md` — a consumer-facing skill citing the dev tree,
    violating ADR 0003's own cordon (verify errors on exactly this). `skills/release/`
    is the same surface and was checked by no zone — sweep it too.
 8. **Tool-layer LLM-agnosticism is design-true, operations-false (A9).** Agnostic data

@@ -347,7 +347,7 @@ def test_generic_dev_vocabulary_is_allowed(tmp_path):
 
 
 def test_live_tree_use_surface_isolation_passes():
-    """Regression for C35: skills/stats-digest/SKILL.md cited meta/design/model-routing.md,
+    """Regression for C35: skills/stats-digest/SKILL.md cited docs/design/model-routing.md,
     a real leak on the live tree that the fixture-only tests above could not catch."""
     verifier = verify.Verifier(_AKMON_ROOT.parent.parent)
     verifier.check_use_surface_isolation()

@@ -1,7 +1,7 @@
 # The conformance corpus (C101)
 
 The language-neutral behavioral spec both permanent implementations of akmon must pass
-(ADR 0020 D01/D03; design [node-consumers.md §5](../design/node-consumers.md#5-conformance-corpus-d03--the-spec)).
+(ADR 0020 D01/D03; design [node-consumers.md §5](../../docs/design/node-consumers.md#5-conformance-corpus-d03--the-spec)).
 The corpus lives at the **process boundary**: it invokes a hook, CLI command, tool or probe
 exactly the way a harness or an owner would, and compares the normalized observable
 (stdout, stderr, exit code, written files) with the recorded expectation. Where the corpus

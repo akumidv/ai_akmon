@@ -1,6 +1,6 @@
 # T3 — packet P2 on Codex, with the examples arm
 
-Result of [trial T3](../design/attention-frame-comparison.md#trial-t3--packet-p2-on-a-second-vendor-with-the-examples-arm),
+Result of [trial T3](../../docs/design/attention-frame-comparison.md#trial-t3--packet-p2-on-a-second-vendor-with-the-examples-arm),
 run as pre-registered and owner-approved, on the Codex context floor the owner
 accepted after the mechanics gate. Every number the disposition rests on is stated here. The run
 material — driver, arm builder, arms, exchanges, scorer tables — is raw input kept outside the
@@ -31,7 +31,7 @@ the second scorer. So it is not a cost under every reading, and it is reported, 
   newline Codex trims. `E` is `B_full` plus the frozen examples block, and `C_E` is `E` plus the
   clause. The engineer arms are 293, 118 811, 119 397, 119 599 and 120 185 bytes. The examples
   block carries none of the 41 leakage phrases (asserted). The builder's first run caught one
-  label before any run of T3 ([design](../design/attention-frame-comparison.md#e-on-the-full-standard--the-frozen-examples-block)).
+  label before any run of T3 ([design](../../docs/design/attention-frame-comparison.md#e-on-the-full-standard--the-frozen-examples-block)).
 - **Scoring.**
   - The primary scorer was blind and used T2's rules and packet format, on the same model tier
     as in T2.

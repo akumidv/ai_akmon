@@ -309,7 +309,7 @@ def test_guardrail_prose_is_not_scanned_here(tmp_path):
 
 
 def test_meta_material_is_not_scanned_here(tmp_path):
-    docs = {"meta/design/notes.md": "# Notes\n\nPreToolUse enforces the deny on Claude Code.\n"}
+    docs = {"docs/design/notes.md": "# Notes\n\nPreToolUse enforces the deny on Claude Code.\n"}
     assert capabilities.check_capabilities(_tree(tmp_path, docs=docs)) == []
 
 

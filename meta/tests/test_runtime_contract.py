@@ -535,7 +535,7 @@ def test_a_clean_overlay_still_resolves_after_the_merge():
 def test_no_shipped_registry_or_document_still_spells_the_retired_keys():
     root = Path(__file__).resolve().parents[2]
     sources = [root / "tools" / "model_routing" / "registry.json"]
-    sources += sorted(root.glob("meta/design/*.md"))
+    sources += sorted(root.glob("docs/design/*.md"))
     offenders = [
         path.relative_to(root).as_posix()
         for path in sources

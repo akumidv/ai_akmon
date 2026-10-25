@@ -2,7 +2,7 @@
 
 Consumer-facing release notes for the **akmon standard** (repo `ai_akmon`, mounted as
 `_aitna/akmon/`). It tells a consuming project *what changed and whether it breaks them* before
-they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0001-release-and-roles-model.md)):
+they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0001-release-and-roles-model.md)):
 
 - **Versioning `v0.x.y`** while pre-1.0 — bump `x` for a **breaking** change to layout, required
   files, runtime compatibility, or a role/pipeline contract; bump `y` for minor/patch.
@@ -22,7 +22,7 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   items stay open. The common guardrail links the convention in design-flow. Ordinary
   unambiguous acceptance still works without a code; accepted ADR block IDs keep their role.
 - **Model routing binds a committed harness ladder when no `--available` list is given (C147,
-  [ADR-0004/D04](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0004-model-routing-capability-tiers.md#d04--committed-harness-ladder-and-opt-in-auditor-rung)).**
+  [ADR-0004/D04](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0004-model-routing-capability-tiers.md#d04--committed-harness-ladder-and-opt-in-auditor-rung)).**
   The registry now carries `harness_rungs` and `auditor_only_rungs` per vendor, so the generated
   `.claude/agents/k_*.md` pin a concrete `model:` and no delegate silently inherits the
   orchestrator's model; the rung above the ladder is the auditor only on `init --auditor <alias>`,
@@ -79,7 +79,7 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   "latest release" no longer counts a pre-release tag.
 - **Google's Python rules as a standard ruff configuration, and `akmon check` over the project's
   own checks (C89; ADR 0014 D01).** Each rule now sits in the layer that can hold it
-  ([ADR 0014](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0014-code-rules-catalog-and-language-profiles.md)): a principle for
+  ([ADR 0014](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0014-code-rules-catalog-and-language-profiles.md)): a principle for
   any language is in `guardrails/_common.md` § Code design; a rule a linter can check is in
   `profiles/ruff.toml`, akmon's Python rules as a plain ruff configuration annotated with Google
   Python Style Guide sections, which runs with or without akmon (`ruff check --config …`, or
@@ -270,7 +270,7 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   that already has `[check]` is left alone; `package.json` `lint`/`typecheck` scripts are named in a
   next step, never recorded.
 - **akmon's JavaScript/TypeScript rules as a standard oxlint configuration, and `--checks akmon`
-  on Node (C110; [ADR-0020/D09](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0020-node-consumers-js-implementation.md#d09--the-javascripttypescript-ruleset-oxlint-and-akmons-own-tooling)).**
+  on Node (C110; [ADR-0020/D09](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0020-node-consumers-js-implementation.md#d09--the-javascripttypescript-ruleset-oxlint-and-akmons-own-tooling)).**
   `profiles/oxlint.json` holds ESLint's `recommended` as oxlint names it plus the Google style
   rules a linter can check (the rules `tsc` already checks are off for TypeScript files);
   `profiles/js.md` holds the ones no linter checks, and `ARCHETYPES.md` maps JavaScript/TypeScript
@@ -375,7 +375,7 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   clone. Where that tree carries no `meta/` (a package carrier), it exits 2 with one line saying
   where the development record lives, instead of a summary of `(missing)` lines and exit 0.
 - **The wheel, the npm package and a `vendored` mount carry no `meta/` and no test files (C118,
-  [ADR 0009](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0009-packaging-package-carrier-and-mount-modes.md#amendment--the-installable-carriers-ship-no-meta-c118)).**
+  [ADR 0009](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0009-packaging-package-carrier-and-mount-modes.md#amendment--the-installable-carriers-ship-no-meta-c118)).**
   akmon's development record (decisions, designs, measurements, reviews, experiments, tests, the
   conformance corpus) and `js/**/*.test.mjs` leave the installable carriers; `submodule` and
   `subtree` mounts, being the git tree, keep `meta/`. Nothing shipped reads `meta/` at runtime;
@@ -1095,7 +1095,7 @@ akmon and still carry old-style skill frontmatter.
 ### Added
 - **`release` role** + [release pipeline](pipelines/release.md): a subject-parameterized DEVELOP
   role (package / akmon tag / pin bump) with a two-mode cycle (lightweight cut · periodic
-  cadence). Locked in [ADR 0001](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0001-release-and-roles-model.md).
+  cadence). Locked in [ADR 0001](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0001-release-and-roles-model.md).
 - **`learn` role** ([learn](roles/learn.md)): the learn loop now has an owning role wrapping the
   `memory-distill` + `learning` pipelines.
 - **`decisions/`** — akmon now keeps its own ADRs (this is where standard-level decisions land,

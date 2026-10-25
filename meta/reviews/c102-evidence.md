@@ -1,6 +1,6 @@
 # C102 evidence — data-first reduction
 
-Task: C102 (design [node-consumers.md §6](../design/node-consumers.md#6-implementation-plan)).
+Task: C102 (design [node-consumers.md §6](../../docs/design/node-consumers.md#6-implementation-plan)).
 Inventory and owner approval: [c102-inventory.md](c102-inventory.md)
 (all 22 files, approved in the proposed order).
 Branch: `main`, uncommitted — the owner commits. Baseline before the work: `main` @ `afbed47`,
@@ -147,22 +147,22 @@ Review of the landed moves; the owner asked for all six findings to be fixed, an
 | F3 | `meta/checks/runtime.py::own_tool_literals` exempted **every** subscript key, so `overrides["claude"]` on a local dict — a real second owner — passed `runtime.duplicate-query-owner` | exempt only a key into the table the module's own data-file loader returns (`_vocabulary()["claude"]`); tests for the exempted form and for a local dict, a non-loader call and a key into a variable, which still count |
 | F4 | `bin/verify.py`/`bin/sync.py` imported `common` twice, once at call time for a test's `sys.modules` swap | the call-time import is gone; `test_cli.py`'s isolation fixture already covered the swap |
 | F5 | `SNAPSHOT_FILES` and `self_ci._make_fixture` are hand-kept lists; a new data file missing from them would ship un-snapshotted | `test_conformance_corpus.py` discovers every `*.json` under `bin/ common/ hooks/ tools/ src/akmon/` and requires it in both lists (and every listed JSON on disk); proven to fail on a planted file |
-| F6 | The `{{name}}` / read-once convention lived only in a docstring | `meta/design/node-consumers.md` §4 states it for the port (and that it is unrelated to the corpus's normalization tokens); `common/jsondata.py` states the read bound and the crash-handler exception |
+| F6 | The `{{name}}` / read-once convention lived only in a docstring | `docs/design/node-consumers.md` §4 states it for the port (and that it is unrelated to the corpus's normalization tokens); `common/jsondata.py` states the read bound and the crash-handler exception |
 
 **`keystone` → `akmon` (owner, same pass).** The delegation-nudge overrides are now
 `AKMON_DELEGATION_GRACE` / `_NUDGE_THRESHOLD` / `_ASK_THRESHOLD`, with no fallback to the old
-names (`hooks/hook_core.json`, `hook_core.py`, `hooks/README.md`, `meta/design/model-routing.md`;
+names (`hooks/hook_core.json`, `hook_core.py`, `hooks/README.md`, `docs/design/model-routing.md`;
 CHANGELOG Unreleased/Breaking). `hooks/delegation-nudge-env-thresholds` is the one scenario that
 changed — an owner-directed spec change, not a re-record; it still passes, and it cannot pass on
 the defaults, so it proves the new names are read. Code identifiers `KEYSTONE_ROOT` /
 `_KEYSTONE_ROOT` / `_KEYSTONE` became `AKMON_ROOT` / `_AKMON_ROOT` / `_AKMON` (release check,
-self-CI, validate, 22 test modules); live prose in `roles/`, `meta/decisions/README.md` and two
+self-CI, validate, 22 test modules); live prose in `roles/`, `docs/adr/README.md` and two
 design docs says akmon. History keeps the old name: ADR 0008, the archive, past reviews,
 released CHANGELOG entries and V1's description.
 
 **Stale citations.** The moves shifted code lines under `path:line` citations in live docs;
 a sweep comparing each cited line at `afbed47` and now found 23 (11 in
-`meta/design/node-consumers.md` §2, 12 across `meta/TASKS.md` and three other design docs),
+`docs/design/node-consumers.md` §2, 12 across `meta/TASKS.md` and three other design docs),
 several already wrong before C102. All now cite `path::name` or the data file's key.
 
 **Verification after the rework** (worktree `c102-fix`, the C102 state plus these fixes):

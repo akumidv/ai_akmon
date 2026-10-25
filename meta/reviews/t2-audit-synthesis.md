@@ -9,7 +9,7 @@
 > `B_full` fails 5 and `C` 4. So the clause reading is **no benefit detected**, not "no effect":
 > no reading puts `C` ahead by more than a run or separates the arms, and none establishes
 > equivalence. The delivery readings stay bounded by the project-content confound both audits
-> confirmed. Owned by A22 and [trial T2](../design/attention-frame-comparison.md#result-of-t2); recorded beside
+> confirmed. Owned by A22 and [trial T2](../../docs/design/attention-frame-comparison.md#result-of-t2); recorded beside
 > [M83–M85](../MEASUREMENTS.md).
 
 ## Sources
@@ -92,7 +92,7 @@ No reading puts `C` ahead of `B_full` by more than one run, and none separates t
 
 | Finding | Effect | Disposition |
 | --- | --- | --- |
-| P2-4 E3 and P2-5 E4 are reading-sensitive | the clause comparison can move a run either way; no reading establishes a benefit or equivalence | recorded scoring kept; the readings above are reported beside it in the [T2 result](../design/attention-frame-comparison.md#result-of-t2) and M84 |
+| P2-4 E3 and P2-5 E4 are reading-sensitive | the clause comparison can move a run either way; no reading establishes a benefit or equivalence | recorded scoring kept; the readings above are reported beside it in the [T2 result](../../docs/design/attention-frame-comparison.md#result-of-t2) and M84 |
 | Delivery contrasts confounded with project match | `B_full ≫ B_ship`, `B_dev ≫ A` and `B_del ≈ A` cannot be read as general calibration or as a delivery failure | cases about the consumer's own project: A30 |
 | `B_del` is a content replica, not a delivery replica | project files and hook text reach the subject as one system prompt, not as the harness's attachments and hook context; no probe shows the modes are equivalent | a delivery-mode control, in A30's scope |
 | Blinding leaks arm category | none on the clause comparison | strip role declarations and file citations from packets in the next trial (A30) |

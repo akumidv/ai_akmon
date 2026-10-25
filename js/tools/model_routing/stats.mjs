@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Session-statistics digest (design: `meta/design/model-routing.md` §4.4, task C13) — the
+ * Session-statistics digest (design: `docs/design/model-routing.md` §4.4, task C13) — the
  * JavaScript twin of `tools/model_routing/stats.py` (C108, ADR 0020 D01). The Python module is the
  * spec: the same report file bytes, the same stdout lines, the same exit code.
  *

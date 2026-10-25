@@ -153,7 +153,7 @@ def _skill_description_max(data: Mapping[str, Any]) -> int:
 # the release tool legitimately operates on the dev tree (it runs meta/self_ci.py) — that is code
 # doing its job, not guidance naming an inert artifact. README.md, CHANGELOG.md, and examples/
 # are deliberate bridges and are not in this surface: examples/ is meta-documentation *about* the
-# mechanism (worked examples with provenance citations into meta/reviews/, meta/design/, etc.), read
+# mechanism (worked examples with provenance citations into meta/reviews/, docs/design/, etc.), read
 # by a maintainer studying how akmon works — not operative guidance a deployed consumer agent
 # executes. Same class as README/CHANGELOG citing dev history; a consumer never attaches examples/.
 # (C35: decided explicitly rather than left as an accidental gap in ``verify.json``'s
@@ -400,7 +400,7 @@ class Verifier:
         # surface `akmon sync` writes to `.akmon/`); `akmon path` is how an agent reaches
         # the rest of the standard (roles, MODEL.md) locally. Revisit this exact wording
         # once the alphavar pilot's findings fold back, before the first PyPI publish
-        # (meta/design/packaging/README.md §Open points).
+        # (docs/design/packaging/README.md §Open points).
         variant = "package" if sync_tool.is_package_mode(self.root) else "mounted"
         # The per-mode anchor tables are the shared ``verify.json`` data; ``missing`` keeps
         # their stored key order. The block heading is filled from its single owner
@@ -1419,7 +1419,7 @@ class Verifier:
         onto the consumer's own users, so it is an error rather than a warning.
 
         Only checked when a ``pyproject.toml`` exists: a non-Python consumer has no manifest to
-        pin in and stays a design open point (meta/design/packaging/README.md §Open points), not a finding.
+        pin in and stays a design open point (docs/design/packaging/README.md §Open points), not a finding.
         """
         if not sync_tool.is_package_mode(self.root):
             return

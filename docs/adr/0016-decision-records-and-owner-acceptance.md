@@ -1,0 +1,103 @@
+# 0016 — Thematic decision records and one owner acceptance
+
+- **Status:** Accepted
+- **Owner:** akuminov@gmail.com
+- **References:** [workflow design](../design/decision-workflow-and-d2-register.md) ·
+  [migration design](../design/d2-legacy-migration.md) ·
+  [cutover map](../design/d2-cutover-reference-map.md) · [C94](../../meta/TASKS_ARCHIVE.md)
+
+## Context
+
+The D2 ledger gave consequential choices visible IDs, but made one semantic decision travel
+through `Pending → Approved → Verified`, required a manually copied landing SHA, and duplicated
+state across the ledger, ADR, design and task. In practice many entries still needed design work;
+the administrative verification step did not prove correctness and repeatedly consumed owner
+attention.
+
+## Accepted decision blocks
+
+### D01 — Separate design, accepted decisions, work, and evidence
+
+`Decision-ID: ADR-0016/D01`
+`Legacy-ID: D2-24`
+
+Open alternatives and unresolved premises live in a living design or task. A consequential,
+settled choice is recorded once in a thematic ADR decision block. Implementation status,
+conformance checks and versioned measurements live in tasks and evidence. No second decision
+ledger mirrors those states.
+
+The owner explicitly accepts a bounded semantic scope once. Landing unchanged implementation
+does not ask for the same acceptance again. A material delta from that scope returns to design
+and requires a new or replacing decision block; a non-material correction is recorded in the
+task or history. A commit may identify implementation evidence, but its hash is not a decision
+status and is never mandatory ADR metadata.
+
+### D02 — Addressable thematic blocks
+
+`Decision-ID: ADR-0016/D02`
+
+Related choices remain together in a thematic ADR, but each independently replaceable choice has
+a stable `ADR-NNNN/DNN` identifier. Every block states its choice and boundary; load-bearing
+alternatives, costs and reconsideration triggers remain in the ADR or its linked design. One
+owner acceptance may cover a clearly enumerated coherent set of blocks. Physical file count does
+not determine the number of acceptance acts.
+
+### D03 — Lossless legacy lookup without a live legacy workflow
+
+`Decision-ID: ADR-0016/D03`
+
+The former ledger is frozen as historical evidence. Every old D2 ID has one canonical
+`Legacy-ID: D2-N` alias at its current semantic owner: an accepted ADR block, or for an unresolved
+measurement, its task/evidence owner. Historical reports retain their original language. An
+alias is navigation and provenance, never status. Checks enforce uniqueness and resolution but
+do not recreate approval stages.
+
+### D04 — Addressable owner decision requests
+
+`Decision-ID: ADR-0016/D04`
+
+**Owner accepted:** adopt the mnemonic question notation seen in da-pricer for requests
+for decisions, so answers can identify their subject without quoting it and arrive in any
+order. [Design-flow](../../pipelines/design-flow.md#decision-requests) owns the operative
+convention; the common guardrail makes it apply across roles.
+
+Request codes identify open choices; accepted ADR block IDs continue to identify durable
+commitments. Matching answers belongs in the existing design/task records and their links
+to accepted blocks, preserving D01's single-owner boundary. This adds no approval gate or
+required owner reply formula. It adopts the owner's requested convention without claiming
+an experimentally measured improvement in attention cost; A22's evaluation remains open.
+
+Positional numbering was rejected because reordering changes the apparent target of an
+answer. Quoting each question was rejected because it adds work to a short reply. Revisit
+the convention if collisions or changed scope make answer matching ambiguous.
+
+> **Amendment — owner-approved: a request code lives only while its request is open, and every
+> kind of request carries one.** The convention covers every request to the owner — a decision, a
+> question, a confirmation or a go-ahead — not only a decision. When a request is answered, the
+> choice and its rationale go into the record that owns the commitment (the accepted block, with
+> the options it weighed) and the code is dropped: it is not retained in the ADR block. A code
+> therefore has to be unique only among open requests and may be reused once its request is
+> closed; durable identity stays with the block ID. The sentence of
+> [design-flow](../../pipelines/design-flow.md#where-requests-sit-in-a-reply) that retained the
+> code in the block is replaced accordingly.
+
+## Consequences
+
+- ADR status is only `Accepted` or `Superseded`; unfinished reasoning is not an ADR.
+- Owner reports distinguish the decision accepted, implementation conformance, evidence limits,
+  and remaining work instead of compressing them into one lifecycle label.
+- Sensitive changes still require owner attention under the common guardrail, but no reminder
+  may demand a D2 row or a post-landing `verify --commit` transition.
+- Historical references remain meaningful and grep-friendly without leaving an apparent active
+  queue at `meta/D2_LEDGER.md`.
+
+## Rejected alternatives
+
+- **Keep D2 as an accepted-only registry.** Rejected as a second index whose status and wording
+  can drift from the ADR that owns the decision.
+- **One ADR per question.** Rejected because it fragments the context needed to judge coupled
+  choices.
+- **One project-wide decision ADR.** Rejected because it defeats thematic reading and makes every
+  unrelated change touch the same document.
+- **Infer acceptance from a commit.** Rejected because authorship and landing do not establish
+  owner understanding or agreement.

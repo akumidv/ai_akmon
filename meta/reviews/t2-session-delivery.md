@@ -6,7 +6,7 @@
 > blocks, and **no stale-rules notice**. The materialized guardrails match the akmon release the
 > consumer has installed; they differ only from akmon's unreleased source. So the gap between
 > what akmon ships and what a session reads is release lag, not a sync or staleness-detector
-> failure. Owned by A22 and [trial T2](../design/attention-frame-comparison.md#trial-t2--delivery-and-clause-comparison);
+> failure. Owned by A22 and [trial T2](../../docs/design/attention-frame-comparison.md#trial-t2--delivery-and-clause-comparison);
 > row M81 in [MEASUREMENTS](../MEASUREMENTS.md).
 
 ## What was checked
@@ -69,7 +69,7 @@ reproduce unchanged; none needs a record of its own.
 | akmon's source `session_start_result` on the consumer: 1,146 characters ending in the stale-rules warning | yes | read above as release lag: the consumer's installed hooks inject 909 characters and no notice |
 | delivered `guardrails/_common.md` 10,023 bytes against the source's 10,808: 22 lines only in the source, 12 only in the delivered copy, `## Role declaration` missing from it | yes | the same release lag; `B_ship` against `B_del` measured it (M83) |
 | `sync` materializes `CLAUDE.md` (payload `@AGENTS.md` only), `.github/copilot-instructions.md`, `GEMINI.md`, `.codex/README.md`, `.codex/hooks.json` | yes | a fact about akmon's own code, recorded by `bin/sync.py` itself |
-| the quote checker used on T1's hand-built fixture pairs quotation marks positionally and skips real quotations | yes | not reused: T2's arms are assembled and asserted by script ([Arms](../design/attention-frame-comparison.md#arms)) |
+| the quote checker used on T1's hand-built fixture pairs quotation marks positionally and skips real quotations | yes | not reused: T2's arms are assembled and asserted by script ([Arms](../../docs/design/attention-frame-comparison.md#arms)) |
 
 ## What this does not establish
 

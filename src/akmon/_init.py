@@ -1,4 +1,4 @@
-"""``akmon init`` — attach the standard to a project (C37, design ``meta/design/packaging/``).
+"""``akmon init`` — attach the standard to a project (C37, design ``docs/design/packaging/``).
 
 This is the mechanized half of ``BOOTSTRAP.md`` §A: mount the standard in one of the four
 modes (ADR 0009 §3-4), create the ``<AITNA_ROOT>/`` local layout, write the integration

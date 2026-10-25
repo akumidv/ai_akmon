@@ -1,6 +1,6 @@
 # C107 evidence — the JS `update` for npm/pnpm/yarn/bun
 
-Task: [C107](../TASKS.md). Plan row: [design §6](../design/node-consumers.md#6-implementation-plan) — each manager's
+Task: [C107](../TASKS.md). Plan row: [design §6](../../docs/design/node-consumers.md#6-implementation-plan) — each manager's
 exact command covered; unknown manager → printed command; rollback announced. Decisions: ADR 0020 D07 ("`akmon update`
 uses the detected manager's exact dev-install command; any other manager gets the command printed"), ADR-0018/D03.
 ADR 0020 D08 applies: [`meta/conformance/DIVERGENCES.md`](../conformance/DIVERGENCES.md).

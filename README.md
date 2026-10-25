@@ -7,10 +7,10 @@ The cross-project standard for **how an AI assistant helps develop, and helps us
 project**. A consumer either mounts the repository at `_aitna/akmon/` or pins the
 `akmon` package as a development dependency and runs it from there — with only the
 guardrails and profiles its `AGENTS.md` imports materialized under `_aitna/.akmon/`
-([ADR 0009](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0009-packaging-package-carrier-and-mount-modes.md)).
+([ADR 0009](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0009-packaging-package-carrier-and-mount-modes.md)).
 The package comes in two carriers of one tree: a Python wheel, and an npm package whose
 JavaScript implementation lets a Node project run akmon with no Python at all
-([ADR 0020](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0020-node-consumers-js-implementation.md)).
+([ADR 0020](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0020-node-consumers-js-implementation.md)).
 The standard is **LLM-agnostic** at the policy layer: plain Markdown/JSON that any assistant
 or human can read. Enforcement depth remains vendor-specific, and the single entry point in
 a consuming project is its root `AGENTS.md`. `akmon init`, `sync`, `verify`, `check`, `path`,
@@ -40,7 +40,7 @@ outcome or avoids larger implementation and rework costs. Evaluate the whole pat
 the result, not the price of an isolated step.
 
 Routing and governance mechanisms already exist. The fuller attention-aware interaction
-protocol is [under design, with evaluation planned](https://github.com/akumidv/ai_akmon/blob/main/meta/design/attention-and-human-agent-collaboration.md),
+protocol is [under design, with evaluation planned](https://github.com/akumidv/ai_akmon/blob/main/docs/design/attention-and-human-agent-collaboration.md),
 not a claimed measured advantage over other products. The research preserves its
 premises, alternatives, implementation plan, and conditions for reconsideration.
 
@@ -141,7 +141,7 @@ inside each project's own forge-workspace. The vocabulary maps one-to-one onto t
 Containment is literal: the anvil sits **inside** the volcano-forge, exactly as `akmon/`
 sits inside `_aitna/`; the `k-` prefix of the subagents reads as *Kyklōpes*.
 
-> The names are **locked** ([ADR 0008](https://github.com/akumidv/ai_akmon/blob/main/meta/decisions/0008-mythological-naming-aitna-akmon-kyklopes.md)),
+> The names are **locked** ([ADR 0008](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0008-mythological-naming-aitna-akmon-kyklopes.md)),
 > and the on-disk rename is tracked as one migration release ([V1](https://github.com/akumidv/ai_akmon/blob/main/meta/TASKS.md)).
 
 ## Vendor support
@@ -278,7 +278,7 @@ owner ◄── synthesis + audit verdict + the items only the owner can verify
 > threshold, nudges — then hard-asks — to hand the work to a smith. How far that reaches on
 > each harness is one row in [CAPABILITIES.md](CAPABILITIES.md).
 > The smiths themselves are exempt (a `k_*` delegate has no delegation tool of its own).
-> Mechanism + motivation: [model-routing §13](https://github.com/akumidv/ai_akmon/blob/main/meta/design/model-routing.md).
+> Mechanism + motivation: [model-routing §13](https://github.com/akumidv/ai_akmon/blob/main/docs/design/model-routing.md).
 
 ## akmon's own development
 

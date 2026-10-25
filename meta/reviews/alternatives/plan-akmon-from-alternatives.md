@@ -2,7 +2,7 @@
 
 > **Status: accepted as direction.** The A11 owner walkthrough closed all 7
 > themes of §6.0 and decisions D1–D4; the verdict set is folded into
-> [ADR 0010](../../decisions/0010-alternatives-adoption-a11-verdicts.md), with
+> [ADR 0010](../../../docs/adr/0010-alternatives-adoption-a11-verdicts.md), with
 > per-theme rationale, amendments and pilot criteria in the
 > [walkthrough record](walkthrough-a11.md). Accepted items carry
 > canonical IDs in `meta/TASKS.md`, the living execution carrier — this file
@@ -144,7 +144,7 @@ procedure, not structure.
 | W11 | `code-flow` has the individual reuse rules but no *ordered decision procedure* before writing new code, and no root-cause clause for bug fixes | engineer / code-flow | solution ladder (need at all → project reuse → stdlib → native → installed dep → minimal expression → new code) + "fix the shared source, not the named symptom"; subordinate to accepted task and locked design; never overrides security/accessibility/trust-boundary/data-loss/explicit requirements | [pny/claude] §7.2-2 / [pny/codex] F2 |
 | W12 | Review verdicts are single-blended and under-specified: no named yardstick for over-engineering, no split between spec compliance and implementation quality, and engineer verification is signal-triggered rather than a consistent task-level contract (worker success reports carry too much trust) | review / review-flow, engineer gate | simplicity lens: `delete / stdlib / native / yagni / shrink` tag vocabulary, read-only, severity by boundary/risk, never LOC; **two-verdict task review** — spec compliance and implementation quality separately, material findings force fix + re-review; reviewer-independence clauses ported verbatim (never tell a reviewer what not to flag, never pre-rate severity, plan contradictions go to the owner) | [pny/claude] §7.2-3 / [pny/codex] F3 / [top3/claude] §1.2-1/-7 / [top3/codex] gap 3 |
 | W13 | The learn-loop PROMOTE step grades no evidence: a plausible rule and a proven rule promote identically | learn | evidence classes: contract/unit-verified · behaviorally demonstrated · no-regression-only · unproven hypothesis · model/harness-specific ceiling; negative results retained and labeled | [pny/claude] §7.2-4 / [pny/codex] F7 (verified: ponytail's #217 rung labeled *unproven* when the benefit did not reproduce) |
-| W24 | design-flow's living design concept is not wired to the host's native plan surface: Claude Code plan mode already produces a durable, owner-approved, resumable plan file (default `~/.claude/plans/`, directory configurable to a project path; `ExitPlanMode` refuses without it), and agent teams give the lead an approve/reject gate over every teammate's plan — yet akmon's design-first rule relies on session discipline where the harness offers an enforcement point, and the approved plan evaporates in a vendor-private directory instead of becoming the design concept | architect / design-flow (+ delegation) | run the A-stage design session in plan mode and promote the approved plan file into `meta/design/` (as, or folded into, the living design concept) with a back-pointer; in team ("tech lead") execution the lead's teammate-plan approval is the same gate at dispatch granularity; vendor mechanisms stay in the adapter layer — instruction-tier fallback: the design concept file itself is the plan | owner request; verified against Claude Code 2.1.211 *(wave 3 — host-native, not from the reviewed alternatives)* |
+| W24 | design-flow's living design concept is not wired to the host's native plan surface: Claude Code plan mode already produces a durable, owner-approved, resumable plan file (default `~/.claude/plans/`, directory configurable to a project path; `ExitPlanMode` refuses without it), and agent teams give the lead an approve/reject gate over every teammate's plan — yet akmon's design-first rule relies on session discipline where the harness offers an enforcement point, and the approved plan evaporates in a vendor-private directory instead of becoming the design concept | architect / design-flow (+ delegation) | run the A-stage design session in plan mode and promote the approved plan file into `docs/design/` (as, or folded into, the living design concept) with a back-pointer; in team ("tech lead") execution the lead's teammate-plan approval is the same gate at dispatch granularity; vendor mechanisms stay in the adapter layer — instruction-tier fallback: the design concept file itself is the plan | owner request; verified against Claude Code 2.1.211 *(wave 3 — host-native, not from the reviewed alternatives)* |
 
 ### 2.5. Delegation contract and token economics *(new group — wave 2)*
 
@@ -240,7 +240,7 @@ develops itself*, not just what lands in the backlog:
 - **Shortest-diff as an absolute / one-runnable-check as the full test
   contract**: rejected in both ponytail reviews' do-not-copy lists.
 - **A parallel spec tree** (`openspec/`-style) beside `meta/TASKS.md` +
-  `meta/design/` + D2: adopt the lifecycle semantics (W21), never the folders —
+  `docs/design/` + D2: adopt the lifecycle semantics (W21), never the folders —
   no second source of truth, no second task list. *(wave 2)*
 - **Bootstrap absolutism** ("1% chance → MUST invoke") and universal mandatory
   TDD/worktrees: reliability bought with a permanent token/attention tax; akmon
@@ -312,7 +312,7 @@ implement concept 14.
 |---:|---|---|---|---|
 | 1 | Prove that policy changes behavior | P3.1 → P3.2 (+P3.3) | W1, W3, W13 | a repeated baseline/treatment fixture catches ≥1 known policy failure and reports variance and cost |
 | 1 | Prove vendor delivery on live paths | P0.1, P0.2 → P3.4 | W2, W4, W9, W10 | a real CLI transcript proves the exact payload on one vendor × carrier × subagent path |
-| 2 | Delegation contracts | P2.4, P2.5, P2.6, P2.8 | W17, W18, W19, W24 | two representative tasks run on the packet; scope escapes, missing-context retries, and dispatch tokens measured; one A-stage design produced via plan mode and promoted into `meta/design/` |
+| 2 | Delegation contracts | P2.4, P2.5, P2.6, P2.8 | W17, W18, W19, W24 | two representative tasks run on the packet; scope escapes, missing-context retries, and dispatch tokens measured; one A-stage design produced via plan mode and promoted into `docs/design/` |
 | 2 | Change-state lifecycle | P2.7 | W21 | one change manifest links the existing owners, detects a stale base, adds no second source of truth |
 | 2 | Review/handoff discipline | P2.1, P2.2 | W11, W12 | escaped findings at final audit and review-loop count drop on two pilot reviews |
 | 3 | Cheap deterministic hardening | P1.1–P1.7, P0.3, P0.4, P2.3 | W5–W8, W20, W22, W23 | checks land in `self_ci`/`release_check` and fail on seeded violations |
@@ -384,7 +384,7 @@ implement concept 14.
   drafts read-only, and the owner-approved plan file (Claude Code:
   `~/.claude/plans/` by default; the plans directory is configurable to a
   project path, which may point it straight at the repo) is promoted into
-  `meta/design/` with a back-pointer instead of evaporating vendor-side. In
+  `docs/design/` with a back-pointer instead of evaporating vendor-side. In
   agent-team ("tech lead") execution, the lead's approval of each teammate's
   plan is the same design-first gate at dispatch granularity, mapped onto the
   P2.4 packet. Instruction-tier fallback: the design concept file itself is

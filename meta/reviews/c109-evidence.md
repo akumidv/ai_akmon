@@ -1,6 +1,6 @@
 # C109 evidence — `init` detects JS/TS linters and analyzers
 
-Task: [C109](../TASKS.md). Plan row: [design §6](../design/node-consumers.md#6-implementation-plan) — the §3 F5 table in
+Task: [C109](../TASKS.md). Plan row: [design §6](../../docs/design/node-consumers.md#6-implementation-plan) — the §3 F5 table in
 node-tagged scenarios per tool and per manager; explicit patterns; `tsc` without `{files}`; scripts named, not recorded.
 Decision: ADR 0020 D07, design §3 F5. Divergence: DV25 (rewritten).
 

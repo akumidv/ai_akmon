@@ -27,7 +27,7 @@ stronger model reasoning can pay off through better outcomes and less implementa
 coordination, and rework. Its expected benefit needs checking; more spending is not
 automatically better, and the model does not invent a common unit for attention and tokens.
 
-The [research and refinement plan](design/attention-and-human-agent-collaboration.md)
+The [research and refinement plan](../docs/design/attention-and-human-agent-collaboration.md)
 records the actual reasoning path, sources and their limits, competing approaches,
 open premises, and evaluation cases. The [roadmap](ROADMAP.md#product-priorities) sets
 direction; [TASKS](TASKS.md) owns execution state. New interaction policies still need
@@ -106,9 +106,9 @@ Two kinds of dev documentation are easy to conflate; place them by their reader:
 The test: *does a newcomer read it to learn how the project is built, or is it a record of how
 we managed and measured the building?* The first is stable knowledge (project docs); the second
 is process and evidence (the dev layer). A document may cite evidence; evidence is not a document
-a newcomer needs first. Settled by [ADR 0023](decisions/0023-project-documents-layout.md); the
-analysis is [design: document layout](design/document-layout.md). akmon applies it to its own
-records after C160; until then they are in `meta/decisions/` and `meta/design/`.
+a newcomer needs first. Settled by [ADR 0023](../docs/adr/0023-project-documents-layout.md); the
+analysis is [design: document layout](../docs/design/document-layout.md). akmon's own records are in
+`docs/adr/` and `docs/design/`.
 
 **Scope boundary — what this tree does NOT cover (yet).** The tree spans DEVELOP and USE.
 It does **not** cover a third mode, **OPERATE** — an agent that *acts in the world at
@@ -129,7 +129,7 @@ runtime with real, often irreversible consequences (orders, money). So mounting 
 **not** OPERATE: akmon's USAGE relation *is* the consuming project's DEVELOP relation — the same
 activity seen from two subjects. This is why a [release](../roles/release.md) is cut for a chosen
 **subject** (the project's package, or akmon). Locked in
-[ADR 0001](decisions/0001-release-and-roles-model.md) §6.
+[ADR 0001](../docs/adr/0001-release-and-roles-model.md) §6.
 
 ---
 

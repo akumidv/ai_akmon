@@ -24,7 +24,7 @@ project's checks — left untouched" guard keeps it. ADR 0020 D01/D03: both impl
   the OK finding is given only when the table declares at least one check. See the measurement below.
 - **Docstrings:** `_setup_checks` and the `_setupChecks` JSDoc say that nothing — `none`, or `own` when no tool is
   found — is recorded as an empty table so a realign keeps it, and that a record written before has no table and is decided again.
-- **Design:** `meta/design/code-rules-and-profiles.md` §7 said "Nothing is written on `own` or `none`"; it now says
+- **Design:** `docs/design/code-rules-and-profiles.md` §7 said "Nothing is written on `own` or `none`"; it now says
   nothing is written into the project's configuration, and `none` and `own` with nothing found are recorded as an
   empty table.
 - **No migration:** a record without a `[check]` table is decided again on its next realign, as before.

@@ -10,7 +10,7 @@
 > [audit synthesis](t2-audit-synthesis.md)). Guidance changed behaviour here when it was
 > in context and written for the project the cases are about; what a consumer session receives is written for the consumer's project, so on
 > these akmon cases its null result cannot be separated from that. Owned by A22 and
-> [trial T2](../design/attention-frame-comparison.md#trial-t2--delivery-and-clause-comparison).
+> [trial T2](../../docs/design/attention-frame-comparison.md#trial-t2--delivery-and-clause-comparison).
 
 ## What ran
 

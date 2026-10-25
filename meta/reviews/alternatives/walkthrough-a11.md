@@ -12,7 +12,7 @@
 > record as its rationale.
 >
 > **Completed:** all 7 themes accepted; the verdict set is folded
-> into [ADR 0010](../../decisions/0010-alternatives-adoption-a11-verdicts.md).
+> into [ADR 0010](../../../docs/adr/0010-alternatives-adoption-a11-verdicts.md).
 >
 > Route (7 themes, plan §6.0): 1 behavioral evaluation → 2 vendor delivery
 > proof (D2, D4) → 3 delegation contracts (D3 parked) → 4 change-state
@@ -131,7 +131,7 @@ a 2-gate sample proves the pilot, not the whole system.
   ≥1 known policy failure (e.g., a default-branch commit without the guard) and
   reports variance and run cost.
 - **Carriers:** one architect pass A14 on P3.1+P3.3 (design session in plan mode
-  per P2.8, plan file promoted into `meta/design/`) → C42 for P3.2.
+  per P2.8, plan file promoted into `docs/design/`) → C42 for P3.2.
 - **Deferred to A14** (named, not decided): fixture consumer (pinned alphavar vs
   synthetic mini-repo), statistical-layer budget, own runner vs external.
 
@@ -331,7 +331,7 @@ One architect pass (inside A13) locks four contracts:
   and prose-driven implementers; **explicit model in every dispatch**; "turn
   count beats token price" as named policy; calibration deferred to C42 data.
 - **P2.8 — design-session carrier**: the plan-mode plan file is promoted into
-  `meta/design/`; in team mode the lead's teammate-plan approval is the same
+  `docs/design/`; in team mode the lead's teammate-plan approval is the same
   gate; instruction-tier fallback — the design concept file itself is the plan.
 
 **Solves:** W17 — failure handling stops being improvisation; W19 — the
@@ -383,7 +383,7 @@ separate lock sessions cost more owner attention.
 
 - **Pilot acceptance criterion:** two representative tasks run on the packet;
   scope escapes, missing-context retries, and dispatch tokens measured; one
-  A-stage design produced via plan mode and promoted into `meta/design/`.
+  A-stage design produced via plan mode and promoted into `docs/design/`.
 - **Carriers:** A13 (one architect pass; scope amendments above) → C41.
 - **D3 — PARKED (owner):** fresh vs forked subagent context is
   resolved by measurement inside C42's harness; until then P2.4 stays silent on
@@ -399,7 +399,7 @@ and what must not).**
 ### Essence
 
 A non-trivial change in akmon lives in six carriers at once: the task in
-`meta/TASKS.md`, the design in `meta/design/`, an ADR, a D2-ledger entry, the
+`meta/TASKS.md`, the design in `docs/design/`, an ADR, a D2-ledger entry, the
 code, the tests. There is **no projection of the change**: answering "what
 state is change X in" requires a manual sweep of all six. Design docs are
 whole snapshots — an amendment means editing the entire document, with no
@@ -418,7 +418,7 @@ The live evidence is our own backlog:
   (C16, C17, C18, C20, C31, C39, V2) — work finished in code, its
   cross-carrier reconciliation hanging; this *is* the uncleared
   reconciliation debt.
-- `meta/design/model-routing.md` — **985 lines**, a living design absorbing
+- `docs/design/model-routing.md` — **985 lines**, a living design absorbing
   §9–13 with statuses embedded; what of it is implemented vs drifted from
   code is discoverable only by reading it end to end.
 - Task lines balloon into mini-documents (C28 spans dozens of lines) because

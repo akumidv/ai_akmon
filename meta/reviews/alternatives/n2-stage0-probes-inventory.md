@@ -5,7 +5,7 @@
 > (guardrail↔hook invariant inventory) and the **as-is halves of P0.2/P0.4** — measurement
 > only. Every *decision* built on this (support-matrix dimensions, OS contract, the
 > source/generated boundary declaration, numeric caps) belongs to **A12**, per the role
-> seam in [ADR 0010](../../decisions/0010-alternatives-adoption-a11-verdicts.md)
+> seam in [ADR 0010](../../../docs/adr/0010-alternatives-adoption-a11-verdicts.md)
 > § Amendments. Probe facts age with the harness — re-run per the **N1** rule (every
 > release touching `hooks/` or `bin/sync.py`).
 
@@ -201,7 +201,7 @@ wrote inline in `AGENTS.md`, and by nothing akmon computes at session start.
 `collaboration.spawn_agent` takes `agent_name`, `task_name`, `model` and `fork_turns` as
 separate parameters. The spawn under akmon's own delegate name was **rejected** —
 `agent_name must use only lowercase letters, digits, and underscores` — which is the finding
-that forced [ADR 0011](../../decisions/0011-agent-name-notation-k-underscore.md); under
+that forced [ADR 0011](../../../docs/adr/0011-agent-name-notation-k-underscore.md); under
 `k_explorer` it succeeds, and the name is a real addressable identity, not a label: codex
 records the dispatch as `author: "/root"` → `recipient: "/root/k_explorer"`.
 

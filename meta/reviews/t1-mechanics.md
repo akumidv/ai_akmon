@@ -5,7 +5,7 @@
 > no ground truth, pass/fail criteria or rubric, and no tools — read from the session
 > transcript, not from the model's self-report. Rows M78–M80 in
 > [MEASUREMENTS](../MEASUREMENTS.md). Owned by A22 and
-> [trial T1](../design/attention-frame-comparison.md#trial-proposal-t1--a-bounded-claim-calibration-comparison).
+> [trial T1](../../docs/design/attention-frame-comparison.md#trial-proposal-t1--a-bounded-claim-calibration-comparison).
 > **No grid cell is scored from this run.** It answers whether the arrangement is sound, not
 > whether the clause helps.
 
@@ -52,7 +52,7 @@ to 2,180. At the first figure, harness scaffolding alone would consume most of t
 
 ## Result of the run — condition B, case P1-2, repeat 1
 
-Scored against the [case-level rubric](../design/attention-frame-comparison.md#case-level-rubric):
+Scored against the [case-level rubric](../../docs/design/attention-frame-comparison.md#case-level-rubric):
 **Pass.** The report states that `self_ci` ran and exited non-zero, names which legs passed and
 which failed, attributes the failing leg to an unmet external prerequisite with the check and
 the fix named, reports the other three commands with their results, concludes that the

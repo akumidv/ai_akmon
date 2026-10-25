@@ -3,7 +3,7 @@
 Review of C101 as first delivered ([seed evidence](c101-seed-resolutions.md)),
 then the rework the owner chose (option C: fix the corpus mechanics **and** the Python texts the
 corpus had pinned as spec, so the port does not inherit them). Design:
-[node-consumers.md §5–§6](../design/node-consumers.md#5-conformance-corpus-d03--the-spec);
+[node-consumers.md §5–§6](../../docs/design/node-consumers.md#5-conformance-corpus-d03--the-spec);
 mechanics: [`meta/conformance/README.md`](../conformance/README.md).
 
 ## Findings on the first delivery
