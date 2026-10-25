@@ -35,7 +35,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -62,6 +62,7 @@ from normalize import NORM_VERSION, Ctx, normalize  # noqa: E402
 from pairing import check_pairing, is_ported  # noqa: E402
 
 from common import versions  # noqa: E402
+from common.runtime import harness_binaries  # noqa: E402
 
 IMPL_SCOPE = {"python": ("shared", "python"), "node": ("shared", "node")}
 #: The Python file that owns each CLI command: the node implementation runs a CLI scenario only when
@@ -90,21 +91,25 @@ class Outcome:
     detail: str = ""
 
 
-def _hide_binary_from_path(binary: str, scratch: Path) -> str:
-    """PATH with every directory holding ``binary`` shadowed by a copy that lacks it.
+def _hide_binaries_from_path(binaries: Sequence[str], scratch: Path) -> str:
+    """PATH with every directory holding one of ``binaries`` shadowed by a copy that lacks them all.
 
-    The corpus tests the corpus's own contract, not the host's live harness: verify's
+    The corpus tests the corpus's own contract, not the host's live harnesses: verify's
     ``codex.host-trust`` would otherwise run a live app-server RPC against the host's Codex
-    (slow, and host-state-dependent). Live harness probes are N10's job.
+    (slow, and host-state-dependent), and the second-opinion chain's head — which init prints and
+    the status line shows — is the first *present* carrier, so an installed harness would change
+    an expected line from host to host (ADR 0024/D11 takes presence from `PATH` and nothing else).
+    Live harness probes are N10's job.
     """
+    hidden = set(binaries)
     entries = []
     for index, entry in enumerate(os.environ.get("PATH", "").split(os.pathsep)):
         directory = Path(entry).absolute() if entry else None
-        if directory and (directory / binary).exists():
+        if directory and any((directory / binary).exists() for binary in hidden):
             shadow = scratch / f"path-{index}"
             shadow.mkdir(parents=True, exist_ok=True)
             for child in directory.iterdir():
-                if child.name != binary and not os.path.lexists(shadow / child.name):
+                if child.name not in hidden and not os.path.lexists(shadow / child.name):
                     (shadow / child.name).symlink_to(child)
             entries.append(str(shadow))
         else:
@@ -308,6 +313,7 @@ def _run_node_unit(scenario: Scenario, ctx: RunCtx) -> tuple[int, str, str, Ctx]
     result = subprocess.run(
         [node, str(probe), "--tree", str(ctx.snapshot), run_spec.probe, str(CORPUS / "units" / run_spec.table)],
         cwd=ctx.work,
+        env={**os.environ, "PATH": _hide_binaries_from_path(harness_binaries(), ctx.work / "path-shadow")},
         capture_output=True,
         text=True,
         check=False,
@@ -387,12 +393,12 @@ def _command_for(
 
 
 def scenario_env(scenario: Scenario, run: RunCtx, run_tmp: Path) -> dict[str, str]:
-    """The environment of the process under test: the host's, a private TMPDIR, no codex, the scenario's own."""
+    """The environment of the process under test: the host's, a private TMPDIR, no harness, the scenario's own."""
     return {
         **os.environ,
         "TMPDIR": str(run_tmp),
         "PYTHONDONTWRITEBYTECODE": "1",
-        "PATH": _hide_binary_from_path("codex", run.work / "path-shadow"),
+        "PATH": _hide_binaries_from_path(harness_binaries(), run.work / "path-shadow"),
         **scenario.env,
     }
 
@@ -472,6 +478,9 @@ def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
     local_repo = _build_local_repo(run.snapshot, run.work, run.version) if fixture.repo else None
     ctx = dataclasses.replace(run_ctx_for(scenario, run, (proj_dir, tree, run_tmp), local_repo), days=(first_day,))
     seed_tmp_files(scenario, run_tmp, ctx)
+    # A scenario's own env may name the run's private directories (`HOME = "{{tmp}}"`): the files it
+    # seeds in `tmp_files` then stand in for the home directory a tool reads one declared file from.
+    env.update({key: _materialize_tokens(value, ctx) for key, value in scenario.env.items()})
     command, payload, extra_env = _command_for(scenario, tree, proj_dir, ctx, run.impl)
     env.update(extra_env)
     result = subprocess.run(command, cwd=proj_dir, env=env, input=payload, capture_output=True, text=True, check=False)

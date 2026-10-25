@@ -190,7 +190,7 @@ this policy; the tiers are how tokens buy quality where leverage is highest. The
 | **reasoner** | load-bearing drafting: deep debugging, design forks, quant derivation, plan drafts | the orchestrator's rung by default; per-kind floors; escalates on signal |
 | **auditor** | clean-context audit of a whole gate's material (`audit`) | the **top of the ladder**, or the auditor-only rung the owner opted into — the highest-leverage check |
 | **worker** | delegable realization: exploration, summaries, mechanical edits, gate loops | cheapest adequate rung (`mid` rung for `implement-under-spec`) |
-| **second-opinion** | independent review of decisions and code | a *different vendor's* model, opt-in |
+| **second-opinion** | independent review of decisions and code | a model of *different priors* (family), down one ladder, opt-in |
 
 The binding surface is the **task-kind matrix** — a finite named list of operations, kept as
 data in the routing registry ([`tools/model_routing/registry.json`](tools/model_routing/registry.json)):
@@ -232,9 +232,11 @@ static below-floor warning is a **weak prior**, not a gate: with the auditor on,
 whole-gate audit is the authoritative check on whether the session model was strong enough, so a
 review/architect-dominant session may deliberately orchestrate below the top rung. Tiers change
 who *drafts*, never who *decides* — owner verification stays with the owner, and a second opinion
-is advisory input to it, not a sign-off. Cross-vendor review uses the opposite configured provider by default: Claude
-sessions ask Codex, Codex sessions ask Claude, unless the project/session explicitly chooses
-another provider.
+is advisory input to it, not a sign-off. The second-opinion reviewer is chosen by model
+*priors* (family), not by vendor, down the registry's `second_opinion_policy.ladder`; same-family
+review runs only as a disclosed last resort, and `second_opinion.py --list` shows the ranked
+chain and every skip. A pin may carry a reasoning effort, `carrier:model@effort`, for a carrier whose
+registry row declares `efforts`.
 
 ## 11. Principles — the shape in seven lines
 

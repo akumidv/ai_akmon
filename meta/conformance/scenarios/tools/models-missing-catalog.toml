@@ -1,0 +1,22 @@
+id = "tools/models-missing-catalog"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/models"]
+
+# The declared catalog does not exist: one refusal line naming the file and the provider row key, exit 2, and
+# nothing is written.
+
+[fixture]
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+tool = "model_routing/models"
+argv = ["--refresh"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "models: ~/.codex/models_cache.json (providers.codex.catalog.file) does not exist; the carrier writes it, so start the carrier once or point the row at its catalog\n"
+file_absent = ["_aitna/local/model-aliases.json"]

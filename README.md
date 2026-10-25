@@ -253,7 +253,7 @@ owner ──► orchestrator (session model)
             ├─► k_reasoner                              reasoner   the orchestrator's rung
             │         …results return; the orchestrator synthesizes…
             ├─► k_auditor  ─ clean context, gate-pack ─ auditor    maximal rung, always
-            └─► second opinion                          other vendor, opt-in
+            └─► second opinion                          different priors, opt-in
             │
 owner ◄── synthesis + audit verdict + the items only the owner can verify
 ```

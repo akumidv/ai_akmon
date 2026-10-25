@@ -1,0 +1,40 @@
+id = "tools/second-opinion-last-resort"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# An empty chain (the only ladder provider is the session's own) takes the disclosed last resort
+# (ADR 0024/D07): the session's own provider on the strongest declared model that differs from the
+# session's, filed `kind=last-resort` with a warning that says so. The provider is declared in the
+# overlay on an absolute-path executable and takes the pack on stdin, so `--dry-run` prints a short
+# command and the corpus needs no harness on PATH.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+"_aitna/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "prompt": "stdin", "family": "qwen", "models": ["small", "big"], "report_dir": ".shfake/second-opinion/"}
+  },
+  "second_opinion_policy": {"ladder": ["shfake"]}
+}
+"""
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--gate",
+  "code-verify",
+  "--gate-pack",
+  "docs/gate-pack.md",
+  "--session-provider",
+  "shfake",
+  "--session-model",
+  "big",
+  "--dry-run",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "/bin/sh -m small\nreport: .shfake/second-opinion/code-verify-1.md\nprovider=shfake priors=qwen carrier=declared repo=unknown model=small kind=last-resort\nwarning: no ladder provider differs from the session, so this run uses the session's own provider with the strongest declared model that differs from big, or its default — same priors, filed as kind=last-resort\nskipped shfake: self\n"

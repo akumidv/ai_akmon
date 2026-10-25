@@ -112,11 +112,7 @@ def _make_project(tmp_path: Path) -> Path:
       "reasoner": "highest",
       "orchestrator_floor": "highest"
     },
-    "second_opinion": {
-      "harness": "claude",
-      "operation": "review",
-      "report_dir": ".codex/second-opinion/"
-    },
+    "carrier": "claude",
     "semantic_fallback": {
       "worker": "worker",
       "mid": "mid",
@@ -132,16 +128,30 @@ def _make_project(tmp_path: Path) -> Path:
       "reasoner": "highest",
       "orchestrator_floor": "highest"
     },
-    "second_opinion": {
-      "harness": "codex",
-      "operation": "review",
-      "report_dir": ".claude/second-opinion/"
-    },
+    "carrier": "codex",
     "semantic_fallback": {
       "worker": "worker",
       "mid": "mid",
       "reasoner": "strongest",
       "orchestrator": "strongest"
+    }
+  },
+  "second_opinion_policy": {
+    "ladder": ["claude", "codex:sol"],
+    "families": {"claude": "Claude", "gpt": "GPT", "qwen": "Qwen", "gemini": "Gemini"}
+  },
+  "providers": {
+    "claude": {
+      "operation": "review",
+      "model_flag": "--model {model}",
+      "family": "claude",
+      "report_dir": ".claude/second-opinion/"
+    },
+    "codex": {
+      "operation": "review",
+      "model_flag": "--model {model}",
+      "family": "gpt",
+      "report_dir": ".codex/second-opinion/"
     }
   }
 }
@@ -2032,38 +2042,271 @@ def test_check_standard_path_falls_back_to_standard_tree_label_in_package_mode(t
 
 
 # --------------------------------------------------------------------------------------
-# retired second-opinion keys in the project overlay (N-review of C57). The overlay is
-# deep-merged *over* the shipped registry, so `cli`/`invoke` never displace the new
-# `harness`/`operation` — they ride along beside them, and every presence check still
-# passes. The stale pair therefore has to be caught at the file it is written in.
+# the providers table, and the keys ADR 0024 retired from the project overlay. The overlay is
+# deep-merged *over* the shipped registry, so a stale `diversity_ladder` or vendor
+# `second_opinion` object never displaces the new ladder or table — it rides along beside them,
+# and every presence check still passes. It therefore has to be caught at the file it is written in.
 # --------------------------------------------------------------------------------------
 
 
-def _overlay_second_opinion_errors(root: Path) -> list[str]:
+def _second_opinion_findings(root: Path, severity: str = "error") -> list[str]:
     verifier = verify.Verifier(root)
     verifier.run()
-    return [f.target for f in verifier.findings if f.severity == "error" and f.code == "routing.second-opinion"]
+    return [f.target for f in verifier.findings if f.severity == severity and f.code == "routing.second-opinion"]
+
+
+def _edit_registry(root: Path, edit) -> None:
+    path = root / "_aitna" / "akmon" / "tools" / "model_routing" / "registry.json"
+    registry = json.loads(path.read_text(encoding="utf-8"))
+    edit(registry)
+    path.write_text(json.dumps(registry), encoding="utf-8")
+
+
+def test_a_compliant_providers_table_reports_no_second_opinion_error(tmp_path):
+    root = _make_project(tmp_path)
+    assert _second_opinion_findings(root) == []
+    assert _second_opinion_findings(root, "ok")
+
+
+@pytest.mark.parametrize("missing", ["operation", "model_flag", "report_dir", "family"])
+def test_a_provider_row_missing_a_required_key_is_one_error(tmp_path, missing):
+    root = _make_project(tmp_path)
+    _edit_registry(root, lambda registry: registry["providers"]["codex"].pop(missing))
+    assert _second_opinion_findings(root) == ["tools/model_routing/registry.json#providers"]
+
+
+def test_a_null_family_is_declared_not_missing(tmp_path):
+    """A carrier that fronts several families states `family: null`; the key must exist, not hold a value."""
+    root = _make_project(tmp_path)
+    _edit_registry(root, lambda registry: registry["providers"]["codex"].update(family=None))
+    assert _second_opinion_findings(root) == []
+
+
+def test_a_ladder_entry_naming_no_provider_is_one_error(tmp_path):
+    root = _make_project(tmp_path)
+    _edit_registry(root, lambda registry: registry["second_opinion_policy"].update(ladder=["claude", "ghost:m"]))
+    assert _second_opinion_findings(root) == ["tools/model_routing/registry.json#second_opinion_policy"]
+
+
+def test_a_vendor_whose_carrier_names_no_provider_is_one_error(tmp_path):
+    root = _make_project(tmp_path)
+    _edit_registry(root, lambda registry: registry["openai"].update(carrier="ghost"))
+    assert _second_opinion_findings(root) == ["tools/model_routing/registry.json#openai"]
+
+
+def test_a_registry_without_a_providers_table_is_one_error(tmp_path):
+    root = _make_project(tmp_path)
+    _edit_registry(root, lambda registry: registry.pop("providers"))
+    assert "tools/model_routing/registry.json#providers" in _second_opinion_findings(root)
 
 
 @pytest.mark.parametrize(
-    "retired", [{"cli": "claude"}, {"invoke": "claude -p"}, {"cli": "claude", "invoke": "claude -p"}]
+    ("overlay", "target"),
+    [
+        (
+            {"second_opinion_policy": {"diversity_ladder": ["other-vendor"]}},
+            "_aitna/model-routing.json#second_opinion_policy",
+        ),
+        ({"anthropic": {"second_opinion": {"report_dir": ".local/so/"}}}, "_aitna/model-routing.json#anthropic"),
+        ({"vendor_x": {"second_opinion": {"cli": "claude"}}}, "_aitna/model-routing.json#vendor_x"),
+    ],
 )
-def test_a_stale_overlay_second_opinion_is_one_error(tmp_path, retired):
+def test_a_stale_overlay_key_is_one_error_naming_the_overlay(tmp_path, overlay, target):
     root = _make_project(tmp_path)
-    _write(
-        root / "_aitna" / "model-routing.json",
-        json.dumps({"anthropic": {"second_opinion": dict(retired)}}),
-    )
-    assert _overlay_second_opinion_errors(root) == ["_aitna/model-routing.json#anthropic"]
+    _write(root / "_aitna" / "model-routing.json", json.dumps(overlay))
+    assert _second_opinion_findings(root) == [target]
 
 
-def test_an_overlay_overriding_only_policy_stays_clean(tmp_path):
+def test_an_overlay_declaring_a_provider_and_a_ladder_stays_clean(tmp_path):
     root = _make_project(tmp_path)
-    _write(
-        root / "_aitna" / "model-routing.json",
-        json.dumps({"anthropic": {"second_opinion": {"report_dir": ".local/so/"}}}),
+    overlay = {
+        "providers": {"myqwen": {"argv": ["qwen", "-m", "{model}"], "family": "qwen"}},
+        "second_opinion_policy": {"ladder": ["myqwen", "claude"]},
+    }
+    _write(root / "_aitna" / "model-routing.json", json.dumps(overlay))
+    assert _second_opinion_findings(root) == []
+
+
+def _second_opinion_errors(root: Path) -> list[tuple[str, str]]:
+    verifier = verify.Verifier(root)
+    verifier.run()
+    return [
+        (f.target, f.message) for f in verifier.findings if f.severity == "error" and f.code == "routing.second-opinion"
+    ]
+
+
+def _write_overlay(root: Path, overlay: dict) -> None:
+    _write(root / "_aitna" / "model-routing.json", json.dumps(overlay))
+
+
+def test_an_overlay_ladder_id_outside_the_merged_providers_is_one_error_quoting_the_overlay(tmp_path):
+    root = _make_project(tmp_path)
+    _write_overlay(root, {"second_opinion_policy": {"ladder": ["claude", "ghost"]}})
+
+    errors = _second_opinion_errors(root)
+
+    assert [target for target, _ in errors] == ["_aitna/model-routing.json#second_opinion_policy"]
+    assert "_aitna/model-routing.json" in errors[0][1] and "undeclared: ghost" in errors[0][1]
+
+
+def test_an_overlay_ladder_over_providers_the_overlay_itself_declares_is_ok(tmp_path):
+    root = _make_project(tmp_path)
+    _write_overlay(
+        root,
+        {
+            "providers": {"mine": {"argv": ["mine", "-m", "{model}"], "family": "qwen"}},
+            "second_opinion_policy": {"ladder": ["mine:big", "claude"]},
+        },
     )
-    assert _overlay_second_opinion_errors(root) == []
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert _second_opinion_errors(root) == []
+    assert any(
+        f.severity == "ok" and f.target == "_aitna/model-routing.json#second_opinion_policy" for f in verifier.findings
+    )
+
+
+@pytest.mark.parametrize(
+    ("row", "fragment"),
+    [
+        ({"argv": ["mine"]}, "family"),
+        ({"argv": ["mine"], "family": "mimo"}, "family 'mimo' is not in second_opinion_policy.families"),
+        (
+            {"argv": ["mine"], "family": None, "model_families": {"x/y": "mimo"}},
+            "model_families.x/y 'mimo' is not in second_opinion_policy.families",
+        ),
+        ({"argv": "mine -m {model}", "family": "qwen"}, "argv must be a non-empty list of strings"),
+        ({"argv": [], "family": "qwen"}, "argv must be a non-empty list of strings"),
+        (
+            {"argv": ["mine"], "family": "qwen", "models": ["big"]},
+            "argv holds no {model} placeholder",
+        ),
+        ({"argv": ["mine"], "family": "qwen", "prompt": "pipe"}, "prompt must be one of: argv, stdin"),
+        ({"argv": ["mine"], "family": "qwen", "repo": "maybe"}, "repo must be one of: worktree, none, unknown"),
+        ({"family": "qwen"}, "carries no argv and akmon ships no command for it"),
+        (
+            {"argv": ["mine"], "family": "qwen", "models": ["big"], "aliases": True},
+            "aliases: true needs a catalog (file and format)",
+        ),
+        (
+            {"argv": ["mine"], "family": "qwen", "aliases": True, "catalog": {"file": "~/x.json", "format": "nope"}},
+            "catalog must be an object with a string file and a format of: codex-models-cache",
+        ),
+        (
+            {"argv": ["mine"], "family": "qwen", "aliases": True, "catalog": "~/x.json"},
+            "catalog must be an object with a string file and a format of: codex-models-cache",
+        ),
+        ({"argv": ["mine"], "family": "qwen", "aliases": "yes"}, "aliases must be true, or the key left out"),
+        (
+            {"argv": ["mine", "{model}"], "family": "qwen", "models": ["default"]},
+            "models must not list the reserved token 'default'",
+        ),
+    ],
+)
+def test_an_overlay_provider_row_that_cannot_run_is_one_error_naming_the_row(tmp_path, row, fragment):
+    root = _make_project(tmp_path)
+    _write_overlay(root, {"providers": {"mine": row}})
+
+    errors = _second_opinion_errors(root)
+
+    assert [target for target, _ in errors] == ["_aitna/model-routing.json#providers.mine"]
+    assert fragment in errors[0][1]
+    assert "_aitna/model-routing.json" in errors[0][1]
+
+
+def test_a_ladder_pin_on_a_row_without_a_model_placeholder_is_an_error(tmp_path):
+    root = _make_project(tmp_path)
+    _write_overlay(
+        root,
+        {
+            "providers": {"mine": {"argv": ["mine"], "family": "qwen"}},
+            "second_opinion_policy": {"ladder": ["mine:big"]},
+        },
+    )
+
+    errors = _second_opinion_errors(root)
+
+    assert any(target == "_aitna/model-routing.json#providers.mine" for target, _ in errors)
+
+
+def test_an_overlay_may_extend_the_family_vocabulary_and_use_the_new_family(tmp_path):
+    root = _make_project(tmp_path)
+    _write_overlay(
+        root,
+        {
+            "second_opinion_policy": {"families": {"mimo": "Xiaomi MiMo models"}},
+            "providers": {"mine": {"argv": ["mine"], "family": "mimo"}},
+        },
+    )
+    assert _second_opinion_errors(root) == []
+
+
+def test_the_overlay_checks_do_not_read_the_developer_local_overlay(tmp_path):
+    root = _make_project(tmp_path)
+    _write(root / "_aitna" / "local" / "model-routing.json", json.dumps({"providers": {"x": {"family": "mimo"}}}))
+    assert _second_opinion_errors(root) == []
+
+
+def test_a_shipped_provider_row_with_a_family_outside_the_vocabulary_is_one_error(tmp_path):
+    root = _make_project(tmp_path)
+    _edit_registry(root, lambda registry: registry["providers"]["codex"].update(family="gptt"))
+    errors = _second_opinion_errors(root)
+    assert [target for target, _ in errors] == ["tools/model_routing/registry.json#providers"]
+    assert "family 'gptt' is not in second_opinion_policy.families" in errors[0][1]
+
+
+def test_a_registry_without_a_family_vocabulary_is_one_error(tmp_path):
+    root = _make_project(tmp_path)
+    _edit_registry(root, lambda registry: registry["second_opinion_policy"].pop("families"))
+    targets = [target for target, _ in _second_opinion_errors(root)]
+    assert "tools/model_routing/registry.json#second_opinion_policy" in targets
+
+
+def test_verifys_overlay_merge_is_the_routing_loaders_merge():
+    sys.path.insert(0, str(Path(verify.__file__).parents[1] / "tools" / "model_routing"))
+    import routing
+
+    base = {"a": {"b": 1, "c": [1, 2]}, "d": {"e": 1}, "f": 1}
+    overlay = {"a": {"c": [3]}, "d": [1], "g": {"h": 2}}
+    assert verify._merge_overlay(base, overlay) == routing._deep_merge(base, overlay)
+
+
+def test_the_catalog_format_list_and_the_default_token_mirror_the_routing_module():
+    import routing
+
+    assert tuple(_VERIFY_DATA["routing_catalog_formats"]) == routing.CATALOG_FORMATS
+    assert _VERIFY_DATA["routing_default_model_token"] == routing.default_model_token()
+
+
+def test_an_overlay_row_with_aliases_and_a_known_catalog_is_accepted(tmp_path):
+    root = _make_project(tmp_path)
+    row = {
+        "argv": ["mine", "{model}"],
+        "family": "qwen",
+        "models": ["big"],
+        "aliases": True,
+        "catalog": {"file": "~/.mine/models.json", "format": "codex-models-cache"},
+    }
+    _write_overlay(root, {"providers": {"mine": row}})
+
+    assert _second_opinion_errors(root) == []
+
+
+def test_the_shipped_codex_row_carries_a_catalog_verify_accepts():
+    registry = json.loads(
+        (Path(verify.__file__).parents[1] / "tools" / "model_routing" / "registry.json").read_text(encoding="utf-8")
+    )
+    row = registry["providers"]["codex"]
+
+    assert row["aliases"] is True
+    assert row["catalog"] == {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}
+
+
+def test_the_retired_key_mirror_equals_the_one_the_routing_data_carries():
+    routing_data = json.loads(
+        (Path(verify.__file__).parents[1] / "tools" / "model_routing" / "agents.json").read_text(encoding="utf-8")
+    )
+    assert _VERIFY_DATA["routing_retired_second_opinion_keys"] == routing_data["retired_second_opinion_keys"]
 
 
 # --------------------------------------------------------------------------------------
@@ -2132,7 +2375,11 @@ def test_verify_data_pins_its_structure():
         "routing_shipped_paths",
         "routing_vendors",
         "routing_semantic_fallback_keys",
-        "routing_second_opinion_keys",
+        "routing_provider_keys",
+        "routing_catalog_formats",
+        "routing_default_model_token",
+        "routing_prompt_channels",
+        "routing_repo_values",
         "routing_retired_second_opinion_keys",
         "reasoner_policy_values",
         "gitignore_patterns",
@@ -2397,3 +2644,65 @@ def test_both_manifests_want_both_profiles(tmp_path):
 def test_unknown_language_wants_no_profile(tmp_path):
     root = _package_root(tmp_path, "", archetype="custom/rust")
     assert {f.severity for f in _profile_findings(root)} == {"ok"}
+
+
+# --------------------------------------------------------------------------------------
+# ADR-0024/D17: the `efforts` row and `model@effort` entries
+# --------------------------------------------------------------------------------------
+
+_EFFORTS = {"flag": "--thinking {effort}", "levels": ["low", "high"]}
+
+
+@pytest.mark.parametrize(
+    ("row", "fragment"),
+    [
+        (
+            {"argv": ["mine", "{model}"], "family": "qwen", "efforts": "high"},
+            "efforts must be an object with a flag holding {effort} and a non-empty list of unique levels",
+        ),
+        (
+            {"argv": ["mine", "{model}"], "family": "qwen", "efforts": {"flag": "--t {effort}", "levels": []}},
+            "efforts must be an object with a flag holding {effort}",
+        ),
+        (
+            {"argv": ["mine", "{model}"], "family": "qwen", "efforts": {"flag": "--t {effort}", "levels": ["a", "a"]}},
+            "efforts must be an object with a flag holding {effort}",
+        ),
+        (
+            {"argv": ["mine", "{model}"], "family": "qwen", "efforts": {"flag": "--t", "levels": ["a"]}},
+            "efforts must be an object with a flag holding {effort}",
+        ),
+        (
+            {"argv": ["mine", "{model}"], "family": "qwen", "efforts": {"flag": "--t {effort}", "levels": ["a", 3]}},
+            "efforts must be an object with a flag holding {effort}",
+        ),
+        (
+            {"argv": ["mine", "{model}"], "family": "qwen", "models": ["m@max"], "efforts": _EFFORTS},
+            "models entry 'm@max' names the effort 'max', which is not one of: low, high",
+        ),
+        (
+            {"argv": ["mine", "{model}"], "family": "qwen", "models": ["m@high"]},
+            "models entry 'm@high' carries an effort, but the row declares no efforts",
+        ),
+        (
+            {"argv": ["mine", "{model}"], "family": "qwen", "models": ["default@high"], "efforts": _EFFORTS},
+            "models must not list the reserved token 'default'",
+        ),
+    ],
+)
+def test_an_overlay_row_with_a_bad_efforts_declaration_is_one_error_naming_the_row(tmp_path, row, fragment):
+    root = _make_project(tmp_path)
+    _write_overlay(root, {"providers": {"mine": row}})
+
+    errors = _second_opinion_errors(root)
+
+    assert [target for target, _ in errors] == ["_aitna/model-routing.json#providers.mine"]
+    assert fragment in errors[0][1]
+
+
+def test_an_overlay_row_with_efforts_and_effort_entries_is_accepted(tmp_path):
+    root = _make_project(tmp_path)
+    row = {"argv": ["mine", "{model}"], "family": "qwen", "models": ["m", "m@high"], "efforts": _EFFORTS}
+    _write_overlay(root, {"providers": {"mine": row}})
+
+    assert _second_opinion_errors(root) == []

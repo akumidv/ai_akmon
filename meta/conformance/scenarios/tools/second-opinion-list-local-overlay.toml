@@ -1,0 +1,46 @@
+id = "tools/second-opinion-list-local-overlay"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# The developer-local routing overlay `<aitna_root>/local/model-routing.json` is the strongest
+# layer (ADR 0024 D11 layer 1): it merges over the project overlay, and a ladder it declares
+# replaces the project's whole (D05) — `codex` is neither ranked nor in the skip ledger. The project
+# overlay is the list scenario's: `shfake` is a qwen carrier and `shmute` has no family. The local
+# one declares `shmute`'s family (so it no longer asks) and re-declares `shfake` as a gpt carrier
+# (so the local word beats the team's), and its ladder puts `shmute` first.
+
+[fixture.files]
+"_aitna/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "prompt": "stdin", "family": "qwen", "models": ["small", "big"], "report_dir": ".shfake/second-opinion/"},
+    "shmute": {"argv": ["/bin/sh"], "report_dir": ".shmute/second-opinion/"}
+  },
+  "second_opinion_policy": {"ladder": ["claude", "shfake", "codex", "shmute"]}
+}
+"""
+"_aitna/local/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"family": "gpt"},
+    "shmute": {"family": "llama"}
+  },
+  "second_opinion_policy": {"ladder": ["claude", "shmute", "shfake"]}
+}
+"""
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--list",
+  "--session-provider",
+  "claude",
+  "--session-model",
+  "opus",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "session: provider=claude model=opus priors=claude\nrank 2: provider=shmute model=(default) priors=llama repo=unknown\nrank 3: provider=shfake model=big priors=gpt repo=unknown\nskipped:\n  claude: self\n"

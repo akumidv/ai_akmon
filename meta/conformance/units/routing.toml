@@ -43,8 +43,9 @@
 # would answer by inheritance (`constructor`), and the transcript tail read: block edges, CRLF split
 # across them, a lone CR, a multi-byte character cut by a block edge, a BOM, invalid UTF-8.
 #
-# Deliberate non-pins: a malformed or missing registry/overlay file (the parser's and the OS's
-# words are the implementation's, as normalization rule 3 says), `MainTurn` (a type alias, no
+# Deliberate non-pins: a malformed or missing registry file, and the parser's own words for a
+# malformed overlay (the parser's and the OS's words are the implementation's, as normalization rule 3
+# says; the named `OverlayError` is pinned, and its message holds none), `MainTurn` (a type alias, no
 # runtime value), a marker exactly at its age-out (it races the clock), and `context_fill_ratio`'s
 # float beyond the binary value both languages compute from the same division.
 
@@ -54,6 +55,11 @@
 id = "data/overlay-name"
 fn = "overlay_name"
 expected_json = '"model-routing.json"'
+
+[[case]]
+id = "data/local-overlay-rel"
+fn = "local_overlay_rel"
+expected_json = '"local/model-routing.json"'
 
 [[case]]
 id = "data/local-config-rel"
@@ -83,7 +89,7 @@ expected_json = '["settings.local.json", "settings.json"]'
 [[case]]
 id = "data/retired-keys"
 fn = "retired_second_opinion_keys"
-expected_json = '["cli", "invoke"]'
+expected_json = '{"policy": ["diversity_ladder"], "vendor": ["second_opinion"], "config": ["second_opinion_provider", "second_opinion_fallback_model"]}'
 
 [[case]]
 id = "data/zone-convention"
@@ -149,7 +155,7 @@ expected_json = 'null'
 id = "data/binding-defaults"
 fn = "Binding"
 kwargs_json = '{"vendor": "v", "orchestrator": "o", "reasoner": "r", "worker": "w", "mid": "m", "auditor": "a", "escalation": []}'
-expected_json = '{"vendor": "v", "orchestrator": "o", "reasoner": "r", "worker": "w", "mid": "m", "auditor": "a", "escalation": [], "semantic_fallback": false, "warning": null, "second_opinion_cli": null, "auditor_opt_in": null}'
+expected_json = '{"vendor": "v", "orchestrator": "o", "reasoner": "r", "worker": "w", "mid": "m", "auditor": "a", "escalation": [], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "data/floor-gap-fields"
@@ -167,7 +173,7 @@ expected_json = '{"role": "r", "trigger": "t", "noun": "n", "headings": ["h"], "
 id = "data/second-opinion-target"
 fn = "SecondOpinionTarget"
 args_json = '["openai", null]'
-expected_json = '{"provider": "openai", "model": null}'
+expected_json = '{"provider": "openai", "model": null, "family": null, "effort": null}'
 
 # --- reg: paths, the overlay, the canonical hash ------------------------------------------------
 
@@ -197,6 +203,74 @@ fn = "overlay_path"
 args_json = '[{"$path": "{{dir}}"}]'
 env = { AITNA_ROOT = "//" }
 expected_json = '"{{dir}}/_aitna/model-routing.json"'
+
+[[case]]
+id = "reg/local-overlay-path-default"
+fn = "local_overlay_path"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '"{{dir}}/_aitna/local/model-routing.json"'
+
+[[case]]
+id = "reg/local-overlay-path-env"
+fn = "local_overlay_path"
+args_json = '[{"$path": "{{dir}}"}]'
+env = { AITNA_ROOT = "meta" }
+expected_json = '"{{dir}}/meta/local/model-routing.json"'
+
+[[case]]
+# The developer-local overlay is the strongest layer: it merges over the project overlay key by key, and a list (a ladder) is replaced whole, not extended.
+id = "reg/load-local-overlay-strongest"
+fn = "load_registry"
+args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
+files = { "akmon/tools/model_routing/registry.json" = '{"a": {"b": 1, "c": 2}, "ladder": ["x", "y", "z"], "k": 0}', "_aitna/model-routing.json" = '{"a": {"c": 3, "d": 4}, "ladder": ["p", "q"], "k": 1}', "_aitna/local/model-routing.json" = '{"a": {"c": 5}, "ladder": ["q"], "n": true}' }
+expected_json = '{"a": {"b": 1, "c": 5, "d": 4}, "ladder": ["q"], "k": 1, "n": true}'
+
+[[case]]
+id = "reg/load-local-overlay-alone"
+fn = "load_registry"
+args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1, "b": 1}', "_aitna/local/model-routing.json" = '{"b": 2}' }
+expected_json = '{"a": 1, "b": 2}'
+
+[[case]]
+# The local overlay is found under AITNA_ROOT, not under the default.
+id = "reg/load-local-overlay-under-env-root"
+fn = "load_registry"
+args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
+env = { AITNA_ROOT = "dev" }
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "dev/local/model-routing.json" = '{"a": 2}', "_aitna/local/model-routing.json" = '{"a": 3}' }
+expected_json = '{"a": 2}'
+
+[[case]]
+# A local overlay path that is a directory is no overlay.
+id = "reg/load-local-overlay-is-dir"
+fn = "load_registry"
+args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/local/model-routing.json/inner" = "x" }
+expected_json = '{"a": 1}'
+
+[[case]]
+# An overlay that does not parse is refused by name; the parser's own words are not part of the message (the cause is chained).
+id = "reg/load-local-overlay-invalid"
+fn = "load_registry"
+args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/local/model-routing.json" = '{ not json' }
+expected_json = '{"error": "OverlayError", "message": "the routing overlay _aitna/local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)"}'
+
+[[case]]
+id = "reg/load-project-overlay-invalid"
+fn = "load_registry"
+args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/model-routing.json" = '{ not json' }
+expected_json = '{"error": "OverlayError", "message": "the routing overlay _aitna/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)"}'
+
+[[case]]
+# An overlay whose top level is not an object is the same named error, not a merge crash.
+id = "reg/load-local-overlay-not-an-object"
+fn = "load_registry"
+args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/local/model-routing.json" = '[1, 2]' }
+expected_json = '{"error": "OverlayError", "message": "the routing overlay _aitna/local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)"}'
 
 [[case]]
 id = "reg/load-without-project"
@@ -269,164 +343,164 @@ expected_json = '"{{registry_hash}}"'
 id = "bind/top-orchestrator"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "large", ["small", "medium", "large"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/reasoner-follows-orchestrator"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "medium", ["small", "medium", "large"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/corridor-below-floor"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "sonnet", ["haiku", "sonnet", "opus", "fable"]]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "sonnet", "reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "sonnet", "reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "auditor_opt_in": null}'''
 
 [[case]]
 id = "bind/corridor-healthy"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus", ["haiku", "sonnet", "opus", "fable"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 # The shipped floor is the top of the ladder, so a lower floor opens the wasteful arm on the committed ladder.
 id = "bind/corridor-reserved-top"
 fn = "compute_binding"
 args_json = '[{"$registry": {"merge": {"anthropic": {"selection_policy": {"orchestrator_floor": "sonnet"}}}}}, "opus"]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator=opus runs on the auditor's reserved top rung — orchestration does not need it; consider /model down to sonnet", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator=opus runs on the auditor's reserved top rung — orchestration does not need it; consider /model down to sonnet", "auditor_opt_in": null}'''
 
 [[case]]
 # The ladder tops out at the floor: floor == top, both arms silent (the accepted degraded mode).
 id = "bind/corridor-collapse-to-floor"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus", ["haiku", "sonnet", "opus"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/openai-relative-floor"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "medium", ["small", "medium", "large"], "openai"]'
-expected_json = '''{"vendor": "openai", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator=medium is below the orchestration floor (large) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "claude", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "openai", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator=medium is below the orchestration floor (large) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "auditor_opt_in": null}'''
 
 [[case]]
 id = "bind/openai-top"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "large", ["small", "medium", "large"], "openai"]'
-expected_json = '{"vendor": "openai", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": null}'
+expected_json = '{"vendor": "openai", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/unknown-orchestrator"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "mystery-model", ["small", "medium", "large"]]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "mystery-model", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator 'mystery-model' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "mystery-model", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator 'mystery-model' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "auditor_opt_in": null}'''
 
 [[case]]
 id = "bind/two-rungs"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "medium", ["small", "medium"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "medium", "escalation": [], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "medium", "escalation": [], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/single-rung"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "only", ["only"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "only", "reasoner": "only", "worker": "only", "mid": "only", "auditor": "only", "escalation": [], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "only", "reasoner": "only", "worker": "only", "mid": "only", "auditor": "only", "escalation": [], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/semantic-fallback"
 fn = "compute_binding"
 args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "strongest"]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "strongest", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": ["mid"], "semantic_fallback": true, "warning": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "strongest", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": ["mid"], "semantic_fallback": true, "warning": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally", "auditor_opt_in": null}'''
 
 [[case]]
 # An empty list is no list (Python truthiness): semantic fallback, not an index error.
 id = "bind/semantic-empty-list"
 fn = "compute_binding"
 args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "x", []]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "x", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": ["mid"], "semantic_fallback": true, "warning": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "x", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": ["mid"], "semantic_fallback": true, "warning": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally", "auditor_opt_in": null}'''
 
 [[case]]
 # Semantic labels de-duplicate in order; a falsy label falls back to its default.
 id = "bind/semantic-overlay-labels"
 fn = "compute_binding"
 args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}, "merge": {"anthropic": {"semantic_fallback": {"worker": "w", "mid": "w", "reasoner": "", "auditor": "top"}}}}}, "o"]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "o", "reasoner": "strongest", "worker": "w", "mid": "strongest", "auditor": "top", "escalation": ["strongest"], "semantic_fallback": true, "warning": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "o", "reasoner": "strongest", "worker": "w", "mid": "strongest", "auditor": "top", "escalation": ["strongest"], "semantic_fallback": true, "warning": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally", "auditor_opt_in": null}'''
 
 [[case]]
 # ADR-0004/D04: with no list the vendor's committed harness ladder binds, and nothing is semantic.
 id = "bind/ladder-default"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus"]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 # The reasoner follows an orchestrator on the committed ladder; the corridor warns below the floor.
 id = "bind/ladder-default-mid-orchestrator"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "sonnet"]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "sonnet", "reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "sonnet", "reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "auditor_opt_in": null}'''
 
 [[case]]
 # An auditor-only alias in the list never binds, wherever it stands: worker is the first ladder rung, not "fable".
 id = "bind/ladder-auditor-only-stripped"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus", ["fable", "haiku", "sonnet", "opus"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 # A session on the auditor-only rung is not on the ladder: the reasoner falls back to the top and the corridor cannot rank it.
 id = "bind/ladder-auditor-only-orchestrator"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "fable"]'
-expected_json = '''{"vendor": "anthropic", "orchestrator": "fable", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator 'fable' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "second_opinion_cli": "codex", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "anthropic", "orchestrator": "fable", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator 'fable' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "auditor_opt_in": null}'''
 
 [[case]]
 # The opt-in moves only the auditor and is recorded on the binding.
 id = "bind/ladder-auditor-opt-in"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus", null, "anthropic", "fable"]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": "fable"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "auditor_opt_in": "fable"}'
 
 [[case]]
 # An opt-in may also name a rung of the ladder.
 id = "bind/ladder-auditor-opt-in-ladder-rung"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus", null, "anthropic", "sonnet"]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "sonnet", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": "sonnet"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "sonnet", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "auditor_opt_in": "sonnet"}'
 
 [[case]]
 id = "bind/ladder-openai-default"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "sol", null, "openai"]'
-expected_json = '{"vendor": "openai", "orchestrator": "sol", "reasoner": "sol", "worker": "luna", "mid": "terra", "auditor": "sol", "escalation": ["terra"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": null}'
+expected_json = '{"vendor": "openai", "orchestrator": "sol", "reasoner": "sol", "worker": "luna", "mid": "terra", "auditor": "sol", "escalation": ["terra"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/ladder-openai-opt-in"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "sol", null, "openai", "astra"]'
-expected_json = '{"vendor": "openai", "orchestrator": "sol", "reasoner": "sol", "worker": "luna", "mid": "terra", "auditor": "astra", "escalation": ["terra"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": "astra"}'
+expected_json = '{"vendor": "openai", "orchestrator": "sol", "reasoner": "sol", "worker": "luna", "mid": "terra", "auditor": "astra", "escalation": ["terra"], "semantic_fallback": false, "warning": null, "auditor_opt_in": "astra"}'
 
 [[case]]
 # An empty list is no list: the committed ladder answers, not an index error.
 id = "bind/ladder-empty-list-is-default"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus", []]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 # A list holding nothing but auditor-only rungs binds nothing: the committed ladder answers.
 id = "bind/ladder-only-auditor-only-is-default"
 fn = "compute_binding"
 args_json = '[{"$registry": {}}, "opus", ["fable"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 # A vendor with no committed ladder binds a given list as it always did.
 id = "bind/ladder-semantic-vendor-with-list"
 fn = "compute_binding"
 args_json = '[{"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "c", ["a", "b", "c"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "c", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "c", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/selection-ladder-default"
@@ -550,7 +624,7 @@ id = "art/local-config-default-ladder"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}}, {"$registry": {}}]'
 kwargs_json = '{"second_opinion": false, "available": null}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": false, "second_opinion_provider": "openai", "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "opus"}}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "opus"}}'
 
 [[case]]
 # The opt-in is recorded; an auditor-only alias in a given list is not part of the recorded ladder.
@@ -558,34 +632,34 @@ id = "art/local-config-auditor-opt-in"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"], "auditor_opt_in": "fable"}}, {"$registry": {}}]'
 kwargs_json = '{"second_opinion": false, "available": null}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"]}, "second_opinion": false, "second_opinion_provider": "openai", "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable", "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "opus"}}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable", "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "opus"}}'
 
 [[case]]
 id = "art/local-config-auditor-only-stripped"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "opus", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}}, {"$registry": {}}]'
 kwargs_json = '{"second_opinion": false, "available": ["haiku", "sonnet", "opus", "fable"]}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": false, "second_opinion_provider": "openai", "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "opus"}}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {"quant-derivation": "opus"}}'
 
 [[case]]
 # A non-"orchestrator" reasoner policy takes the top rung; a literal floor ranks the corridor.
 id = "bind/policy-highest-literal-floor"
 fn = "compute_binding"
 args_json = '[{"$registry": {"set": {"solo": {"selection_policy": {"reasoner": "highest", "orchestrator_floor": "b"}}}}}, "a", ["a", "b", "c"], "solo"]'
-expected_json = '''{"vendor": "solo", "orchestrator": "a", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": "orchestrator=a is below the orchestration floor (b) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "claude", "auditor_opt_in": null}'''
+expected_json = '''{"vendor": "solo", "orchestrator": "a", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": "orchestrator=a is below the orchestration floor (b) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "auditor_opt_in": null}'''
 
 [[case]]
 id = "bind/no-policy-defaults"
 fn = "compute_binding"
 args_json = '[{"$registry": {"set": {"solo": {}}}}, "c", ["a", "b", "c"], "solo"]'
-expected_json = '{"vendor": "solo", "orchestrator": "c", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": null}'
+expected_json = '{"vendor": "solo", "orchestrator": "c", "reasoner": "c", "worker": "a", "mid": "b", "auditor": "c", "escalation": ["b"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
-# A single vendor: no other provider, so the second-opinion harness is its own.
-id = "bind/single-vendor-second-opinion-cli"
+# A single vendor still binds: a vendor block carries orchestration only (ADR 0024/D02).
+id = "bind/single-vendor"
 fn = "compute_binding"
 args_json = '[{"$registry": {"drop": ["openai"]}}, "large", ["small", "medium", "large"]]'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "claude", "auditor_opt_in": null}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}'
 
 [[case]]
 id = "bind/unknown-vendor"
@@ -642,189 +716,662 @@ fn = "vendors_with_routing_policy"
 args_json = '[{"z": {"selection_policy": {}}, "a": {"selection_policy": []}, "m": "s", "b": {"selection_policy": {"x": 1}}}]'
 expected_json = '["z", "b"]'
 
-# --- so: the second-opinion spec, ladder and command -------------------------------------------
+# --- so: the second-opinion ladder (ADR 0024) — providers, priors, session, walk, command, retired keys ---
+#
+# Presence is a host fact (a name on PATH), and the corpus runner hides every shipped carrier, so the
+# walk's rows run on providers an owner would declare outright (D12) over an absolute path every host
+# has (`/bin/sh`) or a name none has — never on the harnesses themselves.
 
 [[case]]
-id = "so/opposite-vendor"
-fn = "opposite_vendor"
-args_json = '[{"$registry": {}}, "anthropic"]'
-expected_json = '"openai"'
+# The shipped one flat ladder (ADR 0024/D05).
+id = "so/ladder-shipped"
+fn = "opinion_ladder"
+args_json = '[{"$registry": {}}]'
+expected_json = '["claude", "codex", "qwen", "opencode", "pi"]'
 
 [[case]]
-id = "so/opposite-vendor-single"
-fn = "opposite_vendor"
-args_json = '[{"$registry": {"drop": ["openai"]}}, "anthropic"]'
-expected_json = '"anthropic"'
+id = "so/ladder-absent"
+fn = "opinion_ladder"
+args_json = '[{}]'
+expected_json = '[]'
 
 [[case]]
-# A routing vendor without a usable spec is passed over for the next one in recorded order.
-id = "so/opposite-vendor-skips-unusable"
-fn = "opposite_vendor"
-args_json = '[{"first": {"selection_policy": {}}, "second": {"selection_policy": {}, "second_opinion": {"harness": "h", "operation": "o", "report_dir": "r"}}}, "third"]'
-expected_json = '"second"'
-
-[[case]]
-id = "so/opposite-vendor-none-usable"
-fn = "opposite_vendor"
-args_json = '[{"first": {"selection_policy": {}}}, "third"]'
-expected_json = '"third"'
-
-[[case]]
-id = "so/spec-required"
-fn = "second_opinion_spec"
-args_json = '[{"$registry": {}}, "openai"]'
-expected_json = '{"harness": "codex", "operation": "review", "model_flag": "--model {model}", "report_dir": ".claude/second-opinion/"}'
-
-[[case]]
-id = "so/spec-missing-required"
-fn = "second_opinion_spec"
-args_json = '[{"$registry": {}}, "nope"]'
-expected_json = '''{"error": "KeyError", "message": "second-opinion provider 'nope' has no usable harness/operation/report_dir spec"}'''
-
-[[case]]
-id = "so/spec-missing-optional"
-fn = "second_opinion_spec"
-args_json = '[{"$registry": {}}, "nope"]'
-kwargs_json = '{"required": false}'
+id = "so/providers-absent"
+fn = "providers"
+args_json = '[{}]'
 expected_json = '{}'
 
 [[case]]
-# A spec without report_dir is not usable.
-id = "so/spec-incomplete-optional"
-fn = "second_opinion_spec"
-args_json = '[{"v": {"second_opinion": {"harness": "h", "operation": "o", "report_dir": ""}}}, "v"]'
-kwargs_json = '{"required": false}'
-expected_json = '{}'
+# The row's keys are the shipped contract; qwen's prompt travels on stdin (N19).
+id = "so/provider-row-qwen"
+fn = "provider_row"
+args_json = '[{"$registry": {}}, "qwen"]'
+expected_json = '{"operation": "review", "model_flag": "-m {model}", "prompt": "stdin", "family": "qwen", "models": [], "report_dir": ".qwen/second-opinion/"}'
 
 [[case]]
-# A retired key raises even on the optional call, and names every retired key in data order.
-id = "so/spec-retired-optional"
-fn = "second_opinion_spec"
-args_json = '[{"$registry": {"merge": {"openai": {"second_opinion": {"invoke": "x", "cli": "codex"}}}}}, "openai"]'
-kwargs_json = '{"required": false}'
-expected_json = '''{"error": "KeyError", "message": "second-opinion provider 'openai' still carries the retired key(s) cli, invoke; the executable and its argv moved into common/runtime.py (C57). Delete only those keys from the hand-owned project overlay and leave the rest of the object alone: the overlay is deep-merged over the shipped registry, so harness/operation/report_dir are inherited unless the overlay deliberately overrides one. The initializer reads this file and will not rewrite it; re-run it afterwards to refresh the generated config."}'''
+# A multi-family carrier ships with no family and no model: the owner declares them in the overlay (D11).
+id = "so/provider-row-opencode"
+fn = "provider_row"
+args_json = '[{"$registry": {}}, "opencode"]'
+expected_json = '{"operation": "review", "model_flag": "-m {model}", "family": null, "models": [], "model_families": {}, "report_dir": ".opencode/second-opinion/"}'
 
 [[case]]
-id = "so/fallback-top-orchestrator"
-fn = "second_opinion_fallback_model"
-args_json = '[["small", "medium", "large"], "large", "large"]'
-expected_json = '"medium"'
+id = "so/provider-row-undeclared"
+fn = "provider_row"
+args_json = '[{"$registry": {}}, "ghost"]'
+expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
-id = "so/fallback-mid-orchestrator"
-fn = "second_opinion_fallback_model"
-args_json = '[["small", "medium", "large"], "medium", "large"]'
-expected_json = '"small"'
+id = "so/split-bare"
+fn = "split_opinion_entry"
+args_json = '["claude"]'
+expected_json = '["claude", null]'
 
 [[case]]
-id = "so/fallback-single-rung"
-fn = "second_opinion_fallback_model"
-args_json = '[["only"], "only", "only"]'
+id = "so/split-pinned"
+fn = "split_opinion_entry"
+args_json = '["claude:opus"]'
+expected_json = '["claude", "opus"]'
+
+[[case]]
+# A model id may hold `:` and `/`; the carrier is whatever precedes the FIRST colon.
+id = "so/split-first-colon"
+fn = "split_opinion_entry"
+args_json = '["opencode:qwen3:8b"]'
+expected_json = '["opencode", "qwen3:8b"]'
+
+[[case]]
+id = "so/split-slash-model"
+fn = "split_opinion_entry"
+args_json = '["opencode:anthropic/claude-sonnet-4"]'
+expected_json = '["opencode", "anthropic/claude-sonnet-4"]'
+
+[[case]]
+# An empty pin is no pin.
+id = "so/split-empty-model"
+fn = "split_opinion_entry"
+args_json = '["claude:"]'
+expected_json = '["claude", null]'
+
+[[case]]
+id = "so/family-row"
+fn = "provider_family"
+args_json = '[{"$registry": {}}, "claude", "opus"]'
+expected_json = '"claude"'
+
+[[case]]
+id = "so/family-no-model"
+fn = "provider_family"
+args_json = '[{"$registry": {}}, "codex"]'
+expected_json = '"gpt"'
+
+[[case]]
+# No row family and no model entry: unknown, so the walk fails closed (D08).
+id = "so/family-unknown-multi"
+fn = "provider_family"
+args_json = '[{"$registry": {}}, "opencode", "anthropic/claude-sonnet-4"]'
 expected_json = 'null'
+
+[[case]]
+id = "so/family-model-entry"
+fn = "provider_family"
+args_json = '[{"$registry": {"merge": {"providers": {"opencode": {"model_families": {"anthropic/claude-sonnet-4": "claude"}}}}}}, "opencode", "anthropic/claude-sonnet-4"]'
+expected_json = '"claude"'
+
+[[case]]
+# The model's own entry outranks the row's single family.
+id = "so/family-model-entry-wins"
+fn = "provider_family"
+args_json = '[{"$registry": {"merge": {"providers": {"claude": {"model_families": {"qwen3:8b": "qwen"}}}}}}, "claude", "qwen3:8b"]'
+expected_json = '"qwen"'
+
+[[case]]
+id = "so/family-row-fallback"
+fn = "provider_family"
+args_json = '[{"$registry": {"merge": {"providers": {"claude": {"model_families": {"qwen3:8b": "qwen"}}}}}}, "claude", "opus"]'
+expected_json = '"claude"'
+
+[[case]]
+id = "so/family-undeclared-provider"
+fn = "provider_family"
+args_json = '[{"$registry": {}}, "ghost", "m"]'
+expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
+
+[[case]]
+# The closed family vocabulary is the keys of second_opinion_policy.families, in declared order (D01).
+id = "so/family-vocabulary-shipped"
+fn = "family_vocabulary"
+args_json = '[{"$registry": {}}]'
+expected_json = '["claude", "gpt", "qwen", "gemini"]'
+
+[[case]]
+# An overlay adds a family by key without restating the shipped ones.
+id = "so/family-vocabulary-overlay-adds"
+fn = "family_vocabulary"
+args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"families": {"deepseek": "DeepSeek models"}}}}}]'
+expected_json = '["claude", "gpt", "qwen", "gemini", "deepseek"]'
+
+[[case]]
+# A list (which an overlay would replace whole) is no vocabulary: the answer is empty.
+id = "so/family-vocabulary-list-is-none"
+fn = "family_vocabulary"
+args_json = '[{"$registry": {"set": {"second_opinion_policy": {"families": ["claude"]}}}}]'
+expected_json = '[]'
+
+[[case]]
+id = "so/family-vocabulary-absent"
+fn = "family_vocabulary"
+args_json = '[{}]'
+expected_json = '[]'
+
+[[case]]
+id = "so/session-family-member"
+fn = "check_session_family"
+args_json = '[{"$registry": {}}, "qwen"]'
+expected_json = 'null'
+
+[[case]]
+# A family outside the vocabulary is refused naming the files that extend it (D01).
+id = "so/session-family-refused"
+fn = "check_session_family"
+args_json = '[{"$registry": {}}, "deepseek"]'
+expected_json = '''{"error": "ValueError", "message": "--session-family 'deepseek' is not in the family vocabulary (claude, gpt, qwen, gemini); add it by declaring second_opinion_policy.families.deepseek in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team"}'''
+
+[[case]]
+id = "so/session-family-overlay-extended"
+fn = "check_session_family"
+args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"families": {"deepseek": "DeepSeek models"}}}}}, "deepseek"]'
+expected_json = 'null'
+
+[[case]]
+# A name the providers table declares is a carrier: it is told where to start (D15).
+id = "so/vendor-refusal-carrier"
+fn = "vendor_refusal"
+args_json = '[{"$registry": {}}, "qwen", ["anthropic", "openai"]]'
+expected_json = '''"--vendor 'qwen' names a carrier, which has no tier-binding block of its own; --vendor must be one of: anthropic, openai (the binding the session borrows). To start from the qwen harness pass --session-provider qwen, with --session-model and --session-family"'''
+
+[[case]]
+id = "so/vendor-refusal-unknown"
+fn = "vendor_refusal"
+args_json = '[{"$registry": {}}, "ghost", ["anthropic", "openai"]]'
+expected_json = '"--vendor must be one of: anthropic, openai"'
+
+[[case]]
+# The line a hook prints for a bad hand-owned overlay: the hook, the file the error names, what it costs.
+id = "so/hook-overlay-line-gate-audit"
+fn = "hook_overlay_line"
+args_json = '["gate-audit", {"$exc": "ValueError", "message": "the routing overlay _aitna/model-routing.json is not a valid JSON object; repair or delete it"}]'
+expected_json = '"akmon gate-audit hook: the routing overlay _aitna/model-routing.json is not a valid JSON object; repair or delete it \u2014 the gate audit is skipped"'
+
+[[case]]
+id = "so/hook-overlay-line-model-routing"
+fn = "hook_overlay_line"
+args_json = '["model-routing", {"$exc": "ValueError", "message": "x"}]'
+expected_json = '"akmon model-routing hook: x \u2014 model routing is silent for this session"'
+
+[[case]]
+id = "so/hook-overlay-line-delegation-log"
+fn = "hook_overlay_line"
+args_json = '["delegation-log", {"$exc": "ValueError", "message": "x"}]'
+expected_json = '"akmon delegation-log hook: x \u2014 the role-matrix advisories are skipped"'
+
+[[case]]
+# The session stanza's own family (init --session-family) is what the ladder reads when the table has none.
+id = "so/session-stanza-family"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {"vendor": "anthropic", "orchestrator": "opus", "session": {"provider": "opencode", "model": "x/y", "family": "qwen"}}]'
+expected_json = '{"provider": "opencode", "family": "qwen", "model": "x/y"}'
+
+[[case]]
+# ...and a stanza naming another provider lends its family to nobody.
+id = "so/session-stanza-family-other-provider"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {"session": {"provider": "opencode", "model": "x/y", "family": "qwen"}}]'
+kwargs_json = '{"provider": "pi"}'
+expected_json = '{"provider": "pi", "family": null, "model": null}'
+
+[[case]]
+# The second opinion's own rule: the strongest declared model (D14).
+id = "so/model-strongest"
+fn = "opinion_model"
+args_json = '[{"$registry": {}}, "claude"]'
+expected_json = '"opus"'
+
+[[case]]
+id = "so/model-strongest-codex"
+fn = "opinion_model"
+args_json = '[{"$registry": {}}, "codex"]'
+expected_json = '"sol"'
+
+[[case]]
+# No declared list: the carrier's own default.
+id = "so/model-none-declared"
+fn = "opinion_model"
+args_json = '[{"$registry": {}}, "qwen"]'
+expected_json = 'null'
+
+[[case]]
+id = "so/model-rule-refused"
+fn = "opinion_model"
+args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"model_rule": "median"}}}}, "claude"]'
+expected_json = '''{"error": "ValueError", "message": "second opinion: unknown model_rule 'median'; the only rule implemented is 'max'"}'''
 
 [[case]]
 id = "so/command-default-model"
-fn = "second_opinion_command"
-args_json = '[{"harness": "claude", "operation": "review"}, "review this"]'
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "claude"]'
+kwargs_json = '{"prompt": "review this"}'
 expected_json = '["claude", "-p", "--output-format", "text", "review this"]'
 
 [[case]]
-# The model flag is a format string split as a shell would split it, before the prompt.
 id = "so/command-pinned-model"
-fn = "second_opinion_command"
-args_json = '''[{"harness": "codex", "operation": "review", "model_flag": "-c model=\"{model}\" --tag ' a b'"}, "p", "gpt x"]'''
-expected_json = '["codex", "exec", "-c", "model=gpt x", "--tag", " a b", "p"]'
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "claude"]'
+kwargs_json = '{"model": "opus", "prompt": "review this"}'
+expected_json = '["claude", "-p", "--output-format", "text", "--model", "opus", "review this"]'
 
 [[case]]
-# The C97 refusal: the model is named by repr (a quote inside switches Python's quote style).
+# A caller with no prompt gets no empty trailing element.
+id = "so/command-no-prompt"
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "codex"]'
+kwargs_json = '{"model": "sol"}'
+expected_json = '["codex", "exec", "--model", "sol"]'
+
+[[case]]
+# Measured on qwen 0.24.7 (N19): read-only via --exclude-tools, the prompt on stdin (no positional), the model pinned with -m.
+id = "so/command-qwen-read-only-stdin"
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "qwen"]'
+kwargs_json = '{"model": "q", "prompt": "p"}'
+expected_json = '["qwen", "--approval-mode", "default", "--exclude-tools", "write_file,edit,run_shell_command", "--max-wall-time", "140s", "-m", "q"]'
+
+[[case]]
+id = "so/command-opencode-model-with-separators"
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "opencode"]'
+kwargs_json = '{"model": "anthropic/claude-sonnet-4:beta", "prompt": "p"}'
+expected_json = '["opencode", "run", "--agent", "plan", "-m", "anthropic/claude-sonnet-4:beta", "p"]'
+
+[[case]]
+# The model flag is split as a shell would split it (quotes honoured), then the model fills the placeholder as one argument.
+id = "so/command-model-flag-split"
+fn = "opinion_command"
+args_json = '''[{"$registry": {"set": {"providers": {"claude": {"operation": "review", "model_flag": "--tag ' a b' --model=\"{model}\""}}}}}, "claude"]'''
+kwargs_json = '{"model": "gpt x", "prompt": "p"}'
+expected_json = '["claude", "-p", "--output-format", "text", "--tag", " a b", "--model=gpt x", "p"]'
+
+[[case]]
+id = "so/command-declared-pinned"
+fn = "opinion_command"
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}", "--flag"]}}}}}, "d"]'
+kwargs_json = '{"model": "m", "prompt": "p"}'
+expected_json = '["d-bin", "-m", "m", "--flag", "p"]'
+
+[[case]]
+# Unpinned, the element that is exactly `{model}` goes and so does the bare flag before it (the owner's no-dangling-flag rule).
+id = "so/command-declared-unpinned-drops-the-flag"
+fn = "opinion_command"
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}", "--flag"]}}}}}, "d"]'
+kwargs_json = '{"prompt": "p"}'
+expected_json = '["d-bin", "--flag", "p"]'
+
+[[case]]
+# An element that merely contains `{model}` is dropped whole and takes nothing with it.
+id = "so/command-declared-unpinned-contains"
+fn = "opinion_command"
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "--keep", "--model={model}", "--x"]}}}}}, "d"]'
+expected_json = '["d-bin", "--keep", "--x"]'
+
+[[case]]
+# The element before a lone `{model}` goes only when it is a bare flag: a subcommand and `--k=v` stay, a leading `{model}` has no predecessor, and every pair is dropped.
+id = "so/command-declared-unpinned-non-flag-predecessor"
+fn = "opinion_command"
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["{model}", "run", "{model}", "--k=v", "{model}", "-m", "{model}", "-n", "1"]}}}}}, "d"]'
+expected_json = '["run", "--k=v", "-n", "1"]'
+
+[[case]]
+# A stdin row gets no prompt argument: the caller feeds the pack on stdin.
+id = "so/command-declared-stdin"
+fn = "opinion_command"
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}"], "prompt": "stdin"}}}}}, "d"]'
+kwargs_json = '{"model": "m", "prompt": "p"}'
+expected_json = '["d-bin", "-m", "m"]'
+
+[[case]]
+# The C97 refusal for a declared carrier; the model is named by repr (a quote inside switches Python's quote style).
+id = "so/command-declared-unpinnable"
+fn = "opinion_command"
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "run"]}}}}}, "d"]'
+kwargs_json = '''{"model": "o'x"}'''
+expected_json = '''{"error": "UnpinnableModelError", "message": "second opinion needs model \"o'x\" on d, but the providers table declares no model_flag for that provider — an unpinned run would not be model-diverse. Declare the measured flag in the provider's row, or route this gate another way."}'''
+
+[[case]]
 id = "so/command-unpinnable"
-fn = "second_opinion_command"
-args_json = '''[{"harness": "claude", "operation": "review"}, "p", "o'x"]'''
-expected_json = '''{"error": "UnpinnableModelError", "message": "second opinion needs model \"o'x\" on claude, but the registry declares no model_flag for that vendor — an unpinned run would not be model-diverse. Declare the measured flag in the vendor's second_opinion block, or route this gate another way."}'''
+fn = "opinion_command"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"operation": "review"}}}}}, "claude"]'
+kwargs_json = '{"model": "o3", "prompt": "p"}'
+expected_json = '''{"error": "UnpinnableModelError", "message": "second opinion needs model 'o3' on claude, but the providers table declares no model_flag for that provider — an unpinned run would not be model-diverse. Declare the measured flag in the provider's row, or route this gate another way."}'''
 
 [[case]]
 id = "so/command-unknown-harness"
-fn = "second_opinion_command"
-args_json = '[{"harness": "nope", "operation": "review"}, "p"]'
-expected_json = '''{"error": "ValueError", "message": "unknown harness 'nope'; known: claude, codex"}'''
+fn = "opinion_command"
+args_json = '[{"$registry": {"set": {"providers": {"nope": {"operation": "review"}}}}}, "nope"]'
+kwargs_json = '{"prompt": "p"}'
+expected_json = '''{"error": "ValueError", "message": "unknown harness 'nope'; known: claude, codex, opencode, pi, qwen"}'''
 
 [[case]]
-id = "so/resolve-other-vendor"
-fn = "resolve_second_opinion"
-args_json = '[{"$registry": {}}, {"orchestrator": "large", "binding": {"auditor": "large"}}, "openai"]'
-expected_json = '{"provider": "anthropic", "model": null}'
+id = "so/repo-harness"
+fn = "opinion_repo"
+args_json = '[{"$registry": {}}, "claude"]'
+expected_json = '"worktree"'
 
 [[case]]
-# Configured == the orchestrating vendor skips other-vendor and pins a different model.
-id = "so/resolve-pinned-same-vendor"
-fn = "resolve_second_opinion"
-args_json = '[{"$registry": {}}, {"orchestrator": "large", "binding": {"auditor": "large"}, "second_opinion_provider": "anthropic", "available": ["small", "medium", "large"]}, "anthropic"]'
-expected_json = '{"provider": "anthropic", "model": "medium"}'
+id = "so/repo-declared-unknown"
+fn = "opinion_repo"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "sh1"]'
+expected_json = '"unknown"'
 
 [[case]]
-# A recorded fallback model wins over the ladder walk.
-id = "so/resolve-recorded-fallback"
-fn = "resolve_second_opinion"
-args_json = '[{"$registry": {"drop": ["openai"]}}, {"orchestrator": "large", "second_opinion_fallback_model": "tiny", "available": ["small", "large"]}, "anthropic"]'
-expected_json = '{"provider": "anthropic", "model": "tiny"}'
+id = "so/repo-stated"
+fn = "opinion_repo"
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d"], "repo": "none"}}}}}, "d"]'
+expected_json = '"none"'
 
 [[case]]
-# Without `available` the semantic rungs are walked: worker, mid, strongest.
-id = "so/resolve-semantic-rungs"
-fn = "resolve_second_opinion"
-args_json = '[{"$registry": {"drop": ["openai"], "unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, {"orchestrator": "strongest", "binding": {"auditor": "strongest"}}, "anthropic"]'
-expected_json = '{"provider": "anthropic", "model": "mid"}'
+id = "so/repo-tool-carrier"
+fn = "opinion_repo"
+args_json = '[{"$registry": {"set": {"providers": {"g": {"carrier": "tool", "operation": "review"}}}}}, "g"]'
+expected_json = '"none"'
 
 [[case]]
-id = "so/resolve-exhausted"
-fn = "resolve_second_opinion"
-args_json = '[{"$registry": {"drop": ["openai"]}}, {"orchestrator": "only", "binding": {"auditor": "only"}, "available": ["only"]}, "anthropic"]'
+id = "so/carrier-harness"
+fn = "opinion_carrier"
+args_json = '[{"$registry": {}}, "claude"]'
+expected_json = '"harness"'
+
+[[case]]
+id = "so/carrier-declared"
+fn = "opinion_carrier"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "sh1"]'
+expected_json = '"declared"'
+
+[[case]]
+id = "so/carrier-tool"
+fn = "opinion_carrier"
+args_json = '[{"$registry": {"set": {"providers": {"g": {"carrier": "tool", "operation": "review"}}}}}, "g"]'
+expected_json = '"tool"'
+
+[[case]]
+id = "so/present-absolute-path"
+fn = "carrier_present"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "sh1"]'
+expected_json = 'true'
+
+[[case]]
+id = "so/present-absent-name"
+fn = "carrier_present"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "gone"]'
+expected_json = 'false'
+
+[[case]]
+id = "so/present-nameless"
+fn = "carrier_present"
+args_json = '[{"$registry": {"set": {"providers": {"n": {"family": "gpt"}}}}}, "n"]'
+expected_json = 'false'
+
+[[case]]
+# No stanza and no argument: the bound vendor's carrier and the recorded orchestrator alias.
+id = "so/session-derived"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {"vendor": "anthropic", "orchestrator": "opus"}]'
+expected_json = '{"provider": "claude", "family": "claude", "model": "opus"}'
+
+[[case]]
+id = "so/session-stanza"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {"vendor": "anthropic", "orchestrator": "opus", "session": {"provider": "qwen", "model": "qwen3-max"}}]'
+expected_json = '{"provider": "qwen", "family": "qwen", "model": "qwen3-max"}'
+
+[[case]]
+id = "so/session-explicit"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {"vendor": "anthropic", "orchestrator": "opus", "session": {"provider": "qwen"}}]'
+kwargs_json = '{"provider": "codex", "model": "sol"}'
+expected_json = '{"provider": "codex", "family": "gpt", "model": "sol"}'
+
+[[case]]
+# A layer that names another provider never lends its model or family.
+id = "so/session-other-layer-lends-nothing"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {"vendor": "anthropic", "orchestrator": "opus", "session": {"provider": "claude", "family": "claude"}}]'
+kwargs_json = '{"provider": "qwen"}'
+expected_json = '{"provider": "qwen", "family": "qwen", "model": null}'
+
+[[case]]
+id = "so/session-explicit-family"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {}]'
+kwargs_json = '{"provider": "opencode", "model": "m", "family": "gpt"}'
+expected_json = '{"provider": "opencode", "family": "gpt", "model": "m"}'
+
+[[case]]
+id = "so/session-multi-family-known"
+fn = "resolve_session"
+args_json = '[{"$registry": {"merge": {"providers": {"opencode": {"model_families": {"x/y": "claude"}}}}}}, {}]'
+kwargs_json = '{"provider": "opencode", "model": "x/y"}'
+expected_json = '{"provider": "opencode", "family": "claude", "model": "x/y"}'
+
+[[case]]
+id = "so/session-multi-family-unknown"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {}]'
+kwargs_json = '{"provider": "opencode", "model": "x/y"}'
+expected_json = '{"provider": "opencode", "family": null, "model": "x/y"}'
+
+[[case]]
+# A harness with no provider row is still a session; its priors are unknown.
+id = "so/session-no-row"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {}]'
+kwargs_json = '{"provider": "gemini"}'
+expected_json = '{"provider": "gemini", "family": null, "model": null}'
+
+[[case]]
+id = "so/session-unknown"
+fn = "resolve_session"
+args_json = '[{"$registry": {}}, {}]'
+expected_json = '''{"error": "SessionUnknownError", "message": "second opinion: no source names the session's provider; pass --session-provider (and --session-model), record it with the routing initializer's --session-provider, or bind a vendor that declares a `carrier`"}'''
+
+[[case]]
+# Self, absent, unknown, same-priors and same-model are all passed over; the order of the ladder is kept.
+id = "so/chain-whole"
+fn = "opinion_chain"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+expected_json = '[{"provider": "sh1", "model": "m2", "family": "gpt", "effort": null}, {"provider": "multi", "model": "a/b:c", "family": "gemini", "effort": null}, {"provider": "sh3", "model": null, "family": "qwen", "effort": null}]'
+
+[[case]]
+id = "so/chain-rank-2"
+fn = "resolve_opinion_chain"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+expected_json = '{"provider": "sh1", "model": "m2", "family": "gpt", "effort": null}'
+
+[[case]]
+id = "so/chain-rank-3"
+fn = "resolve_opinion_chain"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+kwargs_json = '{"rank": 3}'
+expected_json = '{"provider": "multi", "model": "a/b:c", "family": "gemini", "effort": null}'
+
+[[case]]
+id = "so/chain-rank-past-end"
+fn = "resolve_opinion_chain"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+kwargs_json = '{"rank": 9}'
 expected_json = 'null'
 
 [[case]]
-# A ladder without the same-vendor step ends at an unusable other vendor.
-id = "so/resolve-ladder-other-only"
-fn = "resolve_second_opinion"
-args_json = '[{"$registry": {"drop": ["openai"], "set": {"second_opinion_policy": {"diversity_ladder": ["other-vendor"]}}}}, {"orchestrator": "large", "available": ["small", "large"]}, "anthropic"]'
+id = "so/chain-skips"
+fn = "opinion_skips"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+expected_json = '[["claude", "self"], ["sh2", "same priors as claude"], ["gone", "carrier absent"], ["unk", "priors unknown"], ["dup", "same model as sh1"]]'
+
+[[case]]
+id = "so/chain-asks"
+fn = "opinion_asks"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+expected_json = '["unk: priors unknown for its default model; declare providers.unk.family in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team"]'
+
+[[case]]
+# Relativity is a consequence of the self-skip: another session, another rotation of the same ladder.
+id = "so/chain-rotates-with-the-session"
+fn = "opinion_chain"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh1", "family": "gpt", "model": "m2"}}]'
+expected_json = '[{"provider": "claude", "model": "opus", "family": "claude", "effort": null}, {"provider": "multi", "model": "a/b:c", "family": "gemini", "effort": null}, {"provider": "sh3", "model": null, "family": "qwen", "effort": null}]'
+
+[[case]]
+# The model the walk would pick is compared, not only the family.
+id = "so/chain-session-model-already-taken"
+fn = "opinion_skips"
+args_json = '[{"$registry": {"set": {"providers": {"a": {"argv": ["/bin/sh"], "family": "claude", "models": ["x"]}, "b": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["x"]}}, "second_opinion_policy": {"ladder": ["a", "b"]}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "c", "family": "qwen", "model": "x"}}]'
+expected_json = '[["a", "same model as c"], ["b", "same model as c"]]'
+
+[[case]]
+# D08 in the other direction: a session of unknown priors yields an empty chain.
+id = "so/chain-session-priors-unknown"
+fn = "opinion_skips"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": "x/y"}}]'
+expected_json = '[["opencode", "session priors unknown"]]'
+
+[[case]]
+id = "so/chain-session-priors-unknown-asks"
+fn = "opinion_asks"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": "x/y"}}]'
+expected_json = '["session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'
+
+[[case]]
+id = "so/chain-session-priors-unknown-no-model-asks"
+fn = "opinion_asks"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": null}}]'
+expected_json = '["session opencode: priors unknown; declare providers.opencode.family in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (second_opinion.py --session-family)"]'
+
+[[case]]
+id = "so/chain-undeclared-ladder-id"
+fn = "resolve_opinion_chain"
+args_json = '[{"$registry": {"set": {"second_opinion_policy": {"ladder": ["claude", "ghost"]}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
+
+[[case]]
+# The strongest declared model that differs from the session's (D07).
+id = "so/last-resort-different-model"
+fn = "opinion_last_resort"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh1", "family": "gpt", "model": "m2"}}]'
+expected_json = '{"provider": "sh1", "model": "m1", "family": "gpt", "effort": null}'
+
+[[case]]
+id = "so/last-resort-other-end"
+fn = "opinion_last_resort"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh1", "family": "gpt", "model": "m1"}}]'
+expected_json = '{"provider": "sh1", "model": "m2", "family": "gpt", "effort": null}'
+
+[[case]]
+# No other declared model: the carrier's own default.
+id = "so/last-resort-default"
+fn = "opinion_last_resort"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh3", "family": "qwen", "model": "q"}}]'
+expected_json = '{"provider": "sh3", "model": null, "family": "qwen", "effort": null}'
+
+[[case]]
+id = "so/last-resort-reads-the-table-not-the-rungs"
+fn = "opinion_last_resort"
+args_json = '[{"$registry": {"set": {"anthropic": {"selection_policy": {}, "harness_rungs": ["tiny", "small"], "carrier": "claude"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+expected_json = '{"provider": "claude", "model": "sonnet", "family": "claude", "effort": null}'
+
+[[case]]
+id = "so/head-first-provider"
+fn = "opinion_head"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "claude", "model": "opus"}}]'
+expected_json = '["sh1:m2 priors=gpt", null]'
+
+[[case]]
+id = "so/head-bare-provider"
+fn = "opinion_head"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["sh3"]}}}}, {"session": {"provider": "claude", "model": "opus"}}]'
+expected_json = '["sh3 priors=qwen", null]'
+
+[[case]]
+id = "so/head-empty-chain"
+fn = "opinion_head"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude"]}}}}, {"session": {"provider": "claude", "model": "opus"}}]'
+expected_json = '''["unavailable", "second-opinion is on but the provider chain is empty: every ladder provider is the session's own ('claude'), absent from PATH, or answers with priors already taken, so a gate runs only the disclosed last resort (kind=last-resort) — `second_opinion.py --list` names every skip"]'''
+
+[[case]]
+id = "so/head-session-priors-unknown"
+fn = "opinion_head"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "opencode", "model": "x/y"}}]'
+expected_json = '["unavailable priors=unknown", "session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'
+
+[[case]]
+id = "so/head-session-unnamed"
+fn = "opinion_head"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {}]'
+expected_json = '''["unavailable priors=unknown", "second opinion: no source names the session's provider; pass --session-provider (and --session-model), record it with the routing initializer's --session-provider, or bind a vendor that declares a `carrier`"]'''
+
+[[case]]
+id = "so/head-retired-key"
+fn = "opinion_head"
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "claude"}, "second_opinion_provider": "openai"}]'
+expected_json = '{"error": "RetiredKeyError", "message": "the local config .claude/model-routing.local.json still carries the retired key(s) second_opinion_provider (ADR 0024). The second opinion no longer reads a recorded provider or fallback model: it resolves its provider from the session (`session` in this file, or `--session-provider`) and the ladder. Re-run the routing initializer to regenerate this file."}'
+
+[[case]]
+id = "so/retired-overlay-policy"
+fn = "refuse_retired_keys"
+args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"diversity_ladder": ["other-vendor"]}}}}, {}]'
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+
+[[case]]
+id = "so/retired-overlay-vendor"
+fn = "refuse_retired_keys"
+args_json = '[{"$registry": {"merge": {"openai": {"second_opinion": {"report_dir": "x"}}}}}, {}]'
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+
+[[case]]
+# Every retired key is named, policy first, then each registry block in order.
+id = "so/retired-overlay-both"
+fn = "refuse_retired_keys"
+args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"diversity_ladder": []}, "openai": {"second_opinion": {}}}}}, {}]'
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder, openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+
+[[case]]
+# With the project root each overlay file is read, strongest first, and the error quotes the one that holds the key.
+id = "so/retired-overlay-names-the-local-layer"
+fn = "refuse_retired_keys"
+args_json = '[{"$registry": {}}, {}]'
+kwargs_json = '{"project_root": {"$path": "{{dir}}"}}'
+files = { "_aitna/model-routing.json" = '{"briefs": {}}', "_aitna/local/model-routing.json" = '{"second_opinion_policy": {"diversity_ladder": []}}' }
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+
+[[case]]
+id = "so/retired-overlay-names-the-project-layer"
+fn = "refuse_retired_keys"
+args_json = '[{"$registry": {}}, {}]'
+kwargs_json = '{"project_root": {"$path": "{{dir}}"}}'
+files = { "_aitna/model-routing.json" = '{"openai": {"second_opinion": {"report_dir": "x"}}}', "_aitna/local/model-routing.json" = '{"briefs": {}}' }
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+
+[[case]]
+# Named in data order, quoting the local config file.
+id = "so/retired-config"
+fn = "refuse_retired_keys"
+args_json = '[{"$registry": {}}, {"second_opinion_fallback_model": "m", "second_opinion_provider": "openai"}]'
+expected_json = '{"error": "RetiredKeyError", "message": "the local config .claude/model-routing.local.json still carries the retired key(s) second_opinion_provider, second_opinion_fallback_model (ADR 0024). The second opinion no longer reads a recorded provider or fallback model: it resolves its provider from the session (`session` in this file, or `--session-provider`) and the ladder. Re-run the routing initializer to regenerate this file."}'
+
+[[case]]
+# A clean registry and config answer nothing.
+id = "so/retired-clean"
+fn = "refuse_retired_keys"
+args_json = '[{"$registry": {}}, {"vendor": "anthropic", "session": {"provider": "qwen"}}]'
 expected_json = 'null'
-
-[[case]]
-# A configured other vendor is honoured even when it is not the recorded-order opposite.
-id = "so/resolve-configured-other"
-fn = "resolve_second_opinion"
-args_json = '[{"$registry": {"set": {"third": {"selection_policy": {}, "second_opinion": {"harness": "h", "operation": "o", "report_dir": "r"}}}}}, {"second_opinion_provider": "third"}, "anthropic"]'
-expected_json = '{"provider": "third", "model": null}'
-
-[[case]]
-id = "so/unavailability-other-usable"
-fn = "second_opinion_unavailability"
-args_json = '[{"$registry": {}}, {"orchestrator": "large", "binding": {"auditor": "large"}, "available": ["small", "large"]}, "anthropic"]'
-expected_json = '''"other-vendor: openai configured with a usable spec; same-vendor-other-model: on 'anthropic' the rungs ['small', 'large'] against the orchestrator 'large' and the auditor 'large'"'''
-
-[[case]]
-id = "so/unavailability-none-no-diverse"
-fn = "second_opinion_unavailability"
-args_json = '[{"$registry": {"drop": ["openai"]}}, {"orchestrator": "only", "binding": {"auditor": "only"}, "available": ["only"]}, "anthropic"]'
-expected_json = '''"other-vendor: no other vendor is configured with a usable second-opinion spec; same-vendor-other-model: on 'anthropic' the rungs ['only'] hold none that differs from both the orchestrator 'only' and the auditor 'only'"'''
-
-[[case]]
-# The rungs are shown as Python's list repr, a quote inside switching the element's quotes.
-id = "so/unavailability-pinned-repr"
-fn = "second_opinion_unavailability"
-args_json = '''[{"$registry": {}}, {"second_opinion_provider": "anthropic", "available": ["it's", "b"]}, "anthropic"]'''
-expected_json = '''"other-vendor: skipped because second_opinion_provider pins 'anthropic', the orchestrating vendor, though openai is configured; same-vendor-other-model: on 'anthropic' the rungs [\"it's\", 'b'] against the orchestrator '?' and the auditor '?'"'''
-
-[[case]]
-id = "so/unavailability-no-diverse-repr"
-fn = "second_opinion_unavailability"
-args_json = '''[{"$registry": {"drop": ["openai"]}}, {"orchestrator": "it's", "binding": {"auditor": "it's"}, "available": ["it's"]}, "anthropic"]'''
-expected_json = '''"other-vendor: no other vendor is configured with a usable second-opinion spec; same-vendor-other-model: on 'anthropic' the rungs [\"it's\"] hold none that differs from both the orchestrator 'it's' and the auditor 'it's'"'''
-
-[[case]]
-id = "so/unavailability-ladder-absent"
-fn = "second_opinion_unavailability"
-args_json = '[{"$registry": {"set": {"second_opinion_policy": {"diversity_ladder": ["nothing"]}}}}, {}, "anthropic"]'
-expected_json = '"other-vendor: not attempted, it is absent from the configured ladder; same-vendor-other-model: not attempted, it is absent from the configured ladder"'
 
 # --- gen: generated agent files, the wrap, the briefs ------------------------------------------
 
@@ -1734,22 +2281,38 @@ id = "art/local-config"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}, {"$registry": {}}]'
 kwargs_json = '{"second_opinion": true, "available": ["small", "medium", "large"]}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": true, "second_opinion_provider": "openai", "available": ["small", "medium", "large"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": true, "available": ["small", "medium", "large"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}}'
 
 [[case]]
-# A single vendor is its own provider, so the config records the same-vendor fallback model.
+# A single vendor writes the same config: neither a provider nor a fallback model is recorded (ADR 0024).
 id = "art/local-config-single-vendor"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}, {"$registry": {"drop": ["openai"]}}]'
 kwargs_json = '{"second_opinion": false, "available": ["small", "medium", "large"]}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": false, "second_opinion_provider": "anthropic", "available": ["small", "medium", "large"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}, "second_opinion_fallback_model": "medium"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": false, "available": ["small", "medium", "large"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}}'
+
+[[case]]
+# The `session` stanza is written when one is given and only then (ADR 0024): the harness the session runs on.
+id = "art/local-config-session"
+fn = "local_config"
+args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}, {"$registry": {}}]'
+kwargs_json = '{"second_opinion": false, "available": ["small", "medium", "large"], "session": {"provider": "qwen", "model": "q"}}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": false, "available": ["small", "medium", "large"], "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}, "session": {"provider": "qwen", "model": "q"}}'
+
+[[case]]
+# A rebind moves only the orchestrator: the recorded session stanza survives the rewrite.
+id = "art/rebind-to-keeps-session"
+fn = "rebind_to"
+args_json = '[{"$path": "{{dir}}"}, {"$registry": {}}, {"available": ["small", "medium", "large"], "session": {"provider": "qwen", "model": "q"}}, "medium"]'
+tree = ".claude"
+expected_json = '''{"value": [{"vendor": "anthropic", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}, ["{{dir}}/.claude/agents/k_explorer.md", "{{dir}}/.claude/agents/k_mechanic.md", "{{dir}}/.claude/agents/k_validator.md", "{{dir}}/.claude/agents/k_implementer.md", "{{dir}}/.claude/agents/k_reasoner.md", "{{dir}}/.claude/agents/k_auditor.md", "{{dir}}/.claude/model-routing.local.json"]], "tree": {"agents/k_auditor.md": "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n", "agents/k_explorer.md": "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n", "agents/k_implementer.md": "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n", "agents/k_mechanic.md": "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n", "agents/k_reasoner.md": "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n", "agents/k_validator.md": "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n", "model-routing.local.json": "{\n  \"vendor\": \"anthropic\",\n  \"orchestrator\": \"medium\",\n  \"binding\": {\n    \"reasoner\": \"medium\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": false,\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"auditor_opt_in\": null,\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {},\n  \"session\": {\n    \"provider\": \"qwen\",\n    \"model\": \"q\"\n  }\n}\n"}}'''
 
 [[case]]
 id = "art/local-config-semantic-single-vendor"
 fn = "local_config"
 args_json = '[{"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "strongest", "reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": [], "semantic_fallback": true}}, {"$registry": {"drop": ["openai"], "unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}]'
 kwargs_json = '{"second_opinion": false, "available": null}'
-expected_json = '{"vendor": "anthropic", "orchestrator": "strongest", "binding": {"reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": []}, "second_opinion": false, "second_opinion_provider": "anthropic", "available": null, "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}, "second_opinion_fallback_model": "mid"}'
+expected_json = '{"vendor": "anthropic", "orchestrator": "strongest", "binding": {"reasoner": "strongest", "worker": "worker", "mid": "mid", "auditor": "strongest", "escalation": []}, "second_opinion": false, "available": null, "auditor_opt_in": null, "registry_hash": "{{registry_hash}}", "task_kind_floors": {}}'
 
 [[case]]
 # The local config is written as indent-2 JSON with a newline, ASCII-escaped, after the agents.
@@ -1758,7 +2321,7 @@ fn = "binding_artifacts"
 args_json = '[{"$registry": {"set": {"note": "café"}}}, {"$new": "Binding", "fields": {"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}}]'
 kwargs_json = '{"second_opinion": true, "available": ["small", "medium", "large"]}'
 ordered = true
-expected_json = '''[[".claude/agents/k_explorer.md", "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n"], [".claude/agents/k_mechanic.md", "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n"], [".claude/agents/k_validator.md", "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n"], [".claude/agents/k_implementer.md", "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n"], [".claude/agents/k_reasoner.md", "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n"], [".claude/agents/k_auditor.md", "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n"], [".claude/model-routing.local.json", "{\n  \"vendor\": \"anthropic\",\n  \"orchestrator\": \"large\",\n  \"binding\": {\n    \"reasoner\": \"large\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"second_opinion_provider\": \"openai\",\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"auditor_opt_in\": null,\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {}\n}\n"]]'''
+expected_json = '''[[".claude/agents/k_explorer.md", "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n"], [".claude/agents/k_mechanic.md", "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n"], [".claude/agents/k_validator.md", "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n"], [".claude/agents/k_implementer.md", "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n"], [".claude/agents/k_reasoner.md", "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n"], [".claude/agents/k_auditor.md", "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n"], [".claude/model-routing.local.json", "{\n  \"vendor\": \"anthropic\",\n  \"orchestrator\": \"large\",\n  \"binding\": {\n    \"reasoner\": \"large\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"auditor_opt_in\": null,\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {}\n}\n"]]'''
 
 [[case]]
 id = "art/staleness-fresh"
@@ -1824,7 +2387,7 @@ id = "art/float-opt-in-from-config"
 fn = "status_lines"
 args_json = '[{"$call": "read_local_config", "args": [{"$path": "{{dir}}"}]}, {"$registry": {}}, "x"]'
 files = { ".claude/model-routing.local.json" = '{"orchestrator": "large", "second_opinion": 0.0, "available": ["small", "large"], "binding": {"auditor": "large", "escalation": []}}' }
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=large · reasoner=? · auditor=large · worker=? · mid=? · second-opinion=codex(off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'large', re-run `x --orchestrator <alias>`."]'''
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=large · reasoner=? · auditor=large · worker=? · mid=? · second-opinion=unavailable (off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'large', re-run `x --orchestrator <alias>`."]'''
 
 [[case]]
 id = "art/read-local-config-absent"
@@ -1934,7 +2497,7 @@ fn = "rebind_to"
 args_json = '[{"$path": "{{dir}}"}, {"$registry": {}}, {"available": ["small", "medium", "large"], "second_opinion": 1, "vendor": "openai"}, "medium"]'
 files = { ".claude/agents/k-oldname.md" = "Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file.\n", ".claude/agents/mine.md" = "mine\n" }
 tree = ".claude"
-expected_json = '''{"value": [{"vendor": "openai", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator=medium is below the orchestration floor (large) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "second_opinion_cli": "claude", "auditor_opt_in": null}, ["{{dir}}/.claude/agents/k_explorer.md", "{{dir}}/.claude/agents/k_mechanic.md", "{{dir}}/.claude/agents/k_validator.md", "{{dir}}/.claude/agents/k_implementer.md", "{{dir}}/.claude/agents/k_reasoner.md", "{{dir}}/.claude/agents/k_auditor.md", "{{dir}}/.claude/model-routing.local.json"]], "tree": {"agents/k_auditor.md": "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n", "agents/k_explorer.md": "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n", "agents/k_implementer.md": "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n", "agents/k_mechanic.md": "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n", "agents/k_reasoner.md": "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n", "agents/k_validator.md": "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n", "agents/mine.md": "mine\n", "model-routing.local.json": "{\n  \"vendor\": \"openai\",\n  \"orchestrator\": \"medium\",\n  \"binding\": {\n    \"reasoner\": \"medium\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"second_opinion_provider\": \"anthropic\",\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"auditor_opt_in\": null,\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {\n    \"quant-derivation\": \"large\"\n  }\n}\n"}}'''
+expected_json = '''{"value": [{"vendor": "openai", "orchestrator": "medium", "reasoner": "medium", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": "orchestrator=medium is below the orchestration floor (large) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "auditor_opt_in": null}, ["{{dir}}/.claude/agents/k_explorer.md", "{{dir}}/.claude/agents/k_mechanic.md", "{{dir}}/.claude/agents/k_validator.md", "{{dir}}/.claude/agents/k_implementer.md", "{{dir}}/.claude/agents/k_reasoner.md", "{{dir}}/.claude/agents/k_auditor.md", "{{dir}}/.claude/model-routing.local.json"]], "tree": {"agents/k_auditor.md": "---\nname: k_auditor\ndescription: >-\n  Auditor tier — task kind `audit`. Clean-context audit of a whole gate's collected\n  material (a gate-pack): contradictions between independently-correct findings, uncovered\n  seams between zones, re-ranking deltas, a level verdict. Pinned to the maximal available\n  model; drafts and audits, never edits.\ntools: Read, Grep, Glob, Bash\nmodel: large\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_auditor}}\n", "agents/k_explorer.md": "---\nname: k_explorer\ndescription: >-\n  Worker tier — task kinds `explore-search` and `summarize`. Use for read-only fan-out:\n  find where something lives in code/docs, sweep many files, condense files/logs/docs into\n  a brief. Returns conclusions, not file dumps. In a zoned fan-out, start each call's\n  description with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_explorer}}\n", "agents/k_implementer.md": "---\nname: k_implementer\ndescription: >-\n  Worker tier, mid rung — task kind `implement-under-spec`. Use to write code against a\n  decided contract/design: the signatures, data shapes, and structure are already fixed;\n  no open design decisions remain. Ships the change with its tests. In a zoned fan-out,\n  start each call's description with [zone:<label>].\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_implementer}}\n", "agents/k_mechanic.md": "---\nname: k_mechanic\ndescription: >-\n  Worker tier — task kinds `mech-edit`, `test-scaffold`, `doc-sync`. Use for mechanical,\n  behaviour-preserving work from an explicit spec: renames, sweeps, formatting, moving\n  code without reshaping it, test skeletons/fixtures from a stated spec, propagating an\n  already-decided fact across docs. In a zoned fan-out, start each call's description with\n  [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_mechanic}}\n", "agents/k_reasoner.md": "---\nname: k_reasoner\ndescription: >-\n  Reasoner tier — task kinds `debug-deep`, `design-fork`, `quant-derivation`,\n  `plan-draft`. Use for load-bearing thinking: multi-cause/cross-boundary failure\n  analysis, drafting options for a contested design fork, deriving pricing/quant math,\n  drafting a decomposition/zone plan for the orchestrator. Returns a structured report; it\n  drafts, it never decides or edits. In a zoned fan-out, start each call's description\n  with [zone:<label>].\ntools: Read, Grep, Glob, Bash\nmodel: medium\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_reasoner}}\n", "agents/k_validator.md": "---\nname: k_validator\ndescription: >-\n  Worker tier — task kind `validate-loop`. Use to drive project gates to green: run\n  tests/lint/verification tools, parse the output, apply minimal mechanical fixes, re-run\n  until green — or stop with a diagnosis when the failure is not mechanical. In a zoned\n  fan-out, start each call's description with [zone:<label>].\nmodel: small\n---\n\n<!-- Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file. -->\n\n{{body:k_validator}}\n", "agents/mine.md": "mine\n", "model-routing.local.json": "{\n  \"vendor\": \"openai\",\n  \"orchestrator\": \"medium\",\n  \"binding\": {\n    \"reasoner\": \"medium\",\n    \"worker\": \"small\",\n    \"mid\": \"medium\",\n    \"auditor\": \"large\",\n    \"escalation\": [\n      \"medium\"\n    ]\n  },\n  \"second_opinion\": true,\n  \"available\": [\n    \"small\",\n    \"medium\",\n    \"large\"\n  ],\n  \"auditor_opt_in\": null,\n  \"registry_hash\": \"{{registry_hash}}\",\n  \"task_kind_floors\": {\n    \"quant-derivation\": \"large\"\n  }\n}\n"}}'''
 
 [[case]]
 # Idempotent: the same rebind again changes nothing.
@@ -1942,7 +2505,7 @@ id = "art/rebind-to-idempotent"
 fn = "rebind_to"
 args_json = '[{"$path": "{{dir}}"}, {"$registry": {}}, {"available": ["small", "medium", "large"]}, "large"]'
 setup_json = '[{"fn": "rebind_to", "args": [{"$path": "{{dir}}"}, {"$registry": {}}, {"available": ["small", "medium", "large"]}, "large"]}]'
-expected_json = '[{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "second_opinion_cli": "codex", "auditor_opt_in": null}, []]'
+expected_json = '[{"vendor": "anthropic", "orchestrator": "large", "reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"], "semantic_fallback": false, "warning": null, "auditor_opt_in": null}, []]'
 
 [[case]]
 id = "art/rebind-to-dry-run"
@@ -1951,7 +2514,7 @@ args_json = '[{"$path": "{{dir}}"}, {"$registry": {}}, {}, "x"]'
 kwargs_json = '{"write": false}'
 files = { ".claude/agents/k-oldname.md" = "Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file.\n" }
 tree = ".claude"
-expected_json = '''{"value": [{"vendor": "anthropic", "orchestrator": "x", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator 'x' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "second_opinion_cli": "codex", "auditor_opt_in": null}, ["{{dir}}/.claude/agents/k_explorer.md", "{{dir}}/.claude/agents/k_mechanic.md", "{{dir}}/.claude/agents/k_validator.md", "{{dir}}/.claude/agents/k_implementer.md", "{{dir}}/.claude/agents/k_reasoner.md", "{{dir}}/.claude/agents/k_auditor.md", "{{dir}}/.claude/model-routing.local.json"]], "tree": {"agents/k-oldname.md": "Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file.\n"}}'''
+expected_json = '''{"value": [{"vendor": "anthropic", "orchestrator": "x", "reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"], "semantic_fallback": false, "warning": "orchestrator 'x' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias", "auditor_opt_in": null}, ["{{dir}}/.claude/agents/k_explorer.md", "{{dir}}/.claude/agents/k_mechanic.md", "{{dir}}/.claude/agents/k_validator.md", "{{dir}}/.claude/agents/k_implementer.md", "{{dir}}/.claude/agents/k_reasoner.md", "{{dir}}/.claude/agents/k_auditor.md", "{{dir}}/.claude/model-routing.local.json"]], "tree": {"agents/k-oldname.md": "Generated by akmon's model_routing/init tool from registry.json — edit the registry or the project overlay, not this file.\n"}}'''
 
 # --- stat: status, rebind and init lines; floors, bound models, the role matrix -----------------
 
@@ -1959,44 +2522,61 @@ expected_json = '''{"value": [{"vendor": "anthropic", "orchestrator": "x", "reas
 id = "stat/status-fresh"
 fn = "status_lines"
 args_json = '[{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": true, "available": ["small", "medium", "large"], "task_kind_floors": {"quant-derivation": "large"}}, {"$registry": {}}, "_aitna/akmon"]'
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=large · reasoner=large · auditor=large · worker=small · mid=medium · second-opinion=codex(on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: medium). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'large', re-run `_aitna/akmon --orchestrator <alias>`."]'''
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=large · reasoner=large · auditor=large · worker=small · mid=medium · second-opinion=unavailable (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: medium). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'large', re-run `_aitna/akmon --orchestrator <alias>`.", "⚠ second-opinion is on but the provider chain is empty: every ladder provider is the session's own ('claude'), absent from PATH, or answers with priors already taken, so a gate runs only the disclosed last resort (kind=last-resort) — `second_opinion.py --list` names every skip"]'''
 
 [[case]]
 id = "stat/status-corridor-and-floor-gap"
 fn = "status_lines"
 args_json = '[{"vendor": "anthropic", "orchestrator": "sonnet", "binding": {"reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable", "task_kind_floors": {"quant-derivation": "opus"}}, {"$registry": {}}, "akmon tool model_routing/init"]'
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=sonnet · reasoner=sonnet · auditor=fable · worker=haiku · mid=sonnet · second-opinion=codex(off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'sonnet', re-run `akmon tool model_routing/init --orchestrator <alias>`.", "⚠ orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "⚠ task kind quant-derivation has a opus floor, but k_reasoner is bound to sonnet — delegate quant-derivation with model=opus."]'''
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=sonnet · reasoner=sonnet · auditor=fable · worker=haiku · mid=sonnet · second-opinion=unavailable (off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'sonnet', re-run `akmon tool model_routing/init --orchestrator <alias>`.", "⚠ orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "⚠ task kind quant-derivation has a opus floor, but k_reasoner is bound to sonnet — delegate quant-derivation with model=opus."]'''
 
 [[case]]
-id = "stat/status-same-vendor-pin"
+# The chain's head, its model and its priors, for the session the bound vendor names; the provider is declared over an
+# absolute-path executable so the row does not depend on the host's harnesses (ADR 0024/D11).
+id = "stat/status-chain-head"
 fn = "status_lines"
-args_json = '[{"vendor": "anthropic", "orchestrator": "large", "binding": {"auditor": "large"}, "second_opinion": true, "available": ["small", "medium", "large"]}, {"$registry": {"drop": ["openai"]}}, "x"]'
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=large · reasoner=? · auditor=large · worker=? · mid=? · second-opinion=claude(on, model=medium)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'large', re-run `x --orchestrator <alias>`."]'''
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"]}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x"]'
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=shfake:big priors=qwen (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`."]'''
 
 [[case]]
-id = "stat/status-exhausted-on"
+# A recorded `session` stanza names the harness the session runs on, so the head follows it, not the vendor.
+id = "stat/status-session-stanza"
 fn = "status_lines"
-args_json = '[{"orchestrator": "only", "binding": {"auditor": "only", "escalation": []}, "second_opinion": true, "available": ["only"]}, {"$registry": {"drop": ["openai"]}}, "x"]'
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=only · reasoner=? · auditor=only · worker=? · mid=? · second-opinion=unavailable(on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'only', re-run `x --orchestrator <alias>`.", "⚠ second-opinion is on but the diversity ladder is exhausted: no reachable provider differs from the reviewed model, so every gate will skip it — second_opinion.py states the reason at the gate and names the one thing that can still be run by hand, with its limits"]'''
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"], "session": {"provider": "shfake", "model": "big"}}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x"]'
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=claude:opus priors=claude (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`."]'''
 
 [[case]]
-id = "stat/status-exhausted-off"
+# An empty chain is on-state noise only: with the gate on it warns (every gate would run the disclosed last resort), with it off it stays quiet.
+id = "stat/status-empty-chain-on"
 fn = "status_lines"
-args_json = '[{"orchestrator": "only", "binding": {"auditor": "only"}, "available": ["only"]}, {"$registry": {"drop": ["openai"]}}, "x"]'
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=only · reasoner=? · auditor=only · worker=? · mid=? · second-opinion=unavailable(off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'only', re-run `x --orchestrator <alias>`."]'''
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"]}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude"]}}}}, "x"]'
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`.", "⚠ second-opinion is on but the provider chain is empty: every ladder provider is the session's own ('claude'), absent from PATH, or answers with priors already taken, so a gate runs only the disclosed last resort (kind=last-resort) — `second_opinion.py --list` names every skip"]'''
+
+[[case]]
+id = "stat/status-empty-chain-off"
+fn = "status_lines"
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"]}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude"]}}}}, "x"]'
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable (off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`."]'''
+
+[[case]]
+# A session whose priors cannot be resolved reads `priors=unknown` beside the key that would settle it (D08).
+id = "stat/status-session-priors-unknown"
+fn = "status_lines"
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"], "session": {"provider": "opencode", "model": "x/y"}}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x"]'
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable priors=unknown (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`.", "⚠ session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'''
 
 [[case]]
 # Semantic: no escalation hint without a ladder; missing binding fields read "?".
 id = "stat/status-semantic"
 fn = "status_lines"
 args_json = '[{"orchestrator": "strongest", "binding": {"escalation": ["mid"]}}, {"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "x"]'
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=strongest · reasoner=? · auditor=? · worker=? · mid=? · second-opinion=codex(off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'strongest', re-run `x --orchestrator <alias>`.", "⚠ using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally"]'''
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=strongest · reasoner=? · auditor=? · worker=? · mid=? · second-opinion=unavailable (off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'strongest', re-run `x --orchestrator <alias>`.", "⚠ using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally"]'''
 
 [[case]]
 id = "stat/status-retired-key"
 fn = "status_lines"
 args_json = '[{"orchestrator": "large", "available": ["small", "large"]}, {"$registry": {"merge": {"openai": {"second_opinion": {"cli": "codex"}}}}}, "x"]'
-expected_json = '''{"error": "KeyError", "message": "second-opinion provider 'openai' still carries the retired key(s) cli; the executable and its argv moved into common/runtime.py (C57). Delete only those keys from the hand-owned project overlay and leave the rest of the object alone: the overlay is deep-merged over the shipped registry, so harness/operation/report_dir are inherited unless the overlay deliberately overrides one. The initializer reads this file and will not rewrite it; re-run it afterwards to refresh the generated config."}'''
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 id = "stat/rebind-notice-weak"
@@ -2620,3 +3200,381 @@ id = "gate/request-no-floor"
 fn = "gate_audit_request"
 args_json = '[{"gate_triggers": {"review_min_findings": 0}}, {}, "review", "## Findings\n\n- a\n", "akmon tool model_routing/gate_pack"]'
 expected_json = 'null'
+
+# Model aliases (ADR 0024 D16): the catalog parser, the resolution, the reserved `default` token, the generated file.
+
+[[case]]
+# Only `visibility == list` slugs that read <family>-<version>-<alias> count: gpt-reserve is hidden, codex-auto-review is listed but unversioned; a missing priority is null.
+id = "alias/catalog-parse"
+fn = "parse_catalog"
+args_json = '["{\"client_version\":\"0.164.0\",\"models\":[{\"slug\":\"gpt-6.1-sol\",\"visibility\":\"list\",\"priority\":0},{\"slug\":\"gpt-reserve\",\"visibility\":\"hide\",\"priority\":4},{\"slug\":\"codex-auto-review\",\"visibility\":\"list\",\"priority\":43},{\"slug\":\"gpt-6-luna\",\"visibility\":\"list\",\"priority\":null}]}", "codex-models-cache"]'
+expected_json = '{"client": "0.164.0", "models": [{"slug": "gpt-6.1-sol", "alias": "sol", "version": [6, 1], "priority": 0}, {"slug": "gpt-6-luna", "alias": "luna", "version": [6], "priority": null}]}'
+
+[[case]]
+# The host catalog of the owner's report: the highest version of each alias.
+id = "alias/catalog-aliases-host"
+fn = "catalog_aliases"
+args_json = '[{"$call": "parse_catalog", "args": ["{\"client_version\":\"0.164.0\",\"models\":[{\"slug\":\"gpt-6.1-sol\",\"visibility\":\"list\",\"priority\":0},{\"slug\":\"gpt-6.1-terra\",\"visibility\":\"list\",\"priority\":1},{\"slug\":\"gpt-6-astra\",\"visibility\":\"list\",\"priority\":3},{\"slug\":\"gpt-6-sol\",\"visibility\":\"list\",\"priority\":4},{\"slug\":\"gpt-reserve\",\"visibility\":\"hide\",\"priority\":4},{\"slug\":\"gpt-6-luna\",\"visibility\":\"list\",\"priority\":5},{\"slug\":\"gpt-5.6-sol\",\"visibility\":\"list\",\"priority\":6},{\"slug\":\"gpt-5.6-terra\",\"visibility\":\"list\",\"priority\":7},{\"slug\":\"gpt-5.6-luna\",\"visibility\":\"list\",\"priority\":8},{\"slug\":\"codex-auto-review\",\"visibility\":\"hide\",\"priority\":43}]}", "codex-models-cache"]}, ["luna", "terra", "sol"]]'
+expected_json = '{"luna": "gpt-6-luna", "terra": "gpt-6.1-terra", "sol": "gpt-6.1-sol"}'
+
+[[case]]
+# An alias the catalog does not list is absent (unmapped), never guessed.
+id = "alias/catalog-aliases-unmatched"
+fn = "catalog_aliases"
+args_json = '[{"$call": "parse_catalog", "args": ["{\"client_version\":\"0.164.0\",\"models\":[{\"slug\":\"gpt-6.1-sol\",\"visibility\":\"list\",\"priority\":0},{\"slug\":\"gpt-6.1-terra\",\"visibility\":\"list\",\"priority\":1},{\"slug\":\"gpt-6-astra\",\"visibility\":\"list\",\"priority\":3},{\"slug\":\"gpt-6-sol\",\"visibility\":\"list\",\"priority\":4},{\"slug\":\"gpt-reserve\",\"visibility\":\"hide\",\"priority\":4},{\"slug\":\"gpt-6-luna\",\"visibility\":\"list\",\"priority\":5},{\"slug\":\"gpt-5.6-sol\",\"visibility\":\"list\",\"priority\":6},{\"slug\":\"gpt-5.6-terra\",\"visibility\":\"list\",\"priority\":7},{\"slug\":\"gpt-5.6-luna\",\"visibility\":\"list\",\"priority\":8},{\"slug\":\"codex-auto-review\",\"visibility\":\"hide\",\"priority\":43}]}", "codex-models-cache"]}, ["sol", "nova"]]'
+expected_json = '{"sol": "gpt-6.1-sol"}'
+
+[[case]]
+# Equal versions: the lowest priority wins, then the first listed; a lone model with no priority still maps.
+id = "alias/catalog-aliases-tie"
+fn = "catalog_aliases"
+args_json = '[{"$call": "parse_catalog", "args": ["{\"client_version\":\"0.164.0\",\"models\":[{\"slug\":\"gpt-6-sol\",\"visibility\":\"list\",\"priority\":9},{\"slug\":\"acme-6-sol\",\"visibility\":\"list\",\"priority\":2},{\"slug\":\"zed-6-sol\",\"visibility\":\"list\",\"priority\":2},{\"slug\":\"gpt-6-luna\",\"visibility\":\"list\",\"priority\":null}]}", "codex-models-cache"]}, ["sol", "luna"]]'
+expected_json = '{"sol": "acme-6-sol", "luna": "gpt-6-luna"}'
+
+[[case]]
+# A longer version outranks its own prefix.
+id = "alias/catalog-aliases-longer-version"
+fn = "catalog_aliases"
+args_json = '[{"$call": "parse_catalog", "args": ["{\"client_version\":\"0.164.0\",\"models\":[{\"slug\":\"gpt-6-sol\",\"visibility\":\"list\",\"priority\":0},{\"slug\":\"gpt-6.0.1-sol\",\"visibility\":\"list\",\"priority\":5}]}", "codex-models-cache"]}, ["sol"]]'
+expected_json = '{"sol": "gpt-6.0.1-sol"}'
+
+[[case]]
+# Versions compare as numbers, not text: 6.10 is above 6.9.
+id = "alias/catalog-aliases-numeric-order"
+fn = "catalog_aliases"
+args_json = '[{"$call": "parse_catalog", "args": ["{\"client_version\":\"0.164.0\",\"models\":[{\"slug\":\"gpt-6.9-sol\",\"visibility\":\"list\",\"priority\":0},{\"slug\":\"gpt-6.10-sol\",\"visibility\":\"list\",\"priority\":5}]}", "codex-models-cache"]}, ["sol"]]'
+expected_json = '{"sol": "gpt-6.10-sol"}'
+
+[[case]]
+id = "alias/catalog-format-refused"
+fn = "parse_catalog"
+args_json = '["{}", "nope"]'
+expected_json = '''{"error": "ValueError", "message": "format 'nope' is not one of: codex-models-cache"}'''
+
+[[case]]
+id = "alias/catalog-not-json"
+fn = "parse_catalog"
+args_json = '["not json", "codex-models-cache"]'
+expected_json = '{"error": "ValueError", "message": "is not valid JSON"}'
+
+[[case]]
+id = "alias/catalog-no-models"
+fn = "parse_catalog"
+args_json = '["[]", "codex-models-cache"]'
+expected_json = '{"error": "ValueError", "message": "holds no `models` list"}'
+
+[[case]]
+id = "alias/expand-home"
+fn = "expand_home"
+args_json = '["~/.codex/m.json", "/home/a"]'
+expected_json = '"/home/a/.codex/m.json"'
+
+[[case]]
+id = "alias/expand-home-bare"
+fn = "expand_home"
+args_json = '["~", "/home/a/"]'
+expected_json = '"/home/a"'
+
+[[case]]
+id = "alias/expand-home-root"
+fn = "expand_home"
+args_json = '["~/x", "/"]'
+expected_json = '"/x"'
+
+[[case]]
+id = "alias/expand-home-user-form-untouched"
+fn = "expand_home"
+args_json = '["~bob/x", "/home/a"]'
+expected_json = '"~bob/x"'
+
+[[case]]
+id = "alias/resolve-alias"
+fn = "resolve_opinion_model"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {"codex": {"$new": "ProviderAliases", "fields": {"source": "s", "client": null, "aliases": {"sol": "gpt-6.1-sol"}}}}, "codex", "sol"]'
+expected_json = '"gpt-6.1-sol"'
+
+[[case]]
+# A model that is not one of the row's aliases passes through unchanged, with no stored mapping needed.
+id = "alias/resolve-concrete-passes"
+fn = "resolve_opinion_model"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {}, "codex", "gpt-6.1-sol"]'
+expected_json = '"gpt-6.1-sol"'
+
+[[case]]
+id = "alias/resolve-default-passes"
+fn = "resolve_opinion_model"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {}, "codex", null]'
+expected_json = 'null'
+
+[[case]]
+id = "alias/resolve-row-without-aliases"
+fn = "resolve_opinion_model"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {}, "claude", "opus"]'
+expected_json = '"opus"'
+
+[[case]]
+# An alias with no mapping is a fail-closed refusal naming the refresh command.
+id = "alias/resolve-unmapped-refused"
+fn = "resolve_opinion_model"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {"codex": {"$new": "ProviderAliases", "fields": {"source": "s", "client": null, "aliases": {"sol": "gpt-6.1-sol"}}}}, "codex", "luna"]'
+expected_json = '''{"error": "UnresolvedAliasError", "message": "provider 'codex' declares model aliases, and 'luna' has no concrete id in _aitna/local/model-aliases.json; write it with `akmon tool model_routing/models --refresh --provider codex`, pin a concrete id with `--provider codex:<id>`, or run the carrier's own model with `--provider codex:default`"}'''
+
+[[case]]
+id = "alias/is-alias-yes"
+fn = "is_model_alias"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "sol"]'
+expected_json = 'true'
+
+[[case]]
+id = "alias/is-alias-concrete"
+fn = "is_model_alias"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "gpt-6.1-sol"]'
+expected_json = 'false'
+
+[[case]]
+id = "alias/is-alias-row-without-flag"
+fn = "is_model_alias"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "claude", "opus"]'
+expected_json = 'false'
+
+[[case]]
+# The reserved token drops the pin: the carrier's own model.
+id = "alias/pick-default-token"
+fn = "opinion_pick"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "default"]'
+expected_json = '[null, null]'
+
+[[case]]
+id = "alias/pick-no-pin-is-strongest"
+fn = "opinion_pick"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", null]'
+expected_json = '["sol", null]'
+
+[[case]]
+id = "alias/pick-pinned"
+fn = "opinion_pick"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "gpt-6.1-sol"]'
+expected_json = '["gpt-6.1-sol", null]'
+
+[[case]]
+id = "alias/ladder-pins-default-yes"
+fn = "ladder_pins_default"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex"]'
+expected_json = 'true'
+
+[[case]]
+id = "alias/ladder-pins-default-no"
+fn = "ladder_pins_default"
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "claude"]'
+expected_json = 'false'
+
+[[case]]
+id = "alias/default-token"
+fn = "default_model_token"
+args_json = '[]'
+expected_json = '"default"'
+
+[[case]]
+id = "alias/document"
+fn = "model_aliases_document"
+args_json = '[{"codex": {"$new": "ProviderAliases", "fields": {"source": "~/x (codex-models-cache)", "client": "0.164.0", "aliases": {"luna": "gpt-6-luna", "sol": "gpt-6.1-sol"}}}}]'
+expected_json = '"{\n  \"codex\": {\n    \"source\": \"~/x (codex-models-cache)\",\n    \"client\": \"0.164.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"'
+
+[[case]]
+id = "alias/read-file"
+fn = "read_model_aliases"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "_aitna/local/model-aliases.json" = "{\"codex\": {\"source\": \"s\", \"client\": null, \"aliases\": {\"sol\": \"gpt-6.1-sol\"}}}" }
+expected_json = '{"codex": {"source": "s", "client": null, "aliases": {"sol": "gpt-6.1-sol"}}}'
+
+[[case]]
+id = "alias/read-file-absent"
+fn = "read_model_aliases"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '{}'
+
+[[case]]
+id = "alias/read-file-not-json"
+fn = "read_model_aliases"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "_aitna/local/model-aliases.json" = "{ nope" }
+expected_json = '{"error": "ValueError", "message": "the resolved-aliases file _aitna/local/model-aliases.json is not a valid alias map; it is generated and never hand-edited, so delete it and run `akmon tool model_routing/models --refresh`"}'
+
+[[case]]
+id = "alias/read-file-wrong-shape"
+fn = "read_model_aliases"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "_aitna/local/model-aliases.json" = "{\"codex\": {\"source\": \"s\", \"client\": 3, \"aliases\": {}}}" }
+expected_json = '{"error": "ValueError", "message": "the resolved-aliases file _aitna/local/model-aliases.json is not a valid alias map; it is generated and never hand-edited, so delete it and run `akmon tool model_routing/models --refresh`"}'
+
+[[case]]
+id = "alias/local-aliases-path"
+fn = "local_aliases_path"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '"{{dir}}/_aitna/local/model-aliases.json"'
+
+# Reasoning effort (ADR 0024 D17): `model@effort` parsed at the last `@`, checked against the row's levels, appended as the row's flag.
+
+[[case]]
+id = "effort/split-none"
+fn = "split_model_effort"
+args_json = '[null]'
+expected_json = '[null, null]'
+
+[[case]]
+id = "effort/split-plain"
+fn = "split_model_effort"
+args_json = '["sol"]'
+expected_json = '["sol", null]'
+
+[[case]]
+id = "effort/split-effort"
+fn = "split_model_effort"
+args_json = '["sol@high"]'
+expected_json = '["sol", "high"]'
+
+[[case]]
+# The id is split at its LAST `@`.
+id = "effort/split-last-at"
+fn = "split_model_effort"
+args_json = '["a/b@c@d"]'
+expected_json = '["a/b@c", "d"]'
+
+[[case]]
+# An id that encodes the level itself stays one id: akmon never parses a model name.
+id = "effort/split-encoded-id"
+fn = "split_model_effort"
+args_json = '["acme/qwen3.8-27b-max"]'
+expected_json = '["acme/qwen3.8-27b-max", null]'
+
+[[case]]
+id = "effort/split-default"
+fn = "split_model_effort"
+args_json = '["default@high"]'
+expected_json = '["default", "high"]'
+
+[[case]]
+id = "effort/split-effort-only"
+fn = "split_model_effort"
+args_json = '["@high"]'
+expected_json = '[null, "high"]'
+
+[[case]]
+id = "effort/split-empty-effort"
+fn = "split_model_effort"
+args_json = '["m@"]'
+expected_json = '["m", ""]'
+
+[[case]]
+id = "effort/check-none"
+fn = "check_effort"
+args_json = '[{"$registry": {}}, "qwen", null]'
+expected_json = 'null'
+
+[[case]]
+id = "effort/check-listed"
+fn = "check_effort"
+args_json = '[{"$registry": {}}, "claude", "high"]'
+expected_json = 'null'
+
+[[case]]
+id = "effort/check-unsupported"
+fn = "check_effort"
+args_json = '[{"$registry": {}}, "qwen", "high"]'
+expected_json = '''{"error": "EffortError", "message": "provider 'qwen' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.qwen.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
+
+[[case]]
+id = "effort/check-unknown-level"
+fn = "check_effort"
+args_json = '[{"$registry": {}}, "claude", "ultra"]'
+expected_json = '''{"error": "EffortError", "message": "provider 'claude' does not accept the effort 'ultra'; its levels are: low, medium, high, xhigh, max"}'''
+
+[[case]]
+id = "effort/pick-model-effort"
+fn = "opinion_pick"
+args_json = '[{"$registry": {}}, "claude", "sonnet@low"]'
+expected_json = '["sonnet", "low"]'
+
+[[case]]
+# `default@high` pins no model and sends only the level.
+id = "effort/pick-default-effort"
+fn = "opinion_pick"
+args_json = '[{"$registry": {}}, "claude", "default@high"]'
+expected_json = '[null, "high"]'
+
+[[case]]
+# An effort alone keeps the rule's model.
+id = "effort/pick-effort-only"
+fn = "opinion_pick"
+args_json = '[{"$registry": {}}, "claude", "@low"]'
+expected_json = '["opus", "low"]'
+
+[[case]]
+id = "effort/pick-no-pin-no-effort"
+fn = "opinion_pick"
+args_json = '[{"$registry": {}}, "claude", null]'
+expected_json = '["opus", null]'
+
+[[case]]
+id = "effort/command-claude"
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "claude"]'
+kwargs_json = '{"model": "opus", "effort": "high", "prompt": "p"}'
+expected_json = '["claude", "-p", "--output-format", "text", "--model", "opus", "--effort", "high", "p"]'
+
+[[case]]
+# The codex level is a config value: the quotes are literal inside ONE argv element (M188).
+id = "effort/command-codex-quotes"
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "codex"]'
+kwargs_json = '{"model": "gpt-6.1-sol", "effort": "high", "prompt": "p"}'
+expected_json = '["codex", "exec", "--model", "gpt-6.1-sol", "-c", "model_reasoning_effort=\"high\"", "p"]'
+
+[[case]]
+id = "effort/command-effort-only"
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "codex"]'
+kwargs_json = '{"effort": "max", "prompt": "p"}'
+expected_json = '["codex", "exec", "-c", "model_reasoning_effort=\"max\"", "p"]'
+
+[[case]]
+id = "effort/command-pi"
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "pi"]'
+kwargs_json = '{"model": "x", "effort": "off", "prompt": "p"}'
+expected_json = '["pi", "-p", "--no-session", "--tools", "read,grep,find,ls", "--no-extensions", "--no-mcp", "--model", "x", "--thinking", "off", "p"]'
+
+[[case]]
+# A declared argv takes the row's effort flag after its argv, before the prompt.
+id = "effort/command-declared-argv"
+fn = "opinion_command"
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}"], "efforts": {"flag": "--think {effort}", "levels": ["low", "high"]}}}}}}, "d"]'
+kwargs_json = '{"model": "m", "effort": "high", "prompt": "p"}'
+expected_json = '["d-bin", "-m", "m", "--think", "high", "p"]'
+
+[[case]]
+id = "effort/command-unsupported"
+fn = "opinion_command"
+args_json = '[{"$registry": {}}, "opencode"]'
+kwargs_json = '{"effort": "high", "prompt": "p"}'
+expected_json = '''{"error": "EffortError", "message": "provider 'opencode' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.opencode.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
+
+[[case]]
+# A ladder entry's effort travels into its target; the second `sh1` entry is skipped as the same family.
+id = "effort/chain-carries-effort"
+fn = "opinion_chain"
+args_json = '[{"$registry": {"set": {"providers": {"sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m1@high"], "report_dir": "r/sh1/", "efforts": {"flag": "--e {effort}", "levels": ["low", "high"]}}}, "second_opinion_policy": {"ladder": ["sh1:m1@low", "sh1"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+expected_json = '[{"provider": "sh1", "model": "m1", "family": "gpt", "effort": "low"}]'
+
+[[case]]
+# No pin: the rule's strongest declared entry, `m1@high`, with its own effort.
+id = "effort/chain-strongest-entry-effort"
+fn = "opinion_chain"
+args_json = '[{"$registry": {"set": {"providers": {"sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m1@high"], "report_dir": "r/sh1/", "efforts": {"flag": "--e {effort}", "levels": ["low", "high"]}}}, "second_opinion_policy": {"ladder": ["sh1"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+expected_json = '[{"provider": "sh1", "model": "m1", "family": "gpt", "effort": "high"}]'
+
+[[case]]
+id = "effort/ladder-pins-default-with-effort"
+fn = "ladder_pins_default"
+args_json = '[{"$registry": {"set": {"second_opinion_policy": {"ladder": ["codex:default@high"], "model_rule": "max"}}}}, "codex"]'
+expected_json = 'true'

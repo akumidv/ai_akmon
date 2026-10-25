@@ -22,14 +22,13 @@ files = { ".claude/model-routing.local.json" = """{
     ]
   },
   "second_opinion": false,
-  "second_opinion_provider": "openai",
   "available": [
     "haiku",
     "sonnet",
     "opus"
   ],
   "auditor_opt_in": null,
-  "registry_hash": "ef29a31a0c559db7",
+  "registry_hash": "abf01403b7e83ccc",
   "task_kind_floors": {
     "quant-derivation": "opus"
   }
@@ -50,4 +49,4 @@ stderr = ""
 [expected.stdout_json]
 [expected.stdout_json.hookSpecificOutput]
 hookEventName = "SessionStart"
-additionalContext = "[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=codex(off)\nDelegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].\nSelf-check: if your actual model is not 'opus', re-run `{{tool model_routing/init}} --orchestrator <alias>`."
+additionalContext = "[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable (off)\nDelegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].\nSelf-check: if your actual model is not 'opus', re-run `{{tool model_routing/init}} --orchestrator <alias>`."

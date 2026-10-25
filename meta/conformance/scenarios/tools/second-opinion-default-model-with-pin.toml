@@ -1,0 +1,18 @@
+id = "tools/second-opinion-default-model-with-pin"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# `--default-model` together with an explicit `--provider P:model` is one refused line naming both, exit 2.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+
+[run]
+tool = "model_routing/second_opinion"
+argv = ["--gate", "design-align", "--gate-pack", "docs/gate-pack.md", "--session-provider", "claude", "--session-model", "opus", "--provider", "codex:gpt-6.1-sol", "--default-model", "--dry-run"]
+
+[expected]
+exit = 2
+stderr = "second-opinion: --default-model cannot be combined with --provider 'codex:gpt-6.1-sol', which pins a model; drop one of them\n"
+stdout = ""

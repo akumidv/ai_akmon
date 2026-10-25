@@ -48,7 +48,7 @@ from common.codex_hooks import (
 from common.findings import Finding, exit_code, line_safe, print_findings, read_findings_data
 from common.project_root import resolve_project_root
 from common.record import RecordError, read_akmon_toml_strict, recorded_ecosystem
-from common.runtime import codex_hooks_list_command
+from common.runtime import codex_hooks_list_command, harness_commands
 from common.versions import split_version, switch_tag
 
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b", re.ASCII)
@@ -98,6 +98,125 @@ def _ladder_problem(spec: Mapping[str, Any]) -> str | None:
     if rungs is not None and auditor_only is not None and set(rungs) & set(auditor_only):
         return "auditor_only_rungs must not repeat a harness_rungs alias"
     return None
+
+
+def _merge_overlay(base: Mapping[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
+    """``overlay`` merged over ``base`` as the routing loader does: objects key by key, anything else replaced whole.
+
+    Verify reads no routing module (it runs from a bare checkout), so the rule is restated here; a
+    test pins it to ``routing.load_registry`` by merging the same pair both ways.
+    """
+    merged = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_overlay(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _family_names(policy: Mapping[str, Any]) -> tuple[str, ...]:
+    """The family vocabulary a ``second_opinion_policy`` declares: the keys of its ``families`` object."""
+    families = policy.get("families")
+    return tuple(str(name) for name in families) if isinstance(families, dict) else ()
+
+
+def _family_problems(row: Mapping[str, Any], vocabulary: Sequence[str] | None) -> list[str]:
+    """A provider row's family defects: the key missing, or a family (the row's or a model's) outside the vocabulary.
+
+    ``family: null`` is declared, not missing: a carrier that fronts several families states each
+    model's in ``model_families``. A ``None`` vocabulary skips the membership test (it is its own error).
+    """
+    problems: list[str] = []
+    stated = [("family", row["family"])] if row.get("family") is not None else []
+    if "family" not in row:
+        problems.append("family key is missing (null for a multi-family carrier)")
+    by_model = row.get("model_families")
+    if isinstance(by_model, dict):
+        stated += [(f"model_families.{model}", family) for model, family in by_model.items()]
+    elif by_model is not None:
+        problems.append("model_families must be an object of model id to family")
+    for label, family in stated:
+        if not isinstance(family, str):
+            problems.append(f"{label} must be a family name")
+        elif vocabulary is not None and family not in vocabulary:
+            problems.append(f"{label} {family!r} is not in second_opinion_policy.families ({', '.join(vocabulary)})")
+    return problems
+
+
+def _alias_problems(row: Mapping[str, Any], formats: Sequence[str], token: str) -> list[str]:
+    """A provider row's alias and catalog defects (ADR 0024/D16): a row that says ``aliases: true`` needs a catalog.
+
+    ``aliases`` is ``true`` or absent; a ``catalog`` is an object with a string ``file`` and a
+    ``format`` from the closed list; an ``aliases: true`` row without one cannot be resolved by
+    ``models.py``; and the reserved model token (``default``) is never a declared model.
+    """
+    problems: list[str] = []
+    if "aliases" in row and row["aliases"] is not True:
+        problems.append("aliases must be true, or the key left out")
+    catalog = row.get("catalog")
+    if "catalog" in row and not (
+        isinstance(catalog, dict) and isinstance(catalog.get("file"), str) and catalog.get("format") in formats
+    ):
+        problems.append(f"catalog must be an object with a string file and a format of: {', '.join(formats)}")
+    elif row.get("aliases") is True and "catalog" not in row:
+        problems.append("aliases: true needs a catalog (file and format) to resolve the aliases from")
+    models = row.get("models")
+    if isinstance(models, list) and any(_entry_model(entry) == token for entry in models):
+        problems.append(f"models must not list the reserved token {token!r}; a ladder entry says carrier:{token}")
+    return problems
+
+
+def _entry_model(entry: object) -> object:
+    """A ``models`` entry without its ``@effort`` (the last ``@``, ADR 0024/D17); a non-string stays as it is."""
+    if isinstance(entry, str) and "@" in entry:
+        return entry.rpartition("@")[0] or entry
+    return entry
+
+
+def _effort_problems(row: Mapping[str, Any]) -> list[str]:
+    """A provider row's ``efforts`` defects and the ``models`` entries whose ``@effort`` it cannot take (ADR 0024/D17).
+
+    ``efforts`` is an object whose ``flag`` holds ``{effort}`` and whose ``levels`` are a non-empty list
+    of unique strings, weakest first; a ``models`` entry ``m@level`` names a level of that row, and a row
+    with no ``efforts`` takes none.
+    """
+    problems: list[str] = []
+    efforts = row.get("efforts")
+    levels = efforts.get("levels") if isinstance(efforts, dict) else None
+    if "efforts" in row and not (
+        isinstance(efforts, dict)
+        and isinstance(efforts.get("flag"), str)
+        and "{effort}" in efforts["flag"]
+        and isinstance(levels, list)
+        and levels
+        and all(isinstance(level, str) for level in levels)
+        and len(set(levels)) == len(levels)
+    ):
+        problems.append("efforts must be an object with a flag holding {effort} and a non-empty list of unique levels")
+        levels = None
+    models = row.get("models")
+    for entry in models if isinstance(models, list) else []:
+        if not (isinstance(entry, str) and "@" in entry):
+            continue
+        effort = entry.rpartition("@")[2]
+        if "efforts" not in row:
+            problems.append(f"models entry {entry!r} carries an effort, but the row declares no efforts")
+        elif levels is not None and effort not in levels:
+            problems.append(
+                f"models entry {entry!r} names the effort {effort!r}, which is not one of: {', '.join(levels)}"
+            )
+    return problems
+
+
+def _argv_problems(row: Mapping[str, Any], *, pinned: bool) -> list[str]:
+    """A declared ``argv``'s defects: not a non-empty list of strings, or no ``{model}`` where a pin must go (D12)."""
+    argv = row["argv"]
+    if not (isinstance(argv, list) and argv and all(isinstance(part, str) for part in argv)):
+        return ["argv must be a non-empty list of strings (it is never split or passed through a shell)"]
+    if not any("{model}" in part for part in argv) and (row.get("models") or pinned):
+        return ["argv holds no {model} placeholder, but a model is declared or pinned for it"]
+    return []
 
 
 def _reasoner_policy_values(data: Mapping[str, Any]) -> tuple[str, ...]:
@@ -1122,6 +1241,7 @@ class Verifier:
         for relative in self.data["routing_shipped_paths"]:
             self.check_standard_path(relative)
         registry_path = self.standard_root / "tools" / "model_routing" / "registry.json"
+        registry: object = None
         if registry_path.is_file():
             try:
                 registry = sync_tool._read_json(registry_path)
@@ -1160,33 +1280,222 @@ class Verifier:
                 # Outside the try: a defect in the check below must not be reported as a
                 # parse failure of the file it is reading.
                 self._check_overlay_second_opinion(overlay_data)
+                self._check_overlay_providers(registry, overlay_data)
 
     def _check_overlay_second_opinion(self, overlay: object) -> None:
-        """The overlay must not carry keys C57 retired.
+        """The overlay must not carry keys ADR 0024 retired: the old ladder and a vendor's `second_opinion` object.
 
-        The overlay is deep-merged *over* the shipped registry, so a stale `cli`/`invoke` pair
-        does not displace `harness`/`operation` — it rides alongside them, unread. The merged
-        config then looks complete while meaning something the runtime no longer honours, which
-        is why this is checked at the file rather than inferred from the merged result.
+        The overlay is deep-merged *over* the shipped registry, so a stale key does not displace the
+        new ladder or the providers table — it rides alongside them, unread. The merged config then
+        looks complete while meaning something the runtime no longer honours, which is why this is
+        checked at the file rather than inferred from the merged result.
         """
         if not isinstance(overlay, dict):
             return
-        for vendor in self.data["routing_vendors"]:
-            spec = overlay.get(vendor)
-            if not isinstance(spec, dict):
-                continue
-            second = spec.get("second_opinion")
-            if not isinstance(second, dict):
-                continue
-            retired = [key for key in self.data["routing_retired_second_opinion_keys"] if key in second]
-            if retired:
+        retired = self.data["routing_retired_second_opinion_keys"]
+        policy = overlay.get("second_opinion_policy")
+        if isinstance(policy, dict):
+            self._refuse_retired(policy, retired["policy"], "second_opinion_policy")
+        for name, spec in overlay.items():
+            if isinstance(spec, dict):
+                self._refuse_retired(spec, retired["vendor"], name)
+
+    def _refuse_retired(self, block: dict, keys: Sequence[str], name: str) -> None:
+        """One error naming the overlay block and each retired key it still carries."""
+        found = [key for key in keys if key in block]
+        if found:
+            self.error(
+                "routing.second-opinion",
+                f"project overlay {name} carries the retired key(s) {', '.join(found)}",
+                target=f"{self.aitna}/model-routing.json#{name}",
+                fix="Delete only the listed keys from this hand-owned overlay and leave the rest as it is; "
+                "declare a providers row or replace second_opinion_policy.ladder to change the second opinion, "
+                "then re-run the routing initializer.",
+            )
+
+    def _row_problems(
+        self, provider: str, row: object, vocabulary: Sequence[str] | None, *, pinned: bool, shipped: bool = False
+    ) -> list[str]:
+        """What stops one provider row from running, beyond the shipped required keys (ADR 0024/D01, D12).
+
+        Shared by the shipped table and an overlay's rows: the family key present and, when the
+        vocabulary is known, in it (a row's ``model_families`` values too); a declared ``argv`` a
+        non-empty list of strings that carries ``{model}`` once the row declares models or the
+        ladder pins one; a known ``prompt`` channel and ``repo`` value; and, with no ``argv``, a
+        command akmon ships for the carrier (an overlay's rows only: the shipped table is the command
+        map's own subject). ``pinned`` says the merged ladder pins a model on it.
+        """
+        if not isinstance(row, dict):
+            return ["the row must be an object"]
+        problems = _family_problems(row, vocabulary)
+        problems += _alias_problems(row, self.data["routing_catalog_formats"], self.data["routing_default_model_token"])
+        problems += _effort_problems(row)
+        if "argv" in row:
+            problems += _argv_problems(row, pinned=pinned)
+        elif not shipped and provider not in harness_commands():
+            problems.append("carries no argv and akmon ships no command for it")
+        for key, allowed in (
+            ("prompt", self.data["routing_prompt_channels"]),
+            ("repo", self.data["routing_repo_values"]),
+        ):
+            if key in row and row[key] not in allowed:
+                problems.append(f"{key} must be one of: {', '.join(allowed)}")
+        return problems
+
+    def _check_overlay_providers(self, shipped: object, overlay: object) -> None:
+        """The registry the project overlay produces must hold together: its rows, its ladder, its vocabulary.
+
+        Checked on the merged result because the overlay is deep-merged over the shipped registry
+        (a ladder is replaced whole, a row or the vocabulary merges by key) and a defect shows only
+        there. Only the project overlay is read: the developer-local one is gitignored and absent in
+        CI, so verify must not depend on it. Each finding quotes the overlay file.
+        """
+        if not isinstance(shipped, dict) or not isinstance(overlay, dict):
+            return
+        file = f"{self.aitna}/model-routing.json"
+        merged = _merge_overlay(shipped, overlay)
+        own_policy = overlay.get("second_opinion_policy")
+        own_policy = own_policy if isinstance(own_policy, dict) else {}
+        policy = merged.get("second_opinion_policy")
+        policy = policy if isinstance(policy, dict) else {}
+        vocabulary = _family_names(policy)
+        if "families" in own_policy:
+            self._check_vocabulary(vocabulary, f"project overlay {file}", f"{file}#second_opinion_policy")
+        rows = merged.get("providers")
+        rows = rows if isinstance(rows, dict) else {}
+        ladder = policy.get("ladder")
+        entries = ladder if isinstance(ladder, list) else []
+        pinned = {str(entry).partition(":")[0] for entry in entries if ":" in str(entry)}
+        own_rows = overlay.get("providers")
+        for provider in own_rows if isinstance(own_rows, dict) else {}:
+            problems = self._row_problems(provider, rows.get(provider), vocabulary or None, pinned=provider in pinned)
+            self._report_row(f"project overlay {file} provider {provider}", f"{file}#providers.{provider}", problems)
+        if "ladder" in own_policy:
+            unknown = [entry for entry in entries if str(entry).partition(":")[0] not in rows]
+            target = f"{file}#second_opinion_policy"
+            if not isinstance(ladder, list) or not ladder or unknown:
                 self.error(
                     "routing.second-opinion",
-                    f"project overlay {vendor} second_opinion carries the retired key(s) {', '.join(retired)}",
-                    target=f"{self.aitna}/model-routing.json#{vendor}",
-                    fix="Delete only cli/invoke from this hand-owned overlay, leave the rest "
-                    "of the object as it is, then re-run the routing initializer.",
+                    f"second_opinion_policy.ladder as merged with {file} must be a non-empty list of declared providers"
+                    + (f"; undeclared: {', '.join(map(str, unknown))}" if unknown else ""),
+                    target=target,
+                    fix="List only carrier or carrier:model entries whose carrier is a row of the providers table, "
+                    "shipped or declared in an overlay.",
                 )
+            else:
+                self.ok(
+                    "routing.second-opinion",
+                    f"second-opinion ladder as merged with {file} names only declared providers",
+                    target=target,
+                    fix="Keep every ladder entry's carrier declared in the providers table.",
+                )
+
+    def _check_vocabulary(self, vocabulary: Sequence[str], subject: str, target: str) -> None:
+        """The family vocabulary must be a non-empty object of family names (an overlay extends it by key)."""
+        if vocabulary:
+            self.ok(
+                "routing.second-opinion",
+                f"{subject} family vocabulary lists {len(vocabulary)} families",
+                target=target,
+                fix="Keep second_opinion_policy.families an object keyed by family name.",
+            )
+        else:
+            self.error(
+                "routing.second-opinion",
+                f"{subject} second_opinion_policy.families must be a non-empty object keyed by family name",
+                target=target,
+                fix="Declare families as an object (an overlay adds keys; a list would replace the whole vocabulary).",
+            )
+
+    def _report_row(self, subject: str, target: str, problems: Sequence[str]) -> None:
+        """One finding for a provider row: the problems joined, or its being configured."""
+        if problems:
+            self.error(
+                "routing.second-opinion",
+                f"{subject}: {'; '.join(problems)}",
+                target=target,
+                fix="Give the row a family key, an argv list (or a shipped carrier's id) and only known values.",
+            )
+        else:
+            self.ok(
+                "routing.second-opinion",
+                f"{subject} is configured",
+                target=target,
+                fix="Keep the row's family, argv and channel values valid.",
+            )
+
+    def _check_providers(self, registry: dict) -> None:
+        """The providers table: every row carries its keys, every ladder id names a row, every vendor's carrier does."""
+        target = "tools/model_routing/registry.json#providers"
+        rows = registry.get("providers")
+        if not isinstance(rows, dict) or not rows:
+            self.error(
+                "routing.second-opinion",
+                "model-routing registry has no providers table",
+                target=target,
+                fix="Add a providers object with one row per second-opinion carrier.",
+            )
+            return
+        policy = registry.get("second_opinion_policy")
+        vocabulary = _family_names(policy) if isinstance(policy, dict) else ()
+        if not vocabulary:
+            self.error(
+                "routing.second-opinion",
+                "model-routing second_opinion_policy.families must be a non-empty object keyed by family name",
+                target="tools/model_routing/registry.json#second_opinion_policy",
+                fix="Declare the closed family vocabulary (claude, gpt, qwen, gemini) as an object.",
+            )
+        ladder_entries = policy.get("ladder") if isinstance(policy, dict) else None
+        ladder_entries = ladder_entries if isinstance(ladder_entries, list) else []
+        ladder_pins = {str(entry).partition(":")[0] for entry in ladder_entries if ":" in str(entry)}
+        for provider, row in rows.items():
+            missing = [
+                key for key in self.data["routing_provider_keys"] if not isinstance(row, dict) or not row.get(key)
+            ]
+            if isinstance(row, dict) and "family" not in row:
+                missing.append("family")
+            if missing:
+                self.error(
+                    "routing.second-opinion",
+                    f"model-routing provider {provider} missing: {', '.join(missing)}",
+                    target=target,
+                    fix="Fill in the listed keys for this provider; family is null for a multi-family carrier.",
+                )
+                continue
+            problems = self._row_problems(
+                provider, row, vocabulary or None, pinned=provider in ladder_pins, shipped=True
+            )
+            if problems:
+                self.error(
+                    "routing.second-opinion",
+                    f"model-routing provider {provider}: {'; '.join(problems)}",
+                    target=target,
+                    fix="Name a family from second_opinion_policy.families, or extend the vocabulary there.",
+                )
+            else:
+                self.ok(
+                    "routing.second-opinion",
+                    f"model-routing provider {provider} is configured",
+                    target=target,
+                    fix="Keep operation, model_flag, family and report_dir set for this provider.",
+                )
+        ladder = policy.get("ladder") if isinstance(policy, dict) else None
+        unknown = [entry for entry in ladder or [] if str(entry).partition(":")[0] not in rows]
+        if not ladder or unknown:
+            self.error(
+                "routing.second-opinion",
+                "model-routing second_opinion_policy.ladder must be a non-empty list of declared providers"
+                + (f"; undeclared: {', '.join(map(str, unknown))}" if unknown else ""),
+                target="tools/model_routing/registry.json#second_opinion_policy",
+                fix="List only carrier or carrier:model entries whose carrier is a row of the providers table.",
+            )
+        else:
+            self.ok(
+                "routing.second-opinion",
+                "model-routing second-opinion ladder names only declared providers",
+                target="tools/model_routing/registry.json#second_opinion_policy",
+                fix="Keep every ladder entry's carrier declared in the providers table.",
+            )
 
     def _check_model_routing_registry(self, registry: dict) -> None:
         for vendor in self.data["routing_vendors"]:
@@ -1254,30 +1563,21 @@ class Verifier:
                     target=f"tools/model_routing/registry.json#{vendor}",
                     fix="Keep harness_rungs ordered weakest to strongest and auditor_only_rungs disjoint from it.",
                 )
-            second = spec.get("second_opinion")
-            if not isinstance(second, dict):
-                self.error(
-                    "routing.second-opinion",
-                    f"model-routing {vendor} second_opinion is missing",
-                    target=f"tools/model_routing/registry.json#{vendor}",
-                    fix="Add a second_opinion object with harness, operation and report_dir to this vendor.",
-                )
-                continue
-            missing = [key for key in self.data["routing_second_opinion_keys"] if not second.get(key)]
-            if missing:
-                self.error(
-                    "routing.second-opinion",
-                    f"model-routing {vendor} second_opinion missing: {', '.join(missing)}",
-                    target=f"tools/model_routing/registry.json#{vendor}",
-                    fix="Fill in the listed second_opinion keys for this vendor.",
-                )
-            else:
+            if spec.get("carrier") in (registry.get("providers") or {}):
                 self.ok(
                     "routing.second-opinion",
-                    f"model-routing {vendor} second_opinion is configured",
+                    f"model-routing {vendor} carrier names a declared provider",
                     target=f"tools/model_routing/registry.json#{vendor}",
-                    fix="Keep harness, operation and report_dir set for this vendor's second_opinion.",
+                    fix="Keep carrier set to this vendor's row in the providers table.",
                 )
+            else:
+                self.error(
+                    "routing.second-opinion",
+                    f"model-routing {vendor} carrier must name a row of the providers table",
+                    target=f"tools/model_routing/registry.json#{vendor}",
+                    fix="Set carrier to the id of the provider this vendor's session runs on.",
+                )
+        self._check_providers(registry)
 
     def check_gitignore(self) -> None:
         """Check that .gitignore carries the akmon env-secret ignore pattern."""

@@ -18,7 +18,7 @@ import shlex
 import shutil
 import sys
 import tempfile
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from common import jsondata
 from common.markers import claim_diagnostic_marker, release_diagnostic_markers
 from common.project_root import aitna_root_name
-from common.runtime import harness_command
+from common.runtime import harness_command, harness_commands
 
 
 def _agents_data() -> dict:
@@ -48,6 +48,21 @@ def overlay_name() -> str:
     notation-insensitively, unmatched key is an error: see `resolve_briefs`.
     """
     return _agents_data()["overlay_name"]
+
+
+def local_overlay_rel() -> str:
+    """The developer-local overlay's path under the aitna root (gitignored with ``<aitna_root>/local/``)."""
+    return _agents_data()["local_overlay_rel"]
+
+
+def local_aliases_rel() -> str:
+    """The generated resolved-aliases file's path under the aitna root (gitignored with ``<aitna_root>/local/``)."""
+    return _agents_data()["local_aliases_rel"]
+
+
+def default_model_token() -> str:
+    """The reserved model token of the ``carrier[:model]`` grammar: ``carrier:default`` is the carrier's own model."""
+    return _agents_data()["default_model_token"]
 
 
 def local_config_rel() -> str:
@@ -107,6 +122,29 @@ def overlay_path(project_root: Path) -> Path:
     return project_root / aitna_root_name() / overlay_name()
 
 
+def local_overlay_path(project_root: Path) -> Path:
+    """Path to the developer's own routing overlay (gitignored, hand-owned, never generated), if any.
+
+    Same shape and file name as the project overlay, but under ``<aitna_root>/local/`` (ADR 0022):
+    the strongest layer (ADR-0024/D11) — a developer states which harnesses and models they run
+    without asking the team to share it.
+    """
+    return project_root / aitna_root_name() / local_overlay_rel()
+
+
+def local_aliases_path(project_root: Path) -> Path:
+    """Path to the generated resolved-aliases file (ADR-0024/D16), if any.
+
+    Written only by ``tools/model_routing/models.py`` and never hand-owned: it maps each alias of an
+    ``aliases: true`` provider row to the concrete id the carrier accepts on this machine.
+    """
+    return project_root / aitna_root_name() / local_aliases_rel()
+
+
+class OverlayError(ValueError):
+    """A routing overlay file is not a JSON object; the message names the file."""
+
+
 def _deep_merge(base: dict, override: dict) -> dict:
     merged = dict(base)
     for key, value in override.items():
@@ -117,13 +155,39 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return merged
 
 
+def _read_overlay(path: Path, file: str) -> dict:
+    """One overlay file's JSON object; anything else raises ``OverlayError`` naming ``file``."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise OverlayError(jsondata.fill(_agents_data()["overlay_errors"]["invalid"], {"file": file})) from exc
+    if not isinstance(data, dict):
+        raise OverlayError(jsondata.fill(_agents_data()["overlay_errors"]["invalid"], {"file": file}))
+    return data
+
+
+def _overlay_layers(project_root: Path) -> list[tuple[str, dict]]:
+    """The overlay layers that exist, weakest first: the project overlay, then the developer's local one.
+
+    Each is ``(project-root-relative file, parsed object)``; a missing file is no layer.
+    """
+    candidates = (
+        (_overlay_file(), overlay_path(project_root)),
+        (_local_overlay_file(), local_overlay_path(project_root)),
+    )
+    return [(file, _read_overlay(path, file)) for file, path in candidates if path.is_file()]
+
+
 def load_registry(akmon_dir: Path, project_root: Path | None = None) -> dict:
-    """The merged registry: akmon data deep-merged with the project overlay (if any)."""
+    """The merged registry: akmon data, the project overlay, then the developer's local overlay (strongest).
+
+    Dicts merge key by key and anything else — a list, hence a ``ladder`` — is replaced whole by the
+    stronger layer (ADR-0024/D05, D11).
+    """
     registry = json.loads(registry_path(akmon_dir).read_text(encoding="utf-8"))
     if project_root is not None:
-        overlay = overlay_path(project_root)
-        if overlay.is_file():
-            registry = _deep_merge(registry, json.loads(overlay.read_text(encoding="utf-8")))
+        for _file, layer in _overlay_layers(project_root):
+            registry = _deep_merge(registry, layer)
     return registry
 
 
@@ -146,7 +210,6 @@ class Binding:
     escalation: tuple[str, ...]
     semantic_fallback: bool = False
     warning: str | None = None
-    second_opinion_cli: str | None = None
     auditor_opt_in: str | None = None
 
 
@@ -284,8 +347,6 @@ def compute_binding(
             elif orch_rank == len(rungs) - 1 and floor_rank < len(rungs) - 1:
                 warning = jsondata.fill(warnings["reserved_top"], {"orchestrator": orchestrator, "floor": floor_rung})
 
-    provider = opposite_vendor(registry, vendor)
-    second_opinion = registry.get(provider, {}).get("second_opinion", {})
     return Binding(
         vendor=vendor,
         orchestrator=orchestrator,
@@ -296,7 +357,6 @@ def compute_binding(
         escalation=escalation,
         semantic_fallback=semantic,
         warning=warning,
-        second_opinion_cli=second_opinion.get("harness"),
         auditor_opt_in=auditor_opt_in,
     )
 
@@ -352,191 +412,64 @@ def vendors_with_routing_policy(registry: dict) -> list[str]:
     ]
 
 
-def opposite_vendor(registry: dict, vendor: str) -> str:
-    """Default second-opinion provider: another configured vendor, preferring the recorded order."""
-    for candidate in vendors_with_routing_policy(registry):
-        if candidate != vendor and second_opinion_spec(registry, candidate, required=False):
-            return candidate
-    return vendor
+class RetiredKeyError(ValueError):
+    """A configuration file still carries a key ADR 0024 retired; the message names the file and the keys."""
 
 
-def retired_second_opinion_keys() -> tuple[str, ...]:
-    """Keys C57 retired when the executable moved into ``common/runtime.py``.
+def retired_second_opinion_keys() -> dict[str, tuple[str, ...]]:
+    """The keys the second-opinion rewrite retired, by where they live: ``policy``, ``vendor`` and ``config``.
 
-    A project overlay written before that change deep-merges *over* the shipped registry, so
-    the new keys survive and the stale ones ride along unread — the config looks usable and
-    silently means something else.
+    An overlay written before the change deep-merges *over* the shipped registry, so a stale
+    key survives and rides along unread: the configuration looks usable and silently means something
+    else. That is why each one is refused by name (``refuse_retired_keys``) instead of ignored.
     """
-    return tuple(_agents_data()["retired_second_opinion_keys"])
+    return {scope: tuple(keys) for scope, keys in _agents_data()["retired_second_opinion_keys"].items()}
 
 
-def second_opinion_spec(registry: dict, provider: str, *, required: bool = True) -> dict:
-    """The second-opinion policy for one provider, or ``{}`` when it is absent and optional.
+def _retired_overlay_keys(layer: dict) -> list[str]:
+    """The retired keys one overlay-shaped dict still carries, policy first, then each block in order."""
+    retired = retired_second_opinion_keys()
+    found: list[str] = []
+    policy = layer.get("second_opinion_policy")
+    if isinstance(policy, dict):
+        found += [f"second_opinion_policy.{key}" for key in retired["policy"] if key in policy]
+    for name, spec in layer.items():
+        if isinstance(spec, dict):
+            found += [f"{name}.{key}" for key in retired["vendor"] if key in spec]
+    return found
 
-    A spec still carrying the retired keys always raises, in both the required and optional
-    calls: it is a stale *configuration*, not an absent capability, and degrading it to "no
-    second opinion available" would hide the migration behind a silently weaker run.
+
+def refuse_retired_keys(registry: dict, config: dict, *, project_root: Path | None = None) -> None:
+    """Raise ``RetiredKeyError`` naming the file when an overlay or the local config holds a retired key.
+
+    The shipped registry carries none of them, so one found in the merged registry came from an
+    overlay. With ``project_root`` each overlay file is read in turn, strongest first, and the error
+    quotes the one that holds the key — the file to edit. Without it only the merged registry is
+    known, so the error names both candidate files. The local config is a generated file, so its
+    error says to regenerate it; an overlay is hand-owned, so its error says which keys to delete.
     """
-    errors = _agents_data()["second_opinion_spec_errors"]
-    spec = registry.get(provider, {}).get("second_opinion", {})
-    if isinstance(spec, dict):
-        retired = [key for key in retired_second_opinion_keys() if key in spec]
-        if retired:
-            raise KeyError(jsondata.fill(errors["retired_keys"], {"provider": provider, "retired": ", ".join(retired)}))
-        if spec.get("harness") and spec.get("operation") and spec.get("report_dir"):
-            return spec
-    if required:
-        raise KeyError(jsondata.fill(errors["no_usable_spec"], {"provider": provider}))
-    return {}
-
-
-def second_opinion_fallback_model(rungs: list[str], orchestrator: str, auditor: str) -> str | None:
-    """The same-vendor fallback rung when no other vendor is reachable (design §9.7 #2).
-
-    The diversity requirement is about *model* priors, not vendor branding: the strongest
-    rung that differs from both the orchestrator (the author) and the auditor. ``None`` when
-    no rung differs from the orchestrator at all (a single distinct rung) — the caller warns
-    or skips; it must never fall back to the same model.
-    """
-    for rung in reversed(rungs):
-        if rung not in (orchestrator, auditor):
-            return rung
-    return None
-
-
-def second_opinion_command(spec: dict, prompt: str, model: str | None = None) -> list[str]:
-    """Build the non-interactive CLI command; the prompt is passed as the final argv.
-
-    The executable and the operation's argv come from the single owner in ``common/runtime.py``;
-    the registry contributes only *policy* — which harness, which operation, and the optional
-    ``model_flag`` format string (e.g. ``"--model {model}"``) inserted before the prompt so the
-    same-vendor branch of the diversity ladder can pin a *different* model.
-
-    A requested ``model`` with no ``model_flag`` raises ``UnpinnableModelError`` (C97): the run
-    would otherwise go out on the harness's default model and still be filed as a model-diverse
-    second opinion — the one guarantee the ladder exists to give, lost without a signal.
-    """
-    argv = harness_command(str(spec["harness"]), str(spec["operation"]))
-    if model:
-        model_flag = spec.get("model_flag")
-        if not model_flag:
-            raise UnpinnableModelError(str(spec["harness"]), model)
-        argv += shlex.split(str(model_flag).format(model=model))
-    return [*argv, prompt]
+    texts = _agents_data()["retired_key_errors"]
+    if project_root is None:
+        holders = [(f"{_local_overlay_file()} or {_overlay_file()}", _retired_overlay_keys(registry))]
+    else:
+        holders = [(file, _retired_overlay_keys(layer)) for file, layer in reversed(_overlay_layers(project_root))]
+    for file, keys in holders:
+        if keys:
+            raise RetiredKeyError(jsondata.fill(texts["overlay"], {"file": file, "keys": ", ".join(keys)}))
+    in_config = [key for key in retired_second_opinion_keys()["config"] if key in config]
+    if in_config:
+        raise RetiredKeyError(
+            jsondata.fill(texts["config"], {"file": local_config_rel(), "keys": ", ".join(in_config)})
+        )
 
 
 class UnpinnableModelError(ValueError):
-    """A second opinion asked for a model its vendor declares no ``model_flag`` to pin (C97)."""
+    """A second opinion asked for a model its provider declares no ``model_flag`` to pin (C97)."""
 
-    def __init__(self, harness: str, model: str) -> None:
-        super().__init__(jsondata.fill(_agents_data()["unpinnable_model"], {"model": repr(model), "harness": harness}))
-
-
-def second_opinion_unavailability(registry: dict, config: dict, orchestrator_vendor: str) -> str:
-    """Why no model-diverse reviewer exists, walked step by step over the configured ladder.
-
-    Deliberately not a second verdict: ``resolve_second_opinion`` owns the answer. This states,
-    per ladder step, the population that step had — and it states a *conclusion* ("nothing
-    differs") only where it derives one from the same helper the ladder uses. A step that was
-    never attempted says so instead of being explained away, because an overlay can shorten
-    the ladder, and "no diverse reviewer" then means something entirely different.
-    """
-    policy = registry.get("second_opinion_policy", {}) if isinstance(registry, dict) else {}
-    ladder = policy.get("diversity_ladder") or ["other-vendor", "same-vendor-other-model"]
-    others = [
-        vendor
-        for vendor in vendors_with_routing_policy(registry)
-        if vendor != orchestrator_vendor and second_opinion_spec(registry, vendor, required=False)
-    ]
-    configured = config.get("second_opinion_provider")
-    rungs, _ = selection_ladder(registry, orchestrator_vendor, config.get("available"))
-    orchestrator = str(config.get("orchestrator") or "?")
-    auditor = str(config.get("binding", {}).get("auditor") or "?")
-    against = f"the orchestrator '{orchestrator}' and the auditor '{auditor}'"
-    texts = _agents_data()["second_opinion_unavailability"]
-
-    if "other-vendor" not in ladder:
-        other_vendor = texts["other_vendor_absent"]
-    elif not others:
-        other_vendor = texts["other_vendor_none"]
-    elif isinstance(configured, str) and configured == orchestrator_vendor:
-        other_vendor = jsondata.fill(
-            texts["other_vendor_pinned"], {"configured": configured, "others": ", ".join(others)}
+    def __init__(self, provider: str, model: str) -> None:
+        super().__init__(
+            jsondata.fill(_agents_data()["unpinnable_model"], {"model": repr(model), "provider": provider})
         )
-    else:
-        other_vendor = jsondata.fill(texts["other_vendor_usable"], {"others": ", ".join(others)})
-
-    if "same-vendor-other-model" not in ladder:
-        same_vendor = texts["same_vendor_absent"]
-    elif second_opinion_fallback_model(rungs, orchestrator, auditor) is None:
-        same_vendor = jsondata.fill(
-            texts["same_vendor_no_diverse_rung"],
-            {"vendor": orchestrator_vendor, "rungs": repr(rungs), "against": against},
-        )
-    else:
-        same_vendor = jsondata.fill(
-            texts["same_vendor_diverse_rung"],
-            {"vendor": orchestrator_vendor, "rungs": repr(rungs), "against": against},
-        )
-    return f"{other_vendor}; {same_vendor}"
-
-
-@dataclass(frozen=True)
-class SecondOpinionTarget:
-    """A resolved second-opinion target: which provider, and which model to pin (if any)."""
-
-    provider: str
-    model: str | None  # None = the provider CLI's default model (other-vendor case)
-    family: str | None = None  # the priors that answer (ADR-0024/D01); None on the retired vendor path
-
-
-def resolve_second_opinion(registry: dict, config: dict, orchestrator_vendor: str) -> SecondOpinionTarget | None:
-    """Walk `second_opinion_policy.diversity_ladder` to a (provider, model) target.
-
-    Diversity is about *model priors* (design §9.3 item 3): the reviewer must differ
-    from the models it reviews. Ladder steps (registry data):
-      - "other-vendor": another configured vendor with a usable spec — different priors
-        by construction, so model=None (its CLI default is already a different model);
-      - "same-vendor-other-model": the same vendor, pinned to the strongest rung that
-        differs from BOTH orchestrator (author) and auditor, via
-        `second_opinion_fallback_model` (design §9.7 #2);
-      - `never: same-model` — if no rung differs, return None (skip); the caller must
-        never fall back to the same model.
-
-    An explicit `config["second_opinion_provider"]` is honored: a configured *other*
-    vendor satisfies the other-vendor step; configured == orchestrator vendor routes to
-    the same-vendor branch.
-    """
-    policy = registry.get("second_opinion_policy", {}) if isinstance(registry, dict) else {}
-    ladder = policy.get("diversity_ladder") or ["other-vendor", "same-vendor-other-model"]
-    orchestrator = str(config.get("orchestrator") or "")
-    auditor = str(config.get("binding", {}).get("auditor") or "")
-    configured = config.get("second_opinion_provider")
-    for step in ladder:
-        if step == "other-vendor":
-            # An explicit same-vendor override is a deliberate "stay on my vendor, pin a
-            # different model" choice — skip the other-vendor step so it falls through to
-            # same-vendor-other-model rather than silently picking the opposite vendor.
-            if isinstance(configured, str) and configured == orchestrator_vendor:
-                continue
-            provider = (
-                configured
-                if isinstance(configured, str) and configured and configured != orchestrator_vendor
-                else opposite_vendor(registry, orchestrator_vendor)
-            )
-            if provider != orchestrator_vendor and second_opinion_spec(registry, provider, required=False):
-                return SecondOpinionTarget(provider, None)
-        elif step == "same-vendor-other-model":
-            provider = orchestrator_vendor
-            if not second_opinion_spec(registry, provider, required=False):
-                continue
-            model = config.get("second_opinion_fallback_model")
-            if not model:
-                rungs, _ = selection_ladder(registry, provider, config.get("available"))
-                model = second_opinion_fallback_model(rungs, orchestrator, auditor)
-            if model:
-                return SecondOpinionTarget(provider, str(model))
-    return None
 
 
 # --------------------------------------------------------------------------------------
@@ -548,12 +481,26 @@ OPINION_RANK_SECOND = 2
 
 
 @dataclass(frozen=True)
+class SecondOpinionTarget:
+    """A resolved second-opinion target: which provider, which model to pin (if any), and whose priors answer."""
+
+    provider: str
+    model: str | None  # None = the carrier's own default model
+    family: str | None = None  # the priors that answer (ADR-0024/D01); None = unknown (D08)
+    effort: str | None = None  # the reasoning level sent with it (ADR-0024/D17); None = the carrier's own
+
+
+@dataclass(frozen=True)
 class SecondOpinionSession:
     """The working session as the ladder sees it: its carrier, the family that answers, its model."""
 
     provider: str
     family: str | None
     model: str | None = None
+
+
+class SessionUnknownError(ValueError):
+    """No source names the session's provider: an explicit argument, the ``session`` stanza or the bound vendor."""
 
 
 def opinion_ladder(registry: dict) -> tuple[str, ...]:
@@ -570,12 +517,113 @@ def providers(registry: dict) -> dict:
 
 
 def provider_row(registry: dict, provider: str) -> dict:
-    """One row by id. A ladder id the table does not declare is a named error, never a silent skip."""
+    """One row by id. A ladder id the table does not declare is a named error, never a silent skip.
+
+    The error names the two overlay files that can hold the ladder (the developer's and the team's),
+    the same placeholders an ask names, because the entry came from one of them (ADR-0024/D05).
+    """
     row = providers(registry).get(provider)
     if isinstance(row, dict):
         return row
-    text = jsondata.fill(_agents_data()["opinion_ladder_unknown"], {"provider": provider})
-    raise KeyError(text)
+    values = {"provider": provider, "local_overlay": _local_overlay_file(), "overlay": _overlay_file()}
+    raise KeyError(jsondata.fill(_agents_data()["opinion_ladder_unknown"], values))
+
+
+def family_vocabulary(registry: dict) -> tuple[str, ...]:
+    """The closed set of family names, in declared order: ``second_opinion_policy.families``' keys (ADR-0024/D01).
+
+    An object, not a list, so an overlay adds a family by key without restating the shipped ones (a
+    list would be replaced whole by the stronger layer). Closed means a family is named on purpose —
+    a typo or a carrier name is not one — and extending it is a declaration in an overlay.
+    """
+    policy = registry.get("second_opinion_policy")
+    families = policy.get("families") if isinstance(policy, dict) else None
+    return tuple(str(name) for name in families) if isinstance(families, dict) else ()
+
+
+def check_session_family(registry: dict, family: str) -> None:
+    """Raise ``ValueError`` naming the files that extend the vocabulary when ``family`` is not in it."""
+    known = family_vocabulary(registry)
+    if family in known:
+        return
+    values = {
+        "family": family,
+        "known": ", ".join(known),
+        "local_overlay": _local_overlay_file(),
+        "overlay": _overlay_file(),
+    }
+    raise ValueError(jsondata.fill(_agents_data()["session_family_unknown"], values))
+
+
+def vendor_refusal(registry: dict, vendor: str, vendors: Sequence[str]) -> str:
+    """The usage error for a ``--vendor`` with no tier-binding block.
+
+    A name the providers table declares is a carrier: it has no vendor block, so it cannot bind
+    tiers, and the message says how to start from that harness instead (``--session-provider``, with
+    ``--vendor`` still choosing the binding it borrows). Tier binding stays owned by a vendor block
+    (ADR-0024/D15).
+    """
+    texts = _agents_data()
+    key = "vendor_is_carrier" if vendor in providers(registry) else "vendor_unknown"
+    return jsondata.fill(texts[key], {"vendor": vendor, "vendors": ", ".join(vendors)})
+
+
+def hook_overlay_line(hook: str, error: OverlayError) -> str:
+    """The one stderr line a hook prints for a bad hand-owned overlay: the hook, the file, what it costs."""
+    texts = _agents_data()["hook_overlay_error"]
+    effect = texts["effects"][hook]
+    return jsondata.fill(texts["line"], {"hook": hook, "error": error.args[0], "effect": effect})
+
+
+def split_opinion_entry(entry: str) -> tuple[str, str | None]:
+    """A ``carrier[:model]`` entry as ``(provider, model)``, split on the FIRST colon only.
+
+    A model id may itself hold ``/`` and ``:`` (``anthropic/claude-sonnet-4``, ``qwen3:8b``), so the
+    carrier is whatever precedes the first colon and everything after it is the model.
+    """
+    provider, _, model = entry.partition(":")
+    return provider, model or None
+
+
+def split_model_effort(text: str | None) -> tuple[str | None, str | None]:
+    """A ``model[@effort]`` text as ``(model, effort)``, split at its LAST ``@`` (ADR-0024/D17).
+
+    A model id that itself encodes the level (``acme/qwen3.8-27b-max``) stays one id, because akmon
+    never parses a model name; no ``@`` means no effort. An empty side is ``None`` for the model and
+    kept as ``""`` for the effort, which no row lists, so ``m@`` is refused rather than ignored.
+    """
+    if text is None:
+        return None, None
+    model, at, effort = text.rpartition("@")
+    if not at:
+        return text or None, None
+    return model or None, effort
+
+
+def ladder_pins_default(registry: dict, provider: str) -> bool:
+    """Whether a ladder entry names ``provider:default`` (with any effort) — the carrier's own model (ADR-0024/D16)."""
+    token = default_model_token()
+    for entry in opinion_ladder(registry):
+        entry_provider, pinned = split_opinion_entry(entry)
+        if entry_provider == provider and split_model_effort(pinned)[0] == token:
+            return True
+    return False
+
+
+def provider_family(registry: dict, provider: str, model: str | None = None) -> str | None:
+    """The priors that answer when ``provider`` runs ``model``: the model's own entry, else the row's, else unknown.
+
+    A carrier that fronts several families (a gateway, a multi-provider harness) states each model's
+    family in ``model_families``; a single-family carrier states ``family`` once. A model neither
+    names resolves to ``None``, which the walk treats as unknown and fails closed (ADR-0024/D08) —
+    guessing a family from the model id would be the silent weakness this record removes.
+    """
+    row = provider_row(registry, provider)
+    families = row.get("model_families")
+    if model and isinstance(families, dict) and families.get(model):
+        return str(families[model])
+    family = row.get("family")
+    return str(family) if family else None
 
 
 def carrier_present(registry: dict, provider: str) -> bool:
@@ -583,11 +631,18 @@ def carrier_present(registry: dict, provider: str) -> bool:
 
     This is the one host fact the resolver takes (ADR-0024/D11): it reads no carrier settings file, no
     developer dot-directory and no environment value, and never invokes the carrier to ask what it is,
-    so the same code answers the same way on the owner's host and on a consumer's.
+    so the same code answers the same way on the owner's host and on a consumer's. The executable is
+    the row's ``requires_command``, a declared ``argv``'s first element, or — for a shipped carrier —
+    the command map's own name for it, so the map stays the only place that spells one.
     """
     row = provider_row(registry, provider)
     argv = row.get("argv")
-    binary = str(row.get("requires_command") or (argv[0] if isinstance(argv, list) and argv else ""))
+    mapped = harness_commands().get(provider)
+    binary = str(
+        row.get("requires_command")
+        or (argv[0] if isinstance(argv, list) and argv else "")
+        or (mapped.binary if mapped else "")
+    )
     return bool(binary) and shutil.which(binary) is not None
 
 
@@ -610,53 +665,195 @@ def opinion_model(registry: dict, provider: str) -> str | None:
     return str(models[-1])
 
 
+class EffortError(ValueError):
+    """An effort a row cannot take: it declares no ``efforts``, or the level is not one of its ``levels``."""
+
+
+def check_effort(registry: dict, provider: str, effort: str | None) -> None:
+    """Raise ``EffortError`` unless ``effort`` is ``None`` or a level the provider's ``efforts`` lists (ADR-0024/D17).
+
+    akmon never guesses a level and never forwards one the row does not list: a carrier with no
+    ``efforts`` is refused naming it, and an unlisted level is refused naming the accepted ones.
+    """
+    if effort is None:
+        return
+    declared = provider_row(registry, provider).get("efforts")
+    levels = declared.get("levels") if isinstance(declared, dict) else None
+    texts = _agents_data()["effort_errors"]
+    if not isinstance(levels, list):
+        values = {
+            "provider": provider,
+            "effort": effort,
+            "local_overlay": _local_overlay_file(),
+            "overlay": _overlay_file(),
+        }
+        raise EffortError(jsondata.fill(texts["unsupported"], values))
+    if effort not in levels:
+        values = {"provider": provider, "effort": effort, "levels": ", ".join(str(level) for level in levels)}
+        raise EffortError(jsondata.fill(texts["unknown"], values))
+
+
+def opinion_pick(registry: dict, provider: str, pinned: str | None) -> tuple[str | None, str | None]:
+    """The ``(model, effort)`` a ``carrier[:model[@effort]]`` entry runs (ADR-0024/D16, D17).
+
+    ``default`` is a token, not a model id: it drops the pin altogether, so the carrier uses the model
+    it is configured with and no alias is resolved, and ``default@high`` sends only the level. An
+    effort-only pin (``@high``) keeps the rule's model. No pin at all still means the strongest
+    declared entry (``opinion_model``, D14), with the effort that entry carries. A level the row does
+    not list raises ``EffortError``.
+    """
+    model, effort = split_model_effort(pinned)
+    check_effort(registry, provider, effort)
+    if model == default_model_token():
+        return None, effort
+    if model is not None:
+        return model, effort
+    strongest, strongest_effort = split_model_effort(opinion_model(registry, provider))
+    return strongest, effort if pinned is not None else strongest_effort
+
+
+def resolve_session(
+    registry: dict,
+    config: dict,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    family: str | None = None,
+) -> SecondOpinionSession:
+    """The session's carrier, model and priors: explicit arguments, else the ``session`` stanza, else the bound vendor.
+
+    The session may start from any harness on any model, so nothing here assumes a vendor: the
+    ``session`` stanza of the local config (written by ``init --session-provider``) names it
+    outright, and only when neither it nor an argument does the bound vendor's ``carrier`` and the
+    recorded orchestrator alias stand in. Each field comes from the first layer that states it for
+    the chosen provider — a layer that names another provider never lends it a model or a family.
+    A family none of them states is read from the provider table (``provider_family``), and stays
+    ``None`` when that says nothing (ADR-0024/D08). No provider anywhere raises ``SessionUnknownError``.
+    """
+    stanza = config.get("session")
+    vendor_block = registry.get(str(config.get("vendor") or ""))
+    derived = {
+        "provider": vendor_block.get("carrier") if isinstance(vendor_block, dict) else None,
+        "model": config.get("orchestrator"),
+    }
+    layers = (
+        {"provider": provider, "model": model, "family": family},
+        stanza if isinstance(stanza, dict) else {},
+        derived,
+    )
+    chosen = next((str(layer["provider"]) for layer in layers if layer.get("provider")), None)
+    if chosen is None:
+        raise SessionUnknownError(_agents_data()["session_unknown"])
+
+    def stated(field: str) -> str | None:
+        for layer in layers:
+            if layer.get(field) and layer.get("provider") in (None, "", chosen):
+                return str(layer[field])
+        return None
+
+    resolved_model = stated("model")
+    resolved_family = stated("family")
+    if resolved_family is None and chosen in providers(registry):
+        resolved_family = provider_family(registry, chosen, resolved_model)
+    return SecondOpinionSession(chosen, resolved_family, resolved_model)
+
+
+def _overlay_file() -> str:
+    """The project routing overlay's path, project-root-relative — where an owner declares a missing prior."""
+    return f"{aitna_root_name()}/{overlay_name()}"
+
+
+def _local_overlay_file() -> str:
+    """The developer-local routing overlay's path, project-root-relative — the strongest place to declare a prior."""
+    return f"{aitna_root_name()}/{local_overlay_rel()}"
+
+
+def _priors_ask(provider: str, model: str | None) -> str:
+    """The named key that would settle an unknown family, and the file to write it in (ADR-0024/D08, D11)."""
+    asks = _agents_data()["opinion_asks"]
+    values = {
+        "provider": provider,
+        "model": str(model),
+        "local_overlay": _local_overlay_file(),
+        "overlay": _overlay_file(),
+    }
+    return jsondata.fill(asks["provider" if model else "provider_default"], values)
+
+
+def _session_ask(session: SecondOpinionSession) -> str:
+    """The ask for a session whose own family cannot be resolved: nothing is counted as diverse until it is."""
+    asks = _agents_data()["opinion_asks"]
+    values = {
+        "provider": session.provider,
+        "model": str(session.model),
+        "local_overlay": _local_overlay_file(),
+        "overlay": _overlay_file(),
+        "local": local_config_rel(),
+    }
+    return jsondata.fill(asks["session" if session.model else "session_default"], values)
+
+
 def _walk_opinion_ladder(
     registry: dict, session: SecondOpinionSession
-) -> tuple[list[tuple[str, str | None]], list[tuple[str, str]]]:
-    """The one top-down walk: the admissible chain, and every provider passed over with its reason.
+) -> tuple[list[tuple[str, str | None, str | None]], list[tuple[str, str]], list[str]]:
+    """The one top-down walk: the admissible chain, every provider passed over with its reason, and the asks.
 
     Two skips carry the design (ADR-0024/D06): the session's own carrier, and any provider whose
     family or concrete model is already spoken for — a different harness answering with the same
     mind, or the same model under another name, buys no diversity. The compared model is the one the
     consumer's rule resolves (D14), not only a ladder pin, or two providers answering with the same
-    weights would both pass. ``families``/``models`` record which provider holds each, so a reason
-    names the owner rather than only refusing. Rank is a position in the *resulting* chain, so a skip
-    never leaves a hole the report must explain.
+    weights would both pass; the family is read for that chosen model (``provider_family``), because
+    a carrier that fronts several families has no single answer. ``families``/``models`` record which
+    provider holds each, so a reason names the owner rather than only refusing. Rank is a position in
+    the *resulting* chain, so a skip never leaves a hole the report must explain.
+
+    A session whose own family is unknown yields an empty chain (D08): nothing can be said to differ
+    from priors nobody knows. A provider whose family is unknown is skipped and asked about.
     """
     reasons = _agents_data()["opinion_skip_reasons"]
-    chain: list[tuple[str, str | None]] = []
+    if not session.family:
+        return [], [(session.provider, str(reasons["session_priors_unknown"]))], [_session_ask(session)]
+    chain: list[tuple[str, str | None, str | None]] = []
     skips: list[tuple[str, str]] = []
-    families: dict[str, str] = {}
-    models: dict[str, str] = {}
-    if session.family:
-        families[str(session.family)] = session.provider
-    if session.model:
-        models[str(session.model)] = session.provider
+    asks: list[str] = []
+    families: dict[str, str] = {str(session.family): session.provider}
+    models: dict[str, str] = {str(session.model): session.provider} if session.model else {}
     for entry in opinion_ladder(registry):
-        provider, _, pinned = entry.partition(":")
-        row = provider_row(registry, provider)
+        provider, pinned = split_opinion_entry(entry)
+        provider_row(registry, provider)  # an id the table does not declare is a named error, even for the self-skip
+        check_effort(registry, provider, split_model_effort(pinned)[1])  # so is an effort the row cannot take (D17)
         if provider == session.provider:
             skips.append((provider, str(reasons["self"])))
             continue
         if not carrier_present(registry, provider):
             skips.append((provider, str(reasons["absent"])))
             continue
-        family = row.get("family")
+        chosen, effort = opinion_pick(registry, provider, pinned)
+        family = provider_family(registry, provider, chosen)
         if not family:
             skips.append((provider, str(reasons["priors_unknown"])))
+            asks.append(_priors_ask(provider, chosen))
             continue
-        if str(family) in families:
-            skips.append((provider, jsondata.fill(reasons["same_priors"], {"owner": families[str(family)]})))
+        if family in families:
+            skips.append((provider, jsondata.fill(reasons["same_priors"], {"owner": families[family]})))
             continue
-        chosen = pinned or opinion_model(registry, provider)
         if chosen and chosen in models:
             skips.append((provider, jsondata.fill(reasons["same_model"], {"owner": models[chosen]})))
             continue
-        families[str(family)] = provider
+        families[family] = provider
         if chosen:
             models[chosen] = provider
-        chain.append((provider, chosen or None))
-    return chain, skips
+        chain.append((provider, chosen, effort))
+    return chain, skips, asks
+
+
+def opinion_chain(registry: dict, session: SecondOpinionSession) -> tuple[SecondOpinionTarget, ...]:
+    """The whole admissible chain, in rank order from rank 2: every provider the walk kept, resolved."""
+    chain, _, _ = _walk_opinion_ladder(registry, session)
+    return tuple(
+        SecondOpinionTarget(provider, model, provider_family(registry, provider, model), effort)
+        for provider, model, effort in chain
+    )
 
 
 def resolve_opinion_chain(
@@ -667,18 +864,34 @@ def resolve_opinion_chain(
     ``None`` says the chain is empty or shorter than asked; the caller then takes the disclosed last
     resort (ADR-0024/D07) rather than arriving at the same model without saying so.
     """
-    chain, _ = _walk_opinion_ladder(registry, session)
+    chain = opinion_chain(registry, session)
     index = rank - OPINION_RANK_SECOND
-    if not 0 <= index < len(chain):
-        return None
-    provider, pinned = chain[index]
-    family = providers(registry)[provider].get("family")
-    return SecondOpinionTarget(provider, pinned, str(family) if family else None)
+    return chain[index] if 0 <= index < len(chain) else None
 
 
 def opinion_skips(registry: dict, session: SecondOpinionSession) -> tuple[tuple[str, str], ...]:
     """Every provider passed over and why — the ledger that travels with the report (ADR-0024/D08)."""
     return tuple(_walk_opinion_ladder(registry, session)[1])
+
+
+def opinion_asks(registry: dict, session: SecondOpinionSession) -> tuple[str, ...]:
+    """One line per unknown prior the walk met, each naming the key and the file that would settle it (D08, D11)."""
+    return tuple(_walk_opinion_ladder(registry, session)[2])
+
+
+def opinion_last_resort(registry: dict, session: SecondOpinionSession) -> SecondOpinionTarget:
+    """The disclosed last resort for an empty chain: the session's own provider, on a different model if declared.
+
+    The strongest entry of the provider's declared ``models`` whose model differs from the session's —
+    read from the provider table and not from the tier binding's rungs (ADR-0024/D14) — and only when
+    none differs the carrier's own default in a clean context (D07). The caller files the run as
+    ``kind=last-resort``: same priors are never bought, only disclosed.
+    """
+    row = provider_row(registry, session.provider)
+    declared = [str(entry) for entry in row.get("models") or [] if split_model_effort(str(entry))[0] != session.model]
+    model, effort = split_model_effort(declared[-1] if declared else None)
+    family = provider_family(registry, session.provider, model) or session.family
+    return SecondOpinionTarget(session.provider, model, family, effort)
 
 
 def opinion_repo(registry: dict, provider: str) -> str:
@@ -697,14 +910,45 @@ def opinion_repo(registry: dict, provider: str) -> str:
     return "none" if row.get("carrier") == "tool" or row.get("raw_model") else "worktree"
 
 
-def opinion_command(registry: dict, provider: str, *, model: str | None = None, prompt: str | None = None) -> list[str]:
+def opinion_carrier(registry: dict, provider: str) -> str:
+    """The carrier kind the report names: ``declared`` for an owner's own argv, else the row's kind or ``harness``."""
+    row = provider_row(registry, provider)
+    return "declared" if row.get("argv") else str(row.get("carrier") or "harness")
+
+
+def _without_model_placeholder(parts: Sequence[str]) -> list[str]:
+    """``parts`` with every ``{model}`` element gone, and the bare flag that pointed at a lone one."""
+    kept: list[str] = []
+    for part in parts:
+        if "{model}" not in part:
+            kept.append(part)
+        elif part == "{model}" and kept and kept[-1].startswith("-") and "=" not in kept[-1]:
+            kept.pop()
+    return kept
+
+
+def opinion_command(
+    registry: dict, provider: str, *, model: str | None = None, effort: str | None = None, prompt: str | None = None
+) -> list[str]:
     """The argv for one provider: the command map for a shipped carrier, the owner's own list for a declared one.
 
-    A declared ``argv`` is a list and is never split or handed to a shell (ADR-0024/D12) — the config
-    the owner wrote is the trust boundary, and a command string would make every value in it a
-    candidate command. ``{model}`` is the one placeholder, and a pin with nowhere to go raises
+    The executable and the operation's prefix come from ``common/runtime.py`` — the sole owner — and
+    the row adds only policy: its ``model_flag`` and the prompt as the last argument. A declared
+    ``argv`` is a list and is never split or handed to a shell (ADR-0024/D12) — the config the owner
+    wrote is the trust boundary, and a command string would make every value in it a candidate
+    command. ``{model}`` is the one placeholder, and a pin with nowhere to go raises
     ``UnpinnableModelError`` rather than shipping an unpinned run filed as a diverse one (C97).
+    Unpinned, an element holding ``{model}`` is dropped whole; when that element is exactly
+    ``{model}`` and the one before it is a bare flag (leading ``-``, no ``=``), the flag goes with it,
+    so ``["qwen", "-m", "{model}"]`` runs as ``["qwen"]`` rather than with a flag that now eats the
+    next argument (``_without_model_placeholder``).
+    An ``effort`` (ADR-0024/D17) is the row's ``efforts.flag`` with ``{effort}`` filled, split like
+    ``model_flag`` and appended after the model flag — or, for a declared ``argv``, after the argv —
+    and before the prompt; a level the row does not list raises ``EffortError``, so nothing unlisted
+    is ever forwarded. It needs no model pin: ``effort`` alone sends only the level.
+    A row with ``prompt: "stdin"`` gets no prompt argument; the caller feeds the pack on stdin.
     """
+    check_effort(registry, provider, effort)
     row = provider_row(registry, provider)
     argv = row.get("argv")
     if isinstance(argv, list):
@@ -714,16 +958,232 @@ def opinion_command(registry: dict, provider: str, *, model: str | None = None, 
                 raise UnpinnableModelError(provider, str(model))
             parts = [part.replace("{model}", str(model)) for part in parts]
         else:
-            parts = [part for part in parts if "{model}" not in part]
-        if prompt and str(row.get("prompt", "argv")) != "stdin":
-            parts.append(str(prompt))
-        return parts
-    spec: dict = {"harness": provider, "operation": str(row.get("operation", "review"))}
-    if row.get("model_flag"):
-        spec["model_flag"] = str(row["model_flag"])
-    built = second_opinion_command(spec, str(prompt or ""), model=model)
-    # The map builder always ends with the prompt; a caller that has none must not ship an empty argv element.
-    return built[:-1] if not prompt else built
+            parts = _without_model_placeholder(parts)
+    else:
+        parts = harness_command(provider, str(row.get("operation", "review")))
+        if model:
+            model_flag = row.get("model_flag")
+            if not model_flag:
+                raise UnpinnableModelError(provider, str(model))
+            parts += [part.replace("{model}", str(model)) for part in shlex.split(str(model_flag))]
+    if effort is not None:
+        parts += [part.replace("{effort}", effort) for part in shlex.split(str(row["efforts"]["flag"]))]
+    if prompt and str(row.get("prompt", "argv")) != "stdin":
+        parts.append(str(prompt))
+    return parts
+
+
+# --------------------------------------------------------------------------------------
+# Model aliases (ADR-0024/D16): shipped aliases, concrete ids only in a local file
+# --------------------------------------------------------------------------------------
+
+#: The catalog formats ``parse_catalog`` reads; ``bin/verify.json`` keeps the same closed list for the verifier.
+CATALOG_FORMATS = ("codex-models-cache",)
+
+_CODEX_SLUG = re.compile(r"[a-z][a-z0-9]*-(\d+(?:\.\d+)*)-([a-z]+)", re.ASCII)
+
+
+class UnresolvedAliasError(ValueError):
+    """A provider row declares ``aliases: true`` and the alias asked for has no concrete id in the local file."""
+
+
+@dataclass(frozen=True)
+class ProviderAliases:
+    """One provider's entry of the resolved-aliases file: what produced it, the client version, alias → concrete id."""
+
+    source: str
+    client: str | None
+    aliases: dict[str, str]
+
+
+@dataclass(frozen=True)
+class CatalogModel:
+    """A catalog slug that names a versioned alias: ``gpt-6.1-sol`` is alias ``sol`` at version ``(6, 1)``."""
+
+    slug: str
+    alias: str
+    version: tuple[int, ...]
+    priority: int | None
+
+
+@dataclass(frozen=True)
+class Catalog:
+    """What a provider's catalog lists: the carrier version it states, if any, and its listed versioned models."""
+
+    client: str | None
+    models: tuple[CatalogModel, ...]
+
+
+def _alias_file() -> str:
+    """The resolved-aliases file's path, project-root-relative — what an unresolved alias asks to have refreshed."""
+    return f"{aitna_root_name()}/{local_aliases_rel()}"
+
+
+def _valid_provider_aliases(value: object) -> ProviderAliases | None:
+    """``value`` as a ``ProviderAliases``, or ``None`` when it does not have the file's shape."""
+    if not isinstance(value, dict):
+        return None
+    source, client, aliases = value.get("source"), value.get("client"), value.get("aliases")
+    if not isinstance(source, str) or not (client is None or isinstance(client, str)) or not isinstance(aliases, dict):
+        return None
+    if not all(isinstance(key, str) and isinstance(item, str) for key, item in aliases.items()):
+        return None
+    return ProviderAliases(source, client, dict(aliases))
+
+
+def read_model_aliases(project_root: Path) -> dict[str, ProviderAliases]:
+    """The resolved-aliases file as typed entries by provider; ``{}`` when it does not exist.
+
+    A file that is not the shape ``models.py`` writes raises ``ValueError`` naming it: the file is
+    generated, so the cure is deleting it and refreshing, never a hand edit.
+    """
+    path = local_aliases_path(project_root)
+    if not path.is_file():
+        return {}
+    invalid = ValueError(jsondata.fill(_agents_data()["alias_errors"]["invalid"], {"file": _alias_file()}))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise invalid from exc
+    entries = {key: _valid_provider_aliases(value) for key, value in data.items()} if isinstance(data, dict) else None
+    if entries is None or any(entry is None for entry in entries.values()):
+        raise invalid
+    return {key: entry for key, entry in entries.items() if entry is not None}
+
+
+def model_aliases_document(stored: Mapping[str, ProviderAliases]) -> str:
+    """The file's text for ``stored``: indent 2, insertion order, a trailing newline (no dates, nothing host-wide)."""
+    document = {
+        provider: {"source": entry.source, "client": entry.client, "aliases": dict(entry.aliases)}
+        for provider, entry in stored.items()
+    }
+    return json.dumps(document, indent=2) + "\n"
+
+
+def is_model_alias(registry: dict, provider: str, model: str) -> bool:
+    """Whether ``model`` is an alias the carrier does not accept: the row says ``aliases: true`` and lists it."""
+    row = provider_row(registry, provider)
+    models = row.get("models")
+    if row.get("aliases") is not True or not isinstance(models, list):
+        return False
+    return model in [split_model_effort(str(entry))[0] for entry in models]  # an entry may carry an @effort (D17)
+
+
+def resolve_opinion_model(
+    registry: dict, stored: Mapping[str, ProviderAliases], provider: str, model: str | None
+) -> str | None:
+    """The model a carrier is sent: an alias replaced by its concrete id, anything else passed through.
+
+    Only a model that is an alias of an ``aliases: true`` row is replaced; a concrete id (not in the
+    row's ``models``) and the carrier's own default (``None``) pass through. An alias with no mapping
+    raises ``UnresolvedAliasError`` naming the refresh command — fail closed, never an unresolved
+    alias sent to the carrier (ADR-0024/D16, D08).
+    """
+    if model is None or not is_model_alias(registry, provider, model):
+        return model
+    entry = stored.get(provider)
+    concrete = entry.aliases.get(model) if entry else None
+    if not concrete:
+        values = {"provider": provider, "model": model, "file": _alias_file()}
+        raise UnresolvedAliasError(jsondata.fill(_agents_data()["alias_errors"]["unresolved"], values))
+    return concrete
+
+
+def expand_home(path_text: str, home: str) -> str:
+    """``path_text`` with a leading ``~`` or ``~/`` replaced by ``home`` — the only expansion a catalog path takes."""
+    if path_text == "~" or path_text.startswith("~/"):
+        return (home.rstrip("/") + path_text[1:]) or "/"
+    return path_text
+
+
+def parse_catalog(text: str, catalog_format: str) -> Catalog:
+    """A catalog file's text read as ``catalog_format``; ``ValueError`` says what is wrong with it, not where.
+
+    ``codex-models-cache``: ``{"models": [{"slug", "visibility", "priority", ...}]}``. Only ``visibility ==
+    "list"`` entries count, and a slug counts when it reads ``<family>-<version>-<alias>``
+    (``gpt-6.1-sol``): ``gpt-reserve`` and ``codex-auto-review`` are ignored, never guessed at.
+    """
+    texts = _agents_data()["catalog_errors"]
+    if catalog_format not in CATALOG_FORMATS:
+        raise ValueError(
+            jsondata.fill(texts["format"], {"format": catalog_format, "known": ", ".join(CATALOG_FORMATS)})
+        )
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise ValueError(texts["json"]) from exc
+    listed = data.get("models") if isinstance(data, dict) else None
+    if not isinstance(listed, list):
+        raise ValueError(texts["shape"])
+    client = data.get("client_version")
+    models: list[CatalogModel] = []
+    for entry in listed:
+        slug = entry.get("slug") if isinstance(entry, dict) else None
+        match = _CODEX_SLUG.fullmatch(slug) if isinstance(slug, str) else None
+        if match is None or entry.get("visibility") != "list":
+            continue
+        priority = entry.get("priority")
+        version = tuple(int(part) for part in match.group(1).split("."))
+        models.append(
+            CatalogModel(
+                slug,
+                match.group(2),
+                version,
+                priority if isinstance(priority, int) and not isinstance(priority, bool) else None,
+            )
+        )
+    return Catalog(client if isinstance(client, str) else None, tuple(models))
+
+
+def catalog_aliases(catalog: Catalog, aliases: Sequence[str]) -> dict[str, str]:
+    """Each of ``aliases`` mapped to its highest-versioned slug, ties by lowest priority; an unmatched one is absent.
+
+    Absent means unmapped: nothing here guesses an id for an alias the catalog does not list
+    (ADR-0024/D16). The result follows ``aliases``' order.
+    """
+    resolved: dict[str, str] = {}
+    for alias in aliases:
+        best: CatalogModel | None = None
+        for model in catalog.models:
+            if model.alias != alias:
+                continue
+            if best is None or (model.version, -_rank_of(model)) > (best.version, -_rank_of(best)):
+                best = model
+        if best is not None:
+            resolved[alias] = best.slug
+    return resolved
+
+
+def _rank_of(model: CatalogModel) -> float:
+    """A model's catalog priority as a number where lower is better; a model stating none ranks last."""
+    return float("inf") if model.priority is None else float(model.priority)
+
+
+def opinion_head(registry: dict, config: dict) -> tuple[str, str | None]:
+    """What the second opinion would run first, as a display and any warning (the status line and the init summary).
+
+    Resolved through the same walk the runner takes rather than through any stored provider: a
+    display that can disagree with the policy is a second owner of one fact, the drift class C46
+    exists to remove. ``priors=unknown`` stands for a session nobody could name the family of, and
+    the warning carries the ask beside it (ADR-0024/D08); a stale key raises out of here
+    (``refuse_retired_keys``) and costs the whole status block, deliberately.
+    """
+    refuse_retired_keys(registry, config)
+    texts = _agents_data()["opinion_status"]
+    try:
+        session = resolve_session(registry, config)
+    except SessionUnknownError as exc:
+        return str(texts["unavailable_unknown"]), str(exc)
+    if not session.family:
+        return str(texts["unavailable_unknown"]), _session_ask(session)
+    chain = opinion_chain(registry, session)
+    if not chain:
+        return str(texts["unavailable"]), jsondata.fill(texts["chain_empty"], {"provider": session.provider})
+    head = chain[0]
+    pin = head.model or (default_model_token() if head.effort is not None else "")
+    pin = f"{pin}@{head.effort}" if head.effort is not None else pin
+    target = f"{head.provider}:{pin}" if pin else head.provider
+    return jsondata.fill(texts["head"], {"target": target, "family": head.family or "unknown"}), None
 
 
 # --------------------------------------------------------------------------------------
@@ -1366,7 +1826,12 @@ def context_pressure_notice(
 
 
 def binding_artifacts(
-    registry: dict, binding: Binding, *, second_opinion: bool, available: list[str] | None
+    registry: dict,
+    binding: Binding,
+    *,
+    second_opinion: bool,
+    available: list[str] | None,
+    session: dict | None = None,
 ) -> dict[str, str]:
     """Every generated routing artifact as ``project-root-relative path → content``.
 
@@ -1375,7 +1840,7 @@ def binding_artifacts(
     either path produces byte-identical files.
     """
     files = dict(generated_agent_files(registry, binding))
-    config = local_config(binding, registry, second_opinion=second_opinion, available=available)
+    config = local_config(binding, registry, second_opinion=second_opinion, available=available, session=session)
     files[local_config_rel()] = json.dumps(config, indent=2) + "\n"
     return files
 
@@ -1434,8 +1899,8 @@ def rebind_to(
 ) -> tuple[Binding, list[Path]]:
     """Recompute the binding for ``orchestrator`` and (re)write the artifacts under ``root``.
 
-    Reuses the recorded ``available`` list and opt-ins from ``config`` — only the
-    orchestrator moves. Idempotent: unchanged files are left untouched. This is how the
+    Reuses the recorded ``available`` list, opt-ins and ``session`` stanza from ``config`` — only
+    the orchestrator moves. Idempotent: unchanged files are left untouched. This is how the
     hook makes subagent models follow the session's actual orchestrating model.
     """
     available = config.get("available")
@@ -1443,17 +1908,29 @@ def rebind_to(
     vendor = str(config.get("vendor") or "anthropic")
     auditor_opt_in = config.get("auditor_opt_in") or None
     binding = compute_binding(registry, orchestrator, available, vendor, auditor_opt_in)
-    files = binding_artifacts(registry, binding, second_opinion=second_opinion, available=available)
+    files = binding_artifacts(
+        registry, binding, second_opinion=second_opinion, available=available, session=config.get("session")
+    )
     changed = write_artifacts(root, files, write=write)
     remove_obsolete_agents(root, (root / rel for rel in files), write=write)
     return binding, changed
 
 
-def local_config(binding: Binding, registry: dict, *, second_opinion: bool, available: list[str] | None) -> dict:
+def local_config(
+    binding: Binding,
+    registry: dict,
+    *,
+    second_opinion: bool,
+    available: list[str] | None,
+    session: dict | None = None,
+) -> dict:
     """The per-user resolved config written to ``local_config_rel()`` (binding, opt-ins, staleness hash).
 
     ``available`` records the ladder the binding resolved (``selection_ladder``) — none in the
-    semantic case — so the runtime readers need no ``--available`` of their own.
+    semantic case — so the runtime readers need no ``--available`` of their own. ``session`` is the
+    optional ``{provider, model, family?}`` stanza naming the harness the session runs on when it is
+    not the bound vendor's own (ADR-0024); it is written only when given, so a project that never
+    states one derives its session from the vendor as before.
     """
     rungs, semantic = selection_ladder(registry, binding.vendor, available)
     config = {
@@ -1467,17 +1944,13 @@ def local_config(binding: Binding, registry: dict, *, second_opinion: bool, avai
             "escalation": list(binding.escalation),
         },
         "second_opinion": second_opinion,
-        "second_opinion_provider": opposite_vendor(registry, binding.vendor),
         "available": None if semantic else rungs,
         "auditor_opt_in": binding.auditor_opt_in,
         "registry_hash": registry_hash(registry),
         "task_kind_floors": task_kind_floors(registry, [] if semantic else rungs, binding.vendor),
     }
-    provider = config["second_opinion_provider"]
-    if provider == binding.vendor:
-        config["second_opinion_fallback_model"] = second_opinion_fallback_model(
-            rungs, binding.orchestrator, binding.auditor
-        )
+    if session:
+        config["session"] = dict(session)
     return config
 
 
@@ -1496,31 +1969,14 @@ def staleness(config: dict, registry: dict, settings_model: str | None) -> str |
 def _second_opinion_status(registry: dict, config: dict, orchestrator_vendor: str) -> tuple[str, str | None]:
     """What the second-opinion gate will actually do, as one status field plus any warning.
 
-    Resolved through the same ladder the runner walks (``resolve_second_opinion``) rather
-    than through the pre-ladder ``second_opinion_provider``: the latter names the
-    *configured* provider, so an installation whose ladder is exhausted still read
-    ``second-opinion=<harness>(on)`` while every gate silently skipped. A display that can
-    disagree with the policy is a second owner of one fact — the drift class C46 exists to
-    remove — so this one asks the policy.
+    The head of the chain the runner would walk (``opinion_head``), with the on/off state. The
+    status shows the vendor the hook already resolved, so a config that predates the ``vendor`` key
+    reads as the hook reads it.
     """
     enabled = bool(config.get("second_opinion"))
+    display, warning = opinion_head(registry, {**config, "vendor": config.get("vendor") or orchestrator_vendor})
     state = "on" if enabled else "off"
-    # A retired-key overlay (C57, ADR-0004/D02) raises out of here, deliberately and not only here:
-    # ``compute_binding`` reaches the same spec through ``opposite_vendor``, so a stale
-    # overlay costs the whole status block, not this field. Catching it locally would look
-    # like resilience while changing nothing, so the raise is left to travel.
-    target = resolve_second_opinion(registry, config, orchestrator_vendor)
-    if target is None:
-        warning = (
-            "second-opinion is on but the diversity ladder is exhausted: no reachable "
-            "provider differs from the reviewed model, so every gate will skip it — "
-            "second_opinion.py states the reason at the gate and names the one thing that "
-            "can still be run by hand, with its limits"
-        )
-        return f"second-opinion=unavailable({state})", warning if enabled else None
-    harness = str(second_opinion_spec(registry, target.provider, required=False).get("harness") or "-")
-    pin = f", model={target.model}" if target.model else ""
-    return f"second-opinion={harness}({state}{pin})", None
+    return f"second-opinion={display} ({state})", warning if enabled else None
 
 
 @dataclass(frozen=True)

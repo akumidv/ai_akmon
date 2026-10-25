@@ -121,15 +121,36 @@
     "reasoner",
     "orchestrator"
   ],
-  "routing_second_opinion_keys": [
-    "harness",
+  "routing_provider_keys": [
     "operation",
+    "model_flag",
     "report_dir"
   ],
-  "routing_retired_second_opinion_keys": [
-    "cli",
-    "invoke"
+  "routing_catalog_formats": [
+    "codex-models-cache"
   ],
+  "routing_default_model_token": "default",
+  "routing_prompt_channels": [
+    "argv",
+    "stdin"
+  ],
+  "routing_repo_values": [
+    "worktree",
+    "none",
+    "unknown"
+  ],
+  "routing_retired_second_opinion_keys": {
+    "policy": [
+      "diversity_ladder"
+    ],
+    "vendor": [
+      "second_opinion"
+    ],
+    "config": [
+      "second_opinion_provider",
+      "second_opinion_fallback_model"
+    ]
+  },
   "reasoner_policy_values": [
     "orchestrator",
     "highest"

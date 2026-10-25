@@ -1,0 +1,19 @@
+id = "tools/second-opinion-effort-unknown-level"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# A level outside the row's `levels` is one refused line naming the accepted ones, exit 2: claude only warns on
+# an unknown `--effort`, so akmon's own check is what refuses it (M188).
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+
+[run]
+tool = "model_routing/second_opinion"
+argv = ["--gate", "design-align", "--gate-pack", "docs/gate-pack.md", "--session-provider", "qwen", "--session-model", "q", "--provider", "claude:opus@bogus", "--dry-run"]
+
+[expected]
+exit = 2
+stderr = "second-opinion: provider 'claude' does not accept the effort 'bogus'; its levels are: low, medium, high, xhigh, max\n"
+stdout = ""

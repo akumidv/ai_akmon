@@ -31,7 +31,8 @@ shapes are CD1–CD5 in the [distortion register](agent-decision-distortions.md)
   - The qwen CLI's hooks are unmeasured.
 - **Audits exist, but they are heavy and manual.**
   - The `auditor` tier is pinned to the strongest model and is run by hand at gates (ADR 0005).
-  - `second_opinion.py` asks a model from another vendor, by hand. It is advisory.
+  - `second_opinion.py` asks a model of different priors, chosen down one ladder
+    ([ADR 0024](../adr/0024-second-opinion-by-model-priors.md)), by hand. It is advisory.
 - **What persists is mostly the wrong check, not a bare claim.** The failure that survives the
   standard most is P2-4 element E2 on Codex: the agent requested a check that could not show
   whether the hooks run ([register](agent-decision-distortions.md#measured-so-far)).

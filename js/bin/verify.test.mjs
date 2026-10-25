@@ -13,13 +13,16 @@ import os from "node:os";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { TEXT_PATTERNS, Verifier, main, readVerifyData } from "./verify.mjs";
+import { TEXT_PATTERNS, Verifier, main, mergeOverlay, readVerifyData } from "./verify.mjs";
 import { apply, codexHooksText, plannedFiles, readSyncData } from "./sync.mjs";
 import * as alwaysLoaded from "../common/always_loaded.mjs";
 import * as codexHooks from "../common/codex_hooks.mjs";
+import { read } from "../common/jsondata.mjs";
+import { CATALOG_FORMATS, defaultModelToken } from "../tools/model_routing/routing.mjs";
 
 const TREE = fs.realpathSync(posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", ".."));
 const data = readVerifyData();
+const AGENTS_DATA = /** @type {any} */ (read(posix.join(TREE, "tools", "model_routing", "agents.json")));
 const syncData = readSyncData();
 const VERSION = /** @type {{version: string}} */ (
   JSON.parse(fs.readFileSync(posix.join(TREE, "package.json"), "utf-8"))
@@ -1370,7 +1373,7 @@ test("isolation: a clean tree is ok, and a standard tree that is not a directory
 
 // -- model routing: the overlay and the registry shapes ----------------------------------------
 
-test("routing overlay: invalid JSON and a non-object are parse errors; retired keys are named per vendor", async () => {
+test("routing overlay: invalid JSON and a non-object are parse errors; retired keys are named per block", async () => {
   await withScratch((scratch) => {
     const root = project(scratch);
     put(root, "_aitna/model-routing.json", "{nope");
@@ -1386,8 +1389,10 @@ test("routing overlay: invalid JSON and a non-object are parse errors; retired k
       root,
       "_aitna/model-routing.json",
       JSON.stringify({
-        anthropic: { second_opinion: { cli: 1, invoke: 2, harness: "h" } },
-        openai: { second_opinion: { cli: 1 } },
+        second_opinion_policy: { diversity_ladder: ["other-vendor"], ladder: ["claude"] },
+        anthropic: { second_opinion: { harness: "h" } },
+        qwen: { second_opinion: {}, family: "qwen" },
+        openai: { carrier: "codex" },
         extra: 1,
       }),
     );
@@ -1395,15 +1400,19 @@ test("routing overlay: invalid JSON and a non-object are parse errors; retired k
     assert.ok(messages.includes("ok routing.overlay-parse model-routing project overlay parses"));
     assert.ok(
       messages.includes(
-        "error routing.second-opinion project overlay anthropic second_opinion carries the retired key(s) cli, invoke",
+        "error routing.second-opinion project overlay second_opinion_policy carries the retired key(s) diversity_ladder",
       ),
     );
     assert.ok(
       messages.includes(
-        "error routing.second-opinion project overlay openai second_opinion carries the retired key(s) cli",
+        "error routing.second-opinion project overlay anthropic carries the retired key(s) second_opinion",
       ),
     );
-    put(root, "_aitna/model-routing.json", JSON.stringify({ anthropic: 3, openai: { second_opinion: "x" } }));
+    assert.ok(
+      messages.includes("error routing.second-opinion project overlay qwen carries the retired key(s) second_opinion"),
+    );
+    assert.ok(!messages.some((m) => m.includes("project overlay openai")));
+    put(root, "_aitna/model-routing.json", JSON.stringify({ anthropic: 3, openai: { second_opinion_policy: "x" } }));
     assert.ok(!recorded(root, (v) => v.checkModelRouting()).some((m) => m.includes("retired")));
     // an integer beyond 2**53 is a valid document: verify reads it, it never writes it back (sync would refuse it)
     put(
@@ -1414,9 +1423,7 @@ test("routing overlay: invalid JSON and a non-object are parse errors; retired k
     const big = recorded(root, (v) => v.checkModelRouting());
     assert.ok(big.includes("ok routing.overlay-parse model-routing project overlay parses"));
     assert.ok(
-      big.includes(
-        "error routing.second-opinion project overlay anthropic second_opinion carries the retired key(s) cli",
-      ),
+      big.includes("error routing.second-opinion project overlay anthropic carries the retired key(s) second_opinion"),
     );
   });
 });
@@ -1430,9 +1437,16 @@ test("routing registry: the shipped one is ok; a broken policy, fallback and sec
     const vendor = {
       selection_policy: { reasoner: "orchestrator", worker: "lowest" },
       semantic_fallback: { worker: "w", mid: "m", reasoner: "r", orchestrator: "o" },
-      second_opinion: { harness: "h", operation: "o", report_dir: "d" },
+      carrier: "claude",
     };
-    registry({ anthropic: vendor, openai: vendor });
+    const providers = {
+      claude: { operation: "review", model_flag: "--model {model}", family: "claude", report_dir: "d" },
+      qwen: { operation: "review", model_flag: "-m {model}", family: null, report_dir: "q" },
+    };
+    const policy = { ladder: ["claude", "qwen:big"], families: { claude: "Claude", qwen: "Qwen" } };
+    const withTable = (/** @type {object} */ vendors, /** @type {object} */ extra = {}) =>
+      registry({ ...vendors, providers, second_opinion_policy: policy, ...extra });
+    withTable({ anthropic: vendor, openai: vendor });
     const check = () => {
       const verifier = new Verifier(root);
       verifier.standardRoot = tree;
@@ -1442,11 +1456,11 @@ test("routing registry: the shipped one is ok; a broken policy, fallback and sec
         .filter((m) => !m.includes("layout.standard-path"));
     };
     assert.ok(check().every((line) => line.startsWith("ok ")));
-    registry({
+    withTable({
       anthropic: {
         selection_policy: { reasoner: "nope", worker: "lowest" },
         semantic_fallback: { worker: "w", mid: "", reasoner: "r", orchestrator: "o" },
-        second_opinion: { harness: "h" },
+        carrier: "nowhere",
       },
     });
     const lines = check();
@@ -1462,7 +1476,7 @@ test("routing registry: the shipped one is ok; a broken policy, fallback and sec
     );
     assert.ok(
       lines.includes(
-        "error routing.second-opinion tools/model_routing/registry.json#anthropic model-routing anthropic second_opinion missing: operation, report_dir",
+        "error routing.second-opinion tools/model_routing/registry.json#anthropic model-routing anthropic carrier must name a row of the providers table",
       ),
     );
     assert.ok(
@@ -1471,7 +1485,7 @@ test("routing registry: the shipped one is ok; a broken policy, fallback and sec
       ),
     );
     const withLadder = (/** @type {object} */ change) => {
-      registry({ anthropic: { ...vendor, ...change }, openai: vendor });
+      withTable({ anthropic: { ...vendor, ...change }, openai: vendor });
       return check();
     };
     assert.ok(
@@ -1497,11 +1511,11 @@ test("routing registry: the shipped one is ok; a broken policy, fallback and sec
         message,
       );
     }
-    registry({ anthropic: { ...vendor, second_opinion: 3 }, openai: [] });
+    withTable({ anthropic: { ...vendor, carrier: 3 }, openai: [] });
     const shapes = check();
     assert.ok(
       shapes.includes(
-        "error routing.second-opinion tools/model_routing/registry.json#anthropic model-routing anthropic second_opinion is missing",
+        "error routing.second-opinion tools/model_routing/registry.json#anthropic model-routing anthropic carrier must name a row of the providers table",
       ),
     );
     assert.ok(shapes.some((l) => l.startsWith("error routing.vendor-present")));
@@ -1511,6 +1525,280 @@ test("routing registry: the shipped one is ok; a broken policy, fallback and sec
       /error routing\.registry-parse standard tree:tools\/model_routing\/registry\.json .*: expected a JSON object/,
     );
   });
+});
+
+test("routing providers table: a row missing a key, an undeclared ladder entry and an absent table are each named", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    const tree = posix.join(scratch, "tree");
+    const vendor = {
+      selection_policy: { reasoner: "orchestrator", worker: "lowest" },
+      semantic_fallback: { worker: "w", mid: "m", reasoner: "r", orchestrator: "o" },
+      carrier: "claude",
+    };
+    const row = { operation: "review", model_flag: "--model {model}", family: "claude", report_dir: "d" };
+    const check = (/** @type {object} */ body) => {
+      put(tree, "tools/model_routing/registry.json", JSON.stringify({ anthropic: vendor, openai: vendor, ...body }));
+      const verifier = new Verifier(root);
+      verifier.standardRoot = tree;
+      verifier.checkModelRouting();
+      return verifier.findings
+        .map((f) => `${f.severity} ${f.code} ${f.message}`)
+        .filter((m) => m.includes("routing.second-opinion"));
+    };
+    assert.ok(
+      check({ providers: { claude: row }, second_opinion_policy: { ladder: ["claude", "claude:opus"] } }).includes(
+        "ok routing.second-opinion model-routing provider claude is configured",
+      ),
+    );
+    const broken = check({
+      providers: {
+        claude: row,
+        bare: { operation: "review", report_dir: "d" },
+        text: "no",
+        multi: { ...row, family: null },
+      },
+      second_opinion_policy: { ladder: ["claude", "ghost:big"] },
+    });
+    assert.ok(broken.includes("error routing.second-opinion model-routing provider bare missing: model_flag, family"));
+    assert.ok(
+      broken.includes(
+        "error routing.second-opinion model-routing provider text missing: operation, model_flag, report_dir",
+      ),
+    );
+    assert.ok(broken.includes("ok routing.second-opinion model-routing provider multi is configured"));
+    assert.ok(
+      broken.includes(
+        "error routing.second-opinion model-routing second_opinion_policy.ladder must be a non-empty list of declared providers; undeclared: ghost:big",
+      ),
+    );
+    assert.ok(
+      check({ providers: { claude: row }, second_opinion_policy: { ladder: [] } }).includes(
+        "error routing.second-opinion model-routing second_opinion_policy.ladder must be a non-empty list of declared providers",
+      ),
+    );
+    assert.ok(check({}).includes("error routing.second-opinion model-routing registry has no providers table"));
+  });
+});
+
+/**
+ * The routing findings (severity, code, target, message) one project overlay produces on the shipped tree.
+ * @param {string} root
+ * @param {object} overlayBody
+ * @returns {string[]}
+ */
+function overlayFindings(root, overlayBody) {
+  put(root, "_aitna/model-routing.json", JSON.stringify(overlayBody));
+  const verifier = new Verifier(root);
+  verifier.checkModelRouting();
+  return verifier.findings
+    .filter((f) => f.code === "routing.second-opinion" && f.target.startsWith("_aitna/model-routing.json"))
+    .map((f) => `${f.severity} ${f.target} ${f.message}`);
+}
+
+test("routing overlay: the merged ladder and each overlay-declared row are checked and quote the overlay file", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    assert.deepEqual(overlayFindings(root, { second_opinion_policy: { ladder: ["claude", "ghost"] } }), [
+      "error _aitna/model-routing.json#second_opinion_policy second_opinion_policy.ladder as merged with _aitna/model-routing.json must be a non-empty list of declared providers; undeclared: ghost",
+    ]);
+    assert.deepEqual(
+      overlayFindings(root, {
+        providers: { mine: { argv: ["mine", "-m", "{model}"], family: "qwen" } },
+        second_opinion_policy: { ladder: ["mine:big", "claude"] },
+      }),
+      [
+        "ok _aitna/model-routing.json#providers.mine project overlay _aitna/model-routing.json provider mine is configured",
+        "ok _aitna/model-routing.json#second_opinion_policy second-opinion ladder as merged with _aitna/model-routing.json names only declared providers",
+      ],
+    );
+    const bad = /** @type {Array<[object, string]>} */ ([
+      [{ argv: ["mine"] }, "family key is missing (null for a multi-family carrier)"],
+      [
+        { argv: ["mine"], family: "mimo" },
+        "family 'mimo' is not in second_opinion_policy.families (claude, gpt, qwen, gemini)",
+      ],
+      [
+        { argv: ["mine"], family: null, model_families: { "x/y": "mimo" } },
+        "model_families.x/y 'mimo' is not in second_opinion_policy.families (claude, gpt, qwen, gemini)",
+      ],
+      [
+        { argv: "mine -m {model}", family: "qwen" },
+        "argv must be a non-empty list of strings (it is never split or passed through a shell)",
+      ],
+      [
+        { argv: [], family: "qwen" },
+        "argv must be a non-empty list of strings (it is never split or passed through a shell)",
+      ],
+      [
+        { argv: ["mine"], family: "qwen", models: ["big"] },
+        "argv holds no {model} placeholder, but a model is declared or pinned for it",
+      ],
+      [{ argv: ["mine"], family: "qwen", prompt: "pipe" }, "prompt must be one of: argv, stdin"],
+      [{ argv: ["mine"], family: "qwen", repo: "maybe" }, "repo must be one of: worktree, none, unknown"],
+      [{ family: "qwen" }, "carries no argv and akmon ships no command for it"],
+      [
+        { argv: ["mine", "{model}"], family: "qwen", models: ["big"], aliases: true },
+        "aliases: true needs a catalog (file and format) to resolve the aliases from",
+      ],
+      [
+        { argv: ["mine"], family: "qwen", aliases: true, catalog: { file: "~/x.json", format: "nope" } },
+        "catalog must be an object with a string file and a format of: codex-models-cache",
+      ],
+      [
+        { argv: ["mine"], family: "qwen", aliases: true, catalog: "~/x.json" },
+        "catalog must be an object with a string file and a format of: codex-models-cache",
+      ],
+      [{ argv: ["mine"], family: "qwen", aliases: "yes" }, "aliases must be true, or the key left out"],
+      [
+        { argv: ["mine", "{model}"], family: "qwen", models: ["default"] },
+        "models must not list the reserved token 'default'; a ladder entry says carrier:default",
+      ],
+    ]);
+    for (const [row, problem] of bad) {
+      assert.deepEqual(overlayFindings(root, { providers: { mine: row } }), [
+        `error _aitna/model-routing.json#providers.mine project overlay _aitna/model-routing.json provider mine: ${problem}`,
+      ]);
+    }
+    // a ladder pin on a row with no placeholder; an overlay that extends the vocabulary and uses it
+    assert.match(
+      overlayFindings(root, {
+        providers: { mine: { argv: ["mine"], family: "qwen" } },
+        second_opinion_policy: { ladder: ["mine:big"] },
+      })[0],
+      /^error _aitna\/model-routing\.json#providers\.mine .*argv holds no \{model\} placeholder/,
+    );
+    assert.deepEqual(
+      overlayFindings(root, {
+        second_opinion_policy: { families: { mimo: "Xiaomi MiMo" } },
+        providers: { mine: { argv: ["mine"], family: "mimo" } },
+      }),
+      [
+        "ok _aitna/model-routing.json#second_opinion_policy project overlay _aitna/model-routing.json family vocabulary lists 5 families",
+        "ok _aitna/model-routing.json#providers.mine project overlay _aitna/model-routing.json provider mine is configured",
+      ],
+    );
+    // the developer-local overlay is gitignored and absent in CI: it is never read
+    put(root, "_aitna/local/model-routing.json", JSON.stringify({ providers: { x: { family: "mimo" } } }));
+    fs.rmSync(posix.join(root, "_aitna/model-routing.json"));
+    assert.deepEqual(overlayFindings(root, {}), []);
+  });
+});
+
+test("routing overlay: a row with aliases and a known catalog is accepted", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    const row = {
+      argv: ["mine", "{model}"],
+      family: "qwen",
+      models: ["big"],
+      aliases: true,
+      catalog: { file: "~/.mine/models.json", format: "codex-models-cache" },
+    };
+    assert.deepEqual(overlayFindings(root, { providers: { mine: row } }), [
+      "ok _aitna/model-routing.json#providers.mine project overlay _aitna/model-routing.json provider mine is configured",
+    ]);
+  });
+});
+
+// -- ADR-0024/D17: the `efforts` row and `model@effort` entries --
+
+const EFFORTS = { flag: "--thinking {effort}", levels: ["low", "high"] };
+const EFFORTS_SHAPE = "efforts must be an object with a flag holding {effort}";
+
+test("routing overlay: a row with a bad efforts declaration is one error naming the row", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    const base = { argv: ["mine", "{model}"], family: "qwen" };
+    const bad = /** @type {Array<[object, string]>} */ ([
+      [
+        { ...base, efforts: "high" },
+        "efforts must be an object with a flag holding {effort} and a non-empty list of unique levels",
+      ],
+      [{ ...base, efforts: { flag: "--t {effort}", levels: [] } }, EFFORTS_SHAPE],
+      [{ ...base, efforts: { flag: "--t {effort}", levels: ["a", "a"] } }, EFFORTS_SHAPE],
+      [{ ...base, efforts: { flag: "--t", levels: ["a"] } }, EFFORTS_SHAPE],
+      [{ ...base, efforts: { flag: "--t {effort}", levels: ["a", 3] } }, EFFORTS_SHAPE],
+      [
+        { ...base, models: ["m@max"], efforts: EFFORTS },
+        "models entry 'm@max' names the effort 'max', which is not one of: low, high",
+      ],
+      [{ ...base, models: ["m@high"] }, "models entry 'm@high' carries an effort, but the row declares no efforts"],
+      [{ ...base, models: ["default@high"], efforts: EFFORTS }, "models must not list the reserved token 'default'"],
+    ]);
+    for (const [row, fragment] of bad) {
+      const found = overlayFindings(root, { providers: { mine: row } });
+      assert.equal(found.length, 1, fragment);
+      assert.ok(found[0].startsWith("error _aitna/model-routing.json#providers.mine "), found[0]);
+      assert.ok(found[0].includes(fragment), found[0]);
+    }
+  });
+});
+
+test("routing overlay: a row with efforts and effort entries is accepted", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    const row = { argv: ["mine", "{model}"], family: "qwen", models: ["m", "m@high"], efforts: EFFORTS };
+    assert.deepEqual(overlayFindings(root, { providers: { mine: row } }), [
+      "ok _aitna/model-routing.json#providers.mine project overlay _aitna/model-routing.json provider mine is configured",
+    ]);
+  });
+});
+
+test("the catalog formats and the default token of verify.json mirror the routing module", () => {
+  assert.deepEqual(data.routing_catalog_formats, [...CATALOG_FORMATS]);
+  assert.equal(data.routing_default_model_token, defaultModelToken(AGENTS_DATA));
+});
+
+test("the shipped codex row carries aliases and a catalog verify accepts", () => {
+  const registry = /** @type {any} */ (
+    JSON.parse(fs.readFileSync(posix.join(TREE, "tools", "model_routing", "registry.json"), "utf-8"))
+  );
+  const row = registry.providers.codex;
+  assert.equal(row.aliases, true);
+  assert.deepEqual(row.catalog, { file: "~/.codex/models_cache.json", format: "codex-models-cache" });
+  assert.ok(data.routing_catalog_formats.includes(row.catalog.format));
+});
+
+test("routing registry: a family outside the vocabulary, or no vocabulary at all, is named", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    const tree = posix.join(scratch, "tree");
+    const vendor = {
+      selection_policy: { reasoner: "orchestrator", worker: "lowest" },
+      semantic_fallback: { worker: "w", mid: "m", reasoner: "r", orchestrator: "o" },
+      carrier: "claude",
+    };
+    const check = (/** @type {object} */ providers, /** @type {object} */ policy) => {
+      put(
+        tree,
+        "tools/model_routing/registry.json",
+        JSON.stringify({ anthropic: vendor, openai: vendor, providers, second_opinion_policy: policy }),
+      );
+      const verifier = new Verifier(root);
+      verifier.standardRoot = tree;
+      verifier.checkModelRouting();
+      return verifier.findings.map((f) => `${f.severity} ${f.message}`).filter((m) => m.includes("model-routing"));
+    };
+    const row = { operation: "review", model_flag: "--model {model}", family: "gptt", report_dir: "d" };
+    const vocabulary = { claude: "C", gpt: "G" };
+    assert.ok(
+      check({ claude: row }, { ladder: ["claude"], families: vocabulary }).includes(
+        "error model-routing provider claude: family 'gptt' is not in second_opinion_policy.families (claude, gpt)",
+      ),
+    );
+    assert.ok(
+      check({ claude: { ...row, family: "gpt" } }, { ladder: ["claude"] }).includes(
+        "error model-routing second_opinion_policy.families must be a non-empty object keyed by family name",
+      ),
+    );
+  });
+});
+
+test("routing overlay: verify's merge is the loader's — objects key by key, anything else replaced whole", () => {
+  const base = { a: { b: 1, c: [1, 2] }, d: { e: 1 }, f: 1 };
+  const overlay = { a: { c: [3] }, d: [1], g: { h: 2 } };
+  assert.deepEqual(mergeOverlay(base, overlay), { a: { b: 1, c: [3] }, d: [1], f: 1, g: { h: 2 } });
 });
 
 // -- the record --------------------------------------------------------------------------------

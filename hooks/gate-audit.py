@@ -73,7 +73,13 @@ def _project_root(payload: dict) -> Path:
 
 def _decide() -> HookResult | None:
     payload = load_payload()
-    return gate_audit_result(_project_root(payload), payload)
+    try:
+        return gate_audit_result(_project_root(payload), payload)
+    except routing.OverlayError as exc:
+        # A hand-owned overlay that does not parse costs the gate audit, never the turn: one line
+        # names the file and the turn ends as it would have without the audit.
+        print(routing.hook_overlay_line("gate-audit", exc), file=sys.stderr)
+        return None
 
 
 def main() -> int:

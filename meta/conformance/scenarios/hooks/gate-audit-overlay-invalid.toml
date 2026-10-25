@@ -1,0 +1,28 @@
+# A bad hand-owned routing overlay costs the gate audit, never the turn: three findings at the
+# review floor would hold the turn, but the registry cannot be read, so the turn ends unheld and one
+# stderr line names the overlay file.
+id = "hooks/gate-audit-overlay-invalid"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:gate-audit"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/model-routing.json" = "{ not json", "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 agent: review — conformance"}]}}
+"""}
+
+[run]
+script = "gate-audit"
+
+[run.payload]
+hook_event_name = "Stop"
+stop_hook_active = false
+session_id = "sess-ga-overlay"
+cwd = "{{root}}"
+transcript_path = "{{root}}/transcript.jsonl"
+last_assistant_message = "## Findings\n\n- The sync path drops the marker on a stale tree.\n- The verify gate passes on a mounted fixture.\n- The record mode reseeds expectations silently."
+
+[expected]
+exit = 0
+stderr = "akmon gate-audit hook: the routing overlay _aitna/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it) — the gate audit is skipped\n"
+stdout = ""

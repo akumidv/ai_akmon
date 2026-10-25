@@ -1,0 +1,24 @@
+id = "tools/init-vendor-carrier-refused"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/init"]
+
+# `--vendor` takes a vendor with a tier-binding block (D15). A carrier such as `qwen` has none, so
+# it is refused with the way to start from that harness: `--session-provider`, with `--vendor` still
+# choosing the binding it borrows. The argument parser owns the usage banner around the message,
+# so only the message is pinned.
+
+[run]
+tool = "model_routing/init"
+argv = [
+  "--vendor",
+  "qwen",
+]
+
+[expected]
+exit = 2
+stdout = ""
+stderr_contains = [
+  "--vendor 'qwen' names a carrier, which has no tier-binding block of its own; --vendor must be one of: anthropic, openai (the binding the session borrows). To start from the qwen harness pass --session-provider qwen, with --session-model and --session-family",
+]
+file_absent = [".claude/model-routing.local.json"]

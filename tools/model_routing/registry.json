@@ -10,12 +10,7 @@
     },
     "harness_rungs": ["haiku", "sonnet", "opus"],
     "auditor_only_rungs": ["fable"],
-    "second_opinion": {
-      "harness": "claude",
-      "operation": "review",
-      "model_flag": "--model {model}",
-      "report_dir": ".codex/second-opinion/"
-    },
+    "carrier": "claude",
     "semantic_fallback": {
       "worker": "worker",
       "mid": "mid",
@@ -35,12 +30,7 @@
     },
     "harness_rungs": ["luna", "terra", "sol"],
     "auditor_only_rungs": ["astra"],
-    "second_opinion": {
-      "harness": "codex",
-      "operation": "review",
-      "model_flag": "--model {model}",
-      "report_dir": ".claude/second-opinion/"
-    },
+    "carrier": "codex",
     "semantic_fallback": {
       "worker": "worker",
       "mid": "mid",
@@ -98,11 +88,66 @@
     }
   },
   "second_opinion_policy": {
-    "diversity_ladder": [
-      "other-vendor",
-      "same-vendor-other-model"
-    ],
-    "never": "same-model"
+    "ladder": ["claude", "codex", "qwen", "opencode", "pi"],
+    "families": {
+      "claude": "Anthropic Claude models",
+      "gpt": "OpenAI GPT models",
+      "qwen": "Alibaba Qwen models",
+      "gemini": "Google Gemini models"
+    },
+    "model_rule": "max",
+    "never": "silently-same-model"
+  },
+  "providers": {
+    "claude": {
+      "operation": "review",
+      "model_flag": "--model {model}",
+      "family": "claude",
+      "models": ["haiku", "sonnet", "opus"],
+      "efforts": { "flag": "--effort {effort}", "levels": ["low", "medium", "high", "xhigh", "max"] },
+      "report_dir": ".claude/second-opinion/"
+    },
+    "codex": {
+      "operation": "review",
+      "model_flag": "--model {model}",
+      "family": "gpt",
+      "models": ["luna", "terra", "sol"],
+      "aliases": true,
+      "catalog": { "file": "~/.codex/models_cache.json", "format": "codex-models-cache" },
+      "efforts": {
+        "flag": "-c 'model_reasoning_effort=\"{effort}\"'",
+        "levels": ["low", "medium", "high", "xhigh", "max"]
+      },
+      "report_dir": ".codex/second-opinion/"
+    },
+    "qwen": {
+      "operation": "review",
+      "model_flag": "-m {model}",
+      "prompt": "stdin",
+      "family": "qwen",
+      "models": [],
+      "report_dir": ".qwen/second-opinion/"
+    },
+    "opencode": {
+      "operation": "review",
+      "model_flag": "-m {model}",
+      "family": null,
+      "models": [],
+      "model_families": {},
+      "report_dir": ".opencode/second-opinion/"
+    },
+    "pi": {
+      "operation": "review",
+      "model_flag": "--model {model}",
+      "family": null,
+      "models": [],
+      "model_families": {},
+      "efforts": {
+        "flag": "--thinking {effort}",
+        "levels": ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+      },
+      "report_dir": ".pi/second-opinion/"
+    }
   },
   "gate_triggers": {
     "review_min_findings": 3,

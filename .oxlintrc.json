@@ -48,7 +48,6 @@
     {
       "files": [
         "js/tools/model_routing/routing.mjs",
-        "js/tools/model_routing/second_opinion.mjs",
         "js/tools/model_routing/stats.mjs",
         "js/tools/tasks/archive.mjs"
       ],
@@ -58,8 +57,7 @@
     },
     {
       "files": [
-        "js/tools/model_routing/init.mjs",
-        "js/tools/model_routing/second_opinion.mjs"
+        "js/tools/model_routing/init.mjs"
       ],
       "rules": {
         "max-statements": "off"

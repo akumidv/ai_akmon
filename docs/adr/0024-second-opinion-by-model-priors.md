@@ -1,13 +1,17 @@
 # 0024 — The second opinion is chosen by model priors, down one locally-prioritised ladder
 
-- **Status:** Accepted for **D01–D14**. The owner decided each point in session — the diversity axis,
+- **Status:** Accepted for **D01–D17**. The owner decided each point in session — the diversity axis,
   the ladder's shape and order, same-family runs, the carriers that ship, and the gateway carrier's
   home — then **re-decided how a prior becomes known**: what this record first accepted as automatic
   discovery of the host was replaced by **D11** (declared, not snooped) and **D13**, **D12** added the
   owner-declared carrier so a harness akmon never measured can still give a second opinion, and **D14**
   separated model routing — the unit is `(provider, model)`, and the second opinion owns only the rule
-  that picks a model inside a provider. None of it is implemented yet; the work is
-  [C162](../../meta/TASKS.md), the prose and design sweep is [A65](../../meta/TASKS.md).
+  that picks a model inside a provider. **D15** then added `opencode` and `pi`, a session that may start
+  from any harness and model, and the follow-or-propose choice, both confirmed by the owner (including
+  the `model_families` field shape). **D16** then resolves a model alias locally to a concrete id, and makes
+  the refresh of those ids the one explicit, user-invoked read of a carrier's catalog. **D17** then makes a
+  reasoning effort a parameter of the model, `model@effort`. The implementation is
+  in the working copy, in both implementations; the work is [C162](../../meta/TASKS_ARCHIVE.md), the prose and design sweep is [A65](../../meta/TASKS.md).
 - **Owner:** akuminov@gmail.com
 - **Supersedes:** [ADR 0005](0005-synthesizer-gate-audit-and-role-routing.md) item 5 (the
   two-step vendor ladder as the resolution rule) and, in part, the second-opinion rows of
@@ -63,7 +67,10 @@ several families at once — so choosing by carrier name can both *claim* divers
 The **carrier** is the program that runs the review — a harness CLI, or a tool entrypoint issuing a
 bare completion. The **priors** are the model family that actually answers, a short canonical string
 drawn from a **closed** vocabulary (`claude`, `gpt`, `qwen`, `gemini`) so it cannot collapse onto a
-carrier name. Two providers of one family are one mind, however many carriers front them. `vendor`
+carrier name. The vocabulary is the `second_opinion_policy.families` object of the registry (one owner,
+keyed by family so an overlay adds a family without restating the rest): closed means a family is named
+on purpose, and `verify` and `init --session-family` refuse one that is not declared there — an owner
+who runs another family (`deepseek`, `glm`, `mimo`, `nemotron`) declares it in an overlay. Two providers of one family are one mind, however many carriers front them. `vendor`
 keeps its present meaning — whose `selection_policy`, `harness_rungs`, `auditor_only_rungs` and
 `semantic_fallback` a session binds from — and answers no diversity question.
 
@@ -202,8 +209,8 @@ still names `gemini`, because the vocabulary is about minds and not about which 
 
 Entry is gated by the existing rule, not by a new one: `common/runtime.json` owns how a harness is
 invoked non-interactively, and the standard requires a live probe before a capability claim (which is
-what [N8](../../meta/TASKS.md) and [C72](../../meta/TASKS.md) exist to do — the second-opinion matrix
-rows stand at `delivered: unmeasured` until they land). So the qwen row ships **with** its probe, and a
+what [N8](../../meta/TASKS.md) and [C72](../../meta/TASKS.md) exist to do; the `delivered` value of each
+second-opinion matrix row is owned by [CAPABILITIES.md](../../CAPABILITIES.md)). So the qwen row ships **with** its probe, and a
 carrier whose argv nobody ran does not ship as data.
 
 The **gateway** carrier — a bare completion with no repository access — is a shape akmon defines and
@@ -266,6 +273,16 @@ one declaration in the layer the owner chooses — the project overlay or their 
 declaration exists the resolver says `unknown` and names the key. The question "which of my files may
 akmon read" is never posed, because it is never akmon's task to work out what its owner already knows.
 
+**Status of layer 1 (owner decision, landed in both implementations' Python side first):** the
+developer's local overlay is the file `<aitna_root>/local/model-routing.json` — the gitignored
+developer layer of [ADR 0022](0022-local-layer-index-and-plans.md), same shape and same file name as
+the project overlay, hand-owned and never generated. It is merged last, so it is the strongest layer:
+objects merge key by key, and a list — hence `second_opinion_policy.ladder` — is **replaced whole**,
+which is D05's "replaced whole by the local overlay". The registry hash covers it, so editing it makes
+the local config stale and the next session re-runs the initializer. An ask (D08) names this file
+first and the project overlay second. A retired key is refused naming the overlay file that holds it.
+Nothing about this reads carrier configuration; only akmon's own files are read.
+
 ### D12 — An owner may declare a carrier outright: an argv list, a model placeholder, a prompt channel
 
 `Decision-ID: ADR-0024/D12` · *amends [D09](#d09--akmon-ships-three-carriers-a-carrier-enters-only-with-a-measured-review-invocation-and-no-gateway-row-ships-at-all) and [D10](#d10--what-the-reviewer-could-see-is-reported-not-assumed)*
@@ -298,6 +315,9 @@ shipped harness:
   *shipped* row still derives the value from its carrier kind and a *declared* one reports what its
   owner stated. D10's no-knob rule keeps its whole force — the knob cannot manufacture a claim akmon
   would otherwise have to derive; it can only state what only the owner knows.
+- **`report_dir`** is optional: a row that states none files its reports under
+  `.<provider id>/second-opinion/`, the directory the shipped rows name, and the outside-the-project
+  check applies to that default as to a stated value.
 
 This is what removes the bottleneck the first draft carried. `common/runtime.json` still owns every
 carrier **akmon** ships, and a shipped row still needs its measured argv (D09 unchanged on that point,
@@ -347,6 +367,182 @@ honest answer left. *Rejected:* letting the second opinion's rule read the bindi
 a reviewer quietly inherits a `worker`'s model list, the same coupling class this record removes
 elsewhere.
 
+### D15 — opencode and pi ship as unmeasured carriers; the session may start from any harness and model; the priorities are followed or proposed
+
+`Decision-ID: ADR-0024/D15` · *amends [D09](#d09--akmon-ships-three-carriers-a-carrier-enters-only-with-a-measured-review-invocation-and-no-gateway-row-ships-at-all) and [D06](#d06--a-reviewer-differs-from-the-session-in-harness-in-model-and-in-family-every-provider-in-a-chain-differs-from-the-ones-before-it)*
+
+The owner asked in session for **`opencode`** and **`pi`** as carriers, as a basic implementation without
+checks, and for a session that can start from **any** harness and **any** model.
+
+- **Two more shipped rows, unmeasured.** `opencode` (`run`, pin `-m <provider>/<model>`) and `pi` (`-p`,
+  pin `--model <id>`) join `claude`, `codex` and `qwen`. D09's gate — a measured argv before a row ships —
+  is waived for these two by the owner's decision, and the waiver is visible rather than silent: the
+  second-opinion matrix rows in [CAPABILITIES.md](../../CAPABILITIES.md) own what each stands at until
+  [N8](../../meta/TASKS.md), [C72](../../meta/TASKS.md) and, for `qwen`'s argv, [N19](../../meta/TASKS.md)
+  measure them.
+- **A carrier may front several families, so the family belongs to the model.** Both new carriers expose
+  models of more than one family. A provider row therefore may carry `model_families` (model id →
+  family); the family of a candidate is that entry for the model the walk chose, else the row's own
+  `family`, else unknown (D08: skipped with the ask). akmon ships no model list for these two — which
+  models are present and whose they are is the owner's declaration in an overlay (D11).
+  *Proposed by the implementer to carry the owner's request; the owner confirmed the field shape.*
+- **Any starting point.** The session is a `(provider, model, family)` triple that is stated, not derived
+  from a vendor: explicit arguments, then the local `session` stanza (`init --session-provider`,
+  `--session-model`, `--session-family`), then the bound vendor's carrier and orchestrator alias. A
+  session on a harness that has no vendor block receives a second opinion but no tier binding.
+  *Decided in the C162 audit and confirmed by the owner:* **tier binding
+  stays owned by a vendor block** (`anthropic`, `openai`). A session on a harness with no vendor block
+  (`qwen`, `opencode`, `pi`) is declared with `--session-provider` (with `--session-model` and
+  `--session-family`), while `--vendor` still selects the binding it borrows, and `--vendor <carrier>`
+  is refused with a message naming `--session-provider`. A status line with no recorded vendor reads
+  `anthropic`: that is akmon's **default vendor**, not a claim about the session. The family given to
+  `--session-family` is validated against the closed vocabulary `second_opinion_policy.families` (D01),
+  which an overlay extends by key (a new family is one declaration, not a release of akmon).
+- **Followed or proposed.** The runner follows the ladder in the order the owner's overlay gave it; the
+  owner can instead ask it to **propose** — `--list` prints the ranked chain and the skip ledger without
+  running anything — and then pick by rank (`--rank`) or by name (`--provider carrier[:model]`). A named
+  choice that shares the session's family or carrier still runs, disclosed as `kind=pinned` with a
+  warning, never counted as diverse.
+
+### D16 — A model alias is resolved locally to a concrete id; the refresh is the one explicit read of a carrier's catalog
+
+`Decision-ID: ADR-0024/D16` · *amends [D11](#d11--a-prior-is-declared-not-snooped-local-overlay-project-akmons-knowledge-then-ask) and [D14](#d14--the-routed-unit-is-provider-model-model-routing-and-the-second-opinion-are-separate-concerns)*
+
+The shipped codex row lists unversioned aliases (`luna`, `terra`, `sol`), and the runner pinned the strongest
+one raw. On a ChatGPT-account codex (0.159.2) the alias is refused and only a concrete slug such as
+`gpt-6.1-sol` is accepted (M184). Concrete versioned ids go stale faster than akmon ships, so the split is:
+shipped data keeps the aliases, and the concrete ids live only in the developer's local layer, refreshed on
+request.
+
+1. **The row declares an alias.** The shipped codex provider row carries `aliases: true`: every entry of
+   `models` is an alias the carrier does not accept, and a concrete id must be resolved locally before a pin
+   is used. The row also declares its discovery source as data:
+   `catalog: {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}`. The closed list of
+   formats is kept as data in `bin/verify.json`; `verify` requires an `aliases: true` row (in the shipped
+   registry and in a project overlay) to carry a `catalog` with a known format.
+2. **The resolved ids are one local file.** `<aitna_root>/local/model-aliases.json` is generated, gitignored
+   with the local layer ([ADR 0022](0022-local-layer-index-and-plans.md)), never hand-owned, and carries no
+   date. Its shape is `{"<provider>": {"source": "<what produced it>", "client": "<carrier version string
+   if known>", "aliases": {"sol": "gpt-6.1-sol"}}}`. Its path is named `local_aliases_rel` in
+   `tools/model_routing/agents.json`, next to `local_overlay_rel`: one owner, read by both implementations.
+3. **Resolution happens before a pin is used.** In the second-opinion runner, in `--list`, in `--dry-run` and
+   in the report header, a row with `aliases: true` is resolved as follows:
+   - an alias pin is replaced by the concrete id from the file, and the display shows `model=sol→gpt-6.1-sol`;
+     the report header records the concrete model that ran;
+   - a pin that is already a concrete id (not an entry of `models`) passes through unchanged, so
+     `--provider codex:gpt-6.1-sol` keeps working;
+   - an alias with no mapping is a named, fail-closed refusal: exit 2, one line, naming the refresh command.
+     An unresolved alias is never sent to the carrier (the spirit of D08). In `--list` it shows
+     `sol→(unresolved)` and an ask line names the refresh command.
+
+   `kind` and the ladder walk are unchanged.
+4. **The refresh is user-invoked only.** A new tool, `tools/model_routing/models.py` with its JavaScript twin
+   `js/tools/model_routing/models.mjs` (run as `akmon tool model_routing/models`), has two modes:
+   - `--refresh [--provider P] [--dry-run]` writes the resolved aliases into the local file; `--dry-run`
+     previews what a refresh would write;
+   - with no flag, a read-only listing of what is stored and what a refresh would write.
+
+   The one supported catalog format is `codex-models-cache`: JSON `{"models": [{"slug", "visibility",
+   "priority", ...}]}`. Only entries with `visibility == "list"` count. A slug is parsed with
+   `^[a-z][a-z0-9]*-(\d+(?:\.\d+)*)-([a-z]+)$` into a version tuple and an alias; for each alias in the row's
+   `models` the highest version tuple wins, and ties go to the lowest `priority`. Slugs that do not match
+   (`gpt-reserve`, `codex-auto-review`) are ignored. An alias with no match is reported and left unmapped,
+   never guessed. For example, the slugs `gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-astra`, `gpt-6-sol`,
+   `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna` give `sol→gpt-6.1-sol`,
+   `terra→gpt-6.1-terra` and `luna→gpt-6-luna`.
+
+   The tool never calls a carrier and never invents a mapping. It exits 0 when it is ok and 2 on a refusal
+   (a missing catalog, unreadable JSON, an unknown provider or one without a `catalog`), with one line naming
+   the file and the provider row key. A `~` in the catalog file expands through the environment's `HOME`.
+5. **The one explicit read of a catalog.** [D11](#d11--a-prior-is-declared-not-snooped-local-overlay-project-akmons-knowledge-then-ask)
+   says akmon reads no carrier settings file, dot-directory or catalog as a hidden side effect, and never
+   invokes a carrier. This refresh is the **one** explicit, user-invoked place that reads the declared catalog.
+   What it learns is written into akmon's own local file, which every later resolution reads. D11's "no
+   snooping" stays true for every other path: the resolver and the runner never read the carrier's files.
+6. **The rule that picks the model is unchanged.** [D14](#d14--the-routed-unit-is-provider-model-model-routing-and-the-second-opinion-are-separate-concerns)'s
+   `model_rule: max` still picks the strongest declared model. For an `aliases: true` row that model is an
+   alias, which is resolved afterwards to its concrete id.
+
+**D16 second sub-decision — the carrier's own model.** The owner also asked that the second opinion be
+callable on a provider's **default model**: no pin at all, the carrier using the model it is configured with.
+
+- **The reserved token `default`** in the `carrier[:model]` grammar (D05): `codex:default` in a ladder entry
+  (project or local overlay) or in `--provider codex:default` resolves to no model — no pin flag in the
+  argv, no alias resolution, no catalog or alias file needed. The header and `--list` show
+  `model=(default)`, the display an unpinned run already had, and `kind` is not changed by it. The token is
+  not a model id: `verify` refuses a provider whose `models` list literally contains `default`.
+- **`--default-model`** on the runner applies to whichever target the run selects (the ladder head,
+  `--rank N` or `--provider P`) and drops the pin for that run. Combined with an explicit `P:model` it is a
+  one-line refusal (exit 2) naming both; `--provider P:default --default-model` is redundant and allowed.
+- **No alias refusal for a default call.** The `aliases: true` fail-closed refusal (point 3) is about a pin
+  being sent; a default call sends none. On a host whose carrier is already configured with a model (this
+  host's codex `config.toml`), a `default` run works without ever running the refresh.
+- **`--list` marks** a candidate whose ladder entry is `:default` (or every candidate under `--default-model`)
+  with ` pin=default`.
+- **What remains unproven.** The model that runs is unknown to akmon, so the report header can only say
+  `model=(default)`, and the same-model guard of D14 (`silently-same-model`) cannot be proven for it: the
+  walk's model comparison is skipped for an unpinned entry and only the family test (D06) still applies. The
+  existing rule is kept: a default call on the same family or provider as the session is reachable only as
+  `kind=pinned` or as the last resort, and is disclosed as before.
+
+*The owner's direction, given in session; the owner confirmed the file shape (the local `model-aliases.json`
+and the row fields `aliases` and `catalog`) and the spelling of the reserved token `default` and of
+`--default-model`.*
+
+*Rejected:*
+
+- **Shipping concrete versioned ids in `registry.json`.** They go stale between releases, and a consumer
+  would pin an id the account no longer has.
+- **Resolving on every run by reading the carrier's catalog.** It breaks D11: the resolver would read a
+  carrier file as a side effect of an ordinary run.
+- **Letting the carrier resolve the alias.** The carrier refuses it (HTTP 400 `model_not_found` on a
+  ChatGPT-account codex 0.159.2, M184).
+
+### D17 — A reasoning effort is a parameter of the model: `model@effort`
+
+`Decision-ID: ADR-0024/D17` · *amends [D14](#d14--the-routed-unit-is-provider-model-model-routing-and-the-second-opinion-are-separate-concerns) and [D16](#d16--a-model-alias-is-resolved-locally-to-a-concrete-id-the-refresh-is-the-one-explicit-read-of-a-carriers-catalog)*
+
+One model answers at several reasoning efforts, and a carrier takes the level as a flag of its own
+(`pi --thinking`, `opencode run --variant`, `claude --effort`, a `codex` config key), not as a different
+model. D14's unit `(provider, model)` could not say it: a stronger run of the same model had no spelling,
+and a gateway that encodes the level in the model id (`qwen3.8-27b-max`) looked like an unrelated model.
+
+1. **Spelling.** `carrier:model@effort` in the `carrier[:model]` grammar (D05, D16): a ladder entry, a
+   `models` list entry and `--provider P:model@effort`. The id is split at its **last** `@`; an id that
+   itself encodes the level (`acme/qwen3.8-27b-max`) stays one id, because akmon never parses a model
+   name. No `@` means no effort flag: the carrier runs its own level, as `default` runs its own model.
+2. **The row says how.** A provider row declares `efforts: {"flag": "--thinking {effort}", "levels": [...]}`
+   — the flag template spelled like `model_flag`, and the carrier's accepted levels **weakest first**, as
+   data in the registry or an overlay. A carrier whose row has no `efforts` and an entry that carries `@x`
+   is a one-line refusal (exit 2) naming the carrier; a level outside `levels` is a one-line refusal naming
+   the accepted ones. akmon never guesses a level and never forwards one the row does not list.
+3. **The unit is `(provider, model, effort)`.** Order inside one model is the position in `levels`. The
+   second opinion's rule stays D14's `max` — the last entry of `models`, each entry optionally `@effort` —
+   so an owner orders `models` weakest to strongest across ids and efforts alike.
+4. **Same model ignores effort.** The walk's same-model test (D06, D14) compares the model id only: a
+   higher effort of the session's own model is not a different mind, so it stays skipped as same-model (and
+   as same family before that). The disclosed last resort of D07 is unchanged.
+5. **Aliases and `default` compose.** The alias is resolved first (D16) and the effort is appended after:
+   `codex:sol@high` sends `gpt-6.1-sol` and the level. `default@high` pins no model and sends only the
+   level, since the effort flag does not depend on a model pin.
+6. **Report.** The header and `--list` show the effort after the model (`model=qwen3.8-27b@high`); an entry
+   without one shows none.
+7. **Measured before it ships (D09).** A row carries `efforts` only after a probe records the flag, the
+   accepted levels and the behaviour on an unknown one in `meta/MEASUREMENTS.md`; the carrier with no flag
+   (qwen) carries none.
+
+*The owner's direction, given in session: the level is a parameter of the model, spelled `model@effort`;
+the order inside the owner's `models` list is theirs — newer, then larger, then higher effort.*
+
+*Rejected:*
+
+- **One id per effort in the registry** (`qwen3.8-27b-max` as the only way). It works for a gateway that
+  encodes the level in the id, which stays supported as plain ids, but it cannot express a carrier whose
+  level is a flag.
+- **A separate `effort` field on the ladder entry.** A second axis in every entry and every overlay for the
+  same fact the model spelling already carries.
+- **Treating effort as the model rule's tie-break.** The owner orders `models`; the rule stays `max`.
+
 ## Consequences
 
 - **Retired**, each raising a named error that quotes the file that carries it — the same discipline
@@ -358,21 +554,24 @@ elsewhere.
   else, which is why it is refused rather than ignored.
 - **Consumer-facing breakage.** Every consumer's local config carries at least one of those keys, so
   the upgrade step ships in the changelog, not only in code; `verify` names the file and the key.
-- **`--vendor qwen` becomes valid** the moment the qwen vendor block and command row exist — the
-  defect this record was written for.
+- **`qwen` is a carrier, not a vendor.** A session on the qwen harness — the defect this record was
+  written for — now receives a second opinion, started with `init --session-provider qwen`
+  (D15); `--vendor qwen` stays refused, because tier binding is owned by a vendor block and qwen has
+  none, and its refusal names `--session-provider` as the way to start from that harness.
 - **Both implementations change together** (ADR 0020): `tools/model_routing/{routing,second_opinion,init}.py`
   and their twins in `js/tools/model_routing/`, with the conformance rows and seeded violations added
-  in the same change, and each new behaviour observed red before it is green.
+  in the same change, and each new behaviour observed red before it is green. The refresh tool's twins,
+  `tools/model_routing/models.py` and `js/tools/model_routing/models.mjs`, ship in that same change (D16).
 - **Existing chain tests re-pin loudly.** They pin today's absolute two-step order and mutate the
   provider table by name; that re-pin is the intended evidence, not collateral. Two functions this
   makes load-bearing — availability and the different-model fallback — carry no test today and gain
   one.
-- **Relations kept honest:** the per-family concrete-slug rule stays with
-  [C148](../../meta/TASKS.md) (D03 reads the catalog, it does not decide what a family's newest slug
-  is); the vendor-specific directories a `report_dir` names stay with
+- **Relations kept honest:** the per-family concrete-slug rule, once C148's, is absorbed by
+  [D16](#d16--a-model-alias-is-resolved-locally-to-a-concrete-id-the-refresh-is-the-one-explicit-read-of-a-carriers-catalog)
+  (C148 is closed: the local, refreshed alias file replaces reading the catalog on every call); the
+  vendor-specific directories a `report_dir` names stay with
   [A25](../../meta/TASKS.md); the gate run that calls this tool stays with
-  [C96](../../meta/TASKS.md). This record changes none of them, and the row that reads the catalog is
-  written so C148's owner decision remains the single source.
+  [C96](../../meta/TASKS.md). This record changes none of the other two.
 - **A developer who reorders the ladder chooses their own diversity.** The team default is a starting
   order, not an enforced policy: the resolver enforces priors and leaves priority to the list it was
   given.

@@ -1,0 +1,26 @@
+id = "tools/models-refresh-unmapped"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/models"]
+
+# An alias the catalog does not list (`terra`) is reported and left unmapped, never guessed; a version tie
+# (`gpt-6-luna` and `acme-6-luna`) goes to the lower priority; a catalog without a `client_version` stores
+# `client: null`.
+
+[fixture]
+tmp_files = { ".codex/models_cache.json" = "{\"models\":[{\"slug\":\"gpt-6.1-sol\",\"visibility\":\"list\",\"priority\":0},{\"slug\":\"gpt-6-sol\",\"visibility\":\"list\",\"priority\":1},{\"slug\":\"gpt-6-luna\",\"visibility\":\"list\",\"priority\":5},{\"slug\":\"acme-6-luna\",\"visibility\":\"list\",\"priority\":2}]}" }
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+tool = "model_routing/models"
+argv = ["--refresh"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "catalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=(unknown)\n  luna → acme-6-luna\n  sol → gpt-6.1-sol\n  terra: no match in the catalog; left unmapped\nwrote _aitna/local/model-aliases.json\n"
+
+[expected.files]
+"_aitna/local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": null,\n    \"aliases\": {\n      \"luna\": \"acme-6-luna\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"

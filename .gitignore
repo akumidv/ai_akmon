@@ -48,4 +48,8 @@ node_modules/
 .claude/model-routing.local.json
 .claude/model-routing.log
 .claude/second-opinion/
+.codex/second-opinion/
+.qwen/second-opinion/
+.opencode/second-opinion/
+.pi/second-opinion/
 .claude/agents/k_*.md

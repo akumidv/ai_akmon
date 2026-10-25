@@ -1,0 +1,20 @@
+id = "tools/models-unknown-provider"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/models"]
+
+# `--provider` naming a provider the table does not declare is refused, exit 2.
+
+[fixture]
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+tool = "model_routing/models"
+argv = ["--refresh", "--provider", "nope"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "models: --provider names 'nope', which the providers table does not declare\n"

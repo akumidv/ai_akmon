@@ -100,15 +100,43 @@ test("a turn that answers a held one is never held", () => {
   }
 });
 
-test("a broken tree crashes open: exit 0, a diagnostic, no hold", () => {
+test("a broken payload crashes open: exit 0, a diagnostic, no hold", () => {
   const project = _project();
   try {
-    fs.writeFileSync(posix.join(project.root, "_aitna", "model-routing.json"), "{not json");
-    const run = _stop(project, _THREE);
+    // A NUL in `cwd` is a path nothing can resolve: the hook fails before any routing is read.
+    const payload = JSON.stringify({
+      hook_event_name: "Stop",
+      stop_hook_active: false,
+      session_id: "sess-ga",
+      cwd: "x\u0000y",
+      transcript_path: posix.join(project.root, "transcript.jsonl"),
+      last_assistant_message: _THREE,
+    });
+    /** @type {Record<string, string | undefined>} */
+    const env = { ...process.env, TMPDIR: project.tmp };
+    delete env.CLAUDE_PROJECT_DIR;
+    const run = spawnSync(process.execPath, [_HOOK], { input: payload, encoding: "utf8", cwd: project.root, env });
+    assert.equal(run.status, 0, run.stderr);
     assert.notEqual(run.stderr, "", "the failure is reported");
     const answer = JSON.parse(run.stdout);
     assert.equal(answer.decision, undefined, "a crash never holds the turn");
     assert.match(answer.systemMessage, /gate-audit/);
+  } finally {
+    fs.rmSync(project.root, { recursive: true, force: true });
+  }
+});
+
+test("a bad hand-owned routing overlay costs the audit, never the turn: one stderr line names the file", () => {
+  const project = _project();
+  try {
+    fs.writeFileSync(posix.join(project.root, "_aitna", "model-routing.json"), "{ not json");
+    const run = _stop(project, _THREE);
+    assert.equal(run.stdout, "");
+    assert.equal(
+      run.stderr,
+      "akmon gate-audit hook: the routing overlay _aitna/model-routing.json is not a valid JSON object; " +
+        "repair or delete it (it is hand-owned, so akmon never rewrites it) — the gate audit is skipped\n",
+    );
   } finally {
     fs.rmSync(project.root, { recursive: true, force: true });
   }

@@ -1,0 +1,23 @@
+{
+  "errors": {
+    "unknown_provider": "--provider names '{{provider}}', which the providers table does not declare",
+    "no_catalog": "providers.{{provider}} declares no `catalog`; there is nothing to refresh its model aliases from",
+    "none_declared": "no provider row declares a `catalog`; declare providers.<id>.catalog ({\"file\": ..., \"format\": ...}) in the routing overlay",
+    "bad_catalog": "providers.{{provider}}.catalog must be an object with a string `file` and a string `format`",
+    "missing": "{{file}} (providers.{{provider}}.catalog.file) does not exist; the carrier writes it, so start the carrier once or point the row at its catalog",
+    "unreadable": "{{file}} (providers.{{provider}}.catalog.file) cannot be read as UTF-8 text",
+    "invalid": "{{file}} (providers.{{provider}}.catalog) {{reason}}"
+  },
+  "output": {
+    "stored": "stored {{provider}}: source={{source}} client={{client}}",
+    "stored_none": "stored {{provider}}: none",
+    "catalog": "catalog {{provider}}: source={{source}} client={{client}}",
+    "mapped": "  {{alias}} → {{concrete}}",
+    "unmapped": "  {{alias}}: no match in the catalog; left unmapped",
+    "client_unknown": "(unknown)",
+    "wrote": "wrote {{file}}",
+    "unchanged": "{{file}} unchanged",
+    "would_write": "would write {{file}}",
+    "would_leave": "would leave {{file}} unchanged"
+  }
+}

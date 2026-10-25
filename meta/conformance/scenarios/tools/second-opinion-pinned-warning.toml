@@ -1,0 +1,32 @@
+id = "tools/second-opinion-pinned-warning"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# `--provider` naming the session's own provider still runs, but is disclosed `kind=pinned` with a
+# warning line and is never counted as diverse (ADR 0024). `--dry-run` prints the command with the
+# pinned model, the target report path under the provider's own directory and the header fields.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--gate",
+  "code-verify",
+  "--gate-pack",
+  "docs/gate-pack.md",
+  "--session-provider",
+  "claude",
+  "--session-model",
+  "opus",
+  "--provider",
+  "claude:haiku",
+  "--dry-run",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "claude -p --output-format text --model haiku You are an independent second-opinion reviewer for a akmon verify gate.\n\nGate: code-verify\n\nRules:\n- Review only; do not edit files, run commands, commit, push, or approve on behalf of the owner.\n- Return: verdict, key disagreements or risks, missing verification, and concrete file/line references when available.\n- Treat the result as advisory input to owner verification, not a sign-off.\n\nMaterial to review:\nGate material: findings A and B, against yardstick Y.\n\n\nreport: .claude/second-opinion/code-verify-1.md\nprovider=claude priors=claude carrier=harness repo=worktree model=haiku kind=pinned\nwarning: 'claude' is the session's own provider; this run is not an independent second opinion and is filed as kind=pinned\nskipped claude: self\nskipped codex: carrier absent\nskipped qwen: carrier absent\nskipped opencode: carrier absent\nskipped pi: carrier absent\n"

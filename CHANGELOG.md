@@ -16,7 +16,85 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
 
 ## Unreleased
 
+### Breaking
+- **The second opinion is chosen by model priors from one `providers` table (C162, C163,
+  [ADR-0024](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  Retired, each refused with a named error that quotes the file carrying it: in the routing
+  overlay `<aitna>/model-routing.json`, `second_opinion_policy.diversity_ladder` and a vendor's
+  `second_opinion` object; in `model-routing.local.json`, `second_opinion_provider` and
+  `second_opinion_fallback_model`. Check: replace the first two with a `providers` row per
+  carrier and a `second_opinion_policy.ladder` of carrier ids (`claude`, `codex`, `qwen`,
+  `opencode`, `pi` ship), delete the two local keys and re-run `model_routing/init`; `akmon verify`
+  names the file and key that remain. The report directory is now the carrier's own,
+  `.<carrier>/second-opinion/` (it was swapped between `claude` and `codex`); add the new ones to
+  your ignore list.
+
+### Added
+- **Second opinion from any harness and model; the priorities are followed or proposed
+  ([ADR-0024/D15](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  `qwen`, `opencode` and `pi` join `claude` and `codex` as carriers; the last three ship with an
+  **unmeasured** invocation. The session is stated with `--session-provider` / `--session-model`
+  (recorded as `session` by `init`); `second_opinion` takes `--list` (propose the ranked chain
+  and the skip ledger, run nothing), `--rank N` and `--provider carrier[:model]`. A carrier that
+  fronts several families declares `model_families` in an overlay row; an undeclared family is
+  skipped and named, never counted as diverse.
+- **A developer-local routing overlay, `<aitna>/local/model-routing.json`
+  ([ADR-0024/D11](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  The gitignored `local/` folder may hold a hand-owned overlay of the same shape as
+  `<aitna>/model-routing.json`; it merges last, so it is the strongest layer (a `ladder` there
+  replaces the project's whole), and an unknown-prior ask names it first. A declared `argv`
+  that is unpinned now drops a bare flag together with its lone `{model}` element
+  (`["qwen", "-m", "{model}"]` runs as `["qwen"]`). An overlay that is not a JSON object is
+  refused with an error naming the file.
+
+- **`init --session-family` and a closed, extendable family vocabulary
+  ([ADR-0024/D01, D15](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  `model_routing/init --session-family F` records the priors a session answers with in the `session`
+  stanza (kept only while its model is unchanged). `F` must be a key of the new registry object
+  `second_opinion_policy.families` (`claude`, `gpt`, `qwen`, `gemini`); an overlay adds a family by
+  key (`"families": {"deepseek": "…"}`), not by restating the list. Tier binding stays with a vendor
+  block, so `--vendor qwen` (a carrier) is still refused, now with a message naming
+  `--session-provider` as the way to start from that harness.
+- **`akmon verify` checks the registry the project overlay produces.** Every
+  `second_opinion_policy.ladder` id must exist in the merged `providers` table, and each
+  overlay-declared row must carry a `family` key from the vocabulary (its `model_families` values
+  too), an `argv` that is a non-empty list with `{model}` where a pin is declared or ladder-pinned,
+  a known `prompt` and `repo`, or the id of a shipped carrier; each finding quotes the overlay file.
+  The developer-local overlay is not read. An unknown ladder id at run time now names the
+  developer-local and project overlay files to edit.
+- **Model aliases resolve to concrete ids, and `model_routing/models` refreshes them on request
+  ([ADR-0024/D16](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  `akmon tool model_routing/models` lists the resolved aliases stored in `<aitna>/local/model-aliases.json`
+  and what a refresh would write; `--refresh [--provider P] [--dry-run]` writes that file from the provider
+  row's declared catalog (`codex-models-cache` is the one supported format). It is the only place akmon
+  reads a carrier's catalog, and it runs only when invoked. The second-opinion runner resolves an alias
+  pin through that file; `--list`, `--dry-run` and the report header show the concrete model
+  (`sol→gpt-6.1-sol`). Provider rows gain `aliases: true` and `catalog`, both checked by `akmon verify`.
+  The file is generated and gitignored with the local layer; it is never hand-owned.
+- **The second opinion can run on a carrier's own model
+  ([ADR-0024/D16](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  The reserved token `default` (`codex:default` in a ladder entry or in `--provider`) and the runner flag
+  `--default-model` drop the model pin: the carrier uses the model it is configured with, no alias is
+  resolved and no refresh is needed. The header shows `model=(default)`; `--list` marks such a candidate
+  `pin=default`. `akmon verify` refuses a provider whose `models` lists `default`.
+- **A reasoning effort rides on the model: `carrier:model@effort`
+  ([ADR-0024/D17](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  A ladder entry, a `models` entry or `--provider` may end in `@level`; a provider row says how the level
+  is sent with `efforts` (`flag` holding `{effort}`, `levels` weakest first), and the header and `--list`
+  show `model=opus@high`. A carrier with no `efforts`, or a level outside `levels`, is refused with one
+  line (exit 2); akmon never forwards a level the row does not list. The shipped `claude`, `codex` and
+  `pi` rows carry the levels measured in M188; `opencode` and `qwen` carry none. `akmon verify` checks an
+  `efforts` row and the `@level` of a `models` entry.
+
 ### Changed
+- **The shipped codex `sol` pin is resolved, not sent raw
+  ([ADR-0024/D16](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  A ChatGPT-account codex rejects the alias `sol` (HTTP 400 `model_not_found`). The runner now sends the
+  concrete id from the local file, and an alias with no mapping is refused: exit 2, one line naming the
+  refresh command, and nothing is sent to the carrier. A concrete id passed as `--provider codex:<id>`
+  still runs unchanged. Check: on a codex consumer, run `akmon tool model_routing/models --refresh --provider codex`
+  once, and again when the carrier's catalog moves; `--list` then shows `sol→<concrete id>` instead of
+  `sol→(unresolved)`.
 - **Owner decision requests have stable mnemonic codes (A44).** Requests such as
   **D-ORDER** and **D-SLICE** can be answered by code in any order or subset; unanswered
   items stay open. The common guardrail links the convention in design-flow. Ordinary
@@ -35,6 +113,22 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
 - **`akmon verify` checks the committed ladder's shape** (`routing.ladder`): `harness_rungs` a
   non-empty list of unique non-empty strings, `auditor_only_rungs` a list disjoint from it. A
   project overlay that sets neither is unaffected.
+
+### Fixed
+- **A declared provider row with no `report_dir` no longer crashes the runner
+  ([ADR-0024/D12](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  `second_opinion` files its report under `.<provider id>/second-opinion/` (it died with
+  `KeyError: 'report_dir'`).
+- **A bad hand-owned routing overlay no longer takes a hook down
+  ([ADR-0024/D05](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
+  When `<aitna>/model-routing.json` is not a JSON object, the `model-routing`, `gate-audit` and
+  `delegation-log` hooks print one stderr line naming the file instead of a bare crash notice; at
+  `SessionStart` the owner also gets that line on both channels, and the gate audit and the role
+  advisories are skipped until it is repaired.
+- **`second_opinion.py --list` shows what a run would do.** A session of unknown priors now lists the
+  disclosed last resort a run takes (or why none exists); it was hidden.
+- **A carrier fed its prompt as an argument no longer waits on an inherited stdin.** Its stdin is the
+  null device, so a harness that reads it to EOF (`opencode run`) ends instead of hanging.
 
 ## v0.4.0
 

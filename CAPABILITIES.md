@@ -181,7 +181,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - crash-posture: unmeasured
 - evidence: model pin and named identity proven live on 0.146.0, but akmon emits no `.codex/agents/*.toml`, so the capability is not shipped
 
-### Second opinion (cross-vendor review) — Claude Code
+### Second opinion (independent review) — Claude Code
 
 - documented: yes
 - delivered: unmeasured
@@ -190,7 +190,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - crash-posture: unmeasured
 - evidence:
 
-### Second opinion (cross-vendor review) — Codex CLI
+### Second opinion (independent review) — Codex CLI
 
 - documented: yes
 - delivered: unmeasured
@@ -198,6 +198,33 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - effect: none
 - crash-posture: unmeasured
 - evidence:
+
+### Second opinion (independent review) — Qwen Code
+
+- documented: yes
+- delivered: yes
+- route: vendor=qwen-code; version=0.24.7; event=n/a; matcher=n/a
+- effect: none
+- crash-posture: unmeasured
+- evidence: M180 — argv reach (`--approval-mode default --exclude-tools write_file,edit,run_shell_command`, prompt on stdin) and removal of the write/shell tools measured on one default model, and akmon's own runner answered `PONG` on this argv; the exit status on an API or auth failure is not measured, and an unknown `-m` name silently falls back to the default model
+
+### Second opinion (independent review) — OpenCode
+
+- documented: yes
+- delivered: yes
+- route: vendor=opencode; version=1.19.4; event=n/a; matcher=n/a
+- effect: none
+- crash-posture: unmeasured
+- evidence: M181, M186 — argv reach (`run --agent plan -m <provider/model>`, prompt last, stdin closed) measured with open-weight and qwen-family models only, also through akmon's own runner; re-probed with credentials configured, no claude, gpt or gemini model is reachable (github-copilot rejects the PAT, gitlab returns 401), and read-only is approximate (`--agent plan` declines writes by instruction and does not deny bash)
+
+### Second opinion (independent review) — pi
+
+- documented: yes
+- delivered: yes
+- route: vendor=pi; version=1.4.0; event=n/a; matcher=n/a
+- effect: none
+- crash-posture: unmeasured
+- evidence: M185 — the shipped argv (`-p --no-session --tools read,grep,find,ls --no-extensions --no-mcp [--model <m>] <prompt>`) answers and exits 0 on the host's qwen-family provider, also through akmon's own runner; read-only is enforced by the absent write and shell tools (the tool list is exactly `read, grep, find, ls`; a control run without `--tools` lists and uses `write`); no claude, gpt or gemini model is configured in pi here, and the exit status on an API or auth failure is not measured
 
 <!-- akmon:capability-matrix:end -->
 
@@ -216,10 +243,10 @@ inspect that host state — that gap is tracked as **C70**.
 
 ## What `delivered: unmeasured` is waiting on
 
-The second-opinion rows on both harnesses stand at `delivered: unmeasured`. `sync` writes the
+The second-opinion rows on Claude Code and Codex CLI stand at `delivered: unmeasured`; the Qwen Code, OpenCode and pi rows were settled by the N19 and N8 probes (M180, M181/M186, M185) within the limits their evidence names — for OpenCode and pi no claude, gpt or gemini model was reachable, so no cross-family review through them is shown. The Claude Code and Codex CLI legs reached through akmon's own runner (M183, M184) are carried into the matrix by C72. `sync` writes the
 route and `tools/model_routing/second_opinion.py` builds the argv — both pinned by
 `meta/tests/test_second_opinion_cli.py` — but that suite runs only `--dry-run` and the skip
 branch, so no test has ever watched the argv reach a harness. A dry-run establishes what akmon
 emits, never what the harness accepts, and the same distinction across two vendors is the parity
 claim `AGENTS.md` requires a live probe for. The probe and the carrier that follows it are tracked as
-**N8** (the per-harness probe) and **C72** (the regression carriers and the matrix update that follow from its evidence); until they land, the axis stays unmeasured and cites nothing.
+**N8** (the per-harness probe) and **C72** (the regression carriers and the matrix update that follow from its evidence); until they land, a row stays `unmeasured` and cites nothing until its leg is measured.

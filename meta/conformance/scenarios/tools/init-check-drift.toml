@@ -13,5 +13,5 @@ argv = ["--check"]
 [expected]
 exit = 1
 stderr = ""
-stdout = "would update: .claude/agents/k_explorer.md\nwould update: .claude/agents/k_mechanic.md\nwould update: .claude/agents/k_validator.md\nwould update: .claude/agents/k_implementer.md\nwould update: .claude/agents/k_reasoner.md\nwould update: .claude/agents/k_auditor.md\nwould update: .claude/model-routing.local.json\nmodel routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=codex(off)\n"
+stdout = "would update: .claude/agents/k_explorer.md\nwould update: .claude/agents/k_mechanic.md\nwould update: .claude/agents/k_validator.md\nwould update: .claude/agents/k_implementer.md\nwould update: .claude/agents/k_reasoner.md\nwould update: .claude/agents/k_auditor.md\nwould update: .claude/model-routing.local.json\nmodel routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable (off)\n"
 file_absent = [".claude/agents/k_explorer.md", ".claude/agents/k_mechanic.md", ".claude/agents/k_validator.md", ".claude/agents/k_implementer.md", ".claude/agents/k_reasoner.md", ".claude/agents/k_auditor.md", ".claude/model-routing.local.json"]

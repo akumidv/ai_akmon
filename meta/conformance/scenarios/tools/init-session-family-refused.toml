@@ -1,0 +1,22 @@
+id = "tools/init-session-family-refused"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/init"]
+
+# A family outside the closed vocabulary (D01) is refused by name: one `error:` line quoting the
+# overlay files that extend the vocabulary, exit 2, and nothing is written.
+
+[run]
+tool = "model_routing/init"
+argv = [
+  "--session-provider",
+  "opencode",
+  "--session-family",
+  "deepseek",
+]
+
+[expected]
+exit = 2
+stderr = "error: --session-family 'deepseek' is not in the family vocabulary (claude, gpt, qwen, gemini); add it by declaring second_opinion_policy.families.deepseek in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team\n"
+stdout = ""
+file_absent = [".claude/model-routing.local.json"]

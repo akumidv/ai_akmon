@@ -1,0 +1,28 @@
+id = "tools/models-list"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/models"]
+
+# With no flag the tool is read-only: it shows what the local file stores (here a stale mapping from an older
+# client) and what a refresh would write, and writes nothing.
+
+[fixture]
+tmp_files = { ".codex/models_cache.json" = "{\"client_version\":\"0.164.0\",\"models\":[{\"slug\":\"gpt-6.1-sol\",\"visibility\":\"list\",\"priority\":0},{\"slug\":\"gpt-6.1-terra\",\"visibility\":\"list\",\"priority\":1},{\"slug\":\"gpt-6-astra\",\"visibility\":\"list\",\"priority\":3},{\"slug\":\"gpt-6-sol\",\"visibility\":\"list\",\"priority\":4},{\"slug\":\"gpt-reserve\",\"visibility\":\"hide\",\"priority\":4},{\"slug\":\"gpt-6-luna\",\"visibility\":\"list\",\"priority\":5},{\"slug\":\"gpt-5.6-sol\",\"visibility\":\"list\",\"priority\":6},{\"slug\":\"gpt-5.6-terra\",\"visibility\":\"list\",\"priority\":7},{\"slug\":\"gpt-5.6-luna\",\"visibility\":\"list\",\"priority\":8},{\"slug\":\"codex-auto-review\",\"visibility\":\"hide\",\"priority\":43}]}" }
+
+[fixture.files]
+"_aitna/local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": \"0.100.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"terra\": \"gpt-6.1-terra\",\n      \"sol\": \"gpt-5.6-sol\"\n    }\n  }\n}\n"
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+tool = "model_routing/models"
+argv = []
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "stored codex: source=~/.codex/models_cache.json (codex-models-cache) client=0.100.0\n  luna → gpt-6-luna\n  terra → gpt-6.1-terra\n  sol → gpt-5.6-sol\ncatalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=0.164.0\n  luna → gpt-6-luna\n  terra → gpt-6.1-terra\n  sol → gpt-6.1-sol\nwould write _aitna/local/model-aliases.json\n"
+
+[expected.files]
+"_aitna/local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": \"0.100.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"terra\": \"gpt-6.1-terra\",\n      \"sol\": \"gpt-5.6-sol\"\n    }\n  }\n}\n"

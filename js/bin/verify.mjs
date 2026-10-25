@@ -112,13 +112,14 @@ import {
   pySplit,
   pySplitlines,
   pyStat,
+  pyStr,
   pyStrip,
   readText,
   strRepr,
   truthy,
 } from "../common/pyvalue.mjs";
 import { RecordError, readAkmonToml, readAkmonTomlStrict, recordedEcosystem } from "../common/record.mjs";
-import { codexHooksListCommand } from "../common/runtime.mjs";
+import { codexHooksListCommand, harnessCommands } from "../common/runtime.mjs";
 import { codePointCompare, codePointSort } from "../common/sort.mjs";
 import { splitVersion } from "../common/versions.mjs";
 
@@ -146,8 +147,12 @@ import { splitVersion } from "../common/versions.mjs";
  * @property {string[]} routing_shipped_paths
  * @property {string[]} routing_vendors
  * @property {string[]} routing_semantic_fallback_keys
- * @property {string[]} routing_second_opinion_keys
- * @property {string[]} routing_retired_second_opinion_keys
+ * @property {string[]} routing_provider_keys
+ * @property {string[]} routing_catalog_formats
+ * @property {string} routing_default_model_token
+ * @property {string[]} routing_prompt_channels
+ * @property {string[]} routing_repo_values
+ * @property {{policy: string[], vendor: string[], config: string[]}} routing_retired_second_opinion_keys
  * @property {string[]} reasoner_policy_values
  * @property {{env_secret: string, env_example_keep: string, pycache: string}} gitignore_patterns
  * @property {Record<string, string[]>} ci_required_commands
@@ -538,6 +543,188 @@ function _ladderProblem(spec) {
     return "auditor_only_rungs must not repeat a harness_rungs alias";
   }
   return null;
+}
+
+/**
+ * `overlay` merged over `base` as the routing loader does: objects key by key, anything else
+ * replaced whole. Verify reads no routing module, so the rule is restated here; a test pins it to
+ * `routing.mjs` by merging the same pair both ways.
+ * @param {Json} base
+ * @param {Json} overlay
+ * @returns {Record<string, Json>}
+ */
+export function mergeOverlay(base, overlay) {
+  /** @type {Record<string, Json>} */
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(overlay)) {
+    merged[key] = isDict(value) && isDict(merged[key]) ? mergeOverlay(merged[key], value) : value;
+  }
+  return merged;
+}
+
+/**
+ * The family vocabulary a `second_opinion_policy` declares: the keys of its `families` object.
+ * @param {Json} policy
+ * @returns {string[]}
+ */
+function _familyNames(policy) {
+  const families = dictGet(policy, "families");
+  return isDict(families) ? Object.keys(families) : [];
+}
+
+/**
+ * A provider row's family defects: the key missing, or a family (the row's or a model's) outside
+ * the vocabulary. `family: null` is declared, not missing. A `null` vocabulary skips the membership
+ * test (it is its own error).
+ * @param {Json} row
+ * @param {string[] | null} vocabulary
+ * @returns {string[]}
+ */
+function _familyProblems(row, vocabulary) {
+  /** @type {string[]} */
+  const problems = [];
+  /** @type {Array<[string, Json]>} */
+  const stated = dictGet(row, "family") !== null ? [["family", row.family]] : [];
+  if (!Object.hasOwn(row, "family")) {
+    problems.push("family key is missing (null for a multi-family carrier)");
+  }
+  const byModel = dictGet(row, "model_families");
+  if (isDict(byModel)) {
+    stated.push(
+      ...Object.entries(byModel).map(
+        ([model, family]) => /** @type {[string, Json]} */ ([`model_families.${model}`, family]),
+      ),
+    );
+  } else if (byModel !== null) {
+    problems.push("model_families must be an object of model id to family");
+  }
+  for (const [label, family] of stated) {
+    if (typeof family !== "string") {
+      problems.push(`${label} must be a family name`);
+    } else if (vocabulary !== null && !vocabulary.includes(family)) {
+      problems.push(`${label} ${strRepr(family)} is not in second_opinion_policy.families (${vocabulary.join(", ")})`);
+    }
+  }
+  return problems;
+}
+
+/**
+ * A provider row's alias and catalog defects (ADR 0024/D16): a row that says `aliases: true` needs a catalog.
+ *
+ * `aliases` is `true` or absent; a `catalog` is an object with a string `file` and a `format` from the
+ * closed list; an `aliases: true` row without one cannot be resolved by `models.mjs`; and the
+ * reserved model token (`default`) is never a declared model.
+ * @param {Json} row
+ * @param {string[]} formats
+ * @param {string} token
+ * @returns {string[]}
+ */
+function _aliasProblems(row, formats, token) {
+  /** @type {string[]} */
+  const problems = [];
+  if (Object.hasOwn(row, "aliases") && row.aliases !== true) {
+    problems.push("aliases must be true, or the key left out");
+  }
+  const catalog = dictGet(row, "catalog");
+  if (
+    Object.hasOwn(row, "catalog") &&
+    !(isDict(catalog) && typeof dictGet(catalog, "file") === "string" && formats.includes(dictGet(catalog, "format")))
+  ) {
+    problems.push(`catalog must be an object with a string file and a format of: ${formats.join(", ")}`);
+  } else if (dictGet(row, "aliases") === true && !Object.hasOwn(row, "catalog")) {
+    problems.push("aliases: true needs a catalog (file and format) to resolve the aliases from");
+  }
+  const models = dictGet(row, "models");
+  if (Array.isArray(models) && models.some((entry) => _entryModel(entry) === token)) {
+    problems.push(`models must not list the reserved token ${strRepr(token)}; a ladder entry says carrier:${token}`);
+  }
+  return problems;
+}
+
+/**
+ * A `models` entry without its `@effort` (split at the last `@`, ADR 0024/D17); a non-string stays as it is.
+ * @param {Json} entry
+ * @returns {Json}
+ */
+function _entryModel(entry) {
+  if (typeof entry !== "string" || !entry.includes("@")) {
+    return entry;
+  }
+  return entry.slice(0, entry.lastIndexOf("@")) || entry;
+}
+
+/**
+ * Whether `efforts` is an object whose `flag` holds `{effort}` and whose `levels` are a non-empty list
+ * of unique strings.
+ * @param {Json} efforts
+ * @returns {boolean}
+ */
+function _validEfforts(efforts) {
+  if (!isDict(efforts)) {
+    return false;
+  }
+  const flag = dictGet(efforts, "flag");
+  const levels = dictGet(efforts, "levels");
+  return (
+    typeof flag === "string" &&
+    flag.includes("{effort}") &&
+    Array.isArray(levels) &&
+    levels.length > 0 &&
+    levels.every((level) => typeof level === "string") &&
+    new Set(levels).size === levels.length
+  );
+}
+
+/**
+ * A provider row's `efforts` defects and the `models` entries whose `@effort` it cannot take (ADR 0024/D17).
+ *
+ * `efforts` is an object whose `flag` holds `{effort}` and whose `levels` are a non-empty list of
+ * unique strings, weakest first; a `models` entry `m@level` names a level of that row, and a row with
+ * no `efforts` takes none.
+ * @param {Json} row
+ * @returns {string[]}
+ */
+function _effortProblems(row) {
+  /** @type {string[]} */
+  const problems = [];
+  const declared = Object.hasOwn(row, "efforts");
+  const valid = declared && _validEfforts(dictGet(row, "efforts"));
+  if (declared && !valid) {
+    problems.push("efforts must be an object with a flag holding {effort} and a non-empty list of unique levels");
+  }
+  const levels = valid ? /** @type {string[]} */ (dictGet(dictGet(row, "efforts"), "levels")) : null;
+  const models = dictGet(row, "models");
+  for (const entry of Array.isArray(models) ? models : []) {
+    if (typeof entry !== "string" || !entry.includes("@")) {
+      continue;
+    }
+    const effort = entry.slice(entry.lastIndexOf("@") + 1);
+    if (!declared) {
+      problems.push(`models entry ${strRepr(entry)} carries an effort, but the row declares no efforts`);
+    } else if (levels !== null && !levels.includes(effort)) {
+      problems.push(
+        `models entry ${strRepr(entry)} names the effort ${strRepr(effort)}, which is not one of: ${levels.join(", ")}`,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * A declared `argv`'s defects: not a non-empty list of strings, or no `{model}` where a pin must go (D12).
+ * @param {Json} row
+ * @param {boolean} pinned
+ * @returns {string[]}
+ */
+function _argvProblems(row, pinned) {
+  const argv = row.argv;
+  if (!(Array.isArray(argv) && argv.length > 0 && argv.every((part) => typeof part === "string"))) {
+    return ["argv must be a non-empty list of strings (it is never split or passed through a shell)"];
+  }
+  if (!argv.some((part) => part.includes("{model}")) && (truthy(dictGet(row, "models")) || pinned)) {
+    return ["argv holds no {model} placeholder, but a model is declared or pinned for it"];
+  }
+  return [];
 }
 
 /**
@@ -1625,9 +1812,11 @@ export class Verifier {
       this.checkStandardPath(relative);
     }
     const registryPath = pyPath(this.standardRoot, "tools", "model_routing", "registry.json");
+    /** @type {Json} */
+    let registry = null;
     if (isFile(registryPath)) {
       try {
-        const registry = _plain(readJson(registryPath, { lossy: true }));
+        registry = _plain(readJson(registryPath, { lossy: true }));
         this.ok("routing.registry-parse", "model-routing registry parses", {
           target: this.displayPath(registryPath),
           fix: "Keep the model-routing registry valid JSON.",
@@ -1665,41 +1854,283 @@ export class Verifier {
       // Outside the try: a defect in the check below must not be reported as a parse failure of
       // the file it is reading.
       this._checkOverlaySecondOpinion(overlayData);
+      this._checkOverlayProviders(registry, overlayData);
     }
   }
 
   /**
-   * The overlay must not carry keys C57 retired. It is deep-merged *over* the shipped registry, so
-   * a stale `cli`/`invoke` pair rides alongside `harness`/`operation`, unread — checked at the file
-   * rather than inferred from the merged result.
+   * The overlay must not carry keys ADR 0024 retired: the old ladder and a vendor's `second_opinion`
+   * object. It is deep-merged *over* the shipped registry, so a stale key rides alongside the new
+   * ladder or the providers table, unread — checked at the file rather than inferred from the
+   * merged result.
    * @param {Json} overlay
    */
   _checkOverlaySecondOpinion(overlay) {
     if (!isDict(overlay)) {
       return;
     }
-    for (const vendor of this.data.routing_vendors) {
-      const spec = dictGet(overlay, vendor);
-      if (!isDict(spec)) {
-        continue;
+    const retired = this.data.routing_retired_second_opinion_keys;
+    const policy = dictGet(overlay, "second_opinion_policy");
+    if (isDict(policy)) {
+      this._refuseRetired(policy, retired.policy, "second_opinion_policy");
+    }
+    for (const [name, spec] of Object.entries(overlay)) {
+      if (isDict(spec)) {
+        this._refuseRetired(spec, retired.vendor, name);
       }
-      const second = dictGet(spec, "second_opinion");
-      if (!isDict(second)) {
-        continue;
+    }
+  }
+
+  /**
+   * One error naming the overlay block and each retired key it still carries.
+   * @param {Json} block
+   * @param {string[]} keys
+   * @param {string} name
+   */
+  _refuseRetired(block, keys, name) {
+    const found = keys.filter((key) => Object.hasOwn(block, key));
+    if (found.length > 0) {
+      this.error("routing.second-opinion", `project overlay ${name} carries the retired key(s) ${found.join(", ")}`, {
+        target: `${this.aitna}/model-routing.json#${name}`,
+        fix:
+          "Delete only the listed keys from this hand-owned overlay and leave the rest as it is; " +
+          "declare a providers row or replace second_opinion_policy.ladder to change the second opinion, " +
+          "then re-run the routing initializer.",
+      });
+    }
+  }
+
+  /**
+   * What stops one provider row from running, beyond the shipped required keys (ADR 0024/D01, D12):
+   * the family key present and, when the vocabulary is known, in it (a row's `model_families`
+   * values too); a declared `argv` a non-empty list of strings that carries `{model}` once the row
+   * declares models or the ladder pins one; a known `prompt` channel and `repo` value; and, with no
+   * `argv`, a command akmon ships for the carrier (an overlay's rows only: the shipped table is the
+   * command map's own subject). Shared by the shipped table and an overlay's rows.
+   * @param {string} provider
+   * @param {Json} row
+   * @param {string[] | null} vocabulary
+   * @param {boolean} pinned the merged ladder pins a model on this provider
+   * @param {boolean} [shipped] the row is the shipped table's: the command map is its own subject
+   * @returns {string[]}
+   */
+  _rowProblems(provider, row, vocabulary, pinned, shipped = false) {
+    if (!isDict(row)) {
+      return ["the row must be an object"];
+    }
+    const problems = _familyProblems(row, vocabulary);
+    problems.push(..._aliasProblems(row, this.data.routing_catalog_formats, this.data.routing_default_model_token));
+    problems.push(..._effortProblems(row));
+    if (Object.hasOwn(row, "argv")) {
+      problems.push(..._argvProblems(row, pinned));
+    } else if (!shipped && !Object.hasOwn(harnessCommands(this.runtimeData), provider)) {
+      problems.push("carries no argv and akmon ships no command for it");
+    }
+    for (const [key, allowed] of /** @type {Array<[string, string[]]>} */ ([
+      ["prompt", this.data.routing_prompt_channels],
+      ["repo", this.data.routing_repo_values],
+    ])) {
+      if (Object.hasOwn(row, key) && !allowed.includes(row[key])) {
+        problems.push(`${key} must be one of: ${allowed.join(", ")}`);
       }
-      const retired = this.data.routing_retired_second_opinion_keys.filter((key) => Object.hasOwn(second, key));
-      if (retired.length > 0) {
+    }
+    return problems;
+  }
+
+  /**
+   * The registry the project overlay produces must hold together: its rows, its ladder, its
+   * vocabulary. Checked on the merged result because the overlay is deep-merged over the shipped
+   * registry and a defect shows only there. Only the project overlay is read: the developer-local
+   * one is gitignored and absent in CI, so verify must not depend on it. Each finding quotes the
+   * overlay file.
+   * @param {Json} shipped
+   * @param {Json} overlay
+   */
+  _checkOverlayProviders(shipped, overlay) {
+    if (!isDict(shipped) || !isDict(overlay)) {
+      return;
+    }
+    const file = `${this.aitna}/model-routing.json`;
+    const merged = mergeOverlay(shipped, overlay);
+    const ownPolicyValue = dictGet(overlay, "second_opinion_policy");
+    const ownPolicy = isDict(ownPolicyValue) ? ownPolicyValue : {};
+    const policyValue = dictGet(merged, "second_opinion_policy");
+    const policy = isDict(policyValue) ? policyValue : {};
+    const vocabulary = _familyNames(policy);
+    if (Object.hasOwn(ownPolicy, "families")) {
+      this._checkVocabulary(vocabulary, `project overlay ${file}`, `${file}#second_opinion_policy`);
+    }
+    const rowsValue = dictGet(merged, "providers");
+    const rows = isDict(rowsValue) ? rowsValue : {};
+    const ladder = dictGet(policy, "ladder");
+    const entries = Array.isArray(ladder) ? ladder : [];
+    const pinned = new Set(
+      entries.filter((entry) => pyStr(entry).includes(":")).map((entry) => pyStr(entry).split(":")[0]),
+    );
+    const ownRows = dictGet(overlay, "providers");
+    for (const provider of isDict(ownRows) ? Object.keys(ownRows) : []) {
+      const problems = this._rowProblems(
+        provider,
+        dictGet(rows, provider),
+        vocabulary.length > 0 ? vocabulary : null,
+        pinned.has(provider),
+      );
+      this._reportRow(`project overlay ${file} provider ${provider}`, `${file}#providers.${provider}`, problems);
+    }
+    if (Object.hasOwn(ownPolicy, "ladder")) {
+      const unknown = entries.filter((entry) => !Object.hasOwn(rows, pyStr(entry).split(":")[0]));
+      const target = `${file}#second_opinion_policy`;
+      if (!Array.isArray(ladder) || ladder.length === 0 || unknown.length > 0) {
         this.error(
           "routing.second-opinion",
-          `project overlay ${vendor} second_opinion carries the retired key(s) ${retired.join(", ")}`,
+          `second_opinion_policy.ladder as merged with ${file} must be a non-empty list of declared providers` +
+            (unknown.length > 0 ? `; undeclared: ${unknown.map((entry) => pyStr(entry)).join(", ")}` : ""),
           {
-            target: `${this.aitna}/model-routing.json#${vendor}`,
+            target,
             fix:
-              "Delete only cli/invoke from this hand-owned overlay, leave the rest " +
-              "of the object as it is, then re-run the routing initializer.",
+              "List only carrier or carrier:model entries whose carrier is a row of the providers table, " +
+              "shipped or declared in an overlay.",
+          },
+        );
+      } else {
+        this.ok(
+          "routing.second-opinion",
+          `second-opinion ladder as merged with ${file} names only declared providers`,
+          {
+            target,
+            fix: "Keep every ladder entry's carrier declared in the providers table.",
           },
         );
       }
+    }
+  }
+
+  /**
+   * The family vocabulary must be a non-empty object of family names (an overlay extends it by key).
+   * @param {string[]} vocabulary
+   * @param {string} subject
+   * @param {string} target
+   */
+  _checkVocabulary(vocabulary, subject, target) {
+    if (vocabulary.length > 0) {
+      this.ok("routing.second-opinion", `${subject} family vocabulary lists ${vocabulary.length} families`, {
+        target,
+        fix: "Keep second_opinion_policy.families an object keyed by family name.",
+      });
+    } else {
+      this.error(
+        "routing.second-opinion",
+        `${subject} second_opinion_policy.families must be a non-empty object keyed by family name`,
+        {
+          target,
+          fix: "Declare families as an object (an overlay adds keys; a list would replace the whole vocabulary).",
+        },
+      );
+    }
+  }
+
+  /**
+   * One finding for a provider row: the problems joined, or its being configured.
+   * @param {string} subject
+   * @param {string} target
+   * @param {string[]} problems
+   */
+  _reportRow(subject, target, problems) {
+    if (problems.length > 0) {
+      this.error("routing.second-opinion", `${subject}: ${problems.join("; ")}`, {
+        target,
+        fix: "Give the row a family key, an argv list (or a shipped carrier's id) and only known values.",
+      });
+    } else {
+      this.ok("routing.second-opinion", `${subject} is configured`, {
+        target,
+        fix: "Keep the row's family, argv and channel values valid.",
+      });
+    }
+  }
+
+  /**
+   * The providers table: every row carries its keys, every ladder id names a row, every vendor's
+   * carrier does.
+   * @param {Json} registry
+   */
+  _checkProviders(registry) {
+    const target = "tools/model_routing/registry.json#providers";
+    const rows = dictGet(registry, "providers");
+    if (!isDict(rows) || Object.keys(rows).length === 0) {
+      this.error("routing.second-opinion", "model-routing registry has no providers table", {
+        target,
+        fix: "Add a providers object with one row per second-opinion carrier.",
+      });
+      return;
+    }
+    const registryPolicy = dictGet(registry, "second_opinion_policy");
+    const vocabulary = isDict(registryPolicy) ? _familyNames(registryPolicy) : [];
+    if (vocabulary.length === 0) {
+      this.error(
+        "routing.second-opinion",
+        "model-routing second_opinion_policy.families must be a non-empty object keyed by family name",
+        {
+          target: "tools/model_routing/registry.json#second_opinion_policy",
+          fix: "Declare the closed family vocabulary (claude, gpt, qwen, gemini) as an object.",
+        },
+      );
+    }
+    const ladderValue = isDict(registryPolicy) ? dictGet(registryPolicy, "ladder") : null;
+    const ladderEntries = Array.isArray(ladderValue) ? ladderValue : [];
+    const ladderPins = new Set(
+      ladderEntries.filter((entry) => pyStr(entry).includes(":")).map((entry) => pyStr(entry).split(":")[0]),
+    );
+    for (const [provider, row] of Object.entries(rows)) {
+      const missing = this.data.routing_provider_keys.filter((key) => !isDict(row) || !truthy(dictGet(row, key)));
+      if (isDict(row) && !Object.hasOwn(row, "family")) {
+        missing.push("family");
+      }
+      if (missing.length > 0) {
+        this.error("routing.second-opinion", `model-routing provider ${provider} missing: ${missing.join(", ")}`, {
+          target,
+          fix: "Fill in the listed keys for this provider; family is null for a multi-family carrier.",
+        });
+        continue;
+      }
+      const problems = this._rowProblems(
+        provider,
+        row,
+        vocabulary.length > 0 ? vocabulary : null,
+        ladderPins.has(provider),
+        true,
+      );
+      if (problems.length > 0) {
+        this.error("routing.second-opinion", `model-routing provider ${provider}: ${problems.join("; ")}`, {
+          target,
+          fix: "Name a family from second_opinion_policy.families, or extend the vocabulary there.",
+        });
+      } else {
+        this.ok("routing.second-opinion", `model-routing provider ${provider} is configured`, {
+          target,
+          fix: "Keep operation, model_flag, family and report_dir set for this provider.",
+        });
+      }
+    }
+    const ladder = ladderValue;
+    const entries = ladderEntries;
+    const unknown = entries.filter((entry) => !Object.hasOwn(rows, pyStr(entry).split(":")[0]));
+    const policyTarget = "tools/model_routing/registry.json#second_opinion_policy";
+    if (!truthy(ladder) || unknown.length > 0) {
+      this.error(
+        "routing.second-opinion",
+        "model-routing second_opinion_policy.ladder must be a non-empty list of declared providers" +
+          (unknown.length > 0 ? `; undeclared: ${unknown.map((entry) => pyStr(entry)).join(", ")}` : ""),
+        {
+          target: policyTarget,
+          fix: "List only carrier or carrier:model entries whose carrier is a row of the providers table.",
+        },
+      );
+    } else {
+      this.ok("routing.second-opinion", "model-routing second-opinion ladder names only declared providers", {
+        target: policyTarget,
+        fix: "Keep every ladder entry's carrier declared in the providers table.",
+      });
     }
   }
 
@@ -1768,27 +2199,21 @@ export class Verifier {
           fix: "Keep harness_rungs ordered weakest to strongest and auditor_only_rungs disjoint from it.",
         });
       }
-      const second = dictGet(spec, "second_opinion");
-      if (!isDict(second)) {
-        this.error("routing.second-opinion", `model-routing ${vendor} second_opinion is missing`, {
+      const providers = dictGet(registry, "providers");
+      const carrier = dictGet(spec, "carrier");
+      if (isDict(providers) && typeof carrier === "string" && Object.hasOwn(providers, carrier)) {
+        this.ok("routing.second-opinion", `model-routing ${vendor} carrier names a declared provider`, {
           target,
-          fix: "Add a second_opinion object with harness, operation and report_dir to this vendor.",
-        });
-        continue;
-      }
-      const missing = this.data.routing_second_opinion_keys.filter((key) => !truthy(dictGet(second, key)));
-      if (missing.length > 0) {
-        this.error("routing.second-opinion", `model-routing ${vendor} second_opinion missing: ${missing.join(", ")}`, {
-          target,
-          fix: "Fill in the listed second_opinion keys for this vendor.",
+          fix: "Keep carrier set to this vendor's row in the providers table.",
         });
       } else {
-        this.ok("routing.second-opinion", `model-routing ${vendor} second_opinion is configured`, {
+        this.error("routing.second-opinion", `model-routing ${vendor} carrier must name a row of the providers table`, {
           target,
-          fix: "Keep harness, operation and report_dir set for this vendor's second_opinion.",
+          fix: "Set carrier to the id of the provider this vendor's session runs on.",
         });
       }
     }
+    this._checkProviders(registry);
   }
 
   /** `.gitignore` carries the akmon env-secret ignore pattern. */

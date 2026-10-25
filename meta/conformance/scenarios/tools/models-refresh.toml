@@ -1,0 +1,28 @@
+id = "tools/models-refresh"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/models"]
+
+# The explicit refresh (ADR 0024 D16): the shipped codex row declares its catalog `~/.codex/models_cache.json`
+# in the `codex-models-cache` format; `HOME` is the run's private directory, so the catalog is the seeded
+# host-shaped one. Each alias of the row's `models` maps to its highest-versioned listed slug (ties by lowest
+# priority); `gpt-reserve` and `codex-auto-review` (hidden, unversioned) and the older `gpt-6-sol`,
+# `gpt-5.6-*` are not chosen. The generated local file is written.
+
+[fixture]
+tmp_files = { ".codex/models_cache.json" = "{\"client_version\":\"0.164.0\",\"models\":[{\"slug\":\"gpt-6.1-sol\",\"visibility\":\"list\",\"priority\":0},{\"slug\":\"gpt-6.1-terra\",\"visibility\":\"list\",\"priority\":1},{\"slug\":\"gpt-6-astra\",\"visibility\":\"list\",\"priority\":3},{\"slug\":\"gpt-6-sol\",\"visibility\":\"list\",\"priority\":4},{\"slug\":\"gpt-reserve\",\"visibility\":\"hide\",\"priority\":4},{\"slug\":\"gpt-6-luna\",\"visibility\":\"list\",\"priority\":5},{\"slug\":\"gpt-5.6-sol\",\"visibility\":\"list\",\"priority\":6},{\"slug\":\"gpt-5.6-terra\",\"visibility\":\"list\",\"priority\":7},{\"slug\":\"gpt-5.6-luna\",\"visibility\":\"list\",\"priority\":8},{\"slug\":\"codex-auto-review\",\"visibility\":\"hide\",\"priority\":43}]}" }
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+tool = "model_routing/models"
+argv = ["--refresh"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "catalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=0.164.0\n  luna → gpt-6-luna\n  terra → gpt-6.1-terra\n  sol → gpt-6.1-sol\nwrote _aitna/local/model-aliases.json\n"
+
+[expected.files]
+"_aitna/local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": \"0.164.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"terra\": \"gpt-6.1-terra\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"

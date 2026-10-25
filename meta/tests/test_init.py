@@ -339,6 +339,14 @@ def test_merge_gitignore_appends_only_missing_lines():
     assert ".claude/agents/k_*.md" in merged
 
 
+@pytest.mark.parametrize("key", ["gitignore_lines", "gitignore_lines_node"])
+def test_init_ignores_the_local_layer_under_the_projects_dev_root(key):
+    """BOOTSTRAP § D and ADR 0022: `<aitna_root>/local/` is local-only, so init writes its ignore line."""
+    for aitna in ("_aitna", "dev"):
+        lines = [_init._jsondata().fill(line, {"aitna": aitna}) for line in _INIT_DATA[key]]
+        assert f"{aitna}/local/" in lines
+
+
 def test_merge_gitignore_is_idempotent():
     once = _init._merge_gitignore("", _init._gitignore_lines("_aitna"))
     twice = _init._merge_gitignore(once, _init._gitignore_lines("_aitna"))

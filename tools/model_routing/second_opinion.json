@@ -1,16 +1,57 @@
 {
   "prompt": "You are an independent second-opinion reviewer for a akmon verify gate.\n\nGate: {{gate}}\n\nRules:\n- Review only; do not edit files, run commands, commit, push, or approve on behalf of the owner.\n- Return: verdict, key disagreements or risks, missing verification, and concrete file/line references when available.\n- Treat the result as advisory input to owner verification, not a sign-off.\n\nMaterial to review:\n{{material}}\n",
   "unavailable_notice": [
-    "second-opinion: skipped at gate '{{gate}}' — ladder exhausted, no model-diverse reviewer is reachable.",
+    "second-opinion: skipped at gate '{{gate}}' — no provider could be run for rank {{rank}}.",
     "  why: {{reason}}.",
     "  not downgraded: a reviewer on the author's own weights repeats the author's systematic errors and agrees confidently, which is indistinguishable from a review.",
     "  what you can still run by hand: hand this gate pack to a subagent on this same model in a fresh context (no session history, no prior reasoning).",
     "  its limits, to record with any result: it removes anchoring on the author's own output; it does not remove shared model priors. It is a self-check, not a second opinion, and must not be filed as one."
   ],
+  "default_report_dir": ".{{provider}}/second-opinion/",
   "report_dir_outside": "second-opinion: report_dir '{{report_dir}}' resolves outside the project; it must be a directory inside the project root.",
   "summary": {
     "report_line": "report: {{path}}",
-    "provider_line": "provider={{provider}} model={{model}}",
-    "result_line": "second-opinion provider={{provider}} model={{model}} gate={{gate}} exit={{exit}}"
+    "provider_line": "provider={{provider}} priors={{priors}} carrier={{carrier}} repo={{repo}} model={{model}} kind={{kind}}",
+    "result_line": "second-opinion provider={{provider}} priors={{priors}} carrier={{carrier}} repo={{repo}} model={{model}} kind={{kind}} gate={{gate}} exit={{exit}}",
+    "skip_line": "skipped {{provider}}: {{reason}}",
+    "ask_line": "ask: {{ask}}",
+    "warning_line": "warning: {{warning}}"
+  },
+  "unavailable_reasons": {
+    "rank_past_chain": "the chain holds {{count}} provider(s), fewer than rank {{rank}} asks for; the last resort applies only to an empty chain at rank 2",
+    "no_row": "the session's own provider '{{provider}}' has no row in the providers table, so the last resort has nothing to run",
+    "carrier_absent": "the session's own provider '{{provider}}' is not on PATH, so the last resort has nothing to run"
+  },
+  "model_shown": {
+    "alias": "{{alias}}→{{concrete}}",
+    "unresolved": "{{alias}}→(unresolved)",
+    "default": "(default)"
+  },
+  "listing": {
+    "session": "session: provider={{provider}} model={{model}} priors={{priors}}",
+    "candidate": "rank {{rank}}: provider={{provider}} model={{model}} priors={{priors}} repo={{repo}}",
+    "empty": "chain: empty — no ladder provider differs from the session",
+    "last_resort": "last resort at rank 2 (kind=last-resort): provider={{provider}} model={{model}} priors={{priors}} repo={{repo}}",
+  "no_last_resort": "no last resort: {{reason}}",
+    "skipped": "skipped:",
+    "skip": "  {{provider}}: {{reason}}",
+    "asks": "asks:",
+    "ask": "  {{ask}}",
+    "default_pin": " pin=default",
+    "alias_ask": "{{provider}}: alias '{{model}}' has no concrete id; run `akmon tool model_routing/models --refresh --provider {{provider}}`"
+  },
+  "pinned_warnings": {
+    "own_provider": "'{{provider}}' is the session's own provider; this run is not an independent second opinion and is filed as kind=pinned",
+    "same_priors": "'{{provider}}' answers with priors '{{priors}}', the session's own; this run is not a model-diverse second opinion and is filed as kind=pinned",
+    "unknown_priors": "the priors of '{{provider}}' are unknown, so this run is not counted as diverse and is filed as kind=pinned"
+  },
+  "last_resort_note": "no ladder provider differs from the session, so this run uses the session's own provider with the strongest declared model that differs from {{session_model}}, or its default — same priors, filed as kind=last-resort",
+  "errors": {
+    "missing_gate": "second-opinion: --gate and --gate-pack are required unless --list is given",
+    "bad_rank": "second-opinion: --rank must be 2 or more (2 second opinion, 3 third opinion, 4 arbiter); got {{rank}}",
+    "unknown_vendor": "second-opinion: --orchestrator-vendor '{{vendor}}' names no vendor with a `carrier` in the registry; pass --session-provider instead",
+    "default_with_pin": "--default-model cannot be combined with --provider '{{entry}}', which pins a model; drop one of them",
+    "pinned_row": "second-opinion: --provider names '{{provider}}', which the providers table does not declare",
+    "not_run": "second-opinion: could not start '{{command}}': {{reason}}"
   }
 }

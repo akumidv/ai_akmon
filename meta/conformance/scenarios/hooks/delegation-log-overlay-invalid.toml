@@ -1,0 +1,31 @@
+# A bad hand-owned routing overlay still lets the delegation be logged and shown: only the
+# role-matrix advisories, which need the registry, are lost, and one stderr line names the file.
+id = "hooks/delegation-log-overlay-invalid"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:delegation-log"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/model-routing.json" = "{ not json" }
+
+[run]
+script = "delegation-log"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Task"
+session_id = "sess-dl-overlay"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { subagent_type = "k_mechanic", description = "check tokens" }
+
+[expected]
+exit = 0
+stderr = "akmon delegation-log hook: the routing overlay _aitna/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it) — the role-matrix advisories are skipped\n"
+[expected.stdout_json]
+systemMessage = "[akmon] → k_mechanic: check tokens"
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "PreToolUse"
+[expected.files]
+".claude/model-routing.log" = "{{ts}}\tsess-dl-overlay\tk_mechanic\t-\t-\tcheck tokens\n"

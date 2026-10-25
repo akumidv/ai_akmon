@@ -12,7 +12,7 @@
  *
  *   tools/model_routing/agents.json → `data` / `agentsData` (texts, tables, the agent roster)
  *   tools/model_routing/gate.json   → `data` / `gateData`   (gateRules, gateRuleFor and the gate)
- *   common/runtime.json             → `runtimeData`         (secondOpinionCommand, via harnessCommand)
+ *   common/runtime.json             → `runtimeData`         (opinionCommand, carrierPresent, via the harness table)
  *   common/markers.json             → `markersData`         (suppressedRebindWarning, gateAuditOnce)
  *
  * `second_opinion.json` is not read here (its reader is `second_opinion.py`). The registry and
@@ -61,7 +61,7 @@ import { fill } from "../../common/jsondata.mjs";
 import { FloatValue, canonicalForm, wiringForm } from "../../common/json_writer.mjs";
 import { claimDiagnosticMarker, gettempdir, releaseDiagnosticMarkers } from "../../common/markers.mjs";
 import { aitnaRootName } from "../../common/project_root.mjs";
-import { harnessCommand } from "../../common/runtime.mjs";
+import { harnessCommand, harnessCommands } from "../../common/runtime.mjs";
 import {
   pyError as _pyError,
   isDict as _isDict,
@@ -114,11 +114,19 @@ import { codePointCompare, codePointSort } from "../../common/sort.mjs";
  * @property {{mount: string, python: string, node: string}} tool_command
  * @property {string} zone_convention
  * @property {string} overlay_name
+ * @property {string} local_overlay_rel
+ * @property {string} local_aliases_rel
+ * @property {string} default_model_token
+ * @property {{unresolved: string, invalid: string}} alias_errors
+ * @property {{unsupported: string, unknown: string}} effort_errors
+ * @property {{format: string, json: string, shape: string}} catalog_errors
+ * @property {{invalid: string}} overlay_errors
  * @property {string} local_config_rel
  * @property {string} delegation_log_rel
  * @property {string} agents_dir_rel
  * @property {string[]} settings_probe_names
- * @property {string[]} retired_second_opinion_keys
+ * @property {{policy: string[], vendor: string[], config: string[]}} retired_second_opinion_keys
+ * @property {{overlay: string, config: string}} retired_key_errors
  * @property {{name: string, tier: string, description: string, tools: string | null, body: string,
  *   kinds: string[]}[]} agent_specs
  * @property {{binding: string, delegation: string, self_check: string}} status_lines
@@ -126,8 +134,16 @@ import { codePointCompare, codePointSort } from "../../common/sort.mjs";
  * @property {string} rebind_notice
  * @property {string} unlabelled_fanout_warning
  * @property {string} unlabelled_fanout_directive
- * @property {Record<string, string>} second_opinion_unavailability
  * @property {string} unpinnable_model
+ * @property {Record<string, string>} opinion_skip_reasons
+ * @property {{provider: string, provider_default: string, session: string, session_default: string}} opinion_asks
+ * @property {{head: string, unavailable: string, unavailable_unknown: string, chain_empty: string}} opinion_status
+ * @property {string} session_unknown
+ * @property {string} opinion_ladder_unknown
+ * @property {string} session_family_unknown
+ * @property {string} vendor_unknown
+ * @property {string} vendor_is_carrier
+ * @property {{line: string, effects: Record<string, string>}} hook_overlay_error
  * @property {{semantic: string, not_in_list: string, below_floor: string, reserved_top: string}} compute_binding_warnings
  * @property {string} role_matrix_warning
  * @property {string} role_matrix_directive
@@ -136,7 +152,6 @@ import { codePointCompare, codePointSort } from "../../common/sort.mjs";
  * @property {{text: string, override: string}} delegation_floor_directive
  * @property {{warn: string, info: string}} context_pressure
  * @property {{no_config: string, registry_changed: string, model_mismatch: string}} staleness
- * @property {{retired_keys: string, no_usable_spec: string}} second_opinion_spec_errors
  * @property {{order: string, auditor_unknown: string, auditor_unlisted: string}} ladder_errors
  */
 
@@ -174,72 +189,6 @@ function _percent(/** @type {number} */ ratio) {
   return `${Number.isSafeInteger(whole) ? String(whole) : BigInt(whole).toString()}%`;
 }
 
-/**
- * `template.format(model=model)` — the replacement fields Python's `str.format` reads, for the
- * one keyword a `model_flag` is given. A field with a format spec or an attribute/index path is
- * refused rather than spelled differently: no registry declares one.
- * @param {string} template
- * @param {string} model
- * @returns {string}
- */
-function _formatModel(template, model) {
-  let out = "";
-  let i = 0;
-  while (i < template.length) {
-    const ch = template[i];
-    if (ch === "}") {
-      if (template[i + 1] !== "}") {
-        throw _pyError("ValueError", "Single '}' encountered in format string");
-      }
-      out += "}";
-      i += 2;
-      continue;
-    }
-    if (ch !== "{") {
-      out += ch;
-      i += 1;
-      continue;
-    }
-    if (template[i + 1] === "{") {
-      out += "{";
-      i += 2;
-      continue;
-    }
-    const close = template.indexOf("}", i + 1);
-    if (close < 0) {
-      throw _pyError("ValueError", "expected '}' before end of string");
-    }
-    const field = template.slice(i + 1, close);
-    const match = /^([^!:]*)(?:!(.))?(?::(.*))?$/s.exec(field);
-    if (match === null || field.includes("{")) {
-      throw _pyError("ValueError", `format field {${field}} is not supported by the JavaScript twin`);
-    }
-    const name = match[1];
-    if (name === "" || /^[0-9]+$/.test(name)) {
-      throw _pyError(
-        "IndexError",
-        `Replacement index ${name === "" ? 0 : Number(name)} out of range for positional args tuple`,
-      );
-    }
-    if (name.includes(".") || name.includes("[") || match[3]) {
-      throw _pyError("ValueError", `format field {${field}} is not supported by the JavaScript twin`);
-    }
-    if (name !== "model") {
-      throw _pyError("KeyError", name);
-    }
-    const conversion = match[2];
-    if (conversion === undefined || conversion === "s") {
-      out += model;
-    } else if (conversion === "r") {
-      out += _strRepr(model);
-    } else {
-      throw _pyError("ValueError", `Unknown conversion specifier ${conversion}`);
-    }
-    i = close + 1;
-  }
-  return out;
-}
-
 // --------------------------------------------------------------------------------------
 // Data accessors and the registry
 // --------------------------------------------------------------------------------------
@@ -255,6 +204,33 @@ function _formatModel(template, model) {
  */
 export function overlayName(data) {
   return data.overlay_name;
+}
+
+/**
+ * The developer-local overlay's path under the aitna root (gitignored with `<aitna_root>/local/`).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @returns {string}
+ */
+export function localOverlayRel(data) {
+  return data.local_overlay_rel;
+}
+
+/**
+ * The generated resolved-aliases file's path under the aitna root (gitignored with `<aitna_root>/local/`).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @returns {string}
+ */
+export function localAliasesRel(data) {
+  return data.local_aliases_rel;
+}
+
+/**
+ * The reserved model token of the `carrier[:model]` grammar: `carrier:default` is the carrier's own model.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @returns {string}
+ */
+export function defaultModelToken(data) {
+  return data.default_model_token;
 }
 
 /**
@@ -350,6 +326,42 @@ export function overlayPath(data, projectRoot) {
 }
 
 /**
+ * Path to the developer's own routing overlay (gitignored, hand-owned, never generated), if any.
+ *
+ * Same shape and file name as the project overlay, but under `<aitna_root>/local/` (ADR 0022):
+ * the strongest layer (ADR-0024/D11) — a developer states which harnesses and models they run
+ * without asking the team to share it.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {string} projectRoot
+ * @returns {string}
+ */
+export function localOverlayPath(data, projectRoot) {
+  return _path(projectRoot, aitnaRootName(), localOverlayRel(data));
+}
+
+/**
+ * Path to the generated resolved-aliases file (ADR-0024/D16), if any.
+ *
+ * Written only by `tools/model_routing/models.mjs` and never hand-owned: it maps each alias of an
+ * `aliases: true` provider row to the concrete id the carrier accepts on this machine.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {string} projectRoot
+ * @returns {string}
+ */
+export function localAliasesPath(data, projectRoot) {
+  return _path(projectRoot, aitnaRootName(), localAliasesRel(data));
+}
+
+/** A routing overlay file is not a JSON object; the message names the file. */
+export class OverlayError extends Error {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = "OverlayError";
+  }
+}
+
+/**
  * The override deep-merged over the base: nested objects merge, everything else replaces.
  * @param {Record<string, Json>} base
  * @param {Record<string, Json>} override
@@ -391,7 +403,53 @@ function _parseKeepingFloats(text) {
 }
 
 /**
- * The merged registry: akmon data deep-merged with the project overlay (if any).
+ * One overlay file's JSON object; anything else raises `OverlayError` naming `file`.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {string} path
+ * @param {string} file the project-root-relative name the error quotes
+ * @returns {Record<string, Json>}
+ */
+function _readOverlay(data, path, file) {
+  const invalid = () => new OverlayError(fill(data.overlay_errors.invalid, { file }));
+  /** @type {Json} */
+  let parsed;
+  try {
+    parsed = _parseKeepingFloats(_readText(path));
+  } catch (error) {
+    // `json.loads` raises a `ValueError` for a text it cannot parse or decode; an unreadable file is not one.
+    if (error instanceof SyntaxError || (error instanceof Error && error.name === "UnicodeDecodeError")) {
+      throw Object.assign(invalid(), { cause: error });
+    }
+    throw error;
+  }
+  if (!_isDict(parsed)) {
+    throw invalid();
+  }
+  return parsed;
+}
+
+/**
+ * The overlay layers that exist, weakest first: the project overlay, then the developer's local one.
+ *
+ * Each is `[project-root-relative file, parsed object]`; a missing file is no layer.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {string} projectRoot
+ * @returns {[string, Record<string, Json>][]}
+ */
+function _overlayLayers(data, projectRoot) {
+  /** @type {[string, string][]} */
+  const candidates = [
+    [_overlayFile(data), overlayPath(data, projectRoot)],
+    [_localOverlayFile(data), localOverlayPath(data, projectRoot)],
+  ];
+  return candidates.filter(([, path]) => _isFile(path)).map(([file, path]) => [file, _readOverlay(data, path, file)]);
+}
+
+/**
+ * The merged registry: akmon data, the project overlay, then the developer's local overlay (strongest).
+ *
+ * Dicts merge key by key and anything else — a list, hence a `ladder` — is replaced whole by the
+ * stronger layer (ADR-0024/D05, D11).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {string} akmonDir
  * @param {string | null} [projectRoot]
@@ -400,14 +458,8 @@ function _parseKeepingFloats(text) {
 export function loadRegistry(data, akmonDir, projectRoot = null) {
   let registry = _parseKeepingFloats(_readText(registryPath(akmonDir)));
   if (projectRoot !== null && projectRoot !== undefined) {
-    const overlay = overlayPath(data, projectRoot);
-    if (_isFile(overlay)) {
-      const parsed = _parseKeepingFloats(_readText(overlay));
-      if (!_isDict(registry) || !_isDict(parsed)) {
-        // `_deep_merge` copies the registry with `dict()` and walks the overlay's `.items()`.
-        throw _pyError("AttributeError", `'${_pyTypeName(parsed)}' object has no attribute 'items'`);
-      }
-      registry = _deepMerge(registry, parsed);
+    for (const [, layer] of _overlayLayers(data, projectRoot)) {
+      registry = _deepMerge(registry, layer);
     }
   }
   return registry;
@@ -434,7 +486,6 @@ export class Binding {
    * @param {Json[]} escalation
    * @param {boolean} [semanticFallback]
    * @param {string | null} [warning]
-   * @param {Json} [secondOpinionCli]
    * @param {string | null} [auditorOptIn]
    */
   constructor(
@@ -447,7 +498,6 @@ export class Binding {
     escalation,
     semanticFallback = false,
     warning = null,
-    secondOpinionCli = null,
     auditorOptIn = null,
   ) {
     this.vendor = vendor;
@@ -459,7 +509,6 @@ export class Binding {
     this.escalation = Object.freeze([...escalation]);
     this.semanticFallback = semanticFallback;
     this.warning = warning;
-    this.secondOpinionCli = secondOpinionCli;
     this.auditorOptIn = auditorOptIn;
     Object.freeze(this);
   }
@@ -646,21 +695,7 @@ export function computeBinding(
     }
   }
 
-  const provider = oppositeVendor(data, registry, vendor);
-  const secondOpinion = _get(_get(registry, provider, {}), "second_opinion", {});
-  return new Binding(
-    vendor,
-    orchestrator,
-    reasoner,
-    worker,
-    mid,
-    auditor,
-    escalation,
-    semantic,
-    warning,
-    _get(secondOpinion, "harness"),
-    auditorOptIn,
-  );
+  return new Binding(vendor, orchestrator, reasoner, worker, mid, auditor, escalation, semantic, warning, auditorOptIn);
 }
 
 /**
@@ -730,261 +765,1206 @@ export function vendorsWithRoutingPolicy(registry) {
     .map(([name]) => name);
 }
 
-/**
- * Default second-opinion provider: another configured vendor, preferring the recorded order.
- * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
- * @param {Json} registry
- * @param {string} vendor
- * @returns {string}
- */
-export function oppositeVendor(data, registry, vendor) {
-  for (const candidate of vendorsWithRoutingPolicy(registry)) {
-    if (candidate !== vendor && _truthy(secondOpinionSpec(data, registry, candidate, { required: false }))) {
-      return candidate;
-    }
+/** A configuration file still carries a key ADR 0024 retired; the message names the file and the keys. */
+export class RetiredKeyError extends Error {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = "RetiredKeyError";
   }
-  return vendor;
 }
 
 /**
- * Keys C57 retired when the executable moved into `common/runtime.py`.
+ * The keys the second-opinion rewrite retired, by where they live: `policy`, `vendor` and `config`.
  *
- * A project overlay written before that change deep-merges *over* the shipped registry, so
- * the new keys survive and the stale ones ride along unread — the config looks usable and
- * silently means something else.
+ * A project overlay written before the change deep-merges *over* the shipped registry, so a stale
+ * key survives and rides along unread: the configuration looks usable and silently means something
+ * else. That is why each one is refused by name (`refuseRetiredKeys`) instead of ignored.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
- * @returns {string[]}
+ * @returns {{policy: string[], vendor: string[], config: string[]}}
  */
 export function retiredSecondOpinionKeys(data) {
-  return [...data.retired_second_opinion_keys];
+  const keys = data.retired_second_opinion_keys;
+  return { policy: [...keys.policy], vendor: [...keys.vendor], config: [...keys.config] };
 }
 
 /**
- * The second-opinion policy for one provider, or `{}` when it is absent and optional.
+ * The retired keys one overlay-shaped object still carries, policy first, then each block in order.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} layer
+ * @returns {string[]}
+ */
+function _retiredOverlayKeys(data, layer) {
+  const retired = retiredSecondOpinionKeys(data);
+  /** @type {string[]} */
+  const found = [];
+  const policy = _get(layer, "second_opinion_policy");
+  if (_isDict(policy)) {
+    found.push(
+      ...retired.policy.filter((key) => Object.hasOwn(policy, key)).map((key) => `second_opinion_policy.${key}`),
+    );
+  }
+  for (const [name, spec] of Object.entries(layer)) {
+    if (_isDict(spec)) {
+      found.push(...retired.vendor.filter((key) => Object.hasOwn(spec, key)).map((key) => `${name}.${key}`));
+    }
+  }
+  return found;
+}
+
+/**
+ * Raise `RetiredKeyError` naming the file when an overlay or the local config holds a retired key.
  *
- * A spec still carrying the retired keys always raises (`KeyError`), in both the required and
- * optional calls: it is a stale *configuration*, not an absent capability, and degrading it to
- * "no second opinion available" would hide the migration behind a silently weaker run.
+ * The shipped registry carries none of them, so one found in the merged registry came from an
+ * overlay. With `projectRoot` each overlay file is read in turn, strongest first, and the error
+ * quotes the one that holds the key — the file to edit. Without it only the merged registry is
+ * known, so the error names both candidate files. The local config is a generated file, so its
+ * error says to regenerate it; an overlay is hand-owned, so its error says which keys to delete.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
- * @param {Json} provider
- * @param {{required?: boolean}} [options]
- * @returns {Json}
+ * @param {Json} config
+ * @param {{projectRoot?: string | null}} [options]
+ * @returns {void}
  */
-export function secondOpinionSpec(data, registry, provider, { required = true } = {}) {
-  const errors = data.second_opinion_spec_errors;
-  const spec = _get(_get(registry, provider, {}), "second_opinion", {});
-  if (_isDict(spec)) {
-    const retired = retiredSecondOpinionKeys(data).filter((key) => Object.hasOwn(spec, key));
-    if (retired.length) {
-      throw _pyError(
-        "KeyError",
-        fill(errors.retired_keys, { provider: _pyStr(provider), retired: retired.join(", ") }),
-      );
-    }
-    if (_truthy(spec.harness) && _truthy(spec.operation) && _truthy(spec.report_dir)) {
-      return spec;
+export function refuseRetiredKeys(data, registry, config, { projectRoot = null } = {}) {
+  const texts = data.retired_key_errors;
+  /** @type {[string, string[]][]} */
+  const holders =
+    projectRoot === null
+      ? [[`${_localOverlayFile(data)} or ${_overlayFile(data)}`, _retiredOverlayKeys(data, registry)]]
+      : _overlayLayers(data, projectRoot)
+          .reverse()
+          .map(([file, layer]) => [file, _retiredOverlayKeys(data, layer)]);
+  for (const [file, keys] of holders) {
+    if (keys.length) {
+      throw new RetiredKeyError(fill(texts.overlay, { file, keys: keys.join(", ") }));
     }
   }
-  if (required) {
-    throw _pyError("KeyError", fill(errors.no_usable_spec, { provider: _pyStr(provider) }));
+  const inConfig = retiredSecondOpinionKeys(data).config.filter((key) => _contains(config, key));
+  if (inConfig.length) {
+    throw new RetiredKeyError(fill(texts.config, { file: localConfigRel(data), keys: inConfig.join(", ") }));
   }
-  return {};
 }
 
-/**
- * The same-vendor fallback rung when no other vendor is reachable (design §9.7 #2).
- *
- * The diversity requirement is about *model* priors, not vendor branding: the strongest
- * rung that differs from both the orchestrator (the author) and the auditor. `null` when
- * no rung differs from the orchestrator at all (a single distinct rung) — the caller warns
- * or skips; it must never fall back to the same model.
- * @param {Json} rungs
- * @param {Json} orchestrator
- * @param {Json} auditor
- * @returns {Json}
- */
-export function secondOpinionFallbackModel(rungs, orchestrator, auditor) {
-  for (const rung of [..._iterate(rungs)].reverse()) {
-    if (!_pyEq(rung, orchestrator) && !_pyEq(rung, auditor)) {
-      return rung;
-    }
-  }
-  return null;
-}
-
-/** A second opinion asked for a model its vendor declares no `model_flag` to pin (C97). */
+/** A second opinion asked for a model its provider declares no `model_flag` to pin (C97). */
 export class UnpinnableModelError extends Error {
   /**
    * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
-   * @param {string} harness
-   * @param {Json} model
+   * @param {string} provider
+   * @param {string} model
    */
-  constructor(data, harness, model) {
-    super(fill(data.unpinnable_model, { model: _pyRepr(model), harness }));
+  constructor(data, provider, model) {
+    super(fill(data.unpinnable_model, { model: _pyRepr(model), provider }));
     this.name = "UnpinnableModelError";
   }
 }
 
-/**
- * Build the non-interactive CLI command; the prompt is passed as the final argv.
- *
- * The executable and the operation's argv come from the single owner in `common/runtime.json`;
- * the registry contributes only *policy* — which harness, which operation, and the optional
- * `model_flag` format string (e.g. `"--model {model}"`) inserted before the prompt so the
- * same-vendor branch of the diversity ladder can pin a *different* model.
- *
- * A requested `model` with no `model_flag` raises `UnpinnableModelError` (C97): the run
- * would otherwise go out on the harness's default model and still be filed as a model-diverse
- * second opinion — the one guarantee the ladder exists to give, lost without a signal.
- * @param {AgentsData} agentsData the parsed `tools/model_routing/agents.json`
- * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
- * @param {Json} spec
- * @param {string} prompt
- * @param {Json} [model]
- * @returns {string[]}
- */
-export function secondOpinionCommand(agentsData, runtimeData, spec, prompt, model = null) {
-  const argv = harnessCommand(runtimeData, _pyStr(_item(spec, "harness")), _pyStr(_item(spec, "operation")));
-  if (_truthy(model)) {
-    const modelFlag = _get(spec, "model_flag");
-    if (!_truthy(modelFlag)) {
-      throw new UnpinnableModelError(agentsData, _pyStr(_item(spec, "harness")), model);
-    }
-    argv.push(...shlexSplit(_formatModel(_pyStr(modelFlag), _pyStr(model))));
-  }
-  return [...argv, prompt];
-}
+// --------------------------------------------------------------------------------------
+// The provider ladder (ADR-0024/D05-D12): one order, diversity tested on priors
+// --------------------------------------------------------------------------------------
 
-/**
- * Why no model-diverse reviewer exists, walked step by step over the configured ladder.
- *
- * Deliberately not a second verdict: `resolveSecondOpinion` owns the answer. This states,
- * per ladder step, the population that step had — and it states a *conclusion* ("nothing
- * differs") only where it derives one from the same helper the ladder uses. A step that was
- * never attempted says so instead of being explained away, because an overlay can shorten
- * the ladder, and "no diverse reviewer" then means something entirely different.
- * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
- * @param {Json} registry
- * @param {Json} config
- * @param {string} orchestratorVendor
- * @returns {string}
- */
-export function secondOpinionUnavailability(data, registry, config, orchestratorVendor) {
-  const policy = _isDict(registry) ? _get(registry, "second_opinion_policy", {}) : {};
-  const ladder = _or(_get(policy, "diversity_ladder"), ["other-vendor", "same-vendor-other-model"]);
-  const others = vendorsWithRoutingPolicy(registry).filter(
-    (vendor) =>
-      vendor !== orchestratorVendor && _truthy(secondOpinionSpec(data, registry, vendor, { required: false })),
-  );
-  const configured = _get(config, "second_opinion_provider");
-  const [rungs] = selectionLadder(registry, orchestratorVendor, _get(config, "available"));
-  const orchestrator = _pyStr(_or(_get(config, "orchestrator"), "?"));
-  const auditor = _pyStr(_or(_get(_get(config, "binding", {}), "auditor"), "?"));
-  const against = `the orchestrator '${orchestrator}' and the auditor '${auditor}'`;
-  const texts = data.second_opinion_unavailability;
+/** Rank 2 is the second opinion; 3 a third; 4 an arbiter. One walk answers them all (ADR-0024/D06). */
+export const OPINION_RANK_SECOND = 2;
 
-  let otherVendor;
-  if (!_contains(ladder, "other-vendor")) {
-    otherVendor = texts.other_vendor_absent;
-  } else if (others.length === 0) {
-    otherVendor = texts.other_vendor_none;
-  } else if (typeof configured === "string" && configured === orchestratorVendor) {
-    otherVendor = fill(texts.other_vendor_pinned, { configured, others: others.join(", ") });
-  } else {
-    otherVendor = fill(texts.other_vendor_usable, { others: others.join(", ") });
-  }
-
-  let sameVendor;
-  if (!_contains(ladder, "same-vendor-other-model")) {
-    sameVendor = texts.same_vendor_absent;
-  } else if (secondOpinionFallbackModel(rungs, orchestrator, auditor) === null) {
-    sameVendor = fill(texts.same_vendor_no_diverse_rung, {
-      vendor: orchestratorVendor,
-      rungs: _pyRepr(rungs),
-      against,
-    });
-  } else {
-    sameVendor = fill(texts.same_vendor_diverse_rung, { vendor: orchestratorVendor, rungs: _pyRepr(rungs), against });
-  }
-  return `${otherVendor}; ${sameVendor}`;
-}
-
-/** A resolved second-opinion target: which provider, and which model to pin (if any). */
+/** A resolved second-opinion target: which provider, which model to pin (if any), and whose priors answer. */
 export class SecondOpinionTarget {
   /**
-   * @param {Json} provider
-   * @param {string | null} model `null` = the provider CLI's default model (other-vendor case)
+   * @param {string} provider
+   * @param {string | null} model `null` = the carrier's own default model
+   * @param {string | null} [family] the priors that answer (ADR-0024/D01); `null` = unknown (D08)
+   * @param {string | null} [effort] the reasoning level sent with it (ADR-0024/D17); `null` = the carrier's own
    */
-  constructor(provider, model) {
+  constructor(provider, model, family = null, effort = null) {
     this.provider = provider;
+    this.model = model;
+    this.family = family;
+    this.effort = effort;
+    Object.freeze(this);
+  }
+}
+
+/** The working session as the ladder sees it: its carrier, the family that answers, its model. */
+export class SecondOpinionSession {
+  /**
+   * @param {string} provider
+   * @param {string | null} family
+   * @param {string | null} [model]
+   */
+  constructor(provider, family, model = null) {
+    this.provider = provider;
+    this.family = family;
     this.model = model;
     Object.freeze(this);
   }
 }
 
+/** No source names the session's provider: an explicit argument, the `session` stanza or the bound vendor. */
+export class SessionUnknownError extends Error {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = "SessionUnknownError";
+  }
+}
+
 /**
- * Walk `second_opinion_policy.diversity_ladder` to a (provider, model) target.
+ * The one flat ladder — team-committed, or replaced whole by the local overlay (ADR-0024/D05).
+ * @param {Json} registry
+ * @returns {string[]}
+ */
+export function opinionLadder(registry) {
+  const policy = _get(registry, "second_opinion_policy");
+  const ladder = _isDict(policy) ? _get(policy, "ladder") : null;
+  return _iterate(_or(ladder, [])).map(_pyStr);
+}
+
+/**
+ * The provider table — the single owner of every provider row (ADR-0024/D02).
+ * @param {Json} registry
+ * @returns {Record<string, Json>}
+ */
+export function providers(registry) {
+  const rows = _get(registry, "providers");
+  return _isDict(rows) ? rows : {};
+}
+
+/**
+ * One row by id. A ladder id the table does not declare is a named error, never a silent skip.
  *
- * Diversity is about *model priors* (design §9.3 item 3): the reviewer must differ
- * from the models it reviews. Ladder steps (registry data):
- *   - "other-vendor": another configured vendor with a usable spec — different priors
- *     by construction, so model=null (its CLI default is already a different model);
- *   - "same-vendor-other-model": the same vendor, pinned to the strongest rung that
- *     differs from BOTH orchestrator (author) and auditor, via
- *     `secondOpinionFallbackModel` (design §9.7 #2);
- *   - `never: same-model` — if no rung differs, return null (skip); the caller must
- *     never fall back to the same model.
- *
- * An explicit `config.second_opinion_provider` is honored: a configured *other*
- * vendor satisfies the other-vendor step; configured == orchestrator vendor routes to
- * the same-vendor branch.
+ * The error names the two overlay files that can hold the ladder (the developer's and the team's),
+ * the same placeholders an ask names, because the entry came from one of them (ADR-0024/D05).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
- * @param {Json} config
- * @param {string} orchestratorVendor
- * @returns {SecondOpinionTarget | null}
+ * @param {string} provider
+ * @returns {Record<string, Json>}
  */
-export function resolveSecondOpinion(data, registry, config, orchestratorVendor) {
-  const policy = _isDict(registry) ? _get(registry, "second_opinion_policy", {}) : {};
-  const ladder = _or(_get(policy, "diversity_ladder"), ["other-vendor", "same-vendor-other-model"]);
-  const orchestrator = _pyStr(_or(_get(config, "orchestrator"), ""));
-  const auditor = _pyStr(_or(_get(_get(config, "binding", {}), "auditor"), ""));
-  const configured = _get(config, "second_opinion_provider");
-  for (const step of _iterate(ladder)) {
-    if (_pyEq(step, "other-vendor")) {
-      // An explicit same-vendor override is a deliberate "stay on my vendor, pin a
-      // different model" choice — skip the other-vendor step so it falls through to
-      // same-vendor-other-model rather than silently picking the opposite vendor.
-      if (typeof configured === "string" && configured === orchestratorVendor) {
-        continue;
+export function providerRow(data, registry, provider) {
+  const rows = providers(registry);
+  const row = Object.hasOwn(rows, provider) ? rows[provider] : null;
+  if (_isDict(row)) {
+    return row;
+  }
+  const values = { provider, local_overlay: _localOverlayFile(data), overlay: _overlayFile(data) };
+  throw _pyError("KeyError", fill(data.opinion_ladder_unknown, values));
+}
+
+/**
+ * The closed set of family names, in declared order: `second_opinion_policy.families`' keys (ADR-0024/D01).
+ *
+ * An object, not a list, so an overlay adds a family by key without restating the shipped ones (a
+ * list would be replaced whole by the stronger layer).
+ * @param {Json} registry
+ * @returns {string[]}
+ */
+export function familyVocabulary(registry) {
+  const policy = _get(registry, "second_opinion_policy");
+  const families = _isDict(policy) ? _get(policy, "families") : null;
+  return _isDict(families) ? Object.keys(families) : [];
+}
+
+/**
+ * Raise `ValueError` naming the files that extend the vocabulary when `family` is not in it.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} family
+ */
+export function checkSessionFamily(data, registry, family) {
+  const known = familyVocabulary(registry);
+  if (known.includes(family)) {
+    return;
+  }
+  const values = {
+    family,
+    known: known.join(", "),
+    local_overlay: _localOverlayFile(data),
+    overlay: _overlayFile(data),
+  };
+  throw _pyError("ValueError", fill(data.session_family_unknown, values));
+}
+
+/**
+ * The usage error for a `--vendor` with no tier-binding block.
+ *
+ * A name the providers table declares is a carrier: it has no vendor block, so it cannot bind
+ * tiers, and the message says how to start from that harness instead (`--session-provider`, with
+ * `--vendor` still choosing the binding it borrows). Tier binding stays owned by a vendor block
+ * (ADR-0024/D15).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} vendor
+ * @param {string[]} vendors
+ * @returns {string}
+ */
+export function vendorRefusal(data, registry, vendor, vendors) {
+  const text = Object.hasOwn(providers(registry), vendor) ? data.vendor_is_carrier : data.vendor_unknown;
+  return fill(text, { vendor, vendors: vendors.join(", ") });
+}
+
+/**
+ * The one stderr line a hook prints for a bad hand-owned overlay: the hook, the file, what it costs.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {string} hook
+ * @param {Error} error an `OverlayError`
+ * @returns {string}
+ */
+export function hookOverlayLine(data, hook, error) {
+  const texts = data.hook_overlay_error;
+  return fill(texts.line, { hook, error: error.message, effect: texts.effects[hook] });
+}
+
+/**
+ * A `carrier[:model]` entry as `[provider, model]`, split on the FIRST colon only.
+ *
+ * A model id may itself hold `/` and `:` (`anthropic/claude-sonnet-4`, `qwen3:8b`), so the
+ * carrier is whatever precedes the first colon and everything after it is the model.
+ * @param {string} entry
+ * @returns {[string, string | null]}
+ */
+export function splitOpinionEntry(entry) {
+  const colon = entry.indexOf(":");
+  if (colon < 0) {
+    return [entry, null];
+  }
+  return [entry.slice(0, colon), entry.slice(colon + 1) || null];
+}
+
+/**
+ * Whether a ladder entry names `provider:default` — the carrier's own model, no pin (ADR-0024/D16).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @returns {boolean}
+ */
+export function ladderPinsDefault(data, registry, provider) {
+  const token = defaultModelToken(data);
+  return opinionLadder(registry).some((entry) => {
+    const [entryProvider, pinned] = splitOpinionEntry(entry);
+    return entryProvider === provider && splitModelEffort(pinned)[0] === token;
+  });
+}
+
+/**
+ * A `model[@effort]` text as `[model, effort]`, split at its LAST `@` (ADR-0024/D17).
+ *
+ * A model id that itself encodes the level (`acme/qwen3.8-27b-max`) stays one id, because akmon
+ * never parses a model name; no `@` means no effort. An empty side is `null` for the model and kept
+ * as `""` for the effort, which no row lists, so `m@` is refused rather than ignored.
+ * @param {string | null} text
+ * @returns {[string | null, string | null]}
+ */
+export function splitModelEffort(text) {
+  if (text === null) {
+    return [null, null];
+  }
+  const at = text.lastIndexOf("@");
+  if (at < 0) {
+    return [text || null, null];
+  }
+  return [text.slice(0, at) || null, text.slice(at + 1)];
+}
+
+/**
+ * The priors that answer when `provider` runs `model`: the model's own entry, else the row's, else unknown.
+ *
+ * A carrier that fronts several families (a gateway, a multi-provider harness) states each model's
+ * family in `model_families`; a single-family carrier states `family` once. A model neither names
+ * resolves to `null`, which the walk treats as unknown and fails closed (ADR-0024/D08) — guessing
+ * a family from the model id would be the silent weakness this record removes.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @param {string | null} [model]
+ * @returns {string | null}
+ */
+export function providerFamily(data, registry, provider, model = null) {
+  const row = providerRow(data, registry, provider);
+  const families = _get(row, "model_families");
+  if (_truthy(model) && _isDict(families) && _truthy(_get(families, /** @type {string} */ (model)))) {
+    return _pyStr(families[/** @type {string} */ (model)]);
+  }
+  const family = _get(row, "family");
+  return _truthy(family) ? _pyStr(family) : null;
+}
+
+/**
+ * `shutil.which(command)`: the path of an executable, resolved on the current `PATH`, or `null`.
+ *
+ * A name holding a directory part is tested as given; a bare name is searched in each `PATH`
+ * entry (an empty entry is the working directory), and a directory never counts.
+ * @param {string} command
+ * @returns {string | null}
+ */
+function _which(command) {
+  /** @param {string} file */
+  const executable = (file) => {
+    try {
+      if (fs.statSync(file).isDirectory()) {
+        return false;
       }
-      const provider =
-        typeof configured === "string" && configured && configured !== orchestratorVendor
-          ? configured
-          : oppositeVendor(data, registry, orchestratorVendor);
-      if (
-        provider !== orchestratorVendor &&
-        _truthy(secondOpinionSpec(data, registry, provider, { required: false }))
-      ) {
-        return new SecondOpinionTarget(provider, null);
-      }
-    } else if (_pyEq(step, "same-vendor-other-model")) {
-      const provider = orchestratorVendor;
-      if (!_truthy(secondOpinionSpec(data, registry, provider, { required: false }))) {
-        continue;
-      }
-      let model = _get(config, "second_opinion_fallback_model");
-      if (!_truthy(model)) {
-        const [rungs] = selectionLadder(registry, provider, _get(config, "available"));
-        model = secondOpinionFallbackModel(rungs, orchestrator, auditor);
-      }
-      if (_truthy(model)) {
-        return new SecondOpinionTarget(provider, _pyStr(model));
-      }
+      fs.accessSync(file, fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (command.includes("/")) {
+    return executable(command) ? command : null;
+  }
+  const searched = process.env.PATH ?? "/bin:/usr/bin";
+  if (searched === "") {
+    return null;
+  }
+  for (const directory of new Set(searched.split(":"))) {
+    const candidate = posix.join(directory, command);
+    if (executable(candidate)) {
+      return candidate;
     }
   }
   return null;
+}
+
+/**
+ * Whether the carrier's executable resolves on `PATH` — a yes-or-no about a binary, nothing more.
+ *
+ * This is the one host fact the resolver takes (ADR-0024/D11): it reads no carrier settings file,
+ * no developer dot-directory and no environment value, and never invokes the carrier to ask what
+ * it is, so the same code answers the same way on the owner's host and on a consumer's. The
+ * executable is the row's `requires_command`, a declared `argv`'s first element, or — for a
+ * shipped carrier — the command map's own name for it, so the map stays the only place that spells one.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @returns {boolean}
+ */
+export function carrierPresent(data, runtimeData, registry, provider) {
+  const row = providerRow(data, registry, provider);
+  const argv = _get(row, "argv");
+  const table = harnessCommands(runtimeData);
+  const mapped = Object.hasOwn(table, provider) ? table[provider].binary : "";
+  const binary = _pyStr(
+    _or(_get(row, "requires_command"), _or(Array.isArray(argv) && argv.length > 0 ? argv[0] : "", mapped)),
+  );
+  return binary !== "" && _which(binary) !== null;
+}
+
+/**
+ * The model the second opinion takes inside `provider`: its strongest declared one.
+ *
+ * This rule belongs to the second opinion alone (ADR-0024/D14) and reads the provider table's
+ * `models` and nothing else — never the tier binding's rungs, which answer a different consumer's
+ * question and would let a reviewer inherit a `worker`'s list. No declared list means the answer is
+ * `null`: the carrier's own default, the one honest value left. A rule nobody implemented raises,
+ * because silently picking by some other order would be an unstated policy.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @returns {string | null}
+ */
+export function opinionModel(data, registry, provider) {
+  const policy = _get(registry, "second_opinion_policy");
+  const rule = _isDict(policy) ? _pyStr(_get(policy, "model_rule", "max")) : "max";
+  if (rule !== "max") {
+    throw _pyError(
+      "ValueError",
+      `second opinion: unknown model_rule ${_strRepr(rule)}; the only rule implemented is 'max'`,
+    );
+  }
+  const models = _get(providerRow(data, registry, provider), "models");
+  if (!Array.isArray(models) || models.length === 0) {
+    return null;
+  }
+  return _pyStr(models[models.length - 1]);
+}
+
+/** An effort a row cannot take: it declares no `efforts`, or the level is not one of its `levels`. */
+export class EffortError extends Error {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = "EffortError";
+  }
+}
+
+/**
+ * Raise `EffortError` unless `effort` is `null` or a level the provider's `efforts` lists (ADR-0024/D17).
+ *
+ * akmon never guesses a level and never forwards one the row does not list: a carrier with no
+ * `efforts` is refused naming it, and an unlisted level is refused naming the accepted ones.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @param {string | null} effort
+ */
+export function checkEffort(data, registry, provider, effort) {
+  if (effort === null) {
+    return;
+  }
+  const declared = _get(providerRow(data, registry, provider), "efforts");
+  const levels = _isDict(declared) ? _get(declared, "levels") : null;
+  if (!Array.isArray(levels)) {
+    const values = { provider, effort, local_overlay: _localOverlayFile(data), overlay: _overlayFile(data) };
+    throw new EffortError(fill(data.effort_errors.unsupported, values));
+  }
+  if (!levels.includes(effort)) {
+    throw new EffortError(
+      fill(data.effort_errors.unknown, { provider, effort, levels: levels.map((level) => _pyStr(level)).join(", ") }),
+    );
+  }
+}
+
+/**
+ * The `[model, effort]` a `carrier[:model[@effort]]` entry runs (ADR-0024/D16, D17).
+ *
+ * `default` is a token, not a model id: it drops the pin altogether, so the carrier uses the model it
+ * is configured with and no alias is resolved, and `default@high` sends only the level. An effort-only
+ * pin (`@high`) keeps the rule's model. No pin at all still means the strongest declared entry
+ * (`opinionModel`, D14), with the effort that entry carries. A level the row does not list raises
+ * `EffortError`.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @param {string | null} pinned
+ * @returns {[string | null, string | null]}
+ */
+export function opinionPick(data, registry, provider, pinned) {
+  const [model, effort] = splitModelEffort(pinned);
+  checkEffort(data, registry, provider, effort);
+  if (model === defaultModelToken(data)) {
+    return [null, effort];
+  }
+  if (model !== null) {
+    return [model, effort];
+  }
+  const [strongest, strongestEffort] = splitModelEffort(opinionModel(data, registry, provider));
+  return [strongest, pinned !== null ? effort : strongestEffort];
+}
+
+/**
+ * The session's carrier, model and priors: explicit arguments, else the `session` stanza, else the bound vendor.
+ *
+ * The session may start from any harness on any model, so nothing here assumes a vendor: the
+ * `session` stanza of the local config (written by `init --session-provider`) names it outright,
+ * and only when neither it nor an argument does the bound vendor's `carrier` and the recorded
+ * orchestrator alias stand in. Each field comes from the first layer that states it for the chosen
+ * provider — a layer that names another provider never lends it a model or a family. A family none
+ * of them states is read from the provider table (`providerFamily`), and stays `null` when that
+ * says nothing (ADR-0024/D08). No provider anywhere raises `SessionUnknownError`.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {Json} config
+ * @param {{provider?: string | null, model?: string | null, family?: string | null}} [options]
+ * @returns {SecondOpinionSession}
+ */
+export function resolveSession(data, registry, config, { provider = null, model = null, family = null } = {}) {
+  const stanza = _get(config, "session");
+  const vendorBlock = _get(registry, _pyStr(_or(_get(config, "vendor"), "")));
+  /** @type {Json[]} */
+  const layers = [
+    { provider, model, family },
+    _isDict(stanza) ? stanza : {},
+    { provider: _isDict(vendorBlock) ? _get(vendorBlock, "carrier") : null, model: _get(config, "orchestrator") },
+  ];
+  const named = layers.find((layer) => _truthy(_get(layer, "provider")));
+  if (named === undefined) {
+    throw new SessionUnknownError(data.session_unknown);
+  }
+  const chosen = _pyStr(_get(named, "provider"));
+  /**
+   * @param {string} field
+   * @returns {string | null}
+   */
+  const stated = (field) => {
+    for (const layer of layers) {
+      const owner = _get(layer, "provider");
+      if (_truthy(_get(layer, field)) && (owner === null || owner === "" || _pyEq(owner, chosen))) {
+        return _pyStr(_get(layer, field));
+      }
+    }
+    return null;
+  };
+  const resolvedModel = stated("model");
+  let resolvedFamily = stated("family");
+  if (resolvedFamily === null && Object.hasOwn(providers(registry), chosen)) {
+    resolvedFamily = providerFamily(data, registry, chosen, resolvedModel);
+  }
+  return new SecondOpinionSession(chosen, resolvedFamily, resolvedModel);
+}
+
+/**
+ * The project routing overlay's path, project-root-relative — where an owner declares a missing prior.
+ * @param {AgentsData} data
+ * @returns {string}
+ */
+function _overlayFile(data) {
+  return `${aitnaRootName()}/${overlayName(data)}`;
+}
+
+/**
+ * The developer-local routing overlay's path, project-root-relative — the strongest place to declare a prior.
+ * @param {AgentsData} data
+ * @returns {string}
+ */
+function _localOverlayFile(data) {
+  return `${aitnaRootName()}/${localOverlayRel(data)}`;
+}
+
+/**
+ * The named key that would settle an unknown family, and the file to write it in (ADR-0024/D08, D11).
+ * @param {AgentsData} data
+ * @param {string} provider
+ * @param {string | null} model
+ * @returns {string}
+ */
+function _priorsAsk(data, provider, model) {
+  const values = {
+    provider,
+    model: _pyStr(model),
+    local_overlay: _localOverlayFile(data),
+    overlay: _overlayFile(data),
+  };
+  return fill(data.opinion_asks[_truthy(model) ? "provider" : "provider_default"], values);
+}
+
+/**
+ * The ask for a session whose own family cannot be resolved: nothing is counted as diverse until it is.
+ * @param {AgentsData} data
+ * @param {SecondOpinionSession} session
+ * @returns {string}
+ */
+function _sessionAsk(data, session) {
+  const values = {
+    provider: session.provider,
+    model: _pyStr(session.model),
+    local_overlay: _localOverlayFile(data),
+    overlay: _overlayFile(data),
+    local: localConfigRel(data),
+  };
+  return fill(data.opinion_asks[_truthy(session.model) ? "session" : "session_default"], values);
+}
+
+/**
+ * The one top-down walk: the admissible chain, every provider passed over with its reason, and the asks.
+ *
+ * Two skips carry the design (ADR-0024/D06): the session's own carrier, and any provider whose
+ * family or concrete model is already spoken for — a different harness answering with the same
+ * mind, or the same model under another name, buys no diversity. The compared model is the one the
+ * consumer's rule resolves (D14), not only a ladder pin, or two providers answering with the same
+ * weights would both pass; the family is read for that chosen model (`providerFamily`), because a
+ * carrier that fronts several families has no single answer. `families`/`models` record which
+ * provider holds each, so a reason names the owner rather than only refusing. Rank is a position in
+ * the *resulting* chain, so a skip never leaves a hole the report must explain.
+ *
+ * A session whose own family is unknown yields an empty chain (D08): nothing can be said to differ
+ * from priors nobody knows. A provider whose family is unknown is skipped and asked about.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
+ * @param {Json} registry
+ * @param {SecondOpinionSession} session
+ * @returns {[[string, string | null, string | null][], [string, string][], string[]]}
+ */
+function _walkOpinionLadder(data, runtimeData, registry, session) {
+  const reasons = data.opinion_skip_reasons;
+  if (!_truthy(session.family)) {
+    return [[], [[session.provider, reasons.session_priors_unknown]], [_sessionAsk(data, session)]];
+  }
+  /** @type {[string, string | null, string | null][]} */
+  const chain = [];
+  /** @type {[string, string][]} */
+  const skips = [];
+  /** @type {string[]} */
+  const asks = [];
+  /** @type {Map<string, string>} */
+  const families = new Map([[_pyStr(session.family), session.provider]]);
+  /** @type {Map<string, string>} */
+  const models = new Map(_truthy(session.model) ? [[_pyStr(session.model), session.provider]] : []);
+  for (const entry of opinionLadder(registry)) {
+    const [provider, pinned] = splitOpinionEntry(entry);
+    providerRow(data, registry, provider); // an id the table does not declare is a named error, even for the self-skip
+    checkEffort(data, registry, provider, splitModelEffort(pinned)[1]); // so is an effort the row cannot take (D17)
+    if (provider === session.provider) {
+      skips.push([provider, reasons.self]);
+      continue;
+    }
+    if (!carrierPresent(data, runtimeData, registry, provider)) {
+      skips.push([provider, reasons.absent]);
+      continue;
+    }
+    const [chosen, effort] = opinionPick(data, registry, provider, pinned);
+    const family = providerFamily(data, registry, provider, chosen);
+    if (!family) {
+      skips.push([provider, reasons.priors_unknown]);
+      asks.push(_priorsAsk(data, provider, chosen));
+      continue;
+    }
+    const familyOwner = families.get(family);
+    if (familyOwner !== undefined) {
+      skips.push([provider, fill(reasons.same_priors, { owner: familyOwner })]);
+      continue;
+    }
+    const modelOwner = chosen ? models.get(chosen) : undefined;
+    if (modelOwner !== undefined) {
+      skips.push([provider, fill(reasons.same_model, { owner: modelOwner })]);
+      continue;
+    }
+    families.set(family, provider);
+    if (chosen) {
+      models.set(chosen, provider);
+    }
+    chain.push([provider, chosen, effort]);
+  }
+  return [chain, skips, asks];
+}
+
+/**
+ * The whole admissible chain, in rank order from rank 2: every provider the walk kept, resolved.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
+ * @param {Json} registry
+ * @param {SecondOpinionSession} session
+ * @returns {SecondOpinionTarget[]}
+ */
+export function opinionChain(data, runtimeData, registry, session) {
+  const [chain] = _walkOpinionLadder(data, runtimeData, registry, session);
+  return chain.map(
+    ([provider, model, effort]) =>
+      new SecondOpinionTarget(provider, model, providerFamily(data, registry, provider, model), effort),
+  );
+}
+
+/**
+ * The provider at `rank` of the chain the walk produced, or `null` past its end.
+ *
+ * `null` says the chain is empty or shorter than asked; the caller then takes the disclosed last
+ * resort (ADR-0024/D07) rather than arriving at the same model without saying so.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
+ * @param {Json} registry
+ * @param {SecondOpinionSession} session
+ * @param {{rank?: number}} [options]
+ * @returns {SecondOpinionTarget | null}
+ */
+export function resolveOpinionChain(data, runtimeData, registry, session, { rank = OPINION_RANK_SECOND } = {}) {
+  const chain = opinionChain(data, runtimeData, registry, session);
+  const index = rank - OPINION_RANK_SECOND;
+  return index >= 0 && index < chain.length ? chain[index] : null;
+}
+
+/**
+ * Every provider passed over and why — the ledger that travels with the report (ADR-0024/D08).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
+ * @param {Json} registry
+ * @param {SecondOpinionSession} session
+ * @returns {[string, string][]}
+ */
+export function opinionSkips(data, runtimeData, registry, session) {
+  return _walkOpinionLadder(data, runtimeData, registry, session)[1];
+}
+
+/**
+ * One line per unknown prior the walk met, each naming the key and the file that would settle it (D08, D11).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
+ * @param {Json} registry
+ * @param {SecondOpinionSession} session
+ * @returns {string[]}
+ */
+export function opinionAsks(data, runtimeData, registry, session) {
+  return _walkOpinionLadder(data, runtimeData, registry, session)[2];
+}
+
+/**
+ * The disclosed last resort for an empty chain: the session's own provider, on a different model if declared.
+ *
+ * The strongest entry of the provider's declared `models` that differs from the session's model —
+ * read from the provider table and not from the tier binding's rungs (ADR-0024/D14) — and only
+ * when none differs the carrier's own default in a clean context (D07). The caller files the run
+ * as `kind=last-resort`: same priors are never bought, only disclosed.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {SecondOpinionSession} session
+ * @returns {SecondOpinionTarget}
+ */
+export function opinionLastResort(data, registry, session) {
+  const row = providerRow(data, registry, session.provider);
+  const declared = _iterate(_or(_get(row, "models"), []))
+    .map(_pyStr)
+    .filter((entry) => splitModelEffort(entry)[0] !== session.model);
+  const [model, effort] = splitModelEffort(declared.length ? declared[declared.length - 1] : null);
+  const family = providerFamily(data, registry, session.provider, model) ?? session.family;
+  return new SecondOpinionTarget(session.provider, model, family, effort);
+}
+
+/**
+ * What the reviewer could see: derived for a carrier akmon ships, stated or unknown for the rest.
+ *
+ * A knob would let a report claim repository access a bare completion cannot have, so a harness
+ * carrier is `worktree`, a tool carrier is `none`, and a carrier its owner declared with nothing
+ * said reports `unknown` instead of the optimistic reading (ADR-0024/D10, D12).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @returns {string}
+ */
+export function opinionRepo(data, registry, provider) {
+  const row = providerRow(data, registry, provider);
+  const stated = _get(row, "repo");
+  if (_truthy(stated)) {
+    return _pyStr(stated);
+  }
+  if (_truthy(_get(row, "argv"))) {
+    return "unknown";
+  }
+  return _pyEq(_get(row, "carrier"), "tool") || _truthy(_get(row, "raw_model")) ? "none" : "worktree";
+}
+
+/**
+ * The carrier kind the report names: `declared` for an owner's own argv, else the row's kind or `harness`.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @returns {string}
+ */
+export function opinionCarrier(data, registry, provider) {
+  const row = providerRow(data, registry, provider);
+  return _truthy(_get(row, "argv")) ? "declared" : _pyStr(_or(_get(row, "carrier"), "harness"));
+}
+
+/**
+ * `parts` with every `{model}` element gone, and the bare flag that pointed at a lone one.
+ * @param {string[]} parts
+ * @returns {string[]}
+ */
+function _withoutModelPlaceholder(parts) {
+  /** @type {string[]} */
+  const kept = [];
+  for (const part of parts) {
+    if (!part.includes("{model}")) {
+      kept.push(part);
+    } else if (
+      part === "{model}" &&
+      kept.length &&
+      kept[kept.length - 1].startsWith("-") &&
+      !kept[kept.length - 1].includes("=")
+    ) {
+      kept.pop();
+    }
+  }
+  return kept;
+}
+
+/**
+ * The argv for one provider: the command map for a shipped carrier, the owner's own list for a declared one.
+ *
+ * The executable and the operation's prefix come from `common/runtime.json` — the sole owner — and
+ * the row adds only policy: its `model_flag` and the prompt as the last argument. A declared `argv`
+ * is a list and is never split or handed to a shell (ADR-0024/D12) — the config the owner wrote is
+ * the trust boundary, and a command string would make every value in it a candidate command.
+ * `{model}` is the one placeholder, and a pin with nowhere to go raises `UnpinnableModelError`
+ * rather than shipping an unpinned run filed as a diverse one (C97). Unpinned, an element holding
+ * `{model}` is dropped whole; when that element is exactly `{model}` and the one before it is a bare
+ * flag (leading `-`, no `=`), the flag goes with it, so `["qwen", "-m", "{model}"]` runs as
+ * `["qwen"]` rather than with a flag that now eats the next argument (`_withoutModelPlaceholder`).
+ * A row with `prompt: "stdin"` gets no prompt argument; the caller feeds the pack on stdin.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @param {{model?: Json, effort?: string | null, prompt?: Json}} [options]
+ * @returns {string[]}
+ */
+export function opinionCommand(
+  data,
+  runtimeData,
+  registry,
+  provider,
+  { model = null, effort = null, prompt = null } = {},
+) {
+  checkEffort(data, registry, provider, effort);
+  const row = providerRow(data, registry, provider);
+  const argv = _get(row, "argv");
+  /** @type {string[]} */
+  let parts;
+  if (Array.isArray(argv)) {
+    parts = argv.map(_pyStr);
+    if (_truthy(model)) {
+      if (!parts.some((part) => part.includes("{model}"))) {
+        throw new UnpinnableModelError(data, provider, _pyStr(model));
+      }
+      parts = parts.map((part) => part.replaceAll("{model}", () => _pyStr(model)));
+    } else {
+      parts = _withoutModelPlaceholder(parts);
+    }
+  } else {
+    parts = harnessCommand(runtimeData, provider, _pyStr(_get(row, "operation", "review")));
+    if (_truthy(model)) {
+      const modelFlag = _get(row, "model_flag");
+      if (!_truthy(modelFlag)) {
+        throw new UnpinnableModelError(data, provider, _pyStr(model));
+      }
+      parts.push(...shlexSplit(_pyStr(modelFlag)).map((part) => part.replaceAll("{model}", () => _pyStr(model))));
+    }
+  }
+  if (effort !== null) {
+    const flag = _pyStr(_get(_get(row, "efforts"), "flag"));
+    parts.push(...shlexSplit(flag).map((part) => part.replaceAll("{effort}", () => effort)));
+  }
+  if (_truthy(prompt) && _pyStr(_get(row, "prompt", "argv")) !== "stdin") {
+    parts.push(_pyStr(prompt));
+  }
+  return parts;
+}
+
+// --------------------------------------------------------------------------------------
+// Model aliases (ADR-0024/D16): shipped aliases, concrete ids only in a local file
+// --------------------------------------------------------------------------------------
+
+/** The catalog formats `parseCatalog` reads; `bin/verify.json` keeps the same closed list for the verifier. */
+export const CATALOG_FORMATS = Object.freeze(["codex-models-cache"]);
+
+const _CODEX_SLUG = /^([a-z][a-z0-9]*)-(\d+(?:\.\d+)*)-([a-z]+)$/;
+
+/** A provider row declares `aliases: true` and the alias asked for has no concrete id in the local file. */
+export class UnresolvedAliasError extends Error {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = "UnresolvedAliasError";
+  }
+}
+
+/** One provider's entry of the resolved-aliases file: what produced it, the client version, alias → concrete id. */
+export class ProviderAliases {
+  /**
+   * @param {string} source
+   * @param {string | null} client
+   * @param {Record<string, string>} aliases
+   */
+  constructor(source, client, aliases) {
+    this.source = source;
+    this.client = client;
+    this.aliases = aliases;
+    Object.freeze(this);
+  }
+}
+
+/** A catalog slug that names a versioned alias: `gpt-6.1-sol` is alias `sol` at version `[6, 1]`. */
+export class CatalogModel {
+  /**
+   * @param {string} slug
+   * @param {string} alias
+   * @param {number[]} version
+   * @param {number | null} priority
+   */
+  constructor(slug, alias, version, priority) {
+    this.slug = slug;
+    this.alias = alias;
+    this.version = version;
+    this.priority = priority;
+    Object.freeze(this);
+  }
+}
+
+/** What a provider's catalog lists: the carrier version it states, if any, and its listed versioned models. */
+export class Catalog {
+  /**
+   * @param {string | null} client
+   * @param {CatalogModel[]} models
+   */
+  constructor(client, models) {
+    this.client = client;
+    this.models = models;
+    Object.freeze(this);
+  }
+}
+
+/**
+ * The resolved-aliases file's path, project-root-relative — what an unresolved alias asks to have refreshed.
+ * @param {AgentsData} data
+ * @returns {string}
+ */
+function _aliasFile(data) {
+  return `${aitnaRootName()}/${localAliasesRel(data)}`;
+}
+
+/**
+ * `value` as a `ProviderAliases`, or `null` when it does not have the file's shape.
+ * @param {Json} value
+ * @returns {ProviderAliases | null}
+ */
+function _validProviderAliases(value) {
+  if (!_isDict(value)) {
+    return null;
+  }
+  const source = _get(value, "source");
+  const client = _get(value, "client");
+  const aliases = _get(value, "aliases");
+  if (typeof source !== "string" || !(client === null || typeof client === "string") || !_isDict(aliases)) {
+    return null;
+  }
+  if (!Object.values(aliases).every((item) => typeof item === "string")) {
+    return null;
+  }
+  return new ProviderAliases(source, client, /** @type {Record<string, string>} */ ({ ...aliases }));
+}
+
+/**
+ * The resolved-aliases file as typed entries by provider; `{}` when it does not exist.
+ *
+ * A file that is not the shape `models.mjs` writes raises `ValueError` naming it: the file is
+ * generated, so the cure is deleting it and refreshing, never a hand edit.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {string} projectRoot
+ * @returns {Record<string, ProviderAliases>}
+ */
+export function readModelAliases(data, projectRoot) {
+  const path = localAliasesPath(data, projectRoot);
+  if (!_isFile(path)) {
+    return {};
+  }
+  const invalid = () => _pyError("ValueError", fill(data.alias_errors.invalid, { file: _aliasFile(data) }));
+  let parsed;
+  try {
+    parsed = _parseKeepingFloats(_readText(path));
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw Object.assign(invalid(), { cause: error });
+    }
+    throw error;
+  }
+  if (!_isDict(parsed)) {
+    throw invalid();
+  }
+  /** @type {Record<string, ProviderAliases>} */
+  const entries = {};
+  for (const [provider, value] of Object.entries(parsed)) {
+    const entry = _validProviderAliases(value);
+    if (entry === null) {
+      throw invalid();
+    }
+    entries[provider] = entry;
+  }
+  return entries;
+}
+
+/**
+ * The file's text for `stored`: indent 2, insertion order, a trailing newline (no dates, nothing host-wide).
+ * @param {Record<string, ProviderAliases>} stored
+ * @returns {string}
+ */
+export function modelAliasesDocument(stored) {
+  /** @type {Record<string, Json>} */
+  const document = {};
+  for (const [provider, entry] of Object.entries(stored)) {
+    document[provider] = { source: entry.source, client: entry.client, aliases: { ...entry.aliases } };
+  }
+  return wiringForm(document);
+}
+
+/**
+ * Whether `model` is an alias the carrier does not accept: the row says `aliases: true` and lists it.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} provider
+ * @param {string} model
+ * @returns {boolean}
+ */
+export function isModelAlias(data, registry, provider, model) {
+  const row = providerRow(data, registry, provider);
+  const models = _get(row, "models");
+  // An entry may carry an @effort (ADR-0024/D17); the alias is the model before it.
+  return (
+    _get(row, "aliases") === true &&
+    Array.isArray(models) &&
+    models.map((entry) => splitModelEffort(_pyStr(entry))[0]).includes(model)
+  );
+}
+
+/**
+ * The model a carrier is sent: an alias replaced by its concrete id, anything else passed through.
+ *
+ * Only a model that is an alias of an `aliases: true` row is replaced; a concrete id (not in the
+ * row's `models`) and the carrier's own default (`null`) pass through. An alias with no mapping
+ * raises `UnresolvedAliasError` naming the refresh command — fail closed, never an unresolved alias
+ * sent to the carrier (ADR-0024/D16, D08).
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {Record<string, ProviderAliases>} stored
+ * @param {string} provider
+ * @param {string | null} model
+ * @returns {string | null}
+ */
+export function resolveOpinionModel(data, registry, stored, provider, model) {
+  if (model === null || !isModelAlias(data, registry, provider, model)) {
+    return model;
+  }
+  const entry = Object.hasOwn(stored, provider) ? stored[provider] : undefined;
+  const concrete = entry !== undefined && Object.hasOwn(entry.aliases, model) ? entry.aliases[model] : "";
+  if (!concrete) {
+    throw new UnresolvedAliasError(fill(data.alias_errors.unresolved, { provider, model, file: _aliasFile(data) }));
+  }
+  return concrete;
+}
+
+/**
+ * `pathText` with a leading `~` or `~/` replaced by `home` — the only expansion a catalog path takes.
+ * @param {string} pathText
+ * @param {string} home
+ * @returns {string}
+ */
+export function expandHome(pathText, home) {
+  if (pathText === "~" || pathText.startsWith("~/")) {
+    return home.replace(/\/+$/, "") + pathText.slice(1) || "/";
+  }
+  return pathText;
+}
+
+/**
+ * A catalog file's text read as `catalogFormat`; `ValueError` says what is wrong with it, not where.
+ *
+ * `codex-models-cache`: `{"models": [{"slug", "visibility", "priority", ...}]}`. Only `visibility ==
+ * "list"` entries count, and a slug counts when it reads `<family>-<version>-<alias>` (`gpt-6.1-sol`):
+ * `gpt-reserve` and `codex-auto-review` are ignored, never guessed at.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {string} text
+ * @param {string} catalogFormat
+ * @returns {Catalog}
+ */
+export function parseCatalog(data, text, catalogFormat) {
+  const texts = data.catalog_errors;
+  if (!CATALOG_FORMATS.includes(catalogFormat)) {
+    throw _pyError("ValueError", fill(texts.format, { format: catalogFormat, known: CATALOG_FORMATS.join(", ") }));
+  }
+  let parsed;
+  try {
+    parsed = _parseKeepingFloats(text);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw Object.assign(_pyError("ValueError", texts.json), { cause: error });
+    }
+    throw error;
+  }
+  const listed = _isDict(parsed) ? _get(parsed, "models") : null;
+  if (!Array.isArray(listed)) {
+    throw _pyError("ValueError", texts.shape);
+  }
+  const client = _get(parsed, "client_version");
+  /** @type {CatalogModel[]} */
+  const models = [];
+  for (const entry of listed) {
+    const slug = _isDict(entry) ? _get(entry, "slug") : null;
+    const match = typeof slug === "string" ? _CODEX_SLUG.exec(slug) : null;
+    if (match === null || typeof slug !== "string" || _get(entry, "visibility") !== "list") {
+      continue;
+    }
+    const priority = _get(entry, "priority");
+    models.push(
+      new CatalogModel(
+        slug,
+        match[3],
+        match[2].split(".").map(Number),
+        typeof priority === "number" && Number.isInteger(priority) ? priority : null,
+      ),
+    );
+  }
+  return new Catalog(typeof client === "string" ? client : null, models);
+}
+
+/**
+ * Whether version `left` is above `right`, compared part by part, a shorter prefix lower.
+ * @param {number[]} left
+ * @param {number[]} right
+ * @returns {number} negative, zero or positive as `left` is below, equal to or above `right`
+ */
+function _compareVersions(left, right) {
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    if (left[index] !== right[index]) {
+      return left[index] - right[index];
+    }
+  }
+  return left.length - right.length;
+}
+
+/**
+ * A model's catalog priority as a number where lower is better; a model stating none ranks last.
+ * @param {CatalogModel} model
+ * @returns {number}
+ */
+function _rankOf(model) {
+  return model.priority === null ? Number.POSITIVE_INFINITY : model.priority;
+}
+
+/**
+ * Each of `aliases` mapped to its highest-versioned slug, ties by lowest priority; an unmatched one is absent.
+ *
+ * Absent means unmapped: nothing here guesses an id for an alias the catalog does not list
+ * (ADR-0024/D16). The result follows `aliases`' order.
+ * @param {Catalog} catalog
+ * @param {string[]} aliases
+ * @returns {Record<string, string>}
+ */
+export function catalogAliases(catalog, aliases) {
+  /** @type {Record<string, string>} */
+  const resolved = {};
+  for (const alias of aliases) {
+    /** @type {CatalogModel | null} */
+    let best = null;
+    for (const model of catalog.models) {
+      if (model.alias !== alias) {
+        continue;
+      }
+      const order = best === null ? 1 : _compareVersions(model.version, best.version);
+      if (best === null || order > 0 || (order === 0 && _rankOf(model) < _rankOf(best))) {
+        best = model;
+      }
+    }
+    if (best !== null) {
+      resolved[alias] = best.slug;
+    }
+  }
+  return resolved;
+}
+
+/**
+ * What the second opinion would run first, as a display and any warning (the status line and the init summary).
+ *
+ * Resolved through the same walk the runner takes rather than through any stored provider: a
+ * display that can disagree with the policy is a second owner of one fact, the drift class C46
+ * exists to remove. `priors=unknown` stands for a session nobody could name the family of, and the
+ * warning carries the ask beside it (ADR-0024/D08); a stale key raises out of here
+ * (`refuseRetiredKeys`) and costs the whole status block, deliberately.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
+ * @param {Json} registry
+ * @param {Json} config
+ * @returns {[string, string | null]}
+ */
+export function opinionHead(data, runtimeData, registry, config) {
+  refuseRetiredKeys(data, registry, config);
+  const texts = data.opinion_status;
+  /** @type {SecondOpinionSession} */
+  let session;
+  try {
+    session = resolveSession(data, registry, config);
+  } catch (error) {
+    if (error instanceof SessionUnknownError) {
+      return [texts.unavailable_unknown, error.message];
+    }
+    throw error;
+  }
+  if (!_truthy(session.family)) {
+    return [texts.unavailable_unknown, _sessionAsk(data, session)];
+  }
+  const chain = opinionChain(data, runtimeData, registry, session);
+  if (chain.length === 0) {
+    return [texts.unavailable, fill(texts.chain_empty, { provider: session.provider })];
+  }
+  const head = chain[0];
+  let pin = head.model || (head.effort !== null ? defaultModelToken(data) : "");
+  pin = head.effort !== null ? `${pin}@${head.effort}` : pin;
+  const target = pin ? `${head.provider}:${pin}` : head.provider;
+  return [fill(texts.head, { target, family: head.family || "unknown" }), null];
 }
 
 // --------------------------------------------------------------------------------------
@@ -1938,12 +2918,12 @@ export function contextPressureNotice(
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {Binding} binding
- * @param {{secondOpinion: boolean, available: Json}} options
+ * @param {{secondOpinion: boolean, available: Json, session?: Json}} options
  * @returns {Record<string, string>}
  */
-export function bindingArtifacts(data, registry, binding, { secondOpinion, available }) {
+export function bindingArtifacts(data, registry, binding, { secondOpinion, available, session = null }) {
   const files = { ...generatedAgentFiles(data, registry, binding) };
-  const config = localConfig(data, binding, registry, { secondOpinion, available });
+  const config = localConfig(data, binding, registry, { secondOpinion, available, session });
   files[localConfigRel(data)] = wiringForm(config);
   return files;
 }
@@ -2042,8 +3022,8 @@ export function writeArtifacts(root, files, { write = true } = {}) {
 /**
  * Recompute the binding for `orchestrator` and (re)write the artifacts under `root`.
  *
- * Reuses the recorded `available` list and opt-ins from `config` — only the orchestrator
- * moves. Idempotent: unchanged files are left untouched. This is how the hook makes subagent
+ * Reuses the recorded `available` list, opt-ins and `session` stanza from `config` — only the
+ * orchestrator moves. Idempotent: unchanged files are left untouched. This is how the hook makes subagent
  * models follow the session's actual orchestrating model.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {string} root
@@ -2059,7 +3039,11 @@ export function rebindTo(data, root, registry, config, orchestrator, { write = t
   const vendor = _pyStr(_or(_get(config, "vendor"), "anthropic"));
   const auditorOptIn = _or(_get(config, "auditor_opt_in"), null);
   const binding = computeBinding(data, registry, orchestrator, available, vendor, auditorOptIn);
-  const files = bindingArtifacts(data, registry, binding, { secondOpinion, available });
+  const files = bindingArtifacts(data, registry, binding, {
+    secondOpinion,
+    available,
+    session: _get(config, "session"),
+  });
   const changed = writeArtifacts(root, files, { write });
   removeObsoleteAgents(
     data,
@@ -2074,14 +3058,17 @@ export function rebindTo(data, root, registry, config, orchestrator, { write = t
  * The per-user resolved config written to `localConfigRel()` (binding, opt-ins, staleness hash).
  *
  * `available` records the ladder the binding resolved (`selectionLadder`) — none in the semantic
- * case — so the runtime readers need no `--available` of their own.
+ * case — so the runtime readers need no `--available` of their own. `session` is the optional
+ * `{provider, model, family?}` stanza naming the harness the session runs on when it is not the
+ * bound vendor's own (ADR-0024); it is written only when given, so a project that never states one
+ * derives its session from the vendor as before.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Binding} binding
  * @param {Json} registry
- * @param {{secondOpinion: boolean, available: Json}} options
+ * @param {{secondOpinion: boolean, available: Json, session?: Json}} options
  * @returns {Record<string, Json>}
  */
-export function localConfig(data, binding, registry, { secondOpinion, available }) {
+export function localConfig(data, binding, registry, { secondOpinion, available, session = null }) {
   const [rungs, semantic] = selectionLadder(registry, binding.vendor, available);
   /** @type {Record<string, Json>} */
   const config = {
@@ -2095,14 +3082,13 @@ export function localConfig(data, binding, registry, { secondOpinion, available 
       escalation: [...binding.escalation],
     },
     second_opinion: secondOpinion,
-    second_opinion_provider: oppositeVendor(data, registry, binding.vendor),
     available: semantic ? null : rungs,
     auditor_opt_in: binding.auditorOptIn,
     registry_hash: registryHash(registry),
     task_kind_floors: taskKindFloors(registry, semantic ? [] : rungs, binding.vendor),
   };
-  if (config.second_opinion_provider === binding.vendor) {
-    config.second_opinion_fallback_model = secondOpinionFallbackModel(rungs, binding.orchestrator, binding.auditor);
+  if (_truthy(session)) {
+    config.session = { ...session };
   }
   return config;
 }
@@ -2132,31 +3118,24 @@ export function staleness(data, config, registry, settingsModel) {
 /**
  * What the second-opinion gate will actually do, as one status field plus any warning.
  *
- * Resolved through the same ladder the runner walks (`resolveSecondOpinion`), so the display
- * cannot disagree with the policy. A retired-key overlay (C57) raises out of here, deliberately.
+ * The head of the chain the runner would walk (`opinionHead`), with the on/off state. The status
+ * shows the vendor the hook already resolved, so a config that predates the `vendor` key reads as
+ * the hook reads it.
  * @param {AgentsData} data
+ * @param {RuntimeData} runtimeData
  * @param {Json} registry
  * @param {Json} config
  * @param {string} orchestratorVendor
  * @returns {[string, string | null]}
  */
-function _secondOpinionStatus(data, registry, config, orchestratorVendor) {
+function _secondOpinionStatus(data, runtimeData, registry, config, orchestratorVendor) {
   const enabled = _truthy(_get(config, "second_opinion"));
+  const [display, warning] = opinionHead(data, runtimeData, registry, {
+    ...config,
+    vendor: _or(_get(config, "vendor"), orchestratorVendor),
+  });
   const state = enabled ? "on" : "off";
-  const target = resolveSecondOpinion(data, registry, config, orchestratorVendor);
-  if (target === null) {
-    const warning =
-      "second-opinion is on but the diversity ladder is exhausted: no reachable " +
-      "provider differs from the reviewed model, so every gate will skip it — " +
-      "second_opinion.py states the reason at the gate and names the one thing that " +
-      "can still be run by hand, with its limits";
-    return [`second-opinion=unavailable(${state})`, enabled ? warning : null];
-  }
-  const harness = _pyStr(
-    _or(_get(secondOpinionSpec(data, registry, target.provider, { required: false }), "harness"), "-"),
-  );
-  const pin = target.model ? `, model=${target.model}` : "";
-  return [`second-opinion=${harness}(${state}${pin})`, null];
+  return [`second-opinion=${display} (${state})`, enabled ? warning : null];
 }
 
 /** A task kind whose rung floor sits above the rung its routed agent is bound to (C32). */
@@ -2313,15 +3292,16 @@ function _escalationHint(config) {
  * `initCommand` is how this project runs the routing initializer (`toolCommand`). It is passed
  * in because only the caller knows the project root.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
  * @param {Json} config
  * @param {Json} registry
  * @param {string} initCommand
  * @returns {string[]}
  */
-export function statusLines(data, config, registry, initCommand) {
+export function statusLines(data, runtimeData, config, registry, initCommand) {
   const binding = _get(config, "binding", {});
   const orchestratorVendor = _pyStr(_or(_get(config, "vendor"), "anthropic"));
-  const [secondDisplay, secondWarning] = _secondOpinionStatus(data, registry, config, orchestratorVendor);
+  const [secondDisplay, secondWarning] = _secondOpinionStatus(data, runtimeData, registry, config, orchestratorVendor);
   const orchestrator = _get(config, "orchestrator", "?");
   const texts = data.status_lines;
   const lines = [

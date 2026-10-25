@@ -36,9 +36,10 @@ Owner requirements:
    the binding is explicit data, not the orchestrator's in-the-moment judgment.
 5. **Initialization is maximally code** — deterministic scripts and hooks, not prose the
    agent re-derives each session (D4).
-6. **Cross-vendor review is good practice** — reviewing architecture decisions and code
-   with an independent model (e.g. Codex) is offered to the user at session
-   initialization, opt-in.
+6. **Independent review is good practice** — reviewing architecture decisions and code
+   with a model of different priors is offered to the user at session initialization,
+   opt-in; how the reviewer is chosen is owned by
+   [ADR 0024](../adr/0024-second-opinion-by-model-priors.md).
 7. **Binding is automatic and relative to the orchestrating model** — models change;
    the routing table is *computed* from the model the session runs on, so a model
    release costs at most a one-line data edit (usually none, thanks to aliases).
@@ -70,7 +71,7 @@ concrete model aliases live in the registry's committed ladder (§3) and the loc
 | **orchestrator** | decompose, route, integrate results, dialogue with the owner | the main session — whatever model the user runs |
 | **reasoner** | load-bearing synthesis: architecture forks, contested decisions, complex debugging, quant math derivation | the orchestrator's rung of the ladder (§3), as a subagent |
 | **worker** | delegable realization: exploration, summaries, mechanical edits, tests-under-spec, doc-sync | cheapest adequate rung, as a subagent |
-| **auditor** | independent review of architecture decisions and code | a *different vendor's* model (e.g. Codex), opt-in |
+| **second-opinion** | independent review of architecture decisions and code | a model of *different priors*, down one ladder ([ADR 0024](../adr/0024-second-opinion-by-model-priors.md)), opt-in |
 
 Tiers are only the vocabulary. The **binding surface is the task-kind matrix** — a finite,
 named list of operations, each mapped to a tier. It lives in the registry as data
@@ -88,7 +89,7 @@ named list of operations, each mapped to a tier. It lives in the registry as dat
 | `debug-deep` | reasoner | multi-cause, cross-boundary failure analysis |
 | `design-fork` | reasoner | drafting options for a load-bearing decision |
 | `quant-derivation` | reasoner | pricing/math derivations (quant profile work) |
-| `independent-review` | second-opinion | advisory cross-vendor review at verify gates |
+| `independent-review` | second-opinion | advisory review by a model of different priors at verify gates |
 | `audit` | auditor | clean-context audit of a whole gate's material |
 | decompose / route / synthesize / owner dialogue | orchestrator | **never delegated** |
 
@@ -132,7 +133,9 @@ orchestrator model, auditor opt-in)**:
 - **auditor** = the top of the ladder, or the auditor-only rung the owner opted into with
   `init --auditor <alias>` (recorded in the local config as `auditor_opt_in`); an auditor-only
   rung never becomes worker, mid, reasoner or an escalation step.
-- **second-opinion** = a different vendor's entry, independent of the local model list.
+- **second-opinion** = not a rung of this binding: the provider comes from the
+  `second_opinion_policy.ladder` walk and takes its own strongest declared model
+  ([ADR 0024](../adr/0024-second-opinion-by-model-priors.md) D14).
 - **orchestrator** = whatever the user launched — the binding never overrides it, but
   (requirement 9) the hook warns when it leaves the **healthy corridor**
   `floor ≤ orchestrator < top`:
@@ -203,15 +206,20 @@ The single owner of model-selection policy *and* task-kind knowledge (requiremen
     },
     "harness_rungs": ["…"],
     "auditor_only_rungs": ["…"],
-    "second_opinion": {"harness": "claude", "operation": "review", "report_dir": ".codex/second-opinion/"},
+    "carrier": "claude",
     "semantic_fallback": {"worker": "worker", "mid": "mid", "reasoner": "strongest", "orchestrator": "strongest"}
   },
   "openai": {
     "selection_policy": {"available_order": "weakest-to-strongest", "worker": "lowest", "mid": "next-after-worker", "reasoner": "highest", "orchestrator_floor": "highest"},
     "harness_rungs": ["…"],
     "auditor_only_rungs": ["…"],
-    "second_opinion": {"harness": "codex", "operation": "review", "report_dir": ".claude/second-opinion/"},
+    "carrier": "codex",
     "semantic_fallback": {"worker": "worker", "mid": "mid", "reasoner": "strongest", "orchestrator": "strongest"}
+  },
+  "second_opinion_policy": {"ladder": ["claude", "codex", "qwen", "opencode", "pi"], "model_rule": "max", "never": "silently-same-model"},
+  "providers": {
+    "claude": {"operation": "review", "model_flag": "--model {model}", "family": "claude", "models": ["…"], "report_dir": ".claude/second-opinion/"},
+    "…": {}
   },
   "task_kinds": {
     "explore-search": {"tier": "worker"},
@@ -241,14 +249,39 @@ the orchestrator, and so for the reasoner that follows it. `quant-derivation` ca
 only an orchestrator below the corridor leaves the kind under-powered. A floor that resolves to
 nothing on the local ladder records nothing.
 
-`second_opinion` names a harness and an operation; it does not spell a command. C57 moved the
-executable and its argv into `common/runtime.py`, the single map of harness commands, so the
-registry carries policy — which harness, which operation, where reports land — and the runtime
-contract carries the invocation. The retired `cli` and `invoke` keys are not accepted: a config
-still using them fails `routing.second-opinion` at `verify`, which names the overlay file. The
-initializer does not repair it — the overlay is hand-owned input it reads, not an artifact it
-writes — so the fix is a hand edit of `<AITNA_ROOT>/model-routing.json`, then a re-`init` to
-regenerate the local config against the moved `registry_hash`.
+The second opinion's rows are the `providers` table and its order is
+`second_opinion_policy.ladder`; [ADR 0024](../adr/0024-second-opinion-by-model-priors.md) owns
+both, with the walk and the report header. A vendor block keeps only `carrier`, the provider its
+sessions run on. A provider row names an operation, never a command: C57 keeps the executable
+and its argv in `common/runtime.py`, the single map of harness commands. The per-vendor
+`second_opinion` object (and with it the older `cli` and `invoke` keys) is retired: a project
+overlay still carrying it fails `routing.second-opinion` at `verify`, which names the overlay
+file. The initializer does not repair it — the overlay is hand-owned input it reads, not an
+artifact it writes — so the fix is a hand edit of `<AITNA_ROOT>/model-routing.json` (or the
+developer-local `<AITNA_ROOT>/local/model-routing.json`), then a re-`init` to regenerate the
+local config against the moved `registry_hash`.
+
+A provider whose row carries `aliases: true` ships its model names as aliases (the codex `luna`,
+`terra`, `sol`), because a carrier rejects an unversioned name and a versioned one goes stale. The
+concrete id each alias resolves to lives only in the developer-local `<AITNA_ROOT>/local/model-aliases.json`,
+written by the refresh tool on request, and the runner resolves a pin through that file; the split and
+its fail-closed rules are [ADR 0024 D16](../adr/0024-second-opinion-by-model-priors.md).
+The reserved token `default` (`codex:default`, or the runner's `--default-model`) is the other way past an
+alias: no pin at all, the carrier's own configured model, disclosed as `model=(default)` (D16).
+*Open:* other carriers' catalogs — `opencode` `models`, `pi --list-models`, and a `command` format (a
+declared argv whose stdout lists the models) — are not supported; only `codex-models-cache` is (D16).
+
+The unit a run resolves is `(provider, model, effort)`: a model id may carry a reasoning level,
+`carrier:model@effort`, split at its last `@`, and a row says how it is sent with
+`efforts: {"flag": "...{effort}...", "levels": [weakest first]}`
+([ADR 0024 D17](../adr/0024-second-opinion-by-model-priors.md)). Only measured rows ship them
+([M188](../../meta/MEASUREMENTS.md)): `claude` (`--effort`), `codex` (the config value
+`-c 'model_reasoning_effort="{effort}"'`, the quotes literal inside one argv element) and `pi`
+(`--thinking`, whose effect on the acme models M188 did not establish, so it is a flag sent, not a
+behaviour promised). `opencode` ships none, because its `--variant` set is per model and a flat `levels`
+list cannot be true for it; an owner may declare `efforts` in an overlay for a model that lists variants.
+`qwen` has no such flag. *Open:* per-model levels, and a check for the empty body a carrier can return
+with exit 0.
 
 The overlay may also add a `briefs` map — per-agent markdown appended to the generated
 subagent body. Its keys are agent names, so they are a **public contract** written by hand
@@ -303,7 +336,7 @@ moved — before producing their output:
 
 - **Config present and fresh** (registry hash matches, orchestrator matches settings) →
   inject one status line: `model routing: vendor=openai · orchestrator=<local-top> ·
-  reasoner=<local-top> · worker=<local-low> · auditor=<local-high> · second-opinion=claude(on)`. Zero questions,
+  reasoner=<local-top> · worker=<local-low> · auditor=<local-high> · second-opinion=claude:<strongest> priors=claude (on)`. Zero questions,
   near-zero tokens. If the orchestrator leaves the healthy corridor (§3), the line gains
   a warning:
   `⚠ orchestrator=<below-floor> is below the orchestration floor (<floor>) — consider /model up`
@@ -393,18 +426,18 @@ step that has a natural delegate gets a one-line tier annotation:
 
 ### 4.6 Second-opinion protocol
 
-When enabled in config, the orchestrator calls the external vendor at the existing
-**verify gates** — design-flow *Align* for architecture decisions, code-flow step 5
-*Verify* for code — via the registry-recorded invocation. The channel is the vendor's
-**CLI in non-interactive mode** (`codex exec "<prompt>"` for Claude-led sessions,
-`claude -p --output-format text "<prompt>"` for Codex-led sessions); a plugin command can
-replace it later — it is registry data. Note: akmon's `codex_adapter.py`/`codex-hook.py`
-are the *reverse* direction (akmon guardrails running inside a Codex session), not this
-channel.
+When enabled in config, the orchestrator runs `tools/model_routing/second_opinion.py` at the
+existing **verify gates** — design-flow *Align* for architecture decisions, code-flow step 5
+*Verify* for code. Which provider reviews, the ladder walk and its skips, the flags that follow
+or override it, and the report header with its skip ledger are owned by
+[ADR 0024](../adr/0024-second-opinion-by-model-priors.md); the provider's **CLI in
+non-interactive mode** comes from the runtime command map (ADR 0004/D02). Note: akmon's
+`codex_adapter.py`/`codex-hook.py` are the *reverse* direction (akmon guardrails running inside
+a Codex session), not this channel.
 
 **Delivery — the opinion always surfaces in chat** (unlike routing switches, which are a
-silent log): the full report is written to a file
-(`.claude/second-opinion/[<task>-]<gate>-<n>.md`, `n` the next free ordinal); the chat gets a **digest** — verdict, the
+silent log): the full report is written to a file in the chosen provider's `report_dir`
+(`<report_dir>/[<task>-]<gate>-<n>.md`, `n` the next free ordinal); the chat gets a **digest** — verdict, the
 points where the second opinion *disagrees* with the orchestrator's analysis, and the
 file link; the call itself is recorded by the delegation-log hook (§4.4). Token cost is
 bounded: a digest per gate, opt-in only; the full report enters context only on request.
@@ -412,6 +445,18 @@ bounded: a digest per gate, opt-in only; the full report enters context only on 
 The external review is *advisory input to the owner's decision or conformance review*,
 never a replacement for owner acceptance: it widens what the owner sees, it does not
 sign off. Tiers change who *drafts*, never who *decides*.
+
+**Still open** (tracked in [TASKS.md](../../meta/TASKS.md), not decided here):
+
+- the `qwen`, `opencode` and `pi` argv probes (N8, C72, N19) and the `delivered` value each
+  matrix row stands at are owned by [CAPABILITIES.md](../../CAPABILITIES.md), not restated here;
+- when a third opinion or an arbiter (`--rank 3`, `--rank 4`) is called, and how divergent
+  verdicts on one pack are reconciled — A68;
+- tier binding for a session on a harness that has no vendor block: it gets a second opinion
+  but no tier binding (decided, [ADR 0024 D15](../adr/0024-second-opinion-by-model-priors.md): tier
+  binding stays owned by a vendor block, and the session names its harness with `--session-provider`).
+  The status line reads the bound vendor from the local config and falls back to `anthropic`
+  when none is recorded: `anthropic` is akmon's **default vendor**, not a claim about the session.
 
 ## 5. Session flow (end to end)
 
@@ -592,9 +637,10 @@ the evidence-based gate check is the authoritative signal.
 3. **`second-opinion` — always a *different model*, because it thinks differently.** The
    diversity requirement is about priors, not vendor branding: the reviewer must differ
    from the models whose work it reviews (the orchestrator as author, the auditor as
-   auditor). Preference ladder (registry policy): (1) another vendor's model; (2) the same
-   vendor's *different* model; never the same model. Fallback when no other vendor is
-   reachable: decided (§9.7 #2) — a different model of the same vendor.
+   auditor). The mechanism — one ladder walked by priors, the same family only as the
+   disclosed last resort, never silently the same model — is owned by
+   [ADR 0024](../adr/0024-second-opinion-by-model-priors.md), which superseded the
+   vendor-first ladder of §9.7 #2.
 
 Three independence mechanisms, one axis: adversarial verification varies the **prompt**,
 the auditor varies the **context** (fresh view, same or stronger model), second
@@ -742,7 +788,7 @@ All points locked by the owner ("9.7 принято"); recorded in
 | # | Question | Decision |
 |---|---|---|
 | 1 | `reasoner` dynamic default | **(a)** orchestrator's rung + per-task-kind registry floors, escalate on ladder signals — trusts the level hypothesis; the auditor catches under-powered drafts at the gate |
-| 2 | second-opinion fallback when no other vendor is reachable | **(b)** a different model of the same vendor — weaker prior diversity still beats none; the ladder (other vendor → other model → never same) is registry data |
+| 2 | second-opinion fallback when no other vendor is reachable | **(b)** a different model of the same vendor — weaker prior diversity still beats none; the ladder (other vendor → other model → never same) is registry data. *Superseded by [ADR 0024](../adr/0024-second-opinion-by-model-priors.md) (D06–D07): the ladder is walked by priors, not vendor, and same family runs only as the disclosed last resort* |
 | 3 | optional dependency-graph excerpt in the review gate-pack | **yes**, opt-in per gate |
 | 4 | count-floor numbers | **3 / 2**, tune from telemetry |
 | 5 | skip-above-floor surfacing | **silent-but-logged** |
@@ -763,8 +809,9 @@ All points locked by the owner ("9.7 принято"); recorded in
   bounded draft's needs; the auditor safety net makes the relative default viable.
   *Revisit-if:* gate audits show under-powered drafts recurring despite the ladder.
 - **Second-opinion bound to vendor diversity only** — superseded: the requirement is
-  *model* diversity (different priors); vendor diversity is the preferred but not the
-  only way to get it.
+  *model* diversity (different priors), which
+  [ADR 0024](../adr/0024-second-opinion-by-model-priors.md) tests on the model family, not
+  the vendor.
 - **Mandatory auditor at every gate** (v1-fork B) — rejected: contradicts the
   threshold+override decision; cost on trivial gates buys nothing.
 - **Fold into `design-fork`/`debug-deep` prompt contract** — rejected (carried from v1):

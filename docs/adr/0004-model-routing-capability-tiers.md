@@ -29,6 +29,9 @@ observability are code, not prose; cross-vendor review is offered opt-in.
    (load-bearing synthesis: design forks, deep debugging, quant derivation), `worker`
    (delegable realization: exploration, summaries, mechanical edits, tests-under-spec),
    `second-opinion` (independent cross-vendor review, opt-in).
+   **Superseded in part by [ADR 0024](0024-second-opinion-by-model-priors.md)**: the reviewer is
+   chosen by model priors (family) down one ladder, not by vendor, so "cross-vendor" here and in
+   Context reads as "different priors"; the tier, its opt-in and D02 stand unchanged.
 2. **The binding surface is a task-kind matrix, kept as data.** A finite named list of
    operations (`explore-search`, `summarize`, `mech-edit`, `test-scaffold`, `doc-sync`,
    `validate-loop`, `implement-under-spec`, `debug-deep`, `design-fork`,

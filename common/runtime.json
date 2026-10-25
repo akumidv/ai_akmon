@@ -14,6 +14,34 @@
         "review": ["exec"],
         "hooks-list": ["app-server"]
       }
+    },
+    "qwen": {
+      "binary": "qwen",
+      "operations": {
+        "version": ["--version"],
+        "review": [
+          "--approval-mode",
+          "default",
+          "--exclude-tools",
+          "write_file,edit,run_shell_command",
+          "--max-wall-time",
+          "140s"
+        ]
+      }
+    },
+    "opencode": {
+      "binary": "opencode",
+      "operations": {
+        "version": ["--version"],
+        "review": ["run", "--agent", "plan"]
+      }
+    },
+    "pi": {
+      "binary": "pi",
+      "operations": {
+        "version": ["--version"],
+        "review": ["-p", "--no-session", "--tools", "read,grep,find,ls", "--no-extensions", "--no-mcp"]
+      }
     }
   },
   "declared_runtimes": {
@@ -22,14 +50,20 @@
       ["python3", "generated-wiring", "required"],
       ["git", "generated-wiring", "required-on:codex"],
       ["claude", "akmon-own-tooling", "optional"],
-      ["codex", "akmon-own-tooling", "optional"]
+      ["codex", "akmon-own-tooling", "optional"],
+      ["qwen", "akmon-own-tooling", "optional"],
+      ["opencode", "akmon-own-tooling", "optional"],
+      ["pi", "akmon-own-tooling", "optional"]
     ],
     "node": [
       ["POSIX shell", "generated-wiring", "required"],
       ["node", "generated-wiring", "required"],
       ["git", "generated-wiring", "required-on:codex"],
       ["claude", "akmon-own-tooling", "optional"],
-      ["codex", "akmon-own-tooling", "optional"]
+      ["codex", "akmon-own-tooling", "optional"],
+      ["qwen", "akmon-own-tooling", "optional"],
+      ["opencode", "akmon-own-tooling", "optional"],
+      ["pi", "akmon-own-tooling", "optional"]
     ]
   }
 }

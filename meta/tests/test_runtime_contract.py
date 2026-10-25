@@ -46,11 +46,14 @@ DECLARATIONS = (
     RuntimeDeclaration("git", GENERATED_WIRING, REQUIRED_ON + "codex"),
     RuntimeDeclaration("claude", OWN_TOOLING, OPTIONAL),
     RuntimeDeclaration("codex", OWN_TOOLING, OPTIONAL),
+    RuntimeDeclaration("qwen", OWN_TOOLING, OPTIONAL),
+    RuntimeDeclaration("opencode", OWN_TOOLING, OPTIONAL),
+    RuntimeDeclaration("pi", OWN_TOOLING, OPTIONAL),
 )
 
 MAP = {
-    "claude": HarnessCommands(binary="claude", operations={"version": ("--version",)}),
-    "codex": HarnessCommands(binary="codex", operations={"version": ("--version",)}),
+    name: HarnessCommands(binary=name, operations={"version": ("--version",)})
+    for name in ("claude", "codex", "qwen", "opencode", "pi")
 }
 
 
@@ -211,8 +214,7 @@ def test_wiring_that_stops_needing_a_shell_leaves_the_carrier_unused(tmp_path):
     shell_free = (
         RuntimeDeclaration(POSIX_SHELL, GENERATED_WIRING, REQUIRED),
         RuntimeDeclaration("python3", GENERATED_WIRING, REQUIRED),
-        RuntimeDeclaration("claude", OWN_TOOLING, OPTIONAL),
-        RuntimeDeclaration("codex", OWN_TOOLING, OPTIONAL),
+        *(RuntimeDeclaration(name, OWN_TOOLING, OPTIONAL) for name in MAP),
     )
     wiring = {
         "claude": [["python3", "/x/session-start-agent.py"]],
@@ -374,17 +376,15 @@ def test_c57_lock_text_pins_prefix_ownership_without_the_old_overclaim():
 
 
 def test_the_map_constructs_the_second_opinion_argv():
-    import routing
-
-    spec = {"harness": "claude", "operation": "review", "model_flag": "--model {model}"}
-    assert routing.second_opinion_command(spec, "review this") == [
+    registry = {"providers": {"claude": {"operation": "review", "model_flag": "--model {model}"}}}
+    assert routing.opinion_command(registry, "claude", prompt="review this") == [
         "claude",
         "-p",
         "--output-format",
         "text",
         "review this",
     ]
-    assert routing.second_opinion_command(spec, "review this", model="opus") == [
+    assert routing.opinion_command(registry, "claude", model="opus", prompt="review this") == [
         "claude",
         "-p",
         "--output-format",
@@ -393,6 +393,27 @@ def test_the_map_constructs_the_second_opinion_argv():
         "opus",
         "review this",
     ]
+
+
+def test_the_new_carriers_review_operations_are_the_probed_read_only_argv():
+    """qwen and opencode ship the argv N19/N8 measured; pi's is documented only (no credentials on the probe host)."""
+    table = runtime_declaration.harness_commands()
+    assert table["qwen"].operations == {
+        "version": ("--version",),
+        "review": (
+            "--approval-mode",
+            "default",
+            "--exclude-tools",
+            "write_file,edit,run_shell_command",
+            "--max-wall-time",
+            "140s",
+        ),
+    }
+    assert table["opencode"].operations == {"version": ("--version",), "review": ("run", "--agent", "plan")}
+    assert table["pi"].operations == {
+        "version": ("--version",),
+        "review": ("-p", "--no-session", "--tools", "read,grep,find,ls", "--no-extensions", "--no-mcp"),
+    }
 
 
 def test_an_unknown_harness_or_operation_is_refused():
@@ -460,76 +481,38 @@ def test_a_binary_hidden_behind_a_pipe_is_one_undeclared_error(tmp_path):
 # --- retired registry keys (N-review finding 6) ---------------------------------------------
 
 
-@pytest.mark.parametrize("required", [True, False])
-def test_a_registry_still_using_the_retired_keys_is_refused(required):
-    """`cli`/`invoke` moved into the harness map; a stale config must fail, not fall back."""
-    stale = {
-        "anthropic": {
-            "second_opinion": {
-                "cli": "claude",
-                "invoke": "claude -p --output-format text",
-                "report_dir": ".codex/second-opinion/",
-            }
-        }
-    }
-    with pytest.raises(KeyError):
-        routing.second_opinion_spec(stale, "anthropic", required=required)
+def test_a_registry_still_using_the_retired_keys_is_refused():
+    """The per-vendor `second_opinion` object moved into the providers table; a stale one must fail."""
+    stale = {"anthropic": {"second_opinion": {"harness": "claude", "report_dir": ".codex/second-opinion/"}}}
+    with pytest.raises(routing.RetiredKeyError, match=r"anthropic\.second_opinion"):
+        routing.refuse_retired_keys(stale, {})
 
 
-@pytest.mark.parametrize("required", [True, False])
-def test_an_upgraded_registry_under_a_stale_overlay_is_refused(required):
+def test_an_upgraded_registry_under_a_stale_overlay_is_refused():
     """The real upgrade path: the shipped registry is new, the project overlay is not.
 
-    `_deep_merge` layers the overlay *over* the registry, so `harness`/`operation` survive and
-    the retired pair rides along beside them. The merged spec then satisfies every presence
-    check while carrying two contradictory statements of the same command — the exact shape a
-    standalone-stale fixture cannot reach.
+    `_deep_merge` layers the overlay *over* the registry, so the old ladder rides along beside the
+    new one. The merged registry then looks complete while carrying two orders for one decision —
+    the exact shape a standalone-stale fixture cannot reach.
     """
-    shipped = {
-        "anthropic": {
-            "second_opinion": {
-                "harness": "claude",
-                "operation": "review",
-                "report_dir": ".codex/second-opinion/",
-            }
-        }
-    }
-    overlay = {
-        "anthropic": {
-            "second_opinion": {
-                "cli": "claude",
-                "invoke": "claude -p --output-format text",
-            }
-        }
-    }
+    shipped = {"second_opinion_policy": {"ladder": ["claude", "codex"]}}
+    overlay = {"second_opinion_policy": {"diversity_ladder": ["other-vendor"]}}
     merged = routing._deep_merge(shipped, overlay)
-    assert set(merged["anthropic"]["second_opinion"]) == {
-        "harness",
-        "operation",
-        "report_dir",
-        "cli",
-        "invoke",
-    }, "the merge keeps both, which is why presence checks alone cannot catch this"
-    with pytest.raises(KeyError) as raised:
-        routing.second_opinion_spec(merged, "anthropic", required=required)
-    assert "retired" in str(raised.value)
+    assert set(merged["second_opinion_policy"]) == {"ladder", "diversity_ladder"}, "the merge keeps both"
+    with pytest.raises(routing.RetiredKeyError) as raised:
+        routing.refuse_retired_keys(merged, {})
+    assert "model-routing.json" in str(raised.value)
 
 
 def test_a_clean_overlay_still_resolves_after_the_merge():
-    """The negative boundary: an overlay that only overrides policy must keep working."""
-    shipped = {
-        "anthropic": {
-            "second_opinion": {
-                "harness": "claude",
-                "operation": "review",
-                "report_dir": ".codex/second-opinion/",
-            }
-        }
-    }
-    overlay = {"anthropic": {"second_opinion": {"report_dir": ".local/second-opinion/"}}}
-    spec = routing.second_opinion_spec(routing._deep_merge(shipped, overlay), "anthropic")
-    assert spec["report_dir"] == ".local/second-opinion/"
-    assert spec["harness"] == "claude"
+    """The negative boundary: an overlay that only overrides a provider's report directory keeps working."""
+    shipped = {"providers": {"claude": {"operation": "review", "report_dir": ".claude/second-opinion/"}}}
+    overlay = {"providers": {"claude": {"report_dir": ".local/second-opinion/"}}}
+    merged = routing._deep_merge(shipped, overlay)
+    routing.refuse_retired_keys(merged, {})
+    row = routing.provider_row(merged, "claude")
+    assert row["report_dir"] == ".local/second-opinion/"
+    assert row["operation"] == "review"
 
 
 def test_no_shipped_registry_or_document_still_spells_the_retired_keys():
@@ -879,7 +862,7 @@ def test_runtime_json_carries_the_tables_the_module_reads():
 
     data = json.loads((Path(runtime_declaration.__file__).parent / "runtime.json").read_text(encoding="utf-8"))
     assert set(data) == {"harness_commands", "declared_runtimes"}
-    assert set(data["harness_commands"]) == {"claude", "codex"}
+    assert set(data["harness_commands"]) == {"claude", "codex", "qwen", "opencode", "pi"}
     assert data["harness_commands"]["claude"]["operations"]["review"] == ["-p", "--output-format", "text"]
     assert set(data["declared_runtimes"]) == {"python", "node"}
     assert data["declared_runtimes"]["python"][0] == [POSIX_SHELL, GENERATED_WIRING, REQUIRED]
@@ -889,7 +872,7 @@ def test_runtime_json_carries_the_tables_the_module_reads():
 
 def test_the_node_declaration_names_node_where_python_names_python3():
     binaries = [d.binary for d in runtime_declaration.declared_runtimes("node")]
-    assert binaries == [POSIX_SHELL, "node", "git", "claude", "codex"]
+    assert binaries == [POSIX_SHELL, "node", "git", "claude", "codex", "qwen", "opencode", "pi"]
 
 
 def test_an_unknown_ecosystem_is_a_value_error_naming_it():
@@ -899,7 +882,7 @@ def test_an_unknown_ecosystem_is_a_value_error_naming_it():
 
 def test_the_loaders_reconstruct_the_module_shapes_from_the_data_file():
     declarations = runtime_declaration.declared_runtimes("python")
-    assert len(declarations) == 5
+    assert len(declarations) == 8
     assert declarations[0] == RuntimeDeclaration(POSIX_SHELL, GENERATED_WIRING, REQUIRED)
     assert declarations[3] == RuntimeDeclaration("claude", OWN_TOOLING, OPTIONAL)
     table = runtime_declaration.harness_commands()

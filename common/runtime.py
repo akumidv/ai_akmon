@@ -27,7 +27,7 @@ which report directory — and refers to this map by harness name rather than na
 
 The ownership is exact, and narrower than "one place builds the command": this map owns the
 **executable and the operation prefix**, and nothing else may spell either. A caller may append
-its own *policy tail* — ``routing.second_opinion_command`` adds the registry's ``model_flag`` and
+its own *policy tail* — ``routing.opinion_command`` adds the registry's ``model_flag`` and
 the prompt — because a model pin and a prompt are policy the registry owns, not facts about how
 a vendor's CLI is invoked. What the map forbids is a second answer to "what is this harness
 called" or "how is this operation spelled".
@@ -91,7 +91,7 @@ def _runtime_data() -> dict:
 #: in ``common/runtime.json`` — not of the whole argv. Adding an operation there is how a new
 #: caller reaches a harness; spelling an executable or an operation anywhere else is a second
 #: owner and is rejected by the C57 checker. A caller appending its own policy tail is not:
-#: ``routing.second_opinion_command`` adds the registry's ``model_flag`` and the prompt after
+#: ``routing.opinion_command`` adds the registry's ``model_flag`` and the prompt after
 #: this prefix.
 def harness_commands() -> Mapping[str, HarnessCommands]:
     """The harness table: each executable name and its operation prefixes, from the data file."""

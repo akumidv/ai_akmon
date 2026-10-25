@@ -1,0 +1,26 @@
+id = "tools/second-opinion-overlay-invalid"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# A developer-local routing overlay that does not parse is refused by name (OverlayError): one
+# `second-opinion:` line on stderr quoting the file, exit 2, nothing on stdout and no traceback.
+# The parser's own words are not part of the message, so the line is the same on both implementations.
+
+[fixture.files]
+"_aitna/local/model-routing.json" = "{ not json"
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--list",
+  "--session-provider",
+  "claude",
+  "--session-model",
+  "opus",
+]
+
+[expected]
+exit = 2
+stderr = "second-opinion: the routing overlay _aitna/local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)\n"
+stdout = ""

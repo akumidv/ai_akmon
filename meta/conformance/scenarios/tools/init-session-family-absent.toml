@@ -1,0 +1,33 @@
+id = "tools/init-session-family-absent"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/init"]
+
+# The pair of `init-session-family`: the same session without `--session-family`. opencode's row
+# states no family, so the session's priors are unknown and nothing is counted as diverse (D08).
+
+[fixture.files]
+"_aitna/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "prompt": "stdin", "family": "gemini", "report_dir": ".shfake/second-opinion/"}
+  },
+  "second_opinion_policy": {"ladder": ["shfake"]}
+}
+"""
+
+[run]
+tool = "model_routing/init"
+argv = [
+  "--second-opinion",
+  "on",
+  "--session-provider",
+  "opencode",
+  "--session-model",
+  "x/y",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "updated: .claude/agents/k_explorer.md\nupdated: .claude/agents/k_mechanic.md\nupdated: .claude/agents/k_validator.md\nupdated: .claude/agents/k_implementer.md\nupdated: .claude/agents/k_reasoner.md\nupdated: .claude/agents/k_auditor.md\nupdated: .claude/model-routing.local.json\nmodel routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable priors=unknown (on)\n"

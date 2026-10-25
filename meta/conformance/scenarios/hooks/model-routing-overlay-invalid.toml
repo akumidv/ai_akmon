@@ -1,0 +1,28 @@
+# A hand-owned routing overlay that is not valid JSON costs the routing, never the session: at
+# SessionStart one line names the file, on both owner channels (additionalContext and
+# systemMessage) and on stderr, and the hook exits 0.
+id = "hooks/model-routing-overlay-invalid"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:model-routing"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/model-routing.json" = "{ not json" }
+
+[run]
+script = "model-routing"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-mr-overlay"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = "akmon model-routing hook: the routing overlay _aitna/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it) — model routing is silent for this session\n"
+[expected.stdout_json]
+systemMessage = "akmon model-routing hook: the routing overlay _aitna/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it) — model routing is silent for this session"
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "SessionStart"
+additionalContext = "akmon model-routing hook: the routing overlay _aitna/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it) — model routing is silent for this session"

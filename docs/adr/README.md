@@ -147,3 +147,14 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   `carrier[:model]` ladder, team default replaced whole locally; a reviewer differs in harness, model
   **and** family, same family only as the disclosed last resort; `claude`/`codex`/`qwen` ship (qwen
   with its probe), the gateway shape ships with no row. Supersedes 0005 item 5; retains 0004/D02.
+- [0025 — Actors and the action repertoire](0025-actors-and-action-repertoire.md)
+  — who drives a run (developer, autonomous agent, non-developer) is an axis of its own, set at
+  launch and fixed for the run; a permission is a closed repertoire of allowed actions plus a short
+  list of unconditional prohibitions, result quality weighed above bypass risk, the bypass contained
+  by isolation and forge limits; a run's instructions and skills are generated run-local and never
+  committed; a project's own grants are trusted by an owner-accepted digest, as a measured trial.
+- [0026 — Agents of the delivery chain](0026-agents-of-the-delivery-chain.md)
+  — architect, engineer and review are roles of one development agent; learning, integration
+  (decides a merge, sorts findings into blockers and new tasks), release (branch, commit, pull
+  request, review without prompting) and publish (tag, publish) are agents of their own. Supersedes
+  0001 D5 in part.

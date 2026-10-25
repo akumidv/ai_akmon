@@ -4,7 +4,7 @@
 # (`join` is the argv list fed to shlex.join; `expected` is the plain output string).
 #
 # Call sites: split — common/check_runner.py::read_checks (the recorded [check] command), and
-# tools/model_routing/routing.py::second_opinion_command (a model-flag template's extra argv).
+# tools/model_routing/routing.py::opinion_command (a model-flag template's extra argv).
 # join — common/check_runner.py::run_checks (the passed/failed finding's displayed command) and
 # src/akmon/_update.py::_update_package / ::_update_vendored (the command shown to the owner).
 

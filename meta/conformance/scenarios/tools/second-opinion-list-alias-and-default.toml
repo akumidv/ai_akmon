@@ -1,0 +1,21 @@
+id = "tools/second-opinion-list-alias-and-default"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# `--list` over a project overlay (ADR 0024 D16): `shalias` is an `aliases: true` row with no local alias file, so
+# its strongest model shows `big→(unresolved)` and an ask names the refresh command; `shdefault:default` runs
+# the carrier's own model and is marked `pin=default`.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+"_aitna/model-routing.json" = "{\n  \"providers\": {\n    \"shalias\": {\"argv\": [\"/bin/sh\", \"--model\", \"{model}\"], \"prompt\": \"stdin\", \"family\": \"qwen\", \"models\": [\"small\", \"big\"], \"aliases\": true, \"catalog\": {\"file\": \"~/.shalias/models.json\", \"format\": \"codex-models-cache\"}, \"report_dir\": \".shalias/second-opinion/\"},\n    \"shdefault\": {\"argv\": [\"/bin/sh\", \"--model\", \"{model}\"], \"prompt\": \"stdin\", \"family\": \"llama\", \"models\": [\"x\"], \"report_dir\": \".shdefault/second-opinion/\"}\n  },\n  \"second_opinion_policy\": {\"ladder\": [\"claude\", \"shalias\", \"shdefault:default\"]}\n}\n"
+
+[run]
+tool = "model_routing/second_opinion"
+argv = ["--list", "--session-provider", "claude", "--session-model", "opus"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "session: provider=claude model=opus priors=claude\nrank 2: provider=shalias model=big→(unresolved) priors=qwen repo=unknown\nrank 3: provider=shdefault model=(default) priors=llama repo=unknown pin=default\nskipped:\n  claude: self\nasks:\n  shalias: alias 'big' has no concrete id; run `{{tool model_routing/models}} --refresh --provider shalias`\n"

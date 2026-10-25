@@ -1,0 +1,35 @@
+id = "tools/second-opinion-list-unknown-session-last-resort"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# `--list` shows what a run would do, including for a session whose priors nobody declared: the
+# chain is empty (D08 — nothing can differ from priors nobody knows), the disclosed last resort a
+# run takes anyway (D07) is listed, and the ask that would settle the session's priors follows. The
+# provider is declared in the overlay on an absolute-path executable (D12) with no family, so the
+# session's own row is present on every host and says nothing about its priors.
+
+[fixture.files]
+"_aitna/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "prompt": "stdin", "family": null, "models": ["small", "big"], "report_dir": ".shfake/second-opinion/"}
+  },
+  "second_opinion_policy": {"ladder": ["shfake"]}
+}
+"""
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--list",
+  "--session-provider",
+  "shfake",
+  "--session-model",
+  "big",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "session: provider=shfake model=big priors=unknown\nchain: empty — no ladder provider differs from the session\nlast resort at rank 2 (kind=last-resort): provider=shfake model=small priors=unknown repo=unknown\nskipped:\n  shfake: session priors unknown\nasks:\n  session shfake: priors unknown for model big; declare providers.shfake.model_families.big (or providers.shfake.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)\n"

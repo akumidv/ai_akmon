@@ -5,7 +5,7 @@
 # every row answers about the *shipped* declaration: neither module takes the table as an
 # argument, and a synthetic harness map is not something this table can ask either mouth.
 #
-# Call sites: harness_command — tools/model_routing/routing.py::second_opinion_command (the
+# Call sites: harness_command — tools/model_routing/routing.py::opinion_command (the
 # non-interactive review argv: the map's prefix, then the registry's model_flag and prompt).
 # codex_hooks_list_command — bin/verify.py::check_codex_host_trust, the route it speaks JSON-RPC
 # over, and meta/self_ci.py::_codex_free_env, which hides that executable *by name*, so the
@@ -90,6 +90,19 @@ expected = { binary = "claude", population = "akmon-own-tooling", modality = "op
 index = 4
 expected = { binary = "codex", population = "akmon-own-tooling", modality = "optional" }
 
+[[declared]]
+# The three carriers of the basic port (ADR 0024/D09, unmeasured — N19 owns qwen's safe argv): optional, own tooling.
+index = 5
+expected = { binary = "qwen", population = "akmon-own-tooling", modality = "optional" }
+
+[[declared]]
+index = 6
+expected = { binary = "opencode", population = "akmon-own-tooling", modality = "optional" }
+
+[[declared]]
+index = 7
+expected = { binary = "pi", population = "akmon-own-tooling", modality = "optional" }
+
 # --- harness_command: executable, then the operation's prefix, then the caller's tail (base
 # 2000). Every operation the shipped map declares appears here, which is how the whole map is
 # pinned through the join instead of being copied as a structure. -----------------------------
@@ -122,7 +135,7 @@ operation = "hooks-list"
 expected = ["codex", "app-server"]
 
 [[command]]
-# routing.second_opinion_command's real tail: the registry's model_flag, then the prompt last.
+# routing.opinion_command's real tail: the registry's model_flag, then the prompt last.
 harness = "codex"
 operation = "review"
 extra = ["--model", "gpt-5", "review this"]
@@ -142,6 +155,37 @@ harness = "codex"
 operation = "version"
 extra = [""]
 expected = ["codex", "--version", ""]
+
+[[command]]
+# The review operations of qwen and opencode (probed read-only argv, N19/N8) and pi (documented flags, unmeasured): the prefix each declares.
+harness = "qwen"
+operation = "review"
+expected = ["qwen", "--approval-mode", "default", "--exclude-tools", "write_file,edit,run_shell_command", "--max-wall-time", "140s"]
+
+[[command]]
+harness = "opencode"
+operation = "review"
+expected = ["opencode", "run", "--agent", "plan"]
+
+[[command]]
+harness = "pi"
+operation = "review"
+expected = ["pi", "-p", "--no-session", "--tools", "read,grep,find,ls", "--no-extensions", "--no-mcp"]
+
+[[command]]
+harness = "qwen"
+operation = "version"
+expected = ["qwen", "--version"]
+
+[[command]]
+harness = "opencode"
+operation = "version"
+expected = ["opencode", "--version"]
+
+[[command]]
+harness = "pi"
+operation = "version"
+expected = ["pi", "--version"]
 
 # --- the named constructors (base 3000): what the callers above actually reach ----------------
 
@@ -165,7 +209,7 @@ expected = ["codex", "app-server"]
 # --- the executables akmon knows how to invoke (base 4000) -----------------------------------
 
 [[binaries]]
-expected = ["claude", "codex"]
+expected = ["claude", "codex", "opencode", "pi", "qwen"]
 
 # --- the refusals (base 5000): the whole text is spec, including the quote style and the order
 # of the known list. harness_command raises these; its shipped caller is the second-opinion
@@ -175,7 +219,7 @@ expected = ["claude", "codex"]
 [[error]]
 harness = "gemini"
 operation = "version"
-expected = "unknown harness 'gemini'; known: claude, codex"
+expected = "unknown harness 'gemini'; known: claude, codex, opencode, pi, qwen"
 
 [[error]]
 # The hooks-list route belongs to codex alone, and the answer says which operations the named
@@ -189,7 +233,7 @@ expected = "harness 'claude' declares no operation 'hooks-list'; known: review, 
 # written as itself, not \\u-escaped, in the document both mouths print.
 harness = "коdex"
 operation = "version"
-expected = "unknown harness 'коdex'; known: claude, codex"
+expected = "unknown harness 'коdex'; known: claude, codex, opencode, pi, qwen"
 
 # --- the per-ecosystem declaration (C105): a row names its `ecosystem`; python is the default
 # the rows above rely on. The Node list swaps `python3` for `node` and nothing else. ----------
@@ -220,9 +264,24 @@ index = 4
 expected = { binary = "codex", population = "akmon-own-tooling", modality = "optional" }
 
 [[declared]]
-# The list has five entries on both sides; one past the end answers null, not an error.
 ecosystem = "node"
 index = 5
+expected = { binary = "qwen", population = "akmon-own-tooling", modality = "optional" }
+
+[[declared]]
+ecosystem = "node"
+index = 6
+expected = { binary = "opencode", population = "akmon-own-tooling", modality = "optional" }
+
+[[declared]]
+ecosystem = "node"
+index = 7
+expected = { binary = "pi", population = "akmon-own-tooling", modality = "optional" }
+
+[[declared]]
+# The list has eight entries on both sides; one past the end answers null, not an error.
+ecosystem = "node"
+index = 8
 
 # --- the ecosystem refusal (base 6000): the whole text, quote style and sorted known list. ----
 

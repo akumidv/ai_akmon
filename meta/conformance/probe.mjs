@@ -1233,7 +1233,14 @@ const ROUTING_DATA_FILES = {
  * @type {Record<string, Array<keyof typeof ROUTING_DATA_FILES>>}
  */
 const ROUTING_DATA_PARAMS = {
-  secondOpinionCommand: ["agents", "runtime"],
+  opinionCommand: ["agents", "runtime"],
+  carrierPresent: ["agents", "runtime"],
+  opinionChain: ["agents", "runtime"],
+  resolveOpinionChain: ["agents", "runtime"],
+  opinionSkips: ["agents", "runtime"],
+  opinionAsks: ["agents", "runtime"],
+  opinionHead: ["agents", "runtime"],
+  statusLines: ["agents", "runtime"],
   suppressedRebindWarning: ["markers"],
   gateRules: ["gate"],
   gateRuleFor: ["gate"],
@@ -1242,6 +1249,17 @@ const ROUTING_DATA_PARAMS = {
   ...Object.fromEntries(
     [
       "overlayName",
+      "localOverlayRel",
+      "localAliasesRel",
+      "defaultModelToken",
+      "localAliasesPath",
+      "readModelAliases",
+      "isModelAlias",
+      "resolveOpinionModel",
+      "parseCatalog",
+      "opinionPick",
+      "checkEffort",
+      "ladderPinsDefault",
       "localConfigRel",
       "delegationLogRel",
       "agentsDirRel",
@@ -1250,15 +1268,23 @@ const ROUTING_DATA_PARAMS = {
       "toolCommand",
       "settingsProbeNames",
       "overlayPath",
+      "localOverlayPath",
       "loadRegistry",
       "computeBinding",
       "checkLadderOrder",
       "checkAuditorOptIn",
-      "oppositeVendor",
       "retiredSecondOpinionKeys",
-      "secondOpinionSpec",
-      "secondOpinionUnavailability",
-      "resolveSecondOpinion",
+      "refuseRetiredKeys",
+      "providerRow",
+      "checkSessionFamily",
+      "vendorRefusal",
+      "hookOverlayLine",
+      "providerFamily",
+      "opinionModel",
+      "resolveSession",
+      "opinionLastResort",
+      "opinionRepo",
+      "opinionCarrier",
       "agentSpecs",
       "agentFileContent",
       "resolveBriefs",
@@ -1279,7 +1305,6 @@ const ROUTING_DATA_PARAMS = {
       "floorGapLines",
       "delegationFloorWarning",
       "delegationFloorDirective",
-      "statusLines",
       "rebindNotice",
       "initInstruction",
       "zoneConvention",
@@ -1302,10 +1327,11 @@ const ROUTING_CLASS_FIELDS = /** @type {Record<string, string[]>} */ ({
     "escalation",
     "semantic_fallback",
     "warning",
-    "second_opinion_cli",
     "auditor_opt_in",
   ],
-  SecondOpinionTarget: ["provider", "model"],
+  SecondOpinionTarget: ["provider", "model", "family", "effort"],
+  SecondOpinionSession: ["provider", "family", "model"],
+  ProviderAliases: ["source", "client", "aliases"],
   AgentSpec: ["name", "tier", "description", "tools", "body", "kinds"],
   FloorGap: ["kind", "agent", "floor", "bound"],
   DelegationEntry: ["timestamp", "session_id", "subagent", "model", "zone", "description"],
@@ -1715,6 +1741,7 @@ function routingCase(/** @type {any} */ base, /** @type {any} */ case_) {
   /** @type {Record<string, string | null>} */
   const changes = Object.fromEntries(ROUTING_BASE_ENV.map((name) => [name, null]));
   changes.TMPDIR = scratch;
+  changes.PATH = ctx.searchPath;
   for (const [name, value] of Object.entries(case_.env ?? {})) {
     changes[name] = value === "" ? null : routingFill(ctx, String(value));
   }
@@ -1838,6 +1865,44 @@ function hookProse(tree) {
 }
 
 /**
+ * `PATH` with every directory holding one of `binaries` shadowed by a copy that lacks them all —
+ * the runner's `_hide_binaries_from_path`, applied here because a unit run has no process
+ * environment of the runner's making: the second-opinion walk takes presence from `PATH` and
+ * nothing else (ADR 0024/D11), so an installed harness would move an answer from host to host.
+ * @param {string[]} binaries
+ * @param {string} scratch a directory the shadows are made in
+ * @returns {string}
+ */
+function pathWithoutBinaries(binaries, scratch) {
+  const hidden = new Set(binaries);
+  const entries = (process.env.PATH ?? "").split(path.delimiter).map((entry, index) => {
+    if (entry === "") {
+      return entry;
+    }
+    const directory = path.resolve(entry);
+    /** @type {string[]} */
+    let children;
+    try {
+      children = fs.readdirSync(directory);
+    } catch {
+      return entry;
+    }
+    if (!children.some((child) => hidden.has(child))) {
+      return entry;
+    }
+    const shadow = path.join(scratch, `path-${index}`);
+    fs.mkdirSync(shadow, { recursive: true });
+    for (const child of children) {
+      if (!hidden.has(child) && !fs.existsSync(path.join(shadow, child))) {
+        fs.symlinkSync(path.join(directory, child), path.join(shadow, child));
+      }
+    }
+    return shadow;
+  });
+  return entries.join(path.delimiter);
+}
+
+/**
  * The generic mouth: every `[[case]]` of the table against the module `spec` names.
  * @param {string} tree
  * @param {Record<string, any>} table
@@ -1868,13 +1933,35 @@ async function probeRows(tree, table, spec) {
     dataArgs: /** @type {(name: string) => any[]} */ (() => []),
   };
   base.dataArgs = spec.dataArgs(tree, base);
+  const shadows = fs.mkdtempSync(path.join(os.tmpdir(), "akmon-probe-path-"));
+  try {
+    return probeCases(base, table, writer, pathWithoutBinaries(harnessBinaryNames(data.runtime), shadows));
+  } finally {
+    fs.rmSync(shadows, { recursive: true, force: true });
+  }
+}
+
+/** Every optional-harness executable name `common/runtime.json` declares. */
+function harnessBinaryNames(/** @type {any} */ runtime) {
+  return Object.values(runtime.harness_commands).map((/** @type {any} */ spec) => spec.binary);
+}
+
+/**
+ * Run each `[[case]]` of the table in its own scratch directory, with `searchPath` as `PATH`.
+ * @param {any} base
+ * @param {Record<string, any>} table
+ * @param {any} writer
+ * @param {string} searchPath
+ * @returns {any[]}
+ */
+function probeCases(base, table, writer, searchPath) {
   const results = [];
   for (const [index, case_] of (table.case ?? []).entries()) {
     if (skippedAsRoot(case_)) {
       continue;
     }
     const expected = routingParse(writer.FloatValue, case_.expected_json);
-    let actual = routingCase(base, case_);
+    let actual = routingCase({ ...base, searchPath }, case_);
     if (writer.canonicalForm(expected) === writer.canonicalForm(actual)) {
       actual = expected;
     } else if (deepEqual(routingPrintable(base, expected), routingPrintable(base, actual))) {

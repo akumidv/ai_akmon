@@ -53,3 +53,35 @@ test("a settings model beside a NaN or Infinity literal is read, as json.loads r
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+const _BAD_OVERLAY =
+  "akmon model-routing hook: the routing overlay _aitna/model-routing.json is not a valid JSON object; " +
+  "repair or delete it (it is hand-owned, so akmon never rewrites it) — model routing is silent for this session";
+
+/** One event through the hook on a project whose routing overlay does not parse. */
+function _withBadOverlay(/** @type {string} */ event) {
+  const root = _project();
+  try {
+    fs.writeFileSync(posix.join(root, "_aitna", "model-routing.json"), "{ not json");
+    const payload = JSON.stringify({ hook_event_name: event, session_id: "sess-overlay", cwd: root });
+    const run = spawnSync(process.execPath, [_HOOK], { input: payload, encoding: "utf8", cwd: root });
+    assert.equal(run.status, 0, run.stderr);
+    return run;
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("a bad routing overlay at SessionStart tells the owner on both channels which file to repair", () => {
+  const run = _withBadOverlay("SessionStart");
+  const document = JSON.parse(run.stdout);
+  assert.equal(document.systemMessage, _BAD_OVERLAY);
+  assert.deepEqual(document.hookSpecificOutput, { hookEventName: "SessionStart", additionalContext: _BAD_OVERLAY });
+  assert.equal(run.stderr, `${_BAD_OVERLAY}\n`);
+});
+
+test("a bad routing overlay at a later prompt is silent beyond one stderr line", () => {
+  const run = _withBadOverlay("UserPromptSubmit");
+  assert.equal(run.stdout, "");
+  assert.equal(run.stderr, `${_BAD_OVERLAY}\n`);
+});

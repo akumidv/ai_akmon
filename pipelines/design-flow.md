@@ -176,11 +176,11 @@ what the owner must do (decide, confirm a record, supply or run something), and 
 nothing is needed. **Every line carries a code, confirmations and go-aheads included:** the owner
 answers by copying the code, so a line without one has to be quoted in full.
 
-**The body names the code where it argues the question.** The paragraph that gives a request's
-grounds, its description or the reasoning behind its recommendation carries that request's code
-in-line, in bold, at the point it begins — without it the reader cannot tie the closing line back to
-the reasoning, or the reasoning forward to the line. The code in the body is a label on the
-narration, not the ask: the options and the ask itself are not repeated there. The block does not
+**A code heads the passage that argues its question.** The paragraph that gives a request's
+grounds, its description or the reasoning behind its recommendation is preceded by a heading line
+carrying that request's code in bold and its gist — without it the reader cannot tie the closing
+line back to the reasoning, or the reasoning forward to the line. The heading is a label on the
+narration, not the ask: the options and the ask itself are not repeated under it. The block does not
 restate the body's reasoning, and the asks are not scattered through the body: a reader who skips to
 the end must find the whole list there, and a reader of the body must see which question each
 passage is about.

@@ -12,7 +12,8 @@ and writes the generated artifacts:
   binds — the vendor's committed one or ``--available`` — and omitted only for a vendor
   with neither);
 - ``.claude/model-routing.local.json`` — the resolved binding + second-opinion opt-in +
-  registry hash (per-user, gitignored like ``.env``).
+  the optional ``session`` stanza (the harness, model and priors the session runs on, recorded with
+  ``--session-provider``/``--session-model``/``--session-family``) + registry hash (per-user, gitignored like ``.env``).
 
 Stdlib-only and idempotent: re-running with the same inputs changes nothing. The registry
 (``registry.json``) plus the optional project overlay (``<aitna-root>/model-routing.json``)
@@ -87,6 +88,49 @@ def _existing_second_opinion(project_root: Path) -> bool:
     return bool(_existing_config(project_root).get("second_opinion"))
 
 
+def _session_stanza(args: argparse.Namespace, registry: dict, existing: dict) -> dict | None:
+    """The ``session`` stanza to record: the flags over the one already recorded, else none.
+
+    Record only: it names the harness, model and priors the session runs on so the second opinion
+    knows which carrier to skip and which family to differ from, and gives the harness no tier
+    binding (tier binding stays owned by a vendor block: ``--vendor`` selects the one a harness with
+    none borrows). A model or family with no provider borrows the recorded one, else the vendor's
+    ``carrier``; a provider alone keeps the recorded model only when it is the same provider, and a
+    recorded family only while the model is unchanged — the family belongs to the model (D15). A
+    ``--session-family`` outside the closed vocabulary is refused (D01).
+    """
+    recorded = existing.get("session")
+    recorded = recorded if isinstance(recorded, dict) else {}
+    if not (args.session_provider or args.session_model or args.session_family):
+        return dict(recorded) or None
+    if args.session_family:
+        routing.check_session_family(registry, args.session_family)
+    vendor_block = registry.get(args.vendor)
+    carrier = vendor_block.get("carrier") if isinstance(vendor_block, dict) else None
+    provider = args.session_provider or recorded.get("provider") or carrier
+    if not provider:
+        flag = "--session-model" if args.session_model else "--session-family"
+        raise ValueError(f"{flag} needs a provider: pass --session-provider, {args.vendor!r} declares no carrier")
+    same_provider = recorded.get("provider") == provider
+    model = args.session_model or (recorded.get("model") if same_provider else None)
+    family = args.session_family or (
+        recorded.get("family") if same_provider and model == recorded.get("model") else None
+    )
+    stanza = {"provider": str(provider)}
+    if model:
+        stanza["model"] = str(model)
+    if family:
+        stanza["family"] = str(family)
+    return stanza
+
+
+def _require_vendor(parser: argparse.ArgumentParser, registry: dict, vendor: str) -> None:
+    """Exit with a usage error unless ``vendor`` has a routing policy; a carrier's id is told where to start."""
+    vendors = routing.vendors_with_routing_policy(registry)
+    if vendor not in vendors:
+        parser.error(routing.vendor_refusal(registry, vendor, vendors))
+
+
 def _binding_inputs(args: argparse.Namespace, registry: dict, root: Path) -> tuple[list[str] | None, str]:
     """The validated ``--available`` list and the orchestrator alias; ``ValueError`` names a refused flag.
 
@@ -145,7 +189,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Opt in to this rung as the auditor: an auditor-only rung of the vendor (e.g. fable) "
         "or one of its ladder; with --available it must be listed there.",
     )
-    parser.add_argument("--second-opinion", choices=("on", "off"), help="Enable cross-vendor review (opt-in).")
+    parser.add_argument("--second-opinion", choices=("on", "off"), help="Enable second-opinion review (opt-in).")
+    parser.add_argument(
+        "--session-provider",
+        help="Record the provider (harness) the session runs on, so the second opinion skips it; "
+        "record only — it binds no tiers.",
+    )
+    parser.add_argument("--session-model", help="Record the model the session runs on (with --session-provider).")
+    parser.add_argument(
+        "--session-family",
+        help="Record the priors (model family) the session answers with; it must be in the family vocabulary "
+        "(second_opinion_policy.families), which an overlay may extend.",
+    )
     parser.add_argument("--check", action="store_true", help="Do not write; exit 1 when generated files are stale.")
     parser.add_argument("--dry-run", action="store_true", help="Print changes without writing them.")
     args = parser.parse_args(argv)
@@ -154,10 +209,12 @@ def main(argv: list[str] | None = None) -> int:
     if root_notice:
         print(root_notice, file=sys.stderr)
     akmon_dir = _standard_tree_root(root)
-    registry = routing.load_registry(akmon_dir, root)
-    vendors = routing.vendors_with_routing_policy(registry)
-    if args.vendor not in vendors:
-        parser.error(f"--vendor must be one of: {', '.join(vendors)}")
+    try:
+        registry = routing.load_registry(akmon_dir, root)
+    except routing.OverlayError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _require_vendor(parser, registry, args.vendor)
     try:
         available, orchestrator = _binding_inputs(args, registry, root)
     except ValueError as exc:
@@ -165,9 +222,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     second_opinion = _existing_second_opinion(root) if args.second_opinion is None else args.second_opinion == "on"
 
+    try:
+        routing.refuse_retired_keys(registry, {}, project_root=root)
+        session = _session_stanza(args, registry, _existing_config(root))
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     binding = routing.compute_binding(registry, orchestrator, available, args.vendor, args.auditor or None)
     try:
-        artifacts = routing.binding_artifacts(registry, binding, second_opinion=second_opinion, available=available)
+        artifacts = routing.binding_artifacts(
+            registry, binding, second_opinion=second_opinion, available=available, session=session
+        )
     except routing.BriefError as exc:
         # Nothing is written: generating the definitions without the overlay's briefs would
         # drop hand-authored project instructions, and the sweep below would then delete the
@@ -184,12 +249,13 @@ def main(argv: list[str] | None = None) -> int:
         changed.append(path)
         print(f"{'would delete' if not write else 'deleted'}: {path.relative_to(root)}")
 
+    head, _ = routing.opinion_head(registry, json.loads(artifacts[routing.local_config_rel()]))
     print(
         "model routing: "
         f"vendor={binding.vendor} · orchestrator={binding.orchestrator} · reasoner={binding.reasoner} · "
         f"auditor={binding.auditor} · "
         f"worker={binding.worker} · mid={binding.mid} · "
-        f"second-opinion={binding.second_opinion_cli or '-'}({'on' if second_opinion else 'off'})"
+        f"second-opinion={head} ({'on' if second_opinion else 'off'})"
     )
     if binding.warning:
         print(f"⚠ {binding.warning}")

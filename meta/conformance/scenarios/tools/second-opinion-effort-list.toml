@@ -1,0 +1,20 @@
+id = "tools/second-opinion-effort-list"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# `--list` shows the effort after the model (D17 point 6). The ladder entry `shfx` names no pin, so the rule's
+# strongest declared entry `big@high` runs, effort included (point 3: the owner orders `models`).
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+"_aitna/model-routing.json" = "{\n  \"providers\": {\n    \"shfx\": {\"argv\": [\"/bin/sh\", \"-m\", \"{model}\"], \"prompt\": \"stdin\", \"family\": \"gpt\", \"models\": [\"small\", \"big@high\"], \"efforts\": {\"flag\": \"--think {effort}\", \"levels\": [\"low\", \"high\"]}, \"report_dir\": \".shfx/second-opinion/\"}\n  },\n  \"second_opinion_policy\": {\"ladder\": [\"claude\", \"shfx\"]}\n}\n"
+
+[run]
+tool = "model_routing/second_opinion"
+argv = ["--list", "--session-provider", "claude", "--session-model", "opus"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "session: provider=claude model=opus priors=claude\nrank 2: provider=shfx model=big@high priors=gpt repo=unknown\nskipped:\n  claude: self\n"

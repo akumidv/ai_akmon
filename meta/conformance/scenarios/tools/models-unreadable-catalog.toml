@@ -1,0 +1,22 @@
+id = "tools/models-unreadable-catalog"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/models"]
+
+# A catalog that is not JSON is refused, naming the file and the row key.
+
+[fixture]
+tmp_files = { ".codex/models_cache.json" = "not json" }
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+tool = "model_routing/models"
+argv = ["--refresh"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "models: ~/.codex/models_cache.json (providers.codex.catalog) is not valid JSON\n"
+file_absent = ["_aitna/local/model-aliases.json"]

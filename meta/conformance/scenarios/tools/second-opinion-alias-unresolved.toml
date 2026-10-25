@@ -1,0 +1,19 @@
+id = "tools/second-opinion-alias-unresolved"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# An alias with no mapping (no local file at all) is a named, fail-closed refusal (ADR 0024 D16, D08): one
+# line naming the refresh command and exit 2; the carrier is never sent `sol`.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+
+[run]
+tool = "model_routing/second_opinion"
+argv = ["--gate", "design-align", "--gate-pack", "docs/gate-pack.md", "--session-provider", "claude", "--session-model", "opus", "--provider", "codex", "--dry-run"]
+
+[expected]
+exit = 2
+stderr = "second-opinion: provider 'codex' declares model aliases, and 'sol' has no concrete id in _aitna/local/model-aliases.json; write it with `{{tool model_routing/models}} --refresh --provider codex`, pin a concrete id with `--provider codex:<id>`, or run the carrier's own model with `--provider codex:default`\n"
+stdout = ""

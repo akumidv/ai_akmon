@@ -172,9 +172,25 @@ def _project_root(payload: dict) -> Path:
     return find_project_root(Path(cwd))
 
 
+def _overlay_problem_result(payload: dict, error: routing.OverlayError) -> HookResult | None:
+    """What a hand-owned overlay that does not parse costs: the routing, never the session.
+
+    One line names the file, to stderr always and — when the session starts — to the owner on both
+    channels, the way the init instruction goes; a later prompt stays silent beyond stderr.
+    """
+    line = routing.hook_overlay_line("model-routing", error)
+    print(line, file=sys.stderr)
+    if (payload.get("hook_event_name") or "SessionStart") != "SessionStart":
+        return None
+    return HookResult(event_name="SessionStart", additional_context=line, system_message=line)
+
+
 def _decide() -> HookResult | None:
     payload = load_payload()
-    return model_routing_result(_project_root(payload), payload)
+    try:
+        return model_routing_result(_project_root(payload), payload)
+    except routing.OverlayError as exc:
+        return _overlay_problem_result(payload, exc)
 
 
 def main() -> int:

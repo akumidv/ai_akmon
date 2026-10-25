@@ -146,7 +146,7 @@ def test_binding_openai_policy_for_codex_models():
     assert binding.worker == "small"
     assert binding.mid == "medium"
     assert binding.escalation == ("medium",)
-    assert binding.second_opinion_cli == "claude"
+    assert not hasattr(binding, "second_opinion_cli")
 
 
 def test_binding_without_available_uses_semantic_fallback_and_omits_agent_models():
@@ -191,36 +191,6 @@ def test_task_kind_floors_empty_without_rungs():
     assert routing.task_kind_floors(REGISTRY, []) == {}
 
 
-def test_second_opinion_fallback_model_top_orchestrator_returns_rung_below_top():
-    # orchestrator == auditor == top rung → the answer is the rung below the top.
-    assert routing.second_opinion_fallback_model(["small", "medium", "large"], "large", "large") == "medium"
-
-
-def test_second_opinion_fallback_model_mid_orchestrator_returns_top():
-    assert routing.second_opinion_fallback_model(["small", "medium", "large"], "medium", "large") == "small"
-
-
-def test_second_opinion_fallback_model_single_rung_returns_none():
-    assert routing.second_opinion_fallback_model(["only"], "only", "only") is None
-
-
-def test_second_opinion_defaults_to_opposite_vendor_and_builds_command():
-    binding = routing.compute_binding(REGISTRY, "large", available=["small", "medium", "large"], vendor="openai")
-    config = routing.local_config(binding, REGISTRY, second_opinion=True, available=None)
-    target = routing.resolve_second_opinion(REGISTRY, config, "openai")
-    spec = routing.second_opinion_spec(REGISTRY, target.provider)
-
-    assert target.provider == "anthropic"
-    assert spec["harness"] == "claude"
-    assert routing.second_opinion_command(spec, "review this") == [
-        "claude",
-        "-p",
-        "--output-format",
-        "text",
-        "review this",
-    ]
-
-
 # --------------------------------------------------------------------------------------
 # registry loading: overlay merge + hash
 # --------------------------------------------------------------------------------------
@@ -251,6 +221,181 @@ def test_overlay_deep_merges_and_changes_hash(tmp_path):
     assert merged["anthropic"]["selection_policy"] == REGISTRY["anthropic"]["selection_policy"]  # untouched by merge
     assert merged["briefs"]["k_explorer"] == "Project note."
     assert routing.registry_hash(merged) != base_hash
+
+
+def _write_local_overlay(root: Path, data: object) -> Path:
+    path = routing.local_overlay_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
+    return path
+
+
+def test_local_overlay_path_sits_under_the_dev_layers_local_folder(tmp_path, monkeypatch):
+    monkeypatch.delenv("AITNA_ROOT", raising=False)
+    assert routing.local_overlay_path(tmp_path) == tmp_path / "_aitna" / "local" / "model-routing.json"
+    monkeypatch.setenv("AITNA_ROOT", "meta")
+    assert routing.local_overlay_path(tmp_path) == tmp_path / "meta" / "local" / "model-routing.json"
+
+
+def test_local_overlay_is_the_strongest_layer_and_a_ladder_is_replaced_whole(tmp_path):
+    root = _make_project(tmp_path)
+    akmon_dir = root / "_aitna" / "akmon"
+    routing.overlay_path(root).write_text(
+        json.dumps(
+            {
+                "second_opinion_policy": {"ladder": ["claude", "codex"], "model_rule": "max"},
+                "anthropic": {"semantic_fallback": {"worker": "project-worker"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_local_overlay(
+        root,
+        {
+            "second_opinion_policy": {"ladder": ["codex"]},
+            "anthropic": {"semantic_fallback": {"worker": "local-worker"}},
+            "briefs": {"k_explorer": "Mine."},
+        },
+    )
+
+    merged = routing.load_registry(akmon_dir, root)
+
+    assert merged["second_opinion_policy"]["ladder"] == ["codex"]  # replaced whole, not appended or interleaved
+    assert merged["second_opinion_policy"]["model_rule"] == "max"  # a sibling key the local layer omits survives
+    assert merged["anthropic"]["semantic_fallback"]["worker"] == "local-worker"
+    assert (
+        merged["anthropic"]["semantic_fallback"]["reasoner"] == REGISTRY["anthropic"]["semantic_fallback"]["reasoner"]
+    )
+    assert merged["briefs"] == {"k_explorer": "Mine."}
+
+
+def test_local_overlay_alone_merges_over_the_shipped_registry(tmp_path):
+    root = _make_project(tmp_path)
+    _write_local_overlay(root, {"briefs": {"k_explorer": "Mine."}})
+    assert routing.load_registry(root / "_aitna" / "akmon", root)["briefs"] == {"k_explorer": "Mine."}
+
+
+def test_a_missing_or_directory_local_overlay_is_no_layer(tmp_path):
+    root = _make_project(tmp_path)
+    akmon_dir = root / "_aitna" / "akmon"
+    base = routing.load_registry(akmon_dir, root)
+    routing.local_overlay_path(root).mkdir(parents=True)
+    assert routing.load_registry(akmon_dir, root) == base
+
+
+def test_the_registry_hash_covers_the_local_overlay_so_editing_it_makes_the_config_stale(tmp_path):
+    root = _make_project(tmp_path)
+    akmon_dir = root / "_aitna" / "akmon"
+    before = routing.load_registry(akmon_dir, root)
+    config = {"registry_hash": routing.registry_hash(before), "orchestrator": "large"}
+    assert routing.staleness(config, before, None) is None
+
+    _write_local_overlay(root, {"second_opinion_policy": {"ladder": ["codex"]}})
+    after = routing.load_registry(akmon_dir, root)
+
+    assert routing.registry_hash(after) != routing.registry_hash(before)
+    assert "registry" in routing.staleness(config, after, None)
+
+
+@pytest.mark.parametrize("layer", ["project", "local"])
+@pytest.mark.parametrize("content", ["{ not json", "[1, 2]"])
+def test_an_unreadable_overlay_layer_raises_a_named_error_quoting_its_file(tmp_path, layer, content):
+    root = _make_project(tmp_path)
+    if layer == "project":
+        routing.overlay_path(root).write_text(content, encoding="utf-8")
+        expected = "_aitna/model-routing.json"
+    else:
+        _write_local_overlay(root, content)
+        expected = "_aitna/local/model-routing.json"
+
+    with pytest.raises(routing.OverlayError) as caught:
+        routing.load_registry(root / "_aitna" / "akmon", root)
+
+    message = str(caught.value)
+    assert expected in message
+    assert "\n" not in message  # one line
+
+
+def test_a_retired_key_names_the_local_layer_that_holds_it(tmp_path):
+    root = _make_project(tmp_path)
+    routing.overlay_path(root).write_text(json.dumps({"briefs": {}}), encoding="utf-8")
+    _write_local_overlay(root, {"second_opinion_policy": {"diversity_ladder": []}})
+    registry = routing.load_registry(root / "_aitna" / "akmon", root)
+
+    with pytest.raises(routing.RetiredKeyError) as caught:
+        routing.refuse_retired_keys(registry, {}, project_root=root)
+
+    message = str(caught.value)
+    assert "_aitna/local/model-routing.json" in message
+    assert "_aitna/model-routing.json " not in message  # the project layer is clean and not blamed
+    assert "second_opinion_policy.diversity_ladder" in message
+
+
+def test_a_retired_key_names_the_project_layer_that_holds_it(tmp_path):
+    root = _make_project(tmp_path)
+    routing.overlay_path(root).write_text(
+        json.dumps({"openai": {"second_opinion": {"report_dir": "x"}}}), encoding="utf-8"
+    )
+    _write_local_overlay(root, {"briefs": {}})
+    registry = routing.load_registry(root / "_aitna" / "akmon", root)
+
+    with pytest.raises(routing.RetiredKeyError) as caught:
+        routing.refuse_retired_keys(registry, {}, project_root=root)
+
+    assert "_aitna/model-routing.json" in str(caught.value)
+    assert "local/model-routing.json" not in str(caught.value)
+
+
+def test_a_retired_key_without_a_project_root_names_both_candidate_layers():
+    registry = json.loads(json.dumps(REGISTRY))
+    registry["openai"]["second_opinion"] = {"report_dir": "x"}
+
+    with pytest.raises(routing.RetiredKeyError) as caught:
+        routing.refuse_retired_keys(registry, {})
+
+    message = str(caught.value)
+    assert "_aitna/local/model-routing.json" in message
+    assert "_aitna/model-routing.json" in message
+
+
+def test_init_reads_the_local_overlay_and_records_its_hash(tmp_path):
+    root = _make_project(tmp_path)
+    _write_local_overlay(root, {"second_opinion_policy": {"ladder": ["codex"]}})
+
+    assert _load_init().main(["--project-root", str(root), "--orchestrator", "opus"]) == 0
+
+    config = json.loads((root / ".claude" / "model-routing.local.json").read_text(encoding="utf-8"))
+    merged = routing.load_registry(root / "_aitna" / "akmon", root)
+    assert merged["second_opinion_policy"]["ladder"] == ["codex"]
+    assert config["registry_hash"] == routing.registry_hash(merged)
+
+
+def test_init_refuses_a_retired_key_in_the_local_overlay_and_names_that_file(tmp_path, capsys):
+    root = _make_project(tmp_path)
+    _write_local_overlay(root, {"second_opinion_policy": {"diversity_ladder": []}})
+
+    assert _load_init().main(["--project-root", str(root), "--orchestrator", "opus"]) == 2
+
+    assert "_aitna/local/model-routing.json" in capsys.readouterr().err
+    assert not (root / ".claude" / "model-routing.local.json").exists()
+
+
+@pytest.mark.parametrize("layer", ["_aitna/model-routing.json", "_aitna/local/model-routing.json"])
+@pytest.mark.parametrize("content", ["{ not json", "[1, 2]"])
+def test_init_reports_an_overlay_that_is_not_a_json_object_as_one_error_line(tmp_path, capsys, layer, content):
+    root = _make_project(tmp_path)
+    (root / layer).parent.mkdir(parents=True, exist_ok=True)
+    (root / layer).write_text(content, encoding="utf-8")
+
+    assert _load_init().main(["--project-root", str(root), "--orchestrator", "opus"]) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        f"error: the routing overlay {layer} is not a valid JSON object;"
+        " repair or delete it (it is hand-owned, so akmon never rewrites it)\n"
+    )
+    assert not (root / ".claude").exists()
 
 
 # --------------------------------------------------------------------------------------
@@ -436,15 +581,32 @@ def test_staleness_on_settings_model_mismatch():
     assert "differs" in routing.staleness(_fresh_config(), REGISTRY, settings_model="medium")
 
 
-def test_status_lines_name_binding_and_self_check():
+@pytest.fixture
+def carriers_present(monkeypatch):
+    """Presence is a host fact the test supplies; the status line walks the chain, never the host's `PATH`."""
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+
+
+def test_status_lines_name_binding_and_self_check(carriers_present):
     lines = routing.status_lines(_fresh_config(), REGISTRY, "_aitna/akmon")
     joined = "\n".join(lines)
     assert "orchestrator=large" in joined
     assert "auditor=large" in joined
     assert "worker=small" in joined
-    assert "second-opinion=codex(on)" in joined
     assert "Self-check" in joined
     assert "⚠" not in joined
+
+
+def test_status_lines_name_the_chain_head_its_model_and_its_priors(carriers_present):
+    """The head is the walk's answer for the session's own carrier, not a stored provider."""
+    joined = "\n".join(routing.status_lines(_fresh_config(), REGISTRY, "_aitna/akmon"))
+    assert "second-opinion=codex:sol priors=gpt (on)" in joined
+
+
+def test_status_lines_follow_a_recorded_session_not_the_vendor(carriers_present):
+    config = dict(_fresh_config(), session={"provider": "codex", "model": "sol"})
+    joined = "\n".join(routing.status_lines(config, REGISTRY, "_aitna/akmon"))
+    assert "second-opinion=claude:opus priors=claude (on)" in joined
 
 
 def test_status_lines_warn_when_orchestrator_leaves_corridor():
@@ -455,46 +617,53 @@ def test_status_lines_warn_when_orchestrator_leaves_corridor():
     assert "⚠" in joined and "below the orchestration floor" in joined
 
 
-def _single_vendor_config(available: list[str], orchestrator: str) -> tuple[dict, dict]:
-    """A registry with one vendor, so the diversity ladder can only reach its own rungs."""
-    registry = {k: v for k, v in REGISTRY.items() if k != "openai"}
-    binding = routing.compute_binding(registry, orchestrator, available=available)
-    return registry, routing.local_config(binding, registry, second_opinion=True, available=available)
+def _one_provider_config(*, second_opinion: bool) -> tuple[dict, dict]:
+    """A registry whose ladder holds only the session's own carrier, so the chain is empty."""
+    registry = json.loads(json.dumps(REGISTRY))
+    registry["second_opinion_policy"]["ladder"] = ["claude"]
+    binding = routing.compute_binding(registry, "opus", available=["haiku", "sonnet", "opus"])
+    config = routing.local_config(
+        binding, registry, second_opinion=second_opinion, available=["haiku", "sonnet", "opus"]
+    )
+    return registry, config
 
 
-def test_status_lines_name_the_model_the_ladder_pins_not_just_the_harness():
-    """The same-vendor rung runs a *different* model; a bare harness name hides which."""
-    registry, config = _single_vendor_config(["small", "medium", "large"], "large")
+def test_status_lines_do_not_promise_a_second_opinion_the_chain_cannot_reach(carriers_present):
+    """A display that names a provider while every gate runs only the last resort would be a second owner."""
+    registry, config = _one_provider_config(second_opinion=True)
     joined = "\n".join(routing.status_lines(config, registry, "_aitna/akmon"))
-    assert "second-opinion=claude(on, model=medium)" in joined
-
-
-def test_status_lines_do_not_promise_a_second_opinion_the_ladder_cannot_reach():
-    """The pre-ladder display read `<harness>(on)` while every gate silently skipped."""
-    registry, config = _single_vendor_config(["only"], "only")
-    joined = "\n".join(routing.status_lines(config, registry, "_aitna/akmon"))
-    assert "second-opinion=unavailable(on)" in joined
-    assert "ladder is exhausted" in joined
+    assert "second-opinion=unavailable (on)" in joined
+    assert "provider chain is empty" in joined
     assert "⚠" in joined
 
 
-def test_an_exhausted_ladder_is_not_warned_about_while_second_opinion_is_off():
+def test_an_empty_chain_is_not_warned_about_while_second_opinion_is_off(carriers_present):
     """Nothing is lost when the owner never asked for the gate, so it stays quiet."""
-    registry = {k: v for k, v in REGISTRY.items() if k != "openai"}
-    binding = routing.compute_binding(registry, "only", available=["only"])
-    config = routing.local_config(binding, registry, second_opinion=False, available=["only"])
+    registry, config = _one_provider_config(second_opinion=False)
     joined = "\n".join(routing.status_lines(config, registry, "_aitna/akmon"))
-    assert "second-opinion=unavailable(off)" in joined
-    assert "ladder is exhausted" not in joined
+    assert "second-opinion=unavailable (off)" in joined
+    assert "provider chain is empty" not in joined
+
+
+def test_a_session_of_unknown_priors_reads_priors_unknown_and_names_the_key(carriers_present):
+    config = dict(_fresh_config(), session={"provider": "opencode", "model": "x/y"})
+    joined = "\n".join(routing.status_lines(config, REGISTRY, "_aitna/akmon"))
+    assert "second-opinion=unavailable priors=unknown (on)" in joined
+    assert "providers.opencode.model_families.x/y" in joined
 
 
 def test_a_retired_key_overlay_refuses_the_status_block_rather_than_degrading_it():
-    """D2-30's hard failure reaches the status line too — via `compute_binding`, not only
-    the second-opinion field, so there is no partial status to render."""
+    """The hard failure reaches the status line: no partial status renders beside a stale key."""
     registry = json.loads(json.dumps(REGISTRY))
-    registry["openai"]["second_opinion"]["cli"] = "codex"
-    with pytest.raises(KeyError, match="retired key"):
+    registry["openai"]["second_opinion"] = {"report_dir": "x"}
+    with pytest.raises(routing.RetiredKeyError, match=r"openai\.second_opinion"):
         routing.status_lines(_fresh_config(), registry, "_aitna/akmon")
+
+
+def test_a_retired_local_config_key_refuses_the_status_block():
+    config = dict(_fresh_config(), second_opinion_provider="openai")
+    with pytest.raises(routing.RetiredKeyError, match="second_opinion_provider"):
+        routing.status_lines(config, REGISTRY, "_aitna/akmon")
 
 
 # --------------------------------------------------------------------------------------
@@ -531,15 +700,30 @@ def test_local_config_records_the_resolved_ladder_and_the_auditor_opt_in():
     assert listed["available"] == LADDER
 
 
-def test_local_config_carries_fallback_model_when_provider_equals_vendor(tmp_path):
-    # Force a registry with a single vendor so the second-opinion provider falls back to
-    # the orchestrating vendor itself (opposite_vendor has nowhere else to go).
-    single_vendor_registry = {k: v for k, v in REGISTRY.items() if k != "openai"}
-    available = ["small", "medium", "large"]
-    binding = routing.compute_binding(single_vendor_registry, "large", available=available)
-    config = routing.local_config(binding, single_vendor_registry, second_opinion=True, available=available)
-    assert config["second_opinion_provider"] == "anthropic"
-    assert config["second_opinion_fallback_model"] == "medium"
+def test_local_config_writes_none_of_the_retired_keys_and_no_session_unless_given():
+    config = _fresh_config()
+    assert "second_opinion_provider" not in config and "second_opinion_fallback_model" not in config
+    assert "session" not in config
+
+
+def test_local_config_records_the_session_stanza_when_given():
+    binding = routing.compute_binding(REGISTRY, "large", available=["small", "medium", "large"])
+    config = routing.local_config(
+        binding, REGISTRY, second_opinion=True, available=None, session={"provider": "qwen", "model": "qwen3-max"}
+    )
+    assert config["session"] == {"provider": "qwen", "model": "qwen3-max"}
+
+
+def test_a_rebind_keeps_the_recorded_session_stanza(tmp_path):
+    root = _make_project(tmp_path)
+    binding = routing.compute_binding(REGISTRY, "large", available=["small", "medium", "large"])
+    config = routing.local_config(
+        binding, REGISTRY, second_opinion=True, available=["small", "medium", "large"], session={"provider": "qwen"}
+    )
+    routing.rebind_to(root, REGISTRY, config, "medium")
+    rewritten = json.loads((root / routing.local_config_rel()).read_text(encoding="utf-8"))
+    assert rewritten["orchestrator"] == "medium"
+    assert rewritten["session"] == {"provider": "qwen"}
 
 
 # --------------------------------------------------------------------------------------
@@ -903,6 +1087,146 @@ def test_init_preserves_second_opinion_when_flag_omitted(tmp_path):
     assert init.main(["--project-root", str(root), "--orchestrator", "large", "--available", "small,medium,large"]) == 0
     config = json.loads((root / ".claude" / "model-routing.local.json").read_text(encoding="utf-8"))
     assert config["second_opinion"] is True
+
+
+def _init_config(root: Path) -> dict:
+    return json.loads((root / ".claude" / "model-routing.local.json").read_text(encoding="utf-8"))
+
+
+def test_init_summary_prints_the_resolved_chain_head_not_a_stored_harness(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    root = _make_project(tmp_path)
+
+    assert _load_init().main(["--project-root", str(root), "--orchestrator", "opus", "--second-opinion", "on"]) == 0
+
+    assert "second-opinion=codex:sol priors=gpt (on)" in capsys.readouterr().out
+    assert "second_opinion_provider" not in _init_config(root)
+
+
+def test_init_records_the_session_stanza_without_binding_a_harness(tmp_path, monkeypatch):
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    root = _make_project(tmp_path)
+    init = _load_init()
+    argv = ["--project-root", str(root), "--orchestrator", "opus", "--session-provider", "qwen", "--session-model", "q"]
+
+    assert init.main(argv) == 0
+
+    assert _init_config(root)["session"] == {"provider": "qwen", "model": "q"}
+    # Re-running without the flags keeps what was recorded.
+    assert init.main(["--project-root", str(root), "--orchestrator", "opus"]) == 0
+    assert _init_config(root)["session"] == {"provider": "qwen", "model": "q"}
+
+
+def test_init_session_model_alone_borrows_the_vendors_carrier(tmp_path):
+    root = _make_project(tmp_path)
+
+    assert _load_init().main(["--project-root", str(root), "--orchestrator", "opus", "--session-model", "sonnet"]) == 0
+
+    assert _init_config(root)["session"] == {"provider": "claude", "model": "sonnet"}
+
+
+def _init_main(root: Path, *flags: str) -> int:
+    return _load_init().main(["--project-root", str(root), "--orchestrator", "opus", *flags])
+
+
+def test_init_records_the_session_family_and_resolve_session_reads_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    root = _make_project(tmp_path)
+
+    assert _init_main(root, "--session-provider", "opencode", "--session-model", "x/y", "--session-family", "qwen") == 0
+
+    config = _init_config(root)
+    assert config["session"] == {"provider": "opencode", "model": "x/y", "family": "qwen"}
+    registry = routing.load_registry(root / "_aitna" / "akmon", root)
+    # opencode ships with no family, so the answer can only have come from the recorded stanza.
+    assert routing.resolve_session(registry, config).family == "qwen"
+
+
+def test_init_session_family_alone_keeps_the_recorded_provider_and_model(tmp_path):
+    root = _make_project(tmp_path)
+    assert _init_main(root, "--session-provider", "qwen", "--session-model", "q") == 0
+
+    assert _init_main(root, "--session-family", "gemini") == 0
+
+    assert _init_config(root)["session"] == {"provider": "qwen", "model": "q", "family": "gemini"}
+
+
+def test_init_a_new_session_model_drops_the_family_recorded_for_the_old_one(tmp_path):
+    """The family belongs to the model (D15): a recorded one never silently rides along to another model."""
+    root = _make_project(tmp_path)
+    assert _init_main(root, "--session-provider", "opencode", "--session-model", "a", "--session-family", "qwen") == 0
+
+    assert _init_main(root, "--session-model", "b") == 0
+
+    assert _init_config(root)["session"] == {"provider": "opencode", "model": "b"}
+
+
+def test_init_rerun_without_flags_keeps_the_recorded_family(tmp_path):
+    root = _make_project(tmp_path)
+    assert _init_main(root, "--session-provider", "opencode", "--session-model", "a", "--session-family", "qwen") == 0
+
+    assert _init_main(root) == 0
+
+    assert _init_config(root)["session"] == {"provider": "opencode", "model": "a", "family": "qwen"}
+
+
+def test_init_refuses_a_family_outside_the_vocabulary_naming_the_overlay_to_extend(tmp_path, capsys):
+    root = _make_project(tmp_path)
+
+    assert _init_main(root, "--session-provider", "opencode", "--session-family", "deepseek") == 2
+
+    err = capsys.readouterr().err
+    assert err.startswith(
+        "error: --session-family 'deepseek' is not in the family vocabulary (claude, gpt, qwen, gemini)"
+    )
+    assert "second_opinion_policy.families.deepseek in _aitna/local/model-routing.json" in err
+    assert "_aitna/model-routing.json to share it with the team" in err
+    assert not (root / ".claude" / "model-routing.local.json").exists()
+
+
+def test_init_accepts_a_family_an_overlay_added_to_the_vocabulary(tmp_path):
+    root = _make_project(tmp_path)
+    _write_local_overlay(root, {"second_opinion_policy": {"families": {"deepseek": "DeepSeek models"}}})
+
+    assert _init_main(root, "--session-provider", "opencode", "--session-family", "deepseek") == 0
+
+    assert _init_config(root)["session"] == {"provider": "opencode", "family": "deepseek"}
+
+
+def test_init_vendor_naming_a_carrier_points_at_session_provider(tmp_path, capsys):
+    root = _make_project(tmp_path)
+
+    with pytest.raises(SystemExit) as raised:
+        _load_init().main(["--project-root", str(root), "--vendor", "qwen"])
+
+    assert raised.value.code == 2
+    err = capsys.readouterr().err
+    assert "--vendor 'qwen' names a carrier" in err
+    assert "--session-provider qwen" in err
+    assert "--vendor must be one of: anthropic, openai" in err
+
+
+def test_init_vendor_naming_nothing_keeps_the_plain_refusal(tmp_path, capsys):
+    root = _make_project(tmp_path)
+
+    with pytest.raises(SystemExit):
+        _load_init().main(["--project-root", str(root), "--vendor", "ghost"])
+
+    err = capsys.readouterr().err
+    assert "--vendor must be one of: anthropic, openai" in err
+    assert "names a carrier" not in err
+
+
+def test_init_refuses_an_overlay_carrying_a_retired_key_and_writes_nothing(tmp_path, capsys):
+    root = _make_project(tmp_path)
+    overlay = root / "_aitna" / "model-routing.json"
+    overlay.parent.mkdir(parents=True, exist_ok=True)
+    overlay.write_text(json.dumps({"second_opinion_policy": {"diversity_ladder": []}}), encoding="utf-8")
+
+    assert _load_init().main(["--project-root", str(root), "--orchestrator", "opus"]) == 2
+
+    assert "second_opinion_policy.diversity_ladder" in capsys.readouterr().err
+    assert not (root / ".claude" / "model-routing.local.json").exists()
 
 
 # --------------------------------------------------------------------------------------
@@ -1945,21 +2269,35 @@ def test_agents_data_pins_the_structure_and_characteristic_texts():
         "tool_command",
         "zone_convention",
         "overlay_name",
+        "local_overlay_rel",
+        "local_aliases_rel",
+        "default_model_token",
+        "catalog_errors",
+        "alias_errors",
+        "effort_errors",
+        "overlay_errors",
         "local_config_rel",
         "delegation_log_rel",
         "agents_dir_rel",
         "settings_probe_names",
         "retired_second_opinion_keys",
+        "retired_key_errors",
         "agent_specs",
         "status_lines",
         "init_instruction",
         "rebind_notice",
         "unlabelled_fanout_warning",
         "unlabelled_fanout_directive",
-        "second_opinion_unavailability",
         "unpinnable_model",
         "opinion_skip_reasons",
+        "opinion_asks",
+        "opinion_status",
+        "session_unknown",
         "opinion_ladder_unknown",
+        "session_family_unknown",
+        "vendor_unknown",
+        "vendor_is_carrier",
+        "hook_overlay_error",
         "compute_binding_warnings",
         "role_matrix_warning",
         "role_matrix_directive",
@@ -1968,7 +2306,6 @@ def test_agents_data_pins_the_structure_and_characteristic_texts():
         "delegation_floor_directive",
         "context_pressure",
         "staleness",
-        "second_opinion_spec_errors",
         "ladder_errors",
     }
     assert data["generated_banner"] == (
@@ -1987,8 +2324,15 @@ def test_agents_data_pins_the_structure_and_characteristic_texts():
     }
     assert data["zone_convention"] == "In a zoned fan-out, start each call's description with [zone:<label>]."
     assert data["overlay_name"] == "model-routing.json"
+    assert data["local_overlay_rel"] == "local/model-routing.json"
+    assert data["local_aliases_rel"] == "local/model-aliases.json"
+    assert data["default_model_token"] == "default"
     assert data["settings_probe_names"] == ["settings.local.json", "settings.json"]
-    assert data["retired_second_opinion_keys"] == ["cli", "invoke"]
+    assert data["retired_second_opinion_keys"] == {
+        "policy": ["diversity_ladder"],
+        "vendor": ["second_opinion"],
+        "config": ["second_opinion_provider", "second_opinion_fallback_model"],
+    }
     specs = data["agent_specs"]
     assert [s["name"] for s in specs] == [
         "k_explorer",
@@ -2274,3 +2618,421 @@ def test_the_shipped_ladder_data_is_well_formed():
         rungs = REGISTRY[vendor]["harness_rungs"]
         assert rungs and len(set(rungs)) == len(rungs)
         assert set(REGISTRY[vendor]["auditor_only_rungs"]).isdisjoint(rungs)
+
+
+# --------------------------------------------------------------------------------------
+# ADR-0024/D16: aliases resolve locally to concrete ids; `default` is the carrier's own model
+# --------------------------------------------------------------------------------------
+
+_ALIAS_REGISTRY = {
+    "providers": {
+        "codex": {
+            "operation": "review",
+            "model_flag": "--model {model}",
+            "family": "gpt",
+            "models": ["luna", "terra", "sol"],
+            "aliases": True,
+            "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"},
+        },
+        "claude": {"operation": "review", "model_flag": "--model {model}", "family": "claude", "models": ["opus"]},
+    },
+    "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"},
+}
+
+_HOST_SLUGS = [
+    ("gpt-6.1-sol", "list", 0),
+    ("gpt-6.1-terra", "list", 1),
+    ("gpt-6-astra", "list", 3),
+    ("gpt-6-sol", "list", 4),
+    ("gpt-reserve", "hide", 4),
+    ("gpt-6-luna", "list", 5),
+    ("gpt-5.6-sol", "list", 6),
+    ("gpt-5.6-terra", "list", 7),
+    ("gpt-5.6-luna", "list", 8),
+    ("codex-auto-review", "hide", 43),
+]
+
+
+def _catalog_text(slugs=_HOST_SLUGS, **top) -> str:
+    models = [{"slug": slug, "visibility": visibility, "priority": priority} for slug, visibility, priority in slugs]
+    return json.dumps({"client_version": "0.164.0", **top, "models": models})
+
+
+def test_the_host_catalog_maps_each_alias_to_its_highest_version():
+    catalog = routing.parse_catalog(_catalog_text(), "codex-models-cache")
+
+    assert catalog.client == "0.164.0"
+    assert routing.catalog_aliases(catalog, ["luna", "terra", "sol"]) == {
+        "luna": "gpt-6-luna",
+        "terra": "gpt-6.1-terra",
+        "sol": "gpt-6.1-sol",
+    }
+
+
+def test_a_catalog_ignores_hidden_and_unversioned_slugs_and_leaves_an_unmatched_alias_unmapped():
+    catalog = routing.parse_catalog(_catalog_text(), "codex-models-cache")
+
+    assert {model.slug for model in catalog.models} == {
+        "gpt-6.1-sol",
+        "gpt-6.1-terra",
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+    }
+    assert routing.catalog_aliases(catalog, ["sol", "nova"]) == {"sol": "gpt-6.1-sol"}
+
+
+def test_a_version_tie_goes_to_the_lowest_priority_then_to_the_first_listed():
+    slugs = [
+        ("gpt-6-sol", "list", 9),
+        ("acme-6-sol", "list", 2),
+        ("zed-6-sol", "list", 2),
+        ("gpt-6-luna", "list", None),
+    ]
+    catalog = routing.parse_catalog(_catalog_text(slugs), "codex-models-cache")
+
+    assert routing.catalog_aliases(catalog, ["sol", "luna"]) == {"sol": "acme-6-sol", "luna": "gpt-6-luna"}
+
+
+def test_a_longer_version_outranks_its_prefix():
+    catalog = routing.parse_catalog(
+        _catalog_text([("gpt-6-sol", "list", 0), ("gpt-6.0.1-sol", "list", 5)]), "codex-models-cache"
+    )
+
+    assert routing.catalog_aliases(catalog, ["sol"]) == {"sol": "gpt-6.0.1-sol"}
+
+
+@pytest.mark.parametrize(
+    ("text", "catalog_format", "reason"),
+    [
+        ("{}", "nope", "format 'nope' is not one of: codex-models-cache"),
+        ("not json", "codex-models-cache", "is not valid JSON"),
+        ("[]", "codex-models-cache", "holds no `models` list"),
+        ('{"models": 3}', "codex-models-cache", "holds no `models` list"),
+    ],
+)
+def test_a_catalog_that_cannot_be_read_raises_the_reason(text, catalog_format, reason):
+    with pytest.raises(ValueError) as caught:
+        routing.parse_catalog(text, catalog_format)
+
+    assert caught.value.args[0] == reason
+
+
+def test_expand_home_takes_only_a_leading_tilde():
+    assert routing.expand_home("~/.codex/m.json", "/home/a") == "/home/a/.codex/m.json"
+    assert routing.expand_home("~", "/home/a/") == "/home/a"
+    assert routing.expand_home("~/x", "/") == "/x"
+    assert routing.expand_home("~bob/x", "/home/a") == "~bob/x"
+    assert routing.expand_home("/abs/~/x", "/home/a") == "/abs/~/x"
+
+
+def _stored(**aliases: str) -> dict:
+    return {"codex": routing.ProviderAliases("src", None, dict(aliases))}
+
+
+def test_an_alias_resolves_to_the_stored_concrete_id():
+    stored = _stored(sol="gpt-6.1-sol")
+
+    assert routing.resolve_opinion_model(_ALIAS_REGISTRY, stored, "codex", "sol") == "gpt-6.1-sol"
+
+
+def test_a_concrete_id_and_the_default_pass_through_unchanged():
+    assert routing.resolve_opinion_model(_ALIAS_REGISTRY, {}, "codex", "gpt-6.1-sol") == "gpt-6.1-sol"
+    assert routing.resolve_opinion_model(_ALIAS_REGISTRY, {}, "codex", None) is None
+
+
+def test_a_row_without_aliases_never_resolves_anything():
+    assert routing.resolve_opinion_model(_ALIAS_REGISTRY, {}, "claude", "opus") == "opus"
+
+
+def test_an_alias_without_a_mapping_is_refused_naming_the_refresh():
+    with pytest.raises(routing.UnresolvedAliasError) as caught:
+        routing.resolve_opinion_model(_ALIAS_REGISTRY, _stored(luna="gpt-6-luna"), "codex", "sol")
+
+    message = caught.value.args[0]
+    assert "'sol'" in message
+    assert "_aitna/local/model-aliases.json" in message
+    assert "akmon tool model_routing/models --refresh --provider codex" in message
+    assert isinstance(caught.value, ValueError)
+
+
+def test_the_resolved_aliases_file_round_trips_and_a_missing_one_is_empty(tmp_path):
+    assert routing.read_model_aliases(tmp_path) == {}
+    stored = {"codex": routing.ProviderAliases("~/x (codex-models-cache)", "0.164.0", {"sol": "gpt-6.1-sol"})}
+    path = routing.local_aliases_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_text(routing.model_aliases_document(stored), encoding="utf-8")
+
+    assert routing.read_model_aliases(tmp_path) == stored
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "codex": {"source": "~/x (codex-models-cache)", "client": "0.164.0", "aliases": {"sol": "gpt-6.1-sol"}}
+    }
+    assert path.read_text(encoding="utf-8").endswith("}\n")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "not json",
+        "[]",
+        '{"codex": 1}',
+        '{"codex": {"source": "s", "client": 3, "aliases": {}}}',
+        '{"codex": {"source": "s", "client": null, "aliases": {"sol": 1}}}',
+    ],
+)
+def test_a_resolved_aliases_file_of_the_wrong_shape_is_refused_naming_it(tmp_path, text):
+    path = routing.local_aliases_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_text(text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"_aitna/local/model-aliases\.json"):
+        routing.read_model_aliases(tmp_path)
+
+
+def test_the_default_token_drops_the_pin_and_no_pin_keeps_the_strongest_model():
+    assert routing.opinion_pick(_ALIAS_REGISTRY, "codex", "default") == (None, None)
+    assert routing.opinion_pick(_ALIAS_REGISTRY, "codex", None) == ("sol", None)
+    assert routing.opinion_pick(_ALIAS_REGISTRY, "codex", "gpt-6.1-sol") == ("gpt-6.1-sol", None)
+
+
+def test_a_ladder_entry_with_the_default_token_is_found():
+    assert routing.ladder_pins_default(_ALIAS_REGISTRY, "codex") is True
+    assert routing.ladder_pins_default(_ALIAS_REGISTRY, "claude") is False
+
+
+def test_a_default_ladder_entry_walks_to_a_target_with_no_pin(monkeypatch):
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    session = routing.SecondOpinionSession("claude", "claude", "opus")
+
+    chain = routing.opinion_chain(_ALIAS_REGISTRY, session)
+
+    assert [(target.provider, target.model) for target in chain] == [("codex", None)]
+
+
+# --------------------------------------------------------------------------------------
+# ADR-0024/D17: a reasoning effort is a parameter of the model, `model@effort`
+# --------------------------------------------------------------------------------------
+
+_EFFORT_REGISTRY = {
+    "providers": {
+        "claude": {
+            "operation": "review",
+            "model_flag": "--model {model}",
+            "family": "claude",
+            "models": ["haiku", "sonnet", "opus", "opus@high"],
+            "efforts": {"flag": "--effort {effort}", "levels": ["low", "medium", "high"]},
+        },
+        "codex": {
+            "operation": "review",
+            "model_flag": "--model {model}",
+            "family": "gpt",
+            "models": ["luna", "terra", "sol"],
+            "aliases": True,
+            "efforts": {"flag": "-c model_reasoning_effort={effort}", "levels": ["low", "high"]},
+        },
+        "qwen": {"operation": "review", "model_flag": "-m {model}", "family": "qwen", "models": []},
+        "mine": {
+            "argv": ["mine", "-m", "{model}"],
+            "family": "llama",
+            "models": ["m1", "m1@max"],
+            "efforts": {"flag": "--think {effort}", "levels": ["high", "max"]},
+        },
+    },
+    "second_opinion_policy": {"ladder": ["claude:opus@high", "mine", "qwen"], "model_rule": "max"},
+}
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (None, (None, None)),
+        ("sol", ("sol", None)),
+        ("sol@high", ("sol", "high")),
+        ("acme/qwen3.8-27b-max", ("acme/qwen3.8-27b-max", None)),
+        ("a/b@c@d", ("a/b@c", "d")),
+        ("default@high", ("default", "high")),
+        ("@high", (None, "high")),
+        ("m@", ("m", "")),
+    ],
+)
+def test_a_model_splits_at_its_last_at_sign_into_the_model_and_the_effort(text, expected):
+    assert routing.split_model_effort(text) == expected
+
+
+def test_an_effort_a_row_lists_is_accepted_and_none_is_always_accepted():
+    routing.check_effort(_EFFORT_REGISTRY, "claude", "high")
+    routing.check_effort(_EFFORT_REGISTRY, "qwen", None)
+
+
+def test_an_effort_on_a_carrier_with_no_efforts_is_refused_naming_the_carrier():
+    with pytest.raises(routing.EffortError) as caught:
+        routing.check_effort(_EFFORT_REGISTRY, "qwen", "high")
+
+    message = caught.value.args[0]
+    assert message.startswith("provider 'qwen' declares no `efforts`, so the effort 'high' cannot be sent to it")
+    assert "providers.qwen.efforts" in message
+    assert isinstance(caught.value, ValueError)
+
+
+def test_a_level_outside_the_rows_levels_is_refused_naming_the_accepted_ones():
+    with pytest.raises(routing.EffortError) as caught:
+        routing.check_effort(_EFFORT_REGISTRY, "claude", "max")
+
+    assert (
+        caught.value.args[0] == "provider 'claude' does not accept the effort 'max'; its levels are: low, medium, high"
+    )
+
+
+@pytest.mark.parametrize(
+    ("pinned", "expected"),
+    [
+        (None, ("opus", "high")),
+        ("sonnet", ("sonnet", None)),
+        ("sonnet@low", ("sonnet", "low")),
+        ("default", (None, None)),
+        ("default@high", (None, "high")),
+        ("@low", ("opus", "low")),
+    ],
+)
+def test_a_pick_returns_the_model_and_its_effort(pinned, expected):
+    assert routing.opinion_pick(_EFFORT_REGISTRY, "claude", pinned) == expected
+
+
+def test_the_strongest_declared_entry_carries_its_own_effort():
+    assert routing.opinion_pick(_EFFORT_REGISTRY, "mine", None) == ("m1", "max")
+
+
+def test_a_pick_refuses_an_effort_the_carrier_cannot_take():
+    with pytest.raises(routing.EffortError):
+        routing.opinion_pick(_EFFORT_REGISTRY, "qwen", "q@high")
+    with pytest.raises(routing.EffortError):
+        routing.opinion_pick(_EFFORT_REGISTRY, "claude", "opus@max")
+
+
+def test_a_harness_command_appends_the_effort_flag_after_the_model_flag():
+    command = routing.opinion_command(_EFFORT_REGISTRY, "claude", model="opus", effort="high", prompt="p")
+
+    assert command == ["claude", "-p", "--output-format", "text", "--model", "opus", "--effort", "high", "p"]
+
+
+def test_an_effort_without_a_model_sends_only_the_level():
+    command = routing.opinion_command(_EFFORT_REGISTRY, "codex", effort="high", prompt="p")
+
+    assert command == ["codex", "exec", "-c", "model_reasoning_effort=high", "p"]
+
+
+def test_a_declared_argv_row_takes_the_effort_flag_after_its_argv():
+    command = routing.opinion_command(_EFFORT_REGISTRY, "mine", model="m1", effort="max", prompt="p")
+
+    assert command == ["mine", "-m", "m1", "--think", "max", "p"]
+
+
+def test_no_effort_leaves_the_command_as_it_was():
+    command = routing.opinion_command(_EFFORT_REGISTRY, "claude", model="opus", prompt="p")
+
+    assert command == ["claude", "-p", "--output-format", "text", "--model", "opus", "p"]
+
+
+def test_a_command_refuses_an_effort_the_row_does_not_take():
+    with pytest.raises(routing.EffortError):
+        routing.opinion_command(_EFFORT_REGISTRY, "qwen", model="q", effort="high", prompt="p")
+
+
+def test_an_alias_is_a_model_whatever_effort_follows_it():
+    assert routing.is_model_alias(_EFFORT_REGISTRY, "codex", "sol") is True
+    registry = {"providers": {"codex": {"aliases": True, "models": ["luna", "sol@high"]}}}
+    assert routing.is_model_alias(registry, "codex", "sol") is True
+    assert routing.is_model_alias(registry, "codex", "sol@high") is False
+
+
+def test_the_walk_carries_the_effort_of_a_ladder_entry_into_its_target(monkeypatch):
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    session = routing.SecondOpinionSession("qwen", "qwen", "q")
+
+    chain = routing.opinion_chain(_EFFORT_REGISTRY, session)
+
+    assert chain == (
+        routing.SecondOpinionTarget("claude", "opus", "claude", "high"),
+        routing.SecondOpinionTarget("mine", "m1", "llama", "max"),
+    )
+
+
+def test_the_same_model_at_another_effort_is_still_the_same_model(monkeypatch):
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    registry = {
+        "providers": {
+            "alpha": {"argv": ["a", "{model}"], "family": "qwen", "models": [], "efforts": _EFFORT_ROW},
+            "beta": {"argv": ["b", "{model}"], "family": "llama", "models": [], "efforts": _EFFORT_ROW},
+        },
+        "second_opinion_policy": {"ladder": ["alpha:m@low", "beta:m@high"], "model_rule": "max"},
+    }
+
+    chain = routing.opinion_chain(registry, routing.SecondOpinionSession("gamma", "gpt", "z"))
+
+    assert [(t.provider, t.model, t.effort) for t in chain] == [("alpha", "m", "low")]
+    assert ("beta", "same model as alpha") in routing.opinion_skips(
+        registry, routing.SecondOpinionSession("gamma", "gpt", "z")
+    )
+
+
+_EFFORT_ROW = {"flag": "--e {effort}", "levels": ["low", "high"]}
+
+
+def test_a_ladder_entry_with_a_bad_effort_is_refused_even_on_the_sessions_own_carrier(monkeypatch):
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    registry = {**_EFFORT_REGISTRY, "second_opinion_policy": {"ladder": ["qwen:q@high"], "model_rule": "max"}}
+
+    with pytest.raises(routing.EffortError):
+        routing.opinion_chain(registry, routing.SecondOpinionSession("qwen", "qwen", "q"))
+
+
+def test_the_last_resort_compares_the_model_of_an_entry_not_its_effort():
+    session = routing.SecondOpinionSession("claude", "claude", "opus")
+
+    target = routing.opinion_last_resort(_EFFORT_REGISTRY, session)
+
+    assert (target.model, target.effort) == ("sonnet", None)
+
+
+def test_a_default_ladder_entry_may_carry_an_effort(monkeypatch):
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    registry = {**_EFFORT_REGISTRY, "second_opinion_policy": {"ladder": ["codex:default@high"], "model_rule": "max"}}
+
+    chain = routing.opinion_chain(registry, routing.SecondOpinionSession("claude", "claude", "x"))
+
+    assert chain == (routing.SecondOpinionTarget("codex", None, "gpt", "high"),)
+    assert routing.ladder_pins_default(registry, "codex") is True
+
+
+def test_the_shipped_codex_effort_flag_keeps_its_quotes_inside_one_argv_element():
+    """M188: codex takes the level as a config value, ``-c model_reasoning_effort="high"`` — the quotes are literal."""
+    command = routing.opinion_command(REGISTRY, "codex", model="gpt-6.1-sol", effort="high", prompt="p")
+
+    assert command == ["codex", "exec", "--model", "gpt-6.1-sol", "-c", 'model_reasoning_effort="high"', "p"]
+
+
+def test_the_shipped_effort_rows_are_the_measured_ones():
+    """M188: claude, codex and pi ship ``efforts``; opencode (per-model variants) and qwen (no flag) ship none."""
+    rows = routing.providers(REGISTRY)
+
+    assert rows["claude"]["efforts"] == {
+        "flag": "--effort {effort}",
+        "levels": ["low", "medium", "high", "xhigh", "max"],
+    }
+    assert rows["codex"]["efforts"]["levels"] == ["low", "medium", "high", "xhigh", "max"]
+    assert rows["pi"]["efforts"] == {
+        "flag": "--thinking {effort}",
+        "levels": ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+    }
+    assert "efforts" not in rows["opencode"]
+    assert "efforts" not in rows["qwen"]
+
+
+def test_a_shipped_carrier_refuses_a_level_it_does_not_list():
+    with pytest.raises(routing.EffortError, match="its levels are: low, medium, high, xhigh, max"):
+        routing.opinion_command(REGISTRY, "codex", effort="ultra", prompt="p")
+    with pytest.raises(routing.EffortError, match="declares no `efforts`"):
+        routing.opinion_command(REGISTRY, "opencode", effort="high", prompt="p")

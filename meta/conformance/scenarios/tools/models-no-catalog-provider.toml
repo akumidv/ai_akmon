@@ -1,0 +1,20 @@
+id = "tools/models-no-catalog-provider"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/models"]
+
+# A provider whose row declares no `catalog` has nothing to refresh from: refused, exit 2.
+
+[fixture]
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+tool = "model_routing/models"
+argv = ["--refresh", "--provider", "claude"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr = "models: providers.claude declares no `catalog`; there is nothing to refresh its model aliases from\n"

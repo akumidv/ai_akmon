@@ -1,10 +1,10 @@
 """akmon develops on its own layer: its repository is wired the way it wires a consumer.
 
-The standard's own `.claude/settings.json` is not hand-kept. It is the wiring `akmon sync`
-writes for a mounted consumer, with the materialized hook directory replaced by the in-tree
-one — so a hook added, renamed or re-evented for consumers cannot quietly skip the repository
-that ships it. `AGENTS.md` carries the same idea for prose: the guardrail and the profiles are
-imported, never restated.
+Neither `.claude/settings.json` nor `.codex/hooks.json` is hand-kept. Each is the wiring
+`akmon sync` writes for a mounted consumer, with the materialized hook directory (or, for
+Codex, the mounted hook script) replaced by the in-tree one — so a hook added, renamed or
+re-evented for consumers cannot quietly skip the repository that ships it. `AGENTS.md` carries
+the same idea for prose: the guardrail and the profiles are imported, never restated.
 """
 
 from __future__ import annotations
@@ -17,8 +17,10 @@ import sync
 
 _ROOT = Path(__file__).resolve().parents[2]
 _SETTINGS = _ROOT / ".claude" / "settings.json"
+_CODEX = _ROOT / ".codex" / "hooks.json"
 _AGENTS = _ROOT / "AGENTS.md"
 _IN_TREE_HOOKS = "$CLAUDE_PROJECT_DIR/hooks/"
+_IN_TREE_CODEX_HOOK = "$(git rev-parse --show-toplevel)/hooks/codex-hook.py"
 
 
 def _shipped_wiring() -> dict:
@@ -29,13 +31,25 @@ def _shipped_wiring() -> dict:
     return json.loads(blob.replace(mounted, _IN_TREE_HOOKS))
 
 
+def _shipped_codex_wiring() -> dict:
+    """What `akmon sync` would write for a mounted consumer's Codex wiring, re-pointed at this tree."""
+    mounted = f"$(git rev-parse --show-toplevel)/{sync.aitna_root_name()}/akmon/hooks/codex-hook.py"
+    blob = json.dumps(sync._codex_hooks(_ROOT))
+    assert mounted in blob, "the shipped Codex wiring no longer names the mounted hook script"
+    return json.loads(blob.replace(mounted, _IN_TREE_CODEX_HOOK))
+
+
 def test_akmon_wires_its_own_repository_exactly_as_it_wires_a_consumer():
     assert json.loads(_SETTINGS.read_text(encoding="utf-8")) == _shipped_wiring()
 
 
+def test_akmon_wires_its_own_codex_hooks_exactly_as_it_wires_a_consumer():
+    assert json.loads(_CODEX.read_text(encoding="utf-8")) == _shipped_codex_wiring()
+
+
 def test_every_wired_hook_script_exists_in_this_tree():
-    blob = _SETTINGS.read_text(encoding="utf-8")
-    scripts = set(re.findall(r"\$CLAUDE_PROJECT_DIR/hooks/([\w-]+\.py)", blob))
+    blob = _SETTINGS.read_text(encoding="utf-8") + _CODEX.read_text(encoding="utf-8")
+    scripts = set(re.findall(r"/hooks/([\w-]+\.py)", blob))
     assert scripts, "no hook is wired for akmon's own development"
     missing = sorted(name for name in scripts if not (_ROOT / "hooks" / name).is_file())
     assert missing == []

@@ -1555,3 +1555,83 @@ def test_a_codex_hook_data_file_error_propagates_uncaught(monkeypatch):
         codex_adapter.payload_shape({"a": 1})
     with pytest.raises(common_jsondata.DataFileError, match="missing"):
         _codex_hook()._routes()
+
+
+# --------------------------------------------------------------------------------------
+# a bad hand-owned routing overlay must not crash a hook: one line naming the file, the rest silent
+# --------------------------------------------------------------------------------------
+
+_BAD_OVERLAY_ERROR = (
+    "the routing overlay _aitna/model-routing.json is not a valid JSON object;"
+    " repair or delete it (it is hand-owned, so akmon never rewrites it)"
+)
+
+
+def _project_with_a_bad_overlay(tmp_path) -> tuple[Path, dict]:
+    root, payload = _gate_project(tmp_path)
+    (root / "_aitna" / "model-routing.json").write_text("{ not json", encoding="utf-8")
+    return root, payload
+
+
+def _wire_hook_onto(hook, monkeypatch, root: Path, payload: dict) -> None:
+    monkeypatch.setattr(hook, "load_payload", lambda: payload)
+    monkeypatch.setattr(hook, "_project_root", lambda _payload: root)
+
+
+def test_the_stop_gate_does_not_crash_on_a_bad_overlay_and_says_which_file(tmp_path, monkeypatch, capsys):
+    hook = _claude_hook("gate-audit.py")
+    root, payload = _project_with_a_bad_overlay(tmp_path)
+    _wire_hook_onto(hook, monkeypatch, root, payload)
+
+    assert hook.main() == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"akmon gate-audit hook: {_BAD_OVERLAY_ERROR} — the gate audit is skipped\n"
+
+
+def test_model_routing_session_start_tells_the_owner_which_overlay_is_bad(tmp_path, monkeypatch, capsys):
+    hook = _claude_hook("model-routing.py")
+    root, _ = _project_with_a_bad_overlay(tmp_path)
+    _wire_hook_onto(hook, monkeypatch, root, {"hook_event_name": "SessionStart"})
+
+    assert hook.main() == 0
+
+    captured = capsys.readouterr()
+    line = f"akmon model-routing hook: {_BAD_OVERLAY_ERROR} — model routing is silent for this session"
+    emitted = json.loads(captured.out)
+    assert emitted["systemMessage"] == line
+    assert emitted["hookSpecificOutput"] == {"hookEventName": "SessionStart", "additionalContext": line}
+    assert captured.err == line + "\n"
+
+
+def test_model_routing_user_prompt_stays_silent_on_a_bad_overlay_beyond_stderr(tmp_path, monkeypatch, capsys):
+    hook = _claude_hook("model-routing.py")
+    root, _ = _project_with_a_bad_overlay(tmp_path)
+    _wire_hook_onto(hook, monkeypatch, root, {"hook_event_name": "UserPromptSubmit"})
+
+    assert hook.main() == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert _BAD_OVERLAY_ERROR in captured.err
+
+
+def test_delegation_log_still_logs_and_skips_only_the_advisories_on_a_bad_overlay(tmp_path, monkeypatch, capsys):
+    hook = _claude_hook("delegation-log.py")
+    root, _ = _project_with_a_bad_overlay(tmp_path)
+    payload = _delegation_log_payload(root, tmp_path / "missing.jsonl", "k_mechanic")
+    akmon_root = Path(hook_core.__file__).parent.parent
+    monkeypatch.setattr(hook, "load_payload", lambda: payload)
+    monkeypatch.setattr(hook, "find_project_root", lambda _path: root)
+    monkeypatch.setattr(hook, "akmon_runtime_root", lambda _root: root / "_aitna" / "akmon")
+    assert akmon_root.is_dir()
+
+    assert hook.main() == 0
+
+    captured = capsys.readouterr()
+    emitted = json.loads(captured.out)
+    assert "[akmon] → k_mechanic: do the work" in emitted["systemMessage"]
+    assert "role/task-kind" not in emitted["systemMessage"]
+    assert captured.err == f"akmon delegation-log hook: {_BAD_OVERLAY_ERROR} — the role-matrix advisories are skipped\n"
+    assert (root / hook.routing.delegation_log_rel()).is_file()

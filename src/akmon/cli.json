@@ -16,6 +16,7 @@
     "model_routing/coverage_map",
     "model_routing/gate_pack",
     "model_routing/init",
+    "model_routing/models",
     "model_routing/second_opinion",
     "model_routing/stats",
     "release/release_check",

@@ -1,0 +1,23 @@
+# The same bad overlay at a later prompt: stdout stays silent (zero token cost per turn); only the
+# one stderr line names the file.
+id = "hooks/model-routing-overlay-invalid-user-prompt-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:model-routing"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/model-routing.json" = "{ not json" }
+
+[run]
+script = "model-routing"
+
+[run.payload]
+hook_event_name = "UserPromptSubmit"
+session_id = "sess-mr-overlay-prompt"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = "akmon model-routing hook: the routing overlay _aitna/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it) — model routing is silent for this session\n"
+stdout = ""

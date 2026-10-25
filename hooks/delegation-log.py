@@ -126,12 +126,18 @@ def _decide() -> HookResult | None:
     # item 4). On PreToolUse both are delivered and the call still runs (M149).
     messages = [_format_system_message(line)]
     # C20 — advise when the agent has no overlap with the role's effective allowed set.
-    registry = routing.load_registry(akmon_runtime_root(root), root)
-    role = routing.active_role(payload.get("transcript_path"))
-    role_warnings = (
-        routing.role_matrix_warning(registry, subagent_type, role),
-        routing.role_matrix_directive(registry, subagent_type, role),
-    )
+    try:
+        registry = routing.load_registry(akmon_runtime_root(root), root)
+    except routing.OverlayError as exc:
+        # The log line is already written; only the role advisories, which need the registry, are lost.
+        print(routing.hook_overlay_line("delegation-log", exc), file=sys.stderr)
+        role_warnings: tuple[str | None, str | None] = (None, None)
+    else:
+        role = routing.active_role(payload.get("transcript_path"))
+        role_warnings = (
+            routing.role_matrix_warning(registry, subagent_type, role),
+            routing.role_matrix_directive(registry, subagent_type, role),
+        )
     warn_prefix = _log_data()["warning_prefix"]
     # C32 — the recorded task-kind floors are otherwise read by nothing at delegation time.
     call_model = tool_input.get("model")

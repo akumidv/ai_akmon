@@ -1,0 +1,21 @@
+id = "tools/second-opinion-list-no-last-resort"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# `--list` of a session on a harness the providers table has no row for: the chain is empty and
+# there is no last resort to run, so the listing says why instead of staying silent (the run prints
+# the same reason in its skip notice).
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--list",
+  "--session-provider",
+  "gemini",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "session: provider=gemini model=(default) priors=unknown\nchain: empty — no ladder provider differs from the session\nno last resort: the session's own provider 'gemini' has no row in the providers table, so the last resort has nothing to run\nskipped:\n  gemini: session priors unknown\nasks:\n  session gemini: priors unknown; declare providers.gemini.family in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (second_opinion.py --session-family)\n"

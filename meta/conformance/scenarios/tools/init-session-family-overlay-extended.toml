@@ -1,0 +1,35 @@
+id = "tools/init-session-family-overlay-extended"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/init"]
+
+# The family vocabulary is closed but extendable (D01): the project overlay adds `deepseek` by key,
+# without restating the shipped four, and `--session-family deepseek` is accepted.
+
+[fixture.files]
+"_aitna/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "prompt": "stdin", "family": "gemini", "report_dir": ".shfake/second-opinion/"}
+  },
+  "second_opinion_policy": {"ladder": ["shfake"], "families": {"deepseek": "DeepSeek models"}}
+}
+"""
+
+[run]
+tool = "model_routing/init"
+argv = [
+  "--second-opinion",
+  "on",
+  "--session-provider",
+  "opencode",
+  "--session-model",
+  "x/y",
+  "--session-family",
+  "deepseek",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "updated: .claude/agents/k_explorer.md\nupdated: .claude/agents/k_mechanic.md\nupdated: .claude/agents/k_validator.md\nupdated: .claude/agents/k_implementer.md\nupdated: .claude/agents/k_reasoner.md\nupdated: .claude/agents/k_auditor.md\nupdated: .claude/model-routing.local.json\nmodel routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=shfake priors=gemini (on)\n"

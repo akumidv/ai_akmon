@@ -1,0 +1,38 @@
+id = "tools/init-session-family"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/init"]
+
+# `--session-family` records the priors the session answers with (D15) in the `session` stanza, and
+# the second opinion reads it: opencode fronts several families, so its table row states none, and
+# without the flag the session's priors are unknown and the chain is empty (the pair scenario
+# `init-session-family-absent`). With it the declared carrier — a gemini one on an absolute-path
+# executable present on every host (D12) — is the chain's head, so the summary line names it.
+
+[fixture.files]
+"_aitna/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "prompt": "stdin", "family": "gemini", "report_dir": ".shfake/second-opinion/"}
+  },
+  "second_opinion_policy": {"ladder": ["shfake"]}
+}
+"""
+
+[run]
+tool = "model_routing/init"
+argv = [
+  "--second-opinion",
+  "on",
+  "--session-provider",
+  "opencode",
+  "--session-model",
+  "x/y",
+  "--session-family",
+  "qwen",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "updated: .claude/agents/k_explorer.md\nupdated: .claude/agents/k_mechanic.md\nupdated: .claude/agents/k_validator.md\nupdated: .claude/agents/k_implementer.md\nupdated: .claude/agents/k_reasoner.md\nupdated: .claude/agents/k_auditor.md\nupdated: .claude/model-routing.local.json\nmodel routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=shfake priors=gemini (on)\n"

@@ -31,7 +31,9 @@ import {
   activeRole,
   gateAuditOnce,
   gateAuditRequest,
+  hookOverlayLine,
   loadRegistry,
+  OverlayError,
   readLocalConfig,
   registryPath,
   toolCommand,
@@ -108,7 +110,17 @@ function _projectRoot(payload) {
  */
 function _decide(data) {
   const payload = loadPayload();
-  return gateAuditResult(data, _projectRoot(payload), payload);
+  try {
+    return gateAuditResult(data, _projectRoot(payload), payload);
+  } catch (error) {
+    if (!(error instanceof OverlayError)) {
+      throw error;
+    }
+    // A hand-owned overlay that does not parse costs the gate audit, never the turn: one line
+    // names the file and the turn ends as it would have without the audit.
+    process.stderr.write(`${hookOverlayLine(data.agents, "gate-audit", error)}\n`);
+    return null;
+  }
 }
 
 /**

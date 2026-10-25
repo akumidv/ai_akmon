@@ -59,7 +59,9 @@ import {
   delegationFloorWarning,
   delegationLogLine,
   delegationLogRel,
+  hookOverlayLine,
   loadRegistry,
+  OverlayError,
   parseDelegationEntries,
   readLocalConfig,
   roleMatrixDirective,
@@ -190,6 +192,35 @@ function _warningChannels(warnings, warnPrefix) {
 }
 
 /**
+ * The role-matrix advisories (owner, model), or silence when the routing overlay does not parse.
+ *
+ * The log line is already written by the time this runs: a bad hand-owned overlay loses only the
+ * advisories, which need the registry, and one stderr line names the file.
+ * @param {HookData} data
+ * @param {string} root
+ * @param {Json} payload
+ * @param {string} subagentType
+ * @returns {Array<string | null>}
+ */
+function _roleWarnings(data, root, payload, subagentType) {
+  let registry;
+  try {
+    registry = loadRegistry(data.agents, akmonRuntimeRoot(root), root);
+  } catch (error) {
+    if (!(error instanceof OverlayError)) {
+      throw error;
+    }
+    process.stderr.write(`${hookOverlayLine(data.agents, "delegation-log", error)}\n`);
+    return [null, null];
+  }
+  const role = activeRole(dictGet(payload, "transcript_path"));
+  return [
+    roleMatrixWarning(data.agents, registry, subagentType, role),
+    roleMatrixDirective(data.agents, registry, subagentType, role),
+  ];
+}
+
+/**
  * @param {HookData} data
  * @returns {HookResult | null}
  */
@@ -236,12 +267,7 @@ function _decide(data) {
   // item 4). On PreToolUse both are delivered and the call still runs (M149).
   const messages = [_formatSystemMessage(data, line)];
   // C20 — advise when the agent has no overlap with the role's effective allowed set.
-  const registry = loadRegistry(data.agents, akmonRuntimeRoot(root), root);
-  const role = activeRole(dictGet(payload, "transcript_path"));
-  const roleWarnings = [
-    roleMatrixWarning(data.agents, registry, subagentType, role),
-    roleMatrixDirective(data.agents, registry, subagentType, role),
-  ];
+  const roleWarnings = _roleWarnings(data, root, payload, subagentType);
   const warnPrefix = dictItem(data.delegationLog, "warning_prefix");
   // C32 — the recorded task-kind floors are otherwise read by nothing at delegation time.
   const callModel = dictGet(toolInput, "model");

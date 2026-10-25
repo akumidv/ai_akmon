@@ -1,0 +1,38 @@
+id = "tools/second-opinion-run-unknown-session-last-resort"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# The run that the list scenario of the same fixture predicts: a session of unknown priors still
+# takes the disclosed last resort (D07), with the session's ask in the ledger beside it, so `--list`
+# and a run agree.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+"_aitna/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "prompt": "stdin", "family": null, "models": ["small", "big"], "report_dir": ".shfake/second-opinion/"}
+  },
+  "second_opinion_policy": {"ladder": ["shfake"]}
+}
+"""
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--gate",
+  "code-verify",
+  "--gate-pack",
+  "docs/gate-pack.md",
+  "--session-provider",
+  "shfake",
+  "--session-model",
+  "big",
+  "--dry-run",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "/bin/sh -m small\nreport: .shfake/second-opinion/code-verify-1.md\nprovider=shfake priors=unknown carrier=declared repo=unknown model=small kind=last-resort\nwarning: no ladder provider differs from the session, so this run uses the session's own provider with the strongest declared model that differs from big, or its default — same priors, filed as kind=last-resort\nskipped shfake: session priors unknown\nask: session shfake: priors unknown for model big; declare providers.shfake.model_families.big (or providers.shfake.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)\n"

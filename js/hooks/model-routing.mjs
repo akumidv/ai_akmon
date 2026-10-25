@@ -41,8 +41,10 @@ import {
   detectionAliases,
   detectOrchestrator,
   initInstruction,
+  hookOverlayLine,
   lastMainTurn,
   loadRegistry,
+  OverlayError,
   rebindNotice,
   rebindTo,
   readLocalConfig,
@@ -190,7 +192,7 @@ export function modelRoutingResult(data, root, payload) {
       systemMessage: [lines[0], ...overlay, ...pressure].join("\n"),
     });
   }
-  const lines = [...statusLines(data.agents, config, registry, initCommand), ...overlay];
+  const lines = [...statusLines(data.agents, data.runtime, config, registry, initCommand), ...overlay];
   // Owner-addressed subset: the corridor warning, the fact of a rebind and — for the owner
   // alone — the context-pressure reminder at either level (its info line carries ℹ, not ⚠);
   // the steady-state status line itself stays context-only so the UI is quiet when healthy.
@@ -226,12 +228,39 @@ function _projectRoot(payload) {
 }
 
 /**
+ * What a hand-owned overlay that does not parse costs: the routing, never the session.
+ *
+ * One line names the file, to stderr always and — when the session starts — to the owner on both
+ * channels, the way the init instruction goes; a later prompt stays silent beyond stderr.
+ * @param {HookData} data
+ * @param {Json} payload
+ * @param {OverlayError} error
+ * @returns {HookResult | null}
+ */
+function _overlayProblemResult(data, payload, error) {
+  const line = hookOverlayLine(data.agents, "model-routing", error);
+  process.stderr.write(`${line}\n`);
+  const event = dictGet(payload, "hook_event_name");
+  if ((truthy(event) ? event : "SessionStart") !== "SessionStart") {
+    return null;
+  }
+  return new HookResult({ eventName: "SessionStart", additionalContext: line, systemMessage: line });
+}
+
+/**
  * @param {HookData} data
  * @returns {HookResult | null}
  */
 function _decide(data) {
   const payload = loadPayload();
-  return modelRoutingResult(data, _projectRoot(payload), payload);
+  try {
+    return modelRoutingResult(data, _projectRoot(payload), payload);
+  } catch (error) {
+    if (!(error instanceof OverlayError)) {
+      throw error;
+    }
+    return _overlayProblemResult(data, payload, error);
+  }
 }
 
 /**

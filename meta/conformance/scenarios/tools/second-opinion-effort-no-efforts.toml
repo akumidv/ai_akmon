@@ -1,0 +1,19 @@
+id = "tools/second-opinion-effort-no-efforts"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# A carrier whose row declares no `efforts` (opencode: its `--variant` set is per model, M188) given `@high` is
+# one refused line naming the carrier and the files that may declare `efforts`, exit 2 (D17 point 2).
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+
+[run]
+tool = "model_routing/second_opinion"
+argv = ["--gate", "design-align", "--gate-pack", "docs/gate-pack.md", "--session-provider", "qwen", "--session-model", "q", "--provider", "opencode:x@high", "--dry-run"]
+
+[expected]
+exit = 2
+stderr = "second-opinion: provider 'opencode' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.opencode.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)\n"
+stdout = ""

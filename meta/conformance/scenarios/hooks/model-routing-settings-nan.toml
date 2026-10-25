@@ -22,14 +22,13 @@ files = { ".claude/settings.json" = """{"model": "sonnet", "spinner": NaN}""", "
     ]
   },
   "second_opinion": false,
-  "second_opinion_provider": "openai",
   "available": [
     "haiku",
     "sonnet",
     "opus"
   ],
   "auditor_opt_in": null,
-  "registry_hash": "ef29a31a0c559db7",
+  "registry_hash": "abf01403b7e83ccc",
   "task_kind_floors": {
     "quant-derivation": "opus"
   }

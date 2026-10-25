@@ -14,6 +14,7 @@
     "./tools/model_routing/coverage_map": "./js/tools/model_routing/coverage_map.mjs",
     "./tools/model_routing/gate_pack": "./js/tools/model_routing/gate_pack.mjs",
     "./tools/model_routing/init": "./js/tools/model_routing/init.mjs",
+    "./tools/model_routing/models": "./js/tools/model_routing/models.mjs",
     "./tools/model_routing/second_opinion": "./js/tools/model_routing/second_opinion.mjs",
     "./tools/model_routing/stats": "./js/tools/model_routing/stats.mjs",
     "./tools/release/release_check": "./js/tools/release/release_check.mjs",

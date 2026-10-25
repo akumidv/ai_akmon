@@ -1,0 +1,37 @@
+id = "tools/second-opinion-list"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# `--list` proposes the ranked candidate chain without running anything (ADR 0024). The corpus
+# hides every shipped carrier from PATH, so the project overlay declares one provider outright
+# (D12) whose executable is an absolute path every host has: the chain holds it at rank 2, the
+# session's own carrier is skipped as `self`, a shipped carrier is `carrier absent`, and a declared
+# carrier of unknown priors is `priors unknown` with the key to declare (D08). Presence of the
+# declared one is a yes-or-no about `/bin/sh` and nothing else (D11).
+
+[fixture.files]
+"_aitna/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "prompt": "stdin", "family": "qwen", "models": ["small", "big"], "report_dir": ".shfake/second-opinion/"},
+    "shmute": {"argv": ["/bin/sh"], "report_dir": ".shmute/second-opinion/"}
+  },
+  "second_opinion_policy": {"ladder": ["claude", "shfake", "codex", "shmute"]}
+}
+"""
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--list",
+  "--session-provider",
+  "claude",
+  "--session-model",
+  "opus",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "session: provider=claude model=opus priors=claude\nrank 2: provider=shfake model=big priors=qwen repo=unknown\nskipped:\n  claude: self\n  codex: carrier absent\n  shmute: priors unknown\nasks:\n  shmute: priors unknown for its default model; declare providers.shmute.family in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team\n"

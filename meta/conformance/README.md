@@ -85,7 +85,7 @@ tree_files = { "rel/path" = "…" }   # scenario-local override of the snapshot 
 tree_remove = ["rel/path"]          # snapshot paths deleted from that scenario-local copy
 tags = ["v1.1.0"]                   # git tags on the fixture's baseline commit (release checks)
 
-[env]                     # environment overrides for the process under test
+[env]                     # environment overrides for the process under test ({{tmp}} names the run tempdir: HOME = "{{tmp}}")
 AITNA_ROOT = "_aitna"
 
 [run]
@@ -176,9 +176,12 @@ both implementations instead of `python3 $(akmon path)/tools/<tool>.py`.
   counters land there, isolated from host state and each other), and a fresh git repo on the
   scenario's branch, committed once after the warmup — a synced consumer's sync output is its
   baseline, not a change.
-- The `codex` binary is hidden from the process under test's PATH (self-CI's technique):
-  `codex.host-trust` takes its absent-install skip, so the corpus never runs a live harness
-  RPC. Its warn side is exempt in `coverage.toml`; live harness probes are N10's job.
+- Every optional-harness binary (`claude`, `codex`, `qwen`, `opencode`, `pi` — the executables
+  `common/runtime.json` names) is hidden from the process under test's PATH (self-CI's technique
+  for `codex`): `codex.host-trust` takes its absent-install skip, so the corpus never runs a live
+  harness RPC, and the second-opinion chain's head — the first carrier *present* on `PATH`, which
+  `init` prints and the status line shows — reads the same on every host. Its warn side is exempt
+  in `coverage.toml`; live harness probes are N10's job.
 
 ## Gates
 

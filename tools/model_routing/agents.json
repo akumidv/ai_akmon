@@ -10,6 +10,25 @@
   },
   "zone_convention": "In a zoned fan-out, start each call's description with [zone:<label>].",
   "overlay_name": "model-routing.json",
+  "local_overlay_rel": "local/model-routing.json",
+  "local_aliases_rel": "local/model-aliases.json",
+  "default_model_token": "default",
+  "catalog_errors": {
+    "format": "format '{{format}}' is not one of: {{known}}",
+    "json": "is not valid JSON",
+    "shape": "holds no `models` list"
+  },
+  "effort_errors": {
+    "unsupported": "provider '{{provider}}' declares no `efforts`, so the effort '{{effort}}' cannot be sent to it; drop '@{{effort}}', or declare providers.{{provider}}.efforts (a flag holding {effort} and the levels, weakest first) in {{local_overlay}} (yours) or {{overlay}} (the team's)",
+    "unknown": "provider '{{provider}}' does not accept the effort '{{effort}}'; its levels are: {{levels}}"
+  },
+  "alias_errors": {
+    "unresolved": "provider '{{provider}}' declares model aliases, and '{{model}}' has no concrete id in {{file}}; write it with `akmon tool model_routing/models --refresh --provider {{provider}}`, pin a concrete id with `--provider {{provider}}:<id>`, or run the carrier's own model with `--provider {{provider}}:default`",
+    "invalid": "the resolved-aliases file {{file}} is not a valid alias map; it is generated and never hand-edited, so delete it and run `akmon tool model_routing/models --refresh`"
+  },
+  "overlay_errors": {
+    "invalid": "the routing overlay {{file}} is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)"
+  },
   "local_config_rel": ".claude/model-routing.local.json",
   "delegation_log_rel": ".claude/model-routing.log",
   "agents_dir_rel": ".claude/agents",
@@ -17,10 +36,22 @@
     "settings.local.json",
     "settings.json"
   ],
-  "retired_second_opinion_keys": [
-    "cli",
-    "invoke"
-  ],
+  "retired_second_opinion_keys": {
+    "policy": [
+      "diversity_ladder"
+    ],
+    "vendor": [
+      "second_opinion"
+    ],
+    "config": [
+      "second_opinion_provider",
+      "second_opinion_fallback_model"
+    ]
+  },
+  "retired_key_errors": {
+    "overlay": "the routing overlay {{file}} still carries the retired key(s) {{keys}} (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it.",
+    "config": "the local config {{file}} still carries the retired key(s) {{keys}} (ADR 0024). The second opinion no longer reads a recorded provider or fallback model: it resolves its provider from the session (`session` in this file, or `--session-provider`) and the ladder. Re-run the routing initializer to regenerate this file."
+  },
   "agent_specs": [
     {
       "name": "k_explorer",
@@ -102,24 +133,40 @@
   "rebind_notice": "[akmon] orchestrator model changed → {{orchestrator}}; subagent binding updated: reasoner={{reasoner}} · auditor={{auditor}} · worker={{worker}} · mid={{mid}}. Regenerated k_* agents follow the new model.",
   "unlabelled_fanout_warning": "this {{subagent}} delegation carries no zone label while this session's fan-out is zoned ({{labelled}}) — the coverage map will count it as unlabelled",
   "unlabelled_fanout_directive": "this {{subagent}} call carries no zone label while this session's fan-out is zoned ({{labelled}}) — label fan-out calls with [zone:<label>] at the start of the description",
-  "second_opinion_unavailability": {
-    "other_vendor_absent": "other-vendor: not attempted, it is absent from the configured ladder",
-    "other_vendor_none": "other-vendor: no other vendor is configured with a usable second-opinion spec",
-    "other_vendor_pinned": "other-vendor: skipped because second_opinion_provider pins '{{configured}}', the orchestrating vendor, though {{others}} is configured",
-    "other_vendor_usable": "other-vendor: {{others}} configured with a usable spec",
-    "same_vendor_absent": "same-vendor-other-model: not attempted, it is absent from the configured ladder",
-    "same_vendor_no_diverse_rung": "same-vendor-other-model: on '{{vendor}}' the rungs {{rungs}} hold none that differs from both {{against}}",
-    "same_vendor_diverse_rung": "same-vendor-other-model: on '{{vendor}}' the rungs {{rungs}} against {{against}}"
-  },
-  "unpinnable_model": "second opinion needs model {{model}} on {{harness}}, but the registry declares no model_flag for that vendor — an unpinned run would not be model-diverse. Declare the measured flag in the vendor's second_opinion block, or route this gate another way.",
+  "unpinnable_model": "second opinion needs model {{model}} on {{provider}}, but the providers table declares no model_flag for that provider — an unpinned run would not be model-diverse. Declare the measured flag in the provider's row, or route this gate another way.",
   "opinion_skip_reasons": {
     "self": "self",
     "absent": "carrier absent",
     "priors_unknown": "priors unknown",
     "same_priors": "same priors as {{owner}}",
-    "same_model": "same model as {{owner}}"
+    "same_model": "same model as {{owner}}",
+    "session_priors_unknown": "session priors unknown"
   },
-  "opinion_ladder_unknown": "second opinion: the ladder names '{{provider}}', which the providers table does not declare",
+  "opinion_asks": {
+    "provider": "{{provider}}: priors unknown for model {{model}}; declare providers.{{provider}}.model_families.{{model}} (or providers.{{provider}}.family when one family answers every model) in {{local_overlay}} to keep it to yourself, or {{overlay}} to share it with the team",
+    "provider_default": "{{provider}}: priors unknown for its default model; declare providers.{{provider}}.family in {{local_overlay}} to keep it to yourself, or {{overlay}} to share it with the team",
+    "session": "session {{provider}}: priors unknown for model {{model}}; declare providers.{{provider}}.model_families.{{model}} (or providers.{{provider}}.family) in {{local_overlay}} to keep it to yourself, or {{overlay}} to share it with the team, or record session.family in {{local}} (init --session-provider, second_opinion.py --session-family)",
+    "session_default": "session {{provider}}: priors unknown; declare providers.{{provider}}.family in {{local_overlay}} to keep it to yourself, or {{overlay}} to share it with the team, or record session.family in {{local}} (second_opinion.py --session-family)"
+  },
+  "opinion_status": {
+    "head": "{{target}} priors={{family}}",
+    "unavailable": "unavailable",
+    "unavailable_unknown": "unavailable priors=unknown",
+    "chain_empty": "second-opinion is on but the provider chain is empty: every ladder provider is the session's own ('{{provider}}'), absent from PATH, or answers with priors already taken, so a gate runs only the disclosed last resort (kind=last-resort) — `second_opinion.py --list` names every skip"
+  },
+  "session_unknown": "second opinion: no source names the session's provider; pass --session-provider (and --session-model), record it with the routing initializer's --session-provider, or bind a vendor that declares a `carrier`",
+  "opinion_ladder_unknown": "second opinion: the ladder names '{{provider}}', which the providers table does not declare; declare providers.{{provider}} or remove it from second_opinion_policy.ladder in {{local_overlay}} (yours) or {{overlay}} (the team's)",
+  "session_family_unknown": "--session-family '{{family}}' is not in the family vocabulary ({{known}}); add it by declaring second_opinion_policy.families.{{family}} in {{local_overlay}} to keep it to yourself, or {{overlay}} to share it with the team",
+  "vendor_unknown": "--vendor must be one of: {{vendors}}",
+  "vendor_is_carrier": "--vendor '{{vendor}}' names a carrier, which has no tier-binding block of its own; --vendor must be one of: {{vendors}} (the binding the session borrows). To start from the {{vendor}} harness pass --session-provider {{vendor}}, with --session-model and --session-family",
+  "hook_overlay_error": {
+    "line": "akmon {{hook}} hook: {{error}} — {{effect}}",
+    "effects": {
+      "model-routing": "model routing is silent for this session",
+      "gate-audit": "the gate audit is skipped",
+      "delegation-log": "the role-matrix advisories are skipped"
+    }
+  },
   "compute_binding_warnings": {
     "semantic": "using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally",
     "not_in_list": "orchestrator '{{orchestrator}}' is not in the discovered model list — cannot rank it against the floor; refresh discovery or check the alias",
@@ -147,9 +194,5 @@
     "no_config": "no local config — model routing is not initialized",
     "registry_changed": "registry (or project overlay) changed since init",
     "model_mismatch": "settings default model '{{model}}' differs from configured orchestrator"
-  },
-  "second_opinion_spec_errors": {
-    "retired_keys": "second-opinion provider '{{provider}}' still carries the retired key(s) {{retired}}; the executable and its argv moved into common/runtime.py (C57). Delete only those keys from the hand-owned project overlay and leave the rest of the object alone: the overlay is deep-merged over the shipped registry, so harness/operation/report_dir are inherited unless the overlay deliberately overrides one. The initializer reads this file and will not rewrite it; re-run it afterwards to refresh the generated config.",
-    "no_usable_spec": "second-opinion provider '{{provider}}' has no usable harness/operation/report_dir spec"
   }
 }

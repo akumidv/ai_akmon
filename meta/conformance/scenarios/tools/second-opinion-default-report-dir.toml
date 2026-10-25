@@ -1,0 +1,38 @@
+id = "tools/second-opinion-default-report-dir"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/second_opinion"]
+
+# A provider row the owner declares in the overlay with an `argv` and no `report_dir` files its
+# report under `.<provider id>/second-opinion/` (ADR 0024/D12), the directory every shipped row names.
+# A real run, not `--dry-run`: the carrier is an absolute-path `/bin/sh` that prints one line, and the
+# `report:` line names the default directory.
+
+[fixture.files]
+"docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
+"_aitna/model-routing.json" = """
+{
+  "providers": {
+    "shfake": {"argv": ["/bin/sh", "-c", "echo verdict: fine"], "family": "qwen"}
+  },
+  "second_opinion_policy": {"ladder": ["shfake"]}
+}
+"""
+
+[run]
+tool = "model_routing/second_opinion"
+argv = [
+  "--gate",
+  "code-verify",
+  "--gate-pack",
+  "docs/gate-pack.md",
+  "--session-provider",
+  "claude",
+  "--session-model",
+  "opus",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "second-opinion provider=shfake priors=qwen carrier=declared repo=unknown model=(default) kind=chain gate=code-verify exit=0\nreport: .shfake/second-opinion/code-verify-1.md\n\nverdict: fine\n"
