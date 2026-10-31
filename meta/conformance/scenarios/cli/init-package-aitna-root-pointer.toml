@@ -1,0 +1,22 @@
+# init with `--aitna-root meta` in package mode, the offline realign shape of cli/init-package: a root other
+# than `_aitna` is declared in `.aitna-root` at the project root (one line, project-root-relative, ADR 0022
+# D09) and the whole layout lands under it; the closing step no longer asks the owner to export AITNA_ROOT.
+# Python-tagged for the same reason as cli/init-package.
+id = "cli/init-package-aitna-root-pointer"
+ecosystem = "python"
+kind = "cli"
+covers = ["command:init"]
+
+[fixture]
+attach = "native"
+
+
+[run]
+argv = ["init", "--mode", "package", "--yes", "--project-root", "{{root}}", "--aitna-root", "meta"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "akmon init: wrote .aitna-root (meta)\nakmon init: attaching to {{root}}\nakmon init: mount mode: package (requested) · dev layer: meta/\nakmon init: wrote meta/TASKS.md\nakmon init: wrote meta/memory/README.md\nakmon init: wrote meta/agents/development/README.md\nakmon init: wrote meta/agents/learning/README.md\nakmon init: wrote meta/agents/release/README.md\nakmon init: AGENTS.md already carries an akmon block — left untouched\nakmon init: .gitignore: added the akmon entries (secrets, dev-layer venv, routing artifacts)\nakmon init: recorded meta/.akmon.toml (mount=package, akmon_version={{version}})\nakmon init: pyproject.toml: [tool.ruff] extends akmon's Python rules (meta/.akmon/profiles/ruff.toml)\nakmon init: akmon check will run: ruff (recorded as [check])\nakmon init: running sync (generated pointers, hook wiring, imported guardrails)\nupdated: CLAUDE.md\nupdated: .github/copilot-instructions.md\nupdated: GEMINI.md\nupdated: .codex/README.md\nupdated: .claude/skills/demo/SKILL.md\nupdated: .agents/skills/demo/SKILL.md\nupdated: meta/.akmon/guardrails/_common.md\nupdated: meta/.akmon/profiles/ruff.toml\nok: .codex/hooks.json\nok: .claude/settings.json\nok: meta/.akmon.toml\nakmon init: running model-routing init (subagent definitions + local routing config)\nupdated: .claude/agents/k_explorer.md\nupdated: .claude/agents/k_mechanic.md\nupdated: .claude/agents/k_validator.md\nupdated: .claude/agents/k_implementer.md\nupdated: .claude/agents/k_reasoner.md\nupdated: .claude/agents/k_auditor.md\nupdated: .claude/model-routing.local.json\nmodel routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable (off)\n\nakmon init: attached, with steps left to a human/agent decision:\n  1. classify the project's archetype against ARCHETYPES.md and set `attached_archetype` in meta/.akmon.toml\n  2. `akmon verify --strict` checks the existing AGENTS.md block against the contract\n  3. add the contract checks to your existing workflow(s): `akmon sync --check` and `akmon verify --strict`\n  4. add ruff to the project's development dependencies so `akmon check` can run it\n  5. pin the test environment: record the project's own pytest invocation as `[test].runner` in meta/.akmon.toml (BOOTSTRAP §A5 — do not build a venv when the project already has one)\n  6. run `akmon verify --strict` and review the diff — the owner commits, not the assistant (D5)\n"
+[expected.files]
+".aitna-root" = "meta\n"

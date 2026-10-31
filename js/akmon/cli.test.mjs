@@ -15,6 +15,10 @@ import { fileURLToPath } from "node:url";
 
 import { main } from "./cli.mjs";
 
+// The retired AITNA_ROOT makes `verify` warn while it is set (ADR 0022 D09): a shell that exports it must not
+// reach the CLIs this file runs, so only a test that sets it itself sees it.
+delete process.env.AITNA_ROOT;
+
 const cliModule = new URL("./cli.mjs", import.meta.url);
 const CLI = fileURLToPath(cliModule);
 const TREE = posix.resolve(posix.dirname(CLI), "..", "..");
@@ -33,6 +37,7 @@ const HOOK_STEMS = [
   "gate-audit",
   "git-commit-guard",
   "hook_core",
+  "learning-reminder",
   "model-routing",
   "role-on-code",
   "session-start-agent",
@@ -56,7 +61,7 @@ function project() {
 
 /**
  * Run `node script ...args` with a clean environment of its own: a fresh `TMPDIR` (the hooks'
- * once-per-session markers live there) and no `AITNA_ROOT`.
+ * once-per-session markers live there).
  * @param {string} script
  * @param {string[]} args
  * @param {{cwd?: string, input?: string}} [options]
@@ -64,7 +69,6 @@ function project() {
 function spawnNode(script, args, options = {}) {
   /** @type {NodeJS.ProcessEnv} */
   const env = { ...process.env, TMPDIR: tmpdir() };
-  delete env.AITNA_ROOT;
   const result = spawnSync(process.execPath, [script, ...args], {
     cwd: options.cwd ?? os.tmpdir(),
     env,
@@ -230,8 +234,53 @@ test("a missing or unknown command is one usage line on stderr and exit 2", asyn
     stdout: "",
     stderr:
       "akmon: error: argument command: invalid choice: 'frobnicate' " +
-      "(choose from 'init', 'update', 'sync', 'verify', 'check', 'path', 'hook', 'tool', 'version')\n",
+      "(choose from 'init', 'update', 'sync', 'verify', 'check', 'trust', 'learn', 'path', 'hook', 'tool', 'version')\n",
   });
+});
+
+// -- learn -------------------------------------------------------------------------------------
+
+test("learn is dispatched to its own module, usage and exit codes included", () => {
+  const root = project();
+  const help = akmon(["learn", "--help"], { cwd: root });
+  assert.equal(help.status, 0);
+  assert.match(
+    help.stdout,
+    /^usage: akmon learn status \| sessions \[--all\] \| mark \[--at TIME\] {3}\(each takes \[--project-root PATH\]\)\n/,
+  );
+  const bare = akmon(["learn"], { cwd: root });
+  assert.equal(bare.status, 2);
+  assert.equal(bare.stdout, "");
+  assert.match(
+    bare.stderr,
+    /^usage: akmon learn status \| sessions \[--all\] \| mark \[--at TIME\] {3}\(each takes \[--project-root PATH\]\)\n/,
+  );
+  const status = akmon(["learn", "status"], { cwd: root });
+  assert.equal(status.status, 0, status.stderr);
+  assert.match(status.stdout, /^last run: never\ncounting since: no session recorded yet\n/);
+  assert.match(akmon(["-h"]).stdout, /\n {2}learn {5}the learning agent's run record: status, this project's sessions/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("learn takes --project-root: the status of a project the cwd is not inside", () => {
+  const root = project();
+  const elsewhere = fs.realpathSync(tmpdir());
+  const status = akmon(["learn", "status", "--project-root", root], { cwd: elsewhere });
+  assert.equal(status.status, 0, status.stderr);
+  assert.match(status.stdout, /^last run: never\n/);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(elsewhere, { recursive: true, force: true });
+});
+
+test("learn mark with no project root refuses with the notice and writes nothing", () => {
+  const elsewhere = fs.realpathSync(tmpdir());
+  const result = akmon(["learn", "mark"], { cwd: elsewhere });
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /^\[akmon\] no project root at or above /);
+  assert.ok(result.stderr.includes("pass --project-root to name the root instead"));
+  assert.deepEqual(fs.readdirSync(elsewhere), []);
+  fs.rmSync(elsewhere, { recursive: true, force: true });
 });
 
 // -- sync, check -------------------------------------------------------------------------------

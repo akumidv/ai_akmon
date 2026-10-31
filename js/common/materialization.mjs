@@ -126,11 +126,12 @@ export function generatedMarker(data) {
  * The do-not-edit banner; tracks the configured root so it never drifts from real paths. The
  * root is the only dynamic part: the fragments around it come from the shared data file.
  * @param {MaterializationData} data the parsed `common/materialization.json`
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-export function generatedBanner(data) {
+export function generatedBanner(data, projectRoot) {
   const banner = data.generated_banner;
-  return `${banner.prefix}${aitnaRootName()}${banner.suffix}`;
+  return `${banner.prefix}${aitnaRootName(projectRoot)}${banner.suffix}`;
 }
 
 /**
@@ -139,10 +140,11 @@ export function generatedBanner(data) {
  * line ending, so a heading with none has the comment on its line.
  * @param {MaterializationData} data the parsed `common/materialization.json`
  * @param {string} sourceText
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-export function materializedMarkdown(data, sourceText) {
-  const bannerLine = `<!-- ${generatedBanner(data)} -->`;
+export function materializedMarkdown(data, sourceText, projectRoot) {
+  const bannerLine = `<!-- ${generatedBanner(data, projectRoot)} -->`;
   if (sourceText) {
     const end = _firstLineEnd(sourceText);
     const first = sourceText.slice(0, end);
@@ -160,19 +162,20 @@ export function materializedMarkdown(data, sourceText) {
  * @param {MaterializationData} data the parsed `common/materialization.json`
  * @param {string} name
  * @param {string} sourceText
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-export function materializedText(data, name, sourceText) {
+export function materializedText(data, name, sourceText, projectRoot) {
   if (name.endsWith(".md")) {
-    return materializedMarkdown(data, sourceText);
+    return materializedMarkdown(data, sourceText, projectRoot);
   }
-  return `# ${generatedBanner(data)}\n\n${sourceText}`;
+  return `# ${generatedBanner(data, projectRoot)}\n\n${sourceText}`;
 }
 
 /**
  * The standard directories whose files a consumer's `AGENTS.md` `@`-imports: the universal
  * guardrails and the language and environment profiles. Package mode writes the imported ones
- * under `<AITNA_ROOT>/.akmon/<directory>/`; mounted modes import them from the mount.
+ * under `<dev root>/.akmon/<directory>/`; mounted modes import them from the mount.
  * @param {MaterializationData} data the parsed `common/materialization.json`
  * @returns {string[]}
  */
@@ -231,7 +234,10 @@ export function staleMaterialized(data, projectRoot, treeRoot) {
       const relative = `${directory}/${name}`;
       const source = _under(treeRoot, relative);
       try {
-        if (!_isFile(source) || readText(_under(dest, name)) !== materializedText(data, name, readText(source))) {
+        if (
+          !_isFile(source) ||
+          readText(_under(dest, name)) !== materializedText(data, name, readText(source), projectRoot)
+        ) {
           stale.push(relative);
         }
       } catch (error) {

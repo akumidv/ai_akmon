@@ -100,7 +100,7 @@ options:
   --dep-graph DEP_GRAPH
                         Dependency-graph excerpt file (opt-in, §9.7 #3).
   --task TASK           Task id the pack belongs to; prefixes the default name: <task>-<gate>-<kind>-<n>.md.
-  --out OUT             Output path. Defaults to <AITNA_ROOT>/artifacts/gates/[<task>-]<gate>-<kind>-<n>.md, n the next ordinal.
+  --out OUT             Output path. Defaults to <dev root>/artifacts/gates/[<task>-]<gate>-<kind>-<n>.md, n the next ordinal.
   --stdout              Also print the full pack, so the orchestrator can paste it into the k_auditor Agent call.
 `;
 
@@ -425,6 +425,10 @@ export function main(argv = process.argv.slice(2)) {
   const { root, notice } = resolveProjectRoot(options.projectRoot);
   if (notice) {
     process.stderr.write(`${notice}\n`);
+    if (options.out === null) {
+      // The default pack lands in the local layer, and with no project root there is none (ADR 0022 D09).
+      return 2;
+    }
   }
   const yardstickText = readText(options.yardstick);
 

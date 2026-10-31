@@ -158,7 +158,7 @@ def test_role_on_code_fires_on_the_captured_codex_payload(monkeypatch, tmp_path,
     _run_codex_hook(monkeypatch, "role-on-code", _patch_payload(root, "src/x.py"))
 
     emitted = json.loads(capsys.readouterr().out)
-    assert emitted["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message()
+    assert emitted["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message(root)
 
 
 # --------------------------------------------------------------------------------------
@@ -407,7 +407,7 @@ def test_role_advisory_fires_on_a_patch_the_shell_carried(monkeypatch, tmp_path,
     _run_codex_hook(monkeypatch, "role-on-code", _bash_patch_payload(root, "src/x.py", "sess-c49-role"))
 
     emitted = json.loads(capsys.readouterr().out)
-    assert emitted["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message()
+    assert emitted["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message(root)
 
 
 def test_role_advisory_fires_on_a_prefixed_patch_the_shell_carried(monkeypatch, tmp_path, capsys):
@@ -419,7 +419,7 @@ def test_role_advisory_fires_on_a_prefixed_patch_the_shell_carried(monkeypatch, 
     _run_codex_hook(monkeypatch, "role-on-code", payload)
 
     captured = capsys.readouterr()
-    assert json.loads(captured.out)["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message()
+    assert json.loads(captured.out)["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message(root)
     assert "may mutate the filesystem" not in captured.err
 
 
@@ -548,6 +548,50 @@ def test_the_claude_shell_diagnostic_leaves_the_guard_decision_intact(monkeypatc
     assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [
+        ({"CLAUDE_CODE_SESSION_ATTENDED": "1"}, True),
+        ({"CLAUDE_CODE_SESSION_ATTENDED": "0"}, False),
+        ({}, None),
+        ({"CLAUDE_CODE_SESSION_ATTENDED": ""}, None),
+        ({"CLAUDE_CODE_SESSION_ATTENDED": "true"}, None),
+        ({"CLAUDE_CODE_SESSION_ATTENDED": " 1"}, None),
+    ],
+)
+def test_the_attendance_the_host_states_is_one_or_zero_and_nothing_else(environ, expected):
+    assert claude_adapter.attended_from_environment(environ) is expected
+
+
+@pytest.mark.parametrize(
+    "cell",
+    [
+        ("auto", "1", "ask"),
+        ("default", "0", "deny"),
+        ("default", None, "ask"),
+        ("auto", None, "deny"),
+        ("bypassPermissions", "1", "deny"),
+        ("dontAsk", "1", "deny"),
+    ],
+)
+def test_the_claude_commit_guard_reads_attendance_from_the_environment(monkeypatch, tmp_path, capsys, cell):
+    mode, env_value, decision = cell
+    # ADR-0025/D06: the entry point reads CLAUDE_CODE_SESSION_ATTENDED and hands it down.
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    if env_value is not None:
+        monkeypatch.setenv("CLAUDE_CODE_SESSION_ATTENDED", env_value)
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "git push origin feature"},
+        "session_id": "sess-claude-attended",
+        "permission_mode": mode,
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _claude_hook("git-commit-guard.py").main() == 0
+
+    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == decision
+
+
 def test_a_non_shell_claude_call_gets_no_shell_route_diagnostic(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
     payload = {"tool_name": "Write", "tool_input": {"file_path": "src/x.py"}, "session_id": "sess-claude-edit"}
@@ -671,7 +715,7 @@ def test_claude_role_entrypoint_strips_docs_ancestor_using_payload_root(monkeypa
     assert _claude_hook("role-on-code.py").main() == 0
 
     emitted = json.loads(capsys.readouterr().out)
-    assert emitted["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message()
+    assert emitted["hookSpecificOutput"]["additionalContext"] == hook_core.role_on_code_message(root)
 
 
 def test_claude_project_root_without_cwd_falls_back_to_discovery(tmp_path, monkeypatch):
@@ -808,7 +852,7 @@ def test_delegation_log_role_advisory_reaches_owner_and_model(tmp_path, monkeypa
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 role: review — audit"}}) + "\n",
         encoding="utf-8",
     )
     payload = _delegation_log_payload(tmp_path, transcript, "k_mechanic")
@@ -831,7 +875,7 @@ def test_delegation_log_allowed_agent_stays_silent(tmp_path, monkeypatch, capsys
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 role: review — audit"}}) + "\n",
         encoding="utf-8",
     )
     payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
@@ -865,7 +909,7 @@ def test_delegation_log_names_the_bound_model(tmp_path, monkeypatch, capsys):
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 role: review — audit"}}) + "\n",
         encoding="utf-8",
     )
     payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
@@ -891,7 +935,7 @@ def test_delegation_log_reports_no_model_without_a_bound_ladder(tmp_path, monkey
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 role: review — audit"}}) + "\n",
         encoding="utf-8",
     )
     payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
@@ -912,7 +956,7 @@ def test_delegation_log_rejects_malformed_available_without_losing_record(availa
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — audit"}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 role: review — audit"}}) + "\n",
         encoding="utf-8",
     )
     payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
@@ -978,7 +1022,7 @@ def test_every_wired_claude_entry_reports_a_crash_to_the_owner_and_exits_zero(tm
     # One stderr line with the hook and the class, the owner's notice as the one stdout document
     # (M69: shown as a notice, never passed to the model), exit 0 (M70: an exit 1 is silent).
     files, _ = _wired_entry_points(tmp_path)
-    assert len(files) == 8
+    assert len(files) == 9
     for filename in files:
         hook = _claude_hook(filename)
         monkeypatch.setattr(hook, "load_payload", _seeded_crash)
@@ -995,7 +1039,7 @@ def test_every_wired_codex_route_reports_a_crash_as_failed(tmp_path, monkeypatch
     # Exit 1 with nothing on stdout: Codex shows the hook `Failed` and the action goes ahead
     # (M68, M71); an exit 0 would read `Completed` and hide the crash.
     _, routes = _wired_entry_points(tmp_path)
-    assert routes == ["analysis-guard", "role-on-code", "session-start"]
+    assert routes == ["analysis-guard", "learning-reminder", "role-on-code", "session-start"]
     codex_hook = _codex_hook()
     monkeypatch.setattr(codex_hook, "load_payload", _seeded_crash)
     for route in routes:
@@ -1099,13 +1143,22 @@ def test_codex_guard_reports_a_missing_data_file_in_one_line(tmp_path):
     assert run.stdout == ""
 
 
-def test_hook_failure_texts_name_the_hook_and_the_class_never_the_message():
+def test_hook_failure_texts_name_the_hook_and_the_class_never_the_message(tmp_path):
     exc = ValueError("/home/owner/.secret token=abc")
+    root = _codex_project(tmp_path)
     assert hook_core.hook_failure_diagnostic("role-on-code", exc) == "akmon role-on-code hook: ValueError"
-    notice = hook_core.hook_failure_notice("role-on-code", exc)
+    notice = hook_core.hook_failure_notice("role-on-code", exc, root)
     assert "role-on-code" in notice and "ValueError" in notice
     assert "`akmon verify`" in notice and "_aitna/akmon/bin/verify.py" in notice
     assert "secret" not in notice and "token" not in notice
+
+
+def test_hook_failure_notice_names_the_dev_root_the_project_declares(tmp_path):
+    root = _codex_project(tmp_path)
+    (root / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
+    notice = hook_core.hook_failure_notice("role-on-code", ValueError("x"), root)
+    assert "tools/ai/akmon/bin/verify.py" in notice
+    assert "_aitna/akmon" not in notice
 
 
 def test_find_project_root_in_package_mode_from_nested_directory(tmp_path):
@@ -1216,7 +1269,7 @@ def test_stale_guardrail_notice_reaches_both_vendor_wirings(monkeypatch, tmp_pat
     root = _codex_project(tmp_path)
     dest = root / "_aitna" / ".akmon" / "guardrails"
     dest.mkdir(parents=True)
-    (dest / "_common.md").write_text(materialized_markdown("# Common\n\nold rule\n"), encoding="utf-8")
+    (dest / "_common.md").write_text(materialized_markdown("# Common\n\nold rule\n", root), encoding="utf-8")
 
     result = hook_core.session_start_result(root)
     assert result is not None
@@ -1236,7 +1289,7 @@ def test_delegation_log_warns_when_the_agent_runs_below_a_kind_floor(tmp_path, m
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: architect — fork"}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 role: architect — fork"}}) + "\n",
         encoding="utf-8",
     )
     # C32 review: the floor is the corridor's boundary (opus), so only an orchestrator below it —
@@ -1264,7 +1317,7 @@ def test_delegation_log_is_silent_on_floors_for_a_healthy_binding(tmp_path, monk
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: architect — fork"}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 role: architect — fork"}}) + "\n",
         encoding="utf-8",
     )
     config = _bound_config(["haiku", "sonnet", "opus", "fable"])
@@ -1279,7 +1332,7 @@ def test_delegation_log_warns_on_an_unlabelled_call_in_a_zoned_session(tmp_path,
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
-        json.dumps({"type": "assistant", "message": {"content": "🧭 agent: review — sweep"}}) + "\n",
+        json.dumps({"type": "assistant", "message": {"content": "🧭 role: review — sweep"}}) + "\n",
         encoding="utf-8",
     )
     payload = _delegation_log_payload(tmp_path, transcript, "k_explorer")
@@ -1315,7 +1368,7 @@ def _gate_project(tmp_path, transcript_role: str = "review") -> tuple[Path, dict
     transcript = tmp_path / "transcript.jsonl"
     record = {
         "type": "assistant",
-        "message": {"role": "assistant", "content": [{"type": "text", "text": f"🧭 agent: {transcript_role} — focus"}]},
+        "message": {"role": "assistant", "content": [{"type": "text", "text": f"🧭 role: {transcript_role} — focus"}]},
     }
     transcript.write_text(json.dumps(record) + "\n", encoding="utf-8")
     payload = {
@@ -1525,7 +1578,13 @@ def test_codex_hook_json_holds_the_routes_and_diagnostic_templates():
     hook = _codex_hook()
     data = hook._codex_hook_data()
     assert set(data) == {"routes", "unreadable_target", "unmeasured_path_source", "payload_shape"}
-    assert data["routes"] == ["analysis-guard", "role-on-code", "session-start", "git-commit-guard"]
+    assert data["routes"] == [
+        "analysis-guard",
+        "role-on-code",
+        "session-start",
+        "learning-reminder",
+        "git-commit-guard",
+    ]
     assert data["payload_shape"] == "tool_input keys: {{inner}}; payload keys: {{top}}"
 
 

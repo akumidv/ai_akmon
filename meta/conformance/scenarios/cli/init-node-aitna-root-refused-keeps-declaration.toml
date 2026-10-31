@@ -1,0 +1,22 @@
+id = "cli/init-node-aitna-root-refused-keeps-declaration"
+ecosystem = "node"
+kind = "cli"
+covers = ["command:init"]
+
+# The JavaScript twin of cli/init-aitna-root-refused-keeps-declaration: `--aitna-root meta` declares the root
+# in `.aitna-root` before the run is planned, and the refusal of a record the Python implementation serves
+# gives the declaration back, so nothing is left behind. Node-tagged: the Python implementation serves this
+# record.
+[fixture]
+attach = "mount"
+remove = ["src"]
+files = { "meta/.akmon.toml" = "mount = \"submodule\"\nakmon_version = \"0.3.0\"\nattached_archetype = \"unclassified\"\nlast_realign = \"0.3.0\"\n" }
+
+[run]
+argv = ["init", "--project-root", "{{root}}", "--yes", "--aitna-root", "meta"]
+
+[expected]
+exit = 2
+stdout = "akmon init: wrote .aitna-root (meta)\nakmon init: left .aitna-root as it was (nothing was applied)\n"
+stderr = "akmon init: this project's integration record is not a Node attach (ecosystem = \"python\"); the JavaScript implementation serves records that name ecosystem = \"node\", and the Python implementation of akmon serves the other records; this repository has package.json and no Python files, so its mount can move to this implementation, which needs no Python:\n    node meta/akmon/js/akmon/cli.mjs init --ecosystem node\n"
+file_absent = [".aitna-root"]

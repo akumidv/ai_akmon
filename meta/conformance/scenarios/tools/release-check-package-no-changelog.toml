@@ -12,7 +12,7 @@ attach = "native"
 
 [fixture.files]
 "pyproject.toml" = "[project]\nname = \"consumer\"\nversion = \"1.2.0.dev0\"\n\n[dependency-groups]\ndev = [\"akmon=={{version}}\"]\n"
-"_aitna/agents/release/README.md" = "See `_aitna/akmon/roles/release.md`.\n"
+"_aitna/agents/release/README.md" = "See `_aitna/akmon/agents/release.md`.\n"
 
 [run]
 tool = "release/release_check"

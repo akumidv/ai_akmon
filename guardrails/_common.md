@@ -53,8 +53,9 @@ Runtime check: privilege.no-escalation — the whole rule: any Bash command cont
 - Branch for non-trivial work; do not commit straight to the default branch unless asked.
 
 Runtime check: commits.owner-owned — subset: an AI `Co-Authored-By` trailer is denied, and
-`push`/`tag`/`merge` or a commit on the default branch or a detached/unresolved HEAD asks in
-interactive `default` permission mode and denies otherwise. "Tests pass before a commit is
+`push`/`tag`/`merge` or a commit on the default branch or a detached/unresolved HEAD asks when
+the run is attended and denies when it is not (the host states attendance, else the interactive
+`default` permission mode attends). "Tests pass before a commit is
 offered" and "branch for non-trivial work" are not machine-checked.
 
 ## Verify against reality, not memory
@@ -96,8 +97,9 @@ session raises a reminder; whether the turn is analysis-only is not decidable by
 
 ## Role declaration
 
-- **State which agent you are operating as before project work, and restate it on every switch.**
-  Format: `🧭 agent: <name> — <focus>`; pick the role by operation ([roles/](../roles/README.md)).
+- **State which role you are operating in before project work, and restate it on every switch.**
+  Format: `🧭 role: <name> — <focus>`; pick the role by operation ([roles/](../roles/README.md)).
+  `🧭 agent: <name> — <focus>` is still read as an alias for one release; write `role:`.
 
 Runtime check: role.declaration — subset: the first edit to a code file in a session raises the
 design→code reminder; the switch itself is not observable, so the restatement is not checked.
@@ -150,8 +152,8 @@ Not machine-checked; how to carry it beyond prose is open task A52.
   contested fork emerges mid-task).
 
 Runtime check: delegation.tier-floor — subset: uninterrupted read/shell/edit volume with no
-delegation raises a nudge, then an ask in interactive `default` permission mode; a missing or
-non-default mode escalates that ask to a deny.
+delegation raises a nudge, then an ask when the run is attended; an unattended run (the host
+states it, else any mode but the interactive `default`) escalates that ask to a deny.
 
 ## Code design — the principles every language inherits
 

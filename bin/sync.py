@@ -68,7 +68,7 @@ _TREE_ROOT = Path(__file__).resolve().parent.parent
 
 
 def read_mount_mode(project_root: Path) -> str:
-    """The recorded ``mount`` value from ``<AITNA_ROOT>/.akmon.toml`` (ADR 0009 §3).
+    """The recorded ``mount`` value from ``<dev root>/.akmon.toml`` (ADR 0009 §3).
 
     ``"submodule" | "vendored" | "subtree" | "package"``. An absent record or key defaults
     to ``"submodule"`` — the traditional mounted-tree default, kept for backward
@@ -81,7 +81,7 @@ def is_package_mode(project_root: Path) -> bool:
     """Whether ``project_root`` is governed by mount mode ``package`` (ADR 0009 §4).
 
     Driven solely by the recorded ``.akmon.toml`` ``mount`` field, never by whether
-    ``<AITNA_ROOT>/akmon`` happens to exist on disk: a stale mount directory left over from
+    ``<dev root>/akmon`` happens to exist on disk: a stale mount directory left over from
     a prior mode must not shadow a project that has since switched to package mode (and,
     symmetrically, an absent record must not be misread as package mode just because no
     mount exists yet — see ``read_mount_mode``'s backward-compatible default).
@@ -96,7 +96,7 @@ def node_cli(project_root: Path, data: Mapping[str, Any]) -> str:
     amendment of ADR 0020 D02): the command a refusal of a Node record names.
     """
     variant = "package" if is_package_mode(project_root) else "mounted"
-    return jsondata.fill(data["node_cli"][variant], {"aitna": aitna_root_name()})
+    return jsondata.fill(data["node_cli"][variant], {"aitna": aitna_root_name(project_root)})
 
 
 def has_python(project_root: Path, data: Mapping[str, Any], aitna: str) -> bool:
@@ -283,7 +283,7 @@ def package_pin_status(project_root: Path) -> str:
 def standard_tree_root(project_root: Path) -> Path:
     """The standard-tree content this script operates against for ``project_root``.
 
-    The mount at ``<AITNA_ROOT>/akmon`` for mounted modes; this script's own tree
+    The mount at ``<dev root>/akmon`` for mounted modes; this script's own tree
     (``_TREE_ROOT``) in package mode — the installed package *is* the pin, so a lingering
     stale mount directory from a prior mode must not shadow it (ADR 0009 §4-5, mirrored from
     the CLI's dispatch rule).
@@ -294,33 +294,33 @@ def standard_tree_root(project_root: Path) -> Path:
     return _TREE_ROOT
 
 
-def _claude_md(data: Mapping[str, Any]) -> str:
+def _claude_md(data: Mapping[str, Any], root: Path) -> str:
     """The generated ``CLAUDE.md`` body (``sync.json``)."""
     return jsondata.fill(
-        data["vendor_pointers"]["claude_md"], {"banner": generated_banner(), "aitna": aitna_root_name()}
+        data["vendor_pointers"]["claude_md"], {"banner": generated_banner(root), "aitna": aitna_root_name(root)}
     )
 
 
-def _copilot_md(data: Mapping[str, Any]) -> str:
+def _copilot_md(data: Mapping[str, Any], root: Path) -> str:
     """The generated Copilot instructions body (``sync.json``)."""
-    return jsondata.fill(data["vendor_pointers"]["copilot_md"], {"banner": generated_banner()})
+    return jsondata.fill(data["vendor_pointers"]["copilot_md"], {"banner": generated_banner(root)})
 
 
-def _gemini_md(data: Mapping[str, Any]) -> str:
+def _gemini_md(data: Mapping[str, Any], root: Path) -> str:
     """The generated ``GEMINI.md`` body (``sync.json``)."""
-    return jsondata.fill(data["vendor_pointers"]["gemini_md"], {"banner": generated_banner()})
+    return jsondata.fill(data["vendor_pointers"]["gemini_md"], {"banner": generated_banner(root)})
 
 
-def _codex_readme(data: Mapping[str, Any]) -> str:
+def _codex_readme(data: Mapping[str, Any], root: Path) -> str:
     """The generated Codex ``README.md`` body (``sync.json``)."""
-    return jsondata.fill(data["vendor_pointers"]["codex_readme"], {"banner": generated_banner()})
+    return jsondata.fill(data["vendor_pointers"]["codex_readme"], {"banner": generated_banner(root)})
 
 
 # The mounted hooks dir, as a POSIX suffix appended after a vendor's root anchor (Codex: git
 # toplevel · Claude: $CLAUDE_PROJECT_DIR). Mounted modes only: mode ``package`` names no
 # directory at all — see ``launcher_relative``.
-def _mounted_hooks_dir() -> str:
-    return f"{aitna_root_name()}/akmon/hooks"
+def _mounted_hooks_dir(root: Path) -> str:
+    return f"{aitna_root_name(root)}/akmon/hooks"
 
 
 def read_sync_data() -> dict[str, Any]:
@@ -392,12 +392,12 @@ def launcher_relative(root: Path, data: Mapping[str, Any] | None = None) -> str:
 # recognising an entry as akmon-managed must not depend on which mode (or which version) wrote
 # it, so switching modes replaces the other spelling's entries instead of leaving them
 # orphaned beside the new ones (ADR 0009 §4).
-def _akmon_hook_markers(data: Mapping[str, Any]) -> tuple[str, ...]:
+def _akmon_hook_markers(data: Mapping[str, Any], root: Path) -> tuple[str, ...]:
     # The stored shapes (``sync.json``): mounted modes, package mode before C77 (the hooks were
     # materialized), and package mode today — the console script, no path into the repo. The
     # closing quote is part of the marker: a bare `akmon hook ` would also match a project's own
     # hook that merely mentions the word.
-    aitna = aitna_root_name()
+    aitna = aitna_root_name(root)
     shapes = data["akmon_hook_markers"]
     return tuple(jsondata.fill(shape, {"aitna": aitna, "cli": _cli_name(data)}) for shape in shapes)
 
@@ -414,7 +414,7 @@ def _codex_hook_command(root: Path, data: Mapping[str, Any]) -> str:
     anchor = "$(git rev-parse --show-toplevel)"
     if is_package_mode(root):
         return f'"{anchor}/{launcher_relative(root, data)}" hook codex-hook'
-    return f'python3 "{anchor}/{_mounted_hooks_dir()}/codex-hook.py"'
+    return f'python3 "{anchor}/{_mounted_hooks_dir(root)}/codex-hook.py"'
 
 
 def _codex_hooks(root: Path, data: Mapping[str, Any] | None = None) -> dict:
@@ -453,7 +453,7 @@ def _claude_hooks(root: Path, data: Mapping[str, Any] | None = None) -> dict:
         """
         if package_mode:
             return f'"$CLAUDE_PROJECT_DIR/{launcher}" hook {script}'
-        return f'python3 "$CLAUDE_PROJECT_DIR/{_mounted_hooks_dir()}/{script}.py"'
+        return f'python3 "$CLAUDE_PROJECT_DIR/{_mounted_hooks_dir(root)}/{script}.py"'
 
     # The matcher/command table (``sync.json``). The Bash entry also carries the
     # unclassified-shell-route diagnostic (C49, ADR-0012/D02): the edit-tool advisories would
@@ -518,20 +518,22 @@ def _hook_commands(entry: object) -> set[str]:
     return commands
 
 
-def _is_akmon_entry(entry: object, data: Mapping[str, Any] | None = None) -> bool:
+def _is_akmon_entry(entry: object, root: Path, data: Mapping[str, Any] | None = None) -> bool:
     commands = _hook_commands(entry)
-    markers = _akmon_hook_markers(_or_read(data))
+    markers = _akmon_hook_markers(_or_read(data), root)
     return bool(commands) and all(any(marker in command for marker in markers) for command in commands)
 
 
-def _merge_hook_entries(existing: object, wanted: list[dict], data: Mapping[str, Any] | None = None) -> list[object]:
+def _merge_hook_entries(
+    existing: object, wanted: list[dict], root: Path, data: Mapping[str, Any] | None = None
+) -> list[object]:
     if not isinstance(existing, list):
         return list(wanted)
     # Drop stale akmon-managed entries first, then re-append the wanted ones. This keeps
     # user-authored hooks untouched while letting sync rewrite its own (e.g. a renamed hook
     # path) instead of leaving a dangling duplicate.
     data = _or_read(data)
-    merged = [entry for entry in existing if not _is_akmon_entry(entry, data)]
+    merged = [entry for entry in existing if not _is_akmon_entry(entry, root, data)]
     existing_commands = set().union(*(_hook_commands(entry) for entry in merged)) if merged else set()
     for entry in wanted:
         commands = _hook_commands(entry)
@@ -549,7 +551,7 @@ def _claude_settings(root: Path, data: Mapping[str, Any] | None = None) -> Plann
     if not isinstance(hooks, dict):
         raise ValueError(f"{path}: expected hooks to be a JSON object")
     for event_name, wanted_entries in _claude_hooks(root, data)["hooks"].items():
-        hooks[event_name] = _merge_hook_entries(hooks.get(event_name), wanted_entries, data)
+        hooks[event_name] = _merge_hook_entries(hooks.get(event_name), wanted_entries, root, data)
     return PlannedFile(path, json.dumps(settings, indent=2) + "\n")
 
 
@@ -634,12 +636,12 @@ def _skill_stubs(root: Path, source: Path, data: Mapping[str, Any] | None = None
         body = f"{pointer}\n\nRead and follow the source SKILL.md. Do not duplicate its contents here.\n"
         if frontmatter is None:
             content = jsondata.fill(
-                shapes["no_frontmatter"], {"name": name, "banner": generated_banner(), "body": body}
+                shapes["no_frontmatter"], {"name": name, "banner": generated_banner(root), "body": body}
             )
         else:
             content = jsondata.fill(
                 shapes["with_frontmatter"],
-                {"name": name, "banner": generated_banner(), "body": body, "frontmatter": frontmatter},
+                {"name": name, "banner": generated_banner(root), "body": body, "frontmatter": frontmatter},
             )
         stubs.append(PlannedFile(path, content))
     return stubs
@@ -679,7 +681,8 @@ def import_prefix(root: Path) -> str:
 
     The materialized copy in package mode, the mount otherwise.
     """
-    return f"@{aitna_root_name()}/.akmon/" if is_package_mode(root) else f"@{aitna_root_name()}/akmon/"
+    name = aitna_root_name(root)
+    return f"@{name}/.akmon/" if is_package_mode(root) else f"@{name}/akmon/"
 
 
 @dataclass(frozen=True)
@@ -865,7 +868,7 @@ def _materialized_files(root: Path, data: Mapping[str, Any] | None = None) -> tu
     files = [
         PlannedFile(
             dest / name,
-            materialized_text(name, (source / name).read_text(encoding="utf-8")),
+            materialized_text(name, (source / name).read_text(encoding="utf-8"), root),
         )
         for name in names
         if (source / name).is_file()
@@ -970,9 +973,9 @@ def _planned_files(root: Path, data: Mapping[str, Any] | None = None) -> tuple[l
         "copilot_md": _copilot_md,
         "gemini_md": _gemini_md,
         "codex_readme": _codex_readme,
-        "codex_hooks_text": lambda data: _codex_hooks_text(root, data),
+        "codex_hooks_text": lambda data, root: _codex_hooks_text(root, data),
     }
-    files = [PlannedFile(root / relative, generators[name](data)) for relative, name in data["planned_files"]]
+    files = [PlannedFile(root / relative, generators[name](data, root)) for relative, name in data["planned_files"]]
     try:
         files.append(_claude_settings(root, data))
     except ValueError as exc:
@@ -994,7 +997,7 @@ _BYTECODE_CACHE_DIR = "__pycache__"
 
 
 def materialization_root(root: Path) -> Path:
-    """``<AITNA_ROOT>/.akmon`` — the one directory this tool owns outright."""
+    """``<dev root>/.akmon`` — the one directory this tool owns outright."""
     return aitna_root(root) / ".akmon"
 
 
@@ -1003,7 +1006,7 @@ def _obsolete_generated_files(root: Path, files: list[PlannedFile], data: Mappin
 
     Two kinds of directory, two recognition rules, and the difference is deliberate. Under
     ``.claude/skills/`` and ``.agents/skills/`` the project keeps its **own** skills beside
-    ours, so only a file carrying the generated banner is ours to delete. Under ``<AITNA_ROOT>/.akmon/`` nobody
+    ours, so only a file carrying the generated banner is ours to delete. Under ``<dev root>/.akmon/`` nobody
     writes but us, so everything unplanned is stale **whether or not it carries a banner** —
     which is load-bearing rather than tidy: the materialized routing registry never carried one
     (it has to stay parseable JSON), so a banner-only sweep would leave exactly that file
@@ -1058,7 +1061,7 @@ def _sweep_materialization_bytecode(root: Path) -> None:
 def _prune_stop(root: Path, path: Path, data: Mapping[str, Any]) -> Path:
     """How far up to prune emptied directories after deleting ``path``.
 
-    ``<AITNA_ROOT>`` for the materialization, so ``.akmon`` itself disappears once its last
+    ``<dev root>`` for the materialization, so ``.akmon`` itself disappears once its last
     file is gone; the skills directory the stub sat in otherwise.
     """
     try:

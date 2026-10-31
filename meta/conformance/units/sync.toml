@@ -21,11 +21,11 @@
 # optional, so a row never passes it. `$path` arguments are the string on the JS side. Every row runs
 # in its own scratch directory (`{{dir}}`), and the project it describes is that directory: the
 # `files` world key lays out `AGENTS.md`, the record and the ruff configurations, `files_parts` gives
-# the bytes TOML cannot spell, `env` sets AITNA_ROOT where a row relocates the dev layer.
+# the bytes TOML cannot spell, a `.aitna-root` entry of `files` relocates the dev layer.
 #
-# The worlds are package-mode projects (`mount = "package"` in `<AITNA_ROOT>/.akmon.toml`) unless the
+# The worlds are package-mode projects (`mount = "package"` in `<dev root>/.akmon.toml`) unless the
 # row says otherwise, because that is the mode the JS sync serves (ADR 0020 D02); a mounted-prefix row
-# (`imported/no-record-*`) builds no `<AITNA_ROOT>/akmon`, since the JS side never consults a mount
+# (`imported/no-record-*`) builds no `<dev root>/akmon`, since the JS side never consults a mount
 # and the Python side would. The standard tree the files are checked against is the tree under test.
 #
 # Families (the `id` prefix): `upsert` -- _upsert_toml_key, the comment-preserving edit of the record
@@ -928,48 +928,42 @@ expected_json = '[[], []]'
 id = "imported/custom-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "tools/ai/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@tools/ai/.akmon/profiles/python.md\n@_aitna/.akmon/profiles/quant.md\n" }
-env = { "AITNA_ROOT" = "tools/ai" }
+files = { ".aitna-root" = "tools/ai", "tools/ai/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@tools/ai/.akmon/profiles/python.md\n@_aitna/.akmon/profiles/quant.md\n" }
 expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
 
 [[case]]
 id = "imported/custom-root-slashes"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "x/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@x/.akmon/profiles/python.md\n" }
-env = { "AITNA_ROOT" = "/x/" }
+files = { ".aitna-root" = "x/", "x/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@x/.akmon/profiles/python.md\n" }
 expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
 
 [[case]]
 id = "imported/regex-special-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "a.b+c/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a.b+c/.akmon/profiles/python.md\n@aXb+c/.akmon/profiles/quant.md\n@a.b+cc/.akmon/profiles/python-stdlib.md\n" }
-env = { "AITNA_ROOT" = "a.b+c" }
+files = { ".aitna-root" = "a.b+c", "a.b+c/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a.b+c/.akmon/profiles/python.md\n@aXb+c/.akmon/profiles/quant.md\n@a.b+cc/.akmon/profiles/python-stdlib.md\n" }
 expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
 
 [[case]]
 id = "imported/regex-bracket-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "a[b]/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a[b]/.akmon/profiles/python.md\n@ab/.akmon/profiles/quant.md\n" }
-env = { "AITNA_ROOT" = "a[b]" }
+files = { ".aitna-root" = "a[b]", "a[b]/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a[b]/.akmon/profiles/python.md\n@ab/.akmon/profiles/quant.md\n" }
 expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
 
 [[case]]
 id = "imported/regex-paren-dollar-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "(x)$/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@(x)$/.akmon/profiles/python.md\n@x/.akmon/profiles/quant.md\n" }
-env = { "AITNA_ROOT" = "(x)$" }
+files = { ".aitna-root" = "(x)$", "(x)$/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@(x)$/.akmon/profiles/python.md\n@x/.akmon/profiles/quant.md\n" }
 expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
 
 [[case]]
 id = "imported/regex-backslash-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "a\\b/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a\\b/.akmon/profiles/python.md\n" }
-env = { "AITNA_ROOT" = "a\\b" }
+files = { ".aitna-root" = "a\\b", "a\\b/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a\\b/.akmon/profiles/python.md\n" }
 expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
 
 [[case]]
@@ -1109,8 +1103,7 @@ expected_json = '[["guardrails/_common.md"], []]'
 id = "imported/ruff-custom-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "tools/ai/.akmon.toml" = "mount = \"package\"\n", "ruff.toml" = "extend = \"tools/ai/.akmon/profiles/ruff.toml\"\n" }
-env = { "AITNA_ROOT" = "tools/ai" }
+files = { ".aitna-root" = "tools/ai", "tools/ai/.akmon.toml" = "mount = \"package\"\n", "ruff.toml" = "extend = \"tools/ai/.akmon/profiles/ruff.toml\"\n" }
 expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
 
 [[case]]
@@ -1398,8 +1391,7 @@ expected_json = '[["ruff.toml", "z.toml"]]'
 id = "ruff-extends/custom-root-irrelevant"
 fn = "ruff_extends"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "ruff.toml" = "extend = \"a.toml\"\n" }
-env = { "AITNA_ROOT" = "tools/ai" }
+files = { ".aitna-root" = "tools/ai", "ruff.toml" = "extend = \"a.toml\"\n" }
 expected_json = '[["ruff.toml", "a.toml"]]'
 
 [[case]]
@@ -1411,327 +1403,327 @@ expected_json = '{"guardrails/python.md": "profiles/python.md"}'
 [[case]]
 id = "akmon-entry/launcher-spelling"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook role-on-code"}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook role-on-code"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/node-spelling"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/mounted-spelling"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/role-on-code.py\""}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/role-on-code.py\""}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/materialized-spelling"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/.akmon/hooks/role-on-code.py\""}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/.akmon/hooks/role-on-code.py\""}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/custom-root-mounted"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/ai/akmon/hooks/role-on-code.py\""}]}]'
-env = { "AITNA_ROOT" = "tools/ai" }
+args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/ai/akmon/hooks/role-on-code.py\""}]}, {"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/custom-root-not-default"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/role-on-code.py\""}]}]'
-env = { "AITNA_ROOT" = "tools/ai" }
+args_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/role-on-code.py\""}]}, {"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/user-command"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "echo mine"}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "echo mine"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/prose-mention"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "echo akmon hook mention"}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "echo akmon hook mention"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/bare-launcher-no-quote"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "akmon hook role-on-code"}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "akmon hook role-on-code"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/quote-before-hook"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "x\" hook "}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "x\" hook "}]}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/mixed-entry"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook role-on-code"}, {"type": "command", "command": "echo mine"}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook role-on-code"}, {"type": "command", "command": "echo mine"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/two-akmon-commands"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook a"}, {"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/b.mjs\""}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook a"}, {"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/b.mjs\""}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/no-hooks-key"
 fn = "_is_akmon_entry"
-args_json = '[{"matcher": "Bash"}]'
+args_json = '[{"matcher": "Bash"}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/empty-hooks"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": []}]'
+args_json = '[{"hooks": []}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/hooks-not-list"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": "x"}]'
+args_json = '[{"hooks": "x"}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/hooks-dict"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": {"command": "\"x/.venv/bin/akmon\" hook a"}}]'
+args_json = '[{"hooks": {"command": "\"x/.venv/bin/akmon\" hook a"}}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/hook-not-dict"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": ["x", 1, null]}]'
+args_json = '[{"hooks": ["x", 1, null]}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/command-not-string"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"command": 5}, {"command": null}, {"command": ["akmon"]}]}]'
+args_json = '[{"hooks": [{"command": 5}, {"command": null}, {"command": ["akmon"]}]}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/command-missing"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command"}]}]'
+args_json = '[{"hooks": [{"type": "command"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/non-string-commands-ignored-akmon-remains"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"command": 5}, {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook a"}]}]'
+args_json = '[{"hooks": [{"command": 5}, {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook a"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/not-a-dict-string"
 fn = "_is_akmon_entry"
-args_json = '["x"]'
+args_json = '["x", {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/not-a-dict-list"
 fn = "_is_akmon_entry"
-args_json = '[[{"hooks": [{"type": "command", "command": "\"a/.venv/bin/akmon\" hook b"}]}]]'
+args_json = '[[{"hooks": [{"type": "command", "command": "\"a/.venv/bin/akmon\" hook b"}]}], {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/not-a-dict-null"
 fn = "_is_akmon_entry"
-args_json = '[null]'
+args_json = '[null, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/empty-dict"
 fn = "_is_akmon_entry"
-args_json = '[{}]'
+args_json = '[{}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/marker-in-middle"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "FOO=1 \"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook x && other"}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "FOO=1 \"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook x && other"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/node-marker-substring"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "/node_modules/akmon/js/hooks/"}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "/node_modules/akmon/js/hooks/"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/node-marker-other-package"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "node \"/node_modules/akmon-extra/js/hooks/x.mjs\""}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "node \"/node_modules/akmon-extra/js/hooks/x.mjs\""}]}, {"$path": "{{dir}}"}]'
 expected_json = 'false'
 
 [[case]]
 id = "akmon-entry/duplicate-commands"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "\"a/.venv/bin/akmon\" hook x"}, {"type": "command", "command": "\"a/.venv/bin/akmon\" hook x"}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "\"a/.venv/bin/akmon\" hook x"}, {"type": "command", "command": "\"a/.venv/bin/akmon\" hook x"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "akmon-entry/unicode-command"
 fn = "_is_akmon_entry"
-args_json = '[{"hooks": [{"type": "command", "command": "\"\u00e9/.venv/bin/akmon\" hook \u65e5\u672c\u8a9e"}]}]'
+args_json = '[{"hooks": [{"type": "command", "command": "\"é/.venv/bin/akmon\" hook 日本語"}]}, {"$path": "{{dir}}"}]'
 expected_json = 'true'
 
 [[case]]
 id = "merge/existing-missing"
 fn = "_merge_hook_entries"
-args_json = '[null, [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[null, [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/existing-not-list"
 fn = "_merge_hook_entries"
-args_json = '["x", [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]]'
+args_json = '["x", [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
 
 [[case]]
 id = "merge/existing-dict"
 fn = "_merge_hook_entries"
-args_json = '[{"a": 1}, [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[{"a": 1}, [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/existing-empty"
 fn = "_merge_hook_entries"
-args_json = '[[], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]]'
+args_json = '[[], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
 
 [[case]]
 id = "merge/wanted-empty"
 fn = "_merge_hook_entries"
-args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], []]'
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}]'
 
 [[case]]
 id = "merge/wanted-empty-drops-stale"
 fn = "_merge_hook_entries"
-args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], []]'
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}]'
 
 [[case]]
 id = "merge/keeps-user-appends-wanted"
 fn = "_merge_hook_entries"
-args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/replaces-stale-akmon"
 fn = "_merge_hook_entries"
-args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/replacement-order"
 fn = "_merge_hook_entries"
-args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]]'
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
 
 [[case]]
 id = "merge/idempotent"
 fn = "_merge_hook_entries"
-args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]]'
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs\""}]}]'
 
 [[case]]
 id = "merge/mixed-entry-kept"
 fn = "_merge_hook_entries"
-args_json = '[[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook x"}, {"type": "command", "command": "mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook x"}, {"type": "command", "command": "mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook x"}, {"type": "command", "command": "mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/user-owns-same-command"
 fn = "_merge_hook_entries"
-args_json = '[[{"hooks": [{"type": "command", "command": "shared"}]}], [{"hooks": [{"type": "command", "command": "shared"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[{"hooks": [{"type": "command", "command": "shared"}]}], [{"hooks": [{"type": "command", "command": "shared"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"hooks": [{"type": "command", "command": "shared"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/user-owns-one-of-two"
 fn = "_merge_hook_entries"
-args_json = '[[{"hooks": [{"type": "command", "command": "shared"}]}], [{"hooks": [{"type": "command", "command": "shared"}, {"type": "command", "command": "fresh"}]}]]'
+args_json = '[[{"hooks": [{"type": "command", "command": "shared"}]}], [{"hooks": [{"type": "command", "command": "shared"}, {"type": "command", "command": "fresh"}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"hooks": [{"type": "command", "command": "shared"}]}]'
 
 [[case]]
 id = "merge/wanted-duplicate-skipped"
 fn = "_merge_hook_entries"
-args_json = '[[], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/wanted-overlap-skipped"
 fn = "_merge_hook_entries"
-args_json = '[[], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}, {"type": "command", "command": "other"}]}]]'
+args_json = '[[], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}, {"matcher": "Edit", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}, {"type": "command", "command": "other"}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/wanted-without-commands-always-appended"
 fn = "_merge_hook_entries"
-args_json = '[[], [{"matcher": "x"}, {"matcher": "x"}, {"hooks": []}, {"hooks": []}]]'
+args_json = '[[], [{"matcher": "x"}, {"matcher": "x"}, {"hooks": []}, {"hooks": []}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "x"}, {"matcher": "x"}, {"hooks": []}, {"hooks": []}]'
 
 [[case]]
 id = "merge/wanted-non-dict-appended"
 fn = "_merge_hook_entries"
-args_json = '[[], [1, "x", null]]'
+args_json = '[[], [1, "x", null], {"$path": "{{dir}}"}]'
 expected_json = '[1, "x", null]'
 
 [[case]]
 id = "merge/existing-non-dict-entries-kept"
 fn = "_merge_hook_entries"
-args_json = '[[1, "x", null, [], {}, {"hooks": "no"}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[1, "x", null, [], {}, {"hooks": "no"}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[1, "x", null, [], {}, {"hooks": "no"}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/existing-non-string-commands-kept"
 fn = "_merge_hook_entries"
-args_json = '[[{"hooks": [{"command": 5}]}, {"hooks": [{"command": null}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[{"hooks": [{"command": 5}]}, {"hooks": [{"command": null}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"hooks": [{"command": 5}]}, {"hooks": [{"command": null}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/custom-root-stale"
 fn = "_merge_hook_entries"
-args_json = '[[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/ai/akmon/hooks/a.py\""}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
-env = { "AITNA_ROOT" = "tools/ai" }
+args_json = '[[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/ai/akmon/hooks/a.py\""}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/default-root-not-stale-under-custom"
 fn = "_merge_hook_entries"
-args_json = '[[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/a.py\""}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
-env = { "AITNA_ROOT" = "tools/ai" }
+args_json = '[[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/a.py\""}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
 expected_json = '[{"hooks": [{"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/a.py\""}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/extra-fields-preserved"
 fn = "_merge_hook_entries"
-args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "mine"}], "x": {"y": [1, 2.5, null]}}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "mine"}], "x": {"y": [1, 2.5, null]}}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "mine"}], "x": {"y": [1, 2.5, null]}}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/floats-preserved"
 fn = "_merge_hook_entries"
-args_json = '[[{"hooks": [{"type": "command", "command": "mine"}], "timeout": {"$float": "1.0"}}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[{"hooks": [{"type": "command", "command": "mine"}], "timeout": {"$float": "1.0"}}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"hooks": [{"type": "command", "command": "mine"}], "timeout": 1.0}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/order-of-user-entries"
 fn = "_merge_hook_entries"
-args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"hooks": [{"type": "command", "command": "b"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"hooks": [{"type": "command", "command": "c"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]]'
+args_json = '[[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"hooks": [{"type": "command", "command": "b"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR/.venv/bin/akmon\" hook git-commit-guard"}]}, {"hooks": [{"type": "command", "command": "c"}]}], [{"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}, {"hooks": [{"type": "command", "command": "b"}]}, {"hooks": [{"type": "command", "command": "c"}]}, {"matcher": "Bash", "hooks": [{"type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/git-commit-guard.mjs\""}]}]'
 
 [[case]]
 id = "merge/shared-command-across-existing"
 fn = "_merge_hook_entries"
-args_json = '[[{"hooks": [{"type": "command", "command": "p"}]}, {"hooks": [{"type": "command", "command": "q"}]}], [{"hooks": [{"type": "command", "command": "q"}]}, {"hooks": [{"type": "command", "command": "r"}]}]]'
+args_json = '[[{"hooks": [{"type": "command", "command": "p"}]}, {"hooks": [{"type": "command", "command": "q"}]}], [{"hooks": [{"type": "command", "command": "q"}]}, {"hooks": [{"type": "command", "command": "r"}]}], {"$path": "{{dir}}"}]'
 expected_json = '[{"hooks": [{"type": "command", "command": "p"}]}, {"hooks": [{"type": "command", "command": "q"}]}, {"hooks": [{"type": "command", "command": "r"}]}]'

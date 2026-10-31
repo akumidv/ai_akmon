@@ -33,11 +33,9 @@ function recordWith(/** @type {string} */ table) {
   return `mount = "package"\nakmon_version = "0.4.0"\n\n[check]\n${table}`;
 }
 
-/** Run `node check.mjs` with `args` in `cwd`, `AITNA_ROOT` unset. */
+/** Run `node check.mjs` with `args` in `cwd`. */
 function run(/** @type {string[]} */ args, /** @type {string} */ cwd) {
-  const env = { ...process.env };
-  delete env.AITNA_ROOT;
-  const result = spawnSync(process.execPath, [CHECK, ...args], { cwd, env, encoding: "utf8" });
+  const result = spawnSync(process.execPath, [CHECK, ...args], { cwd, env: { ...process.env }, encoding: "utf8" });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 

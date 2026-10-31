@@ -177,16 +177,16 @@ def test_cli_writes_full_pack(tmp_path):
     assert "Finding: all clear." in text
 
 
-def test_the_default_report_path_follows_the_configured_dev_layer_root(monkeypatch, tmp_path):
-    """C73: the default landed under a literal ``_aitna`` regardless of ``AITNA_ROOT``.
+def test_the_default_report_path_follows_the_configured_dev_layer_root(tmp_path):
+    """C73: the default landed under a literal ``_aitna`` regardless of the declared dev root.
 
     Written with no ``--out``, the pack is the artifact a gate is verified from, so a path that
     ignores the project's own dev-layer name puts it where nothing looks for it.
     """
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     yardstick = tmp_path / "yardstick.md"
     yardstick.write_text("Ship it.\n", encoding="utf-8")
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     (tmp_path / "tools" / "ai" / "akmon").mkdir(parents=True)
 
     assert (
@@ -207,6 +207,32 @@ def test_the_default_report_path_follows_the_configured_dev_layer_root(monkeypat
     written = sorted((tmp_path / "tools" / "ai" / "artifacts" / "gates").glob("*.md"))
     assert [p.name for p in written] == ["code-verify-full-1.md"]
     assert not (tmp_path / "_aitna").exists()
+
+
+def test_no_out_with_no_project_root_refuses_and_writes_nothing(tmp_path, monkeypatch, capsys):
+    """ADR 0022 D09: the default pack lands in the local layer, and with no project root there is none."""
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    yardstick = tmp_path / "yardstick.md"
+    yardstick.write_text("Ship it.\n", encoding="utf-8")
+    monkeypatch.chdir(bare)
+    assert gate_pack.main(["--gate", "code-verify", "--role", "review", "--yardstick", str(yardstick)]) == 2
+    assert "no project root at or above" in capsys.readouterr().err
+    assert list(bare.iterdir()) == []
+
+
+def test_an_explicit_out_still_writes_with_no_project_root(tmp_path, monkeypatch, capsys):
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    yardstick = tmp_path / "yardstick.md"
+    yardstick.write_text("Ship it.\n", encoding="utf-8")
+    out = tmp_path / "pack.md"
+    monkeypatch.chdir(bare)
+    argv = ["--gate", "code-verify", "--role", "review", "--yardstick", str(yardstick), "--out", str(out)]
+    assert gate_pack.main(argv) == 0
+    assert "no project root at or above" in capsys.readouterr().err
+    assert out.is_file()
+    assert list(bare.iterdir()) == []
 
 
 def test_the_default_name_is_task_gate_kind_and_the_next_ordinal(tmp_path, capsys):

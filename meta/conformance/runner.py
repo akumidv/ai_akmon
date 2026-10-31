@@ -64,6 +64,9 @@ from pairing import check_pairing, is_ported  # noqa: E402
 from common import versions  # noqa: E402
 from common.runtime import harness_binaries  # noqa: E402
 
+#: The variable Claude Code sets in a hook process to say whether an owner is present (ADR-0025/D06).
+SESSION_ATTENDED_ENV = "CLAUDE_CODE_SESSION_ATTENDED"
+RETIRED_DEV_ROOT_ENV = "AITNA_ROOT"
 IMPL_SCOPE = {"python": ("shared", "python"), "node": ("shared", "node")}
 #: The Python file that owns each CLI command: the node implementation runs a CLI scenario only when
 #: that file has its port (``pairing.is_ported``). ``path``, ``hook`` and ``version`` live in the dispatcher.
@@ -73,6 +76,8 @@ COMMAND_FILE = {
     "sync": "bin/sync.py",
     "verify": "bin/verify.py",
     "check": "bin/check.py",
+    "trust": "src/akmon/_trust.py",
+    "learn": "src/akmon/_learn.py",
     "path": "src/akmon/cli.py",
     "hook": "src/akmon/cli.py",
     "tool": "src/akmon/cli.py",
@@ -117,9 +122,14 @@ def _hide_binaries_from_path(binaries: Sequence[str], scratch: Path) -> str:
     return os.pathsep.join(entries)
 
 
-def _today() -> str:
-    """The host's local calendar day, the one the process under test stamps its dates in."""
-    return datetime.datetime.now().astimezone().date().isoformat()
+def _run_days() -> tuple[str, ...]:
+    """The calendar days of this moment: the host's local day and the UTC day, when they differ.
+
+    A process under test stamps its dates in either (``akmon learn`` records UTC), so near
+    midnight both are the run's own.
+    """
+    now = datetime.datetime.now().astimezone()
+    return tuple(dict.fromkeys((now.date().isoformat(), now.astimezone(datetime.UTC).date().isoformat())))
 
 
 def _impl_version(repo: Path, impl: str) -> str:
@@ -309,11 +319,14 @@ def _run_node_unit(scenario: Scenario, ctx: RunCtx) -> tuple[int, str, str, Ctx]
             "prerequisite of --impl node units: probe.mjs (the JS mouth for unit tables, at probe.py's "
             "contract) has not landed yet"
         )
-    first_day = _today()
+    first_days = _run_days()
     result = subprocess.run(
         [node, str(probe), "--tree", str(ctx.snapshot), run_spec.probe, str(CORPUS / "units" / run_spec.table)],
         cwd=ctx.work,
-        env={**os.environ, "PATH": _hide_binaries_from_path(harness_binaries(), ctx.work / "path-shadow")},
+        env={
+            **{key: value for key, value in os.environ.items() if key != RETIRED_DEV_ROOT_ENV},
+            "PATH": _hide_binaries_from_path(harness_binaries(), ctx.work / "path-shadow"),
+        },
         capture_output=True,
         text=True,
         check=False,
@@ -322,7 +335,7 @@ def _run_node_unit(scenario: Scenario, ctx: RunCtx) -> tuple[int, str, str, Ctx]
         result.returncode,
         result.stdout,
         result.stderr,
-        Ctx(root="", mount="", tree=str(ctx.snapshot), tmp="", version=ctx.version, repo="", days=(first_day,)),
+        Ctx(root="", mount="", tree=str(ctx.snapshot), tmp="", version=ctx.version, repo="", days=first_days),
     )
 
 
@@ -394,8 +407,14 @@ def _command_for(
 
 def scenario_env(scenario: Scenario, run: RunCtx, run_tmp: Path) -> dict[str, str]:
     """The environment of the process under test: the host's, a private TMPDIR, no harness, the scenario's own."""
+    # The host's attendance statement (ADR-0025/D06) is the host's, not the scenario's: a scenario that
+    # needs it sets it in its own `[env]`; one that does not runs as if the host stated nothing.
+    # The retired `AITNA_ROOT` (ADR 0022 D09) is scrubbed the same way: `verify` warns while it is set, so a
+    # developer shell that exports it would change every scenario's output.
+    unstated = {SESSION_ATTENDED_ENV, RETIRED_DEV_ROOT_ENV}
+    host = {key: value for key, value in os.environ.items() if key not in unstated}
     return {
-        **os.environ,
+        **host,
         "TMPDIR": str(run_tmp),
         "PYTHONDONTWRITEBYTECODE": "1",
         "PATH": _hide_binaries_from_path(harness_binaries(), run.work / "path-shadow"),
@@ -448,7 +467,7 @@ def run_ctx_for(scenario: Scenario, run: RunCtx, located: tuple[Path, Path, Path
         tmp=str(run_tmp),
         version=run.version,
         repo=str(local_repo) if local_repo else "",
-        days=(_today(),),
+        days=_run_days(),
         carrier=str(proj_dir / "node_modules" / "akmon") if native_node else "",
     )
 
@@ -469,14 +488,14 @@ def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
     run_tmp = run.work / f"tmp-{tag}"
     run_tmp.mkdir(parents=True)
     fixture = scenario.fixture
-    first_day = _today()
+    first_days = _run_days()
     env = scenario_env(scenario, run, run_tmp)
     # The tree is the corpus-controlled snapshot (or a private override copy): a mounted
     # consumer links it, a native one runs the CLI inside it as its embedded tree.
     run_env = RunEnv(snapshot=run.snapshot, repo=run.repo, work=run.work, version=run.version, impl=run.impl)
     proj_dir, tree = materialize_fixture(fixture, run_env, tag, warmup_sync(scenario, run, env))
     local_repo = _build_local_repo(run.snapshot, run.work, run.version) if fixture.repo else None
-    ctx = dataclasses.replace(run_ctx_for(scenario, run, (proj_dir, tree, run_tmp), local_repo), days=(first_day,))
+    ctx = dataclasses.replace(run_ctx_for(scenario, run, (proj_dir, tree, run_tmp), local_repo), days=first_days)
     seed_tmp_files(scenario, run_tmp, ctx)
     # A scenario's own env may name the run's private directories (`HOME = "{{tmp}}"`): the files it
     # seeds in `tmp_files` then stand in for the home directory a tool reads one declared file from.
@@ -484,9 +503,9 @@ def _run(scenario: Scenario, run: RunCtx) -> tuple[int, str, str, Ctx]:
     command, payload, extra_env = _command_for(scenario, tree, proj_dir, ctx, run.impl)
     env.update(extra_env)
     result = subprocess.run(command, cwd=proj_dir, env=env, input=payload, capture_output=True, text=True, check=False)
-    last_day = _today()
-    if last_day != first_day:  # a run across midnight: both days are the run's own
-        ctx = dataclasses.replace(ctx, days=(first_day, last_day))
+    last_days = _run_days()
+    if last_days != first_days:  # a run across midnight: both days are the run's own
+        ctx = dataclasses.replace(ctx, days=tuple(dict.fromkeys(first_days + last_days)))
     return result.returncode, result.stdout, result.stderr, ctx
 
 

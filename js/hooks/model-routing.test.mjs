@@ -85,3 +85,19 @@ test("a bad routing overlay at a later prompt is silent beyond one stderr line",
   assert.equal(run.stdout, "");
   assert.equal(run.stderr, `${_BAD_OVERLAY}\n`);
 });
+
+test("with no project root the hook is silent and writes nothing", () => {
+  const lone = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-model-routing-lone-")));
+  try {
+    for (const event of ["SessionStart", "UserPromptSubmit"]) {
+      const payload = JSON.stringify({ hook_event_name: event, session_id: "sess-lone", cwd: lone });
+      const run = spawnSync(process.execPath, [_HOOK], { input: payload, encoding: "utf8", cwd: lone });
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(run.stdout, "", event);
+      assert.equal(run.stderr, "", event);
+    }
+    assert.deepEqual(fs.readdirSync(lone), []);
+  } finally {
+    fs.rmSync(lone, { recursive: true, force: true });
+  }
+});

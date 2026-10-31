@@ -54,9 +54,9 @@ def test_find_project_root_falls_back_to_start_when_no_marker(tmp_path):
     assert project_root.find_project_root(tmp_path) == tmp_path
 
 
-def test_find_project_root_detects_via_custom_aitna_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+def test_find_project_root_detects_via_custom_aitna_root(tmp_path):
     root = _mounted_root(tmp_path, "tools/ai")
+    (root / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     nested = root / "src" / "pkg"
     nested.mkdir(parents=True)
     assert project_root.find_project_root(nested) == root
@@ -75,10 +75,10 @@ def test_find_project_root_still_requires_agents_md(tmp_path):
     assert project_root.find_project_root(tmp_path) == tmp_path
 
 
-def test_a_package_project_is_found_under_a_custom_aitna_root(monkeypatch, tmp_path):
+def test_a_package_project_is_found_under_a_custom_aitna_root(tmp_path):
     """The combination the three hard-coded copies could not reach: no mount *and* no ``_aitna``."""
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     root = _package_root(tmp_path, "tools/ai")
+    (root / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     nested = root / "src" / "pkg"
     nested.mkdir(parents=True)
     assert project_root.find_project_root(nested) == root
@@ -183,11 +183,12 @@ def test_a_root_that_was_not_found_is_stated_rather_than_returned_bare(tmp_path)
     assert "--project-root" in notice
 
 
-def test_the_notice_names_the_configured_dev_layer_not_the_default(monkeypatch, tmp_path):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+def test_the_notice_names_the_declaration_file_since_no_root_means_no_declared_dev_layer(tmp_path):
+    """With no project root there is nothing to read a declaration from, so the notice states the
+    whole way a root is recognised: ``AGENTS.md`` beside ``.aitna-root``, or the default layout."""
     _, notice = project_root.resolve_project_root(None, tmp_path)
     assert notice is not None
-    assert "tools/ai/akmon" in notice and "_aitna" not in notice
+    assert "AGENTS.md beside .aitna-root" in notice
 
 
 def test_the_notice_is_one_line_so_a_console_cannot_split_it(tmp_path):
@@ -251,7 +252,7 @@ def test_no_module_grows_its_own_copy_of_the_walk():
 def test_no_module_grows_its_own_copy_of_the_dev_layer_name():
     """The sibling fact, and the one that drifted furthest.
 
-    Three modules defined it and four more spelled ``_aitna`` inline past ``AITNA_ROOT``, so a
+    Three modules defined it and four more spelled ``_aitna`` inline past the declared root, so a
     project with a relocated dev layer had its coverage map and its gate packs written into a
     directory it does not read, and its pinned test runner silently ignored.
     """
@@ -261,7 +262,7 @@ def test_no_module_grows_its_own_copy_of_the_dev_layer_name():
 def test_no_shipped_module_spells_the_default_dev_layer_inline():
     """``_aitna`` is a default, not a path: only its owner may name it.
 
-    A literal elsewhere is invisible until someone sets ``AITNA_ROOT``, and then it degrades
+    A literal elsewhere is invisible until a project declares another dev root, and then it degrades
     silently rather than failing — which is the whole reason this owner exists.
     """
     tree = _tree_root()

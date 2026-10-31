@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import ast
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -688,7 +687,7 @@ console.log(JSON.stringify({
 }));
 """
 #: The integration records of the two projects the wiring is read for: the hooks directory is
-#: ``node_modules/akmon/js/hooks`` in package mode and ``<AITNA_ROOT>/akmon/js/hooks`` in a mount.
+#: ``node_modules/akmon/js/hooks`` in package mode and ``<dev root>/akmon/js/hooks`` in a mount.
 _NODE_WIRING_RECORDS = ('mount = "package"\necosystem = "node"\n', 'mount = "submodule"\necosystem = "node"\n')
 
 
@@ -722,7 +721,6 @@ def node_generated_wiring(root: Path) -> dict:
             capture_output=True,
             text=True,
             check=False,
-            env={key: value for key, value in os.environ.items() if key != "AITNA_ROOT"},
         )
     if result.returncode != 0:
         tail = (result.stderr or "").strip().splitlines()

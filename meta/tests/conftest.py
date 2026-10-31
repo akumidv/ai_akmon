@@ -54,6 +54,26 @@ def _codex_free_path(tmp_path_factory) -> str:
 
 
 @pytest.fixture(autouse=True)
+def _host_states_no_attendance(monkeypatch):
+    """Every test runs as if the host stated no attendance (ADR-0025/D06).
+
+    A session that runs the suite is itself an attended Claude Code session and carries
+    ``CLAUDE_CODE_SESSION_ATTENDED=1``, which the hook entry points read; a test that wants a value sets it.
+    """
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ATTENDED", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_retired_dev_root_variable(monkeypatch):
+    """Every test runs without ``AITNA_ROOT`` in the environment (ADR 0022 D09).
+
+    ``verify`` warns ``environment.aitna-root-ignored`` while the retired variable is set, so a developer
+    shell that exports it would fail every strict-verify test; a test that wants it sets it itself.
+    """
+    monkeypatch.delenv("AITNA_ROOT", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _codex_absent_in_tests(monkeypatch, _codex_free_path):
     """Every test runs on a host without Codex, the way self-CI's fixture legs do (C70).
 

@@ -1,0 +1,9 @@
+{
+  "grants_dir": "grants",
+  "store_env": "AKMON_TRUST_DIR",
+  "state_home_env": "XDG_STATE_HOME",
+  "state_home_subdir": ".local/state",
+  "store_subdir": "akmon/trust",
+  "accepted_dir": "accepted",
+  "log_file": "trust.log"
+}

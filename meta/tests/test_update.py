@@ -127,12 +127,6 @@ def test_update_data_file_error_propagates_uncaught(monkeypatch):
         )
 
 
-@pytest.fixture(autouse=True)
-def isolated_aitna_root(monkeypatch):
-    """``update`` sets ``AITNA_ROOT`` for the run, as ``init`` does; keep tests apart."""
-    monkeypatch.setenv("AITNA_ROOT", "_aitna")
-
-
 def _versions():
     return cli._embedded_common_module(_tree.embedded_tree_root(), "versions")
 
@@ -234,6 +228,17 @@ def test_a_project_that_is_not_attached_is_refused(tmp_path, capsys):
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
     assert _update.main(["--project-root", str(tmp_path), "--ref", "v0.4.0"]) == 2
     assert "akmon init" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("before", [None, "old/root\n"])
+def test_a_refused_update_leaves_the_dev_root_declaration_as_it_was(tmp_path, before):
+    """``--aitna-root`` writes the declaration early; a refusal before ``init`` runs gives it back."""
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")  # no record under `dev/`: refused
+    pointer = tmp_path / ".aitna-root"
+    if before is not None:
+        pointer.write_text(before, encoding="utf-8")
+    assert _update.main(["--project-root", str(tmp_path), "--aitna-root", "dev", "--ref", "v0.4.0"]) == 2
+    assert (pointer.read_text(encoding="utf-8") if pointer.exists() else None) == before
 
 
 @pytest.mark.parametrize(

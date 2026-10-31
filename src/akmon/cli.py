@@ -1,6 +1,6 @@
 """``akmon`` console entry point — a thin CLI dispatching to the standard tree.
 
-``init`` / ``sync`` / ``verify`` / ``path`` / ``hook`` / ``version`` per the CLI contract in
+``init`` / ``sync`` / ``verify`` / ``trust`` / ``learn`` / ``path`` / ``hook`` / ``version`` per the CLI contract in
 ``docs/design/packaging/README.md``. ``init`` (all four mount modes) lives in
 ``akmon._init``; this module keeps only the dispatch rules.
 
@@ -9,10 +9,10 @@ runs a hook out of the resolved standard tree, so the wiring never has to spell 
 site-packages.
 
 Version-skew rule (design doc, "sync / verify"): when a mounted tree exists at
-``<AITNA_ROOT>/akmon`` the launcher runs *that* tree's ``bin/sync.py`` / ``bin/verify.py``
+``<dev root>/akmon`` the launcher runs *that* tree's ``bin/sync.py`` / ``bin/verify.py``
 (subprocess, so the pinned standard governs, not whatever CLI version is installed) and
 prints a one-line notice if the CLI's own version differs from the pin recorded in
-``<AITNA_ROOT>/.akmon.toml``; otherwise it runs the embedded tree's copies (importing their
+``<dev root>/.akmon.toml``; otherwise it runs the embedded tree's copies (importing their
 ``main`` when possible, else subprocess). Mode ``package`` has no mount at all — the package
 *is* the pin — so it always resolves to the embedded tree. ``init`` runs before any mount
 exists and therefore starts embedded; once it has mounted the standard, the sync it runs
@@ -151,27 +151,26 @@ def _project_root_lib() -> ModuleType:
 
 
 def _mounted_akmon_root(start: Path) -> Path | None:
-    """The mounted tree root (``<AITNA_ROOT>/akmon``) for ``start``'s project, if any.
+    """The mounted tree root (``<dev root>/akmon``) for ``start``'s project, if any.
 
     A deliberate, narrow duplication of the mount half of the project-root marker check
     (``common/project_root.py::is_project_root``: an ``AGENTS.md`` file plus an existing
-    ``<AITNA_ROOT>/akmon`` directory, walking up from ``start``) rather than a reuse: this
+    ``<dev root>/akmon`` directory, walking up from ``start``) rather than a reuse: this
     function's job is to decide *which* tree's code the CLI should trust for everything
     else, so it must not itself depend on either tree's content.
 
-    Also honours ``<AITNA_ROOT>/.akmon.toml``'s ``mount`` field when present:
+    Also honours ``<dev root>/.akmon.toml``'s ``mount`` field when present:
     ``mount = "package"`` means "run the embedded tree unconditionally, no skew by
-    construction" (ADR 0009 §4-5) — a stale ``<AITNA_ROOT>/akmon`` left over from a prior
+    construction" (ADR 0009 §4-5) — a stale ``<dev root>/akmon`` left over from a prior
     mode must not shadow it, so this returns ``None`` (no mount) even if that directory
     still exists on disk. The record is read by the embedded tree's ``common/record.py`` —
     the one reader (C75). That is not the dependency the paragraph above avoids: the embedded
     tree ships with this CLI, while the consumer's tree is the one under judgment.
     """
     record = _embedded_common_module(_tree.embedded_tree_root(), "record")
-    aitna_name = _project_root_lib().aitna_root_name()
     for candidate in (start, *start.parents):
         if (candidate / "AGENTS.md").is_file():
-            aitna_dir = candidate / aitna_name
+            aitna_dir = _project_root_lib().aitna_root(candidate)
             if record.records_package_mode(candidate):
                 return None
             akmon_root = aitna_dir / "akmon"
@@ -194,7 +193,7 @@ def _split_version(recorded: str) -> tuple[str, str | None]:
 def _skew_notice(mounted_root: Path) -> str | None:
     """One-line notice when the CLI's own version differs from the mounted tree's pin.
 
-    Reads ``<AITNA_ROOT>/.akmon.toml``'s ``akmon_version`` (the consumer's recorded pin).
+    Reads ``<dev root>/.akmon.toml``'s ``akmon_version`` (the consumer's recorded pin).
     Absent for a project that has not realigned yet — nothing to compare, no notice.
 
     Comparison normalizes first (F9/6): the pin and ``__version__`` reach this function in
@@ -410,7 +409,21 @@ def _cmd_update(argv: list[str]) -> int:
     return _update.main(argv)
 
 
-_COMMANDS = ("init", "update", "sync", "verify", "check", "path", "hook", "tool", "version")
+def _cmd_trust(argv: list[str]) -> int:
+    """Accept, inspect and revoke the digests of a project's own grant files (C172, ADR 0025/D05). Imported lazily."""
+    from akmon import _trust  # noqa: PLC0415 — _trust imports this module back; only trust pays
+
+    return _trust.main(argv)
+
+
+def _cmd_learn(argv: list[str]) -> int:
+    """The learning agent's run record and session list (C177, ADR 0026/D07). Imported lazily, as trust is."""
+    from akmon import _learn  # noqa: PLC0415 — _learn imports this module back; only learn pays
+
+    return _learn.main(argv)
+
+
+_COMMANDS = ("init", "update", "sync", "verify", "check", "trust", "learn", "path", "hook", "tool", "version")
 
 # `argparse.add_subparsers` + a REMAINDER positional mis-parses a remainder that starts
 # with "-" (e.g. `akmon sync --check`) — a known argparse limitation. A single top-level
@@ -446,10 +459,14 @@ def _dispatch_fixed_command(parser: argparse.ArgumentParser, command: str, argv:
         return _cmd_hook(argv) if command == "hook" else _cmd_tool(argv)
     if command == "version":
         return _cmd_version()
-    if command == "init":
-        return _cmd_init(argv)
-    if command == "update":
-        return _cmd_update(argv)
+    lazy = {
+        "init": _cmd_init,
+        "update": _cmd_update,
+        "trust": _cmd_trust,
+        "learn": _cmd_learn,
+    }  # each imports its module on the call
+    if command in lazy:
+        return lazy[command](argv)
     parser.error(f"unknown command {command!r}")  # pragma: no cover - choices already restrict this
     return 2
 

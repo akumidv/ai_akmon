@@ -40,7 +40,7 @@ import sys
 from pathlib import Path
 
 # The tree root, so the shared ``common`` package resolves: the data loader is reached the same
-# way from the mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+# way from the mounted tree and from the materialized ``<dev root>/.akmon/`` copy alike.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from common import jsondata

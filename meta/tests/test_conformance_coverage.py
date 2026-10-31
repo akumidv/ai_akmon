@@ -334,7 +334,8 @@ def test_real_tree_derivation() -> None:
     }
     commands = {item for item in population.items if item.startswith("command:")}
     assert commands == {
-        f"command:{name}" for name in ("init", "update", "sync", "verify", "check", "path", "hook", "tool", "version")
+        f"command:{name}"
+        for name in ("init", "update", "sync", "verify", "check", "trust", "learn", "path", "hook", "tool", "version")
     }
     # Every dynamic site in the shipped tree is reviewed, and every review names a live site.
     exceptions = coverage.load_exceptions()

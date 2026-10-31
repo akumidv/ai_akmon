@@ -14,8 +14,9 @@ this file carries only what is true of akmon and of nothing else.
 
 ## Roles
 
-[`roles/README.md`](roles/README.md) — `review`, `architect` and `engineer` for project work,
-`learn` and `release` cross-cutting. Declaring the active role and restating it on every switch
+[`roles/README.md`](roles/README.md) — `review`, `architect` and `engineer`, the modes of the
+development agent; [`agents/README.md`](agents/README.md) — the development, learning and release
+agents, the last two working in `learn` and `release`. Declaring the active role and restating it on every switch
 is the guardrail's rule; this file only says where the roles live.
 
 ## Delegation
@@ -46,10 +47,9 @@ the shipped block states it directly: Codex does not expand nested `@` imports i
   ([ADR 0023](docs/adr/0023-project-documents-layout.md)); reviews, measurements, experiments and the
   backlog stay in `meta/`.
 - Record non-trivial implementation work in `meta/TASKS.md` before code.
-- **`<DEV>` is `meta/`.** akmon has no `_aitna/`; its dev-layer root is `meta/`, so its local layer
-  is `meta/local/` and its development skills would live in `meta/skills/`
-  ([ADR 0022](docs/adr/0022-local-layer-index-and-plans.md)). The root is to be resolved by
-  code (C157); this line tells a reader.
+- **`<DEV>` is `meta/`.** akmon has no `_aitna/`; its `.aitna-root` file declares `meta`, so its local
+  layer is `meta/local/` and its development skills would live in `meta/skills/`
+  ([ADR 0022](docs/adr/0022-local-layer-index-and-plans.md)).
 - To look for alternatives to a design choice, or to check a decision against how other projects
   solved it, open [`meta/reviews/alternatives/`](meta/reviews/alternatives/README.md). It is
   material for akmon's own development, not part of what a consumer receives.

@@ -383,11 +383,14 @@ function recordEcosystem(module, table) {
     const relative = case_.aitna_root ?? "_aitna";
     const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "akmon-probe-ecosystem-"));
     try {
+      if (case_.aitna_root !== undefined) {
+        fs.writeFileSync(path.join(scratch, ".aitna-root"), relative, "utf-8");
+      }
       if (case_.absent !== true) {
         fs.mkdirSync(path.join(scratch, relative), { recursive: true });
         fs.writeFileSync(path.join(scratch, relative, ".akmon.toml"), case_.text ?? "", "utf-8");
       }
-      const actual = withEnvironment({ AITNA_ROOT: case_.aitna_root ?? null }, () => module.recordedEcosystem(scratch));
+      const actual = module.recordedEcosystem(scratch);
       results.push({ index: 1000 + index, expected: case_.expected, actual });
     } finally {
       fs.rmSync(scratch, { recursive: true, force: true });
@@ -1104,6 +1107,9 @@ function materializationWorld(case_) {
   const copies = path.join(project, case_.aitna_dir ?? "_aitna", ".akmon");
   fs.mkdirSync(project);
   fs.mkdirSync(tree);
+  if (case_.aitna_root !== undefined) {
+    fs.writeFileSync(path.join(project, ".aitna-root"), case_.aitna_root, "utf-8");
+  }
   for (const [base, prefix] of /** @type {Array<[string, string]>} */ ([
     [copies, "project"],
     [tree, "tree"],
@@ -1147,9 +1153,7 @@ function materializationStale(module, data, table) {
     const { scratch, project, tree, copies } = materializationWorld(case_);
     let actual;
     try {
-      actual = withEnvironment({ AITNA_ROOT: case_.aitna_root ?? null }, () =>
-        answered(() => module.staleMaterialized(data, project, tree)),
-      );
+      actual = answered(() => module.staleMaterialized(data, project, tree));
     } finally {
       for (const [prefix, base] of /** @type {Array<[string, string]>} */ ([
         ["project", copies],
@@ -1177,23 +1181,41 @@ async function probeMaterialization(tree, table) {
   /** @type {any[]} */
   const results = [];
   /**
-   * One family of rows, each answered under the AITNA_ROOT the row sets.
-   * @param {(case_: any) => unknown} answer
+   * One family of rows, each answered under the project the row's `aitna_root` declares in `.aitna-root`
+   * (no `aitna_root`: no project, the default dev root). `expected = { raises = true }` asks for the refusal.
+   * @param {(case_: any, project: string | null) => unknown} answer
    * @param {number} base
    * @param {string} name
    */
   const family = (answer, base, name) => {
     for (const [index, case_] of (table[name] ?? []).entries()) {
-      const actual = withEnvironment({ AITNA_ROOT: case_.aitna_root ?? null }, () => answer(case_));
-      results.push({ index: base + index, expected: case_.expected ?? null, actual });
+      const scratch =
+        case_.aitna_root === undefined
+          ? null
+          : fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-probe-materialization-")));
+      try {
+        if (scratch !== null) {
+          fs.writeFileSync(path.join(scratch, ".aitna-root"), case_.aitna_root, "utf-8");
+        }
+        const refusal = case_.expected !== null && typeof case_.expected === "object" && case_.expected.raises === true;
+        let actual = refusal ? answered(() => answer(case_, scratch)) : answer(case_, scratch);
+        if (typeof actual === "string" && scratch !== null) {
+          actual = actual.split(scratch).join("{{project}}");
+        }
+        results.push({ index: base + index, expected: case_.expected ?? null, actual });
+      } finally {
+        if (scratch !== null) {
+          fs.rmSync(scratch, { recursive: true, force: true });
+        }
+      }
     }
   };
   family(() => module.generatedMarker(data), 0, "marker");
-  family(() => module.generatedBanner(data), 1000, "banner");
-  family((/** @type {any} */ c) => module.materializedMarkdown(data, c.input), 2000, "markdown");
-  family((/** @type {any} */ c) => module.materializedText(data, c.name, c.input), 3000, "text");
+  family((_c, project) => module.generatedBanner(data, project), 1000, "banner");
+  family((/** @type {any} */ c, project) => module.materializedMarkdown(data, c.input, project), 2000, "markdown");
+  family((/** @type {any} */ c, project) => module.materializedText(data, c.name, c.input, project), 3000, "text");
   family(() => module.importedDirs(data), 4000, "dirs");
-  family((/** @type {any} */ c) => module.materializedDir(c.project_root), 5000, "dir");
+  family((/** @type {any} */ c, project) => module.materializedDir(project ?? c.project_root), 5000, "dir");
   return [...results, ...materializationStale(module, data, table)];
 }
 
@@ -1346,7 +1368,6 @@ const ROUTING_OPTIONS_CLASSES = new Set(["HookResult", "Finding"]);
 
 const ROUTING_BASE_ENV = [
   "AKMON_CONTEXT_RECOMMENDED_MAX",
-  "AITNA_ROOT",
   "AKMON_DELEGATION_GRACE",
   "AKMON_DELEGATION_NUDGE_THRESHOLD",
   "AKMON_DELEGATION_ASK_THRESHOLD",
@@ -1492,8 +1513,15 @@ function routingConstructed(ctx, value) {
   return routingNew(ctx, value.$new, routingArg(ctx, value.fields ?? {}));
 }
 
-/** A dataclass from its snake_case fields, in the declaration order of `ROUTING_CLASS_FIELDS`. */
+/**
+ * A dataclass from its snake_case fields, in the declaration order of `ROUTING_CLASS_FIELDS`; `OpinionRun`
+ * is the one dataclass the JS module keeps as a plain options object (`{model, effort, prompt}`).
+ */
 function routingNew(/** @type {any} */ ctx, /** @type {string} */ name, /** @type {Record<string, any>} */ fields) {
+  if (name === "OpinionRun") {
+    // Python's `routing.OpinionRun` dataclass is the options bag of `opinionCommand`, after the project root.
+    return Object.fromEntries(Object.entries(fields).map(([key, value]) => [routingCamel(key), value]));
+  }
   const Cls = ctx.module[name] ?? ctx.classes[name];
   if (ROUTING_OPTIONS_CLASSES.has(name)) {
     return new Cls(Object.fromEntries(Object.entries(fields).map(([key, value]) => [routingCamel(key), value])));
@@ -1749,9 +1777,7 @@ function routingCase(/** @type {any} */ base, /** @type {any} */ case_) {
   const working = process.cwd();
   try {
     routingWorld(ctx, scratch, case_);
-    if (case_.cwd !== undefined) {
-      process.chdir(path.join(scratch, case_.cwd));
-    }
+    process.chdir(path.join(scratch, case_.cwd ?? "."));
     return withEnvironment(changes, () => routingAnswer(ctx, case_));
   } finally {
     process.chdir(working);
@@ -1802,6 +1828,7 @@ const HOOK_DATA_EXPORTS = {
     "unclassifiedShellRouteNotice",
     "reportUnclassifiedShellRoute",
     "privilegeEscalationGuardResult",
+    "askIsAttended",
     "gitCommitGuardResult",
     "staleGuardrailNotice",
     "sessionStartResult",
@@ -1906,11 +1933,12 @@ function pathWithoutBinaries(binaries, scratch) {
  * The generic mouth: every `[[case]]` of the table against the module `spec` names.
  * @param {string} tree
  * @param {Record<string, any>} table
- * @param {{module: string, classes?: string, dataArgs: (tree: string, base: any) => ((name: string) => any[]), plain?: boolean, texts?: boolean}} spec
+ * @param {{module: string, classes?: string, dataArgs: (tree: string, base: any) => ((name: string) => any[]), plain?: boolean, texts?: boolean, adapt?: (module: any) => any}} spec
  * @returns {Promise<any[]>}
  */
 async function probeRows(tree, table, spec) {
-  const module = await loadModule(tree, spec.module);
+  const loaded = await loadModule(tree, spec.module);
+  const module = spec.adapt === undefined ? loaded : spec.adapt(loaded);
   const classes = spec.classes === undefined ? {} : await loadModule(tree, spec.classes);
   const writer = await loadModule(tree, "js/common/json_writer.mjs");
   const values = await loadModule(tree, "js/common/pyvalue.mjs");
@@ -2061,6 +2089,28 @@ async function probeSync(tree, table) {
   });
 }
 
+/**
+ * The project-root owner (ADR 0022 D09), one public call per row, against the tree's `js/common/project_root.mjs`.
+ * `resolveProjectRoot` answers `{root, notice}` here and a `(root, notice)` tuple in Python: the mouth hands the
+ * module's answer back as the pair, so one table pins both.
+ * @param {string} tree
+ * @param {Record<string, any>} table
+ * @returns {Promise<any[]>}
+ */
+async function probeProjectRoot(tree, table) {
+  return probeRows(tree, table, {
+    module: "js/common/project_root.mjs",
+    dataArgs: () => () => [],
+    adapt: (/** @type {any} */ module) => ({
+      ...module,
+      resolveProjectRoot: (/** @type {any[]} */ ...args) => {
+        const { root, notice } = module.resolveProjectRoot(...args);
+        return [root, notice];
+      },
+    }),
+  });
+}
+
 /** The exports of `always_loaded.mjs` that take its data bundle first: the Python twins read `always_loaded.json` themselves. */
 const ALWAYS_LOADED_DATA_EXPORTS = new Set([
   "blockHeading",
@@ -2118,6 +2168,7 @@ const PROBES = {
   markers: probeMarkers,
   materialization: probeMaterialization,
   routing: probeRouting,
+  project_root: probeProjectRoot,
   hook_core: probeHookCore,
   claude_adapter: probeClaudeAdapter,
   codex_adapter: probeCodexAdapter,

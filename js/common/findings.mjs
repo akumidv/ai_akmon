@@ -274,13 +274,17 @@ export function printFindings(findings, { quiet = false } = {}) {
 }
 
 /**
- * The shared exit contract: errors fail; warnings fail only under `--strict`.
+ * The shared exit contract: errors fail; warnings fail only under `--strict`. A warning whose code
+ * is in `strictExempt` stays visible and never fails, strict or not: the carrier names the exempt
+ * codes, each a tolerance with a removal task.
  *
  * @param {readonly Finding[]} findings
- * @param {{strict?: boolean}} [options]
+ * @param {{strict?: boolean, strictExempt?: ReadonlySet<string>}} [options]
  * @returns {number}
  */
-export function exitCode(findings, { strict = false } = {}) {
-  const present = new Set(findings.map((finding) => finding.severity));
-  return present.has("error") || (strict && present.has("warn")) ? 1 : 0;
+export function exitCode(findings, { strict = false, strictExempt = new Set() } = {}) {
+  if (findings.some((finding) => finding.severity === "error")) {
+    return 1;
+  }
+  return strict && findings.some((finding) => finding.severity === "warn" && !strictExempt.has(finding.code)) ? 1 : 0;
 }

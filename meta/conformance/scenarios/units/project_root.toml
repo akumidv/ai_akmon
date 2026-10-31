@@ -1,0 +1,15 @@
+id = "units/project_root"
+ecosystem = "shared"
+kind = "unit"
+covers = ["unit:project_root"]
+
+[run]
+probe = "project_root"
+table = "project_root.toml"
+
+# The document is pinned, not just the exit code: the node run compares the *same* bytes, so this
+# row is where the two mouths are required to agree, not merely each to be green.
+[expected]
+exit = 0
+stdout = "{\n  \"ok\": true,\n  \"answered\": 75,\n  \"failed\": []\n}\n"
+stderr = ""

@@ -93,6 +93,22 @@ test("a falsy transcript_path of any JSON type is no transcript (Python: `if not
   }
 });
 
+test("activeRole reads `🧭 role:` and the `🧭 agent:` alias, the last declaration winning", () => {
+  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-role-decl-"));
+  try {
+    const turn = (/** @type {string} */ text) => JSON.stringify({ type: "assistant", message: { content: text } });
+    const transcript = posix.join(dir, "t.jsonl");
+    fs.writeFileSync(transcript, `${turn("🧭 agent: Review — alias")}\n`);
+    assert.equal(activeRole(transcript), "review");
+    fs.writeFileSync(transcript, `${turn("🧭 role: engineer — new")}\n${turn("🧭 agent: architect — alias")}\n`);
+    assert.equal(activeRole(transcript), "architect");
+    fs.writeFileSync(transcript, `${turn("🧭 agent: architect — alias")}\n${turn("🧭 role: Engineer — new")}\n`);
+    assert.equal(activeRole(transcript), "engineer");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a truthy transcript_path that is not a string is the TypeError Path() raises", () => {
   for (const bad of [5, true, ["x"], { a: 1 }]) {
     assert.throws(() => activeRole(/** @type {any} */ (bad)), { name: "TypeError" });
@@ -122,59 +138,63 @@ test("a ladder entry splits on its FIRST colon only; an empty model is no model"
 
 test("presence is a name on PATH, or an absolute path that is executable — never a directory", () => {
   const registry = declared(["claude"]);
-  assert.equal(carrierPresent(AGENTS, RUNTIME, registry, "sh1"), true);
-  assert.equal(carrierPresent(AGENTS, RUNTIME, registry, "gone"), false);
+  assert.equal(carrierPresent(AGENTS, RUNTIME, registry, "sh1", null), true);
+  assert.equal(carrierPresent(AGENTS, RUNTIME, registry, "gone", null), false);
   const nameless = { ...registry, providers: { n: { family: "gpt" }, d: { argv: ["/tmp"] } } };
-  assert.equal(carrierPresent(AGENTS, RUNTIME, nameless, "n"), false);
-  assert.equal(carrierPresent(AGENTS, RUNTIME, nameless, "d"), false);
+  assert.equal(carrierPresent(AGENTS, RUNTIME, nameless, "n", null), false);
+  assert.equal(carrierPresent(AGENTS, RUNTIME, nameless, "d", null), false);
 });
 
 test("the walk skips self, absent, taken priors and a taken concrete model, in that order", () => {
   const registry = declared(["claude", "sh1", "sh2", "gone", "dup"]);
   const session = new SecondOpinionSession("claude", "claude", "opus");
   assert.deepEqual(
-    opinionChain(AGENTS, RUNTIME, registry, session).map((target) => [target.provider, target.model, target.family]),
+    opinionChain(AGENTS, RUNTIME, registry, session, null).map((target) => [
+      target.provider,
+      target.model,
+      target.family,
+    ]),
     [["sh1", "m2", "gpt"]],
   );
-  assert.deepEqual(opinionSkips(AGENTS, RUNTIME, registry, session), [
+  assert.deepEqual(opinionSkips(AGENTS, RUNTIME, registry, session, null), [
     ["claude", "self"],
     ["sh2", "same priors as claude"],
     ["gone", "carrier absent"],
     ["dup", "same model as sh1"],
   ]);
-  assert.equal(resolveOpinionChain(AGENTS, RUNTIME, registry, session, { rank: 3 }), null);
-  assert.equal(resolveOpinionChain(AGENTS, RUNTIME, registry, session)?.provider, "sh1");
+  assert.equal(resolveOpinionChain(AGENTS, RUNTIME, registry, session, null, { rank: 3 }), null);
+  assert.equal(resolveOpinionChain(AGENTS, RUNTIME, registry, session, null)?.provider, "sh1");
 });
 
 test("a session whose priors are unknown has an empty chain and one skip (D08)", () => {
   const registry = declared(["sh1"]);
   const session = new SecondOpinionSession("opencode", null, "x/y");
-  assert.deepEqual(opinionChain(AGENTS, RUNTIME, registry, session), []);
-  assert.deepEqual(opinionSkips(AGENTS, RUNTIME, registry, session), [["opencode", "session priors unknown"]]);
+  assert.deepEqual(opinionChain(AGENTS, RUNTIME, registry, session, null), []);
+  assert.deepEqual(opinionSkips(AGENTS, RUNTIME, registry, session, null), [["opencode", "session priors unknown"]]);
 });
 
 test("a model named `constructor` is a model, not an inherited property", () => {
   const registry = declared(["sh1"]);
   registry.providers.sh1.models = ["constructor"];
   const session = new SecondOpinionSession("claude", "claude", "constructor");
-  assert.deepEqual(opinionSkips(AGENTS, RUNTIME, registry, session), [["sh1", "same model as claude"]]);
+  assert.deepEqual(opinionSkips(AGENTS, RUNTIME, registry, session, null), [["sh1", "same model as claude"]]);
 });
 
 test("the last resort is another declared model of the session's own provider, else the default", () => {
   const registry = declared(["sh1"]);
-  const other = opinionLastResort(AGENTS, registry, new SecondOpinionSession("sh1", "gpt", "m2"));
+  const other = opinionLastResort(AGENTS, registry, new SecondOpinionSession("sh1", "gpt", "m2"), null);
   assert.deepEqual({ ...other }, { provider: "sh1", model: "m1", family: "gpt", effort: null });
-  const none = opinionLastResort(AGENTS, registry, new SecondOpinionSession("gone", "gemini", "x"));
+  const none = opinionLastResort(AGENTS, registry, new SecondOpinionSession("gone", "gemini", "x"), null);
   assert.deepEqual({ ...none }, { provider: "gone", model: null, family: "gemini", effort: null });
 });
 
 test("a model's own family wins over the row's; an unnamed multi-family model is unknown", () => {
   const registry = declared(["sh1"]);
   registry.providers.sh1.model_families = { "a/b:c": "gemini" };
-  assert.equal(providerFamily(AGENTS, registry, "sh1", "a/b:c"), "gemini");
-  assert.equal(providerFamily(AGENTS, registry, "sh1", "m1"), "gpt");
-  assert.equal(providerFamily(AGENTS, SHIPPED, "opencode", "x/y"), null);
-  assert.throws(() => providerFamily(AGENTS, SHIPPED, "ghost"), { name: "KeyError" });
+  assert.equal(providerFamily(AGENTS, registry, "sh1", null, "a/b:c"), "gemini");
+  assert.equal(providerFamily(AGENTS, registry, "sh1", null, "m1"), "gpt");
+  assert.equal(providerFamily(AGENTS, SHIPPED, "opencode", null, "x/y"), null);
+  assert.throws(() => providerFamily(AGENTS, SHIPPED, "ghost", null), { name: "KeyError" });
 });
 
 test("the session: arguments, then the stanza, then the bound vendor; another layer lends nothing", () => {
@@ -201,7 +221,7 @@ test("the session: arguments, then the stanza, then the bound vendor; another la
 
 test("a declared argv pins by placeholder and never by splitting; a `$&` model is not a replacement pattern", () => {
   const registry = { providers: { d: { argv: ["d-bin", "-m", "{model}", "--flag"] }, u: { argv: ["u-bin"] } } };
-  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, registry, "d", { model: "a$&b", prompt: "p" }), [
+  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, registry, "d", null, { model: "a$&b", prompt: "p" }), [
     "d-bin",
     "-m",
     "a$&b",
@@ -209,14 +229,14 @@ test("a declared argv pins by placeholder and never by splitting; a `$&` model i
     "p",
   ]);
   // Unpinned, the part holding the placeholder goes and the bare flag that pointed at it goes too.
-  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, registry, "d"), ["d-bin", "--flag"]);
-  assert.throws(() => opinionCommand(AGENTS, RUNTIME, registry, "u", { model: "m" }), UnpinnableModelError);
+  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, registry, "d", null), ["d-bin", "--flag"]);
+  assert.throws(() => opinionCommand(AGENTS, RUNTIME, registry, "u", null, { model: "m" }), UnpinnableModelError);
   const stdin = { providers: { s: { argv: ["s"], prompt: "stdin" } } };
-  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, stdin, "s", { prompt: "p" }), ["s"]);
+  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, stdin, "s", null, { prompt: "p" }), ["s"]);
 });
 
 test("a shipped carrier's command comes from the map plus the row's model flag", () => {
-  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, SHIPPED, "claude", { model: "opus", prompt: "p" }), [
+  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, SHIPPED, "claude", null, { model: "opus", prompt: "p" }), [
     "claude",
     "-p",
     "--output-format",
@@ -225,7 +245,7 @@ test("a shipped carrier's command comes from the map plus the row's model flag",
     "opus",
     "p",
   ]);
-  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, SHIPPED, "opencode", { model: "x/y:z", prompt: "p" }), [
+  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, SHIPPED, "opencode", null, { model: "x/y:z", prompt: "p" }), [
     "opencode",
     "run",
     "--agent",
@@ -239,34 +259,34 @@ test("a shipped carrier's command comes from the map plus the row's model flag",
 test("a retired key is refused by name and file, in the overlay and in the local config", () => {
   const overlay = { ...SHIPPED, second_opinion_policy: { diversity_ladder: [] }, openai: { second_opinion: {} } };
   assert.throws(
-    () => refuseRetiredKeys(AGENTS, overlay, {}),
+    () => refuseRetiredKeys(AGENTS, overlay, {}, null),
     (error) => {
       assert.ok(error instanceof RetiredKeyError);
       assert.match(error.message, /second_opinion_policy\.diversity_ladder, (?:\w+)\.second_opinion/);
       return true;
     },
   );
-  assert.throws(() => refuseRetiredKeys(AGENTS, SHIPPED, { second_opinion_provider: "x" }), RetiredKeyError);
-  assert.doesNotThrow(() => refuseRetiredKeys(AGENTS, SHIPPED, { vendor: "anthropic", session: {} }));
+  assert.throws(() => refuseRetiredKeys(AGENTS, SHIPPED, { second_opinion_provider: "x" }, null), RetiredKeyError);
+  assert.doesNotThrow(() => refuseRetiredKeys(AGENTS, SHIPPED, { vendor: "anthropic", session: {} }, null));
 });
 
 test("the head names the first provider, or says why there is none", () => {
   const registry = declared(["claude", "sh1"]);
   const session = { provider: "claude", model: "opus" };
-  assert.deepEqual(opinionHead(AGENTS, RUNTIME, registry, { session }), ["sh1:m2 priors=gpt", null]);
+  assert.deepEqual(opinionHead(AGENTS, RUNTIME, registry, { session }, null), ["sh1:m2 priors=gpt", null]);
   const alone = declared(["claude"]);
-  const [display, warning] = opinionHead(AGENTS, RUNTIME, alone, { session });
+  const [display, warning] = opinionHead(AGENTS, RUNTIME, alone, { session }, null);
   assert.equal(display, "unavailable");
   assert.match(String(warning), /provider chain is empty/);
-  assert.deepEqual(opinionHead(AGENTS, RUNTIME, registry, {})[0], "unavailable priors=unknown");
+  assert.deepEqual(opinionHead(AGENTS, RUNTIME, registry, {}, null)[0], "unavailable priors=unknown");
 });
 
 test("the status line shows the head and the on/off state; a retired key costs the whole block", () => {
   const registry = declared(["claude", "sh1"]);
   const config = { vendor: "anthropic", orchestrator: "opus", second_opinion: true, session: { provider: "claude" } };
-  const lines = statusLines(AGENTS, RUNTIME, config, registry, "init");
+  const lines = statusLines(AGENTS, RUNTIME, config, registry, "init", null);
   assert.match(lines[0], /second-opinion=sh1:m2 priors=gpt \(on\)$/);
-  assert.throws(() => statusLines(AGENTS, RUNTIME, { ...config, second_opinion_provider: "x" }, registry, "i"), {
+  assert.throws(() => statusLines(AGENTS, RUNTIME, { ...config, second_opinion_provider: "x" }, registry, "i", null), {
     name: "RetiredKeyError",
   });
 });
@@ -300,41 +320,15 @@ function scratch(files = {}) {
   return root;
 }
 
-/**
- * Run `body` with `AITNA_ROOT` set (or unset for null), restoring it afterwards.
- * @template T
- * @param {string | null} value
- * @param {() => T} body
- * @returns {T}
- */
-function withAitnaRoot(value, body) {
-  const saved = process.env.AITNA_ROOT;
-  if (value === null) {
-    delete process.env.AITNA_ROOT;
-  } else {
-    process.env.AITNA_ROOT = value;
-  }
-  try {
-    return body();
-  } finally {
-    if (saved === undefined) {
-      delete process.env.AITNA_ROOT;
-    } else {
-      process.env.AITNA_ROOT = saved;
-    }
-  }
-}
-
-test("the developer's overlay sits under the dev layer's local folder, wherever AITNA_ROOT puts the layer", () => {
+test("the developer's overlay sits under the dev layer's local folder, wherever `.aitna-root` puts the layer", () => {
   assert.equal(localOverlayRel(AGENTS), "local/model-routing.json");
-  assert.equal(
-    withAitnaRoot(null, () => localOverlayPath(AGENTS, "/p")),
-    "/p/_aitna/local/model-routing.json",
-  );
-  assert.equal(
-    withAitnaRoot("meta", () => localOverlayPath(AGENTS, "/p")),
-    "/p/meta/local/model-routing.json",
-  );
+  const root = scratch();
+  assert.equal(localOverlayPath(AGENTS, root), `${root}/_aitna/local/model-routing.json`);
+  assert.equal(overlayPath(AGENTS, root), `${root}/_aitna/model-routing.json`);
+  fs.writeFileSync(posix.join(root, ".aitna-root"), "meta\n");
+  assert.equal(localOverlayPath(AGENTS, root), `${root}/meta/local/model-routing.json`);
+  assert.equal(overlayPath(AGENTS, root), `${root}/meta/model-routing.json`);
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("the local overlay is the strongest layer, a ladder is replaced whole and a sibling key survives", () => {
@@ -348,7 +342,7 @@ test("the local overlay is the strongest layer, a ladder is replaced whole and a
       briefs: { k_explorer: "Mine." },
     }),
   });
-  const merged = withAitnaRoot(null, () => loadRegistry(AGENTS, posix.join(root, "_aitna", "akmon"), root));
+  const merged = loadRegistry(AGENTS, posix.join(root, "_aitna", "akmon"), root);
   assert.deepEqual(merged.second_opinion_policy.ladder, ["codex"]);
   assert.equal(merged.second_opinion_policy.model_rule, "max");
   assert.deepEqual(merged.briefs, { k_explorer: "Mine." });
@@ -356,16 +350,10 @@ test("the local overlay is the strongest layer, a ladder is replaced whole and a
 
 test("the local overlay alone merges over the shipped registry; a directory is no layer", () => {
   const alone = scratch({ "_aitna/local/model-routing.json": '{"briefs": {"k_explorer": "Mine."}}' });
-  assert.deepEqual(
-    withAitnaRoot(null, () => loadRegistry(AGENTS, posix.join(alone, "_aitna", "akmon"), alone)).briefs,
-    { k_explorer: "Mine." },
-  );
+  assert.deepEqual(loadRegistry(AGENTS, posix.join(alone, "_aitna", "akmon"), alone).briefs, { k_explorer: "Mine." });
   const folder = scratch();
   fs.mkdirSync(posix.join(folder, "_aitna", "local", "model-routing.json"), { recursive: true });
-  assert.deepEqual(
-    withAitnaRoot(null, () => loadRegistry(AGENTS, posix.join(folder, "_aitna", "akmon"), folder)),
-    SHIPPED,
-  );
+  assert.deepEqual(loadRegistry(AGENTS, posix.join(folder, "_aitna", "akmon"), folder), SHIPPED);
 });
 
 test("an overlay layer that is not a JSON object is a named one-line error quoting its file", () => {
@@ -376,7 +364,7 @@ test("an overlay layer that is not a JSON object is a named one-line error quoti
     for (const content of ["{ not json", "[1, 2]"]) {
       const root = scratch({ [layer]: content });
       assert.throws(
-        () => withAitnaRoot(null, () => loadRegistry(AGENTS, posix.join(root, "_aitna", "akmon"), root)),
+        () => loadRegistry(AGENTS, posix.join(root, "_aitna", "akmon"), root),
         (error) => {
           assert.ok(error instanceof OverlayError);
           assert.equal(error.name, "OverlayError");
@@ -395,7 +383,7 @@ test("a retired key is named in the layer that holds it: the strongest holder fi
     "_aitna/local/model-routing.json": '{"second_opinion_policy": {"diversity_ladder": []}}',
   });
   assert.throws(
-    () => withAitnaRoot(null, () => refuseRetiredKeys(AGENTS, {}, {}, { projectRoot: local })),
+    () => refuseRetiredKeys(AGENTS, {}, {}, local, { layered: true }),
     (error) => {
       assert.ok(error instanceof RetiredKeyError);
       assert.match(
@@ -410,7 +398,7 @@ test("a retired key is named in the layer that holds it: the strongest holder fi
     "_aitna/local/model-routing.json": '{"second_opinion_policy": {"diversity_ladder": []}}',
   });
   assert.throws(
-    () => withAitnaRoot(null, () => refuseRetiredKeys(AGENTS, {}, {}, { projectRoot: both })),
+    () => refuseRetiredKeys(AGENTS, {}, {}, both, { layered: true }),
     /the routing overlay _aitna\/local\/model-routing\.json still carries the retired key\(s\) second_opinion_policy\.diversity_ladder \(ADR/,
   );
   const project = scratch({
@@ -418,22 +406,39 @@ test("a retired key is named in the layer that holds it: the strongest holder fi
     "_aitna/local/model-routing.json": '{"briefs": {}}',
   });
   assert.throws(
-    () => withAitnaRoot(null, () => refuseRetiredKeys(AGENTS, {}, {}, { projectRoot: project })),
+    () => refuseRetiredKeys(AGENTS, {}, {}, project, { layered: true }),
     /the routing overlay _aitna\/model-routing\.json still carries the retired key\(s\) openai\.second_opinion \(ADR/,
   );
 });
 
 test("without a project root a retired key in the merged registry names both candidate files", () => {
   assert.throws(
-    () => withAitnaRoot(null, () => refuseRetiredKeys(AGENTS, { second_opinion_policy: { diversity_ladder: [] } }, {})),
+    () => refuseRetiredKeys(AGENTS, { second_opinion_policy: { diversity_ladder: [] } }, {}, null),
     /the routing overlay _aitna\/local\/model-routing\.json or _aitna\/model-routing\.json still carries/,
   );
+});
+
+test("an unlayered retired-key refusal names both files under the declared dev root", () => {
+  const root = scratch({ ".aitna-root": "tools/ai\n" });
+  try {
+    assert.throws(
+      () => refuseRetiredKeys(AGENTS, { second_opinion_policy: { diversity_ladder: [] } }, {}, root),
+      (error) => {
+        assert.ok(error instanceof RetiredKeyError);
+        assert.ok(error.message.includes("tools/ai/local/model-routing.json or tools/ai/model-routing.json"));
+        assert.ok(!error.message.includes("_aitna"));
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("an unpinned declared argv drops each element holding the placeholder and the bare flag that pointed at a lone one", () => {
   const argvOf = (/** @type {string[]} */ ...argv) => ({ providers: { d: { argv } } });
   const run = (/** @type {any} */ registry, /** @type {any} */ options = {}) =>
-    opinionCommand(AGENTS, RUNTIME, registry, "d", options);
+    opinionCommand(AGENTS, RUNTIME, registry, "d", null, options);
   assert.deepEqual(run(argvOf("qwen", "-m", "{model}")), ["qwen"]);
   assert.deepEqual(run(argvOf("d-bin", "-m", "{model}", "--flag"), { prompt: "p" }), ["d-bin", "--flag", "p"]);
   // `--model={model}` carries its own flag: only that element goes and the one before it stays.
@@ -463,29 +468,28 @@ test("an ask names the local overlay first and the project overlay second; a ses
     },
     second_opinion_policy: { ladder: ["claude", "pi"] },
   };
-  const asks = withAitnaRoot(null, () =>
-    opinionAsks(AGENTS, RUNTIME, registry, new SecondOpinionSession("claude", "claude", null)),
-  );
+  const asks = opinionAsks(AGENTS, RUNTIME, registry, new SecondOpinionSession("claude", "claude", null), null);
   assert.deepEqual(asks, [
     `pi: priors unknown for its default model; declare providers.pi.family in ${local} to keep it to yourself, or ${project} to share it with the team`,
   ]);
-  const [ask] = withAitnaRoot(null, () =>
-    opinionAsks(AGENTS, RUNTIME, SHIPPED, new SecondOpinionSession("opencode", null, "undeclared/model")),
+  const [ask] = opinionAsks(
+    AGENTS,
+    RUNTIME,
+    SHIPPED,
+    new SecondOpinionSession("opencode", null, "undeclared/model"),
+    null,
   );
   assert.ok(ask.indexOf(local) < ask.indexOf(project) && ask.indexOf(project) < ask.indexOf("session.family"), ask);
   assert.ok(ask.includes("to keep it to yourself") && ask.includes("to share it with the team"));
 });
 
 test("the project overlay path is still the shared file beside the local folder", () => {
-  assert.equal(
-    withAitnaRoot(null, () => overlayPath(AGENTS, "/p")),
-    "/p/_aitna/model-routing.json",
-  );
+  assert.equal(overlayPath(AGENTS, "/p"), "/p/_aitna/model-routing.json");
 });
 
 test("an unknown ladder id names both overlay files to edit", () => {
   assert.throws(
-    () => providerRow(AGENTS, { providers: {} }, "ghost"),
+    () => providerRow(AGENTS, { providers: {} }, "ghost", null),
     (/** @type {any} */ error) => {
       assert.equal(error.name, "KeyError");
       assert.match(error.message, /the ladder names 'ghost', which the providers table does not declare; /);
@@ -507,9 +511,9 @@ test("the family vocabulary is the keys of second_opinion_policy.families, empty
 });
 
 test("checkSessionFamily accepts a member and refuses the rest naming the overlay to extend", () => {
-  checkSessionFamily(AGENTS, SHIPPED, "qwen");
+  checkSessionFamily(AGENTS, SHIPPED, "qwen", null);
   assert.throws(
-    () => checkSessionFamily(AGENTS, SHIPPED, "mimo"),
+    () => checkSessionFamily(AGENTS, SHIPPED, "mimo", null),
     (/** @type {any} */ error) => {
       assert.equal(error.name, "ValueError");
       assert.match(
@@ -683,20 +687,20 @@ function stored(aliases) {
 
 test("an alias resolves to the stored concrete id; a concrete id and the default pass through", () => {
   assert.equal(
-    resolveOpinionModel(AGENTS, ALIAS_REGISTRY, stored({ sol: "gpt-6.1-sol" }), "codex", "sol"),
+    resolveOpinionModel(AGENTS, ALIAS_REGISTRY, stored({ sol: "gpt-6.1-sol" }), "codex", "sol", null),
     "gpt-6.1-sol",
   );
-  assert.equal(resolveOpinionModel(AGENTS, ALIAS_REGISTRY, {}, "codex", "gpt-6.1-sol"), "gpt-6.1-sol");
-  assert.equal(resolveOpinionModel(AGENTS, ALIAS_REGISTRY, {}, "codex", null), null);
+  assert.equal(resolveOpinionModel(AGENTS, ALIAS_REGISTRY, {}, "codex", "gpt-6.1-sol", null), "gpt-6.1-sol");
+  assert.equal(resolveOpinionModel(AGENTS, ALIAS_REGISTRY, {}, "codex", null, null), null);
 });
 
 test("a row without aliases never resolves anything", () => {
-  assert.equal(resolveOpinionModel(AGENTS, ALIAS_REGISTRY, {}, "claude", "opus"), "opus");
+  assert.equal(resolveOpinionModel(AGENTS, ALIAS_REGISTRY, {}, "claude", "opus", null), "opus");
 });
 
 test("an alias without a mapping is refused naming the refresh", () => {
   assert.throws(
-    () => resolveOpinionModel(AGENTS, ALIAS_REGISTRY, stored({ luna: "gpt-6-luna" }), "codex", "sol"),
+    () => resolveOpinionModel(AGENTS, ALIAS_REGISTRY, stored({ luna: "gpt-6-luna" }), "codex", "sol", null),
     (error) => {
       assert.ok(error instanceof UnresolvedAliasError);
       assert.match(error.message, /'sol'/);
@@ -744,9 +748,9 @@ test("a resolved aliases file of the wrong shape is refused naming it", () => {
 });
 
 test("the default token drops the pin and no pin keeps the strongest model", () => {
-  assert.deepEqual(opinionPick(AGENTS, ALIAS_REGISTRY, "codex", "default"), [null, null]);
-  assert.deepEqual(opinionPick(AGENTS, ALIAS_REGISTRY, "codex", null), ["sol", null]);
-  assert.deepEqual(opinionPick(AGENTS, ALIAS_REGISTRY, "codex", "gpt-6.1-sol"), ["gpt-6.1-sol", null]);
+  assert.deepEqual(opinionPick(AGENTS, ALIAS_REGISTRY, "codex", "default", null), [null, null]);
+  assert.deepEqual(opinionPick(AGENTS, ALIAS_REGISTRY, "codex", null, null), ["sol", null]);
+  assert.deepEqual(opinionPick(AGENTS, ALIAS_REGISTRY, "codex", "gpt-6.1-sol", null), ["gpt-6.1-sol", null]);
 });
 
 test("a ladder entry with the default token is found", () => {
@@ -756,7 +760,7 @@ test("a ladder entry with the default token is found", () => {
 
 test("a default ladder entry walks to a target with no pin", () => {
   const session = new SecondOpinionSession("claude", "claude", "opus");
-  const chain = opinionChain(AGENTS, RUNTIME, ALIAS_REGISTRY, session);
+  const chain = opinionChain(AGENTS, RUNTIME, ALIAS_REGISTRY, session, null);
   assert.deepEqual(
     chain.map((target) => [target.provider, target.model]),
     [["codex", null]],
@@ -836,13 +840,13 @@ test("a model splits at its last at sign into the model and the effort", () => {
 });
 
 test("an effort a row lists is accepted and none is always accepted", () => {
-  checkEffort(AGENTS, EFFORT_REGISTRY, "claude", "high");
-  checkEffort(AGENTS, EFFORT_REGISTRY, "qwen", null);
+  checkEffort(AGENTS, EFFORT_REGISTRY, "claude", "high", null);
+  checkEffort(AGENTS, EFFORT_REGISTRY, "qwen", null, null);
 });
 
 test("an effort on a carrier with no efforts is refused naming the carrier", () => {
   assert.throws(
-    () => checkEffort(AGENTS, EFFORT_REGISTRY, "qwen", "high"),
+    () => checkEffort(AGENTS, EFFORT_REGISTRY, "qwen", "high", null),
     (/** @type {any} */ error) => {
       assert.ok(error instanceof EffortError);
       assert.ok(error instanceof Error);
@@ -856,7 +860,7 @@ test("an effort on a carrier with no efforts is refused naming the carrier", () 
 });
 
 test("a level outside the rows levels is refused naming the accepted ones", () => {
-  assert.throws(() => checkEffort(AGENTS, EFFORT_REGISTRY, "claude", "max"), {
+  assert.throws(() => checkEffort(AGENTS, EFFORT_REGISTRY, "claude", "max", null), {
     name: "EffortError",
     message: "provider 'claude' does not accept the effort 'max'; its levels are: low, medium, high",
   });
@@ -873,28 +877,28 @@ test("a pick returns the model and its effort", () => {
     ["@low", ["opus", "low"]],
   ];
   for (const [pinned, expected] of rows) {
-    assert.deepEqual(opinionPick(AGENTS, EFFORT_REGISTRY, "claude", pinned), expected, String(pinned));
+    assert.deepEqual(opinionPick(AGENTS, EFFORT_REGISTRY, "claude", pinned, null), expected, String(pinned));
   }
 });
 
 test("the strongest declared entry carries its own effort", () => {
-  assert.deepEqual(opinionPick(AGENTS, EFFORT_REGISTRY, "mine", null), ["m1", "max"]);
+  assert.deepEqual(opinionPick(AGENTS, EFFORT_REGISTRY, "mine", null, null), ["m1", "max"]);
 });
 
 test("a pick refuses an effort the carrier cannot take", () => {
-  assert.throws(() => opinionPick(AGENTS, EFFORT_REGISTRY, "qwen", "q@high"), EffortError);
-  assert.throws(() => opinionPick(AGENTS, EFFORT_REGISTRY, "claude", "opus@max"), EffortError);
+  assert.throws(() => opinionPick(AGENTS, EFFORT_REGISTRY, "qwen", "q@high", null), EffortError);
+  assert.throws(() => opinionPick(AGENTS, EFFORT_REGISTRY, "claude", "opus@max", null), EffortError);
 });
 
 test("a harness command appends the effort flag after the model flag", () => {
   assert.deepEqual(
-    opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "claude", { model: "opus", effort: "high", prompt: "p" }),
+    opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "claude", null, { model: "opus", effort: "high", prompt: "p" }),
     ["claude", "-p", "--output-format", "text", "--model", "opus", "--effort", "high", "p"],
   );
 });
 
 test("an effort without a model sends only the level", () => {
-  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "codex", { effort: "high", prompt: "p" }), [
+  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "codex", null, { effort: "high", prompt: "p" }), [
     "codex",
     "exec",
     "-c",
@@ -905,13 +909,13 @@ test("an effort without a model sends only the level", () => {
 
 test("a declared argv row takes the effort flag after its argv", () => {
   assert.deepEqual(
-    opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "mine", { model: "m1", effort: "max", prompt: "p" }),
+    opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "mine", null, { model: "m1", effort: "max", prompt: "p" }),
     ["mine", "-m", "m1", "--think", "max", "p"],
   );
 });
 
 test("no effort leaves the command as it was", () => {
-  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "claude", { model: "opus", prompt: "p" }), [
+  assert.deepEqual(opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "claude", null, { model: "opus", prompt: "p" }), [
     "claude",
     "-p",
     "--output-format",
@@ -924,22 +928,22 @@ test("no effort leaves the command as it was", () => {
 
 test("a command refuses an effort the row does not take", () => {
   assert.throws(
-    () => opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "qwen", { model: "q", effort: "high", prompt: "p" }),
+    () => opinionCommand(AGENTS, RUNTIME, EFFORT_REGISTRY, "qwen", null, { model: "q", effort: "high", prompt: "p" }),
     EffortError,
   );
 });
 
 test("an alias is a model whatever effort follows it", () => {
-  assert.equal(isModelAlias(AGENTS, EFFORT_REGISTRY, "codex", "sol"), true);
+  assert.equal(isModelAlias(AGENTS, EFFORT_REGISTRY, "codex", "sol", null), true);
   const registry = { providers: { codex: { aliases: true, models: ["luna", "sol@high"] } } };
-  assert.equal(isModelAlias(AGENTS, registry, "codex", "sol"), true);
-  assert.equal(isModelAlias(AGENTS, registry, "codex", "sol@high"), false);
+  assert.equal(isModelAlias(AGENTS, registry, "codex", "sol", null), true);
+  assert.equal(isModelAlias(AGENTS, registry, "codex", "sol@high", null), false);
 });
 
 test("the walk carries the effort of a ladder entry into its target", () => {
   const registry = effortDeclared(["claude:opus@high", "mine", "qwen"]);
   const session = new SecondOpinionSession("qwen", "qwen", "q");
-  assert.deepEqual(opinionChain(AGENTS, RUNTIME, registry, session), [
+  assert.deepEqual(opinionChain(AGENTS, RUNTIME, registry, session, null), [
     new SecondOpinionTarget("claude", "opus", "claude", "high"),
     new SecondOpinionTarget("mine", "m1", "llama", "max"),
   ]);
@@ -956,34 +960,38 @@ test("the same model at another effort is still the same model", () => {
   };
   const session = new SecondOpinionSession("gamma", "gpt", "z");
   assert.deepEqual(
-    opinionChain(AGENTS, RUNTIME, registry, session).map((target) => [target.provider, target.model, target.effort]),
+    opinionChain(AGENTS, RUNTIME, registry, session, null).map((target) => [
+      target.provider,
+      target.model,
+      target.effort,
+    ]),
     [["alpha", "m", "low"]],
   );
-  assert.deepEqual(opinionSkips(AGENTS, RUNTIME, registry, session), [["beta", "same model as alpha"]]);
+  assert.deepEqual(opinionSkips(AGENTS, RUNTIME, registry, session, null), [["beta", "same model as alpha"]]);
 });
 
 test("a ladder entry with a bad effort is refused even on the sessions own carrier", () => {
   const registry = effortDeclared(["qwen:q@high"]);
   assert.throws(
-    () => opinionChain(AGENTS, RUNTIME, registry, new SecondOpinionSession("qwen", "qwen", "q")),
+    () => opinionChain(AGENTS, RUNTIME, registry, new SecondOpinionSession("qwen", "qwen", "q"), null),
     EffortError,
   );
 });
 
 test("the last resort compares the model of an entry not its effort", () => {
-  const target = opinionLastResort(AGENTS, EFFORT_REGISTRY, new SecondOpinionSession("claude", "claude", "opus"));
+  const target = opinionLastResort(AGENTS, EFFORT_REGISTRY, new SecondOpinionSession("claude", "claude", "opus"), null);
   assert.deepEqual([target.model, target.effort], ["sonnet", null]);
 });
 
 test("a default ladder entry may carry an effort", () => {
   const registry = effortDeclared(["codex:default@high"]);
-  const chain = opinionChain(AGENTS, RUNTIME, registry, new SecondOpinionSession("claude", "claude", "x"));
+  const chain = opinionChain(AGENTS, RUNTIME, registry, new SecondOpinionSession("claude", "claude", "x"), null);
   assert.deepEqual(chain, [new SecondOpinionTarget("codex", null, "gpt", "high")]);
   assert.equal(ladderPinsDefault(AGENTS, registry, "codex"), true);
 });
 
 test("the shipped codex effort flag keeps its quotes inside one argv element", () => {
-  const command = opinionCommand(AGENTS, RUNTIME, SHIPPED, "codex", {
+  const command = opinionCommand(AGENTS, RUNTIME, SHIPPED, "codex", null, {
     model: "gpt-6.1-sol",
     effort: "high",
     prompt: "p",
@@ -1007,11 +1015,11 @@ test("the shipped effort rows are the measured ones", () => {
 });
 
 test("a shipped carrier refuses a level it does not list", () => {
-  assert.throws(() => opinionCommand(AGENTS, RUNTIME, SHIPPED, "codex", { effort: "ultra", prompt: "p" }), {
+  assert.throws(() => opinionCommand(AGENTS, RUNTIME, SHIPPED, "codex", null, { effort: "ultra", prompt: "p" }), {
     name: "EffortError",
     message: /its levels are: low, medium, high, xhigh, max/,
   });
-  assert.throws(() => opinionCommand(AGENTS, RUNTIME, SHIPPED, "opencode", { effort: "high", prompt: "p" }), {
+  assert.throws(() => opinionCommand(AGENTS, RUNTIME, SHIPPED, "opencode", null, { effort: "high", prompt: "p" }), {
     name: "EffortError",
     message: /declares no `efforts`/,
   });

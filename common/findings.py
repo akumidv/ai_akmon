@@ -47,7 +47,7 @@ adopter renders JSON publicly before ``akmon status`` (C59) introduces it.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import InitVar, dataclass
 from pathlib import Path
 from typing import Any
@@ -208,9 +208,16 @@ def print_findings(findings: Iterable[Finding], *, quiet: bool = False) -> None:
         print(render(finding, data))
 
 
-def exit_code(findings: Sequence[Finding], *, strict: bool = False) -> int:
-    """The shared exit contract: errors fail; warnings fail only under ``--strict``."""
-    severities = {finding.severity for finding in findings}
-    if "error" in severities or (strict and "warn" in severities):
+def exit_code(
+    findings: Sequence[Finding], *, strict: bool = False, strict_exempt: Collection[str] = frozenset()
+) -> int:
+    """The shared exit contract: errors fail; warnings fail only under ``--strict``.
+
+    A warning whose code is in ``strict_exempt`` stays visible and never fails, strict or not: the
+    carrier names the exempt codes, each a tolerance with a removal task.
+    """
+    if any(finding.severity == "error" for finding in findings):
+        return 1
+    if strict and any(finding.severity == "warn" and finding.code not in strict_exempt for finding in findings):
         return 1
     return 0

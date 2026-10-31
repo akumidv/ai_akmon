@@ -576,17 +576,45 @@ expected_json = '"{{dir}}/proj"'
 id = "root/custom-root"
 fn = "project_root"
 args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
-env = { "AITNA_ROOT" = "tools/ai" }
-files = { "proj/AGENTS.md" = "", "proj/tools/ai/.akmon.toml" = "", "proj/sub/x" = "" }
+files = { "proj/.aitna-root" = "tools/ai", "proj/AGENTS.md" = "", "proj/tools/ai/.akmon.toml" = "", "proj/sub/x" = "" }
 expected_json = '"{{dir}}/proj"'
 
 [[case]]
-id = "root/custom-root-record-elsewhere"
+id = "root/record-under-undeclared-root"
 fn = "project_root"
 args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
-env = { "AITNA_ROOT" = "tools/ai" }
-files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+files = { "proj/AGENTS.md" = "", "proj/tools/ai/.akmon.toml" = "", "proj/sub/x" = "" }
 expected_json = '"{{dir}}/proj/sub"'
+
+[[case]]
+# The located root answers the project the payload's cwd belongs to, or None where there is none: a hook that
+# writes the local layer stays silent rather than write under a guess (ADR 0022 D09).
+id = "root/located-pointer"
+fn = "located_project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
+files = { "proj/.aitna-root" = "meta", "proj/AGENTS.md" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "root/located-none"
+fn = "located_project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
+files = { "proj/sub/x" = "" }
+expected_json = 'null'
+
+[[case]]
+id = "root/located-record-under-undeclared-root"
+fn = "located_project_root"
+args_json = '[{"cwd": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/tools/ai/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = 'null'
+
+[[case]]
+# No cwd in the payload: the walk begins at the process's directory (the row's scratch directory).
+id = "root/located-no-cwd-key"
+fn = "located_project_root"
+args_json = '[{}]'
+expected_json = 'null'
 
 [[case]]
 id = "root/nested-projects-nearest-wins"

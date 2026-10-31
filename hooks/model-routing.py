@@ -36,9 +36,8 @@ from pathlib import Path
 from claude_adapter import load_payload, run_guarded
 from hook_core import (
     HookResult,
-    aitna_root_name,
     akmon_runtime_root,
-    find_project_root,
+    locate_project_root,
     runtime_root_display,
 )
 
@@ -96,7 +95,6 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     config = _load_config(root)
     event = payload.get("hook_event_name") or "SessionStart"
 
-    aitna = aitna_root_name()
     # Recovery instructions must name a command that works in the tree this project actually has:
     # the mount's script when one exists, `akmon tool` from the installed wheel, whose literal
     # path carries the venv's Python version (C77, ADR-0020/D06). Naming the mount
@@ -104,7 +102,7 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     init_command = routing.tool_command(runtime_root_display(root), "model_routing/init")
     # An overlay `briefs` key matching no agent makes every regeneration lossy, so the
     # rebind is refused rather than run — and the reason is stated instead of swallowed (C50).
-    brief_warn = routing.brief_warning(registry, aitna)
+    brief_warn = routing.brief_warning(registry, root)
 
     # Detect the model the main chain actually runs on (authoritative over settings) and
     # rebind the subagents when it moved. Needs an existing config for the `available`
@@ -153,7 +151,7 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
             additional_context="\n".join(lines),
             system_message="\n".join([lines[0], *overlay, *pressure]),
         )
-    lines = routing.status_lines(config, registry, init_command) + overlay
+    lines = routing.status_lines(config, registry, init_command, root) + overlay
     # Owner-addressed subset: the corridor warning, the fact of a rebind and — for the owner
     # alone — the context-pressure reminder at either level (its info line carries ℹ, not ⚠);
     # the steady-state status line itself stays context-only so the UI is quiet when healthy.
@@ -167,9 +165,10 @@ def model_routing_result(root: Path, payload: dict) -> HookResult | None:
     )
 
 
-def _project_root(payload: dict) -> Path:
+def _project_root(payload: dict) -> Path | None:
+    """The project the payload belongs to, or ``None``: with no project root the hook stays silent (ADR 0022 D09)."""
     cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or str(Path.cwd())
-    return find_project_root(Path(cwd))
+    return locate_project_root(Path(cwd))
 
 
 def _overlay_problem_result(payload: dict, error: routing.OverlayError) -> HookResult | None:
@@ -187,8 +186,11 @@ def _overlay_problem_result(payload: dict, error: routing.OverlayError) -> HookR
 
 def _decide() -> HookResult | None:
     payload = load_payload()
+    root = _project_root(payload)
+    if root is None:
+        return None
     try:
-        return model_routing_result(_project_root(payload), payload)
+        return model_routing_result(root, payload)
     except routing.OverlayError as exc:
         return _overlay_problem_result(payload, exc)
 

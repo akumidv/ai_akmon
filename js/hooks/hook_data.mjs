@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 
 import { read } from "../common/jsondata.mjs";
 
+/** @typedef {import("../common/learning.mjs").LearningData} LearningData */
 /** @typedef {import("../common/markers.mjs").MarkersData} MarkersData */
 /** @typedef {import("../common/materialization.mjs").MaterializationData} MaterializationData */
 /** @typedef {import("../common/runtime.mjs").RuntimeData} RuntimeData */
@@ -36,12 +37,14 @@ import { read } from "../common/jsondata.mjs";
  * @typedef {object} HookData
  * @property {HookDocument} core `hooks/hook_core.json`
  * @property {HookDocument} vocabulary `hooks/vocabulary.json`
+ * @property {LearningData} learning `common/learning.json`
  * @property {MarkersData} markers `common/markers.json`
  * @property {MaterializationData} materialization `common/materialization.json`
  * @property {HookDocument} codex `hooks/codex_hook.json`
  * @property {HookDocument} delegationLog `hooks/delegation_log.json`
  * @property {AgentsData} agents `tools/model_routing/agents.json`
  * @property {GateData} gate `tools/model_routing/gate.json`
+ * @property {Record<string, {roles: string[], role_files: boolean}>} definitions `agents/agents.json`, the agent -> roles table
  * @property {RuntimeData} runtime `common/runtime.json`
  */
 
@@ -52,12 +55,14 @@ export const TREE_ROOT = posix.resolve(posix.dirname(fileURLToPath(import.meta.u
 const FILES = {
   core: "hooks/hook_core.json",
   vocabulary: "hooks/vocabulary.json",
+  learning: "common/learning.json",
   markers: "common/markers.json",
   materialization: "common/materialization.json",
   codex: "hooks/codex_hook.json",
   delegationLog: "hooks/delegation_log.json",
   agents: "tools/model_routing/agents.json",
   gate: "tools/model_routing/gate.json",
+  definitions: "agents/agents.json",
   runtime: "common/runtime.json",
 };
 

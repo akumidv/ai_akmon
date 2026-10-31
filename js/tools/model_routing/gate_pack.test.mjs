@@ -151,6 +151,46 @@ test("main writes the pack and prints the summary", () => {
   assert.ok(result.stdout.endsWith(`\n\n${pack}\n`));
 });
 
+test("the default pack lands under the dev root the project declares", () => {
+  const root = project({ "y.md": "goal\n", ".aitna-root": "meta\n" });
+  const result = run([
+    "--project-root",
+    root,
+    "--gate",
+    "g",
+    "--role",
+    "review",
+    "--yardstick",
+    path.join(root, "y.md"),
+  ]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^gate-pack kind=full role=review\npack: meta\/artifacts\/gates\/g-full-1\.md\n/);
+  assert.ok(fs.existsSync(path.join(root, "meta", "artifacts", "gates", "g-full-1.md")));
+  assert.equal(fs.existsSync(path.join(root, "_aitna")), false);
+});
+
+test("with no project root and no --out it prints the notice, exits 2 and writes nothing", () => {
+  const lone = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gate-pack-lone-")));
+  fs.writeFileSync(path.join(lone, "y.md"), "goal\n");
+  const saved = process.cwd();
+  try {
+    process.chdir(lone);
+    const result = run(["--gate", "g", "--role", "review", "--yardstick", "y.md"]);
+    assert.equal(result.code, 2);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /^\[akmon\] no project root at or above /);
+    assert.ok(result.stderr.includes("pass --project-root to name the root instead"));
+    assert.deepEqual(fs.readdirSync(lone), ["y.md"]);
+    // an explicit --out is the owner's own destination, so it still writes
+    const out = run(["--gate", "g", "--role", "review", "--yardstick", "y.md", "--out", "p.md"]);
+    assert.equal(out.code, 0, out.stderr);
+    assert.deepEqual(fs.readdirSync(lone).sort(), ["p.md", "y.md"]);
+  } finally {
+    process.chdir(saved);
+    fs.rmSync(lone, { recursive: true, force: true });
+  }
+});
+
 test("usage errors are one line and exit 2", () => {
   assert.deepEqual(run(["--role", "review"]), {
     code: 2,

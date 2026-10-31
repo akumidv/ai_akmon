@@ -24,7 +24,7 @@ from pathlib import Path
 
 # The tree root, so the shared ``common`` package resolves: it holds the single owner of
 # project-root discovery (C73) and is reachable at the same tree-relative depth from the
-# mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+# mounted tree and from the materialized ``<dev root>/.akmon/`` copy alike.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from common import jsondata
@@ -173,6 +173,15 @@ def _report_dir(root: Path) -> Path:
     return aitna_root(root) / "artifacts" / "gates"
 
 
+def _write_pack(pack: str, args: argparse.Namespace, root: Path) -> Path:
+    """Write ``pack`` to ``--out``, else to the next free name under the project's gates directory; its path."""
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(pack, encoding="utf-8")
+        return args.out
+    return create_report(_report_dir(root), _report_prefix(args.gate, args.kind, args.task), pack)
+
+
 def _report_prefix(gate: str, kind: str, task: str | None) -> str:
     """``[<task>-]<gate>-<kind>``: the default pack's name before its ``-<n>.md`` ordinal (C114)."""
     return report_prefix(f"{safe_name(gate) or 'gate'}-{kind}", task)
@@ -215,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--out",
         type=Path,
-        help="Output path. Defaults to <AITNA_ROOT>/artifacts/gates/[<task>-]<gate>-<kind>-<n>.md, n the next ordinal.",
+        help="Output path. Defaults to <dev root>/artifacts/gates/[<task>-]<gate>-<kind>-<n>.md, n the next ordinal.",
     )
     parser.add_argument(
         "--stdout",
@@ -232,6 +241,9 @@ def main(argv: list[str] | None = None) -> int:
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
         print(root_notice, file=sys.stderr)
+        if not args.out:
+            # The default pack lands in the local layer, and with no project root there is none (ADR 0022 D09).
+            return 2
     yardstick_text = args.yardstick.read_text(encoding="utf-8")
 
     if args.kind == "plan-check":
@@ -254,12 +266,7 @@ def main(argv: list[str] | None = None) -> int:
             ),
         )
 
-    if args.out:
-        out = args.out
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(pack, encoding="utf-8")
-    else:
-        out = create_report(_report_dir(root), _report_prefix(args.gate, args.kind, args.task), pack)
+    out = _write_pack(pack, args, root)
     try:
         rel = out.relative_to(root)
     except ValueError:

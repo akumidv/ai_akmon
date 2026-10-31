@@ -192,9 +192,10 @@ function _existingSecondOpinion(data, projectRoot) {
  *   sessionFamily: string | null}} options
  * @param {Json} registry
  * @param {Record<string, Json>} existing the recorded local config
+ * @param {string} root
  * @returns {Record<string, string> | null}
  */
-function _sessionStanza(data, options, registry, existing) {
+function _sessionStanza(data, options, registry, existing, root) {
   const recordedValue = dictGet(existing, "session");
   /** @type {Record<string, Json>} */
   const recorded = isDict(recordedValue) ? recordedValue : {};
@@ -202,7 +203,7 @@ function _sessionStanza(data, options, registry, existing) {
     return Object.keys(recorded).length > 0 ? { ...recorded } : null;
   }
   if (options.sessionFamily) {
-    checkSessionFamily(data, registry, options.sessionFamily);
+    checkSessionFamily(data, registry, options.sessionFamily, root);
   }
   const vendorBlock = dictGet(registry, options.vendor);
   const carrier = isDict(vendorBlock) ? dictGet(vendorBlock, "carrier") : null;
@@ -398,8 +399,8 @@ export function main(argv = process.argv.slice(2)) {
 
   /** @type {Record<string, string> | null} */ let session;
   try {
-    refuseRetiredKeys(data, registry, {}, { projectRoot: root });
-    session = _sessionStanza(data, options, registry, _existingConfig(data, root));
+    refuseRetiredKeys(data, registry, {}, root, { layered: true });
+    session = _sessionStanza(data, options, registry, _existingConfig(data, root), root);
   } catch (exc) {
     if (!_isRefusal(exc)) {
       throw exc;
@@ -419,7 +420,7 @@ export function main(argv = process.argv.slice(2)) {
     // hand-authored project instructions, and the sweep below would then delete the only files
     // still carrying them (C50).
     process.stderr.write(`error: ${exc.message}\n`);
-    const overlay = pyPath(aitnaRootName(), overlayName(data));
+    const overlay = pyPath(aitnaRootName(root), overlayName(data));
     process.stderr.write(`error: fix ${overlay}; no files were written\n`);
     return 2;
   }
@@ -447,7 +448,7 @@ export function main(argv = process.argv.slice(2)) {
     process.stdout.write(`${write ? "deleted" : "would delete"}: ${_rel(root, path)}\n`);
   }
 
-  const [head] = opinionHead(data, runtime, registry, jsonLoads(artifacts[localConfigRel(data)]));
+  const [head] = opinionHead(data, runtime, registry, jsonLoads(artifacts[localConfigRel(data)]), root);
   process.stdout.write(
     "model routing: " +
       `vendor=${binding.vendor} · orchestrator=${binding.orchestrator} · reasoner=${binding.reasoner} · ` +

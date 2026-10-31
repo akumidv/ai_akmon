@@ -42,12 +42,12 @@ mechanizes the mechanical steps and prints pointers for the judgment steps.
 ## Current state (what we build on)
 
 - `bin/sync.py`, `bin/verify.py` — stdlib-only, argparse CLIs, project-root discovery via
-  `AGENTS.md` + `<AITNA_ROOT>/akmon`; safe to run repeatedly. Already shaped like console
+  `AGENTS.md` + `<dev root>/akmon`; safe to run repeatedly. Already shaped like console
   entry points in everything but packaging.
 - `tools/model_routing/init.py` — the routing initializer `init` must invoke as a step.
-- `<AITNA_ROOT>/.akmon.toml` — the integration record (version, `[test].runner`); the
+- `<dev root>/.akmon.toml` — the integration record (version, `[test].runner`); the
   natural place for `init` to record the chosen mount mode.
-- `AITNA_ROOT` env — the dev-layer root is already parameterized; the CLI inherits it.
+- `.aitna-root` file — the dev-layer root is already declared by a file the CLI reads; no environment variable carries it.
 - Versioning `v0.x.y` + CHANGELOG + release role (ADR 0001) — the package rides the same
   release, it does not get its own version line.
 - LICENSE (Apache-2.0) present; repo public at `github.com/akumidv/ai_akmon`.
@@ -65,7 +65,7 @@ mechanizes the mechanical steps and prints pointers for the judgment steps.
 **Proposed: C.** One PyPI distribution, built from the same git tag the release cuts, so
 `package version == standard version`, always. `init --mode submodule` keeps today's
 default distribution intent (deterministic pin, PR governance); `--mode vendored` copies
-the embedded tree into `<AITNA_ROOT>/akmon` and records the version in `.akmon.toml`
+the embedded tree into `<dev root>/akmon` and records the version in `.akmon.toml`
 (pin = recorded version, updated by `akmon update`, which runs the target release's own `init`
 — [A23](update-command.md)); `--mode subtree`
 documented, delegated to git. Default mode: `submodule` when the project is a git repo
@@ -73,7 +73,7 @@ with network, else `vendored` — always printed, never silent. *(lock)*
 
 ### Mount mode `package` — no standard tree in the repo
 
-The three modes above all materialize the tree at `<AITNA_ROOT>/akmon`. Mode `package`
+The three modes above all materialize the tree at `<dev root>/akmon`. Mode `package`
 removes the in-repo tree entirely: the consumer pins akmon in its own dependency
 manifest (a uv dev-group entry — `akmon @ git+https://github.com/akumidv/ai_akmon@vX.Y.Z`
 until the first PyPI publish, `akmon==X.Y.Z` after) and the standard lives in
@@ -82,7 +82,7 @@ extra: akmon is dev tooling and must not reach the consumer's own users.
 
 What must still exist as files in the consumer repo is exactly what the **harness** has to
 resolve by path: the guardrails the consumer's AGENTS.md @-imports. `akmon sync`
-**materializes** those, and only those, into `<AITNA_ROOT>/.akmon/guardrails/`. Pointing the
+**materializes** those, and only those, into `<dev root>/.akmon/guardrails/`. Pointing the
 import into the package instead was considered and rejected in the C77 amendment: AGENTS.md is
 committed, the path into the package carries the venv's Python version, and an @-import that
 does not resolve reports nothing at all. Because the copy is the consumer's *rules*, it is held
@@ -104,9 +104,9 @@ pin bump, `sync` refreshes, hand-edits are overwritten like any generated pointe
 it — banner or not, which is what finally clears a previous version's routing registry.
 Consequences inside the tools (C37 scope):
 
-- **Standard-tree resolution decouples from the mount:** tree root = `<AITNA_ROOT>/akmon`
+- **Standard-tree resolution decouples from the mount:** tree root = `<dev root>/akmon`
   when it exists, else the installed package's embedded tree (`importlib.resources`).
-  Project-root discovery accepts `AGENTS.md` + `<AITNA_ROOT>/.akmon.toml` as well as the
+  Project-root discovery accepts `AGENTS.md` + `<dev root>/.akmon.toml` as well as the
   mount (`common/project_root.py::is_project_root`).
 - **Hook wiring becomes mode-aware:** `python3 "<anchor>/{aitna}/akmon/hooks/<hook>.py"`
   (mounted) vs `"<anchor>/.venv/bin/akmon" hook <hook>` (package). Entry recognition covers
@@ -147,6 +147,7 @@ uvx akmon init [--mode submodule|vendored|subtree|package] [--aitna-root PATH] [
 akmon update [--ref REF]        # A23: move the pin, then realign — design in update-command.md
 akmon sync  [--check|--dry-run]
 akmon verify [--strict]
+akmon trust status|diff|accept|revoke|report   # C172: digest trust for a project's own grants — ADR 0025/D05
 akmon path
 akmon hook <name> [args...]
 akmon version
@@ -194,9 +195,10 @@ a submodule" let a `vendored → submodule` switch finish green with no `.gitmod
   declaration, and prose is not a pin; a manifest that does not parse is reported as such, not
   as a missing pin. `verify --strict` keeps the check alive past the attach, for projects that have a
   `pyproject.toml` at all.*
-- ***The dev-layer root is validated wherever it comes from.** `--aitna-root` and `AITNA_ROOT`
-  are one contract — the flag's whole effect is to set the variable — so both are refused when
-  absolute or when they climb out of the project, lexically and after resolution.*
+- ***The dev-layer root is validated wherever it comes from.** `--aitna-root` and the `.aitna-root`
+  file are one contract — the flag's whole effect is to write the file — so both are refused when
+  absolute or when they climb out of the project, lexically and after resolution
+  ([ADR 0022 D09](../../adr/0022-local-layer-index-and-plans.md#d09--how-the-dev-root-is-declared-and-found)).*
 - ***Mode `package` requires the virtualenv inside the project root.** The generated wiring
   names the console script by a project-relative path, and that wiring is a committed file every
   developer on the project runs; an absolute path to whichever venv happened to run `sync` is a
@@ -293,7 +295,7 @@ plan they were.*
 3. **Vendored + subtree modes** — embedded-tree copy with version record; subtree
    documented in BOOTSTRAP. Skew notice in the launchers.
 4. **Package mode** — mount-decoupled tree resolution (root discovery via
-   `.akmon.toml`; embedded tree via `importlib.resources`), `<AITNA_ROOT>/.akmon/`
+   `.akmon.toml`; embedded tree via `importlib.resources`), `<dev root>/.akmon/`
    materialization of the imported guardrails, `akmon hook` wiring, `akmon path`,
    `mount` key in `.akmon.toml`. **Pilot on alphavar** (git+https dev-group pin):
    detach the submodule, pin, re-point AGENTS.md @-imports and vendor hook wiring at

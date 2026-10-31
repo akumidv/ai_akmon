@@ -19,10 +19,10 @@ The release **subject** is parameterized, selected with ``--subject``:
 
 The third subject — an akmon **pin bump** recorded in a consuming project — is deferred
 (backlog T18). For ``package``, project-specific check/build commands live in the project's
-``<AITNA_ROOT>/agents/release/README.md`` (the release-agent incarnation); this tool reads that
+``<dev root>/agents/release/README.md`` (the release-agent incarnation); this tool reads that
 charter and points the owner at it rather than inventing commands.
 
-The skill that drives this tool: ``<AITNA_ROOT>/akmon/skills/release/SKILL.md``.
+The skill that drives this tool: ``<dev root>/akmon/skills/release/SKILL.md``.
 """
 
 from __future__ import annotations
@@ -74,14 +74,14 @@ def subjects() -> tuple[str, ...]:
     return tuple(_release_data()["subjects"])
 
 
-def _release_charter() -> str:
-    """The release charter, project-root-relative, under the *configured* dev layer.
+def _release_charter(root: Path | None) -> str:
+    """The release charter, project-root-relative, under the project's *declared* dev layer.
 
-    A function rather than a constant because ``AITNA_ROOT`` is read at call time: the
+    A function rather than a constant because the dev layer is the project's to declare: the
     literal this replaced pointed a project with a relocated dev layer at a file it does not
     have, both when reading it and when printing it into the owner-run plan.
     """
-    return f"{aitna_root_name()}/agents/release/README.md"
+    return f"{aitna_root_name(root)}/agents/release/README.md"
 
 
 def _read(path: Path) -> str:
@@ -146,7 +146,7 @@ def _tasks_summary(tasks_dir: Path) -> list[str]:
 def run_state(root: Path, subject: str) -> int:
     """``--state``: print the TASKS / CHANGELOG / release-charter / git-status summary.
 
-    The akmon subject reads ``<AITNA_ROOT>/akmon`` when the project mounts it, else the running
+    The akmon subject reads ``<dev root>/akmon`` when the project mounts it, else the running
     tree itself (an akmon clone). It is refused (exit 2) when that tree has no ``meta/`` at all: a
     package carrier ships no development record, and a summary of nothing but ``(missing)`` lines
     would read as an empty backlog. A ``meta/`` missing one file keeps its ``(missing)`` line.
@@ -181,9 +181,9 @@ def run_state(root: Path, subject: str) -> int:
         print(line)
     print()
     if subject == "package":
-        charter = root / _release_charter()
+        charter = root / _release_charter(root)
         note = texts["charter_found"] if charter.is_file() else texts["charter_missing"]
-        print(jsondata.fill(texts["charter_line"], {"charter": _release_charter(), "note": note}))
+        print(jsondata.fill(texts["charter_line"], {"charter": _release_charter(root), "note": note}))
         print()
     print(jsondata.fill(texts["git_status_header"], {"name": git_dir.name}))
     for line in _git_status(git_dir).splitlines():
@@ -686,12 +686,12 @@ def _check_tags(root: Path, version: str | None, *, has_changelog: bool, heading
 
 
 def _pinned_test_runner(root: Path) -> str | None:
-    """The `[test].runner` recorded in `<root>/<AITNA_ROOT>/.akmon.toml`, if any.
+    """The `[test].runner` recorded in `<root>/<dev root>/.akmon.toml`, if any.
 
     Attach (BOOTSTRAP §A5) pins the project's *existing* test environment here — `uv` may be
     absent, and a Python project usually already has its own manager (poetry/pdm/pip-venv/conda)
     and an env with pytest, so the right move is to *use what is there*, decided once at attach,
-    not to re-guess (or build a second `<AITNA_ROOT>/.venv`) on every run. Absent → fall back to
+    not to re-guess (or build a second `<dev root>/.venv`) on every run. Absent → fall back to
     `_pytest_command`'s discovery for projects that predate this field.
     """
     test = read_akmon_toml(aitna_root(root) / ".akmon.toml").get("test")
@@ -702,7 +702,7 @@ def _pinned_test_runner(root: Path) -> str | None:
 def _pytest_command(root: Path, tests: str) -> list[str]:
     """Resolve a test runner: the pinned `test_runner` (attach record) first, else discovery.
 
-    Discovery order: the dev-layer venv BOOTSTRAP §A5 provisions (`<AITNA_ROOT>/.venv`) → a system
+    Discovery order: the dev-layer venv BOOTSTRAP §A5 provisions (`<dev root>/.venv`) → a system
     pytest → `uv` → `python -m pytest`. The dev venv comes first because it is the deliberately-
     provisioned env; `uv` is a fallback, and when used it must install pytest on the fly
     (`--with pytest`) — a bare `uv run pytest` runs in an ephemeral env *without* pytest and fails.
@@ -748,13 +748,13 @@ def run_check(root: Path, subject: str) -> int:
             [sys.executable, str(BIN / "verify.py"), "--project-root", str(root), "--strict", "--quiet"],
         ]
         failed = _run_commands(root, commands)
-        charter = root / _release_charter()
+        charter = root / _release_charter(root)
         if charter.is_file():
-            print("\n" + jsondata.fill(texts["charter_runs_note"], {"charter": _release_charter()}))
+            print("\n" + jsondata.fill(texts["charter_runs_note"], {"charter": _release_charter(root)}))
             print(texts["charter_runs_note_suffix"])
         else:
-            print("\n" + jsondata.fill(texts["charter_missing_note"], {"charter": _release_charter()}))
-            failed.append(_release_charter())
+            print("\n" + jsondata.fill(texts["charter_missing_note"], {"charter": _release_charter(root)}))
+            failed.append(_release_charter(root))
 
     if exit_code(version_findings):
         failed.append(texts["version_check_failed_item"])
@@ -804,7 +804,7 @@ def _mount_path(tree: Path) -> str | None:
     """``tree``'s path from the project root that mounts it, or None when no project mounts it.
 
     The akmon tag is cut from ``tree`` — the tree ``--check`` reads, ``AKMON_ROOT``. A consumer
-    that mounts it (submodule or subtree) has it at ``<AITNA_ROOT>/akmon`` below its own root,
+    that mounts it (submodule or subtree) has it at ``<dev root>/akmon`` below its own root,
     and the owner runs the plan from there after a ``cd``; akmon's own repository is that tree
     already, so it takes no ``cd`` (C130).
     """
@@ -815,7 +815,7 @@ def _mount_path(tree: Path) -> str | None:
     return mount.relative_to(project).as_posix()
 
 
-def run_plan(version: str, subject: str, tree: Path = AKMON_ROOT) -> int:
+def run_plan(version: str, subject: str, tree: Path = AKMON_ROOT, project_root: Path | None = None) -> int:
     """The owner-run command set, with the version bump ahead of the staging step.
 
     The order is load-bearing, not cosmetic. Until C54 this plan staged ``CHANGELOG.md`` and
@@ -825,7 +825,8 @@ def run_plan(version: str, subject: str, tree: Path = AKMON_ROOT) -> int:
     first, every version literal is named, and every one of them is staged explicitly.
 
     ``tree`` is the akmon tree the tag is cut from; the plan opens with a ``cd`` into it only
-    when a consuming project mounts it (``_mount_path``).
+    when a consuming project mounts it (``_mount_path``). ``project_root`` is the project a
+    ``package`` plan is run in, for the path of its release charter.
     """
     plan = _release_data()["run_plan"]
     if not _VERSION_RE.match(version):
@@ -846,7 +847,7 @@ def run_plan(version: str, subject: str, tree: Path = AKMON_ROOT) -> int:
     if subject == "akmon":
         lines += [jsondata.fill(line, {"literal": literal}) for line in facts["literal_lines"]]
     else:  # package — run from the project root.
-        lines.append(jsondata.fill(facts["literal_line"], {"charter": _release_charter()}))
+        lines.append(jsondata.fill(facts["literal_line"], {"charter": _release_charter(project_root)}))
     lines.append(jsondata.fill(plan["changelog_note"], {"version": version}))
     lines.append(plan["recheck_note"])
     lines.append("")
@@ -857,7 +858,7 @@ def run_plan(version: str, subject: str, tree: Path = AKMON_ROOT) -> int:
     lines.append(jsondata.fill(plan["tag_line"], {"version": version}))
     lines.append(plan["push_line"])
     if subject == "package":
-        lines.append("\n" + jsondata.fill(facts["publish_note"], {"charter": _release_charter()}))
+        lines.append("\n" + jsondata.fill(facts["publish_note"], {"charter": _release_charter(project_root)}))
     lines.append("")
     # The akmon subject reopens a third carrier whose spelling is derived, so it carries its own
     # note, filled with what the shared logic derives for the development form of this literal;
@@ -888,10 +889,12 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--plan", metavar="vX.Y.Z", help="Print the owner-run commit/tag/push command set.")
     args = parser.parse_args(argv)
 
-    if args.plan:
-        return run_plan(args.plan, args.subject)
-
     root, root_notice = resolve_project_root(args.project_root)
+    if args.plan:
+        # Only a package plan names a path under the project (its release charter); the akmon plan is the tree's own.
+        if root_notice and args.subject == "package":
+            print(root_notice, file=sys.stderr)
+        return run_plan(args.plan, args.subject, project_root=root)
     if root_notice:
         print(root_notice, file=sys.stderr)
     if args.state:

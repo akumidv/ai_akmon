@@ -14,7 +14,7 @@
  */
 
 import { dictGet, truthy } from "../common/pyvalue.mjs";
-import { loadPayload, runAsEntryPoint, runGuarded } from "./claude_adapter.mjs";
+import { attendedFromEnvironment, loadPayload, runAsEntryPoint, runGuarded } from "./claude_adapter.mjs";
 import { gitCommitGuardResult, privilegeEscalationGuardResult, reportUnclassifiedShellRoute } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 
@@ -39,6 +39,7 @@ function decide(data) {
     privilegeEscalationGuardResult(data, command) ??
     gitCommitGuardResult(data, command, null, {
       permissionMode: typeof permissionMode === "string" ? permissionMode : null,
+      attended: attendedFromEnvironment(process.env),
     })
   );
 }

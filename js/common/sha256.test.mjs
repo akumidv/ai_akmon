@@ -16,7 +16,7 @@ test("sha256Hex matches node:crypto around every padding boundary and on non-ASC
     const text = "x".repeat(length);
     assert.equal(sha256Hex(text), reference(text), `length ${length}`);
   }
-  for (const text of ["é", "🧭 agent", "\u0000\u0001", "a\0b", "日本語".repeat(40)]) {
+  for (const text of ["é", "🧭 role", "\u0000\u0001", "a\0b", "日本語".repeat(40)]) {
     assert.equal(sha256Hex(text), reference(text));
   }
 });

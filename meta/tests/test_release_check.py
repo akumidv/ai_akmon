@@ -448,12 +448,10 @@ def test_the_plan_has_no_cd_in_akmons_own_repository(tmp_path, capsys):
 
 
 @pytest.mark.parametrize(("aitna", "mount"), [(None, "_aitna/akmon"), ("tools/ai", "tools/ai/akmon")])
-def test_the_plan_cds_into_the_mounted_tree(tmp_path, capsys, monkeypatch, aitna, mount):
-    if aitna is None:
-        monkeypatch.delenv("AITNA_ROOT", raising=False)
-    else:
-        monkeypatch.setenv("AITNA_ROOT", aitna)
+def test_the_plan_cds_into_the_mounted_tree(tmp_path, capsys, aitna, mount):
     (tmp_path / "AGENTS.md").write_text("x\n", encoding="utf-8")
+    if aitna is not None:
+        (tmp_path / ".aitna-root").write_text(f"{aitna}\n", encoding="utf-8")
     tree = tmp_path / mount
     tree.mkdir(parents=True)
     (tree / "AGENTS.md").write_text("x\n", encoding="utf-8")
@@ -640,31 +638,32 @@ def test_the_reopen_contract_fails_on_a_mutated_plan(mutate, capsys):
         _assert_plan_reopens_the_cycle(mutate(_plan_lines(capsys)))
 
 
-def test_the_integration_record_is_read_from_the_configured_dev_layer(tmp_path, monkeypatch):
+def test_the_integration_record_is_read_from_the_configured_dev_layer(tmp_path):
     """A relocated dev layer must not make the pinned runner invisible.
 
-    The record path was spelled ``_aitna`` directly, so under ``AITNA_ROOT=tools/ai`` the
+    The record path was spelled ``_aitna`` directly, so under a ``.aitna-root`` of ``tools/ai`` the
     pinned ``[test].runner`` was never seen and the check silently fell through to discovery —
     running the project's tests under a different interpreter than the one attach pinned.
     """
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+    (tmp_path / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     (tmp_path / "tools" / "ai").mkdir(parents=True)
     (tmp_path / "tools" / "ai" / ".akmon.toml").write_text('[test]\nrunner = "poetry run pytest"\n', encoding="utf-8")
     assert release_check._pinned_test_runner(tmp_path) == "poetry run pytest"
     assert release_check._pytest_command(tmp_path, "TESTS") == ["poetry", "run", "pytest", "TESTS"]
 
 
-def test_the_dev_venv_is_discovered_under_the_configured_dev_layer(tmp_path, monkeypatch):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+def test_the_dev_venv_is_discovered_under_the_configured_dev_layer(tmp_path):
+    (tmp_path / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     venv_python = tmp_path / "tools" / "ai" / ".venv" / "bin" / "python"
     venv_python.parent.mkdir(parents=True)
     venv_python.write_text("#!/bin/sh\n", encoding="utf-8")
     assert release_check._pytest_command(tmp_path, "TESTS") == [str(venv_python), "-m", "pytest", "TESTS"]
 
 
-def test_the_release_charter_path_follows_the_configured_dev_layer(monkeypatch):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
-    assert release_check._release_charter() == "tools/ai/agents/release/README.md"
+def test_the_release_charter_path_follows_the_configured_dev_layer(tmp_path):
+    assert release_check._release_charter(tmp_path) == "_aitna/agents/release/README.md"
+    (tmp_path / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
+    assert release_check._release_charter(tmp_path) == "tools/ai/agents/release/README.md"
 
 
 # --------------------------------------------------------------------------------------
@@ -814,7 +813,7 @@ def test_semver_spelling_carries_a_final_version_and_its_development_spelling():
 
 
 def test_state_refuses_the_akmon_subject_without_its_meta(tmp_path, capsys):
-    """No ``<AITNA_ROOT>/akmon/meta/`` at all (package mode, a carrier): one refusal line, exit 2."""
+    """No ``<dev root>/akmon/meta/`` at all (package mode, a carrier): one refusal line, exit 2."""
     (tmp_path / "_aitna" / "akmon").mkdir(parents=True)
     assert release_check.run_state(tmp_path, "akmon") == 2
     out, err = capsys.readouterr()
@@ -824,7 +823,7 @@ def test_state_refuses_the_akmon_subject_without_its_meta(tmp_path, capsys):
 
 
 def test_state_reads_the_running_tree_when_no_akmon_is_mounted(tmp_path, monkeypatch, capsys):
-    """Inside an akmon clone there is no ``<AITNA_ROOT>/akmon``: the running tree's meta/ is the record."""
+    """Inside an akmon clone there is no ``<dev root>/akmon``: the running tree's meta/ is the record."""
     clone = tmp_path / "clone"
     (clone / "meta").mkdir(parents=True)
     (clone / "meta" / "TASKS.md").write_text("- C1 · a · active · e\n", encoding="utf-8")

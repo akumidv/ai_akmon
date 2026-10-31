@@ -1,0 +1,27 @@
+# SessionStart with the three shipped agents' charters (development, release, learning): each agent
+# is named with the roles its definition gives it (agents/agents.json), listed in the order of the delivery chain (agents/agents.json). The
+# project root also holds a shipped-style `agents/` folder of definition files and `agents.json` — akmon
+# running on itself — which must not appear as OPERATE agents.
+id = "hooks/session-start-roster-agents"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:session-start-agent"]
+
+[fixture]
+files = { "_aitna/agents/release/README.md" = "# Agent — release\n", "_aitna/agents/learning/README.md" = "# Agent — learning\n", "agents/README.md" = "# agents\n", "agents/development.md" = "# Agent: development\n", "agents/agents.json" = "{}\n" }
+
+[run]
+script = "session-start-agent"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-ss-roster-agents"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+[expected.stdout_json]
+[expected.stdout_json.hookSpecificOutput]
+hookEventName = "SessionStart"
+additionalContext = "[akmon] Role declaration\nBefore doing project work, state which role you are operating in, and restate it whenever you switch. Format: `🧭 role: <name> — <focus>`.\n- DEVELOP (build the project), agents and the roles they work in: development — roles review, architect, engineer; learning — role learn; release — role release\nNo role is declared yet.\nPick the role (never an agent name) by operation: decompose an existing thing → review · construct a new structure/decision → architect · realize a decided structure in code → engineer. If unclear, ask.\nDelegation is the default for non-atomic work: before the first repository sweep, edit, or test run, decompose the task and delegate every independent sub-step to available subagents. Keep only decomposition, routing, synthesis, and owner dialogue in the orchestrator. Skip delegation only when the task is atomic or the harness exposes no subagents; state the reason.\nAlso: read `_aitna/memory/` at session start (project memory)."

@@ -31,9 +31,17 @@ import routing  # noqa: E402
 _SHIPPED = routing.load_registry(_AKMON)
 
 
-def test_opinion_command_without_model_is_the_map_prefix_and_the_prompt():
+@pytest.fixture
+def project(tmp_path):
+    """A minimal project whose dev root is the default `_aitna` (no `.aitna-root` declaration)."""
+    (tmp_path / "AGENTS.md").write_text("# project\n", encoding="utf-8")
+    (tmp_path / "_aitna").mkdir()
+    return tmp_path
+
+
+def test_opinion_command_without_model_is_the_map_prefix_and_the_prompt(project):
     registry = {"providers": {"claude": {"operation": "review", "model_flag": "--model {model}"}}}
-    assert routing.opinion_command(registry, "claude", prompt="review this") == [
+    assert routing.opinion_command(registry, "claude", project, routing.OpinionRun(prompt="review this")) == [
         "claude",
         "-p",
         "--output-format",
@@ -42,9 +50,11 @@ def test_opinion_command_without_model_is_the_map_prefix_and_the_prompt():
     ]
 
 
-def test_opinion_command_with_model_inserts_the_flag_before_the_prompt():
+def test_opinion_command_with_model_inserts_the_flag_before_the_prompt(project):
     registry = {"providers": {"claude": {"operation": "review", "model_flag": "--model {model}"}}}
-    assert routing.opinion_command(registry, "claude", model="opus", prompt="review this") == [
+    assert routing.opinion_command(
+        registry, "claude", project, routing.OpinionRun(model="opus", prompt="review this")
+    ) == [
         "claude",
         "-p",
         "--output-format",
@@ -55,9 +65,11 @@ def test_opinion_command_with_model_inserts_the_flag_before_the_prompt():
     ]
 
 
-def test_opinion_command_with_a_model_id_holding_slash_and_colon_keeps_it_one_argument():
+def test_opinion_command_with_a_model_id_holding_slash_and_colon_keeps_it_one_argument(project):
     registry = {"providers": {"opencode": {"operation": "review", "model_flag": "-m {model}"}}}
-    assert routing.opinion_command(registry, "opencode", model="anthropic/claude-sonnet-4:beta", prompt="p") == [
+    assert routing.opinion_command(
+        registry, "opencode", project, routing.OpinionRun(model="anthropic/claude-sonnet-4:beta", prompt="p")
+    ) == [
         "opencode",
         "run",
         "--agent",
@@ -68,16 +80,16 @@ def test_opinion_command_with_a_model_id_holding_slash_and_colon_keeps_it_one_ar
     ]
 
 
-def test_opinion_command_with_model_but_no_model_flag_fails_loudly():
+def test_opinion_command_with_model_but_no_model_flag_fails_loudly(project):
     """C97: a pin the provider cannot apply is an error, not a silently unpinned run."""
     registry = {"providers": {"codex": {"operation": "review"}}}
     with pytest.raises(routing.UnpinnableModelError, match="declares no model_flag"):
-        routing.opinion_command(registry, "codex", model="o3", prompt="review this")
+        routing.opinion_command(registry, "codex", project, routing.OpinionRun(model="o3", prompt="review this"))
 
 
-def test_every_shipped_provider_declares_a_flag_that_pins_a_model_before_the_prompt():
+def test_every_shipped_provider_declares_a_flag_that_pins_a_model_before_the_prompt(project):
     for provider in routing.providers(_SHIPPED):
-        argv = routing.opinion_command(_SHIPPED, provider, model="m", prompt="p")
+        argv = routing.opinion_command(_SHIPPED, provider, project, routing.OpinionRun(model="m", prompt="p"))
         # A stdin row (qwen) carries no prompt argument: the model is then last.
         pinned = argv[:-1] if _SHIPPED["providers"][provider].get("prompt") != "stdin" else argv
         assert pinned[-1] == "m", provider
@@ -195,36 +207,36 @@ _ALL_PRESENT = (
 @pytest.fixture
 def all_present(monkeypatch):
     """Presence is a host fact the test supplies; nothing here reads `PATH` (ADR 0024/D11)."""
-    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: provider in _ALL_PRESENT)
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider, project_root: provider in _ALL_PRESENT)
 
 
 def _session(provider, family, model=None):
     return routing.SecondOpinionSession(provider=provider, family=family, model=model)
 
 
-def test_ladder_walk_skips_the_session_carrier(all_present):
-    target = routing.resolve_opinion_chain(_PRIORS_REGISTRY, _session("claude", "claude"), rank=2)
+def test_ladder_walk_skips_the_session_carrier(all_present, project):
+    target = routing.resolve_opinion_chain(_PRIORS_REGISTRY, _session("claude", "claude"), project, rank=2)
     assert target == routing.SecondOpinionTarget("codex", None, "gpt")
 
 
-def test_ladder_walk_is_relative_to_the_session_not_absolute(all_present):
+def test_ladder_walk_is_relative_to_the_session_not_absolute(all_present, project):
     """The top of the ladder is reachable for everyone but itself — no per-carrier second choice."""
-    target = routing.resolve_opinion_chain(_PRIORS_REGISTRY, _session("codex", "gpt"), rank=2)
+    target = routing.resolve_opinion_chain(_PRIORS_REGISTRY, _session("codex", "gpt"), project, rank=2)
     assert target == routing.SecondOpinionTarget("claude", None, "claude")
 
 
-def test_same_priors_behind_another_carrier_is_skipped(all_present):
+def test_same_priors_behind_another_carrier_is_skipped(all_present, project):
     """`homi` is a different harness and still the same mind, so it buys nothing (D06)."""
     session = _session("claude", "claude")
-    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, rank=3) == routing.SecondOpinionTarget(
+    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, project, rank=3) == routing.SecondOpinionTarget(
         "qwen", None, "qwen"
     )
-    skips = routing.opinion_skips(_PRIORS_REGISTRY, session)
+    skips = routing.opinion_skips(_PRIORS_REGISTRY, session, project)
     assert ("claude", "self") in skips
     assert ("homi", "same priors as claude") in skips
 
 
-def test_a_model_the_session_already_answers_with_is_skipped(all_present):
+def test_a_model_the_session_already_answers_with_is_skipped(all_present, project):
     """D06's second half: another harness answering with the same model is not another mind.
     A family nobody else carries keeps the skip on the model alone."""
     registry = {
@@ -235,46 +247,48 @@ def test_a_model_the_session_already_answers_with_is_skipped(all_present):
         "second_opinion_policy": {"ladder": ["claude", "qwen:opus"]},
     }
     session = _session("claude", "claude", model="opus")
-    assert routing.resolve_opinion_chain(registry, session, rank=2) is None
-    assert routing.opinion_skips(registry, session) == (("claude", "self"), ("qwen", "same model as claude"))
+    assert routing.resolve_opinion_chain(registry, session, project, rank=2) is None
+    assert routing.opinion_skips(registry, session, project) == (("claude", "self"), ("qwen", "same model as claude"))
 
 
-def test_a_provider_without_declared_priors_is_skipped(all_present):
+def test_a_provider_without_declared_priors_is_skipped(all_present, project):
     """Nothing was read from the host to fill this in, and guessing would be the old defect.
     Two `qwen`-family providers are one mind, so the chain stops at two and rank 4 is past it."""
     session = _session("claude", "claude")
-    assert ("sphinx", "priors unknown") in routing.opinion_skips(_PRIORS_REGISTRY, session)
-    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, rank=3) == routing.SecondOpinionTarget(
+    assert ("sphinx", "priors unknown") in routing.opinion_skips(_PRIORS_REGISTRY, session, project)
+    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, project, rank=3) == routing.SecondOpinionTarget(
         "qwen", None, "qwen"
     )
-    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, rank=4) is None
+    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, project, rank=4) is None
 
 
-def test_an_absent_carrier_is_skipped_with_that_reason(monkeypatch):
-    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: provider in ("claude", "qwen"))
+def test_an_absent_carrier_is_skipped_with_that_reason(monkeypatch, project):
+    monkeypatch.setattr(
+        routing, "carrier_present", lambda registry, provider, project_root: provider in ("claude", "qwen")
+    )
     session = _session("claude", "claude")
-    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, rank=2) == routing.SecondOpinionTarget(
+    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, project, rank=2) == routing.SecondOpinionTarget(
         "qwen", None, "qwen"
     )
-    assert ("codex", "carrier absent") in routing.opinion_skips(_PRIORS_REGISTRY, session)
+    assert ("codex", "carrier absent") in routing.opinion_skips(_PRIORS_REGISTRY, session, project)
 
 
-def test_a_ladder_id_outside_the_table_is_a_named_error(all_present):
+def test_a_ladder_id_outside_the_table_is_a_named_error(all_present, project):
     registry = {
         "providers": _PRIORS_REGISTRY["providers"],
         "second_opinion_policy": {"ladder": ["claude", "ghost"]},
     }
     with pytest.raises(KeyError, match="ghost"):
-        routing.resolve_opinion_chain(registry, _session("claude", "claude"), rank=2)
+        routing.resolve_opinion_chain(registry, _session("claude", "claude"), project, rank=2)
 
 
-def test_an_exhausted_chain_yields_nothing_for_the_caller_to_dress_up(all_present):
+def test_an_exhausted_chain_yields_nothing_for_the_caller_to_dress_up(all_present, project):
     """Rank past the chain is `None`; the last resort (D07) is the caller's disclosed step."""
-    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, _session("claude", "claude"), rank=9) is None
+    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, _session("claude", "claude"), project, rank=9) is None
 
 
-def test_declared_carrier_builds_its_own_argv_with_the_pin(all_present):
-    assert routing.opinion_command(_PRIORS_REGISTRY, "myqwen", model="qwen3.8-flash") == [
+def test_declared_carrier_builds_its_own_argv_with_the_pin(all_present, project):
+    assert routing.opinion_command(_PRIORS_REGISTRY, "myqwen", project, routing.OpinionRun(model="qwen3.8-flash")) == [
         "myqwen",
         "-m",
         "qwen3.8-flash",
@@ -285,42 +299,48 @@ def _declared(*argv: str) -> dict:
     return {"providers": {"d": {"argv": list(argv), "family": "qwen", "report_dir": _SO_DIR}}}
 
 
-def test_an_unpinned_declared_argv_drops_the_model_element_and_the_flag_before_it():
+def test_an_unpinned_declared_argv_drops_the_model_element_and_the_flag_before_it(project):
     """The owner's rule: no dangling flag — `["qwen", "-m", "{model}"]` runs as `["qwen"]`, not `["qwen", "-m"]`."""
-    assert routing.opinion_command(_declared("qwen", "-m", "{model}"), "d") == ["qwen"]
-    assert routing.opinion_command(_declared("d-bin", "-m", "{model}", "--flag"), "d", prompt="p") == [
+    assert routing.opinion_command(_declared("qwen", "-m", "{model}"), "d", project) == ["qwen"]
+    assert routing.opinion_command(
+        _declared("d-bin", "-m", "{model}", "--flag"), "d", project, routing.OpinionRun(prompt="p")
+    ) == [
         "d-bin",
         "--flag",
         "p",
     ]
 
 
-def test_an_unpinned_declared_argv_drops_an_element_that_merely_contains_the_placeholder_whole():
+def test_an_unpinned_declared_argv_drops_an_element_that_merely_contains_the_placeholder_whole(project):
     """`--model={model}` carries its own flag, so only that element goes and the one before it stays."""
-    assert routing.opinion_command(_declared("d-bin", "--keep", "--model={model}", "--x"), "d") == [
+    assert routing.opinion_command(_declared("d-bin", "--keep", "--model={model}", "--x"), "d", project) == [
         "d-bin",
         "--keep",
         "--x",
     ]
 
 
-def test_an_unpinned_placeholder_keeps_a_predecessor_that_is_not_a_bare_flag():
+def test_an_unpinned_placeholder_keeps_a_predecessor_that_is_not_a_bare_flag(project):
     """Only a flag (leading `-`, no `=`) is paired with the value after it; a subcommand or `--k=v` stays."""
-    assert routing.opinion_command(_declared("d-bin", "run", "{model}"), "d") == ["d-bin", "run"]
-    assert routing.opinion_command(_declared("d-bin", "--k=v", "{model}"), "d") == ["d-bin", "--k=v"]
-    assert routing.opinion_command(_declared("{model}", "x"), "d") == ["x"]
+    assert routing.opinion_command(_declared("d-bin", "run", "{model}"), "d", project) == ["d-bin", "run"]
+    assert routing.opinion_command(_declared("d-bin", "--k=v", "{model}"), "d", project) == ["d-bin", "--k=v"]
+    assert routing.opinion_command(_declared("{model}", "x"), "d", project) == ["x"]
 
 
-def test_an_unpinned_argv_with_several_placeholders_drops_each_flag_pair():
-    assert routing.opinion_command(_declared("d-bin", "-m", "{model}", "-n", "1", "--alt", "{model}"), "d") == [
+def test_an_unpinned_argv_with_several_placeholders_drops_each_flag_pair(project):
+    assert routing.opinion_command(
+        _declared("d-bin", "-m", "{model}", "-n", "1", "--alt", "{model}"), "d", project
+    ) == [
         "d-bin",
         "-n",
         "1",
     ]
 
 
-def test_a_pinned_declared_argv_is_unchanged_by_the_dangling_flag_rule():
-    assert routing.opinion_command(_declared("d-bin", "-m", "{model}", "--model={model}"), "d", model="m1") == [
+def test_a_pinned_declared_argv_is_unchanged_by_the_dangling_flag_rule(project):
+    assert routing.opinion_command(
+        _declared("d-bin", "-m", "{model}", "--model={model}"), "d", project, routing.OpinionRun(model="m1")
+    ) == [
         "d-bin",
         "-m",
         "m1",
@@ -328,20 +348,22 @@ def test_a_pinned_declared_argv_is_unchanged_by_the_dangling_flag_rule():
     ]
 
 
-def test_declared_carrier_without_a_placeholder_refuses_a_pin(all_present):
+def test_declared_carrier_without_a_placeholder_refuses_a_pin(all_present, project):
     """The C97 guarantee, kept for a carrier akmon never measured: no silent unpinned run."""
     with pytest.raises(routing.UnpinnableModelError, match="declares no model"):
-        routing.opinion_command(_PRIORS_REGISTRY, "nomodel", model="gpt-x")
+        routing.opinion_command(_PRIORS_REGISTRY, "nomodel", project, routing.OpinionRun(model="gpt-x"))
 
 
-def test_declared_carrier_reports_repo_as_unknown_unless_stated(all_present):
+def test_declared_carrier_reports_repo_as_unknown_unless_stated(all_present, project):
     """Repository access is derived for a harness and never invented for a declaration."""
-    assert routing.opinion_repo(_PRIORS_REGISTRY, "myqwen") == "unknown"
-    assert routing.opinion_repo(_PRIORS_REGISTRY, "claude") == "worktree"
+    assert routing.opinion_repo(_PRIORS_REGISTRY, "myqwen", project) == "unknown"
+    assert routing.opinion_repo(_PRIORS_REGISTRY, "claude", project) == "worktree"
 
 
-def test_shipped_carrier_still_routes_through_the_command_map(all_present):
-    argv = routing.opinion_command(_PRIORS_REGISTRY, "claude", model="opus", prompt="review this")
+def test_shipped_carrier_still_routes_through_the_command_map(all_present, project):
+    argv = routing.opinion_command(
+        _PRIORS_REGISTRY, "claude", project, routing.OpinionRun(model="opus", prompt="review this")
+    )
     assert argv == ["claude", "-p", "--output-format", "text", "--model", "opus", "review this"]
 
 
@@ -372,37 +394,37 @@ _RULE_REGISTRY = {
 }
 
 
-def test_the_second_opinion_takes_the_strongest_declared_model(all_present):
+def test_the_second_opinion_takes_the_strongest_declared_model(all_present, project):
     session = _session("qwen", "qwen")
-    assert routing.resolve_opinion_chain(_RULE_REGISTRY, session, rank=2) == routing.SecondOpinionTarget(
+    assert routing.resolve_opinion_chain(_RULE_REGISTRY, session, project, rank=2) == routing.SecondOpinionTarget(
         "claude", "opus", "claude"
     )
-    assert routing.resolve_opinion_chain(_RULE_REGISTRY, session, rank=3) == routing.SecondOpinionTarget(
+    assert routing.resolve_opinion_chain(_RULE_REGISTRY, session, project, rank=3) == routing.SecondOpinionTarget(
         "codex", "sol", "gpt"
     )
 
 
-def test_a_provider_declaring_no_models_yields_the_carrier_default(all_present):
+def test_a_provider_declaring_no_models_yields_the_carrier_default(all_present, project):
     session = _session("qwen", "qwen")
-    assert routing.resolve_opinion_chain(_RULE_REGISTRY, session, rank=4) == routing.SecondOpinionTarget(
+    assert routing.resolve_opinion_chain(_RULE_REGISTRY, session, project, rank=4) == routing.SecondOpinionTarget(
         "nodefault", None, "gemini"
     )
 
 
-def test_the_model_rule_reads_the_provider_table_never_the_bindings_rungs(all_present):
+def test_the_model_rule_reads_the_provider_table_never_the_bindings_rungs(all_present, project):
     """D14's separation: `anthropic.harness_rungs` says tiny/small, and that is not this answer."""
-    assert routing.opinion_model(_RULE_REGISTRY, "claude") == "opus"
+    assert routing.opinion_model(_RULE_REGISTRY, "claude", project) == "opus"
 
 
-def test_an_unimplemented_model_rule_is_refused_not_guessed(all_present):
+def test_an_unimplemented_model_rule_is_refused_not_guessed(all_present, project):
     registry = dict(_RULE_REGISTRY, second_opinion_policy={"ladder": ["claude"], "model_rule": "median"})
     with pytest.raises(ValueError, match="model_rule"):
-        routing.opinion_model(registry, "claude")
+        routing.opinion_model(registry, "claude", project)
 
 
-def test_two_providers_answering_with_the_same_model_are_not_two_minds(monkeypatch):
+def test_two_providers_answering_with_the_same_model_are_not_two_minds(monkeypatch, project):
     """D06 and D14 together: the model the rule picks is what must differ, not only the family."""
-    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider, project_root: True)
     registry = {
         "providers": {
             "alpha": {"argv": ["alpha"], "family": "claude", "models": ["shared"], "report_dir": _SO_DIR},
@@ -411,11 +433,11 @@ def test_two_providers_answering_with_the_same_model_are_not_two_minds(monkeypat
         "second_opinion_policy": {"ladder": ["alpha", "beta"]},
     }
     session = _session("gamma", "qwen")
-    assert routing.resolve_opinion_chain(registry, session, rank=2) == routing.SecondOpinionTarget(
+    assert routing.resolve_opinion_chain(registry, session, project, rank=2) == routing.SecondOpinionTarget(
         "alpha", "shared", "claude"
     )
-    assert routing.resolve_opinion_chain(registry, session, rank=3) is None
-    assert ("beta", "same model as alpha") in routing.opinion_skips(registry, session)
+    assert routing.resolve_opinion_chain(registry, session, project, rank=3) is None
+    assert ("beta", "same model as alpha") in routing.opinion_skips(registry, session, project)
 
 
 # --------------------------------------------------------------------------------------
@@ -438,24 +460,24 @@ _GATEWAYS = {
 }
 
 
-def test_provider_family_reads_the_models_own_entry_first():
-    assert routing.provider_family(_GATEWAYS, "opencode", "anthropic/claude-sonnet-4") == "claude"
-    assert routing.provider_family(_GATEWAYS, "opencode", "qwen3:8b") == "qwen"
-    assert routing.provider_family(_GATEWAYS, "mixed", "qwen3:8b") == "qwen"
+def test_provider_family_reads_the_models_own_entry_first(project):
+    assert routing.provider_family(_GATEWAYS, "opencode", project, "anthropic/claude-sonnet-4") == "claude"
+    assert routing.provider_family(_GATEWAYS, "opencode", project, "qwen3:8b") == "qwen"
+    assert routing.provider_family(_GATEWAYS, "mixed", project, "qwen3:8b") == "qwen"
 
 
-def test_provider_family_falls_back_to_the_row_then_to_unknown():
-    assert routing.provider_family(_GATEWAYS, "mixed", "anything-else") == "gpt"
-    assert routing.provider_family(_GATEWAYS, "claude", "opus") == "claude"
-    assert routing.provider_family(_GATEWAYS, "claude") == "claude"
-    assert routing.provider_family(_GATEWAYS, "opencode", "undeclared/model") is None
-    assert routing.provider_family(_GATEWAYS, "opencode") is None
-    assert routing.provider_family(_GATEWAYS, "pi", "anything") is None
+def test_provider_family_falls_back_to_the_row_then_to_unknown(project):
+    assert routing.provider_family(_GATEWAYS, "mixed", project, "anything-else") == "gpt"
+    assert routing.provider_family(_GATEWAYS, "claude", project, "opus") == "claude"
+    assert routing.provider_family(_GATEWAYS, "claude", project) == "claude"
+    assert routing.provider_family(_GATEWAYS, "opencode", project, "undeclared/model") is None
+    assert routing.provider_family(_GATEWAYS, "opencode", project) is None
+    assert routing.provider_family(_GATEWAYS, "pi", project, "anything") is None
 
 
-def test_provider_family_of_an_undeclared_provider_is_a_named_error():
+def test_provider_family_of_an_undeclared_provider_is_a_named_error(project):
     with pytest.raises(KeyError, match="ghost"):
-        routing.provider_family(_GATEWAYS, "ghost", "m")
+        routing.provider_family(_GATEWAYS, "ghost", project, "m")
 
 
 @pytest.mark.parametrize(
@@ -481,28 +503,28 @@ def _gateway_registry(ladder):
     return {**_GATEWAYS, "second_opinion_policy": {"ladder": ladder}}
 
 
-def test_a_multi_family_carrier_resolves_the_family_of_its_pinned_model(all_present):
+def test_a_multi_family_carrier_resolves_the_family_of_its_pinned_model(all_present, project):
     registry = _gateway_registry(["opencode:anthropic/claude-sonnet-4"])
-    chain = routing.resolve_opinion_chain(registry, _session("qwen", "qwen", "qwen3:8b"), rank=2)
+    chain = routing.resolve_opinion_chain(registry, _session("qwen", "qwen", "qwen3:8b"), project, rank=2)
     assert chain == routing.SecondOpinionTarget("opencode", "anthropic/claude-sonnet-4", "claude")
 
 
-def test_a_multi_family_carrier_pinned_to_the_sessions_family_is_skipped_as_same_priors(all_present):
+def test_a_multi_family_carrier_pinned_to_the_sessions_family_is_skipped_as_same_priors(all_present, project):
     registry = _gateway_registry(["opencode:anthropic/claude-sonnet-4"])
     session = _session("claude", "claude", "opus")
-    assert routing.resolve_opinion_chain(registry, session, rank=2) is None
-    assert ("opencode", "same priors as claude") in routing.opinion_skips(registry, session)
+    assert routing.resolve_opinion_chain(registry, session, project, rank=2) is None
+    assert ("opencode", "same priors as claude") in routing.opinion_skips(registry, session, project)
 
 
-def test_a_multi_family_carrier_with_an_unknown_model_is_skipped_and_asked_about(all_present):
+def test_a_multi_family_carrier_with_an_unknown_model_is_skipped_and_asked_about(all_present, project):
     registry = _gateway_registry(["opencode:undeclared/model", "pi"])
     session = _session("claude", "claude")
-    assert routing.resolve_opinion_chain(registry, session, rank=2) is None
-    assert routing.opinion_skips(registry, session) == (
+    assert routing.resolve_opinion_chain(registry, session, project, rank=2) is None
+    assert routing.opinion_skips(registry, session, project) == (
         ("opencode", "priors unknown"),
         ("pi", "priors unknown"),
     )
-    asks = routing.opinion_asks(registry, session)
+    asks = routing.opinion_asks(registry, session, project)
     assert len(asks) == 2
     assert "providers.opencode.model_families.undeclared/model" in asks[0]
     assert "model-routing.json" in asks[0]
@@ -510,10 +532,10 @@ def test_a_multi_family_carrier_with_an_unknown_model_is_skipped_and_asked_about
     assert "model_families" not in asks[1]
 
 
-def test_an_ask_names_the_local_overlay_first_and_the_project_overlay_second(all_present):
+def test_an_ask_names_the_local_overlay_first_and_the_project_overlay_second(all_present, project):
     """D11 layer 1: the strongest file is offered first, the shared one second, in the same sentence."""
     registry = _gateway_registry(["opencode:undeclared/model", "pi"])
-    asks = routing.opinion_asks(registry, _session("claude", "claude"))
+    asks = routing.opinion_asks(registry, _session("claude", "claude"), project)
     local_file, project_file = "_aitna/local/model-routing.json", "_aitna/model-routing.json"
     assert asks[1] == (
         f"pi: priors unknown for its default model; declare providers.pi.family in {local_file}"
@@ -522,33 +544,33 @@ def test_an_ask_names_the_local_overlay_first_and_the_project_overlay_second(all
     assert asks[0].index(local_file) < asks[0].index(project_file)
 
 
-def test_a_session_ask_names_both_overlays_then_the_recorded_session_family(all_present):
+def test_a_session_ask_names_both_overlays_then_the_recorded_session_family(all_present, project):
     session = _session("opencode", None, "undeclared/model")
-    [ask] = routing.opinion_asks(_PRIORS_REGISTRY, session)
+    [ask] = routing.opinion_asks(_PRIORS_REGISTRY, session, project)
     local_file, project_file = "_aitna/local/model-routing.json", "_aitna/model-routing.json"
     assert ask.index(local_file) < ask.index(project_file) < ask.index("session.family")
     assert "to keep it to yourself" in ask and "to share it with the team" in ask
 
 
-def test_a_model_id_with_a_colon_reaches_the_walk_whole(all_present):
+def test_a_model_id_with_a_colon_reaches_the_walk_whole(all_present, project):
     registry = _gateway_registry(["opencode:qwen3:8b"])
-    target = routing.resolve_opinion_chain(registry, _session("claude", "claude"), rank=2)
+    target = routing.resolve_opinion_chain(registry, _session("claude", "claude"), project, rank=2)
     assert target == routing.SecondOpinionTarget("opencode", "qwen3:8b", "qwen")
 
 
-def test_the_same_carrier_twice_on_two_models_of_one_family_is_one_mind(all_present):
+def test_the_same_carrier_twice_on_two_models_of_one_family_is_one_mind(all_present, project):
     registry = _gateway_registry(["opencode:qwen3:8b", "mixed:qwen3:8b"])
     session = _session("claude", "claude")
-    assert routing.resolve_opinion_chain(registry, session, rank=3) is None
-    assert ("mixed", "same priors as opencode") in routing.opinion_skips(registry, session)
+    assert routing.resolve_opinion_chain(registry, session, project, rank=3) is None
+    assert ("mixed", "same priors as opencode") in routing.opinion_skips(registry, session, project)
 
 
-def test_a_session_with_unknown_priors_yields_an_empty_chain_and_the_ask(all_present):
+def test_a_session_with_unknown_priors_yields_an_empty_chain_and_the_ask(all_present, project):
     """D08, in the other direction: nothing can be said to differ from priors nobody knows."""
     session = _session("opencode", None, "undeclared/model")
-    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, rank=2) is None
-    assert routing.opinion_skips(_PRIORS_REGISTRY, session) == (("opencode", "session priors unknown"),)
-    [ask] = routing.opinion_asks(_PRIORS_REGISTRY, session)
+    assert routing.resolve_opinion_chain(_PRIORS_REGISTRY, session, project, rank=2) is None
+    assert routing.opinion_skips(_PRIORS_REGISTRY, session, project) == (("opencode", "session priors unknown"),)
+    [ask] = routing.opinion_asks(_PRIORS_REGISTRY, session, project)
     assert "providers.opencode.model_families.undeclared/model" in ask
     assert "session.family" in ask
 
@@ -623,32 +645,32 @@ def test_a_session_nothing_names_is_a_named_error():
 # --------------------------------------------------------------------------------------
 
 
-def test_the_last_resort_takes_the_strongest_declared_model_that_differs_from_the_sessions():
+def test_the_last_resort_takes_the_strongest_declared_model_that_differs_from_the_sessions(project):
     registry = {"providers": {"claude": {"family": "claude", "models": ["haiku", "sonnet", "opus"]}}}
-    assert routing.opinion_last_resort(registry, _session("claude", "claude", "opus")) == routing.SecondOpinionTarget(
-        "claude", "sonnet", "claude"
-    )
-    assert routing.opinion_last_resort(registry, _session("claude", "claude", "haiku")) == routing.SecondOpinionTarget(
-        "claude", "opus", "claude"
-    )
+    assert routing.opinion_last_resort(
+        registry, _session("claude", "claude", "opus"), project
+    ) == routing.SecondOpinionTarget("claude", "sonnet", "claude")
+    assert routing.opinion_last_resort(
+        registry, _session("claude", "claude", "haiku"), project
+    ) == routing.SecondOpinionTarget("claude", "opus", "claude")
 
 
-def test_the_last_resort_falls_back_to_the_carrier_default_when_no_model_differs():
+def test_the_last_resort_falls_back_to_the_carrier_default_when_no_model_differs(project):
     registry = {"providers": {"qwen": {"family": "qwen", "models": []}, "solo": {"family": "gpt", "models": ["x"]}}}
-    assert routing.opinion_last_resort(registry, _session("qwen", "qwen", "q")) == routing.SecondOpinionTarget(
+    assert routing.opinion_last_resort(registry, _session("qwen", "qwen", "q"), project) == routing.SecondOpinionTarget(
         "qwen", None, "qwen"
     )
-    assert routing.opinion_last_resort(registry, _session("solo", "gpt", "x")) == routing.SecondOpinionTarget(
+    assert routing.opinion_last_resort(registry, _session("solo", "gpt", "x"), project) == routing.SecondOpinionTarget(
         "solo", None, "gpt"
     )
 
 
-def test_the_last_resort_reads_the_provider_table_not_the_bindings_rungs():
+def test_the_last_resort_reads_the_provider_table_not_the_bindings_rungs(project):
     registry = {
         "anthropic": {"selection_policy": {}, "harness_rungs": ["tiny", "small"]},
         "providers": {"claude": {"family": "claude", "models": ["haiku", "opus"]}},
     }
-    assert routing.opinion_last_resort(registry, _session("claude", "claude", "opus")).model == "haiku"
+    assert routing.opinion_last_resort(registry, _session("claude", "claude", "opus"), project).model == "haiku"
 
 
 # --------------------------------------------------------------------------------------
@@ -656,24 +678,24 @@ def test_the_last_resort_reads_the_provider_table_not_the_bindings_rungs():
 # --------------------------------------------------------------------------------------
 
 
-def test_a_shipped_carrier_is_present_when_the_command_maps_binary_resolves(monkeypatch):
+def test_a_shipped_carrier_is_present_when_the_command_maps_binary_resolves(monkeypatch, project):
     seen = []
     monkeypatch.setattr(routing.shutil, "which", lambda binary: seen.append(binary) or "/bin/x")
-    assert routing.carrier_present(_SHIPPED, "qwen") is True
+    assert routing.carrier_present(_SHIPPED, "qwen", project) is True
     assert seen == ["qwen"]
 
 
-def test_a_declared_carrier_is_present_by_its_requires_command_then_its_argv(monkeypatch):
+def test_a_declared_carrier_is_present_by_its_requires_command_then_its_argv(monkeypatch, project):
     seen = []
     monkeypatch.setattr(routing.shutil, "which", lambda binary: seen.append(binary) or None)
     registry = {"providers": {"a": {"requires_command": "tool-a", "argv": ["x"]}, "b": {"argv": ["tool-b", "-m"]}}}
-    assert routing.carrier_present(registry, "a") is False
-    assert routing.carrier_present(registry, "b") is False
+    assert routing.carrier_present(registry, "a", project) is False
+    assert routing.carrier_present(registry, "b", project) is False
     assert seen == ["tool-a", "tool-b"]
 
 
-def test_a_row_naming_no_executable_anywhere_is_absent():
-    assert routing.carrier_present({"providers": {"nameless": {"family": "gpt"}}}, "nameless") is False
+def test_a_row_naming_no_executable_anywhere_is_absent(project):
+    assert routing.carrier_present({"providers": {"nameless": {"family": "gpt"}}}, "nameless", project) is False
 
 
 # --------------------------------------------------------------------------------------
@@ -689,29 +711,29 @@ def test_the_retired_keys_are_listed_by_where_they_live():
     }
 
 
-def test_a_retired_ladder_in_the_overlay_is_refused_and_names_the_overlay_file():
+def test_a_retired_ladder_in_the_overlay_is_refused_and_names_the_overlay_file(project):
     registry = {"second_opinion_policy": {"ladder": ["claude"], "diversity_ladder": ["other-vendor"]}}
     with pytest.raises(routing.RetiredKeyError, match=r"model-routing\.json.*second_opinion_policy\.diversity_ladder"):
-        routing.refuse_retired_keys(registry, {})
+        routing.refuse_retired_keys(registry, {}, project)
 
 
-def test_a_vendor_second_opinion_object_in_the_overlay_is_refused_and_names_the_vendor():
+def test_a_vendor_second_opinion_object_in_the_overlay_is_refused_and_names_the_vendor(project):
     registry = {"anthropic": {"selection_policy": {}, "second_opinion": {"report_dir": "x"}}}
     with pytest.raises(routing.RetiredKeyError, match=r"model-routing\.json.*anthropic\.second_opinion"):
-        routing.refuse_retired_keys(registry, {})
+        routing.refuse_retired_keys(registry, {}, project)
 
 
-def test_the_retired_local_config_keys_are_refused_and_name_the_local_config_file():
+def test_the_retired_local_config_keys_are_refused_and_name_the_local_config_file(project):
     config = {"second_opinion_provider": "openai", "second_opinion_fallback_model": "medium"}
     with pytest.raises(
         routing.RetiredKeyError,
         match=r"model-routing\.local\.json.*second_opinion_provider, second_opinion_fallback_model",
     ):
-        routing.refuse_retired_keys({}, config)
+        routing.refuse_retired_keys({}, config, project)
 
 
-def test_a_clean_registry_and_config_pass():
-    routing.refuse_retired_keys(_SHIPPED, {"vendor": "anthropic", "session": {"provider": "qwen"}})
+def test_a_clean_registry_and_config_pass(project):
+    routing.refuse_retired_keys(_SHIPPED, {"vendor": "anthropic", "session": {"provider": "qwen"}}, project)
 
 
 # --------------------------------------------------------------------------------------
@@ -719,37 +741,37 @@ def test_a_clean_registry_and_config_pass():
 # --------------------------------------------------------------------------------------
 
 
-def test_the_head_names_the_first_provider_its_model_and_its_priors(all_present):
+def test_the_head_names_the_first_provider_its_model_and_its_priors(all_present, project):
     config = {"vendor": "anthropic", "orchestrator": "opus"}
     registry = {**_RULE_REGISTRY, "anthropic": {"selection_policy": {}, "carrier": "claude"}}
     registry["providers"] = {**_RULE_REGISTRY["providers"]}
-    assert routing.opinion_head(registry, config) == ("codex:sol priors=gpt", None)
+    assert routing.opinion_head(registry, config, project) == ("codex:sol priors=gpt", None)
 
 
-def test_a_head_without_a_model_is_the_bare_provider(all_present):
+def test_a_head_without_a_model_is_the_bare_provider(all_present, project):
     config = {"session": {"provider": "claude", "model": "opus"}}
     registry = {**_PRIORS_REGISTRY, "second_opinion_policy": {"ladder": ["claude", "qwen"]}}
-    assert routing.opinion_head(registry, config) == ("qwen priors=qwen", None)
+    assert routing.opinion_head(registry, config, project) == ("qwen priors=qwen", None)
 
 
-def test_an_empty_chain_reads_unavailable_and_says_why(all_present):
+def test_an_empty_chain_reads_unavailable_and_says_why(all_present, project):
     config = {"session": {"provider": "claude", "model": "opus"}}
     registry = {**_PRIORS_REGISTRY, "second_opinion_policy": {"ladder": ["claude"]}}
-    display, warning = routing.opinion_head(registry, config)
+    display, warning = routing.opinion_head(registry, config, project)
     assert display == "unavailable"
     assert "provider chain is empty" in warning and "--list" in warning
 
 
-def test_a_session_of_unknown_priors_reads_priors_unknown_beside_the_key_to_declare(all_present):
+def test_a_session_of_unknown_priors_reads_priors_unknown_beside_the_key_to_declare(all_present, project):
     config = {"session": {"provider": "opencode", "model": "undeclared/model"}}
     registry = {**_PRIORS_REGISTRY, "providers": {**_PRIORS_REGISTRY["providers"], "opencode": {"family": None}}}
-    display, warning = routing.opinion_head(registry, config)
+    display, warning = routing.opinion_head(registry, config, project)
     assert display == "unavailable priors=unknown"
     assert "providers.opencode.model_families.undeclared/model" in warning
 
 
-def test_a_session_nothing_names_reads_priors_unknown_too(all_present):
-    display, warning = routing.opinion_head(_PRIORS_REGISTRY, {})
+def test_a_session_nothing_names_reads_priors_unknown_too(all_present, project):
+    display, warning = routing.opinion_head(_PRIORS_REGISTRY, {}, project)
     assert display == "unavailable priors=unknown"
     assert "--session-provider" in warning
 
@@ -759,9 +781,9 @@ def test_a_session_nothing_names_reads_priors_unknown_too(all_present):
 # --------------------------------------------------------------------------------------
 
 
-def test_an_unknown_ladder_id_names_both_overlay_files_to_edit():
+def test_an_unknown_ladder_id_names_both_overlay_files_to_edit(project):
     with pytest.raises(KeyError) as raised:
-        routing.provider_row({"providers": {}}, "ghost")
+        routing.provider_row({"providers": {}}, "ghost", project)
 
     message = raised.value.args[0]
     assert "the ladder names 'ghost', which the providers table does not declare" in message
@@ -786,8 +808,61 @@ def test_a_registry_without_a_vocabulary_has_an_empty_one():
     assert routing.family_vocabulary({"second_opinion_policy": {"families": ["claude"]}}) == ()
 
 
-def test_check_session_family_accepts_a_member_and_refuses_the_rest_naming_the_files():
-    routing.check_session_family(_SHIPPED, "qwen")
+def test_check_session_family_accepts_a_member_and_refuses_the_rest_naming_the_files(project):
+    routing.check_session_family(_SHIPPED, "qwen", project)
     with pytest.raises(ValueError, match=r"--session-family 'mimo' is not in the family vocabulary") as raised:
-        routing.check_session_family(_SHIPPED, "mimo")
+        routing.check_session_family(_SHIPPED, "mimo", project)
     assert "second_opinion_policy.families.mimo in _aitna/local/model-routing.json" in str(raised.value)
+
+
+# --------------------------------------------------------------------------------------
+# the dev root is declared by `.aitna-root` (ADR 0022 D09): printed overlay paths follow it
+# --------------------------------------------------------------------------------------
+
+
+def test_a_relocated_dev_root_moves_the_files_an_ask_names(all_present, project):
+    (project / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
+    registry = _gateway_registry(["pi"])
+    [ask] = routing.opinion_asks(registry, _session("claude", "claude"), project)
+    assert "providers.pi.family in tools/ai/local/model-routing.json" in ask
+    assert "or tools/ai/model-routing.json to share it with the team" in ask
+    assert "_aitna" not in ask
+
+
+def test_a_relocated_dev_root_moves_the_files_an_unknown_ladder_id_names(project):
+    (project / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
+    with pytest.raises(KeyError) as raised:
+        routing.provider_row({"providers": {}}, "ghost", project)
+    assert "tools/ai/local/model-routing.json (yours)" in raised.value.args[0]
+    assert "tools/ai/model-routing.json (the team's)" in raised.value.args[0]
+
+
+def test_akmons_own_dev_root_is_declared_by_its_tracked_file():
+    with pytest.raises(KeyError) as raised:
+        routing.provider_row({"providers": {}}, "ghost", _AKMON)
+    assert "meta/local/model-routing.json (yours)" in raised.value.args[0]
+
+
+def test_without_a_project_root_the_files_an_ask_names_are_the_default_dev_root(all_present):
+    [ask] = routing.opinion_asks(_gateway_registry(["pi"]), _session("claude", "claude"), None)
+    assert "_aitna/local/model-routing.json" in ask and " _aitna/model-routing.json" in ask
+
+
+def test_a_layered_refusal_reads_each_overlay_file_and_names_the_one_that_holds_the_key(project):
+    (project / "_aitna" / "local").mkdir()
+    (project / "_aitna" / "model-routing.json").write_text(
+        '{"second_opinion_policy": {"diversity_ladder": ["x"]}}', encoding="utf-8"
+    )
+    with pytest.raises(routing.RetiredKeyError) as raised:
+        routing.refuse_retired_keys({}, {}, project, layered=True)
+    message = str(raised.value)
+    assert "_aitna/model-routing.json" in message and "second_opinion_policy.diversity_ladder" in message
+    assert "local/model-routing.json" not in message
+
+
+def test_an_unlayered_refusal_names_both_overlay_files_under_the_dev_root(project):
+    (project / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
+    registry = {"second_opinion_policy": {"diversity_ladder": ["x"]}}
+    with pytest.raises(routing.RetiredKeyError) as raised:
+        routing.refuse_retired_keys(registry, {}, project)
+    assert "tools/ai/local/model-routing.json or tools/ai/model-routing.json" in str(raised.value)

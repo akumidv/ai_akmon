@@ -190,18 +190,27 @@ args_json = '[{"$path": "{{dir}}"}]'
 expected_json = '"{{dir}}/_aitna/model-routing.json"'
 
 [[case]]
-# AITNA_ROOT is read with its slashes stripped; a value of only slashes is the default.
-id = "reg/overlay-path-env"
+# The dev root is read from the project's `.aitna-root` with its trailing slash stripped.
+id = "reg/overlay-path-pointer"
 fn = "overlay_path"
 args_json = '[{"$path": "{{dir}}"}]'
-env = { AITNA_ROOT = "/dev/layer/" }
+files = { ".aitna-root" = "dev/layer/" }
 expected_json = '"{{dir}}/dev/layer/model-routing.json"'
 
 [[case]]
-id = "reg/overlay-path-env-slashes"
+# An absolute declaration is refused, not stripped to a relative one.
+id = "reg/overlay-path-pointer-absolute"
 fn = "overlay_path"
 args_json = '[{"$path": "{{dir}}"}]'
-env = { AITNA_ROOT = "//" }
+files = { ".aitna-root" = "/dev/layer/" }
+expected_json = '''{"error": "ValueError", "message": ".aitna-root must be relative to the project root and stay inside it: '/dev/layer/'"}'''
+
+[[case]]
+# The retired AITNA_ROOT variable moves nothing.
+id = "reg/overlay-path-env-ignored"
+fn = "overlay_path"
+args_json = '[{"$path": "{{dir}}"}]'
+env = { AITNA_ROOT = "dev/layer" }
 expected_json = '"{{dir}}/_aitna/model-routing.json"'
 
 [[case]]
@@ -211,10 +220,10 @@ args_json = '[{"$path": "{{dir}}"}]'
 expected_json = '"{{dir}}/_aitna/local/model-routing.json"'
 
 [[case]]
-id = "reg/local-overlay-path-env"
+id = "reg/local-overlay-path-pointer"
 fn = "local_overlay_path"
 args_json = '[{"$path": "{{dir}}"}]'
-env = { AITNA_ROOT = "meta" }
+files = { ".aitna-root" = "meta" }
 expected_json = '"{{dir}}/meta/local/model-routing.json"'
 
 [[case]]
@@ -233,12 +242,11 @@ files = { "akmon/tools/model_routing/registry.json" = '{"a": 1, "b": 1}', "_aitn
 expected_json = '{"a": 1, "b": 2}'
 
 [[case]]
-# The local overlay is found under AITNA_ROOT, not under the default.
-id = "reg/load-local-overlay-under-env-root"
+# The local overlay is found under the declared dev root, not under the default.
+id = "reg/load-local-overlay-under-declared-root"
 fn = "load_registry"
 args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
-env = { AITNA_ROOT = "dev" }
-files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "dev/local/model-routing.json" = '{"a": 2}', "_aitna/local/model-routing.json" = '{"a": 3}' }
+files = { ".aitna-root" = "dev", "akmon/tools/model_routing/registry.json" = '{"a": 1}', "dev/local/model-routing.json" = '{"a": 2}', "_aitna/local/model-routing.json" = '{"a": 3}' }
 expected_json = '{"a": 2}'
 
 [[case]]
@@ -295,12 +303,11 @@ files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}' }
 expected_json = '{"a": 1}'
 
 [[case]]
-# The overlay is found under AITNA_ROOT, not under the default.
-id = "reg/load-overlay-under-env-root"
+# The overlay is found under the declared dev root, not under the default.
+id = "reg/load-overlay-under-declared-root"
 fn = "load_registry"
 args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
-env = { AITNA_ROOT = "dev" }
-files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "dev/model-routing.json" = '{"a": 2}', "_aitna/model-routing.json" = '{"a": 3}' }
+files = { ".aitna-root" = "dev", "akmon/tools/model_routing/registry.json" = '{"a": 1}', "dev/model-routing.json" = '{"a": 2}', "_aitna/model-routing.json" = '{"a": 3}' }
 expected_json = '{"a": 2}'
 
 [[case]]
@@ -745,20 +752,20 @@ expected_json = '{}'
 # The row's keys are the shipped contract; qwen's prompt travels on stdin (N19).
 id = "so/provider-row-qwen"
 fn = "provider_row"
-args_json = '[{"$registry": {}}, "qwen"]'
+args_json = '[{"$registry": {}}, "qwen", null]'
 expected_json = '{"operation": "review", "model_flag": "-m {model}", "prompt": "stdin", "family": "qwen", "models": [], "report_dir": ".qwen/second-opinion/"}'
 
 [[case]]
 # A multi-family carrier ships with no family and no model: the owner declares them in the overlay (D11).
 id = "so/provider-row-opencode"
 fn = "provider_row"
-args_json = '[{"$registry": {}}, "opencode"]'
+args_json = '[{"$registry": {}}, "opencode", null]'
 expected_json = '{"operation": "review", "model_flag": "-m {model}", "family": null, "models": [], "model_families": {}, "report_dir": ".opencode/second-opinion/"}'
 
 [[case]]
 id = "so/provider-row-undeclared"
 fn = "provider_row"
-args_json = '[{"$registry": {}}, "ghost"]'
+args_json = '[{"$registry": {}}, "ghost", null]'
 expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
@@ -796,45 +803,45 @@ expected_json = '["claude", null]'
 [[case]]
 id = "so/family-row"
 fn = "provider_family"
-args_json = '[{"$registry": {}}, "claude", "opus"]'
+args_json = '[{"$registry": {}}, "claude", null, "opus"]'
 expected_json = '"claude"'
 
 [[case]]
 id = "so/family-no-model"
 fn = "provider_family"
-args_json = '[{"$registry": {}}, "codex"]'
+args_json = '[{"$registry": {}}, "codex", null]'
 expected_json = '"gpt"'
 
 [[case]]
 # No row family and no model entry: unknown, so the walk fails closed (D08).
 id = "so/family-unknown-multi"
 fn = "provider_family"
-args_json = '[{"$registry": {}}, "opencode", "anthropic/claude-sonnet-4"]'
+args_json = '[{"$registry": {}}, "opencode", null, "anthropic/claude-sonnet-4"]'
 expected_json = 'null'
 
 [[case]]
 id = "so/family-model-entry"
 fn = "provider_family"
-args_json = '[{"$registry": {"merge": {"providers": {"opencode": {"model_families": {"anthropic/claude-sonnet-4": "claude"}}}}}}, "opencode", "anthropic/claude-sonnet-4"]'
+args_json = '[{"$registry": {"merge": {"providers": {"opencode": {"model_families": {"anthropic/claude-sonnet-4": "claude"}}}}}}, "opencode", null, "anthropic/claude-sonnet-4"]'
 expected_json = '"claude"'
 
 [[case]]
 # The model's own entry outranks the row's single family.
 id = "so/family-model-entry-wins"
 fn = "provider_family"
-args_json = '[{"$registry": {"merge": {"providers": {"claude": {"model_families": {"qwen3:8b": "qwen"}}}}}}, "claude", "qwen3:8b"]'
+args_json = '[{"$registry": {"merge": {"providers": {"claude": {"model_families": {"qwen3:8b": "qwen"}}}}}}, "claude", null, "qwen3:8b"]'
 expected_json = '"qwen"'
 
 [[case]]
 id = "so/family-row-fallback"
 fn = "provider_family"
-args_json = '[{"$registry": {"merge": {"providers": {"claude": {"model_families": {"qwen3:8b": "qwen"}}}}}}, "claude", "opus"]'
+args_json = '[{"$registry": {"merge": {"providers": {"claude": {"model_families": {"qwen3:8b": "qwen"}}}}}}, "claude", null, "opus"]'
 expected_json = '"claude"'
 
 [[case]]
 id = "so/family-undeclared-provider"
 fn = "provider_family"
-args_json = '[{"$registry": {}}, "ghost", "m"]'
+args_json = '[{"$registry": {}}, "ghost", null, "m"]'
 expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
@@ -867,20 +874,20 @@ expected_json = '[]'
 [[case]]
 id = "so/session-family-member"
 fn = "check_session_family"
-args_json = '[{"$registry": {}}, "qwen"]'
+args_json = '[{"$registry": {}}, "qwen", null]'
 expected_json = 'null'
 
 [[case]]
 # A family outside the vocabulary is refused naming the files that extend it (D01).
 id = "so/session-family-refused"
 fn = "check_session_family"
-args_json = '[{"$registry": {}}, "deepseek"]'
+args_json = '[{"$registry": {}}, "deepseek", null]'
 expected_json = '''{"error": "ValueError", "message": "--session-family 'deepseek' is not in the family vocabulary (claude, gpt, qwen, gemini); add it by declaring second_opinion_policy.families.deepseek in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team"}'''
 
 [[case]]
 id = "so/session-family-overlay-extended"
 fn = "check_session_family"
-args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"families": {"deepseek": "DeepSeek models"}}}}}, "deepseek"]'
+args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"families": {"deepseek": "DeepSeek models"}}}}}, "deepseek", null]'
 expected_json = 'null'
 
 [[case]]
@@ -934,190 +941,178 @@ expected_json = '{"provider": "pi", "family": null, "model": null}'
 # The second opinion's own rule: the strongest declared model (D14).
 id = "so/model-strongest"
 fn = "opinion_model"
-args_json = '[{"$registry": {}}, "claude"]'
+args_json = '[{"$registry": {}}, "claude", null]'
 expected_json = '"opus"'
 
 [[case]]
 id = "so/model-strongest-codex"
 fn = "opinion_model"
-args_json = '[{"$registry": {}}, "codex"]'
+args_json = '[{"$registry": {}}, "codex", null]'
 expected_json = '"sol"'
 
 [[case]]
 # No declared list: the carrier's own default.
 id = "so/model-none-declared"
 fn = "opinion_model"
-args_json = '[{"$registry": {}}, "qwen"]'
+args_json = '[{"$registry": {}}, "qwen", null]'
 expected_json = 'null'
 
 [[case]]
 id = "so/model-rule-refused"
 fn = "opinion_model"
-args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"model_rule": "median"}}}}, "claude"]'
+args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"model_rule": "median"}}}}, "claude", null]'
 expected_json = '''{"error": "ValueError", "message": "second opinion: unknown model_rule 'median'; the only rule implemented is 'max'"}'''
 
 [[case]]
 id = "so/command-default-model"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "claude"]'
-kwargs_json = '{"prompt": "review this"}'
+args_json = '[{"$registry": {}}, "claude", null, {"$new": "OpinionRun", "fields": {"prompt": "review this"}}]'
 expected_json = '["claude", "-p", "--output-format", "text", "review this"]'
 
 [[case]]
 id = "so/command-pinned-model"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "claude"]'
-kwargs_json = '{"model": "opus", "prompt": "review this"}'
+args_json = '[{"$registry": {}}, "claude", null, {"$new": "OpinionRun", "fields": {"model": "opus", "prompt": "review this"}}]'
 expected_json = '["claude", "-p", "--output-format", "text", "--model", "opus", "review this"]'
 
 [[case]]
 # A caller with no prompt gets no empty trailing element.
 id = "so/command-no-prompt"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "codex"]'
-kwargs_json = '{"model": "sol"}'
+args_json = '[{"$registry": {}}, "codex", null, {"$new": "OpinionRun", "fields": {"model": "sol"}}]'
 expected_json = '["codex", "exec", "--model", "sol"]'
 
 [[case]]
 # Measured on qwen 0.24.7 (N19): read-only via --exclude-tools, the prompt on stdin (no positional), the model pinned with -m.
 id = "so/command-qwen-read-only-stdin"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "qwen"]'
-kwargs_json = '{"model": "q", "prompt": "p"}'
+args_json = '[{"$registry": {}}, "qwen", null, {"$new": "OpinionRun", "fields": {"model": "q", "prompt": "p"}}]'
 expected_json = '["qwen", "--approval-mode", "default", "--exclude-tools", "write_file,edit,run_shell_command", "--max-wall-time", "140s", "-m", "q"]'
 
 [[case]]
 id = "so/command-opencode-model-with-separators"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "opencode"]'
-kwargs_json = '{"model": "anthropic/claude-sonnet-4:beta", "prompt": "p"}'
+args_json = '[{"$registry": {}}, "opencode", null, {"$new": "OpinionRun", "fields": {"model": "anthropic/claude-sonnet-4:beta", "prompt": "p"}}]'
 expected_json = '["opencode", "run", "--agent", "plan", "-m", "anthropic/claude-sonnet-4:beta", "p"]'
 
 [[case]]
 # The model flag is split as a shell would split it (quotes honoured), then the model fills the placeholder as one argument.
 id = "so/command-model-flag-split"
 fn = "opinion_command"
-args_json = '''[{"$registry": {"set": {"providers": {"claude": {"operation": "review", "model_flag": "--tag ' a b' --model=\"{model}\""}}}}}, "claude"]'''
-kwargs_json = '{"model": "gpt x", "prompt": "p"}'
+args_json = '''[{"$registry": {"set": {"providers": {"claude": {"operation": "review", "model_flag": "--tag ' a b' --model=\"{model}\""}}}}}, "claude", null, {"$new": "OpinionRun", "fields": {"model": "gpt x", "prompt": "p"}}]'''
 expected_json = '["claude", "-p", "--output-format", "text", "--tag", " a b", "--model=gpt x", "p"]'
 
 [[case]]
 id = "so/command-declared-pinned"
 fn = "opinion_command"
-args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}", "--flag"]}}}}}, "d"]'
-kwargs_json = '{"model": "m", "prompt": "p"}'
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}", "--flag"]}}}}}, "d", null, {"$new": "OpinionRun", "fields": {"model": "m", "prompt": "p"}}]'
 expected_json = '["d-bin", "-m", "m", "--flag", "p"]'
 
 [[case]]
 # Unpinned, the element that is exactly `{model}` goes and so does the bare flag before it (the owner's no-dangling-flag rule).
 id = "so/command-declared-unpinned-drops-the-flag"
 fn = "opinion_command"
-args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}", "--flag"]}}}}}, "d"]'
-kwargs_json = '{"prompt": "p"}'
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}", "--flag"]}}}}}, "d", null, {"$new": "OpinionRun", "fields": {"prompt": "p"}}]'
 expected_json = '["d-bin", "--flag", "p"]'
 
 [[case]]
 # An element that merely contains `{model}` is dropped whole and takes nothing with it.
 id = "so/command-declared-unpinned-contains"
 fn = "opinion_command"
-args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "--keep", "--model={model}", "--x"]}}}}}, "d"]'
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "--keep", "--model={model}", "--x"]}}}}}, "d", null]'
 expected_json = '["d-bin", "--keep", "--x"]'
 
 [[case]]
 # The element before a lone `{model}` goes only when it is a bare flag: a subcommand and `--k=v` stay, a leading `{model}` has no predecessor, and every pair is dropped.
 id = "so/command-declared-unpinned-non-flag-predecessor"
 fn = "opinion_command"
-args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["{model}", "run", "{model}", "--k=v", "{model}", "-m", "{model}", "-n", "1"]}}}}}, "d"]'
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["{model}", "run", "{model}", "--k=v", "{model}", "-m", "{model}", "-n", "1"]}}}}}, "d", null]'
 expected_json = '["run", "--k=v", "-n", "1"]'
 
 [[case]]
 # A stdin row gets no prompt argument: the caller feeds the pack on stdin.
 id = "so/command-declared-stdin"
 fn = "opinion_command"
-args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}"], "prompt": "stdin"}}}}}, "d"]'
-kwargs_json = '{"model": "m", "prompt": "p"}'
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}"], "prompt": "stdin"}}}}}, "d", null, {"$new": "OpinionRun", "fields": {"model": "m", "prompt": "p"}}]'
 expected_json = '["d-bin", "-m", "m"]'
 
 [[case]]
 # The C97 refusal for a declared carrier; the model is named by repr (a quote inside switches Python's quote style).
 id = "so/command-declared-unpinnable"
 fn = "opinion_command"
-args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "run"]}}}}}, "d"]'
-kwargs_json = '''{"model": "o'x"}'''
+args_json = '''[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "run"]}}}}}, "d", null, {"$new": "OpinionRun", "fields": {"model": "o'x"}}]'''
 expected_json = '''{"error": "UnpinnableModelError", "message": "second opinion needs model \"o'x\" on d, but the providers table declares no model_flag for that provider — an unpinned run would not be model-diverse. Declare the measured flag in the provider's row, or route this gate another way."}'''
 
 [[case]]
 id = "so/command-unpinnable"
 fn = "opinion_command"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"operation": "review"}}}}}, "claude"]'
-kwargs_json = '{"model": "o3", "prompt": "p"}'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"operation": "review"}}}}}, "claude", null, {"$new": "OpinionRun", "fields": {"model": "o3", "prompt": "p"}}]'
 expected_json = '''{"error": "UnpinnableModelError", "message": "second opinion needs model 'o3' on claude, but the providers table declares no model_flag for that provider — an unpinned run would not be model-diverse. Declare the measured flag in the provider's row, or route this gate another way."}'''
 
 [[case]]
 id = "so/command-unknown-harness"
 fn = "opinion_command"
-args_json = '[{"$registry": {"set": {"providers": {"nope": {"operation": "review"}}}}}, "nope"]'
-kwargs_json = '{"prompt": "p"}'
+args_json = '[{"$registry": {"set": {"providers": {"nope": {"operation": "review"}}}}}, "nope", null, {"$new": "OpinionRun", "fields": {"prompt": "p"}}]'
 expected_json = '''{"error": "ValueError", "message": "unknown harness 'nope'; known: claude, codex, opencode, pi, qwen"}'''
 
 [[case]]
 id = "so/repo-harness"
 fn = "opinion_repo"
-args_json = '[{"$registry": {}}, "claude"]'
+args_json = '[{"$registry": {}}, "claude", null]'
 expected_json = '"worktree"'
 
 [[case]]
 id = "so/repo-declared-unknown"
 fn = "opinion_repo"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "sh1"]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "sh1", null]'
 expected_json = '"unknown"'
 
 [[case]]
 id = "so/repo-stated"
 fn = "opinion_repo"
-args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d"], "repo": "none"}}}}}, "d"]'
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d"], "repo": "none"}}}}}, "d", null]'
 expected_json = '"none"'
 
 [[case]]
 id = "so/repo-tool-carrier"
 fn = "opinion_repo"
-args_json = '[{"$registry": {"set": {"providers": {"g": {"carrier": "tool", "operation": "review"}}}}}, "g"]'
+args_json = '[{"$registry": {"set": {"providers": {"g": {"carrier": "tool", "operation": "review"}}}}}, "g", null]'
 expected_json = '"none"'
 
 [[case]]
 id = "so/carrier-harness"
 fn = "opinion_carrier"
-args_json = '[{"$registry": {}}, "claude"]'
+args_json = '[{"$registry": {}}, "claude", null]'
 expected_json = '"harness"'
 
 [[case]]
 id = "so/carrier-declared"
 fn = "opinion_carrier"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "sh1"]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "sh1", null]'
 expected_json = '"declared"'
 
 [[case]]
 id = "so/carrier-tool"
 fn = "opinion_carrier"
-args_json = '[{"$registry": {"set": {"providers": {"g": {"carrier": "tool", "operation": "review"}}}}}, "g"]'
+args_json = '[{"$registry": {"set": {"providers": {"g": {"carrier": "tool", "operation": "review"}}}}}, "g", null]'
 expected_json = '"tool"'
 
 [[case]]
 id = "so/present-absolute-path"
 fn = "carrier_present"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "sh1"]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "sh1", null]'
 expected_json = 'true'
 
 [[case]]
 id = "so/present-absent-name"
 fn = "carrier_present"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "gone"]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, "gone", null]'
 expected_json = 'false'
 
 [[case]]
 id = "so/present-nameless"
 fn = "carrier_present"
-args_json = '[{"$registry": {"set": {"providers": {"n": {"family": "gpt"}}}}}, "n"]'
+args_json = '[{"$registry": {"set": {"providers": {"n": {"family": "gpt"}}}}}, "n", null]'
 expected_json = 'false'
 
 [[case]]
@@ -1187,175 +1182,175 @@ expected_json = '''{"error": "SessionUnknownError", "message": "second opinion: 
 # Self, absent, unknown, same-priors and same-model are all passed over; the order of the ladder is kept.
 id = "so/chain-whole"
 fn = "opinion_chain"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 expected_json = '[{"provider": "sh1", "model": "m2", "family": "gpt", "effort": null}, {"provider": "multi", "model": "a/b:c", "family": "gemini", "effort": null}, {"provider": "sh3", "model": null, "family": "qwen", "effort": null}]'
 
 [[case]]
 id = "so/chain-rank-2"
 fn = "resolve_opinion_chain"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 expected_json = '{"provider": "sh1", "model": "m2", "family": "gpt", "effort": null}'
 
 [[case]]
 id = "so/chain-rank-3"
 fn = "resolve_opinion_chain"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 kwargs_json = '{"rank": 3}'
 expected_json = '{"provider": "multi", "model": "a/b:c", "family": "gemini", "effort": null}'
 
 [[case]]
 id = "so/chain-rank-past-end"
 fn = "resolve_opinion_chain"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 kwargs_json = '{"rank": 9}'
 expected_json = 'null'
 
 [[case]]
 id = "so/chain-skips"
 fn = "opinion_skips"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 expected_json = '[["claude", "self"], ["sh2", "same priors as claude"], ["gone", "carrier absent"], ["unk", "priors unknown"], ["dup", "same model as sh1"]]'
 
 [[case]]
 id = "so/chain-asks"
 fn = "opinion_asks"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 expected_json = '["unk: priors unknown for its default model; declare providers.unk.family in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team"]'
 
 [[case]]
 # Relativity is a consequence of the self-skip: another session, another rotation of the same ladder.
 id = "so/chain-rotates-with-the-session"
 fn = "opinion_chain"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh1", "family": "gpt", "model": "m2"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh1", "family": "gpt", "model": "m2"}}, null]'
 expected_json = '[{"provider": "claude", "model": "opus", "family": "claude", "effort": null}, {"provider": "multi", "model": "a/b:c", "family": "gemini", "effort": null}, {"provider": "sh3", "model": null, "family": "qwen", "effort": null}]'
 
 [[case]]
 # The model the walk would pick is compared, not only the family.
 id = "so/chain-session-model-already-taken"
 fn = "opinion_skips"
-args_json = '[{"$registry": {"set": {"providers": {"a": {"argv": ["/bin/sh"], "family": "claude", "models": ["x"]}, "b": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["x"]}}, "second_opinion_policy": {"ladder": ["a", "b"]}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "c", "family": "qwen", "model": "x"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"a": {"argv": ["/bin/sh"], "family": "claude", "models": ["x"]}, "b": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["x"]}}, "second_opinion_policy": {"ladder": ["a", "b"]}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "c", "family": "qwen", "model": "x"}}, null]'
 expected_json = '[["a", "same model as c"], ["b", "same model as c"]]'
 
 [[case]]
 # D08 in the other direction: a session of unknown priors yields an empty chain.
 id = "so/chain-session-priors-unknown"
 fn = "opinion_skips"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": "x/y"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": "x/y"}}, null]'
 expected_json = '[["opencode", "session priors unknown"]]'
 
 [[case]]
 id = "so/chain-session-priors-unknown-asks"
 fn = "opinion_asks"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": "x/y"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": "x/y"}}, null]'
 expected_json = '["session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'
 
 [[case]]
 id = "so/chain-session-priors-unknown-no-model-asks"
 fn = "opinion_asks"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": null}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": null}}, null]'
 expected_json = '["session opencode: priors unknown; declare providers.opencode.family in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (second_opinion.py --session-family)"]'
 
 [[case]]
 id = "so/chain-undeclared-ladder-id"
 fn = "resolve_opinion_chain"
-args_json = '[{"$registry": {"set": {"second_opinion_policy": {"ladder": ["claude", "ghost"]}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"second_opinion_policy": {"ladder": ["claude", "ghost"]}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
 # The strongest declared model that differs from the session's (D07).
 id = "so/last-resort-different-model"
 fn = "opinion_last_resort"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh1", "family": "gpt", "model": "m2"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh1", "family": "gpt", "model": "m2"}}, null]'
 expected_json = '{"provider": "sh1", "model": "m1", "family": "gpt", "effort": null}'
 
 [[case]]
 id = "so/last-resort-other-end"
 fn = "opinion_last_resort"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh1", "family": "gpt", "model": "m1"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh1", "family": "gpt", "model": "m1"}}, null]'
 expected_json = '{"provider": "sh1", "model": "m2", "family": "gpt", "effort": null}'
 
 [[case]]
 # No other declared model: the carrier's own default.
 id = "so/last-resort-default"
 fn = "opinion_last_resort"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh3", "family": "qwen", "model": "q"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "sh3", "family": "qwen", "model": "q"}}, null]'
 expected_json = '{"provider": "sh3", "model": null, "family": "qwen", "effort": null}'
 
 [[case]]
 id = "so/last-resort-reads-the-table-not-the-rungs"
 fn = "opinion_last_resort"
-args_json = '[{"$registry": {"set": {"anthropic": {"selection_policy": {}, "harness_rungs": ["tiny", "small"], "carrier": "claude"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"anthropic": {"selection_policy": {}, "harness_rungs": ["tiny", "small"], "carrier": "claude"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 expected_json = '{"provider": "claude", "model": "sonnet", "family": "claude", "effort": null}'
 
 [[case]]
 id = "so/head-first-provider"
 fn = "opinion_head"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "claude", "model": "opus"}}, null]'
 expected_json = '["sh1:m2 priors=gpt", null]'
 
 [[case]]
 id = "so/head-bare-provider"
 fn = "opinion_head"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["sh3"]}}}}, {"session": {"provider": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["sh3"]}}}}, {"session": {"provider": "claude", "model": "opus"}}, null]'
 expected_json = '["sh3 priors=qwen", null]'
 
 [[case]]
 id = "so/head-empty-chain"
 fn = "opinion_head"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude"]}}}}, {"session": {"provider": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude"]}}}}, {"session": {"provider": "claude", "model": "opus"}}, null]'
 expected_json = '''["unavailable", "second-opinion is on but the provider chain is empty: every ladder provider is the session's own ('claude'), absent from PATH, or answers with priors already taken, so a gate runs only the disclosed last resort (kind=last-resort) — `second_opinion.py --list` names every skip"]'''
 
 [[case]]
 id = "so/head-session-priors-unknown"
 fn = "opinion_head"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "opencode", "model": "x/y"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "opencode", "model": "x/y"}}, null]'
 expected_json = '["unavailable priors=unknown", "session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'
 
 [[case]]
 id = "so/head-session-unnamed"
 fn = "opinion_head"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {}, null]'
 expected_json = '''["unavailable priors=unknown", "second opinion: no source names the session's provider; pass --session-provider (and --session-model), record it with the routing initializer's --session-provider, or bind a vendor that declares a `carrier`"]'''
 
 [[case]]
 id = "so/head-retired-key"
 fn = "opinion_head"
-args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "claude"}, "second_opinion_provider": "openai"}]'
+args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "claude"}, "second_opinion_provider": "openai"}, null]'
 expected_json = '{"error": "RetiredKeyError", "message": "the local config .claude/model-routing.local.json still carries the retired key(s) second_opinion_provider (ADR 0024). The second opinion no longer reads a recorded provider or fallback model: it resolves its provider from the session (`session` in this file, or `--session-provider`) and the ladder. Re-run the routing initializer to regenerate this file."}'
 
 [[case]]
 id = "so/retired-overlay-policy"
 fn = "refuse_retired_keys"
-args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"diversity_ladder": ["other-vendor"]}}}}, {}]'
+args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"diversity_ladder": ["other-vendor"]}}}}, {}, null]'
 expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 id = "so/retired-overlay-vendor"
 fn = "refuse_retired_keys"
-args_json = '[{"$registry": {"merge": {"openai": {"second_opinion": {"report_dir": "x"}}}}}, {}]'
+args_json = '[{"$registry": {"merge": {"openai": {"second_opinion": {"report_dir": "x"}}}}}, {}, null]'
 expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 # Every retired key is named, policy first, then each registry block in order.
 id = "so/retired-overlay-both"
 fn = "refuse_retired_keys"
-args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"diversity_ladder": []}, "openai": {"second_opinion": {}}}}}, {}]'
+args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"diversity_ladder": []}, "openai": {"second_opinion": {}}}}}, {}, null]'
 expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder, openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 # With the project root each overlay file is read, strongest first, and the error quotes the one that holds the key.
 id = "so/retired-overlay-names-the-local-layer"
 fn = "refuse_retired_keys"
-args_json = '[{"$registry": {}}, {}]'
-kwargs_json = '{"project_root": {"$path": "{{dir}}"}}'
+args_json = '[{"$registry": {}}, {}, {"$path": "{{dir}}"}]'
+kwargs_json = '{"layered": true}'
 files = { "_aitna/model-routing.json" = '{"briefs": {}}', "_aitna/local/model-routing.json" = '{"second_opinion_policy": {"diversity_ladder": []}}' }
 expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 id = "so/retired-overlay-names-the-project-layer"
 fn = "refuse_retired_keys"
-args_json = '[{"$registry": {}}, {}]'
-kwargs_json = '{"project_root": {"$path": "{{dir}}"}}'
+args_json = '[{"$registry": {}}, {}, {"$path": "{{dir}}"}]'
+kwargs_json = '{"layered": true}'
 files = { "_aitna/model-routing.json" = '{"openai": {"second_opinion": {"report_dir": "x"}}}', "_aitna/local/model-routing.json" = '{"briefs": {}}' }
 expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
@@ -1363,14 +1358,14 @@ expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _a
 # Named in data order, quoting the local config file.
 id = "so/retired-config"
 fn = "refuse_retired_keys"
-args_json = '[{"$registry": {}}, {"second_opinion_fallback_model": "m", "second_opinion_provider": "openai"}]'
+args_json = '[{"$registry": {}}, {"second_opinion_fallback_model": "m", "second_opinion_provider": "openai"}, null]'
 expected_json = '{"error": "RetiredKeyError", "message": "the local config .claude/model-routing.local.json still carries the retired key(s) second_opinion_provider, second_opinion_fallback_model (ADR 0024). The second opinion no longer reads a recorded provider or fallback model: it resolves its provider from the session (`session` in this file, or `--session-provider`) and the ladder. Re-run the routing initializer to regenerate this file."}'
 
 [[case]]
 # A clean registry and config answer nothing.
 id = "so/retired-clean"
 fn = "refuse_retired_keys"
-args_json = '[{"$registry": {}}, {"vendor": "anthropic", "session": {"provider": "qwen"}}]'
+args_json = '[{"$registry": {}}, {"vendor": "anthropic", "session": {"provider": "qwen"}}, null]'
 expected_json = 'null'
 
 # --- gen: generated agent files, the wrap, the briefs ------------------------------------------
@@ -1507,20 +1502,20 @@ expected_json = '''{"error": "BriefError", "message": "overlay brief 'k_mechanic
 [[case]]
 id = "gen/brief-warning-fine"
 fn = "brief_warning"
-args_json = '[{"$registry": {}}]'
+args_json = '[{"$registry": {}}, null]'
 expected_json = 'null'
 
 [[case]]
-id = "gen/brief-warning-named-root"
+id = "gen/brief-warning-no-project"
 fn = "brief_warning"
-args_json = '[{"briefs": {"k_gone": "stale"}}, "_aitna"]'
+args_json = '[{"briefs": {"k_gone": "stale"}}, null]'
 expected_json = '''"⚠ overlay brief key 'k_gone' matches no agent (known: k_auditor, k_explorer, k_implementer, k_mechanic, k_reasoner, k_validator) — fix _aitna/model-routing.json; k_* definitions are not regenerated until it resolves"'''
 
 [[case]]
-id = "gen/brief-warning-env-root"
+id = "gen/brief-warning-declared-root"
 fn = "brief_warning"
-args_json = '[{"briefs": {"k_gone": "stale"}}]'
-env = { AITNA_ROOT = "dev/" }
+args_json = '[{"briefs": {"k_gone": "stale"}}, {"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "dev/" }
 expected_json = '''"⚠ overlay brief key 'k_gone' matches no agent (known: k_auditor, k_explorer, k_implementer, k_mechanic, k_reasoner, k_validator) — fix dev/model-routing.json; k_* definitions are not regenerated until it resolves"'''
 
 # --- mark: the two marker throttles and the files they leave ------------------------------------
@@ -1866,6 +1861,70 @@ fn = "active_role"
 args_json = '["{{dir}}/t.jsonl"]'
 files_parts = { "t.jsonl" = ['{"type": "assistant", "message": {"content": "🧭 agent: review"}}', "\r\n", '{"type": "assistant", "isSidechain": 1, "message": {"content": "🧭 agent: learn ', { repeat = "z", times = 65448 }, '"}}', "\r\n"] }
 expected_json = '"review"'
+
+[[case]]
+# ADR 0027/D03: `🧭 role:` is the declaration; every tx/role-* case above spells it with the
+# `🧭 agent:` alias, which is read the same way for one release. The cases below pin the new
+# spelling, and the two spellings together.
+id = "tx/role-new-form"
+fn = "active_role"
+args_json = '["{{dir}}/t.jsonl"]'
+files_parts = { "t.jsonl" = ['{"type": "assistant", "message": {"content": "\ud83e\udded role: Review \u2014 analysis"}}', "\n"] }
+expected_json = '"review"'
+
+[[case]]
+# The last qualifying declaration wins whichever spelling it uses.
+id = "tx/role-new-form-and-alias-last-wins"
+fn = "active_role"
+args_json = '["{{dir}}/t.jsonl"]'
+files_parts = { "t.jsonl" = [
+  '{"type": "assistant", "message": {"content": "\ud83e\udded agent: review"}}', "\n",
+  '{"type": "assistant", "message": {"content": "\ud83e\udded role: engineer"}}', "\n",
+  '{"type": "assistant", "message": {"content": "\ud83e\udded agent: architect"}}', "\n",
+] }
+expected_json = '"architect"'
+
+[[case]]
+id = "tx/role-new-form-alias-then-role"
+fn = "active_role"
+args_json = '["{{dir}}/t.jsonl"]'
+files_parts = { "t.jsonl" = [
+  '{"type": "assistant", "message": {"content": "\ud83e\udded agent: architect"}}', "\n",
+  '{"type": "assistant", "message": {"content": "\ud83e\udded role: Engineer"}}', "\n",
+] }
+expected_json = '"engineer"'
+
+[[case]]
+# Sidechain turns, user turns, a non-object line, a malformed line and a torn last line are
+# skipped under the new spelling too.
+id = "tx/role-new-form-skips"
+fn = "active_role"
+args_json = '["{{dir}}/t.jsonl"]'
+files_parts = { "t.jsonl" = [
+  '{"type": "assistant", "message": {"content": "🧭 role: review"}}', "\n",
+  '{"type": "assistant", "isSidechain": true, "message": {"content": "\ud83e\udded role: engineer"}}', "\n",
+  '{"type": "user", "message": {"content": "\ud83e\udded role: engineer"}}', "\n",
+  '["role:", {"type": "assistant"}]', "\n",
+  'not json role: engineer', "\n",
+  '{"type": "assistant", "message": {"content": "\ud83e\udded role: engin',
+] }
+expected_json = '"review"'
+
+[[case]]
+# No space after the colon and a tab before the keyword; the name stops at the first non-ASCII letter.
+id = "tx/role-new-form-tab-no-space"
+fn = "active_role"
+args_json = '["{{dir}}/t.jsonl"]'
+files_parts = { "t.jsonl" = ['{"type": "assistant", "message": {"content": "🧭\trole:REv\u0435iew"}}', "\n"] }
+expected_json = '"rev"'
+
+[[case]]
+# The CRLF block-edge case of tx/role-crlf-split-at-edge, spelled `role:` (one byte shorter, so one more pad byte).
+id = "tx/role-new-form-crlf-split-at-edge"
+fn = "active_role"
+args_json = '["{{dir}}/t.jsonl"]'
+files_parts = { "t.jsonl" = ['{"type": "assistant", "message": {"content": "🧭 role: review"}}', "\r\n", '{"type": "assistant", "message": {"content": "🧭 role: learn ', { repeat = "z", times = 65467 }, '"}}', "\r\n"] }
+expected_json = '"learn"'
 
 [[case]]
 id = "tx/turn-last-main-chain"
@@ -2385,7 +2444,7 @@ expected_json = '{"value": ["⚠ context pressure: ~100% of the recommended 200k
 [[case]]
 id = "art/float-opt-in-from-config"
 fn = "status_lines"
-args_json = '[{"$call": "read_local_config", "args": [{"$path": "{{dir}}"}]}, {"$registry": {}}, "x"]'
+args_json = '[{"$call": "read_local_config", "args": [{"$path": "{{dir}}"}]}, {"$registry": {}}, "x", null]'
 files = { ".claude/model-routing.local.json" = '{"orchestrator": "large", "second_opinion": 0.0, "available": ["small", "large"], "binding": {"auditor": "large", "escalation": []}}' }
 expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=large · reasoner=? · auditor=large · worker=? · mid=? · second-opinion=unavailable (off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'large', re-run `x --orchestrator <alias>`."]'''
 
@@ -2521,13 +2580,13 @@ expected_json = '''{"value": [{"vendor": "anthropic", "orchestrator": "x", "reas
 [[case]]
 id = "stat/status-fresh"
 fn = "status_lines"
-args_json = '[{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": true, "available": ["small", "medium", "large"], "task_kind_floors": {"quant-derivation": "large"}}, {"$registry": {}}, "_aitna/akmon"]'
+args_json = '[{"vendor": "anthropic", "orchestrator": "large", "binding": {"reasoner": "large", "worker": "small", "mid": "medium", "auditor": "large", "escalation": ["medium"]}, "second_opinion": true, "available": ["small", "medium", "large"], "task_kind_floors": {"quant-derivation": "large"}}, {"$registry": {}}, "_aitna/akmon", null]'
 expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=large · reasoner=large · auditor=large · worker=small · mid=medium · second-opinion=unavailable (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: medium). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'large', re-run `_aitna/akmon --orchestrator <alias>`.", "⚠ second-opinion is on but the provider chain is empty: every ladder provider is the session's own ('claude'), absent from PATH, or answers with priors already taken, so a gate runs only the disclosed last resort (kind=last-resort) — `second_opinion.py --list` names every skip"]'''
 
 [[case]]
 id = "stat/status-corridor-and-floor-gap"
 fn = "status_lines"
-args_json = '[{"vendor": "anthropic", "orchestrator": "sonnet", "binding": {"reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable", "task_kind_floors": {"quant-derivation": "opus"}}, {"$registry": {}}, "akmon tool model_routing/init"]'
+args_json = '[{"vendor": "anthropic", "orchestrator": "sonnet", "binding": {"reasoner": "sonnet", "worker": "haiku", "mid": "sonnet", "auditor": "fable", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"], "auditor_opt_in": "fable", "task_kind_floors": {"quant-derivation": "opus"}}, {"$registry": {}}, "akmon tool model_routing/init", null]'
 expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=sonnet · reasoner=sonnet · auditor=fable · worker=haiku · mid=sonnet · second-opinion=unavailable (off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'sonnet', re-run `akmon tool model_routing/init --orchestrator <alias>`.", "⚠ orchestrator=sonnet is below the orchestration floor (opus) — decomposition/synthesis degrade everything downstream; consider /model up. Advisory: the auditor's level verdict is the authoritative check", "⚠ task kind quant-derivation has a opus floor, but k_reasoner is bound to sonnet — delegate quant-derivation with model=opus."]'''
 
 [[case]]
@@ -2535,47 +2594,47 @@ expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=son
 # absolute-path executable so the row does not depend on the host's harnesses (ADR 0024/D11).
 id = "stat/status-chain-head"
 fn = "status_lines"
-args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"]}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x"]'
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"]}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x", null]'
 expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=shfake:big priors=qwen (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`."]'''
 
 [[case]]
 # A recorded `session` stanza names the harness the session runs on, so the head follows it, not the vendor.
 id = "stat/status-session-stanza"
 fn = "status_lines"
-args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"], "session": {"provider": "shfake", "model": "big"}}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x"]'
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"], "session": {"provider": "shfake", "model": "big"}}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x", null]'
 expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=claude:opus priors=claude (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`."]'''
 
 [[case]]
 # An empty chain is on-state noise only: with the gate on it warns (every gate would run the disclosed last resort), with it off it stays quiet.
 id = "stat/status-empty-chain-on"
 fn = "status_lines"
-args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"]}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude"]}}}}, "x"]'
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"]}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude"]}}}}, "x", null]'
 expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`.", "⚠ second-opinion is on but the provider chain is empty: every ladder provider is the session's own ('claude'), absent from PATH, or answers with priors already taken, so a gate runs only the disclosed last resort (kind=last-resort) — `second_opinion.py --list` names every skip"]'''
 
 [[case]]
 id = "stat/status-empty-chain-off"
 fn = "status_lines"
-args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"]}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude"]}}}}, "x"]'
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": false, "available": ["haiku", "sonnet", "opus"]}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude"]}}}}, "x", null]'
 expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable (off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`."]'''
 
 [[case]]
 # A session whose priors cannot be resolved reads `priors=unknown` beside the key that would settle it (D08).
 id = "stat/status-session-priors-unknown"
 fn = "status_lines"
-args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"], "session": {"provider": "opencode", "model": "x/y"}}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x"]'
+args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"], "session": {"provider": "opencode", "model": "x/y"}}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x", null]'
 expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable priors=unknown (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`.", "⚠ session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'''
 
 [[case]]
 # Semantic: no escalation hint without a ladder; missing binding fields read "?".
 id = "stat/status-semantic"
 fn = "status_lines"
-args_json = '[{"orchestrator": "strongest", "binding": {"escalation": ["mid"]}}, {"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "x"]'
+args_json = '[{"orchestrator": "strongest", "binding": {"escalation": ["mid"]}}, {"$registry": {"unset": {"anthropic": ["harness_rungs", "auditor_only_rungs"]}}}, "x", null]'
 expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=strongest · reasoner=? · auditor=? · worker=? · mid=? · second-opinion=unavailable (off)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals. In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'strongest', re-run `x --orchestrator <alias>`.", "⚠ using semantic model labels because this vendor commits no model ladder and no concrete model list was provided — every delegate runs on the orchestrator's model until a ladder is given; pass --available to bind vendor aliases locally"]'''
 
 [[case]]
 id = "stat/status-retired-key"
 fn = "status_lines"
-args_json = '[{"orchestrator": "large", "available": ["small", "large"]}, {"$registry": {"merge": {"openai": {"second_opinion": {"cli": "codex"}}}}}, "x"]'
+args_json = '[{"orchestrator": "large", "available": ["small", "large"]}, {"$registry": {"merge": {"openai": {"second_opinion": {"cli": "codex"}}}}}, "x", null]'
 expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
@@ -3290,70 +3349,70 @@ expected_json = '"~bob/x"'
 [[case]]
 id = "alias/resolve-alias"
 fn = "resolve_opinion_model"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {"codex": {"$new": "ProviderAliases", "fields": {"source": "s", "client": null, "aliases": {"sol": "gpt-6.1-sol"}}}}, "codex", "sol"]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {"codex": {"$new": "ProviderAliases", "fields": {"source": "s", "client": null, "aliases": {"sol": "gpt-6.1-sol"}}}}, "codex", "sol", null]'
 expected_json = '"gpt-6.1-sol"'
 
 [[case]]
 # A model that is not one of the row's aliases passes through unchanged, with no stored mapping needed.
 id = "alias/resolve-concrete-passes"
 fn = "resolve_opinion_model"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {}, "codex", "gpt-6.1-sol"]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {}, "codex", "gpt-6.1-sol", null]'
 expected_json = '"gpt-6.1-sol"'
 
 [[case]]
 id = "alias/resolve-default-passes"
 fn = "resolve_opinion_model"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {}, "codex", null]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {}, "codex", null, null]'
 expected_json = 'null'
 
 [[case]]
 id = "alias/resolve-row-without-aliases"
 fn = "resolve_opinion_model"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {}, "claude", "opus"]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {}, "claude", "opus", null]'
 expected_json = '"opus"'
 
 [[case]]
 # An alias with no mapping is a fail-closed refusal naming the refresh command.
 id = "alias/resolve-unmapped-refused"
 fn = "resolve_opinion_model"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {"codex": {"$new": "ProviderAliases", "fields": {"source": "s", "client": null, "aliases": {"sol": "gpt-6.1-sol"}}}}, "codex", "luna"]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {"codex": {"$new": "ProviderAliases", "fields": {"source": "s", "client": null, "aliases": {"sol": "gpt-6.1-sol"}}}}, "codex", "luna", null]'
 expected_json = '''{"error": "UnresolvedAliasError", "message": "provider 'codex' declares model aliases, and 'luna' has no concrete id in _aitna/local/model-aliases.json; write it with `akmon tool model_routing/models --refresh --provider codex`, pin a concrete id with `--provider codex:<id>`, or run the carrier's own model with `--provider codex:default`"}'''
 
 [[case]]
 id = "alias/is-alias-yes"
 fn = "is_model_alias"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "sol"]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "sol", null]'
 expected_json = 'true'
 
 [[case]]
 id = "alias/is-alias-concrete"
 fn = "is_model_alias"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "gpt-6.1-sol"]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "gpt-6.1-sol", null]'
 expected_json = 'false'
 
 [[case]]
 id = "alias/is-alias-row-without-flag"
 fn = "is_model_alias"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "claude", "opus"]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "claude", "opus", null]'
 expected_json = 'false'
 
 [[case]]
 # The reserved token drops the pin: the carrier's own model.
 id = "alias/pick-default-token"
 fn = "opinion_pick"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "default"]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "default", null]'
 expected_json = '[null, null]'
 
 [[case]]
 id = "alias/pick-no-pin-is-strongest"
 fn = "opinion_pick"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", null]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", null, null]'
 expected_json = '["sol", null]'
 
 [[case]]
 id = "alias/pick-pinned"
 fn = "opinion_pick"
-args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "gpt-6.1-sol"]'
+args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, "codex", "gpt-6.1-sol", null]'
 expected_json = '["gpt-6.1-sol", null]'
 
 [[case]]
@@ -3468,109 +3527,103 @@ expected_json = '["m", ""]'
 [[case]]
 id = "effort/check-none"
 fn = "check_effort"
-args_json = '[{"$registry": {}}, "qwen", null]'
+args_json = '[{"$registry": {}}, "qwen", null, null]'
 expected_json = 'null'
 
 [[case]]
 id = "effort/check-listed"
 fn = "check_effort"
-args_json = '[{"$registry": {}}, "claude", "high"]'
+args_json = '[{"$registry": {}}, "claude", "high", null]'
 expected_json = 'null'
 
 [[case]]
 id = "effort/check-unsupported"
 fn = "check_effort"
-args_json = '[{"$registry": {}}, "qwen", "high"]'
+args_json = '[{"$registry": {}}, "qwen", "high", null]'
 expected_json = '''{"error": "EffortError", "message": "provider 'qwen' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.qwen.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
 id = "effort/check-unknown-level"
 fn = "check_effort"
-args_json = '[{"$registry": {}}, "claude", "ultra"]'
+args_json = '[{"$registry": {}}, "claude", "ultra", null]'
 expected_json = '''{"error": "EffortError", "message": "provider 'claude' does not accept the effort 'ultra'; its levels are: low, medium, high, xhigh, max"}'''
 
 [[case]]
 id = "effort/pick-model-effort"
 fn = "opinion_pick"
-args_json = '[{"$registry": {}}, "claude", "sonnet@low"]'
+args_json = '[{"$registry": {}}, "claude", "sonnet@low", null]'
 expected_json = '["sonnet", "low"]'
 
 [[case]]
 # `default@high` pins no model and sends only the level.
 id = "effort/pick-default-effort"
 fn = "opinion_pick"
-args_json = '[{"$registry": {}}, "claude", "default@high"]'
+args_json = '[{"$registry": {}}, "claude", "default@high", null]'
 expected_json = '[null, "high"]'
 
 [[case]]
 # An effort alone keeps the rule's model.
 id = "effort/pick-effort-only"
 fn = "opinion_pick"
-args_json = '[{"$registry": {}}, "claude", "@low"]'
+args_json = '[{"$registry": {}}, "claude", "@low", null]'
 expected_json = '["opus", "low"]'
 
 [[case]]
 id = "effort/pick-no-pin-no-effort"
 fn = "opinion_pick"
-args_json = '[{"$registry": {}}, "claude", null]'
+args_json = '[{"$registry": {}}, "claude", null, null]'
 expected_json = '["opus", null]'
 
 [[case]]
 id = "effort/command-claude"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "claude"]'
-kwargs_json = '{"model": "opus", "effort": "high", "prompt": "p"}'
+args_json = '[{"$registry": {}}, "claude", null, {"$new": "OpinionRun", "fields": {"model": "opus", "effort": "high", "prompt": "p"}}]'
 expected_json = '["claude", "-p", "--output-format", "text", "--model", "opus", "--effort", "high", "p"]'
 
 [[case]]
 # The codex level is a config value: the quotes are literal inside ONE argv element (M188).
 id = "effort/command-codex-quotes"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "codex"]'
-kwargs_json = '{"model": "gpt-6.1-sol", "effort": "high", "prompt": "p"}'
+args_json = '[{"$registry": {}}, "codex", null, {"$new": "OpinionRun", "fields": {"model": "gpt-6.1-sol", "effort": "high", "prompt": "p"}}]'
 expected_json = '["codex", "exec", "--model", "gpt-6.1-sol", "-c", "model_reasoning_effort=\"high\"", "p"]'
 
 [[case]]
 id = "effort/command-effort-only"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "codex"]'
-kwargs_json = '{"effort": "max", "prompt": "p"}'
+args_json = '[{"$registry": {}}, "codex", null, {"$new": "OpinionRun", "fields": {"effort": "max", "prompt": "p"}}]'
 expected_json = '["codex", "exec", "-c", "model_reasoning_effort=\"max\"", "p"]'
 
 [[case]]
 id = "effort/command-pi"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "pi"]'
-kwargs_json = '{"model": "x", "effort": "off", "prompt": "p"}'
+args_json = '[{"$registry": {}}, "pi", null, {"$new": "OpinionRun", "fields": {"model": "x", "effort": "off", "prompt": "p"}}]'
 expected_json = '["pi", "-p", "--no-session", "--tools", "read,grep,find,ls", "--no-extensions", "--no-mcp", "--model", "x", "--thinking", "off", "p"]'
 
 [[case]]
 # A declared argv takes the row's effort flag after its argv, before the prompt.
 id = "effort/command-declared-argv"
 fn = "opinion_command"
-args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}"], "efforts": {"flag": "--think {effort}", "levels": ["low", "high"]}}}}}}, "d"]'
-kwargs_json = '{"model": "m", "effort": "high", "prompt": "p"}'
+args_json = '[{"$registry": {"set": {"providers": {"d": {"argv": ["d-bin", "-m", "{model}"], "efforts": {"flag": "--think {effort}", "levels": ["low", "high"]}}}}}}, "d", null, {"$new": "OpinionRun", "fields": {"model": "m", "effort": "high", "prompt": "p"}}]'
 expected_json = '["d-bin", "-m", "m", "--think", "high", "p"]'
 
 [[case]]
 id = "effort/command-unsupported"
 fn = "opinion_command"
-args_json = '[{"$registry": {}}, "opencode"]'
-kwargs_json = '{"effort": "high", "prompt": "p"}'
+args_json = '[{"$registry": {}}, "opencode", null, {"$new": "OpinionRun", "fields": {"effort": "high", "prompt": "p"}}]'
 expected_json = '''{"error": "EffortError", "message": "provider 'opencode' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.opencode.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
 # A ladder entry's effort travels into its target; the second `sh1` entry is skipped as the same family.
 id = "effort/chain-carries-effort"
 fn = "opinion_chain"
-args_json = '[{"$registry": {"set": {"providers": {"sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m1@high"], "report_dir": "r/sh1/", "efforts": {"flag": "--e {effort}", "levels": ["low", "high"]}}}, "second_opinion_policy": {"ladder": ["sh1:m1@low", "sh1"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m1@high"], "report_dir": "r/sh1/", "efforts": {"flag": "--e {effort}", "levels": ["low", "high"]}}}, "second_opinion_policy": {"ladder": ["sh1:m1@low", "sh1"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 expected_json = '[{"provider": "sh1", "model": "m1", "family": "gpt", "effort": "low"}]'
 
 [[case]]
 # No pin: the rule's strongest declared entry, `m1@high`, with its own effort.
 id = "effort/chain-strongest-entry-effort"
 fn = "opinion_chain"
-args_json = '[{"$registry": {"set": {"providers": {"sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m1@high"], "report_dir": "r/sh1/", "efforts": {"flag": "--e {effort}", "levels": ["low", "high"]}}}, "second_opinion_policy": {"ladder": ["sh1"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}]'
+args_json = '[{"$registry": {"set": {"providers": {"sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m1@high"], "report_dir": "r/sh1/", "efforts": {"flag": "--e {effort}", "levels": ["low", "high"]}}}, "second_opinion_policy": {"ladder": ["sh1"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
 expected_json = '[{"provider": "sh1", "model": "m1", "family": "gpt", "effort": "high"}]'
 
 [[case]]

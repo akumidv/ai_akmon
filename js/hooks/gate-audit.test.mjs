@@ -31,7 +31,7 @@ function _project() {
   const declaration = {
     type: "assistant",
     isSidechain: false,
-    message: { content: [{ type: "text", text: "🧭 agent: review — gate" }] },
+    message: { content: [{ type: "text", text: "🧭 role: review — gate" }] },
   };
   fs.writeFileSync(posix.join(root, "transcript.jsonl"), `${JSON.stringify(declaration)}\n`);
   return { root, tmp: posix.join(root, "tmp") };

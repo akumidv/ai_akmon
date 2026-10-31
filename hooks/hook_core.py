@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,11 +20,11 @@ from typing import Any
 # Where the dev layer is, what it is called, and how the project root is found are not this
 # module's facts — they belong to ``common.project_root``, which is stdlib-only and sits
 # beside ``hooks/`` at the same tree-relative path in every carrier the hooks run from: the
-# mounted ``<AITNA_ROOT>/akmon/`` tree and the wheel's embedded ``akmon/_tree/``. The copy that
+# mounted ``<dev root>/akmon/`` tree and the wheel's embedded ``akmon/_tree/``. The copy that
 # used to live here answered the same questions in the same words and was the last remaining
 # second definition (C73).
 # This file's own tree root. Every carrier keeps a hook and the data it reads in one tree —
-# the mounted ``<AITNA_ROOT>/akmon/``, and the wheel's embedded ``akmon/_tree/`` — so this is
+# the mounted ``<dev root>/akmon/``, and the wheel's embedded ``akmon/_tree/`` — so this is
 # both the import anchor for ``common`` and the answer to "which tree is running" below.
 _TREE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_TREE_ROOT))
@@ -37,10 +38,12 @@ from common.markers import (  # noqa: E402
 )
 from common.materialization import stale_materialized  # noqa: E402
 from common.project_root import (  # noqa: E402
+    AITNA_ROOT_DEFAULT,
     aitna_root,
     aitna_root_name,
     akmon_mount,
     find_project_root,
+    locate_project_root,
 )
 
 
@@ -54,17 +57,17 @@ def akmon_runtime_root(project_root: Path) -> Path:
 
     This replaces the record-vetoes-the-directory rule (C69, ADR-0009/D02), which was correct only while
     mode ``package`` copied the hooks — and the whole runtime surface they read — into
-    ``<AITNA_ROOT>/.akmon/``. With the materialization narrowed to the guardrails the
+    ``<dev root>/.akmon/``. With the materialization narrowed to the guardrails the
     consumer's ``AGENTS.md`` imports, that directory holds no registry at all, and pointing
     here would have made the routing hook's "no registry, older pin — stay silent" guard fire on
     every session: status line and delegation log gone, exit code 0, stderr empty.
 
     What the old rule defended against is gone rather than given up: a stale
-    ``<AITNA_ROOT>/akmon`` from a prior mode cannot shadow anything, because a tree that is not
+    ``<dev root>/akmon`` from a prior mode cannot shadow anything, because a tree that is not
     executing is not a candidate.
 
     ``project_root`` stays in the signature: the project overlay it locates
-    (``<AITNA_ROOT>/model-routing.json``) is still layered onto whatever registry this tree
+    (``<dev root>/model-routing.json``) is still layered onto whatever registry this tree
     carries, and callers pass the pair together.
     """
     del project_root  # the carrier answers; the project only supplies the overlay on top of it
@@ -88,7 +91,7 @@ def runtime_root_display(project_root: Path) -> str:
     mount = akmon_mount(project_root)
     try:
         if akmon_runtime_root(project_root).resolve() == mount.resolve():
-            return f"{aitna_root_name()}/akmon"
+            return f"{aitna_root_name(project_root)}/akmon"
     except OSError:  # pragma: no cover - resolve() only raises on pathological filesystems
         pass
     return "$(akmon path)"
@@ -125,13 +128,13 @@ def hook_failure_diagnostic(hook_name: str, exc: BaseException) -> str:
     return f"akmon {hook_name} hook: {type(exc).__name__}"
 
 
-def hook_failure_notice(hook_name: str, exc: BaseException) -> str:
+def hook_failure_notice(hook_name: str, exc: BaseException, start: Path | None = None) -> str:
     """What the owner is told when an entry point crashed (C87, ADR-0013/D01): the fact, then the command.
 
     The same two facts as :func:`hook_failure_diagnostic` and nothing from the exception's text.
-    It is written inside a crash handler, so it reads nothing that can raise — the dev-layer
-    name is an environment lookup with a default, not a filesystem question, and the text is
-    code, not data (see :func:`hook_failure_diagnostic`).
+    It is written inside a crash handler, so nothing it reads can raise out of it — the dev-layer
+    name is looked up from ``start`` (default: the cwd) and falls back to the default name when
+    that lookup itself fails, and the text is code, not data (see :func:`hook_failure_diagnostic`).
 
     Runtime classification: operational
     Rationale: the owner-facing half of the same crash report (ADR-0013/D01) — it states that a
@@ -139,10 +142,14 @@ def hook_failure_notice(hook_name: str, exc: BaseException) -> str:
     renders it into the vendor's owner channel, so ADR-0012/D07 requires this classification on it
     even though it sits outside the ``*_result`` join.
     """
+    try:
+        dev_name = aitna_root_name(locate_project_root(start))
+    except (OSError, ValueError, RuntimeError):
+        dev_name = AITNA_ROOT_DEFAULT
     return (
         f"⚠ akmon: the {hook_name} hook failed ({type(exc).__name__}) and was skipped — this action "
         f"went ahead without it. Check the setup: `akmon verify` (a mounted tree: "
-        f"`python3 {aitna_root_name()}/akmon/bin/verify.py`)."
+        f"`python3 {dev_name}/akmon/bin/verify.py`)."
     )
 
 
@@ -159,11 +166,16 @@ def _code_extensions() -> frozenset[str]:
     return frozenset(_hook_core_data()["code_extensions"])
 
 
-# Path-classification segments are derived from the configured dev-layer root (default
-# ``_aitna``) so relocating it via AITNA_ROOT keeps the code/planning-doc detection correct.
+def _dev_name(root: Path | None) -> str:
+    """The lowercased dev-layer name the path classifiers match on; ``root`` defaults to the project at the cwd."""
+    return aitna_root_name(root if root is not None else locate_project_root()).lower()
+
+
+# Path-classification segments are derived from the project's dev-layer root (default ``_aitna``)
+# so relocating it via ``.aitna-root`` keeps the code/planning-doc detection correct.
 # These match lowercased path *substrings*, so the segment uses the lowercased root name.
-def _non_code_segments() -> tuple[str, ...]:
-    aitna = aitna_root_name().lower()
+def _non_code_segments(root: Path | None) -> tuple[str, ...]:
+    aitna = _dev_name(root)
     return tuple(jsondata.fill(segment, {"aitna": aitna}) for segment in _hook_core_data()["non_code_segments"])
 
 
@@ -260,13 +272,13 @@ def report_unclassified_shell_route(session_id: str | None) -> None:
 
 # Planning / design docs — editing one may be an analysis-only turn that needs confirmation
 # first (see guardrails/_common.md § Analysis before mutation).
-def _planning_doc_segments() -> tuple[str, ...]:
-    aitna = aitna_root_name().lower()
+def _planning_doc_segments(root: Path | None) -> tuple[str, ...]:
+    aitna = _dev_name(root)
     return tuple(jsondata.fill(segment, {"aitna": aitna}) for segment in _hook_core_data()["planning_doc_segments"])
 
 
-def _planning_doc_files() -> tuple[str, ...]:
-    aitna = aitna_root_name().lower()
+def _planning_doc_files(root: Path | None) -> tuple[str, ...]:
+    aitna = _dev_name(root)
     return tuple(jsondata.fill(name, {"aitna": aitna}) for name in _hook_core_data()["planning_doc_files"])
 
 
@@ -284,23 +296,50 @@ def current_git_branch() -> str:
         return ""
 
 
-# ask->deny escalation for unattended sessions (C31, ADR-0006/D02). A live test
-# showed a hook-forced `ask` is a silent no-op — no prompt, no block — in a Claude Code
-# background/child session running in `acceptEdits` mode; the PreToolUse payload carries a
-# `permission_mode` field (same enum on Codex) that tells a hook whether an interactive
-# owner is actually there to answer. Only the strict `default` mode is known to gate on
-# `ask`; everywhere else (or the field missing outright) the owner asked to be stricter
-# rather than silently pass through, so the decision is escalated to a hard `deny` — the one
-# decision every vendor is confirmed to enforce unconditionally.
+# ask->deny escalation for an unattended run (C31, ADR-0006/D02, narrowed by ADR-0025/D06). A live
+# test showed a hook-forced `ask` is a silent no-op -- no prompt, no block -- in a Claude Code
+# background/child session, so an ask that nobody can answer becomes a hard `deny`, the one
+# decision every vendor is confirmed to enforce unconditionally. Who attends is read from what the
+# host states: Claude Code sets `CLAUDE_CODE_SESSION_ATTENDED` (the adapter reads it at the entry
+# point and hands it down as `attended`; M199, M200). Where the host states nothing, only the
+# interactive `default` permission mode attends. A mode that skips every question never does.
 def _interactive_default_permission_mode() -> str:
-    """The one permission mode known to gate on a hook-forced ``ask`` (C102)."""
+    """The one permission mode known to gate on a hook-forced ``ask`` when the host states no attendance (C102)."""
     return _hook_core_data()["interactive_default_permission_mode"]
 
 
-def _escalate_unattended_ask(result: HookResult, permission_mode: str | None) -> HookResult:
-    if result.permission_decision != "ask" or permission_mode == _interactive_default_permission_mode():
+def _unattended_permission_modes() -> frozenset[str]:
+    """The permission modes that skip every question, so an ``ask`` is never shown in them (M193)."""
+    return frozenset(_hook_core_data()["unattended_permission_modes"])
+
+
+def ask_is_attended(permission_mode: str | None, *, attended: bool | None = None) -> bool:
+    """Whether a hook's ``ask`` reaches an owner who can answer it (ADR-0025/D06).
+
+    ``attended`` is the host's own statement (``CLAUDE_CODE_SESSION_ATTENDED``: ``True`` for ``1``,
+    ``False`` for ``0``), or ``None`` where it states nothing; the permission mode then decides,
+    as it did before. A mode that skips every question is never attended, whatever ``attended`` says.
+    """
+    if permission_mode in _unattended_permission_modes():
+        return False
+    if attended is not None:
+        return attended
+    return permission_mode == _interactive_default_permission_mode()
+
+
+# The attendance value as the host spells it, or ``unset`` where it stated nothing.
+_ATTENDED_LABELS = {True: "1", False: "0", None: "unset"}
+
+
+def _escalate_unattended_ask(
+    result: HookResult, permission_mode: str | None, *, attended: bool | None = None
+) -> HookResult:
+    if result.permission_decision != "ask" or ask_is_attended(permission_mode, attended=attended):
         return result
-    suffix = jsondata.fill(_hook_core_data()["escalated_ask_suffix"], {"permission_mode": repr(permission_mode)})
+    suffix = jsondata.fill(
+        _hook_core_data()["escalated_ask_suffix"],
+        {"permission_mode": repr(permission_mode), "attended": _ATTENDED_LABELS[attended]},
+    )
     return HookResult(
         event_name=result.event_name,
         additional_context=result.additional_context,
@@ -350,7 +389,11 @@ def privilege_escalation_guard_result(command: str) -> HookResult | None:
 
 
 def git_commit_guard_result(
-    command: str, branch: str | None = None, *, permission_mode: str | None = None
+    command: str,
+    branch: str | None = None,
+    *,
+    permission_mode: str | None = None,
+    attended: bool | None = None,
 ) -> HookResult | None:
     """Guard commit-shaped ``git`` commands: no AI co-author trailer, owner confirms landing history.
 
@@ -377,6 +420,7 @@ def git_commit_guard_result(
                 permission_reason=_hook_core_data()["git_commit_push_tag_merge_reason"],
             ),
             permission_mode,
+            attended=attended,
         )
 
     if is_git("commit"):
@@ -393,20 +437,78 @@ def git_commit_guard_result(
                     ),
                 ),
                 permission_mode,
+                attended=attended,
             )
 
     return None
 
 
-def agent_names(directory: Path) -> list[str]:
-    """Sorted names of the agent charters (subdirectories with a ``README.md``) under ``directory``."""
+def agent_names(directory: Path, known: Mapping[str, Sequence[str]] | None = None) -> list[str]:
+    """The agent charters (subdirectories with a ``README.md``) under ``directory``, in roster order.
+
+    ``known`` is :func:`agent_definitions`, whose key order is the delivery chain's (ADR 0026/D08):
+    the shipped agents with a charter come first, in that order, then the rest sorted by name. A
+    charter directory named for a role of a shipped agent that has a charter of its own is the legacy
+    layout of that agent (ADR 0026/D06), and is left out so that one agent is not listed twice; with
+    no such charter it is listed as any other.
+    """
     if not directory.is_dir():
         return []
-    return sorted(
+    known = known or {}
+    found = {
         item.name
         for item in directory.iterdir()
         if item.is_dir() and not item.name.startswith(".") and (item / "README.md").is_file()
-    )
+    }
+    shipped = [agent for agent in known if agent in found]
+    legacy = {role for agent in shipped for role in known[agent]} - set(known)
+    return shipped + sorted(found - set(shipped) - legacy)
+
+
+# A role a charter names: a reference to the standard's ``roles/<role>.md``.
+_CHARTER_ROLE_RE = re.compile(r"roles/([a-z][a-z0-9_-]*)\.md")
+
+
+def agent_definitions() -> dict[str, list[str]]:
+    """The roles of each agent akmon ships, by agent (``agents/agents.json`` of this tree).
+
+    The one owner of the agent -> roles table: ``akmon init`` writes each charter's sections from the
+    same file (ADR 0026/D06).
+    """
+    document = jsondata.read(_TREE_ROOT / "agents" / "agents.json")
+    return {agent: list(spec["roles"]) for agent, spec in document.items()}
+
+
+def agent_roles(directory: Path, agent: str, known: Mapping[str, Sequence[str]]) -> list[str]:
+    """The roles of ``agent``: its definition's when ``known`` names it, else the charter's own.
+
+    ``known`` is :func:`agent_definitions` (ADR 0026/D06). An agent it does not name — a project's
+    own, or a pre-0027 role-named charter directory — falls back: the charter
+    (``directory/<agent>/README.md``) names each role it works in by a reference to
+    ``roles/<role>.md`` (ADR 0027/D04), and a charter that names none belongs to an agent whose charter
+    directory is its role name (``learn``), so the agent's own name is its one role.
+    """
+    if agent in known:
+        return list(known[agent])
+    try:
+        text = (directory / agent / "README.md").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return [agent]
+    return list(dict.fromkeys(_CHARTER_ROLE_RE.findall(text))) or [agent]
+
+
+def agent_roster(directory: Path, agents: list[str], start: dict[str, str], known: Mapping[str, Sequence[str]]) -> str:
+    """The agents of ``directory`` each with its roles, as the session-start roster line names them.
+
+    ``known`` is :func:`agent_definitions`: the shipped agents' roles come from it, and only the
+    development layer passes it — a project's runtime agents keep their charters' own roles.
+    """
+    entries = []
+    for agent in agents:
+        roles = agent_roles(directory, agent, known)
+        template = start["agent_one_role"] if len(roles) == 1 else start["agent_many_roles"]
+        entries.append(jsondata.fill(template, {"agent": agent, "roles": ", ".join(roles)}))
+    return start["agent_separator"].join(entries)
 
 
 def stale_guardrail_notice(root: Path) -> str | None:
@@ -415,7 +517,7 @@ def stale_guardrail_notice(root: Path) -> str | None:
     The interactive half of the freshness guarantee (C77). ``sync --check`` and ``verify``
     already catch this copy in CI, but they run on a commit; the window this closes opens
     earlier and closes silently. A pin bump installs the new hooks the instant the dependency
-    resolves — they run from the package — while ``<AITNA_ROOT>/.akmon/`` still
+    resolves — they run from the package — while ``<dev root>/.akmon/`` still
     holds the previous release's text until someone runs ``akmon sync``. Nothing in a session
     would otherwise say that the always-on rules loaded from the repository are not the rules
     the running standard ships.
@@ -444,7 +546,7 @@ def stale_guardrail_notice(root: Path) -> str | None:
         return None
     return jsondata.fill(
         _hook_core_data()["stale_guardrail_notice"],
-        {"root_name": aitna_root_name(), "names": ", ".join(names)},
+        {"root_name": aitna_root_name(root), "names": ", ".join(names)},
     )
 
 
@@ -459,7 +561,7 @@ def session_start_result(root: Path) -> HookResult | None:
     second fact "operational" would read as "incidental", which it is not.
     """
     stale = stale_guardrail_notice(root)
-    dev = agent_names(aitna_root(root) / "agents")
+    dev = agent_names(aitna_root(root) / "agents", agent_definitions())
     desk = agent_names(root / "agents")
     if not dev and not desk:
         # A project with no agent charters still has to hear this one: it is about the rules
@@ -473,9 +575,14 @@ def session_start_result(root: Path) -> HookResult | None:
     start = _hook_core_data()["session_start"]
     lines = [start["title"], start["format_line"]]
     if dev:
-        lines.append(jsondata.fill(start["develop_line"], {"agents": ", ".join(dev)}))
+        lines.append(
+            jsondata.fill(
+                start["develop_line"],
+                {"agents": agent_roster(aitna_root(root) / "agents", dev, start, agent_definitions())},
+            )
+        )
     if desk:
-        lines.append(jsondata.fill(start["operate_line"], {"agents": ", ".join(desk)}))
+        lines.append(jsondata.fill(start["operate_line"], {"agents": agent_roster(root / "agents", desk, start, {})}))
     lines.append(start["no_agent_line"])
     if dev:
         # The DEVELOP routing discriminator (ADR 0003 §4): give the picking rule up front, not
@@ -484,7 +591,7 @@ def session_start_result(root: Path) -> HookResult | None:
     else:
         lines.append(start["pick_generic"])
     lines.append(start["delegation_line"])
-    lines.append(jsondata.fill(start["memory_line"], {"root_name": aitna_root_name()}))
+    lines.append(jsondata.fill(start["memory_line"], {"root_name": aitna_root_name(root)}))
     if stale is not None:
         lines.append(stale)
     # Dual channel for the stale-guardrail line only (requirement 11): it asks the *owner* for a
@@ -578,14 +685,15 @@ def classify_target(file_path: str, root: Path | None = None) -> str:
 def is_code_path(file_path: str, root: Path | None = None) -> bool:
     """Whether ``file_path`` is a project code file (not docs/design, and a recognized extension)."""
     target = classify_target(file_path, root)
-    if any(segment in target for segment in _non_code_segments()):
+    if any(segment in target for segment in _non_code_segments(root)):
         return False
     return Path(target).suffix in _code_extensions()
 
 
-def role_on_code_message() -> str:
+def role_on_code_message(root: Path | None = None) -> str:
     """Owner-facing text for the role-on-code reminder (hooks/hook_core.json, C102)."""
-    return jsondata.fill(_hook_core_data()["role_on_code_message"], {"tasks": f"{aitna_root_name()}/TASKS.md"})
+    tasks = f"{aitna_root_name(root if root is not None else locate_project_root())}/TASKS.md"
+    return jsondata.fill(_hook_core_data()["role_on_code_message"], {"tasks": tasks})
 
 
 def role_on_code_result(
@@ -603,17 +711,17 @@ def role_on_code_result(
     if not claim_diagnostic_marker(marker_kind("role_on_code"), session_id):
         return None
 
-    return HookResult(event_name="PreToolUse", additional_context=role_on_code_message())
+    return HookResult(event_name="PreToolUse", additional_context=role_on_code_message(project_root))
 
 
 def is_planning_doc(file_path: str, root: Path | None = None) -> bool:
     """Whether ``file_path`` is a backlog/design/ADR/requirements/process planning doc."""
     target = classify_target(file_path, root)
-    if target.endswith(_planning_doc_files()):
+    if target.endswith(_planning_doc_files(root)):
         return True
     if not target.endswith(".md"):
         return False
-    return any(segment in target for segment in _planning_doc_segments())
+    return any(segment in target for segment in _planning_doc_segments(root))
 
 
 def analysis_before_mutation_message() -> str:
@@ -668,7 +776,7 @@ def analysis_write_result(
 #   is drift too, but cheaper to undo than an edit.
 # - **The opening calls of a stretch are free** (:func:`delegation_grace`): orientation before
 #   the first delegation is not yet a failure to delegate.
-# - **A read never carries the ask.** Outside the interactive default mode the ask is a deny, and
+# - **A read never carries the ask.** In an unattended run the ask is a deny, and
 #   a denied look costs the agent the means to find out what it was about to do. The score stays
 #   over the threshold, so the ask lands on the next edit or shell call.
 #
@@ -781,7 +889,7 @@ def _update_delegation_counter(counter: Path, tool_name: str) -> float:
 
 
 def _delegation_ask_result(
-    score: float, tool_name: str, ask_marker: Path, permission_mode: str | None
+    score: float, tool_name: str, ask_marker: Path, *, permission_mode: str | None, attended: bool | None
 ) -> HookResult | None:
     """The hard ask: fires once per stretch, never on a read."""
     # A read never carries the ask and does not spend it; the next edit or shell call does.
@@ -796,6 +904,7 @@ def _delegation_ask_result(
             permission_reason=delegation_ask_message(score),
         ),
         permission_mode,
+        attended=attended,
     )
 
 
@@ -814,6 +923,7 @@ def delegation_nudge_result(
     *,
     is_subagent: bool = False,
     permission_mode: str | None = None,
+    attended: bool | None = None,
 ) -> HookResult | None:
     """PreToolUse guardrail: nudge, then hard-ask, on sustained orchestrator delegation drift.
 
@@ -840,7 +950,7 @@ def delegation_nudge_result(
     score = _update_delegation_counter(counter, tool_name)
 
     if score >= delegation_ask_threshold():
-        return _delegation_ask_result(score, tool_name, ask_marker, permission_mode)
+        return _delegation_ask_result(score, tool_name, ask_marker, permission_mode=permission_mode, attended=attended)
     if score >= delegation_nudge_threshold():
         return _delegation_soft_nudge_result(score, marker)
     return None

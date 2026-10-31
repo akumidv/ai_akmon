@@ -30,6 +30,52 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   your ignore list.
 
 ### Added
+- **Agents are listed in the order of the delivery chain, and a learning run is offered before a
+  pull request (C180,
+  [ADR-0026](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0026-agents-of-the-delivery-chain.md)/D08).**
+  `agents/agents.json` keys are the chain's order — development, learning, release — and the
+  session-start roster, the `akmon init` AGENTS.md block and the docs follow it, a project's own
+  agents after them by name; `akmon init` writes the learning charter before the release one. The
+  roster leaves out a legacy role-named charter directory (`review/`, `architect/`, `engineer/`,
+  `learn/`) once the agent that owns the role has a charter of its own. The `release` skill and
+  `pipelines/code-flow.md` tell the owner a learning run is due before a pull request when
+  `akmon learn status` counts a session since the last run, and offer the `learning` skill without
+  starting it.
+- **The learning agent's run record, reminder and skill (C177,
+  [ADR-0026](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0026-agents-of-the-delivery-chain.md)/D07).**
+  A new `learning-reminder` SessionStart hook records each session id once in
+  `<AITNA_ROOT>/local/learning.json` (gitignored with the local layer) and, once at least one session
+  has passed since the last learning run (the session just starting is not one) and 10 sessions or 7
+  days have gone by, asks the model to tell the owner once to run the `learning` skill (and shows the
+  owner the same line). A second-opinion run is neither counted nor reminded, an unattended
+  (`claude -p`) run is counted but not reminded, and concurrent writes are serialised by a lock
+  file beside the record. Change the
+  thresholds with `[learning] reminder_sessions` and `reminder_days` in `<AITNA_ROOT>/.akmon.toml`.
+  `akmon sync` wires the hook for Claude and as a Codex route (`codex-hook learning-reminder`), so a
+  consumer that runs `akmon verify` on Codex will find one more hook to trust. `akmon learn status`,
+  `sessions` and `mark` show the counts, list this project's Claude transcripts (also those started
+  in a directory inside it) and Codex sessions since the last run (before the first run: since
+  counting began; `--all` lists every one) under a listing-time line, and record the end of a run
+  (`mark --at <that time>` keeps activity after the listing). `akmon verify` warns
+  (`charters.role-link-target`) when a charter links a role or agent definition the standard tree
+  lacks. The `akmon init` AGENTS.md block now names the
+  development, release and learning charters (an existing block is not rewritten). Check: run
+  `akmon sync` after bumping the pin so the new hook is wired.
+
+- **`akmon trust` — a project's own grant files take effect only once the owner accepted their
+  digest (C172, [ADR-0025/D04, D05](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0025-actors-and-action-repertoire.md)),
+  as a trial.** `status`, `diff`, `accept`, `revoke` and `report` work on every file under
+  `<AITNA_ROOT>/grants/` (provisional name) or on the paths given. A digest is the SHA-256 of the
+  content, not bound to a project or a path; the store is `$AKMON_TRUST_DIR`, else
+  `$XDG_STATE_HOME/akmon/trust`, else `~/.local/state/akmon/trust`, outside every checkout.
+  `accept` shows the change since the last accepted version of the same path and asks at the
+  terminal; it is refused when stdin is not a terminal and has no `--yes`. The store may not lie
+  inside the project's checkout (a store path, symbolic links followed, inside the project root is
+  refused), and the history is kept per project and path: a file new to a project is `new`, shown as
+  a diff against another project's accepted version under that project's name. The interactive-terminal
+  check is not a security boundary (a pseudo-terminal passes it, and a process running as the same
+  user can write the store); containment until C173 is the launcher giving an autonomous run the store
+  read-only. Nothing reads the store yet: the hook that enforces it is C173.
 - **Second opinion from any harness and model; the priorities are followed or proposed
   ([ADR-0024/D15](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
   `qwen`, `opencode` and `pi` join `claude` and `codex` as carriers; the last three ship with an
@@ -86,7 +132,76 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   `pi` rows carry the levels measured in M188; `opencode` and `qwen` carry none. `akmon verify` checks an
   `efforts` row and the `@level` of a `models` entry.
 
+- **The release and learning agents have a shipped definition and a charter of their own (C176,
+  [ADR-0026/D06](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0026-agents-of-the-delivery-chain.md)).**
+  akmon ships `agents/`: `development.md`, `release.md`, `learning.md`, an `agents/README.md` that
+  says what an agent definition, a role and a charter each are, and `agents/agents.json`, the one
+  table of which roles each agent works in. `akmon init` now also writes
+  `<AITNA_ROOT>/agents/release/README.md` and `<AITNA_ROOT>/agents/learning/README.md` beside the
+  development charter, each linking its definition and carrying a section for the agent's one role
+  (`release`, `learn`); a file already there stays untouched. A charter directory named `learn/` is
+  now a legacy layout: `akmon verify` passes it with a `charters.legacy-role-dir` warning that names
+  `learning/` as the successor, and `verify --strict` still passes, like the other role-named
+  directories. `charters.role-link` accepts a link to `akmon/agents/` as well as `akmon/roles/`. The
+  session-start roster names the three agents with their roles from `agents/agents.json`
+  (`development — roles review, architect, engineer; learning — role learn; release — role
+  release`); a charter that names no shipped agent keeps reading its roles from the `roles/` links
+  it holds, else its own name. Check: if you keep a `<AITNA_ROOT>/agents/learn/` charter, move its
+  content to `agents/learning/README.md` and delete the directory; add the new `release/` and
+  `learning/` charters by re-running `akmon init`.
+
 ### Changed
+- **The dev-layer root is declared by a `.aitna-root` file, and the `AITNA_ROOT` environment
+  variable is removed (C157,
+  [ADR-0022](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0022-local-layer-index-and-plans.md)/D09).**
+  Consumer-visible: `AITNA_ROOT` is no longer read by any tool or hook, in either implementation;
+  `akmon verify` warns `environment.aitna-root-ignored` while it is still set (and `--strict` fails
+  on it). A project whose dev layer is not `_aitna/` states it in `.aitna-root` at the project root,
+  one line holding a project-root-relative path (`tools/ai`); an absent file means `_aitna`, and an
+  absolute path, one climbing with `..` or one resolving outside the project is refused. Check: if
+  you exported `AITNA_ROOT`, run `akmon update --aitna-root <path>` (or `akmon init --aitna-root
+  <path>`), which writes the file, commit it, then unset the variable in shells and CI. `akmon init`
+  writes the file only for a non-default root and no longer prints the `export AITNA_ROOT=` step; a
+  run that is declined at the prompt or refused before it applies anything leaves `.aitna-root` as it
+  found it. A directory holding `AGENTS.md` and `.aitna-root` is a project root. With no project
+  root found the
+  local-layer writers (the learning record and `akmon learn mark`, the routing alias refresh, gate
+  packs and coverage maps without `--out`, `akmon trust accept` and `revoke`) print the notice and
+  write nothing, and the learning-reminder and model-routing hooks stay silent. `akmon learn`
+  accepts `--project-root`. Messages that wrote `<AITNA_ROOT>` now write `<dev root>`.
+- **The role declaration is `🧭 role: <name> — <focus>`, and a charter is one directory per agent
+  (A72, [ADR-0027/D03, D04](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0027-names-of-agents-actors-roles-and-delegates.md)).**
+  Both carry a one-release tolerance. *Declaration:* the hooks' guidance, the `AGENTS.md` block
+  `akmon init` writes and the `guardrails/_common.md` rule now say `role:`; `🧭 agent:` is still read
+  as an alias (the active-role reader behind the delegation advisory and the gate audit accepts
+  both), so a session or a project note that still writes it keeps working. *Charter:* `akmon init`
+  writes `<AITNA_ROOT>/agents/development/README.md` — one charter for the development agent, with a
+  section per role (`review`, `architect`, `engineer`) — in place of one directory per role, and the
+  `AGENTS.md` block it writes links that charter. A role-named directory
+  (`<AITNA_ROOT>/agents/architect/`, `engineer/`, `review/`) still passes `akmon verify`, with a
+  `charters.legacy-role-dir` warning that is shown but never fails `verify --strict` (the CI step
+  `akmon init` ships runs it, so a pin bump does not turn an existing consumer red; the exemption is
+  removed with the tolerance; `release/` is an agent, not a role of the development agent, and carries
+  none, while `learn/` joins the legacy directories, see the agent-definitions entry under Added). The
+  session-start roster now reads each agent with its roles (`development —
+  roles review, architect, engineer`; `release — role release`), so a model declares a role, never an
+  agent name. Check: move each role directory's content into the matching
+  section of `agents/development/README.md`, delete the directory, and update the
+  `AGENTS.md` block's agent line to link the new charter; replace `🧭 agent:` with `🧭 role:` in
+  your own notes and prompts. The alias and the legacy-directory warning are removed in the release
+  after this one.
+- **`roles/release.md` and `roles/learn.md` moved into the agent definitions (C176,
+  [ADR-0026/D06](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0026-agents-of-the-delivery-chain.md)).**
+  `roles/` keeps the three roles of the development agent; the release agent is defined in
+  `agents/release.md` and the learning agent in `agents/learning.md`, each working in one mode that
+  keeps its name (`release`, `learn`), so `🧭 role: release` and `🧭 role: learn` stay valid. The
+  standard-tree layout check requires `agents/README.md`, `agents.json`, `development.md`,
+  `learning.md` and `release.md` instead of the two role files, and the wheel, the npm package and a
+  vendored mount carry `agents/`. The release agent's boundary text is unchanged in effect: the
+  owner still runs the landing commands until the repertoire of C173 enforces ADR 0026/D04.
+  Check: a link or note of yours to `roles/release.md` or `roles/learn.md` now reads
+  `agents/release.md` or `agents/learning.md`; `release_check --subject package` still reads
+  `<AITNA_ROOT>/agents/release/README.md` as an optional note.
 - **The shipped codex `sol` pin is resolved, not sent raw
   ([ADR-0024/D16](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
   A ChatGPT-account codex rejects the alias `sol` (HTTP 400 `model_not_found`). The runner now sends the
@@ -115,6 +230,19 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   project overlay that sets neither is unaffected.
 
 ### Fixed
+- **A hook `ask` reaches an owner who is present ([ADR-0025](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0025-actors-and-action-repertoire.md)/D06, C178).**
+  The commit guard's `push`/`tag`/`merge` and commit-on-the-default-branch ask, and the delegation
+  tier-floor ask, were turned into a deny whenever `permission_mode` was not `default`, so an
+  attended session in `auto` could never answer them. A hook entry point now reads the host's
+  `CLAUDE_CODE_SESSION_ATTENDED` (`1` attended, `0` unattended): an attended run keeps the ask, an
+  unattended run (`-p`) gets the deny, and where the variable is absent (Codex, an older Claude
+  Code) the earlier rule stands. `bypassPermissions` and `dontAsk` are never attended. The deny's
+  suffix now names the permission mode and the attendance value. Nothing to change in a consumer;
+  `akmon sync` carries the hooks.
+- `~/.claude/projects/` directory names are derived the way Claude Code derives them: every
+  character outside `[A-Za-z0-9]` becomes `-` (a project under `_name` or `my.app` was missed by
+  `stats` before).
+
 - **A declared provider row with no `report_dir` no longer crashes the runner
   ([ADR-0024/D12](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0024-second-opinion-by-model-priors.md)).**
   `second_opinion` files its report under `.<provider id>/second-opinion/` (it died with

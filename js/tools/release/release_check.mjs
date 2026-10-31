@@ -119,11 +119,12 @@ export function subjects(data) {
 }
 
 /**
- * The release charter, project-root-relative, under the *configured* dev layer.
+ * The release charter, project-root-relative, under the project's *declared* dev layer.
+ * @param {string | null} root
  * @returns {string}
  */
-function _releaseCharter() {
-  return `${aitnaRootName()}/agents/release/README.md`;
+function _releaseCharter(root) {
+  return `${aitnaRootName(root)}/agents/release/README.md`;
 }
 
 /**
@@ -227,7 +228,7 @@ function _tasksSummary(data, tasksDir) {
 /**
  * `--state`: print the TASKS / CHANGELOG / release-charter / git-status summary.
  *
- * The akmon subject reads `<AITNA_ROOT>/akmon` when the project mounts it, else the running tree
+ * The akmon subject reads `<dev root>/akmon` when the project mounts it, else the running tree
  * itself; it is refused when that tree has no `meta/` at all (see the Python).
  * @param {ReleaseData} data
  * @param {string} root
@@ -268,9 +269,9 @@ export function runState(data, root, subject) {
   }
   _out();
   if (subject === "package") {
-    const charter = pyPath(root, _releaseCharter());
+    const charter = pyPath(root, _releaseCharter(root));
     const note = isFile(charter) ? texts.charter_found : texts.charter_missing;
-    _out(fill(texts.charter_line, { charter: _releaseCharter(), note }));
+    _out(fill(texts.charter_line, { charter: _releaseCharter(root), note }));
     _out();
   }
   _out(fill(texts.git_status_header, { name: basename(gitDir) }));
@@ -800,13 +801,13 @@ export function runCheck(data, root, subject) {
   const failed = _runCommands(root, [
     { printable: ["akmon", "verify", ...args].join(" "), argv: [process.execPath, cli, "verify", ...args] },
   ]);
-  const charter = pyPath(root, _releaseCharter());
+  const charter = pyPath(root, _releaseCharter(root));
   if (isFile(charter)) {
-    _out(`\n${fill(texts.charter_runs_note, { charter: _releaseCharter() })}`);
+    _out(`\n${fill(texts.charter_runs_note, { charter: _releaseCharter(root) })}`);
     _out(texts.charter_runs_note_suffix);
   } else {
-    _out(`\n${fill(texts.charter_missing_note, { charter: _releaseCharter() })}`);
-    failed.push(_releaseCharter());
+    _out(`\n${fill(texts.charter_missing_note, { charter: _releaseCharter(root) })}`);
+    failed.push(_releaseCharter(root));
   }
 
   if (exitCode(versionFindings)) {
@@ -852,9 +853,10 @@ function _mountPath(tree) {
  * @param {string} version
  * @param {string} subject
  * @param {string} [tree] the akmon tree the tag is cut from (default: the running one)
+ * @param {string | null} [projectRoot] the project a `package` plan is run in, for the path of its release charter
  * @returns {number}
  */
-export function runPlan(data, version, subject, tree = embeddedTreeRoot()) {
+export function runPlan(data, version, subject, tree = embeddedTreeRoot(), projectRoot = null) {
   const plan = data.run_plan;
   if (!VERSION_RE.test(version)) {
     process.stderr.write(`${fill(plan.error_version, { version: pyRepr(version) })}\n`);
@@ -878,7 +880,7 @@ export function runPlan(data, version, subject, tree = embeddedTreeRoot()) {
   if (subject === "akmon") {
     lines.push(...facts.literal_lines.map((/** @type {string} */ line) => fill(line, { literal })));
   } else {
-    lines.push(fill(facts.literal_line, { charter: _releaseCharter() }));
+    lines.push(fill(facts.literal_line, { charter: _releaseCharter(projectRoot) }));
   }
   lines.push(fill(plan.changelog_note, { version }));
   lines.push(plan.recheck_note);
@@ -890,7 +892,7 @@ export function runPlan(data, version, subject, tree = embeddedTreeRoot()) {
   lines.push(fill(plan.tag_line, { version }));
   lines.push(plan.push_line);
   if (subject === "package") {
-    lines.push(`\n${fill(facts.publish_note, { charter: _releaseCharter() })}`);
+    lines.push(`\n${fill(facts.publish_note, { charter: _releaseCharter(projectRoot) })}`);
   }
   lines.push("");
   const cycleNote = Object.hasOwn(facts, "cycle_note") ? facts.cycle_note : plan.cycle_note;
@@ -979,11 +981,14 @@ export function main(argv = process.argv.slice(2)) {
     return 0;
   }
 
-  if (options.plan) {
-    return runPlan(data, options.plan, options.subject);
-  }
-
   const { root, notice } = resolveProjectRoot(options.projectRoot);
+  if (options.plan) {
+    // Only a package plan names a path under the project (its release charter); the akmon plan is the tree's own.
+    if (notice && options.subject === "package") {
+      process.stderr.write(`${notice}\n`);
+    }
+    return runPlan(data, options.plan, options.subject, embeddedTreeRoot(), root);
+  }
   if (notice) {
     process.stderr.write(`${notice}\n`);
   }

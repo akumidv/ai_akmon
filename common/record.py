@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""The one reader of ``<AITNA_ROOT>/.akmon.toml`` — the project's integration record.
+"""The one reader of ``<dev root>/.akmon.toml`` — the project's integration record.
 
 The record answers "which carrier is this project on" (ADR 0009 §3), and answering it wrongly
-is never loud: a package-mode project beside a stale ``<AITNA_ROOT>/akmon`` had its hooks bind
+is never loud: a package-mode project beside a stale ``<dev root>/akmon`` had its hooks bind
 the stale tree's registry and print stale tool paths, silently (C69, ADR-0009/D02). Before this module
 existed, ``bin/sync.py`` held the original reader and four other modules had grown narrow
 readers of their own, each justified in place. C75 folded three of those four —
@@ -147,6 +147,16 @@ def recorded_mount(project_root: Path) -> str | None:
     """
     value = read_akmon_toml(aitna_root(project_root) / ".akmon.toml").get("mount")
     return value if isinstance(value, str) and value else None
+
+
+def recorded_table(project_root: Path, name: str) -> dict:
+    """The ``[name]`` table the record holds, or ``{}`` when the record, the table or its shape is missing.
+
+    Lenient like :func:`read_akmon_toml`: a caller that only *consults* an optional section — the
+    learning reminder's thresholds — gets its defaults from an absent or broken record, never an error.
+    """
+    table = read_akmon_toml(aitna_root(project_root) / ".akmon.toml").get(name)
+    return table if isinstance(table, dict) else {}
 
 
 def records_package_mode(project_root: Path) -> bool:

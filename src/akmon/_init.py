@@ -1,7 +1,7 @@
 """``akmon init`` — attach the standard to a project (C37, design ``docs/design/packaging/``).
 
 This is the mechanized half of ``BOOTSTRAP.md`` §A: mount the standard in one of the four
-modes (ADR 0009 §3-4), create the ``<AITNA_ROOT>/`` local layout, write the integration
+modes (ADR 0009 §3-4), create the ``<dev root>/`` local layout, write the integration
 record, run ``sync`` and the model-routing initializer, and print the steps it deliberately
 did **not** do. The judgment steps stay with the agent/owner — archetype classification and
 the guardrail/profile map (``ARCHETYPES.md``), and the ``[test].runner`` pin — so ``init``
@@ -254,46 +254,64 @@ def _describe(repo_dir: Path) -> str | None:
 
 
 def _effective_aitna_root(flag: str | None, root: Path) -> str:
-    """The dev-layer root this run will use — from ``--aitna-root`` or from ``AITNA_ROOT``.
+    """The dev-layer root this run will use — ``--aitna-root``, else the one ``root`` already declares.
 
-    Validated whichever way it arrived.
-
-    The two sources are one contract, so validating only the flag validated nothing: the flag's
-    entire effect is to *set* the environment variable, and a caller who exports the variable
-    instead reaches every code path the flag reaches. ``AITNA_ROOT=../escaped akmon init`` wrote
-    the record, the backlog, the charters and the mount into a sibling directory and exited 0.
+    Validated whichever way it arrived, by the one validator (``common/project_root.py``). A flag
+    that is empty or blank states nothing, and the declaration (``.aitna-root``, else ``_aitna``)
+    stands. The environment is not read: the declaration is the project's, not the shell's (ADR 0022 D09).
     """
-    source = "--aitna-root" if flag is not None else "AITNA_ROOT"
-    raw = flag if flag is not None else os.environ.get("AITNA_ROOT")
-    if raw is None or not raw.strip():
-        return cli._project_root_lib().AITNA_ROOT_DEFAULT
-    return _validated_aitna_root(raw, root, source)
+    resolver = cli._project_root_lib()
+    try:
+        if flag is not None and flag.strip():
+            return resolver.validated_dev_root_name(flag, root, "--aitna-root")
+        return resolver.aitna_root_name(root)
+    except ValueError as exc:
+        raise _InitError(str(exc)) from exc
 
 
-def _validated_aitna_root(value: str, root: Path, source: str = "--aitna-root") -> str:
-    """A dev-layer root as a project-root-relative path, or a hard error.
+def _write_dev_root_pointer(root: Path, aitna: str) -> None:
+    """Declare ``aitna`` as the dev layer in ``<root>/.aitna-root``, only when it is not the default.
 
-    `AITNA_ROOT` is *project-root-relative* by contract (BOOTSTRAP §A) and `init` writes a whole
-    layout under it — backlog, memory, charters, the integration record, and in package mode the
-    materialized imported guardrails. An absolute path or one climbing out with `..` would
-    scatter all of that outside the project the caller named, silently, because every later step
-    simply follows the variable. Checked both lexically and by resolution: a symlinked segment
-    can leave the project without a single `..` in the string.
+    The default is declared by the file's absence (ADR 0022 D09), so a project that moves back to
+    ``_aitna`` loses a pointer that named another root. Written before the mount and the sync and
+    routing steps run, because every one of them reads the root through that file.
     """
-    raw = value.strip()
-    # Absoluteness is decided on the *raw* value: stripping the slashes first would turn
-    # `/tmp/escaped` into the innocent-looking relative `tmp/escaped` and let it through.
-    if Path(raw).is_absolute():
-        raise _InitError(f"{source} must be relative to the project root and stay inside it: {value!r}")
-    cleaned = raw.strip("/")
-    if not cleaned:
-        raise _InitError(f"{source} cannot be empty")
-    candidate = Path(cleaned)
-    if ".." in candidate.parts:
-        raise _InitError(f"{source} must be relative to the project root and stay inside it: {value!r}")
-    if root.resolve() not in (root / candidate).resolve().parents:
-        raise _InitError(f"{source} resolves outside the project root: {(root / candidate).resolve()}")
-    return cleaned
+    resolver = cli._project_root_lib()
+    pointer = root / resolver.DEV_ROOT_FILE
+    declared = pointer.read_text(encoding="utf-8").strip() if pointer.is_file() else None
+    if aitna == resolver.AITNA_ROOT_DEFAULT:
+        if declared not in (None, aitna):
+            pointer.unlink()
+            _log(f"removed {pointer.name} (the dev layer is the default, {aitna}/)")
+    elif declared != aitna:
+        pointer.write_text(aitna + "\n", encoding="utf-8")
+        _log(f"wrote {pointer.name} ({aitna})")
+
+
+def _dev_root_pointer_text(root: Path) -> str | None:
+    """The text of ``<root>/.aitna-root``, or ``None`` when the project has no such file.
+
+    Kept raw (not stripped) so that ``_restore_dev_root_pointer`` can put back exactly what was there.
+    """
+    pointer = root / cli._project_root_lib().DEV_ROOT_FILE
+    return pointer.read_text(encoding="utf-8") if pointer.is_file() else None
+
+
+def _restore_dev_root_pointer(root: Path, previous: str | None) -> None:
+    """Put ``<root>/.aitna-root`` back to ``previous`` (``_dev_root_pointer_text``'s value), when it differs.
+
+    A run that declines or refuses before it applies anything must leave the declaration it wrote early
+    (``_write_dev_root_pointer``) as it found it: deleted when it was absent, its old text when it existed,
+    re-created when the run removed it.
+    """
+    pointer = root / cli._project_root_lib().DEV_ROOT_FILE
+    if _dev_root_pointer_text(root) == previous:
+        return
+    if previous is None:
+        pointer.unlink()
+    else:
+        pointer.write_text(previous, encoding="utf-8")
+    _log(f"left {pointer.name} as it was (nothing was applied)")
 
 
 def _recorded_mount(root: Path, aitna: str) -> str | None:
@@ -607,18 +625,71 @@ def _memory_index() -> str:
     return _data()["memory_index"]
 
 
-def _charters() -> dict[str, str]:
-    """The default agent charters by role, in write order (``init.json``)."""
-    return _data()["charters"]
+@dataclass(frozen=True)
+class _Charter:
+    """One default agent charter: the agent's focus, its roles in write order, and where the roles are defined.
+
+    ``role_files`` is true when each role is a file under ``roles/`` and false when the roles are
+    defined inside the agent's own definition (``agents/<agent>.md``).
+    """
+
+    focus: str
+    roles: Mapping[str, str]
+    role_files: bool
 
 
-def _charter(role: str, focus: str, aitna: str, *, package_mode: bool) -> str:
-    """One agent charter (``init.json``), with the locate line picked by mount mode."""
+def _agent_definitions() -> Mapping[str, Any]:
+    """The agent → roles table (``agents/agents.json`` of the embedded tree), the one owner of it.
+
+    The session-start hook reads the same file; this init writes one charter per agent from it.
+    """
+    return _jsondata().read(_tree.embedded_tree_root() / "agents" / "agents.json")
+
+
+def _charters() -> dict[str, _Charter]:
+    """The default agent charters by agent, in write order (``agents.json``), typed where the files are read.
+
+    The agent's and each role's focus text is ``init.json``'s; which roles an agent works in is not.
+    """
+    data = _data()
+    return {
+        agent: _Charter(
+            focus=data["charters"][agent],
+            roles={role: data["charter_role_focus"][role] for role in spec["roles"]},
+            role_files=spec["role_files"],
+        )
+        for agent, spec in _agent_definitions().items()
+    }
+
+
+def _charter(agent: str, spec: _Charter, aitna: str, *, package_mode: bool) -> str:
+    """One agent charter (``init.json``): the agent's header, its definition link and one section per role.
+
+    ``spec`` is the agent's entry; each locate line is picked by mount mode, and a role's record is
+    ``roles/<role>.md`` or, when the agent defines its roles itself, ``agents/<agent>.md``.
+    """
     jsondata = _jsondata()
     data = _data()
     locate_key = "charter_locate_package" if package_mode else "charter_locate_mounted"
-    locate = jsondata.fill(data[locate_key], {"aitna": aitna, "role": role})
-    return jsondata.fill(data["charter"], {"role": role, "focus": focus, "locate": locate})
+
+    def locate(path: str) -> str:
+        return jsondata.fill(data[locate_key], {"aitna": aitna, "path": path})
+
+    sections = []
+    for role, focus in spec.roles.items():
+        path = f"roles/{role}.md" if spec.role_files else f"agents/{agent}.md"
+        sections.append(
+            jsondata.fill(data["charter_role"], {"role": role, "focus": focus, "path": path, "locate": locate(path)})
+        )
+    return jsondata.fill(
+        data["charter"],
+        {
+            "agent": agent,
+            "focus": spec.focus,
+            "locate": locate(f"agents/{agent}.md"),
+            "sections": "\n".join(sections),
+        },
+    )
 
 
 def _gitignore_lines(aitna: str) -> list[str]:
@@ -790,7 +861,7 @@ def _write_if_absent(path: Path, text: str, log: Callable[[str], None], label: s
 
 
 def _write_akmon_toml(root: Path, aitna: str, *, mode: str, version: str | None, archetype: str) -> Path:
-    """Create or prepare ``<AITNA_ROOT>/.akmon.toml`` for an attach/realign.
+    """Create or prepare ``<dev root>/.akmon.toml`` for an attach/realign.
 
     A fresh record is written whole. An existing one is *upserted key by key*
     (``sync.py::_upsert_toml_key``) rather than regenerated, so a hand-written
@@ -1131,13 +1202,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"akmon init: {root} is not a directory", file=sys.stderr)
         return 2
 
+    # `_plan` writes the dev-root declaration before the owner is asked; a refusal or a "no" gives it back.
+    declared_before = _dev_root_pointer_text(root)
     try:
-        attach, reason = _plan(args, root)
+        try:
+            attach, reason = _plan(args, root)
+        except _InitError:
+            _restore_dev_root_pointer(root, declared_before)
+            raise
         _log(f"attaching to {root}")
         _log(f"mount mode: {attach.mode} ({reason}) · dev layer: {attach.aitna}/")
         if attach.switching:
             _log(f"migrating the mount mode: {attach.previous} → {attach.mode}")
         if not args.yes and not _confirm(f"akmon init: attach akmon to {root}?"):
+            _restore_dev_root_pointer(root, declared_before)
             print("akmon init: aborted", file=sys.stderr)
             return 1
         version, pin_status = _mount(attach, repo=args.repo, ref=args.ref)
@@ -1182,12 +1260,14 @@ def _log(message: str) -> None:
 
 def _plan(args: argparse.Namespace, root: Path) -> tuple[_Attach, str]:
     """The run's dev layer and mount mode, and why that mode; refuses a migration not asked for."""
-    # Every path in the tooling derives from this env var (sync/verify/hooks read it at call
-    # time), so resolving it once here — from the flag or from the environment, validated
-    # either way — makes the whole run, including the sync and routing subprocesses that
-    # inherit the environment, agree on one dev-layer root that is inside the project.
+    # Every path in the tooling derives from the project's dev-root declaration (sync, verify and the
+    # hooks read `.aitna-root`), so the root is resolved once here — from the flag or from the
+    # declaration, validated either way — and declared before anything reads it
+    # (`_write_dev_root_pointer`), which makes the whole run, including the sync and routing steps,
+    # agree on one dev-layer root that is inside the project. The declaration is the one file this run
+    # writes before it asks to proceed: the reads below go through it.
     aitna = _effective_aitna_root(args.aitna_root, root)
-    os.environ["AITNA_ROOT"] = aitna
+    _write_dev_root_pointer(root, aitna)
 
     # A record another implementation wrote (C105): the run would re-spell its wiring for the Python
     # launcher through `sync`, which refuses it; `init` says so before touching anything. It goes
@@ -1384,12 +1464,12 @@ def _write_local_layout(attach: _Attach) -> None:
         (root / aitna / name).mkdir(parents=True, exist_ok=True)
     _write_if_absent(root / aitna / "TASKS.md", _tasks_skeleton(aitna), _log, f"{aitna}/TASKS.md")
     _write_if_absent(root / aitna / "memory" / "README.md", _memory_index(), _log, f"{aitna}/memory/README.md")
-    for role, focus in _charters().items():
+    for agent, spec in _charters().items():
         _write_if_absent(
-            root / aitna / "agents" / role / "README.md",
-            _charter(role, focus, aitna, package_mode=attach.package_mode),
+            root / aitna / "agents" / agent / "README.md",
+            _charter(agent, spec, aitna, package_mode=attach.package_mode),
             _log,
-            f"{aitna}/agents/{role}/README.md",
+            f"{aitna}/agents/{agent}/README.md",
         )
 
 
@@ -1477,8 +1557,6 @@ def _add_closing_steps(attach: _Attach, *, archetype: str, profiles: Sequence[st
     pin_step = _pin_step(pin_status, ref) if attach.package_mode else None
     if pin_step:
         attach.next_steps.insert(0, pin_step)
-    if aitna != cli._project_root_lib().AITNA_ROOT_DEFAULT:
-        attach.next_steps.append(jsondata.fill(steps["export_aitna"], {"aitna": aitna}))
     attach.next_steps.append(steps["verify"])
 
 

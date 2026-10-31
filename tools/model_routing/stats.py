@@ -33,6 +33,7 @@ import routing
 
 from common import jsondata
 from common.report_path import create_report, report_prefix, task_error
+from common.transcripts import newest_jsonl, transcripts_dir
 
 
 def _stats_data() -> dict:
@@ -168,27 +169,6 @@ class TranscriptStats:
 
     per_model: dict[str, TokenUsage] = field(default_factory=dict)
     user_message_count: int = 0
-
-
-def munged_project_dir(project_root: Path) -> str:
-    """The ``~/.claude/projects/`` directory name for a project root: every ``/`` → ``-``."""
-    return str(project_root.resolve()).replace("/", "-")
-
-
-def transcripts_dir(project_root: Path, claude_home: Path | None = None) -> Path:
-    """The project's transcript directory under ``<claude_home>/projects/``."""
-    home = claude_home or (Path.home() / ".claude")
-    return home / "projects" / munged_project_dir(project_root)
-
-
-def newest_jsonl(directory: Path) -> Path | None:
-    """The most recently modified ``*.jsonl`` file in ``directory`` — the current session."""
-    if not directory.is_dir():
-        return None
-    candidates = [path for path in directory.iterdir() if path.is_file() and path.suffix == ".jsonl"]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
 def aggregate_transcript_lines(lines: Iterable[str]) -> TranscriptStats:

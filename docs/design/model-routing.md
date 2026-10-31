@@ -257,13 +257,13 @@ and its argv in `common/runtime.py`, the single map of harness commands. The per
 `second_opinion` object (and with it the older `cli` and `invoke` keys) is retired: a project
 overlay still carrying it fails `routing.second-opinion` at `verify`, which names the overlay
 file. The initializer does not repair it — the overlay is hand-owned input it reads, not an
-artifact it writes — so the fix is a hand edit of `<AITNA_ROOT>/model-routing.json` (or the
-developer-local `<AITNA_ROOT>/local/model-routing.json`), then a re-`init` to regenerate the
+artifact it writes — so the fix is a hand edit of `<dev root>/model-routing.json` (or the
+developer-local `<dev root>/local/model-routing.json`), then a re-`init` to regenerate the
 local config against the moved `registry_hash`.
 
 A provider whose row carries `aliases: true` ships its model names as aliases (the codex `luna`,
 `terra`, `sol`), because a carrier rejects an unversioned name and a versioned one goes stale. The
-concrete id each alias resolves to lives only in the developer-local `<AITNA_ROOT>/local/model-aliases.json`,
+concrete id each alias resolves to lives only in the developer-local `<dev root>/local/model-aliases.json`,
 written by the refresh tool on request, and the runner resolves a pin through that file; the split and
 its fail-closed rules are [ADR 0024 D16](../adr/0024-second-opinion-by-model-priors.md).
 The reserved token `default` (`codex:default`, or the runner's `--default-model`) is the other way past an
@@ -838,7 +838,7 @@ Pre-tier, a role read as "one agent walks the pipeline". Under the subagent mode
 names three things instead: **(a) the steps the orchestrator keeps** (Frame, gate
 decisions, owner dialogue — its own matrix row), **(b) its routing rights** — which task
 kinds it may delegate (§10.2), and **(c) the gate contract its pipeline ends with**
-(which gate-pack, which executors, at what criticality). The `🧭 agent:` declaration
+(which gate-pack, which executors, at what criticality). The `🧭 role:` declaration
 marks whose orchestration contract is active; subagents do not inherit the role — they
 receive a task kind, and the role's constraints must already be encoded in what it is
 allowed to route.
@@ -933,7 +933,7 @@ was not built, and nothing may name that marker as a carrier. See the note under
 
 > **Row 1, second half, was not built as written — kept verbatim as the record.** C20 does
 > not add a session-state marker: it reads the active role from the transcript's last qualifying
-> main-chain `🧭 agent: <name>` declaration ([D2-4](../../meta/D2_LEDGER.md)) — first non-whitespace
+> main-chain `🧭 role: <name>` declaration ([D2-4](../../meta/D2_LEDGER.md)) — first non-whitespace
 > text of the assistant turn, with the role name case-normalized — chosen for consistency with
 > C22/C23 scanning, a single source, and nothing to forget to write. So
 > **no session-state marker exists**, and anything that named it as a carrier was standing
@@ -1196,7 +1196,9 @@ completed normally with no permission gate, even though the hook's stdout carrie
 `acceptEdits` as the exact trigger, the owner chose the stricter posture over the diagnostic
 one: **`delegation_nudge_result` and `git_commit_guard_result` now both escalate any `ask`
 to a hard `deny` whenever `permission_mode` is not the interactive `default`** (including the
-field being absent, the worst case) — `_escalate_unattended_ask` in `hook_core.py`. `deny` is
+field being absent, the worst case) — `_escalate_unattended_ask` in `hook_core.py`. *Narrowed by
+[0025](../adr/0025-actors-and-action-repertoire.md)/D06: the host's own attendance
+(`CLAUDE_CODE_SESSION_ATTENDED`) now decides, and the mode only where the host states nothing.* `deny` is
 the one decision every vendor is confirmed (C28b) to enforce unconditionally, so a session
 that cannot be trusted to answer `ask` gets a real stop instead of a silent pass-through; the
 owner watches how this behaves in practice (fatigue vs. missed real confirmations) rather

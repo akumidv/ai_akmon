@@ -15,7 +15,6 @@ for submodules since CVE-2022-39253 unless ``protocol.file.allow=always`` — se
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -41,15 +40,6 @@ def _write(path: Path, text: str) -> None:
 
 def _git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, check=True)
-
-
-@pytest.fixture(autouse=True)
-def isolated_aitna_root(monkeypatch):
-    """`init` sets ``AITNA_ROOT`` in the process environment on purpose (every step and every
-    subprocess it spawns must agree on one dev-layer root). In-process tests therefore have to
-    be isolated from each other: without this, one test's ``--aitna-root`` would silently
-    relocate the dev layer of every test that ran after it."""
-    monkeypatch.setenv("AITNA_ROOT", "_aitna")
 
 
 @pytest.fixture
@@ -168,7 +158,9 @@ def test_init_data_pins_its_structure():
         "tasks_skeleton",
         "memory_index",
         "charters",
+        "charter_role_focus",
         "charter",
+        "charter_role",
         "charter_locate_package",
         "charter_locate_mounted",
         "gitignore_lines",
@@ -192,8 +184,14 @@ def test_init_data_pins_its_structure():
         "closing_steps",
     }
     assert _INIT_DATA["akmon_repo"] == "https://github.com/akumidv/ai_akmon"
-    assert list(_INIT_DATA["charters"]) == ["review", "architect", "engineer"]  # write order is load-bearing
-    assert _INIT_DATA["charters"]["engineer"] == "realize a decided structure in code, with tests"
+    # the focus text of one charter per agent (ADR 0027/D04) and of each role section; which roles an agent
+    # works in is `agents/agents.json`'s, never this file's
+    assert list(_INIT_DATA["charters"]) == ["development", "learning", "release"]
+    assert _INIT_DATA["charter_role_focus"]["engineer"] == "realize a decided structure in code, with tests"
+    definitions = json.loads((_AKMON / "agents" / "agents.json").read_text(encoding="utf-8"))
+    assert list(definitions) == list(_INIT_DATA["charters"])
+    assert definitions["development"]["roles"] == ["review", "architect", "engineer"]  # section order is load-bearing
+    assert {role for spec in definitions.values() for role in spec["roles"]} == set(_INIT_DATA["charter_role_focus"])
     assert _INIT_DATA["tree_markers"] == ["bin/sync.py", "bin/verify.py", "roles/README.md", "guardrails/_common.md"]
     assert _INIT_DATA["mount_gitignore"] == "__pycache__/\n*.py[cod]\n"
     assert _INIT_DATA["ruff_step"]["uv"] == (
@@ -561,7 +559,21 @@ def test_init_creates_the_local_layout_and_leaves_its_files_alone_on_a_re_run(tm
     tasks = aitna / "TASKS.md"
     assert "TASKS_ARCHIVE.md" in tasks.read_text(encoding="utf-8")
     assert (aitna / "memory" / "README.md").is_file()
-    assert (aitna / "agents" / "engineer" / "README.md").is_file()
+    charter = (aitna / "agents" / "development" / "README.md").read_text(encoding="utf-8")
+    assert charter.startswith("# Agent — development\n")
+    for role in ("review", "architect", "engineer"):
+        assert f"## {role}\n" in charter
+        assert f"(_aitna/akmon/roles/{role}.md)" in charter
+        assert not (aitna / "agents" / role).exists()  # one charter per agent, not per role (ADR 0027/D04)
+    assert "`agents/development.md` in the akmon standard" in charter
+    # the release and learning agents get a charter of their own, linking their shipped definition
+    for agent, role in (("release", "release"), ("learning", "learn")):
+        agent_charter = (aitna / "agents" / agent / "README.md").read_text(encoding="utf-8")
+        assert agent_charter.startswith(f"# Agent — {agent}\n")
+        assert f"## {role}\n" in agent_charter
+        assert f"(_aitna/akmon/agents/{agent}.md)" in agent_charter
+        assert "roles/" not in agent_charter  # these roles are defined in the agent definition, not under roles/
+    assert not (aitna / "agents" / "learn").exists()  # the legacy role-named directory is never written
 
     tasks.write_text("# my own backlog\n", encoding="utf-8")
     assert _init_vendored(tmp_path) == 0
@@ -787,7 +799,53 @@ def test_init_honours_a_relocated_dev_layer_root(tmp_path, monkeypatch):
     assert (tmp_path / "tools" / "ai" / "akmon" / "bin" / "sync.py").is_file()
     assert (tmp_path / "tools" / "ai" / ".akmon.toml").is_file()
     assert "@tools/ai/akmon/guardrails/_common.md" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    # The relocation is the project's own, declared by a file (ADR 0022 D09), not by the shell.
+    assert (tmp_path / ".aitna-root").read_text(encoding="utf-8") == "tools/ai\n"
     assert _verify_strict(tmp_path, monkeypatch) == 0
+
+
+def test_init_writes_no_declaration_for_the_default_dev_layer(tmp_path):
+    assert _init.main(["--mode", "vendored", "--project-root", str(tmp_path), "--yes"]) == 0
+    assert (tmp_path / "_aitna" / "akmon" / "bin" / "sync.py").is_file()
+    assert not (tmp_path / ".aitna-root").exists()
+
+
+def test_init_back_to_the_default_removes_a_declaration_naming_another_root(tmp_path):
+    (tmp_path / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
+    assert _init.main(["--mode", "vendored", "--project-root", str(tmp_path), "--aitna-root", "_aitna", "--yes"]) == 0
+    assert not (tmp_path / ".aitna-root").exists()
+    assert (tmp_path / "_aitna" / ".akmon.toml").is_file()
+
+
+def test_init_does_not_print_an_export_step_for_a_relocated_root(tmp_path, capsys):
+    assert _init.main(["--mode", "vendored", "--project-root", str(tmp_path), "--aitna-root", "tools/ai", "--yes"]) == 0
+    assert "export AITNA_ROOT" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("before", "flag"),
+    [
+        (None, "tools/ai"),  # absent before: the early write is deleted again
+        ("old/root\n", "tools/ai"),  # present before: its text is put back, byte for byte
+        ("tools/ai", "_aitna"),  # init removes it for the default root: it is re-created
+    ],
+)
+def test_declining_the_prompt_leaves_the_dev_root_declaration_as_it_was(tmp_path, monkeypatch, capsys, before, flag):
+    pointer = tmp_path / ".aitna-root"
+    if before is not None:
+        pointer.write_text(before, encoding="utf-8")
+    monkeypatch.setattr(_init, "_confirm", lambda question: False)
+    assert _init.main(["--mode", "vendored", "--project-root", str(tmp_path), "--aitna-root", flag]) == 1
+    assert "aborted" in capsys.readouterr().err
+    assert (pointer.read_text(encoding="utf-8") if pointer.exists() else None) == before
+    assert not (tmp_path / flag / ".akmon.toml").exists()  # nothing else was applied either
+
+
+def test_a_refusal_in_the_plan_leaves_the_dev_root_declaration_as_it_was(tmp_path, capsys):
+    (tmp_path / "package.json").write_text('{"name": "demo"}\n', encoding="utf-8")  # a Node repository: handed over
+    assert _init.main(["--mode", "vendored", "--project-root", str(tmp_path), "--aitna-root", "dev", "--yes"]) == 2
+    assert "npx" in capsys.readouterr().err
+    assert not (tmp_path / ".aitna-root").exists()
 
 
 # --------------------------------------------------------------------------------------
@@ -807,22 +865,21 @@ def test_aitna_root_outside_the_project_is_refused(tmp_path, capsys, value):
 
 
 @pytest.mark.parametrize("value", ["../escaped", "/tmp/escaped", "a/../../escaped"])
-def test_aitna_root_from_the_environment_is_refused_the_same_way(tmp_path, monkeypatch, capsys, value):
-    """The flag and the variable are one contract: the flag's whole effect is to *set* the
-    variable, so validating only the flag validated nothing — exporting it reached every path."""
+def test_aitna_root_from_the_declaration_file_is_refused_the_same_way(tmp_path, capsys, value):
+    """The flag and ``.aitna-root`` are one contract: a declaration that climbs out of the project
+    reaches every path the run writes, so it is validated by the same function as the flag."""
     project = tmp_path / "project"
     project.mkdir()
-    monkeypatch.setenv("AITNA_ROOT", value)
+    (project / ".aitna-root").write_text(value + "\n", encoding="utf-8")
     assert _init.main(["--mode", "vendored", "--project-root", str(project), "--yes"]) == 2
-    assert "AITNA_ROOT" in capsys.readouterr().err
+    assert ".aitna-root" in capsys.readouterr().err
     assert not (tmp_path / "escaped").exists()
-    assert list(project.iterdir()) == []
+    assert [path.name for path in project.iterdir()] == [".aitna-root"]  # the owner's file, nothing else
 
 
-def test_aitna_root_env_is_not_left_set_by_a_refused_run(tmp_path, monkeypatch):
-    monkeypatch.setenv("AITNA_ROOT", "_aitna")
+def test_a_refused_run_leaves_no_declaration_behind(tmp_path):
     assert _init.main(["--mode", "vendored", "--project-root", str(tmp_path), "--aitna-root", "..", "--yes"]) == 2
-    assert os.environ["AITNA_ROOT"] == "_aitna"
+    assert not (tmp_path / ".aitna-root").exists()
 
 
 # --------------------------------------------------------------------------------------

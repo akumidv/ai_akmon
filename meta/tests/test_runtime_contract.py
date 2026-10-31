@@ -377,14 +377,15 @@ def test_c57_lock_text_pins_prefix_ownership_without_the_old_overclaim():
 
 def test_the_map_constructs_the_second_opinion_argv():
     registry = {"providers": {"claude": {"operation": "review", "model_flag": "--model {model}"}}}
-    assert routing.opinion_command(registry, "claude", prompt="review this") == [
+    assert routing.opinion_command(registry, "claude", None, routing.OpinionRun(prompt="review this")) == [
         "claude",
         "-p",
         "--output-format",
         "text",
         "review this",
     ]
-    assert routing.opinion_command(registry, "claude", model="opus", prompt="review this") == [
+    run = routing.OpinionRun(model="opus", prompt="review this")
+    assert routing.opinion_command(registry, "claude", None, run) == [
         "claude",
         "-p",
         "--output-format",
@@ -485,7 +486,7 @@ def test_a_registry_still_using_the_retired_keys_is_refused():
     """The per-vendor `second_opinion` object moved into the providers table; a stale one must fail."""
     stale = {"anthropic": {"second_opinion": {"harness": "claude", "report_dir": ".codex/second-opinion/"}}}
     with pytest.raises(routing.RetiredKeyError, match=r"anthropic\.second_opinion"):
-        routing.refuse_retired_keys(stale, {})
+        routing.refuse_retired_keys(stale, {}, None)
 
 
 def test_an_upgraded_registry_under_a_stale_overlay_is_refused():
@@ -500,7 +501,7 @@ def test_an_upgraded_registry_under_a_stale_overlay_is_refused():
     merged = routing._deep_merge(shipped, overlay)
     assert set(merged["second_opinion_policy"]) == {"ladder", "diversity_ladder"}, "the merge keeps both"
     with pytest.raises(routing.RetiredKeyError) as raised:
-        routing.refuse_retired_keys(merged, {})
+        routing.refuse_retired_keys(merged, {}, None)
     assert "model-routing.json" in str(raised.value)
 
 
@@ -509,8 +510,8 @@ def test_a_clean_overlay_still_resolves_after_the_merge():
     shipped = {"providers": {"claude": {"operation": "review", "report_dir": ".claude/second-opinion/"}}}
     overlay = {"providers": {"claude": {"report_dir": ".local/second-opinion/"}}}
     merged = routing._deep_merge(shipped, overlay)
-    routing.refuse_retired_keys(merged, {})
-    row = routing.provider_row(merged, "claude")
+    routing.refuse_retired_keys(merged, {}, None)
+    row = routing.provider_row(merged, "claude", None)
     assert row["report_dir"] == ".local/second-opinion/"
     assert row["operation"] == "review"
 

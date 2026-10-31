@@ -16,7 +16,7 @@ attach = "native"
 "pyproject.toml" = "[project]\nname = \"consumer\"\nversion = \"1.2.0.dev0\"\n\n[dependency-groups]\ndev = [\"akmon=={{version}}\"]\n"
 "src/akmon/__init__.py" = "_STATIC_VERSION = \"1.2.0.dev0\"\n"
 "CHANGELOG.md" = "# Changelog\n\n## Unreleased\n\n- next change\n\n## v1.1.0\n\n- an earlier release\n"
-"_aitna/agents/release/README.md" = "See `_aitna/akmon/roles/release.md`.\n"
+"_aitna/agents/release/README.md" = "See `_aitna/akmon/agents/release.md`.\n"
 
 [run]
 tool = "release/release_check"

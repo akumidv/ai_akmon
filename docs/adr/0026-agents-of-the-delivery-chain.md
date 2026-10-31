@@ -1,11 +1,14 @@
 # 0026 — Agents of the delivery chain
 
-- **Status:** Accepted for **D01–D05**. The owner decided in session that the development roles are
+- **Status:** Accepted for **D01–D08**. The owner decided in session that the development roles are
   roles of one agent (**D01**), that learning is an agent of its own (**D02**), that a separate
   integration agent decides a merge (**D03**), that a release agent cuts a release without prompting
   the developer (**D04**), and that tag and publish belong to a separate publish agent (**D05**). The
-  names are working names until A72; each agent's repertoire is a proposal in the design.
-  Implementation has not started.
+  names are fixed by [0027](0027-names-of-agents-actors-roles-and-delegates.md); each agent's repertoire is a
+  proposal in the design. When release and learning became agents, the owner chose a folder of agent
+  definitions apart from the roles (**D06**) and a learning run over the project's sessions with a
+  reminder after 10 sessions or 7 days (**D07**). On that implementation the owner chose to list the
+  agents in the order of the chain and to make a learning run due before a pull request (**D08**).
 - **Owner:** akuminov@gmail.com
 - **Supersedes, in part:** [0001](0001-release-and-roles-model.md) D5 — the owner no longer executes
   the commit of a release: the release agent commits and opens its pull request (**D04**), and tag and
@@ -33,6 +36,11 @@ development roles, which share one responsibility, kept together.
 4. A release agent cuts a release and opens its pull request without prompting the developer
    (**D04**).
 5. Tag and publish belong to a publish agent (**D05**).
+6. akmon defines its agents in a folder of their own, apart from the roles (**D06**).
+7. The learning agent reads the project's sessions since its last run and is recalled by a reminder
+   (**D07**).
+8. Agents are listed in the order of the chain, and a learning run is due before a pull request
+   (**D08**).
 
 ## Alternatives considered
 
@@ -96,3 +104,41 @@ review. It does not tag or publish.
 
 Tag and publish, where a project publishes at all, belong to a **publish agent** of their own. Whether
 it asks before acting is set by the actor of its run ([0025](0025-actors-and-action-repertoire.md)/D01).
+
+### D06 — Agent definitions apart from the roles
+
+`Decision-ID: ADR-0026/D06`
+
+akmon ships the definition of each of its agents in a folder of agent definitions, apart from
+`roles/`: the agent's responsibility, the roles it works in, its pipeline and its hand-offs.
+`roles/` keeps only the modes of the development agent — review, architect, engineer. The release and
+learning agents work in one mode each, `release` and `learn`, defined inside their agent definitions;
+those names stay valid in the role declaration. `akmon init` scaffolds a charter for the development,
+release and learning agents (`agents/development/`, `agents/release/`, `agents/learning/`); a charter
+directory named `learn/` is a legacy layout and verifies with a warning for one release, as the other
+role-named directories do ([0027](0027-names-of-agents-actors-roles-and-delegates.md)/D04).
+
+### D07 — The learning agent's run and its reminder
+
+`Decision-ID: ADR-0026/D07`
+
+The learning agent reads the sessions of the project it serves — never other projects' — recorded
+since its last run, and proposes what to keep; nothing is persisted until the owner confirms it. The
+end of a run is recorded in the project's local layer. At session start a hook reminds the owner and
+the model to run it once 10 sessions or 7 days have passed since that run, whichever comes first, and
+only when at least one session has passed; the project may change both thresholds. In the first
+version the owner starts the run through a skill; a scheduled run waits for the run environment
+(C174).
+
+### D08 — The chain's order and a learning run before a pull request
+
+`Decision-ID: ADR-0026/D08`
+
+Wherever akmon lists its agents, they follow the delivery chain — development, learning,
+integration, release, publish — and a project's own agents follow them by name. Learning stands
+before integration because a change carries the lessons of the sessions that made it: before a pull
+request is opened, by the release agent or by the hand-off that leads to integration, a learning run
+is due when at least one session has passed since the last one. The agent opening the request tells
+the owner and offers the run; it does not start it on its own, and what the owner confirms lands in
+the same pull request. This adds a third occasion to D07's reminder; its thresholds still govern the
+session-start one.

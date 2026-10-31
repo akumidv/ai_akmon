@@ -31,14 +31,24 @@ project-local hook surface.
   commit guard; enforces
   [`../guardrails/_common.md`](../guardrails/_common.md) "Commits & ownership": denies an AI
   `Co-Authored-By` trailer; asks the owner before `push`/`tag`/`merge` and before a `commit`
-  on the default branch (landing history). Runs as a **PreToolUse → Bash** hook, and carries the
+  on the default branch (landing history). That ask reaches the owner when the run is attended and
+  becomes a `deny` when it is not: the entry point reads `CLAUDE_CODE_SESSION_ATTENDED` (`1`
+  attended, `0` unattended; M199, M200) and hands it down, and where the variable is absent
+  the interactive `default` permission mode attends; `bypassPermissions` and `dontAsk` never do
+  ([ADR 0025 D06](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0025-actors-and-action-repertoire.md)).
+  Runs as a **PreToolUse → Bash** hook, and carries the
   neutral **unclassified-shell-route diagnostic** ([ADR 0012 D02](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0012-stage1-contracts-and-vocabulary.md)): the advisories below key off a
   file path, so a write that arrives through the shell is invisible to them on Claude as well —
   said once per session on the hook process's stderr, never blocking, never model context.
 - [`session-start-agent.py`](session-start-agent.py) — Claude SessionStart wrapper for the
-  neutral active-agent reminder: injects a
-  reminder to declare the active agent (and restate it on switch) plus the project's
-  **scanned** agent roster (`_aitna/agents/` dev + root `agents/` desk), and the "read
+  neutral role-declaration reminder: injects a
+  reminder to declare the active role (`🧭 role: <name> — <focus>`, and restate it on switch;
+  `🧭 agent:` is still read as an alias for one release) plus the project's
+  **scanned** agent roster (`_aitna/agents/` dev + root `agents/` desk — one directory per agent,
+  ADR 0027/D04; the dev layer names each shipped agent's roles from
+  [`agents/agents.json`](../agents/agents.json), ADR 0026/D06, lists the shipped agents in that
+  file's order — the delivery chain's, ADR 0026/D08 — then the project's own by name, and leaves out a
+  legacy role-named directory whose agent has a charter of its own), and the "read
   `_aitna/memory/` at session start" rule. In mode `package` it also reports guardrails under
   `_aitna/.akmon/guardrails/` that the running package has moved past — the copy the harness
   `@`-imports going stale after a pin bump is otherwise silent until the next CI run. Runs as a
@@ -74,6 +84,18 @@ project-local hook surface.
   `systemMessage`). Owner-addressed output — init instruction, corridor warning, rebind
   notice — also goes out as `systemMessage` so the owner sees it in the host UI (ADR 0006). Logic
   in [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).
+- [`learning-reminder.py`](learning-reminder.py) — Claude **SessionStart** hook for the learning
+  agent's run reminder (C177, ADR 0026/D07). It records the session id once (a resumed or compacted
+  session keeps its id, so it is not counted twice) in `<dev root>/local/learning.json`, and once at
+  least one session has passed since the last learning run **and** 10 sessions or 7 days have gone by
+  (`[learning] reminder_sessions` / `reminder_days` in `<dev root>/.akmon.toml`) it emits
+  `additionalContext` (the model tells the owner once in its first reply) and a `systemMessage` for
+  the owner: run the `learning` skill. Silent on a compaction and when nothing is due; never blocks —
+  a failure goes through the shared crash guard. Codex runs the same code as the route
+  `codex-hook.py learning-reminder` and shows the model half only (M65: SessionStart
+  `additionalContext` is the one measured Codex channel). The record, the thresholds and the texts are
+  [`../common/learning.py`](../common/learning.py) and `learning.json`; `akmon learn` is the command
+  line over them.
 - [`gate-audit.py`](gate-audit.py) — Claude **Stop** wrapper for the **gate audit forcing
   function** (C25). The registry's `gate_triggers` count floors (`review_min_findings`,
   `architect_min_options`) were data nothing read: a role could hand off ten findings without the
@@ -117,7 +139,8 @@ project-local hook surface.
   is fuzzy, so the advisory never blocks; but on *sustained* drift past a second, higher
   threshold (default 120; env `AKMON_DELEGATION_ASK_THRESHOLD`, clamped to at least the
   advisory threshold) the next edit or shell call — never a read — carries a hard `ask`
-  permission decision, with its own once-per-episode marker, also cleared by a delegation.
+  permission decision, with its own once-per-episode marker, also cleared by a delegation;
+  an unattended run turns that ask into a `deny` by the same rule as the commit guard's.
   The weights and thresholds come from a replay of recorded sessions (C88, M72–M75). Runs as a **PreToolUse →
   Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob** hook (one combined-matcher entry
   seeing the mutations, the reads/sweeps, and the delegation resets).

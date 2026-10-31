@@ -1,0 +1,23 @@
+# Ten sessions have passed when an eleventh starts (the starting session is not counted): the default threshold of 10 is reached; the model is asked to tell the owner once (additionalContext) and the owner is told (systemMessage).
+id = "hooks/learning-reminder-due-by-sessions"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:learning-reminder"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/local/learning.json" = "{\n  \"last_run\": null,\n  \"since\": \"2999-01-01T00:00:00Z\",\n  \"sessions\": [\n    \"seed-0\",\n    \"seed-1\",\n    \"seed-2\",\n    \"seed-3\",\n    \"seed-4\",\n    \"seed-5\",\n    \"seed-6\",\n    \"seed-7\",\n    \"seed-8\",\n    \"seed-9\"\n  ]\n}\n" }
+
+[run]
+script = "learning-reminder"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-lr-eleventh"
+source = "startup"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"[akmon] Learning reminder: 10 sessions and 0 days have passed since akmon began counting, and no learning run is recorded yet. In your first reply to the owner, tell them once that a learning run is due and that they can start it with the `learning` skill; do not start it yourself.\"}, \"systemMessage\": \"[akmon] learning: 10 sessions and 0 days since akmon began counting (no learning run is recorded yet) \\u2014 run the `learning` skill to review them.\"}\n"

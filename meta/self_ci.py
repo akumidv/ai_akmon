@@ -85,7 +85,7 @@ def _write(path: Path, text: str = "x\n") -> None:
 def _make_fixture(root: Path, akmon_root: Path) -> None:
     _write(root / "AGENTS.md", AGENTS_MD)
     _write(root / "_aitna" / "TASKS.md", "# Tasks\n\n- T1 · demo · active · engineer · keep fixture valid\n")
-    _write(root / "_aitna" / "agents" / "engineer" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
+    _write(root / "_aitna" / "agents" / "development" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
     _write(root / "_aitna" / "akmon" / "skills" / "demo" / "SKILL.md", SKILL_MD)
     _write(root / "_aitna" / "memory" / "note.md", "fact\n")
     _write(root / "_aitna" / "memory" / "README.md", "# Memory\n- note.md\n")
@@ -104,8 +104,11 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "roles/review.md",
         "roles/architect.md",
         "roles/engineer.md",
-        "roles/learn.md",
-        "roles/release.md",
+        "agents/README.md",
+        "agents/agents.json",
+        "agents/development.md",
+        "agents/learning.md",
+        "agents/release.md",
         "guardrails/_common.md",
         "pipelines/pre-commit.md",
         "pipelines/code-flow.md",
@@ -119,7 +122,11 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "common/codex_hooks.py",
         "common/findings.json",
         "common/findings.py",
+        "common/grant_trust.json",
+        "common/grant_trust.py",
         "common/jsondata.py",
+        "common/learning.json",
+        "common/learning.py",
         "common/markers.json",
         "common/markers.py",
         "common/materialization.json",
@@ -131,6 +138,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "common/report_path.py",
         "common/runtime.json",
         "common/runtime.py",
+        "common/transcripts.py",
         "common/versions.py",
         "profiles/ruff.toml",
         "bin/check.py",
@@ -279,7 +287,7 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[st
 
     This is the only leg where the standard tree comes from ``site-packages`` (the wheel's
     force-included ``akmon/_tree``) rather than from this checkout, so it is what proves the
-    embedded-tree resolution, the ``<AITNA_ROOT>/.akmon/`` materialization, and the
+    embedded-tree resolution, the ``<dev root>/.akmon/`` materialization, and the
     hook-runtime contract hold for a real installation rather than for a dev bench.
     """
     dist = tmp_root / "dist"
@@ -382,6 +390,29 @@ def _hook_payload(vendor: str, event: str, cwd: Path) -> dict:
     return payload
 
 
+def _check_session_start_output(fixture: Path, vendor: str, command: str, stdout: str, label: str) -> int:
+    """What a generated SessionStart command must have done; 1 when it is an always-speaking hook, else 0.
+
+    The learning reminder is silent until sessions or days have accumulated (C177), so a freshly
+    attached project hears nothing from it; what it must have done is record the session. Every
+    other SessionStart hook has something to say in a freshly attached project (the per-turn hooks
+    are silent by design, so only these are required to speak).
+    """
+    if "learning-reminder" in command:
+        if not list(fixture.glob("*/local/learning.json")):
+            raise RuntimeError(f"learning-reminder hook recorded no session ({label})")
+        return 0
+    if not stdout.strip():
+        raise RuntimeError(f"generated hook command produced no output ({label})")
+    if vendor == "codex":
+        context = json.loads(stdout)["hookSpecificOutput"]["additionalContext"]
+        if "development — role" not in context:
+            raise RuntimeError(f"session-start hook lost its role brief ({label})")
+        if "Delegation is the default for non-atomic work" not in context:
+            raise RuntimeError(f"session-start hook lost its delegation rule ({label})")
+    return 1
+
+
 def _run_generated_hook_commands(fixture: Path, nested: Path, env: dict[str, str] | None = None) -> None:
     """Run every generated hook command **verbatim**, the way the harness runs it.
 
@@ -420,17 +451,7 @@ def _run_generated_hook_commands(fixture: Path, nested: Path, env: dict[str, str
         if completed.stderr.strip():
             raise RuntimeError(f"generated hook command wrote to stderr ({label}): {completed.stderr.strip()}")
         if event == "SessionStart":
-            # Every SessionStart hook has something to say in a freshly attached project. The
-            # per-turn hooks are silent by design, so only these are required to speak.
-            if not completed.stdout.strip():
-                raise RuntimeError(f"generated hook command produced no output ({label})")
-            speaking += 1
-            if vendor == "codex":
-                context = json.loads(completed.stdout)["hookSpecificOutput"]["additionalContext"]
-                if "DEVELOP (build the project): architect, engineer, review" not in context:
-                    raise RuntimeError(f"session-start hook lost its role brief ({label})")
-                if "Delegation is the default for non-atomic work" not in context:
-                    raise RuntimeError(f"session-start hook lost its delegation rule ({label})")
+            speaking += _check_session_start_output(fixture, vendor, command, completed.stdout, label)
     if speaking < _ALWAYS_SPEAKING_HOOK_COUNT:
         raise RuntimeError(f"expected the always-speaking hooks to be wired; saw {speaking}")
 

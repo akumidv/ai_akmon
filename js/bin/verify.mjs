@@ -23,13 +23,13 @@
  *   the check is that the hooks directory exists. In package mode it is
  *   `<root>/node_modules/akmon/js/hooks`, with the two ways it fails named apart (Yarn Plug'n'Play
  *   installs no `node_modules`; a hoisted install sits in an ancestor directory that the committed
- *   wiring cannot reach); in a mounted mode it is `<AITNA_ROOT>/akmon/js/hooks`;
+ *   wiring cannot reach); in a mounted mode it is `<dev root>/akmon/js/hooks`;
  * - `package.dev-pin` (package mode) reads `package.json` through `packagePinStatus`; the same
  *   finding is a warning when the `devDependencies` pin is not an exact version (no Python twin);
  * - `layout.standard-path` checks the `js/hooks/*.mjs` files the Node wiring runs
  *   (`node_wired_hook_scripts`);
  * - `ci.akmon-checks` of a mounted record asks for the mounted JavaScript CLI,
- *   `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs` (`ci_required_commands.mounted_node`).
+ *   `node <dev root>/akmon/js/akmon/cli.mjs` (`ci_required_commands.mounted_node`).
  *
  * The Python's mounted checks are ported for a Node mount: the mount-relative paths of
  * `check_standard_path` (`displayPath`), `layout.vendored-leftover` (`check_vendored_leftovers`, a
@@ -170,6 +170,8 @@ import { splitVersion } from "../common/versions.mjs";
  * @property {string} unsupported_record
  * @property {string} ruff_without_python
  * @property {string} ruff_without_python_fix
+ * @property {string} aitna_root_ignored
+ * @property {string} aitna_root_ignored_fix
  * @property {Record<string, any>} node the Node-only texts
  */
 
@@ -197,6 +199,20 @@ const _ROADMAP_CITE_RE = new RegExp(`(?<![${_WORD}])ROADMAP(?:\\.md|[${_SPACE}]+
 const _DEV_NAME_RE = new RegExp(`(?<![${_WORD}])self_ci(?![${_WORD}])|(?<![${_WORD}])CONCEPT\\.md(?![${_WORD}])`, "g");
 const _LINK_RE = /\]\(([^)]+)\)/gu;
 const _INLINE_CODE_RE = /`([^`]+)`/gu;
+// A role or agent definition a charter links, as written under the mounted standard tree.
+const _ROLE_TARGET_RE = /akmon\/(roles|agents)\/([A-Za-z0-9_.-]+)\.md/gu;
+// Charter directories named for a role, not an agent (ADR 0027/D04, ADR 0026/D06), each with the agent
+// whose charter it belongs to: the development agent's roles, and the learn role of the learning agent.
+// `release` is both a role and an agent name, so its directory is the current layout.
+const _LEGACY_ROLE_CHARTER_DIRS = new Map([
+  ["architect", "development"],
+  ["engineer", "development"],
+  ["review", "development"],
+  ["learn", "learning"],
+]);
+// Warnings that stay visible but never fail `--strict`: the one-release tolerance of ADR 0027/D04, so
+// the CI step `akmon init` ships does not go red on a consumer's pin bump. Task C175 removes it.
+const _STRICT_EXEMPT_CODES = new Set(["charters.legacy-role-dir"]);
 const _LEGACY_OWNER_ANCHOR_RE = new RegExp(`\\*\\*D2\\*\\*[${_SPACE}]+—[${_SPACE}]+the owner[${_SPACE}]+verifies`);
 // `^##\s+Unreleased\b` under MULTILINE | IGNORECASE | ASCII: `^` after a `\n` only, `i` without `u`.
 const _UNRELEASED_RE = new RegExp(`(?<![^\\n])##[${_SPACE}]+Unreleased(?![${_WORD}])`, "i");
@@ -736,17 +752,19 @@ function _argvProblems(row, pinned) {
 export class Verifier {
   /**
    * @param {string} root the project root
-   * @param {{codexHooksRunner?: Runner}} [options] `codexHooksRunner`
+   * @param {{codexHooksRunner?: Runner, aitnaRootEnv?: string | null}} [options] `codexHooksRunner`
    *   is the injectable seam of the host-trust query (a carrier passes a fake instead of spawning a
-   *   real `codex app-server`)
+   *   real `codex app-server`); `aitnaRootEnv` is `AITNA_ROOT` as the entry point read it from the
+   *   environment, which akmon ignores (ADR 0022 D09) and `checkIgnoredEnvironment` says so while it is set
    */
-  constructor(root, { codexHooksRunner } = {}) {
+  constructor(root, { codexHooksRunner, aitnaRootEnv = null } = {}) {
     this.root = root;
     /** @type {Finding[]} */
     this.findings = [];
-    // The dev-layer root is configurable (AITNA_ROOT, default _aitna); akmon sits in the project's
+    this.aitnaRootEnv = aitnaRootEnv;
+    // The dev-layer root is declared by `.aitna-root` (default _aitna); akmon sits in the project's
     // `node_modules`. Every path below derives from these so a relocated layer still verifies.
-    this.aitna = aitnaRootName();
+    this.aitna = aitnaRootName(root);
     this.akmon = `${this.aitna}/akmon`;
     // The standard tree this project operates against: the mount for a mounted record,
     // `<root>/node_modules/akmon` (spelled unresolved) in package mode — which may live outside the
@@ -1256,7 +1274,12 @@ export class Verifier {
     }
   }
 
-  /** Each agent directory has a README.md charter linking a akmon role. */
+  /**
+   * Each agent directory has a README.md charter linking a akmon role or agent definition. A
+   * directory named for a role (`architect`, `engineer`, `review`, `learn`) is the pre-ADR-0027
+   * layout: it still verifies, with a warning that names the migration; `release` is the release
+   * agent's own directory (ADR 0026/D06), so it carries no such warning.
+   */
   checkAgentCharters() {
     const agentsDir = pyPath(this.root, this.aitna, "agents");
     if (!isDir(agentsDir)) {
@@ -1273,6 +1296,16 @@ export class Verifier {
     for (const agent of agents) {
       const readme = pyPath(agentsDir, agent, "README.md");
       const relative = _relativeTo(readme, this.root);
+      const successor = _LEGACY_ROLE_CHARTER_DIRS.get(agent);
+      if (successor !== undefined) {
+        const asSection = successor === "development" ? ` as the ${agent} section` : "";
+        this.warn("charters.legacy-role-dir", `${this.aitna}/agents/${agent} is named for a role, not an agent`, {
+          target: `${this.aitna}/agents/${agent}`,
+          fix:
+            `Move its content into ${this.aitna}/agents/${successor}/README.md${asSection}; ` +
+            "a charter is one directory per agent (ADR 0027/D04).",
+        });
+      }
       if (!isFile(readme)) {
         this.error("charters.readme", `${relative} is missing`, {
           target: relative,
@@ -1281,16 +1314,58 @@ export class Verifier {
         continue;
       }
       const text = readText(readme);
-      if (text.includes(`${this.akmon}/roles`) || text.includes("akmon/roles")) {
+      if (
+        ["roles", "agents"].some(
+          (folder) => text.includes(`akmon/${folder}`) || text.includes(`${this.akmon}/${folder}`),
+        )
+      ) {
         this.ok("charters.role-link", `${relative} links a akmon role`, {
           target: relative,
           fix: "Keep the akmon role link in this charter.",
         });
+        if (!_LEGACY_ROLE_CHARTER_DIRS.has(agent)) {
+          this._checkRoleLinkTargets(text, relative);
+        }
       } else {
         this.warn("charters.role-link", `${relative} does not link a akmon role`, {
           target: relative,
           fix: `Link the akmon role this agent follows from ${relative}.`,
         });
+      }
+    }
+  }
+
+  /**
+   * Warn for each `akmon/roles/<x>.md` or `akmon/agents/<x>.md` a charter links that the standard
+   * tree lacks.
+   *
+   * Resolved against the standard tree the project operates against (`this.standardRoot`: the
+   * mount, or the installed tree in package mode); with no such tree nothing is said. A charter in
+   * a legacy role-named directory is skipped by the caller: its migration warning already tells
+   * the owner to move it, and its link may point at a definition the same migration retired.
+   * @param {string} text the charter
+   * @param {string} relative the charter's path, as findings name it
+   */
+  _checkRoleLinkTargets(text, relative) {
+    if (!isDir(this.standardRoot)) {
+      return;
+    }
+    const seen = new Set();
+    for (const match of text.matchAll(_ROLE_TARGET_RE)) {
+      const [, folder, name] = match;
+      if (seen.has(match[0])) {
+        continue;
+      }
+      seen.add(match[0]);
+      if (!isFile(pyPath(this.standardRoot, folder, `${name}.md`))) {
+        this.warn(
+          "charters.role-link-target",
+          `${relative} links ${this.akmon}/${folder}/${name}.md, which is not in the standard tree`,
+          {
+            target: relative,
+            fix: `Link a ${folder.slice(0, -1)} definition that exists under ${this.akmon}/${folder}/.`,
+          },
+        );
       }
     }
   }
@@ -1662,7 +1737,7 @@ export class Verifier {
    * the generated pointers cannot reach it, `sync` spelled the tree absolute); missing; present.
    * A linked `node_modules/akmon` (pnpm) is present — the link is not resolved for the message.
    *
-   * A mounted record's wiring runs node on `<AITNA_ROOT>/akmon/js/hooks` ({@link checkMountedHookLauncher}).
+   * A mounted record's wiring runs node on `<dev root>/akmon/js/hooks` ({@link checkMountedHookLauncher}).
    */
   checkHookLauncher() {
     if (this.mounted) {
@@ -2546,6 +2621,22 @@ export class Verifier {
     this.checkAttachRecord();
     this.checkCheckConfig();
     this.checkRuffWithoutPython();
+    this.checkIgnoredEnvironment();
+  }
+
+  /**
+   * Warn while the retired `AITNA_ROOT` variable is set: it no longer decides anything (ADR 0022 D09).
+   * The value comes from the entry point, not from here: nothing below `main` reads the environment.
+   */
+  checkIgnoredEnvironment() {
+    if (this.aitnaRootEnv === null) {
+      return;
+    }
+    this.warn(
+      "environment.aitna-root-ignored",
+      fill(this.data.aitna_root_ignored, { value: this.aitnaRootEnv, aitna: this.aitna }),
+      { target: "AITNA_ROOT", fix: this.data.aitna_root_ignored_fix },
+    );
   }
 }
 
@@ -2630,7 +2721,7 @@ export async function main(argv = process.argv.slice(2), { codexHooksRunner } = 
   }
   // The refusal comes first (C105): these checks read the Node carrier (the launcher folder, the
   // `package.json` pin), so a report on any other record would be wrong rather than partial.
-  const verify = new Verifier(root, { codexHooksRunner });
+  const verify = new Verifier(root, { codexHooksRunner, aitnaRootEnv: process.env.AITNA_ROOT ?? null });
   const found = unsupportedFound(verify.syncData, root);
   if (found !== null) {
     process.stderr.write(`${fill(verify.data.unsupported_record, { found })}\n`);
@@ -2638,7 +2729,7 @@ export async function main(argv = process.argv.slice(2), { codexHooksRunner } = 
   }
   await verify.run();
   printFindings(verify.findings, { quiet: options.quiet });
-  return exitCode(verify.findings, { strict: options.strict });
+  return exitCode(verify.findings, { strict: options.strict, strictExempt: _STRICT_EXEMPT_CODES });
 }
 
 /**

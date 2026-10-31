@@ -1,6 +1,6 @@
 # Unit table: integration-record parsing (common/record.py: read_akmon_toml,
 # read_akmon_toml_strict, _strip_inline_comment; JS mirror in C103). The one reader of
-# `<AITNA_ROOT>/.akmon.toml`, consulted by bin/sync.py, model_routing/init.py, the CLI, and
+# `<dev root>/.akmon.toml`, consulted by bin/sync.py, model_routing/init.py, the CLI, and
 # hooks/hook_core.py's D2 reminder (per the module's own docstring, C75).
 #
 # Each case feeds `text` to both readers (or marks the file absent); expected names the
@@ -184,8 +184,8 @@ input = "\u001f\u0085 plain \u0085\u001f"
 expected = 'plain'
 
 # --- ecosystem: recorded_ecosystem / recordedEcosystem (C105) -------------------------------------
-# A project whose record (`<AITNA_ROOT>/.akmon.toml`, `text`; `absent = true` for no file at all;
-# `aitna_root` relocates the dev layer and is exported as AITNA_ROOT for the row) answers `expected`:
+# A project whose record (`<dev root>/.akmon.toml`, `text`; `absent = true` for no file at all;
+# `aitna_root` relocates the dev layer: the row's project declares it in `.aitna-root`) answers `expected`:
 # the string the top-level `ecosystem` key holds, `python` when the key is missing, empty, not a
 # string, nested in a table, or the record is absent. The value is returned as written -- no case
 # folding, no trim -- because whether it names an ecosystem a caller serves is the caller's question.

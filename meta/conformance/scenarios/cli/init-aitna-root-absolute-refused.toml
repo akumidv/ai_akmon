@@ -1,0 +1,17 @@
+# `--aitna-root` must be project-root-relative (ADR 0022 D09): an absolute path is refused before anything
+# is written, and the message names the value. Nothing declares the root, so no `.aitna-root` appears.
+id = "cli/init-aitna-root-absolute-refused"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:init"]
+
+[fixture]
+attach = "none"
+
+[run]
+argv = ["init", "--mode", "package", "--yes", "--project-root", "{{root}}", "--aitna-root", "/etc/akmon"]
+
+[expected]
+exit = 2
+stderr = "akmon init: --aitna-root must be relative to the project root and stay inside it: '/etc/akmon'\n"
+stdout = ""

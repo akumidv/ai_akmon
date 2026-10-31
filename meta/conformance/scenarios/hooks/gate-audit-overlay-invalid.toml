@@ -8,7 +8,7 @@ covers = ["hook:gate-audit"]
 
 [fixture]
 attach = "native"
-files = { "_aitna/model-routing.json" = "{ not json", "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 agent: review — conformance"}]}}
+files = { "_aitna/model-routing.json" = "{ not json", "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 role: review — conformance"}]}}
 """}
 
 [run]

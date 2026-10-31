@@ -4,8 +4,8 @@
  * `hooks/codex-hook.py` (C104, ADR 0020 D01). The Python module is the spec: the same answers,
  * the same texts, the same exit code and the same stdout and stderr.
  *
- * Usage from `.codex/hooks.json` (`_aitna` is the default dev-layer root; a project that sets
- * `AITNA_ROOT` gets the matching path written by `sync.py`):
+ * Usage from `.codex/hooks.json` (`_aitna` is the default dev-layer root; a project that declares
+ * another root in `.aitna-root` gets the matching path written by `sync.py`):
  *
  *     node "$(git rev-parse --show-toplevel)/_aitna/akmon/js/hooks/codex-hook.mjs" analysis-guard
  *
@@ -31,8 +31,9 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { readThresholds, recordAndRemind, sessionEvent, statePath } from "../common/learning.mjs";
 import { claimDiagnosticMarker, markerKind, unidentifiedIdentity } from "../common/markers.mjs";
-import { dictItem, pyIterate, pyPath } from "../common/pyvalue.mjs";
+import { dictGet, dictItem, pyIterate, pyPath } from "../common/pyvalue.mjs";
 import { fill } from "../common/jsondata.mjs";
 import {
   command,
@@ -54,7 +55,9 @@ import {
   assertEncodablePath,
   editTool,
   findProjectRoot,
+  locateProjectRoot,
   gitCommitGuardResult,
+  HookResult,
   privilegeEscalationGuardResult,
   reportUnclassifiedShellRoute,
   roleOnCodeResult,
@@ -64,7 +67,6 @@ import {
 import { lazyHookData } from "./hook_data.mjs";
 
 /** @typedef {import("./hook_data.mjs").HookData} HookData */
-/** @typedef {import("./hook_core.mjs").HookResult} HookResult */
 /** @typedef {import("./codex_adapter.mjs").Payload} Payload */
 
 /**
@@ -213,6 +215,45 @@ function _sessionStart(data, payload) {
 }
 
 /**
+ * The learning-run reminder (C177): record the session, remind once a run is due.
+ *
+ * Codex reads `additionalContext` on `SessionStart` (M65) and has no owner channel, so only the
+ * model half of the reminder is printed — `printResult` drops `systemMessage`. An unidentified
+ * session id is not recorded.
+ * @param {HookData} data
+ * @param {Payload} payload
+ * @returns {void}
+ */
+function _learningReminder(data, payload) {
+  const root = locateProjectRoot(_startOf(data, payload));
+  if (root === null) {
+    // No project root: the record has no local layer to live in, so nothing is written (ADR 0022 D09).
+    return;
+  }
+  const sid = sessionId(data, payload);
+  const source = dictGet(payload, "source");
+  const event = sessionEvent(
+    sid === unidentifiedIdentity(data.markers) ? null : sid,
+    typeof source === "string" ? source : null,
+    process.env,
+    data.learning,
+  );
+  if (event === null) {
+    return;
+  }
+  const reminder = recordAndRemind(
+    statePath(root, data.learning),
+    event,
+    readThresholds(root, data.learning),
+    new Date(),
+    data.learning,
+  );
+  if (reminder !== null) {
+    printResult(data, new HookResult({ eventName: "SessionStart", additionalContext: reminder[0] }));
+  }
+}
+
+/**
  * The hook routes this wrapper dispatches (hooks/codex_hook.json, C102).
  * @param {HookData} data
  * @returns {string[]}
@@ -267,6 +308,8 @@ function _dispatch(data, route, payload) {
     _advisory(data, payload, (kind, path, sid, root) => roleOnCodeResult(data, kind, path, sid, root));
   } else if (route === "session-start") {
     _sessionStart(data, payload);
+  } else if (route === "learning-reminder") {
+    _learningReminder(data, payload);
   } else if (route === "git-commit-guard") {
     // Intentionally not wired by sync.py yet; C28(b) owns the exact live-probe,
     // owner verification, then generated-wiring sequence for Bash+git behavior.

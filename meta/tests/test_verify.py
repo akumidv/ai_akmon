@@ -84,8 +84,11 @@ def _make_project(tmp_path: Path) -> Path:
         "roles/review.md",
         "roles/architect.md",
         "roles/engineer.md",
-        "roles/learn.md",
-        "roles/release.md",
+        "agents/README.md",
+        "agents/agents.json",
+        "agents/development.md",
+        "agents/learning.md",
+        "agents/release.md",
         "guardrails/_common.md",
         "pipelines/pre-commit.md",
         "pipelines/code-flow.md",
@@ -159,7 +162,7 @@ def _make_project(tmp_path: Path) -> Path:
     )
 
     # an agent charter that links a akmon role
-    _write(root / "_aitna" / "agents" / "engineer" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
+    _write(root / "_aitna" / "agents" / "development" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
 
     # a skill (so check_skills is ok, not warn)
     _write(ks / "skills" / "demo" / "SKILL.md", SKILL_MD)
@@ -413,12 +416,12 @@ def test_missing_agents_md_is_error(tmp_path):
     assert any("AGENTS.md is missing" in message for message in _messages(verifier.findings, "error"))
 
 
-def test_missing_release_role_is_error(tmp_path):
+def test_missing_release_agent_definition_is_error(tmp_path):
     root = _make_project(tmp_path)
-    (root / "_aitna" / "akmon" / "roles" / "release.md").unlink()
+    (root / "_aitna" / "akmon" / "agents" / "release.md").unlink()
     verifier = verify.Verifier(root)
     verifier.run()
-    assert any("roles/release.md is missing" in message for message in _messages(verifier.findings, "error"))
+    assert any("agents/release.md is missing" in message for message in _messages(verifier.findings, "error"))
 
 
 def test_missing_changelog_is_error(tmp_path):
@@ -491,6 +494,117 @@ def test_a_path_with_a_line_separator_is_escaped_before_it_reaches_a_finding(tmp
     assert finding.severity == "error"
     assert r"\nERROR forged.rule victim" in finding.target
     assert len(render(finding).splitlines()) == 1
+
+
+def test_the_legacy_role_dir_warning_stays_visible_and_never_fails_strict(tmp_path, capsys):
+    root = _make_project(tmp_path)
+    _write(root / "_aitna" / "agents" / "engineer" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
+    assert verify.main(["--project-root", str(root)]) == 0
+    capsys.readouterr()
+    assert verify.main(["--project-root", str(root), "--strict", "--quiet"]) == 0
+    assert capsys.readouterr().out.count("WARN charters.legacy-role-dir _aitna/agents/engineer:") == 1
+    # the exemption is only for that code: another warning still fails strict
+    (root / ".gitignore").write_text("nothing useful\n", encoding="utf-8")
+    assert verify.main(["--project-root", str(root), "--strict", "--quiet"]) == 1
+
+
+def test_a_learn_charter_directory_warns_and_never_fails_strict(tmp_path, capsys):
+    root = _make_project(tmp_path)
+    _write(root / "_aitna" / "agents" / "learn" / "README.md", "See `_aitna/akmon/roles/learn.md`.\n")
+    assert verify.main(["--project-root", str(root), "--strict", "--quiet"]) == 0
+    assert capsys.readouterr().out.count("WARN charters.legacy-role-dir _aitna/agents/learn:") == 1
+
+
+def test_a_charter_linking_an_agent_definition_passes_the_role_link_check(tmp_path):
+    _write(tmp_path / "_aitna" / "agents" / "release" / "README.md", "Read `_aitna/akmon/agents/release.md`.\n")
+    verifier = verify.Verifier(tmp_path)
+    verifier.check_agent_charters()
+    assert [(finding.severity, finding.code) for finding in verifier.findings] == [("ok", "charters.role-link")]
+
+
+def test_a_charter_linking_a_missing_role_or_agent_definition_warns_per_target(tmp_path):
+    root = _make_project(tmp_path)
+    _write(
+        root / "_aitna" / "agents" / "development" / "README.md",
+        "Roles `_aitna/akmon/roles/review.md`, `_aitna/akmon/roles/nope.md` and `_aitna/akmon/roles/nope.md` again;"
+        " agent [x](../akmon/agents/ghost.md).\n",
+    )
+    verifier = verify.Verifier(root)
+    verifier.check_agent_charters()
+    missing = [finding for finding in verifier.findings if finding.code == "charters.role-link-target"]
+    assert [(finding.severity, finding.target) for finding in missing] == [
+        ("warn", "_aitna/agents/development/README.md")
+    ] * 2
+    assert "_aitna/akmon/roles/nope.md, which is not in the standard tree" in missing[0].message
+    assert "_aitna/akmon/agents/ghost.md" in missing[1].message
+    assert "role definition that exists under _aitna/akmon/roles/" in missing[0].fix
+    assert [finding.code for finding in verifier.findings if finding.severity == "ok"] == ["charters.role-link"]
+
+
+def test_a_missing_link_target_fails_strict_unlike_the_legacy_warning(tmp_path, capsys):
+    root = _make_project(tmp_path)
+    _write(root / "_aitna" / "agents" / "development" / "README.md", "See `_aitna/akmon/roles/nope.md`.\n")
+    assert verify.main(["--project-root", str(root)]) == 0
+    capsys.readouterr()
+    assert verify.main(["--project-root", str(root), "--strict", "--quiet"]) == 1
+    assert "WARN charters.role-link-target" in capsys.readouterr().out
+
+
+def test_link_targets_are_not_resolved_for_a_legacy_role_directory(tmp_path):
+    root = _make_project(tmp_path)
+    _write(root / "_aitna" / "agents" / "learn" / "README.md", "See `_aitna/akmon/roles/learn.md`.\n")
+    verifier = verify.Verifier(root)
+    verifier.check_agent_charters()
+    assert not [finding for finding in verifier.findings if finding.code == "charters.role-link-target"]
+
+
+def test_link_targets_resolve_against_the_embedded_tree_in_package_mode(tmp_path):
+    root = tmp_path / "pkg"
+    _write(root / "_aitna" / ".akmon.toml", 'mount = "package"\n')
+    _write(
+        root / "_aitna" / "agents" / "development" / "README.md",
+        "See `_aitna/akmon/roles/architect.md` and `_aitna/akmon/roles/nonexistent.md`.\n",
+    )
+    verifier = verify.Verifier(root)
+    verifier.check_agent_charters()
+    missing = [finding for finding in verifier.findings if finding.code == "charters.role-link-target"]
+    assert len(missing) == 1
+    assert "nonexistent.md" in missing[0].message
+
+
+def test_a_release_charter_directory_is_the_current_layout_not_legacy(tmp_path):
+    _write(tmp_path / "_aitna" / "agents" / "release" / "README.md", "Read `_aitna/akmon/agents/release.md`.\n")
+    verifier = verify.Verifier(tmp_path)
+    verifier.check_agent_charters()
+    assert not [finding for finding in verifier.findings if finding.code == "charters.legacy-role-dir"]
+
+
+def test_a_role_named_charter_directory_still_verifies_with_the_legacy_warning(tmp_path):
+    agents = tmp_path / "_aitna" / "agents"
+    _write(agents / "development" / "README.md", "See `_aitna/akmon/roles/review.md`.\n")
+    _write(agents / "engineer" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
+    _write(agents / "release" / "README.md", "See `_aitna/akmon/agents/release.md`.\n")
+    _write(agents / "learn" / "README.md", "See `_aitna/akmon/agents/learning.md`.\n")
+    _write(agents / "learning" / "README.md", "See `_aitna/akmon/agents/learning.md`.\n")
+    verifier = verify.Verifier(tmp_path)
+    verifier.check_agent_charters()
+    legacy = [finding for finding in verifier.findings if finding.code == "charters.legacy-role-dir"]
+    assert [(finding.severity, finding.target) for finding in legacy] == [
+        ("warn", "_aitna/agents/engineer"),
+        ("warn", "_aitna/agents/learn"),
+    ]
+    assert "ADR 0027/D04" in legacy[0].fix
+    assert "_aitna/agents/development/README.md" in legacy[0].fix
+    assert "_aitna/agents/learning/README.md" in legacy[1].fix  # a learn/ directory moves to the learning agent
+    # the role-named charter keeps passing its own checks: only the warning is added
+    assert not [finding for finding in verifier.findings if finding.severity == "error"]
+    assert [finding.target for finding in verifier.findings if finding.code == "charters.role-link"] == [
+        "_aitna/agents/development/README.md",
+        "_aitna/agents/engineer/README.md",
+        "_aitna/agents/learn/README.md",
+        "_aitna/agents/learning/README.md",
+        "_aitna/agents/release/README.md",
+    ]
 
 
 def test_skills_without_agents_source_root_reference_is_warning(tmp_path):
@@ -932,7 +1046,7 @@ def test_inits_ruff_toml_in_a_node_project_without_python_warns(tmp_path, mount)
     assert finding.message == (
         "ruff.toml is the one akmon init writes for ruff, but this project has package.json and no Python "
         "files (pyproject.toml, setup.py, setup.cfg, requirements*.txt, Pipfile, uv.lock, poetry.lock, or a "
-        "*.py file outside <AITNA_ROOT> and node_modules (git-tracked in a work tree)): ruff has nothing to lint here"
+        "*.py file outside <dev root> and node_modules (git-tracked in a work tree)): ruff has nothing to lint here"
     )
     assert finding.fix == "Remove ruff.toml, and name the project's own checks under [check] in _aitna/.akmon.toml."
     assert (tmp_path / "ruff.toml").is_file()  # verify deletes nothing
@@ -1023,7 +1137,7 @@ def test_a_python_mount_in_a_project_with_only_package_json_warns_with_the_switc
         "the mount at _aitna/akmon runs on the Python implementation "
         '(_aitna/.akmon.toml does not say ecosystem = "node"), '
         "but this project has package.json and no Python files (pyproject.toml, setup.py, setup.cfg, "
-        "requirements*.txt, Pipfile, uv.lock, poetry.lock, or a *.py file outside <AITNA_ROOT> and "
+        "requirements*.txt, Pipfile, uv.lock, poetry.lock, or a *.py file outside <dev root> and "
         "node_modules (git-tracked in a work tree)): every machine "
         "that runs its hooks and checks needs Python"
     )
@@ -1301,7 +1415,7 @@ def _make_package_mode_project(tmp_path: Path) -> Path:
     _write(root / "_aitna" / "TASKS.md")
     _write(root / "_aitna" / ".akmon.toml", _package_akmon_toml())
 
-    _write(root / "_aitna" / "agents" / "engineer" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
+    _write(root / "_aitna" / "agents" / "development" / "README.md", "See `_aitna/akmon/roles/engineer.md`.\n")
     _write(root / "_aitna" / "memory" / "note.md", "fact\n")
     _write(root / "_aitna" / "memory" / "README.md", "# Memory\n- note.md\n")
 
@@ -1471,10 +1585,10 @@ def _unusable_wiring(root: Path, kind: str) -> str:
     }[kind]
 
 
-def test_the_generated_population_is_three_command_entries(tmp_path):
+def test_the_generated_population_is_four_command_entries(tmp_path):
     """The carriers below derive their fixture from the real generator; pin its size so a
     shrinking population cannot quietly thin the corpus."""
-    assert len(_generated_entries(tmp_path)) == 3
+    assert len(_generated_entries(tmp_path)) == 4
 
 
 def test_check_codex_host_trust_is_silent_without_generated_wiring(tmp_path, monkeypatch):
@@ -1567,10 +1681,10 @@ def test_check_codex_host_trust_zero_discovered_entries_is_every_one_missing(tmp
     verifier = _live_query_verifier(tmp_path, monkeypatch, _hooks_list_runner([]))
     verifier.check_codex_host_trust()
     assert _levels(verifier.findings) == {"warn"}
-    assert _only_host_trust_message(verifier) == "Codex hook delivery is incomplete: missing (3)"
+    assert _only_host_trust_message(verifier) == "Codex hook delivery is incomplete: missing (4)"
 
 
-@pytest.mark.parametrize("index", range(3))
+@pytest.mark.parametrize("index", range(4))
 def test_check_codex_host_trust_warns_when_any_one_generated_entry_is_missing(tmp_path, monkeypatch, index):
     _write_codex_wiring(tmp_path)
     entries = _generated_entries(tmp_path)
@@ -2351,6 +2465,45 @@ def test_consumer_always_loaded_warning_fails_only_strict_runs(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
+# the retired AITNA_ROOT variable (ADR 0022 D09): ignored, and said so while it is set
+# --------------------------------------------------------------------------------------
+
+
+def _ignored_environment(findings):
+    return [finding for finding in findings if finding.code == "environment.aitna-root-ignored"]
+
+
+def test_a_set_aitna_root_variable_is_one_warning_that_names_the_declaration_file(tmp_path):
+    root = _make_project(tmp_path)
+    verifier = verify.Verifier(root, aitna_root_env="tools/ai")
+    verifier.run()
+    (finding,) = _ignored_environment(verifier.findings)
+    assert finding.severity == "warn"
+    assert finding.target == "AITNA_ROOT"
+    assert "tools/ai" in finding.message
+    assert ".aitna-root" in finding.message
+    assert ".aitna-root" in finding.fix
+
+
+def test_an_unset_aitna_root_variable_raises_no_warning(tmp_path):
+    root = _make_project(tmp_path)
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert _ignored_environment(verifier.findings) == []
+
+
+def test_main_reads_the_variable_from_the_environment_and_strict_fails_on_it(tmp_path, monkeypatch, capsys):
+    root = _make_project(tmp_path)
+    monkeypatch.delenv("AITNA_ROOT", raising=False)
+    assert verify.main(["--project-root", str(root), "--strict"]) == 0
+    assert "environment.aitna-root-ignored" not in capsys.readouterr().out
+    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+    assert verify.main(["--project-root", str(root)]) == 0
+    assert "environment.aitna-root-ignored" in capsys.readouterr().out
+    assert verify.main(["--project-root", str(root), "--strict"]) == 1
+
+
+# --------------------------------------------------------------------------------------
 # bin/verify.json — the shared verify text and tables (C102)
 # --------------------------------------------------------------------------------------
 
@@ -2407,14 +2560,17 @@ def test_verify_data_pins_its_structure():
         "python_mount_without_python",
         "python_mount_without_python_fix",
         "python_mount_switch",
+        # the retired AITNA_ROOT variable still set in the environment (ADR 0022 D09)
+        "aitna_root_ignored",
+        "aitna_root_ignored_fix",
         # the JavaScript verify's own keys (C105); this file never reads them
         "unsupported_record",
         "node_wired_hook_scripts",
         "node",
     }
     assert _VERIFY_DATA["wired_hook_scripts"][0] == "hook_core.py"
-    assert _VERIFY_DATA["wired_hook_scripts"][-1] == "gate-audit.py"
-    assert len(_VERIFY_DATA["wired_hook_scripts"]) == 12
+    assert _VERIFY_DATA["wired_hook_scripts"][-1] == "learning-reminder.py"
+    assert len(_VERIFY_DATA["wired_hook_scripts"]) == 13
     assert _VERIFY_DATA["task_statuses"] == ["active", "blocked", "deferred", "done"]
     assert _VERIFY_DATA["tasks_max_lines"] == 200
     assert _VERIFY_DATA["skill_name_max"] == 64

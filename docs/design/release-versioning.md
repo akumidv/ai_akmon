@@ -134,9 +134,10 @@ Extracting `learn` as its own role (above) is what makes this invariant mechanic
 rather than aspirational: without a `learn` role, "review memory and promote" has nowhere to
 go but back into `release`.
 
-Project agent incarnation:
+Project agent charters:
 
-- akmon defines the reusable roles in `roles/release.md` and `roles/learn.md`, and the
+- akmon defines the reusable release and learning agents in `agents/release.md` and
+  `agents/learning.md` (ADR 0026/D06), and the
   pipeline in `pipelines/release.md`;
 - each consuming project may add `_aitna/agents/release/README.md` with local release commands,
   package registry details, project-specific verification, and downstream propagation policy,
@@ -145,16 +146,16 @@ Project agent incarnation:
 ### Role-axis placement
 
 `release` and `learn` are new values on the **Role** axis, alongside `architect` / `engineer`.
-They place on the three orthogonal axes the same way every role does (see `roles/README.md`):
+They place on the orthogonal axes the same way every role does (see `roles/README.md`):
 
 | Axis | `release` | `learn` |
 |---|---|---|
 | **Role** (definition = pipeline + requirements + guardrails) | `pipelines/release.md` + impact/version vocabulary + D5 guardrail | `pipelines/learning.md` + `memory-distill.md` + "promote only via explicit task" guardrail |
-| **Layer** (where the artifact lives / whom it serves) | definition SHARED (`roles/release.md`); incarnation LOCAL (`_aitna/agents/release/`); akmon's own release notes SHARED, a consuming project's LOCAL | definition SHARED (`roles/learn.md`); incarnation LOCAL (`_aitna/agents/learn/`) |
+| **Layer** (where the artifact lives / whom it serves) | definition SHARED (`agents/release.md`); charter LOCAL (`_aitna/agents/release/`); akmon's own release notes SHARED, a consuming project's LOCAL | definition SHARED (`agents/learning.md`); charter LOCAL (`_aitna/agents/learning/`) |
 | **Project type** (what the project exposes) | first-class input: `package` → build/publish + tag; akmon → pin-bump across consumers; `service` → deploy artifact | mostly invariant across project types |
 
-An agent is the meeting point of the three axes, e.g. *alphavar's release agent* = `release`
-(role) × LOCAL (incarnation) × `package` (project type). Both roles are **DEVELOP**; neither
+An agent is the unit of responsibility, not an axis value: *alphavar's release agent* works in the
+`release` role (SHARED definition) under a LOCAL charter, for a `package` project. Both roles are **DEVELOP**; neither
 introduces an OPERATE branch — OPERATE is consuming the published release, not producing it.
 
 ### Subject relativity — DEVELOP/OPERATE/USAGE are relative to a subject
@@ -176,7 +177,7 @@ Two **consumption** relations, split by consequence — do not conflate:
   mounting and following akmon. "Developing alphavar with akmon" is the USAGE relation to
   akmon, **not** OPERATE, even though colloquially we "operate with akmon."
 - **OPERATE consumption** — runtime with real, often irreversible consequences (orders, money).
-  Reserved for a runtime actor; its guardrails differ in kind from D#/USAGE rules.
+  Reserved for a runtime agent; its guardrails differ in kind from D#/USAGE rules.
 
 The recursion to keep in mind: **akmon's USAGE relation *is* the consuming project's DEVELOP
 relation** — the same activity seen from two subjects. That is why mounting akmon feels like
@@ -406,8 +407,8 @@ explicit extension points for option C.
 
 New/updated akmon artifacts:
 
-- `roles/release.md` — shared release role definition (lightweight cut + periodic cadence).
-- `roles/learn.md` — shared learn role, extracted from the existing learn-loop pipelines so
+- `agents/release.md` — shared release agent definition (first `roles/release.md`) (lightweight cut + periodic cadence).
+- `agents/learning.md` — shared learning agent definition (first `roles/learn.md`), extracted from the existing learn-loop pipelines so
   `release` can hand off to it instead of absorbing learning work.
 - `roles/README.md` — add `release` and `learn` rows to the role table (per
   [Role-axis placement](#role-axis-placement)).

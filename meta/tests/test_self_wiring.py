@@ -25,7 +25,7 @@ _IN_TREE_CODEX_HOOK = "$(git rev-parse --show-toplevel)/hooks/codex-hook.py"
 
 def _shipped_wiring() -> dict:
     """What `akmon sync` would write for a mounted consumer, re-pointed at this tree."""
-    mounted = f"$CLAUDE_PROJECT_DIR/{sync.aitna_root_name()}/akmon/hooks/"
+    mounted = f"$CLAUDE_PROJECT_DIR/{sync.aitna_root_name(_ROOT)}/akmon/hooks/"
     blob = json.dumps(sync._claude_hooks(_ROOT))
     assert mounted in blob, "the shipped wiring no longer names the mounted hook directory"
     return json.loads(blob.replace(mounted, _IN_TREE_HOOKS))
@@ -33,7 +33,7 @@ def _shipped_wiring() -> dict:
 
 def _shipped_codex_wiring() -> dict:
     """What `akmon sync` would write for a mounted consumer's Codex wiring, re-pointed at this tree."""
-    mounted = f"$(git rev-parse --show-toplevel)/{sync.aitna_root_name()}/akmon/hooks/codex-hook.py"
+    mounted = f"$(git rev-parse --show-toplevel)/{sync.aitna_root_name(_ROOT)}/akmon/hooks/codex-hook.py"
     blob = json.dumps(sync._codex_hooks(_ROOT))
     assert mounted in blob, "the shipped Codex wiring no longer names the mounted hook script"
     return json.loads(blob.replace(mounted, _IN_TREE_CODEX_HOOK))

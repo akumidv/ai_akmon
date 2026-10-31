@@ -59,12 +59,19 @@ does not decide architecture or process contracts.
    Preserve remaining obligations in actual linked tasks/evidence. Do not require a
    separate ADR lifecycle transition or copied landing SHA. Capture any reusable insight
    to `_aitna/memory/` (feeds the learn loop).
+7. **Hand off** *(when the work goes on to a pull request or to integration)* — before the request
+   is opened, run `akmon learn status` (a Node project: `npx akmon learn status`) and read its
+   `sessions since the last run: N` line. When `N` is 1 or more, tell the owner a learning run is
+   due before the pull request and offer the [`learning`](../skills/learning/SKILL.md) skill; do not
+   start it yourself, and continue only after the owner chooses. What the owner confirms lands in the
+   same pull request.
 
 ## Gates (must hold to advance)
 
 - **Before commit (Pre-commit):** tests pass; lint/type checks green.
 - **Before Done (Verify):** math/data/architecture changes are owner-verified.
 - **At Close:** task marked done; reusable insight recorded.
+- **Before a pull request:** the owner has been told a learning run is due, when one is, and has chosen.
 
 ## Done
 

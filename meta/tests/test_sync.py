@@ -60,36 +60,36 @@ def _akmon_entry(path: str, matcher: str = "Bash") -> dict:
     return {"matcher": matcher, "hooks": [{"type": "command", "command": f'python3 "{path}"'}]}
 
 
-def test_merge_replaces_non_list_existing_with_wanted():
+def test_merge_replaces_non_list_existing_with_wanted(tmp_path):
     wanted = [_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")]
-    assert sync._merge_hook_entries("garbage", wanted) == wanted
+    assert sync._merge_hook_entries("garbage", wanted, tmp_path) == wanted
 
 
-def test_merge_preserves_user_hooks_and_adds_wanted():
+def test_merge_preserves_user_hooks_and_adds_wanted(tmp_path):
     user = {"matcher": "Bash", "hooks": [{"type": "command", "command": "my-own-hook.sh"}]}
     wanted = [_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")]
-    merged = sync._merge_hook_entries([user], wanted)
+    merged = sync._merge_hook_entries([user], wanted, tmp_path)
     assert user in merged
     assert wanted[0] in merged
 
 
-def test_merge_is_idempotent():
+def test_merge_is_idempotent(tmp_path):
     wanted = [_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")]
-    once = sync._merge_hook_entries([], wanted)
-    twice = sync._merge_hook_entries(once, wanted)
+    once = sync._merge_hook_entries([], wanted, tmp_path)
+    twice = sync._merge_hook_entries(once, wanted, tmp_path)
     assert once == twice
 
 
-def test_merge_drops_stale_akmon_entry_on_rename():
+def test_merge_drops_stale_akmon_entry_on_rename(tmp_path):
     # A previous sync wrote the hook at an old path; the wanted set now uses a new path.
     stale = _akmon_entry("_aitna/akmon/hooks/old-name.py")
     wanted = [_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py")]
-    merged = sync._merge_hook_entries([stale], wanted)
+    merged = sync._merge_hook_entries([stale], wanted, tmp_path)
     assert stale not in merged  # stale akmon entry removed, not duplicated
     assert merged == wanted
 
 
-def test_merge_keeps_mixed_entry_that_is_not_purely_akmon():
+def test_merge_keeps_mixed_entry_that_is_not_purely_akmon(tmp_path):
     # An entry combining a akmon command with a user command is not "akmon-owned".
     mixed = {
         "matcher": "Bash",
@@ -98,14 +98,14 @@ def test_merge_keeps_mixed_entry_that_is_not_purely_akmon():
             {"type": "command", "command": "user-extra.sh"},
         ],
     }
-    merged = sync._merge_hook_entries([mixed], [])
+    merged = sync._merge_hook_entries([mixed], [], tmp_path)
     assert mixed in merged
 
 
-def test_is_akmon_entry_recognises_marker():
-    assert sync._is_akmon_entry(_akmon_entry("x/_aitna/akmon/hooks/h.py"))
-    assert not sync._is_akmon_entry({"matcher": "Bash", "hooks": [{"command": "other.sh"}]})
-    assert not sync._is_akmon_entry({"matcher": "Bash", "hooks": []})
+def test_is_akmon_entry_recognises_marker(tmp_path):
+    assert sync._is_akmon_entry(_akmon_entry("x/_aitna/akmon/hooks/h.py"), tmp_path)
+    assert not sync._is_akmon_entry({"matcher": "Bash", "hooks": [{"command": "other.sh"}]}, tmp_path)
+    assert not sync._is_akmon_entry({"matcher": "Bash", "hooks": []}, tmp_path)
 
 
 # --------------------------------------------------------------------------------------
@@ -295,7 +295,7 @@ def test_skill_stub_carries_the_source_frontmatter_in_both_harness_dirs(tmp_path
     source.write_text(f"---\n{_ALPHA_FRONTMATTER}\n---\n\n# alpha\n\nBody.\n", encoding="utf-8")
 
     expected = (
-        f"---\n# {sync.generated_banner()}\n{_ALPHA_FRONTMATTER}\n---\n\n# alpha\n\n"
+        f"---\n# {sync.generated_banner(root)}\n{_ALPHA_FRONTMATTER}\n---\n\n# alpha\n\n"
         "Source skill: [../../../skills/alpha/SKILL.md](../../../skills/alpha/SKILL.md)\n\n"
         "Read and follow the source SKILL.md. Do not duplicate its contents here.\n"
     )
@@ -313,7 +313,7 @@ def test_skill_stub_without_source_frontmatter_stays_a_bare_pointer(tmp_path):
 
     assert set(stubs) == {".claude/skills/beta/SKILL.md", ".agents/skills/beta/SKILL.md"}
     for content in stubs.values():
-        assert content.startswith(f"# beta\n\n<!-- {sync.generated_banner()} -->\n\nSource skill: ")
+        assert content.startswith(f"# beta\n\n<!-- {sync.generated_banner(root)} -->\n\nSource skill: ")
 
 
 def test_skill_stub_outside_the_repository_points_through_akmon_path(tmp_path):
@@ -331,7 +331,7 @@ def test_skill_stub_outside_the_repository_points_through_akmon_path(tmp_path):
     ]
     for stub in stubs:
         assert "Source skill: `$(akmon path)/skills/alpha/SKILL.md`" in stub.content
-        assert stub.content.startswith(f"---\n# {sync.generated_banner()}\n{_ALPHA_FRONTMATTER}\n---\n")
+        assert stub.content.startswith(f"---\n# {sync.generated_banner(root)}\n{_ALPHA_FRONTMATTER}\n---\n")
 
 
 @pytest.mark.parametrize(
@@ -425,39 +425,48 @@ def test_main_check_and_dry_run_are_mutually_exclusive(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# configurable dev-layer root (AITNA_ROOT) — A4
+# configurable dev-layer root (the `.aitna-root` declaration) — A4
 # --------------------------------------------------------------------------------------
 
 
 def _make_root_at(tmp_path: Path, aitna: str) -> Path:
-    """A minimal tree whose dev-layer root is ``aitna`` (e.g. ``tools/ai``)."""
+    """A minimal tree whose dev-layer root is ``aitna`` (e.g. ``tools/ai``), declared in ``.aitna-root``."""
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / ".aitna-root").write_text(f"{aitna}\n", encoding="utf-8")
     (tmp_path / aitna / "akmon").mkdir(parents=True)
     return tmp_path
 
 
-def test_aitna_root_name_defaults_to_aitna(monkeypatch):
-    monkeypatch.delenv("AITNA_ROOT", raising=False)
-    assert sync.aitna_root_name() == "_aitna"
+def test_aitna_root_name_defaults_to_aitna_without_a_declaration(tmp_path):
+    root = _make_root(tmp_path)
+    assert not (root / ".aitna-root").exists()
+    assert sync.aitna_root_name(root) == "_aitna"
 
 
-def test_aitna_root_name_reads_env_and_strips_slashes(monkeypatch):
-    monkeypatch.setenv("AITNA_ROOT", "/tools/ai/")
-    assert sync.aitna_root_name() == "tools/ai"
+def test_aitna_root_name_reads_the_declaration_and_strips_trailing_slashes(tmp_path):
+    (tmp_path / ".aitna-root").write_text("tools/ai/\n", encoding="utf-8")
+    assert sync.aitna_root_name(tmp_path) == "tools/ai"
 
 
-def test_aitna_root_name_blank_env_falls_back_to_default(monkeypatch):
-    monkeypatch.setenv("AITNA_ROOT", "")
-    assert sync.aitna_root_name() == "_aitna"
+def test_aitna_root_name_refuses_an_absolute_declaration(tmp_path):
+    """A leading slash is an absolute path, refused rather than stripped into a relative one."""
+    (tmp_path / ".aitna-root").write_text("/tools/ai/\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="relative to the project root"):
+        sync.aitna_root_name(tmp_path)
 
 
-def test_akmon_root_derives_from_configured_aitna(monkeypatch, tmp_path):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+def test_aitna_root_name_refuses_a_blank_declaration(tmp_path):
+    (tmp_path / ".aitna-root").write_text("\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="cannot be empty"):
+        sync.aitna_root_name(tmp_path)
+
+
+def test_akmon_root_derives_from_the_declared_dev_root(tmp_path):
+    (tmp_path / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     assert sync.akmon_root(tmp_path) == tmp_path / "tools" / "ai" / "akmon"
 
 
-def test_generated_hook_commands_use_custom_aitna_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+def test_generated_hook_commands_use_custom_aitna_root(tmp_path):
     root = _make_root_at(tmp_path, "tools/ai")
     claude = sync._claude_settings(root).content
     assert "tools/ai/akmon/hooks/git-commit-guard.py" in claude
@@ -469,16 +478,16 @@ def test_generated_hook_commands_use_custom_aitna_root(monkeypatch, tmp_path):
     assert "_aitna/akmon/hooks" not in codex
 
 
-def test_akmon_hook_marker_tracks_custom_aitna_root(monkeypatch):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+def test_akmon_hook_marker_tracks_custom_aitna_root(tmp_path):
+    root = _make_root_at(tmp_path, "tools/ai")
     entry = _akmon_entry("x/tools/ai/akmon/hooks/h.py")
-    assert sync._is_akmon_entry(entry)
+    assert sync._is_akmon_entry(entry, root)
     # an entry at the default path is no longer "akmon-owned" under the custom root
-    assert not sync._is_akmon_entry(_akmon_entry("x/_aitna/akmon/hooks/h.py"))
+    assert not sync._is_akmon_entry(_akmon_entry("x/_aitna/akmon/hooks/h.py"), root)
 
 
-def test_skill_sources_search_custom_aitna_root(monkeypatch, tmp_path):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+def test_skill_sources_search_custom_aitna_root(tmp_path):
+    (tmp_path / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     _make_skill(tmp_path, "tools/ai/akmon/skills", "alpha")
     _make_skill(tmp_path, "tools/ai/skills", "beta")
     sources, errors = sync._skill_sources(tmp_path)
@@ -486,8 +495,7 @@ def test_skill_sources_search_custom_aitna_root(monkeypatch, tmp_path):
     assert {s.parent.name for s in sources} == {"alpha", "beta"}
 
 
-def test_full_generation_under_custom_root_is_idempotent(monkeypatch, tmp_path):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+def test_full_generation_under_custom_root_is_idempotent(tmp_path):
     root = _make_root_at(tmp_path, "tools/ai")
     assert sync.main(["--project-root", str(root)]) == 0  # write
     assert sync.main(["--project-root", str(root), "--check"]) == 0  # clean second pass
@@ -705,7 +713,7 @@ def test_sync_data_pins_its_structure():
         "{{aitna}}/akmon/js/hooks/",
     ]
     # one template per harness, the hooks directory a placeholder: node_modules/akmon/js/hooks in
-    # package mode, <AITNA_ROOT>/akmon/js/hooks in a mounted one (js/bin/sync.mjs::nodeHooksDir)
+    # package mode, <dev root>/akmon/js/hooks in a mounted one (js/bin/sync.mjs::nodeHooksDir)
     assert _SYNC_DATA["node_hook_command"] == 'node "{{anchor}}/{{hooks_dir}}/{{script}}.mjs"'
     assert _SYNC_DATA["node_codex_hook_command"] == 'node "{{anchor}}/{{hooks_dir}}/codex-hook.mjs"'
     # the wiring tables: matcher entries and hook commands, order load-bearing
@@ -715,7 +723,8 @@ def test_sync_data_pins_its_structure():
     assert _SYNC_DATA["claude_hooks"]["Stop"][0]["commands"] == ["gate-audit"]
     assert _SYNC_DATA["codex_hooks"]["PreToolUse"][0]["matcher"] == "Bash|apply_patch"
     assert _SYNC_DATA["codex_hooks"]["SessionStart"][0]["commands"] == [
-        ["session-start", "Loading akmon session reminders"]
+        ["session-start", "Loading akmon session reminders"],
+        ["learning-reminder", "Checking the learning-run reminder"],
     ]
     assert list(_SYNC_DATA["planned_files"]) == [
         ["CLAUDE.md", "claude_md"],

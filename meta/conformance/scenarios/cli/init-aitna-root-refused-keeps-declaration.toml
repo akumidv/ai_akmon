@@ -1,0 +1,23 @@
+id = "cli/init-aitna-root-refused-keeps-declaration"
+ecosystem = "python"
+kind = "cli"
+covers = ["command:init"]
+
+# `--aitna-root meta` declares the root in `.aitna-root` before the run is planned (the mount, sync and
+# routing steps read the root through that file); a refusal in the plan, like a declined prompt, gives the
+# declaration back, so a run that applied nothing leaves no `.aitna-root` behind. The refusal is the
+# record of the other implementation, as in cli/init-ecosystem-node-refused, but under the declared root.
+[fixture]
+attach = "native"
+warmup = "before"
+name = "base"
+files = { "meta/.akmon.toml" = "mount = \"package\"\necosystem = \"node\"\nakmon_version = \"{{version}}\"\nattached_archetype = \"unclassified\"\nlast_realign = \"{{version}}\"\n" }
+
+[run]
+argv = ["init", "--yes", "--project-root", "{{root}}", "--aitna-root", "meta"]
+
+[expected]
+exit = 2
+stdout = "akmon init: wrote .aitna-root (meta)\nakmon init: left .aitna-root as it was (nothing was applied)\n"
+stderr = "akmon init: this project's integration record names ecosystem = \"node\" (meta/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon init\n"
+file_absent = [".aitna-root"]

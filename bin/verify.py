@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
@@ -305,7 +306,21 @@ _DEV_NAME_RE = re.compile(r"\bself_ci\b|\bCONCEPT\.md\b", re.ASCII)
 # Markdown link target and inline-code span — the two ways a path is written in these docs.
 _LEGACY_OWNER_ANCHOR_RE = re.compile(r"\*\*D2\*\*\s+—\s+the owner\s+verifies", re.ASCII)
 _LINK_RE = re.compile(r"\]\(([^)]+)\)")
+# Charter directories named for a role, not an agent (ADR 0027/D04, ADR 0026/D06), each with the agent
+# whose charter it belongs to: the development agent's roles, and the learn role of the learning agent.
+# ``release`` is both a role and an agent name, so its directory is the current layout.
+_LEGACY_ROLE_CHARTER_DIRS = {
+    "architect": "development",
+    "engineer": "development",
+    "review": "development",
+    "learn": "learning",
+}
+# Warnings that stay visible but never fail ``--strict``: the one-release tolerance of ADR 0027/D04, so
+# the CI step ``akmon init`` ships does not go red on a consumer's pin bump. Task C175 removes it.
+_STRICT_EXEMPT_CODES = frozenset({"charters.legacy-role-dir"})
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+# A role or agent definition a charter links, as written under the mounted standard tree.
+_ROLE_TARGET_RE = re.compile(r"akmon/(roles|agents)/([A-Za-z0-9_.-]+)\.md", re.ASCII)
 # Path fragments that only ever point into akmon's own development tree / artifacts. A path
 # (link target or inline code) containing any of these is a leak; the same word in free prose
 # (e.g. "detail in decisions/ ADRs") is not, because it is not written as a path here.
@@ -371,12 +386,16 @@ class Verifier:
         root: Path,
         *,
         codex_hooks_runner: Callable[[Sequence[str], Path, float], str] | None = None,
+        aitna_root_env: str | None = None,
     ) -> None:
         self.root = root
         self.findings: list[Finding] = []
-        # The dev-layer root is configurable (AITNA_ROOT, default _aitna); akmon mounts at
+        # ``AITNA_ROOT`` as the entry point read it from the environment: akmon ignores it (ADR 0022 D09)
+        # and ``check_ignored_environment`` says so while it is set.
+        self.aitna_root_env = aitna_root_env
+        # The dev-layer root is declared by ``.aitna-root`` (default _aitna); akmon mounts at
         # <aitna>/akmon. Every path below derives from these so a relocated layer still verifies.
-        self.aitna = sync_tool.aitna_root_name()
+        self.aitna = sync_tool.aitna_root_name(root)
         self.akmon = f"{self.aitna}/akmon"
         # The standard tree this project actually operates against: the mount for mounted
         # modes, the embedded tree for package mode (ADR 0009 §4) — may live outside
@@ -768,7 +787,12 @@ class Verifier:
             )
 
     def check_agent_charters(self) -> None:
-        """Check that each agent directory has a README.md charter linking a akmon role."""
+        """Check that each agent directory has a README.md charter linking a akmon role or agent definition.
+
+        A directory named for a role (``architect``, ``engineer``, ``review``, ``learn``) is the
+        pre-ADR-0027 layout: it still verifies, with a warning that names the migration. ``release``
+        is the release agent's own directory (ADR 0026/D06), so it carries no such warning.
+        """
         agents_dir = self.root / self.aitna / "agents"
         if not agents_dir.is_dir():
             return
@@ -784,6 +808,18 @@ class Verifier:
         for agent in agents:
             readme = agent / "README.md"
             relative = str(readme.relative_to(self.root))
+            if agent.name in _LEGACY_ROLE_CHARTER_DIRS:
+                successor = _LEGACY_ROLE_CHARTER_DIRS[agent.name]
+                as_section = f" as the {agent.name} section" if successor == "development" else ""
+                self.warn(
+                    "charters.legacy-role-dir",
+                    f"{self.aitna}/agents/{agent.name} is named for a role, not an agent",
+                    target=f"{self.aitna}/agents/{agent.name}",
+                    fix=(
+                        f"Move its content into {self.aitna}/agents/{successor}/README.md{as_section}; "
+                        "a charter is one directory per agent (ADR 0027/D04)."
+                    ),
+                )
             if not readme.is_file():
                 self.error(
                     "charters.readme",
@@ -793,19 +829,41 @@ class Verifier:
                 )
                 continue
             text = readme.read_text(encoding="utf-8")
-            if f"{self.akmon}/roles" in text or "akmon/roles" in text:
+            if any(f"akmon/{folder}" in text or f"{self.akmon}/{folder}" in text for folder in ("roles", "agents")):
                 self.ok(
                     "charters.role-link",
                     f"{relative} links a akmon role",
                     target=relative,
                     fix="Keep the akmon role link in this charter.",
                 )
+                if agent.name not in _LEGACY_ROLE_CHARTER_DIRS:
+                    self._check_role_link_targets(text, relative)
             else:
                 self.warn(
                     "charters.role-link",
                     f"{relative} does not link a akmon role",
                     target=relative,
                     fix=f"Link the akmon role this agent follows from {relative}.",
+                )
+
+    def _check_role_link_targets(self, text: str, relative: str) -> None:
+        """Warn for each ``akmon/roles/<x>.md`` or ``akmon/agents/<x>.md`` a charter links that the standard tree lacks.
+
+        Resolved against the standard tree the project operates against (``self.standard_root``: the
+        mount, or the embedded tree in package mode); with no such tree nothing is said. A charter
+        in a legacy role-named directory is skipped by the caller: its migration warning already
+        tells the owner to move it, and its link may point at a definition the same migration
+        retired.
+        """
+        if not self.standard_root.is_dir():
+            return
+        for folder, name in dict.fromkeys(_ROLE_TARGET_RE.findall(text)):
+            if not (self.standard_root / folder / f"{name}.md").is_file():
+                self.warn(
+                    "charters.role-link-target",
+                    f"{relative} links {self.akmon}/{folder}/{name}.md, which is not in the standard tree",
+                    target=relative,
+                    fix=f"Link a {folder.removesuffix('s')} definition that exists under {self.akmon}/{folder}/.",
                 )
 
     def check_memory(self) -> None:
@@ -1802,7 +1860,7 @@ class Verifier:
         The agent writes it on attach/realign (sync.py is stdlib-only and cannot run `git describe`).
 
         It is a **consumer** artifact, so this check applies when akmon is mounted as a
-        submodule (`<AITNA_ROOT>/akmon/` present) *or* the record itself exists (package
+        submodule (`<dev root>/akmon/` present) *or* the record itself exists (package
         mode has no mount at all, ADR 0009 §4 — `.akmon.toml` is the only trace a
         package-mode consumer leaves) — verify run against the akmon repo itself (no mount,
         no record) skips it. Even on a consumer, a *missing* record is a non-gating note (the
@@ -1922,6 +1980,21 @@ class Verifier:
         self.check_check_config()
         self.check_ruff_without_python()
         self.check_python_mount_without_python()
+        self.check_ignored_environment()
+
+    def check_ignored_environment(self) -> None:
+        """Warn while the retired ``AITNA_ROOT`` variable is set: it no longer decides anything (ADR 0022 D09).
+
+        The value comes from the entry point, not from here: nothing below ``main`` reads the environment.
+        """
+        if self.aitna_root_env is None:
+            return
+        self.warn(
+            "environment.aitna-root-ignored",
+            jsondata.fill(self.data["aitna_root_ignored"], {"value": self.aitna_root_env, "aitna": self.aitna}),
+            target="AITNA_ROOT",
+            fix=self.data["aitna_root_ignored_fix"],
+        )
 
     def check_check_config(self) -> None:
         """The ``[check]`` table of the integration record — validated here, run by ``akmon check``.
@@ -2041,10 +2114,10 @@ def main(argv: list[str] | None = None) -> int:
         cli = sync_tool.node_cli(root, sync_tool.read_sync_data())
         print(jsondata.fill(text, {"value": line_safe(ecosystem), "cli": cli}), file=sys.stderr)
         return 2
-    verify = Verifier(root)
+    verify = Verifier(root, aitna_root_env=os.environ.get("AITNA_ROOT"))
     verify.run()
     print_findings(verify.findings, quiet=args.quiet)
-    return exit_code(verify.findings, strict=args.strict)
+    return exit_code(verify.findings, strict=args.strict, strict_exempt=_STRICT_EXEMPT_CODES)
 
 
 if __name__ == "__main__":

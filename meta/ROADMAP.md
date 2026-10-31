@@ -17,7 +17,7 @@ Each open item states: **the gap** (what is missing), **why it matters**, and a
    [ADR 0016](../docs/adr/0016-decision-records-and-owner-acceptance.md). Start with the
    [research and AP0–AP5 plan](../docs/design/attention-and-human-agent-collaboration.md#refinement-and-implementation-plan)
    and its design/implementation tasks A22/C86.
-2. **Token efficiency for quality.** Develop the existing roles, subagent delegation,
+2. **Token efficiency for quality.** Develop the existing roles, delegation to delegates,
    model selection, skills, and hook controls against the cost of errors and rework.
    Check achieved quality and actual routing/delivery evidence, not agent counts or
    nominal model settings. Reuse [model-routing](../docs/design/model-routing.md); do not create
@@ -42,10 +42,11 @@ correctness, and explicitly locked task dependencies remain in force.
 
 ## Done (formulated in the model)
 
-- **Three axes** — Layer (SHARED/LOCAL/USAGE), Role (architect/engineer/…), Archetype
-  (package/service/…). Layer as a decision tree, not a grid (no false "shared usage").
-- **Role vs agent** — role = definition (in akmon); agent = incarnation (in a
-  project). Axis values are roles; an agent is a point where axes meet.
+- **Four axes** — Layer (SHARED/LOCAL/USAGE), Role (architect/engineer/…), Archetype
+  (package/service/…), Actor (developer/autonomous/guided). Layer as a decision tree, not a grid (no false "shared usage").
+- **Role vs agent** — role = definition (in akmon) and a mode an agent works in; agent = the unit
+  of responsibility, defined in a project by its charter. Axis values are roles; an agent is not an
+  axis value.
 - **Learn loop** ([MODEL §6](../MODEL.md#6-the-learn-loop-how-the-standard-evolves)) — CAPTURE → DISTILL → PROMOTE → PROPAGATE; two memories
   (shared `_aitna/memory/` vs provider-private) kept distinct; promotion test
   (general + proven).
@@ -58,7 +59,7 @@ correctness, and explicitly locked task dependencies remain in force.
 
 ## Open — gaps in the model (not yet formulated)
 
-### O1. OPERATE mode (runtime actors)
+### O1. OPERATE mode (runtime agents)
 
 - **Gap.** The decision tree spans DEVELOP and USE only. A third mode — an agent that
   *acts in the world at runtime* (places orders, moves data/money) — has no place in the

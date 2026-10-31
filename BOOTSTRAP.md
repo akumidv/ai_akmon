@@ -19,7 +19,7 @@ akmon layer in a project. Also carries **ready prompts for the user**.
 > `npx github:akumidv/ai_akmon#vX.Y.Z init --mode submodule` in a mounted one, with no Python
 > anywhere (§G); the steps below hold, with the Node spellings §G names.
 
-Source of rules: [README.md](README.md) (the three axes, the layer decision tree, the
+Source of rules: [README.md](README.md) (the four axes, the layer decision tree, the
 learn loop) and [ARCHETYPES.md](ARCHETYPES.md) (archetypes + the guardrail/profile
 map). Note: in a **mounted** mode akmon does **not** exist in the target project until step 1
 — the shared layer lives only in the repo `ai_akmon` and must be cloned in first, and the
@@ -34,15 +34,16 @@ for `package`, and `akmon init --mode <mode>` to choose one.
 
 ## A. What the agent does on attach
 
-`_aitna/` below is the **default** dev-layer root. A project may relocate it by declaring
-`AITNA_ROOT` (a project-root-relative path, e.g. `tools/ai`); akmon then mounts at
-`<AITNA_ROOT>/akmon` and the tooling derives every path from it. If `AITNA_ROOT` is set,
-export it in the shell before running `sync.py` / `verify.py` (and substitute it for `_aitna/`
-in the mount path and the steps below). Unset → `_aitna`.
+`_aitna/` below is the **default** dev-layer root. A project may relocate it by declaring the root in
+a one-line `.aitna-root` file at the project root, holding a project-root-relative POSIX path (e.g.
+`tools/ai`); `akmon init --aitna-root PATH` writes that file for a non-default root. akmon then
+mounts at `<dev root>/akmon` and the tooling derives every path from it. Substitute the declared
+root for `_aitna/` in the mount path and the steps below. No `.aitna-root` file → `_aitna`. The
+former `AITNA_ROOT` environment variable no longer sets the root; `akmon verify` warns while it is set.
 
 When the user asks "attach akmon", the agent:
 
-1. **Attach the shared layer as a submodule** (mount path `<AITNA_ROOT>/akmon`, default
+1. **Attach the shared layer as a submodule** (mount path `<dev root>/akmon`, default
    `_aitna/akmon`, repo `ai_akmon` — skip if the prompt already ran it):
    ```bash
    git submodule add --name _aitna/akmon \
@@ -74,7 +75,7 @@ When the user asks "attach akmon", the agent:
    **Pin the test environment (`[test].runner`).** Some agent tooling needs Python with `pytest`
    (e.g. the akmon unit tests, or any future deps-bearing tool). **Use what the project already
    has; only build a venv when there is none.** Decide the runner once, here, and record it in the
-   integration record (`[test].runner` in `<AITNA_ROOT>/.akmon.toml`, §C) so `release_check` uses
+   integration record (`[test].runner` in `<dev root>/.akmon.toml`, §C) so `release_check` uses
    it verbatim rather than guessing per-run — `uv` may be absent, and a Python project usually has
    its own manager:
    - **Python / mixed project** — it already supplies `pytest` through its own manager
@@ -102,7 +103,7 @@ When the user asks "attach akmon", the agent:
    the USAGE placement, and the **resolved guardrail/profile links** from step 4 (written
    out, so they aren't recomputed each session). This block *is* the prose attach record.
 
-   **Write the machine-readable integration record** `<AITNA_ROOT>/.akmon.toml` (§C) — the
+   **Write the machine-readable integration record** `<dev root>/.akmon.toml` (§C) — the
    version this project sits on, so a later bump can diff the CHANGELOG (see "Pull the latest
    shared layer"). `sync.py` cannot generate it (it is stdlib-only and cannot run `git`), so the
    agent writes it here, reading the version (tag-anchored, SHA-suffixed only between tags) from
@@ -165,7 +166,7 @@ Attach akmon to this project with the CLI, then finish the judgement steps:
 (add `--mode package` for a dependency pin with no tree in the repo, `--mode vendored` for
 an offline copy). Then classify the project per ARCHETYPES.md, check the language-profile
 imports init wrote into the AGENTS.md akmon block (one per detected language; add a missing
-one), pin `[test].runner` in <AITNA_ROOT>/.akmon.toml, and run `akmon verify --strict`.
+one), pin `[test].runner` in <dev root>/.akmon.toml, and run `akmon verify --strict`.
 Show the diff, do not commit.
 ```
 
@@ -177,7 +178,7 @@ Attach akmon to this Node project with the npm package, then finish the judgemen
   npx akmon init
 Then classify the project per ARCHETYPES.md, check the language-profile imports init wrote into
 the AGENTS.md akmon block (one per detected language; add a missing one), pin `[test].runner` in
-<AITNA_ROOT>/.akmon.toml to the project's own test command, and run `npx akmon verify --strict`.
+<dev root>/.akmon.toml to the project's own test command, and run `npx akmon verify --strict`.
 Show the diff, do not commit.
 ```
 
@@ -226,11 +227,12 @@ This project uses the akmon dev layer. Model & notation:
 - **Layers (README §2):** SHARED = `_aitna/akmon/` · LOCAL =
   `_aitna/{skills,tools,memory,agents}/` · USAGE = root `skills/` (`<none>` if not
   exposed).
-- **Agents (roles):** [architect](_aitna/agents/architect/README.md),
-  [engineer](_aitna/agents/engineer/README.md) → roles:
-  [akmon/roles/](_aitna/akmon/roles/). **Declare the active agent** before doing work
-  and restate it on switch (`🧭 agent: <name> — <focus>`) — see
-  [Role declaration](_aitna/akmon/roles/README.md#role-declaration-announce-the-active-agent).
+- **Agents:** the [development](_aitna/agents/development/README.md) charter — its roles are
+  review, architect and engineer → roles: [akmon/roles/](_aitna/akmon/roles/) — and the
+  [learning](_aitna/agents/learning/README.md) and
+  [release](_aitna/agents/release/README.md) charters, one per agent. **Declare the active role**
+  before doing work and restate it on switch (`🧭 role: <name> — <focus>`) — see
+  [Role declaration](_aitna/akmon/roles/README.md#role-declaration-announce-the-active-role).
 - **Delegation (always-on, direct):** **delegation is the default.** For every non-trivial
   task, before the first repository sweep, edit, or test run, decompose the work and delegate
   every independent mechanical sub-step to available subagents without waiting for an owner
@@ -291,7 +293,7 @@ Mechanically-enforced rules (e.g. D5 via the commit-guard hook, step 8) hold reg
 the import covers the rules that rely on the agent having *read* them (owner acceptance,
 memory). The `.claude/skills/` and `.agents/skills/` stubs also apply (written by `sync.py`).
 
-### Integration record — `<AITNA_ROOT>/.akmon.toml`
+### Integration record — `<dev root>/.akmon.toml`
 
 The machine-readable companion to the AGENTS.md akmon block: the akmon **version** this
 project was attached/realigned against, plus the pinned test environment. The agent writes it
@@ -329,7 +331,7 @@ path) instead of discovering one; when absent it falls back to discovery (dev ve
 pytest → uv). Pin it as `<interpreter> -m pytest` or a manager invocation (`poetry run pytest`),
 never a venv `bin/pytest` console script (stale-shebang on relocation).
 
-It lives in the LOCAL layer (`<AITNA_ROOT>/`, **outside** the submodule) so it survives a
+It lives in the LOCAL layer (`<dev root>/`, **outside** the submodule) so it survives a
 submodule re-checkout, and is **not** linked from AGENTS.md — so it stays out of context during
 development and is read only at attach/verify/bump time.
 
@@ -414,13 +416,13 @@ git submodule update --init --recursive
 ```
 
 ### Pull the latest shared layer into a project
-This is the consumer side of the [release](roles/release.md) cycle; the bump itself is a release
+This is the consumer side of the [release](agents/release.md) cycle; the bump itself is a release
 **subject** ("akmon pin bump").
 
 **Delta-check first (what to verify, not where it is stored).** The delta-check is a *procedure*,
 not stored data — it computes a version window and reads the changes from the CHANGELOG; it never
 keeps its own copy of them (the CHANGELOG is the single owner of "what changed"):
-1. `from` = `last_realign` in `<AITNA_ROOT>/.akmon.toml` — the version the project was last
+1. `from` = `last_realign` in `<dev root>/.akmon.toml` — the version the project was last
    *aligned* to. Not `akmon_version`: that key records the pin, and in mode `package` `sync`
    restamps it with the installed version on every run, so it stops anchoring the window the
    moment you sync.
@@ -485,7 +487,7 @@ sync without a realign leaves the record ahead of `last_realign` and `akmon veri
 moves the mount and leaves the record where it was — so a skipped `init` leaves both keys agreeing
 on the old version and `verify` cannot see it; there the procedure above is the only guard.
 
-A realign needs no network: on a project that already has `<AITNA_ROOT>/.akmon.toml`, `init` takes
+A realign needs no network: on a project that already has `<dev root>/.akmon.toml`, `init` takes
 the version it names in links and pin instructions from the installed package. Only a **first**
 attach in mode `package` without `--ref` asks the akmon repository for its latest release tag
 (`git ls-remote`, so it needs network access to GitHub) and stops with exit 2 when it cannot
@@ -523,7 +525,7 @@ proven (see [learning](pipelines/learning.md)).
 
 Alongside the mounted modes (`submodule` — this document's default — plus `vendored` and
 `subtree`), akmon installs as an ordinary dev dependency, with **no tree at
-`<AITNA_ROOT>/akmon`**:
+`<dev root>/akmon`**:
 
 - The consumer pins akmon in its manifest's **dev group** (never a runtime dep) — a
   git-tag pin `akmon @ git+https://github.com/akumidv/ai_akmon@vX.Y.Z` until the first
@@ -540,8 +542,8 @@ Alongside the mounted modes (`submodule` — this document's default — plus `v
   wiring is a committed file every developer runs, and an absolute path to one person's venv
   breaks silently for everyone else — a hook command whose executable is missing produces no
   error you will see. `akmon verify` reports it (`hooks.launcher`) until the pin is installed.
-- `akmon sync` materializes into `<AITNA_ROOT>/.akmon/guardrails/` and
-  `<AITNA_ROOT>/.akmon/profiles/` the guardrail and profile files your `AGENTS.md` actually
+- `akmon sync` materializes into `<dev root>/.akmon/guardrails/` and
+  `<dev root>/.akmon/profiles/` the guardrail and profile files your `AGENTS.md` actually
   `@`-imports. Those cannot be reached through the package, because `AGENTS.md` is committed
   and the only path from it into the package carries the venv's Python version
   (`.venv/lib/python3.14/site-packages/…`) — and an `@`-import that does not resolve says
@@ -550,7 +552,7 @@ Alongside the mounted modes (`submodule` — this document's default — plus `v
   `akmon sync`, then start a new session — the `@`-import is expanded once, at session start);
   importing a file akmon does not ship is a `sync` error, not a silent skip. A ruff
   configuration of the project that `extend`s akmon's rules (`profiles/ruff.toml`) gets the same:
-  `sync` materializes the file at `<AITNA_ROOT>/.akmon/profiles/ruff.toml` and keeps it fresh.
+  `sync` materializes the file at `<dev root>/.akmon/profiles/ruff.toml` and keeps it fresh.
 - If `sync` reports that `AGENTS.md` imports a file that moved, replace that import line with
   the one the error names (today: `guardrails/python.md` → `profiles/python.md`).
 - Everything else (MODEL.md, roles, pipelines, skills) is read from the installed
@@ -652,9 +654,9 @@ there is no move back.
 The switch needs a mount or CLI at this release or later.
 
 - **Submodule or subtree:** update the mount to this release or later first — a submodule with
-  `git -C <AITNA_ROOT>/akmon fetch --tags && git -C <AITNA_ROOT>/akmon checkout <tag>`, a subtree
-  with `git subtree pull --prefix <AITNA_ROOT>/akmon <repo> <tag> --squash` — then run
-  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs init --ecosystem node` (a subtree also takes
+  `git -C <dev root>/akmon fetch --tags && git -C <dev root>/akmon checkout <tag>`, a subtree
+  with `git subtree pull --prefix <dev root>/akmon <repo> <tag> --squash` — then run
+  `node <dev root>/akmon/js/akmon/cli.mjs init --ecosystem node` (a subtree also takes
   `--ref <tag>`, the ref merged into the mount). A mount that predates the switch is refused
   before anything is written, and the refusal names both commands.
 - **Vendored:** `npx github:akumidv/ai_akmon#<tag> init --ecosystem node`, with `<tag>` this
@@ -666,7 +668,7 @@ The switch needs a mount or CLI at this release or later.
 `init` rewrites the record and the hook wiring, decides `[check]` again only when it holds
 exactly akmon's ruff default, and never deletes `ruff.toml`. Then: re-approve the rewritten Codex
 hooks with `/hooks` (the §F rule — a changed entry runs nothing until re-approved), review
-`[check]` in `<AITNA_ROOT>/.akmon.toml` — when it is empty,
-`node <AITNA_ROOT>/akmon/js/akmon/cli.mjs init --checks own` detects the project's JavaScript
+`[check]` in `<dev root>/.akmon.toml` — when it is empty,
+`node <dev root>/akmon/js/akmon/cli.mjs init --checks own` detects the project's JavaScript
 checks, since an explicit `--checks` decides an empty table again — and remove `ruff.toml` if a
 closing step names it.

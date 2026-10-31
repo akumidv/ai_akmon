@@ -214,7 +214,7 @@ ledger records dispatch only; it does not decide whether “dispatch” means a 
 launch, a confirmed launch, or a completed run, nor what makes one local line safe to trust after
 compaction. **Owner choice F21/A:** record the observed Claude `PreToolUse` dispatch **request** after
 C46 normalizes it to `subagent`; make no launch or completion claim. Write versioned seven-field TSV
-records to `<AITNA_ROOT>/model-routing.log`; retain `.claude/model-routing.log` as the read-only
+records to `<dev root>/model-routing.log`; retain `.claude/model-routing.log` as the read-only
 legacy path. `delegation-log.py` is the sole writer; statistics and coverage-map are the exact default
 readers. Serialize bounded appends and keep migration, gitignore, prose/path and schema joins under
 `self_ci`. Rejected: treating PreToolUse as proof of launch, because the harness can still refuse or
@@ -820,10 +820,10 @@ the same way or the check fails.
 | callable | classification | prose owner and the subset the marker claims |
 |---|---|---|
 | `privilege_escalation_guard_result` | `privilege.no-escalation` | `guardrails/_common.md` § Privilege escalation — the whole rule: any `sudo` in a Bash command is denied |
-| `git_commit_guard_result` | `commits.owner-owned` | § Commits & ownership — **subset**: the AI `Co-Authored-By` trailer (deny) and `push`/`tag`/`merge`, or a commit on the default branch or detached/unresolved HEAD (ask in interactive default mode; deny when `permission_mode` is missing or non-default because the ask cannot be trusted to reach the owner). "Tests pass before a commit is offered" and "branch for non-trivial work" are **not** machine-checked and the marker must not imply they are |
+| `git_commit_guard_result` | `commits.owner-owned` | § Commits & ownership — **subset**: the AI `Co-Authored-By` trailer (deny) and `push`/`tag`/`merge`, or a commit on the default branch or detached/unresolved HEAD (ask when the run is attended; deny when it is not, because the ask cannot be trusted to reach the owner — attendance is the host's `CLAUDE_CODE_SESSION_ATTENDED`, else the interactive default `permission_mode`; ADR-0025/D06). "Tests pass before a commit is offered" and "branch for non-trivial work" are **not** machine-checked and the marker must not imply they are |
 | `analysis_write_result` | `analysis.before-mutation` | § Analysis before mutation — **subset**: the first edit to a planning/design document in a session raises a reminder. The rule's substance (was this turn analysis-only?) is not decidable by a hook |
 | `d2_ledger_reminder_result` | `verify.owner-verify-d2` | § Verify against reality, not memory, the **Owner-verify** bullet — **subset**: an edit matching the consumer's configured `[d2_ledger] sensitive_paths` globs (see F8/3 below) |
-| `delegation_nudge_result` | `delegation.tier-floor` | § Route by task kind — the tier floor — **subset**: uninterrupted read/shell/edit volume without a delegation raises a nudge, then an ask in interactive default mode; a missing or non-default `permission_mode` escalates that ask to deny |
+| `delegation_nudge_result` | `delegation.tier-floor` | § Route by task kind — the tier floor — **subset**: uninterrupted read/shell/edit volume without a delegation raises a nudge, then an ask when the run is attended; an unattended run escalates that ask to deny (ADR-0025/D06) |
 | `role_on_code_result` | `role.declaration` | § Role declaration — **new prose, written by C53** (see F8/1) — **subset**: the first edit to a code file in a session, which is the design→code switch the SessionStart reminder cannot catch |
 | `session_start_result` | `Runtime classification: operational` | — see F8/2 for the required rationale |
 
@@ -1802,7 +1802,7 @@ not prove launch, acceptance, progress or completion. The exact generated Claude
 record. Codex remains `delivered: no`; no Codex event is inferred from Claude evidence.
 
 **Path, writer and readers.** The sole current write path is
-`<AITNA_ROOT>/model-routing.log`, resolved from the consumer's declared dev-layer root. The legacy
+`<dev root>/model-routing.log`, resolved from the consumer's declared dev-layer root. The legacy
 read-only path is `.claude/model-routing.log`. `hooks/delegation-log.py` is the sole production
 writer. The exact default reader population is `tools/model_routing/stats.py` and
 `tools/model_routing/coverage_map.py`; no third reader or second writer silently owns migration or
@@ -1842,9 +1842,9 @@ segment naming, reader order, crash recovery and retention; introducing any rota
 C58 fails the source-owner check.
 
 **Gitignore and guardrail join.** Both `.claude/model-routing.log` and the resolved
-`<AITNA_ROOT>/model-routing.log` are local/gitignored throughout migration. The orchestration
+`<dev root>/model-routing.log` are local/gitignored throughout migration. The orchestration
 guardrail carries exactly: **“After compaction, trust the dispatch-request ledger at
-`<AITNA_ROOT>/model-routing.log` and `git log`; it records requests, not launches or completions.”**
+`<dev root>/model-routing.log` and `git log`; it records requests, not launches or completions.”**
 One pure C58 contract checker, called by `self_ci`, joins that symbolic path and scope to the writer,
 both default readers, the explicit override, generated hook wiring, schema owner and declared
 gitignore entries. Every isolated contract violation emits exactly one C51 **error** and makes
@@ -2013,7 +2013,7 @@ bring the parked JSON option spelling or D1 mutable levels into this lock.
   newest-known selection, fallback and provenance, exact `harness.*` codes/severities/counts and the
   error/warn caller exit matrix;
 - C58's suite pins the seven-field versioned v1 record, the sole writer and the exact default-reader
-  population, the neutral `<AITNA_ROOT>` path with the vendor path read-only, the serialized bounded
+  population, the neutral `<dev root>` path with the vendor path read-only, the serialized bounded
   append, the migration and the gitignore/prose/path joins under `self_ci`, plus the safe
   diagnostic and exit a malformed or unknown-version row produces in either reader. The envelope
   and write-failure oracle stays with the §2/C52 corpus and C58 does not duplicate it. The record

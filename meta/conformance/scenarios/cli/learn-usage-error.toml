@@ -1,0 +1,16 @@
+# An unknown subcommand is a usage error: exit 2, the usage on stderr.
+id = "cli/learn-usage-error"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:learn"]
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+argv = ["learn", "bogus"]
+
+[expected]
+exit = 2
+stderr = "akmon learn: unknown command 'bogus'\nusage: akmon learn status | sessions [--all] | mark [--at TIME]   (each takes [--project-root PATH])\n  status         sessions and days since the last learning run, and the reminder thresholds\n  sessions       this project's recorded sessions (Claude transcripts, Codex sessions) modified since the last run\n                 (before the first run: since counting began); the first line is the listing time\n                 --all  list every recorded session, whatever the record says\n  mark           record the end of a learning run: last_run = now, the counted sessions cleared\n                 --at TIME  stamp that UTC time (the listing time of `sessions`, e.g. {{ts}}) instead of now\n"
+stdout = ""

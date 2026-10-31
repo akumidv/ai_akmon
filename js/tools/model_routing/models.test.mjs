@@ -138,6 +138,68 @@ test("a refresh writes the file with the highest version of each alias", () => {
   );
 });
 
+/**
+ * Run `main` from a directory inside no project, with no `--project-root`, `HOME` at `base`'s stand-in home.
+ * @param {string} base
+ * @param {string} cwd
+ * @param {...string} argv
+ * @returns {{code: number, stdout: string, stderr: string}}
+ */
+function runLone(base, cwd, ...argv) {
+  let stdout = "";
+  let stderr = "";
+  const out = process.stdout.write;
+  const err = process.stderr.write;
+  const home = process.env.HOME;
+  const saved = process.cwd();
+  process.env.HOME = path.join(base, "home");
+  process.chdir(cwd);
+  process.stdout.write = /** @type {any} */ (
+    (/** @type {string} */ text) =>
+      ((stdout += text), true)
+  );
+  process.stderr.write = /** @type {any} */ (
+    (/** @type {string} */ text) =>
+      ((stderr += text), true)
+  );
+  try {
+    return { code: main(argv), stdout, stderr };
+  } finally {
+    process.stdout.write = out;
+    process.stderr.write = err;
+    process.env.HOME = home;
+    process.chdir(saved);
+  }
+}
+
+test("a refresh follows the dev root the project declares", () => {
+  const { base, root } = scratch();
+  catalog(base);
+  fs.writeFileSync(path.join(root, ".aitna-root"), "meta\n");
+  const result = run(base, "--refresh");
+  assert.equal(result.code, 0, result.stderr);
+  assert.ok(fs.existsSync(path.join(root, "meta", "local", "model-aliases.json")));
+  assert.equal(fs.existsSync(path.join(root, "_aitna", "local")), false);
+});
+
+test("--refresh with no project root prints the notice, exits 2 and writes nothing; a preview still runs", () => {
+  const { base } = scratch();
+  catalog(base);
+  const lone = path.join(base, "lone");
+  fs.mkdirSync(lone);
+  const refused = runLone(base, lone, "--refresh");
+  assert.equal(refused.code, 2);
+  assert.equal(refused.stdout, "");
+  assert.match(refused.stderr, /^\[akmon\] no project root at or above /);
+  assert.ok(refused.stderr.includes("pass --project-root to name the root instead"));
+  assert.deepEqual(fs.readdirSync(lone), []);
+  // a preview and a listing write nothing, so the notice does not stop them
+  const preview = runLone(base, lone, "--refresh", "--dry-run");
+  assert.match(preview.stderr, /^\[akmon\] no project root at or above /);
+  assert.notEqual(preview.stdout, "");
+  assert.deepEqual(fs.readdirSync(lone), []);
+});
+
 test("a second refresh is idempotent and says unchanged", () => {
   const { base, root } = scratch();
   catalog(base);

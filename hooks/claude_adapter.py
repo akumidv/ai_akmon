@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,7 @@ from hook_core import (
     find_project_root,
     hook_failure_diagnostic,
     hook_failure_notice,
+    locate_project_root,
     read_tool,
 )
 
@@ -53,6 +54,19 @@ def load_payload() -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+# The host's own statement of whether an owner is present (M199, M200); read at the entry point.
+SESSION_ATTENDED_ENV = "CLAUDE_CODE_SESSION_ATTENDED"
+
+
+def attended_from_environment(environ: Mapping[str, str]) -> bool | None:
+    """The attendance the host states in ``environ``: ``True`` for ``1``, ``False`` for ``0``, else ``None``.
+
+    A hook entry point passes ``os.environ``; ``hook_core`` never reads it (ADR-0025/D06). An absent
+    variable or any other value states nothing, and the permission-mode rule decides.
+    """
+    return {"1": True, "0": False}.get(environ.get(SESSION_ATTENDED_ENV, ""))
+
+
 def project_root(payload: dict[str, Any]) -> Path:
     """The project root the payload's paths belong to — from its ``cwd``, not the process's.
 
@@ -60,8 +74,21 @@ def project_root(payload: dict[str, Any]) -> Path:
     root (C47), so it has to describe the session's project rather than wherever the hook
     process happens to have been started.
     """
+    return find_project_root(_payload_start(payload))
+
+
+def located_project_root(payload: dict[str, Any]) -> Path | None:
+    """The project root the payload's ``cwd`` belongs to, or ``None`` when there is none.
+
+    The answer a hook that writes the local layer needs: with no project root it stays silent
+    rather than write under a guess (ADR 0022 D09).
+    """
+    return locate_project_root(_payload_start(payload))
+
+
+def _payload_start(payload: dict[str, Any]) -> Path | None:
     cwd = payload.get("cwd")
-    return find_project_root(Path(cwd) if isinstance(cwd, str) and cwd else None)
+    return Path(cwd) if isinstance(cwd, str) and cwd else None
 
 
 def _document_keys() -> dict[str, str]:

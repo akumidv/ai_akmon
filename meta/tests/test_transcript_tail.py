@@ -45,7 +45,7 @@ def _forward_active_role(transcript_path):
     try:
         with path.open(encoding="utf-8") as handle:
             for line in handle:
-                if "agent:" not in line:
+                if "role:" not in line and "agent:" not in line:
                     continue
                 try:
                     entry = json.loads(line)
@@ -103,13 +103,12 @@ def _record(kind: str, message: dict, *, sidechain: bool = False, ascii_only: bo
 # least one pre-filter. The raw-emoji line is multi-byte UTF-8, so a small block splits a character.
 _LINES = {
     "main": _record(
-        "assistant", {"model": "claude-opus-4-8", "usage": {"input_tokens": 7}, "content": "🧭 agent: review — a"}
+        "assistant", {"model": "claude-opus-4-8", "usage": {"input_tokens": 7}, "content": "🧭 role: review — a"}
     ),
-    "main-raw": _record(
-        "assistant", {"model": "claude-fable-5", "content": "🧭 agent: Engineer — b"}, ascii_only=False
-    ),
-    "side": _record("assistant", {"model": "claude-haiku-4-5", "content": "🧭 agent: learn"}, sidechain=True),
-    "synthetic": _record("assistant", {"model": "<synthetic>", "content": "quoted `🧭 agent: architect`"}),
+    "main-raw": _record("assistant", {"model": "claude-fable-5", "content": "🧭 role: Engineer — b"}, ascii_only=False),
+    "main-alias": _record("assistant", {"model": "claude-opus-4-8", "content": "🧭 agent: architect — alias"}),
+    "side": _record("assistant", {"model": "claude-haiku-4-5", "content": "🧭 role: learn"}, sidechain=True),
+    "synthetic": _record("assistant", {"model": "<synthetic>", "content": "quoted `🧭 role: architect`"}),
     "user": _record("user", {"content": '"model" agent: release'}),
     "torn": b'{"type": "assistant", "message": {"model": "claude-opus-4-8", "content": "\\ud83e\\udded agent: x',
     "empty": b"",

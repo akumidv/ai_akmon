@@ -1,0 +1,14 @@
+{
+  "development": {
+    "roles": ["review", "architect", "engineer"],
+    "role_files": true
+  },
+  "learning": {
+    "roles": ["learn"],
+    "role_files": false
+  },
+  "release": {
+    "roles": ["release"],
+    "role_files": false
+  }
+}

@@ -14,7 +14,9 @@ least said the route may mutate files unseen. This is the hook Claude already ru
 
 from __future__ import annotations
 
-from claude_adapter import load_payload, run_guarded
+import os
+
+from claude_adapter import attended_from_environment, load_payload, run_guarded
 from hook_core import (
     HookResult,
     git_commit_guard_result,
@@ -32,7 +34,9 @@ def _decide() -> HookResult | None:
     command = (payload.get("tool_input") or {}).get("command", "") or ""
     permission_mode = payload.get("permission_mode")
     return privilege_escalation_guard_result(command) or git_commit_guard_result(
-        command, permission_mode=permission_mode if isinstance(permission_mode, str) else None
+        command,
+        permission_mode=permission_mode if isinstance(permission_mode, str) else None,
+        attended=attended_from_environment(os.environ),
     )
 
 

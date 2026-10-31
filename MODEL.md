@@ -28,7 +28,7 @@ Two connected priorities serve that mission:
    preserving independent factual assessment rather than adapting conclusions to obtain
    agreement; keep material choices, uncertainty, and problems visible.
 2. **Agent work and token efficiency for quality.** Separate cognitive work through roles,
-   delegate bounded work to subagents, select model capability by task kind and leverage,
+   delegate bounded work to delegates, select model capability by task kind and leverage,
    reuse skills, and use hooks for the controls a harness can actually deliver. These are
    means to better outcomes, not reasons to maximize agent count or minimize every call.
 
@@ -59,17 +59,18 @@ before extending the accepted scope. There is no separate D2 approval/landing le
 or mandatory copied commit hash. [Design-flow](pipelines/design-flow.md) owns the
 recording and acceptance procedure.
 
-## 1. Three orthogonal axes (do not conflate)
+## 1. Four orthogonal axes (do not conflate)
 
 | Axis | Answers | Values |
 |---|---|---|
 | **Layer** | *where* an artifact lives + *whom it serves* | SHARED / LOCAL / USAGE |
 | **Role** | *who performs* the work + by which pipeline | review / architect / engineer / learn / release |
 | **Archetype** | *what* the project exposes outward | package / service / mcp / frontend / job / platform / custom |
+| **Actor** | *who drives* a run, fixed for the run ([0025](docs/adr/0025-actors-and-action-repertoire.md)) | developer / autonomous / guided |
 
-Each is a type dimension (a kind, not a thing). An **agent is not an axis value** — it is a
-concrete point where a role is applied in a project on a layer; a role is the reusable
-definition (here), an agent its incarnation in a project (`_aitna/agents/`).
+Each is a type dimension (a kind, not a thing). An **agent is not an axis value** — it is the unit of responsibility that works in a role (a mode) on
+a layer; a role is the reusable definition (here), and an agent is defined in a project by its charter
+(`_aitna/agents/<agent>/README.md`).
 
 ## 2. Layer — a decision tree
 
@@ -90,12 +91,13 @@ Does this artifact help DEVELOP this project — or USE it from outside?
 SHARED+LOCAL point inward (building this repo); USAGE points outward.
 
 `_aitna/` is the **default** dev-layer root, not a hard-coded literal: a project may relocate it
-by declaring `AITNA_ROOT` (a project-root-relative path, e.g. `tools/ai`); akmon then mounts at
-`<AITNA_ROOT>/akmon` and the tooling derives every path from it. Unset → `_aitna`.
+by declaring the root in its `.aitna-root` file (a project-root-relative path, e.g. `tools/ai`);
+akmon then mounts at `<dev root>/akmon` and the tooling derives every path from it. No
+`.aitna-root` file → `_aitna` ([BOOTSTRAP](BOOTSTRAP.md#a-what-the-agent-does-on-attach)).
 
 The LOCAL layer also holds the working state of a session: `<DEV>/local/`, gitignored, indexed in
 the project row format and never referenced from a tracked file
-([tasks](pipelines/tasks.md#the-local-layer)). `<DEV>` is the dev-layer root, `<AITNA_ROOT>`.
+([tasks](pipelines/tasks.md#the-local-layer)). `<DEV>` is the dev-layer root, `<dev root>`.
 Development skills live in `<DEV>/skills/`, apart from the shipped root `skills/`.
 
 **Where project documents live.** Lasting knowledge — what a newcomer reads to learn how the project
@@ -104,12 +106,12 @@ is built and why — lives in the project's `docs/`: decisions in `docs/adr/`, l
 live in `<DEV>`: the backlog, the roadmap, reviews, measurements, experiments, benchmarks. A
 document may cite that evidence; the evidence is not a document to read first. The two paths are
 resolved by code, so a project that already keeps its decisions elsewhere keeps them there and,
-once the accessor ships, declares it in `<AITNA_ROOT>/.akmon.toml`.
+once the accessor ships, declares it in `<dev root>/.akmon.toml`.
 
 ## 3. Role vs agent — the DEVELOP triad
 
-A **role** is a definition (pipeline + requirements + guardrails); an **agent** is a role
-applied in a project. The three DEVELOP roles split by **cognitive operation** — each mode has
+A **role** is a definition (pipeline + requirements + guardrails) and a mode; an **agent** is the unit of
+responsibility that works in one or more roles. The three DEVELOP roles split by **cognitive operation** — each mode has
 its own definition of good, so one bar cannot optimise all three:
 
 | Role | Operation | Output | Pipeline |
@@ -118,13 +120,16 @@ its own definition of good, so one bar cannot optimise all three:
 | [architect](roles/architect.md) | **synthesis** — design what *should be* (options, trade-offs, contracts, ADRs) | a design + ADR | [design-flow](pipelines/design-flow.md) |
 | [engineer](roles/engineer.md) | **realization** — code, tests, refactoring | committed, tested code | [code-flow](pipelines/code-flow.md) |
 
-`learn` ([memory-distill](pipelines/memory-distill.md) + [learning](pipelines/learning.md)) and
-`release` ([release](pipelines/release.md)) are cross-cutting. See [roles/README.md](roles/README.md).
+The three roles are modes of one **development agent** ([agents/development.md](agents/development.md)).
+The learning agent ([agents/learning.md](agents/learning.md); pipelines [memory-distill](pipelines/memory-distill.md)
+and [learning](pipelines/learning.md)) and the release agent ([agents/release.md](agents/release.md); pipeline
+[release](pipelines/release.md)) work in one mode each, `learn` and `release`; both names stay valid in the role
+declaration. See [roles/README.md](roles/README.md) and [agents/README.md](agents/README.md).
 
 **The discriminator (routes any task):** does it **decompose** an existing thing to
 understand/measure it → `review` · **construct** a new structure/decision → `architect` ·
-**realize** a decided structure in code → `engineer`? Declare the active agent
-(`🧭 agent: <name> — <focus>`) and restate it on every switch.
+**realize** a decided structure in code → `engineer`? Declare the active role
+(`🧭 role: <name> — <focus>`) and restate it on every switch.
 
 ## 4. Archetype
 
@@ -151,9 +156,9 @@ shared project memory (`_aitna/memory/`, in git) vs each assistant's provider-pr
 
 ## 7. Inheritance contract (agent → role)
 
-A project agent charter (`_aitna/agents/<role>/README.md`) **links** its akmon role as the
+An agent's charter (`_aitna/agents/<agent>/README.md`) **links** the akmon roles it works in as the
 source of requirements + pipeline and **adds only project specifics** — it does not restate the
-role, so a change here propagates to every project after `git submodule update`.
+roles, so a change here propagates to every project after `git submodule update`.
 
 ## 8. Secrets
 
@@ -172,7 +177,7 @@ which needs no Python (`npx akmon …`).
 ## 10. Capability tiers — model routing
 
 Roles say *who* performs an operation; tiers say *which model rung* runs it. Delegation is
-**by task kind, as a subagent**: the main session (the **orchestrator**) decomposes, routes,
+**by task kind, to delegates run as host subagents**: the main session (the **orchestrator**) decomposes, routes,
 integrates results, and talks to the owner — those are never delegated.
 
 The routing gradient embodies one **leverage principle: quality investment ∝ artifact
@@ -248,7 +253,7 @@ Each line is the index entry; the linked artifact owns the full statement.
    concentrates (§10).
 2. **Enforced, not documented** — a rule that must always hold ships with a forcing
    function (a hook), because prose alone decays out of context
-   ([README](README.md) — "the smiths are used, not just named"; the commit and analysis
+   ([README](README.md) — "the delegates are used, not just named"; the commit and analysis
    guards in [guardrails/_common.md](guardrails/_common.md)).
 3. **Data over prose** — a binding contract lives as machine-checked data
    ([registry.json](tools/model_routing/registry.json), the sync/verify contracts);

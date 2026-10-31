@@ -651,6 +651,17 @@ def test_exit_code_helper_matches_the_matrix(severity, strict, expected):
     assert exit_code([_finding(severity=severity)], strict=strict) == expected
 
 
+@pytest.mark.parametrize(("strict", "expected"), [(False, 0), (True, 0)])
+def test_a_strict_exempt_warning_never_fails(strict, expected):
+    assert exit_code([_finding(code="area.rule")], strict=strict, strict_exempt={"area.rule"}) == expected
+
+
+def test_strict_exemption_is_per_code_and_never_covers_an_error():
+    exempt = {"area.rule"}
+    assert exit_code([_finding(code="area.rule"), _finding(code="area.other")], strict=True, strict_exempt=exempt) == 1
+    assert exit_code([_finding(code="area.rule", severity="error")], strict_exempt=exempt) == 1
+
+
 def test_exit_code_of_an_empty_stream_is_zero():
     assert exit_code([], strict=True) == 0
 

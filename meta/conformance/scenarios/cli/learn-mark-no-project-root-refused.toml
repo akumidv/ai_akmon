@@ -1,0 +1,21 @@
+# `mark` writes the learning state: with no project root and no --project-root it prints the notice and exits 2
+# rather than write under the current directory (ADR 0022 D09). The state file is not created.
+id = "cli/learn-mark-no-project-root-refused"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:learn"]
+
+[fixture]
+attach = "none"
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+argv = ["learn", "mark"]
+
+[expected]
+exit = 2
+stderr = "[akmon] no project root at or above {{root}}: expected AGENTS.md beside .aitna-root, _aitna/akmon or _aitna/.akmon.toml. Falling back to that directory, so anything this command reads or writes is relative to it; pass --project-root to name the root instead.\n"
+stdout = ""
+file_absent = ["_aitna/local/learning.json"]

@@ -33,6 +33,7 @@ import {
   findProjectRoot,
   hookFailureDiagnostic,
   hookFailureNotice,
+  locateProjectRoot,
   readTool,
 } from "./hook_core.mjs";
 
@@ -101,6 +102,25 @@ export function loadPayload() {
   return parsePayload(readStdinBytes());
 }
 
+/** The host's own statement of whether an owner is present (M199, M200); read at the entry point. */
+export const SESSION_ATTENDED_ENV = "CLAUDE_CODE_SESSION_ATTENDED";
+
+/**
+ * The attendance the host states in `environ`: `true` for `1`, `false` for `0`, else `null`.
+ *
+ * A hook entry point passes `process.env`; `hook_core` never reads it (ADR-0025/D06). An absent
+ * variable or any other value states nothing, and the permission-mode rule decides.
+ * @param {Record<string, string | undefined>} environ
+ * @returns {boolean | null}
+ */
+export function attendedFromEnvironment(environ) {
+  const value = environ[SESSION_ATTENDED_ENV];
+  if (value === "1") {
+    return true;
+  }
+  return value === "0" ? false : null;
+}
+
 /**
  * The project root the payload's paths belong to — from its `cwd`, not the process's.
  *
@@ -111,12 +131,32 @@ export function loadPayload() {
  * @returns {string}
  */
 export function projectRoot(payload) {
+  return findProjectRoot(_payloadStart(payload));
+}
+
+/**
+ * The project root the payload's `cwd` belongs to, or `null` when there is none: the answer a hook
+ * that writes the local layer needs, since with no project root it stays silent rather than write
+ * under a guess (ADR 0022 D09).
+ * @param {Payload} payload
+ * @returns {string | null}
+ */
+export function locatedProjectRoot(payload) {
+  return locateProjectRoot(_payloadStart(payload));
+}
+
+/**
+ * The directory a payload's `cwd` names, or `null` when it names none.
+ * @param {Payload} payload
+ * @returns {string | null}
+ */
+function _payloadStart(payload) {
   const cwd = dictGet(payload, "cwd");
   if (typeof cwd === "string" && cwd !== "") {
     assertEncodablePath(cwd); // `Path(cwd).resolve()` refuses a NUL or a lone surrogate
-    return findProjectRoot(pyPath(cwd));
+    return pyPath(cwd);
   }
-  return findProjectRoot(null);
+  return null;
 }
 
 // --------------------------------------------------------------------------------------

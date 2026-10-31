@@ -59,7 +59,7 @@ import { embeddedTreeRoot } from "./_tree.mjs";
 const TREE_ROOT = posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /** The commands, in the order the Python lists them. */
-const COMMANDS = ["init", "update", "sync", "verify", "check", "path", "hook", "tool", "version"];
+const COMMANDS = ["init", "update", "sync", "verify", "check", "trust", "learn", "path", "hook", "tool", "version"];
 
 /** The commands a Node mount's own CLI serves when another CLI is asked (the Python's controlling tree). */
 const HANDED_OVER = ["sync", "verify", "check", "path", "hook", "tool"];
@@ -239,7 +239,7 @@ function _help(data) {
 /**
  * Hand the command over to the CLI of the Node mount that governs the working directory's project,
  * when this CLI is not that mount's own (`_mount.mjs`); `null` when this CLI does the work. A
- * project without a mount pays one walk up for `AGENTS.md` and a look for `<AITNA_ROOT>/akmon`.
+ * project without a mount pays one walk up for `AGENTS.md` and a look for `<dev root>/akmon`.
  * @param {string[]} argv the full command line, the command first
  * @param {boolean} notice whether a version skew is announced (the commands the Python dispatches)
  * @returns {Promise<number | null>}
@@ -303,6 +303,12 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === "check") {
     return (await import("../bin/check.mjs")).main(rest);
+  }
+  if (command === "trust") {
+    return (await import("./_trust.mjs")).main(rest);
+  }
+  if (command === "learn") {
+    return (await import("./_learn.mjs")).main(rest);
   }
   if (command === "tool") {
     return _cmdTool(data, rest);

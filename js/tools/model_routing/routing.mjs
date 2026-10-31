@@ -60,7 +60,7 @@ import { posix } from "node:path";
 import { fill } from "../../common/jsondata.mjs";
 import { FloatValue, canonicalForm, wiringForm } from "../../common/json_writer.mjs";
 import { claimDiagnosticMarker, gettempdir, releaseDiagnosticMarkers } from "../../common/markers.mjs";
-import { aitnaRootName } from "../../common/project_root.mjs";
+import { aitnaRoot, aitnaRootName } from "../../common/project_root.mjs";
 import { harnessCommand, harnessCommands } from "../../common/runtime.mjs";
 import {
   pyError as _pyError,
@@ -322,7 +322,7 @@ export function registryPath(akmonDir) {
  * @returns {string}
  */
 export function overlayPath(data, projectRoot) {
-  return _path(projectRoot, aitnaRootName(), overlayName(data));
+  return _path(aitnaRoot(projectRoot), overlayName(data));
 }
 
 /**
@@ -336,7 +336,7 @@ export function overlayPath(data, projectRoot) {
  * @returns {string}
  */
 export function localOverlayPath(data, projectRoot) {
-  return _path(projectRoot, aitnaRootName(), localOverlayRel(data));
+  return _path(aitnaRoot(projectRoot), localOverlayRel(data));
 }
 
 /**
@@ -349,7 +349,7 @@ export function localOverlayPath(data, projectRoot) {
  * @returns {string}
  */
 export function localAliasesPath(data, projectRoot) {
-  return _path(projectRoot, aitnaRootName(), localAliasesRel(data));
+  return _path(aitnaRoot(projectRoot), localAliasesRel(data));
 }
 
 /** A routing overlay file is not a JSON object; the message names the file. */
@@ -439,8 +439,8 @@ function _readOverlay(data, path, file) {
 function _overlayLayers(data, projectRoot) {
   /** @type {[string, string][]} */
   const candidates = [
-    [_overlayFile(data), overlayPath(data, projectRoot)],
-    [_localOverlayFile(data), localOverlayPath(data, projectRoot)],
+    [_overlayFile(data, projectRoot), overlayPath(data, projectRoot)],
+    [_localOverlayFile(data, projectRoot), localOverlayPath(data, projectRoot)],
   ];
   return candidates.filter(([, path]) => _isFile(path)).map(([file, path]) => [file, _readOverlay(data, path, file)]);
 }
@@ -823,15 +823,21 @@ function _retiredOverlayKeys(data, layer) {
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {Json} config
- * @param {{projectRoot?: string | null}} [options]
+ * @param {string | null} projectRoot
+ * @param {{layered?: boolean}} [options] `layered`: read each overlay file in turn, so the error names the one that holds the key
  * @returns {void}
  */
-export function refuseRetiredKeys(data, registry, config, { projectRoot = null } = {}) {
+export function refuseRetiredKeys(data, registry, config, projectRoot, { layered = false } = {}) {
   const texts = data.retired_key_errors;
   /** @type {[string, string[]][]} */
   const holders =
-    projectRoot === null
-      ? [[`${_localOverlayFile(data)} or ${_overlayFile(data)}`, _retiredOverlayKeys(data, registry)]]
+    !layered || projectRoot === null
+      ? [
+          [
+            `${_localOverlayFile(data, projectRoot)} or ${_overlayFile(data, projectRoot)}`,
+            _retiredOverlayKeys(data, registry),
+          ],
+        ]
       : _overlayLayers(data, projectRoot)
           .reverse()
           .map(([file, layer]) => [file, _retiredOverlayKeys(data, layer)]);
@@ -936,15 +942,20 @@ export function providers(registry) {
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {string} provider
+ * @param {string | null} projectRoot
  * @returns {Record<string, Json>}
  */
-export function providerRow(data, registry, provider) {
+export function providerRow(data, registry, provider, projectRoot) {
   const rows = providers(registry);
   const row = Object.hasOwn(rows, provider) ? rows[provider] : null;
   if (_isDict(row)) {
     return row;
   }
-  const values = { provider, local_overlay: _localOverlayFile(data), overlay: _overlayFile(data) };
+  const values = {
+    provider,
+    local_overlay: _localOverlayFile(data, projectRoot),
+    overlay: _overlayFile(data, projectRoot),
+  };
   throw _pyError("KeyError", fill(data.opinion_ladder_unknown, values));
 }
 
@@ -967,8 +978,9 @@ export function familyVocabulary(registry) {
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {string} family
+ * @param {string | null} projectRoot
  */
-export function checkSessionFamily(data, registry, family) {
+export function checkSessionFamily(data, registry, family, projectRoot) {
   const known = familyVocabulary(registry);
   if (known.includes(family)) {
     return;
@@ -976,8 +988,8 @@ export function checkSessionFamily(data, registry, family) {
   const values = {
     family,
     known: known.join(", "),
-    local_overlay: _localOverlayFile(data),
-    overlay: _overlayFile(data),
+    local_overlay: _localOverlayFile(data, projectRoot),
+    overlay: _overlayFile(data, projectRoot),
   };
   throw _pyError("ValueError", fill(data.session_family_unknown, values));
 }
@@ -1073,11 +1085,21 @@ export function splitModelEffort(text) {
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {string} provider
+ * @param {string | null} projectRoot
  * @param {string | null} [model]
  * @returns {string | null}
  */
-export function providerFamily(data, registry, provider, model = null) {
-  const row = providerRow(data, registry, provider);
+export function providerFamily(data, registry, provider, projectRoot, model = null) {
+  return _rowFamily(providerRow(data, registry, provider, projectRoot), model);
+}
+
+/**
+ * The priors one provider row states for `model`, else for itself, else `null` (`providerFamily`).
+ * @param {Record<string, Json>} row
+ * @param {string | null} model
+ * @returns {string | null}
+ */
+function _rowFamily(row, model) {
   const families = _get(row, "model_families");
   if (_truthy(model) && _isDict(families) && _truthy(_get(families, /** @type {string} */ (model)))) {
     return _pyStr(families[/** @type {string} */ (model)]);
@@ -1135,10 +1157,11 @@ function _which(command) {
  * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
  * @param {Json} registry
  * @param {string} provider
+ * @param {string | null} projectRoot
  * @returns {boolean}
  */
-export function carrierPresent(data, runtimeData, registry, provider) {
-  const row = providerRow(data, registry, provider);
+export function carrierPresent(data, runtimeData, registry, provider, projectRoot) {
+  const row = providerRow(data, registry, provider, projectRoot);
   const argv = _get(row, "argv");
   const table = harnessCommands(runtimeData);
   const mapped = Object.hasOwn(table, provider) ? table[provider].binary : "";
@@ -1159,9 +1182,10 @@ export function carrierPresent(data, runtimeData, registry, provider) {
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {string} provider
+ * @param {string | null} projectRoot
  * @returns {string | null}
  */
-export function opinionModel(data, registry, provider) {
+export function opinionModel(data, registry, provider, projectRoot) {
   const policy = _get(registry, "second_opinion_policy");
   const rule = _isDict(policy) ? _pyStr(_get(policy, "model_rule", "max")) : "max";
   if (rule !== "max") {
@@ -1170,7 +1194,7 @@ export function opinionModel(data, registry, provider) {
       `second opinion: unknown model_rule ${_strRepr(rule)}; the only rule implemented is 'max'`,
     );
   }
-  const models = _get(providerRow(data, registry, provider), "models");
+  const models = _get(providerRow(data, registry, provider, projectRoot), "models");
   if (!Array.isArray(models) || models.length === 0) {
     return null;
   }
@@ -1195,15 +1219,21 @@ export class EffortError extends Error {
  * @param {Json} registry
  * @param {string} provider
  * @param {string | null} effort
+ * @param {string | null} projectRoot
  */
-export function checkEffort(data, registry, provider, effort) {
+export function checkEffort(data, registry, provider, effort, projectRoot) {
   if (effort === null) {
     return;
   }
-  const declared = _get(providerRow(data, registry, provider), "efforts");
+  const declared = _get(providerRow(data, registry, provider, projectRoot), "efforts");
   const levels = _isDict(declared) ? _get(declared, "levels") : null;
   if (!Array.isArray(levels)) {
-    const values = { provider, effort, local_overlay: _localOverlayFile(data), overlay: _overlayFile(data) };
+    const values = {
+      provider,
+      effort,
+      local_overlay: _localOverlayFile(data, projectRoot),
+      overlay: _overlayFile(data, projectRoot),
+    };
     throw new EffortError(fill(data.effort_errors.unsupported, values));
   }
   if (!levels.includes(effort)) {
@@ -1225,18 +1255,19 @@ export function checkEffort(data, registry, provider, effort) {
  * @param {Json} registry
  * @param {string} provider
  * @param {string | null} pinned
+ * @param {string | null} projectRoot
  * @returns {[string | null, string | null]}
  */
-export function opinionPick(data, registry, provider, pinned) {
+export function opinionPick(data, registry, provider, pinned, projectRoot) {
   const [model, effort] = splitModelEffort(pinned);
-  checkEffort(data, registry, provider, effort);
+  checkEffort(data, registry, provider, effort, projectRoot);
   if (model === defaultModelToken(data)) {
     return [null, effort];
   }
   if (model !== null) {
     return [model, effort];
   }
-  const [strongest, strongestEffort] = splitModelEffort(opinionModel(data, registry, provider));
+  const [strongest, strongestEffort] = splitModelEffort(opinionModel(data, registry, provider, projectRoot));
   return [strongest, pinned !== null ? effort : strongestEffort];
 }
 
@@ -1285,8 +1316,9 @@ export function resolveSession(data, registry, config, { provider = null, model 
   };
   const resolvedModel = stated("model");
   let resolvedFamily = stated("family");
-  if (resolvedFamily === null && Object.hasOwn(providers(registry), chosen)) {
-    resolvedFamily = providerFamily(data, registry, chosen, resolvedModel);
+  const chosenRow = Object.hasOwn(providers(registry), chosen) ? providers(registry)[chosen] : null;
+  if (resolvedFamily === null && _isDict(chosenRow)) {
+    resolvedFamily = _rowFamily(chosenRow, resolvedModel);
   }
   return new SecondOpinionSession(chosen, resolvedFamily, resolvedModel);
 }
@@ -1294,19 +1326,21 @@ export function resolveSession(data, registry, config, { provider = null, model 
 /**
  * The project routing overlay's path, project-root-relative — where an owner declares a missing prior.
  * @param {AgentsData} data
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-function _overlayFile(data) {
-  return `${aitnaRootName()}/${overlayName(data)}`;
+function _overlayFile(data, projectRoot) {
+  return `${aitnaRootName(projectRoot)}/${overlayName(data)}`;
 }
 
 /**
  * The developer-local routing overlay's path, project-root-relative — the strongest place to declare a prior.
  * @param {AgentsData} data
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-function _localOverlayFile(data) {
-  return `${aitnaRootName()}/${localOverlayRel(data)}`;
+function _localOverlayFile(data, projectRoot) {
+  return `${aitnaRootName(projectRoot)}/${localOverlayRel(data)}`;
 }
 
 /**
@@ -1314,14 +1348,15 @@ function _localOverlayFile(data) {
  * @param {AgentsData} data
  * @param {string} provider
  * @param {string | null} model
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-function _priorsAsk(data, provider, model) {
+function _priorsAsk(data, provider, model, projectRoot) {
   const values = {
     provider,
     model: _pyStr(model),
-    local_overlay: _localOverlayFile(data),
-    overlay: _overlayFile(data),
+    local_overlay: _localOverlayFile(data, projectRoot),
+    overlay: _overlayFile(data, projectRoot),
   };
   return fill(data.opinion_asks[_truthy(model) ? "provider" : "provider_default"], values);
 }
@@ -1330,14 +1365,15 @@ function _priorsAsk(data, provider, model) {
  * The ask for a session whose own family cannot be resolved: nothing is counted as diverse until it is.
  * @param {AgentsData} data
  * @param {SecondOpinionSession} session
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-function _sessionAsk(data, session) {
+function _sessionAsk(data, session, projectRoot) {
   const values = {
     provider: session.provider,
     model: _pyStr(session.model),
-    local_overlay: _localOverlayFile(data),
-    overlay: _overlayFile(data),
+    local_overlay: _localOverlayFile(data, projectRoot),
+    overlay: _overlayFile(data, projectRoot),
     local: localConfigRel(data),
   };
   return fill(data.opinion_asks[_truthy(session.model) ? "session" : "session_default"], values);
@@ -1361,12 +1397,13 @@ function _sessionAsk(data, session) {
  * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
  * @param {Json} registry
  * @param {SecondOpinionSession} session
+ * @param {string | null} projectRoot
  * @returns {[[string, string | null, string | null][], [string, string][], string[]]}
  */
-function _walkOpinionLadder(data, runtimeData, registry, session) {
+function _walkOpinionLadder(data, runtimeData, registry, session, projectRoot) {
   const reasons = data.opinion_skip_reasons;
   if (!_truthy(session.family)) {
-    return [[], [[session.provider, reasons.session_priors_unknown]], [_sessionAsk(data, session)]];
+    return [[], [[session.provider, reasons.session_priors_unknown]], [_sessionAsk(data, session, projectRoot)]];
   }
   /** @type {[string, string | null, string | null][]} */
   const chain = [];
@@ -1380,21 +1417,21 @@ function _walkOpinionLadder(data, runtimeData, registry, session) {
   const models = new Map(_truthy(session.model) ? [[_pyStr(session.model), session.provider]] : []);
   for (const entry of opinionLadder(registry)) {
     const [provider, pinned] = splitOpinionEntry(entry);
-    providerRow(data, registry, provider); // an id the table does not declare is a named error, even for the self-skip
-    checkEffort(data, registry, provider, splitModelEffort(pinned)[1]); // so is an effort the row cannot take (D17)
+    providerRow(data, registry, provider, projectRoot); // an id the table does not declare is a named error, even for the self-skip
+    checkEffort(data, registry, provider, splitModelEffort(pinned)[1], projectRoot); // so is an effort the row cannot take (D17)
     if (provider === session.provider) {
       skips.push([provider, reasons.self]);
       continue;
     }
-    if (!carrierPresent(data, runtimeData, registry, provider)) {
+    if (!carrierPresent(data, runtimeData, registry, provider, projectRoot)) {
       skips.push([provider, reasons.absent]);
       continue;
     }
-    const [chosen, effort] = opinionPick(data, registry, provider, pinned);
-    const family = providerFamily(data, registry, provider, chosen);
+    const [chosen, effort] = opinionPick(data, registry, provider, pinned, projectRoot);
+    const family = providerFamily(data, registry, provider, projectRoot, chosen);
     if (!family) {
       skips.push([provider, reasons.priors_unknown]);
-      asks.push(_priorsAsk(data, provider, chosen));
+      asks.push(_priorsAsk(data, provider, chosen, projectRoot));
       continue;
     }
     const familyOwner = families.get(family);
@@ -1422,13 +1459,14 @@ function _walkOpinionLadder(data, runtimeData, registry, session) {
  * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
  * @param {Json} registry
  * @param {SecondOpinionSession} session
+ * @param {string | null} projectRoot
  * @returns {SecondOpinionTarget[]}
  */
-export function opinionChain(data, runtimeData, registry, session) {
-  const [chain] = _walkOpinionLadder(data, runtimeData, registry, session);
+export function opinionChain(data, runtimeData, registry, session, projectRoot) {
+  const [chain] = _walkOpinionLadder(data, runtimeData, registry, session, projectRoot);
   return chain.map(
     ([provider, model, effort]) =>
-      new SecondOpinionTarget(provider, model, providerFamily(data, registry, provider, model), effort),
+      new SecondOpinionTarget(provider, model, providerFamily(data, registry, provider, projectRoot, model), effort),
   );
 }
 
@@ -1441,11 +1479,19 @@ export function opinionChain(data, runtimeData, registry, session) {
  * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
  * @param {Json} registry
  * @param {SecondOpinionSession} session
+ * @param {string | null} projectRoot
  * @param {{rank?: number}} [options]
  * @returns {SecondOpinionTarget | null}
  */
-export function resolveOpinionChain(data, runtimeData, registry, session, { rank = OPINION_RANK_SECOND } = {}) {
-  const chain = opinionChain(data, runtimeData, registry, session);
+export function resolveOpinionChain(
+  data,
+  runtimeData,
+  registry,
+  session,
+  projectRoot,
+  { rank = OPINION_RANK_SECOND } = {},
+) {
+  const chain = opinionChain(data, runtimeData, registry, session, projectRoot);
   const index = rank - OPINION_RANK_SECOND;
   return index >= 0 && index < chain.length ? chain[index] : null;
 }
@@ -1456,10 +1502,11 @@ export function resolveOpinionChain(data, runtimeData, registry, session, { rank
  * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
  * @param {Json} registry
  * @param {SecondOpinionSession} session
+ * @param {string | null} projectRoot
  * @returns {[string, string][]}
  */
-export function opinionSkips(data, runtimeData, registry, session) {
-  return _walkOpinionLadder(data, runtimeData, registry, session)[1];
+export function opinionSkips(data, runtimeData, registry, session, projectRoot) {
+  return _walkOpinionLadder(data, runtimeData, registry, session, projectRoot)[1];
 }
 
 /**
@@ -1468,10 +1515,11 @@ export function opinionSkips(data, runtimeData, registry, session) {
  * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
  * @param {Json} registry
  * @param {SecondOpinionSession} session
+ * @param {string | null} projectRoot
  * @returns {string[]}
  */
-export function opinionAsks(data, runtimeData, registry, session) {
-  return _walkOpinionLadder(data, runtimeData, registry, session)[2];
+export function opinionAsks(data, runtimeData, registry, session, projectRoot) {
+  return _walkOpinionLadder(data, runtimeData, registry, session, projectRoot)[2];
 }
 
 /**
@@ -1484,15 +1532,16 @@ export function opinionAsks(data, runtimeData, registry, session) {
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {SecondOpinionSession} session
+ * @param {string | null} projectRoot
  * @returns {SecondOpinionTarget}
  */
-export function opinionLastResort(data, registry, session) {
-  const row = providerRow(data, registry, session.provider);
+export function opinionLastResort(data, registry, session, projectRoot) {
+  const row = providerRow(data, registry, session.provider, projectRoot);
   const declared = _iterate(_or(_get(row, "models"), []))
     .map(_pyStr)
     .filter((entry) => splitModelEffort(entry)[0] !== session.model);
   const [model, effort] = splitModelEffort(declared.length ? declared[declared.length - 1] : null);
-  const family = providerFamily(data, registry, session.provider, model) ?? session.family;
+  const family = providerFamily(data, registry, session.provider, projectRoot, model) ?? session.family;
   return new SecondOpinionTarget(session.provider, model, family, effort);
 }
 
@@ -1505,10 +1554,11 @@ export function opinionLastResort(data, registry, session) {
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {string} provider
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-export function opinionRepo(data, registry, provider) {
-  const row = providerRow(data, registry, provider);
+export function opinionRepo(data, registry, provider, projectRoot) {
+  const row = providerRow(data, registry, provider, projectRoot);
   const stated = _get(row, "repo");
   if (_truthy(stated)) {
     return _pyStr(stated);
@@ -1524,10 +1574,11 @@ export function opinionRepo(data, registry, provider) {
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {string} provider
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-export function opinionCarrier(data, registry, provider) {
-  const row = providerRow(data, registry, provider);
+export function opinionCarrier(data, registry, provider, projectRoot) {
+  const row = providerRow(data, registry, provider, projectRoot);
   return _truthy(_get(row, "argv")) ? "declared" : _pyStr(_or(_get(row, "carrier"), "harness"));
 }
 
@@ -1571,6 +1622,7 @@ function _withoutModelPlaceholder(parts) {
  * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
  * @param {Json} registry
  * @param {string} provider
+ * @param {string | null} projectRoot
  * @param {{model?: Json, effort?: string | null, prompt?: Json}} [options]
  * @returns {string[]}
  */
@@ -1579,10 +1631,11 @@ export function opinionCommand(
   runtimeData,
   registry,
   provider,
+  projectRoot,
   { model = null, effort = null, prompt = null } = {},
 ) {
-  checkEffort(data, registry, provider, effort);
-  const row = providerRow(data, registry, provider);
+  checkEffort(data, registry, provider, effort, projectRoot);
+  const row = providerRow(data, registry, provider, projectRoot);
   const argv = _get(row, "argv");
   /** @type {string[]} */
   let parts;
@@ -1682,10 +1735,11 @@ export class Catalog {
 /**
  * The resolved-aliases file's path, project-root-relative — what an unresolved alias asks to have refreshed.
  * @param {AgentsData} data
+ * @param {string | null} projectRoot
  * @returns {string}
  */
-function _aliasFile(data) {
-  return `${aitnaRootName()}/${localAliasesRel(data)}`;
+function _aliasFile(data, projectRoot) {
+  return `${aitnaRootName(projectRoot)}/${localAliasesRel(data)}`;
 }
 
 /**
@@ -1723,7 +1777,8 @@ export function readModelAliases(data, projectRoot) {
   if (!_isFile(path)) {
     return {};
   }
-  const invalid = () => _pyError("ValueError", fill(data.alias_errors.invalid, { file: _aliasFile(data) }));
+  const invalid = () =>
+    _pyError("ValueError", fill(data.alias_errors.invalid, { file: _aliasFile(data, projectRoot) }));
   let parsed;
   try {
     parsed = _parseKeepingFloats(_readText(path));
@@ -1768,10 +1823,11 @@ export function modelAliasesDocument(stored) {
  * @param {Json} registry
  * @param {string} provider
  * @param {string} model
+ * @param {string | null} projectRoot
  * @returns {boolean}
  */
-export function isModelAlias(data, registry, provider, model) {
-  const row = providerRow(data, registry, provider);
+export function isModelAlias(data, registry, provider, model, projectRoot) {
+  const row = providerRow(data, registry, provider, projectRoot);
   const models = _get(row, "models");
   // An entry may carry an @effort (ADR-0024/D17); the alias is the model before it.
   return (
@@ -1793,16 +1849,19 @@ export function isModelAlias(data, registry, provider, model) {
  * @param {Record<string, ProviderAliases>} stored
  * @param {string} provider
  * @param {string | null} model
+ * @param {string | null} projectRoot
  * @returns {string | null}
  */
-export function resolveOpinionModel(data, registry, stored, provider, model) {
-  if (model === null || !isModelAlias(data, registry, provider, model)) {
+export function resolveOpinionModel(data, registry, stored, provider, model, projectRoot) {
+  if (model === null || !isModelAlias(data, registry, provider, model, projectRoot)) {
     return model;
   }
   const entry = Object.hasOwn(stored, provider) ? stored[provider] : undefined;
   const concrete = entry !== undefined && Object.hasOwn(entry.aliases, model) ? entry.aliases[model] : "";
   if (!concrete) {
-    throw new UnresolvedAliasError(fill(data.alias_errors.unresolved, { provider, model, file: _aliasFile(data) }));
+    throw new UnresolvedAliasError(
+      fill(data.alias_errors.unresolved, { provider, model, file: _aliasFile(data, projectRoot) }),
+    );
   }
   return concrete;
 }
@@ -1938,10 +1997,11 @@ export function catalogAliases(catalog, aliases) {
  * @param {RuntimeData} runtimeData the parsed `common/runtime.json`
  * @param {Json} registry
  * @param {Json} config
+ * @param {string | null} projectRoot
  * @returns {[string, string | null]}
  */
-export function opinionHead(data, runtimeData, registry, config) {
-  refuseRetiredKeys(data, registry, config);
+export function opinionHead(data, runtimeData, registry, config, projectRoot) {
+  refuseRetiredKeys(data, registry, config, projectRoot);
   const texts = data.opinion_status;
   /** @type {SecondOpinionSession} */
   let session;
@@ -1954,9 +2014,9 @@ export function opinionHead(data, runtimeData, registry, config) {
     throw error;
   }
   if (!_truthy(session.family)) {
-    return [texts.unavailable_unknown, _sessionAsk(data, session)];
+    return [texts.unavailable_unknown, _sessionAsk(data, session, projectRoot)];
   }
-  const chain = opinionChain(data, runtimeData, registry, session);
+  const chain = opinionChain(data, runtimeData, registry, session, projectRoot);
   if (chain.length === 0) {
     return [texts.unavailable, fill(texts.chain_empty, { provider: session.provider })];
   }
@@ -2154,18 +2214,17 @@ export function resolveBriefs(data, registry) {
  * Owner-addressed line naming an unusable overlay `briefs` map, or null when it is fine.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
- * @param {string | null} [aitna]
+ * @param {string | null} projectRoot
  * @returns {string | null}
  */
-export function briefWarning(data, registry, aitna = null) {
+export function briefWarning(data, registry, projectRoot) {
   try {
     resolveBriefs(data, registry);
   } catch (error) {
     if (!(error instanceof BriefError)) {
       throw error;
     }
-    const root = aitna || aitnaRootName();
-    return `⚠ ${error.message} — fix ${root}/${overlayName(data)}; k_* definitions are not regenerated until it resolves`;
+    return `⚠ ${error.message} — fix ${_overlayFile(data, projectRoot)}; k_* definitions are not regenerated until it resolves`;
   }
   return null;
 }
@@ -2301,8 +2360,9 @@ export function boundModelFor(data, config, subagentType) {
   return model;
 }
 
-// A declaration: `🧭 agent: <name>` as the first non-whitespace text of a turn (`re.ASCII`).
-const _ROLE_DECL_RE = /^[ \t\n\r\f\v]*🧭[ \t\n\r\f\v]*agent:[ \t\n\r\f\v]*([A-Za-z][A-Za-z0-9_-]*)/u;
+// A declaration: `🧭 role: <name>` as the first non-whitespace text of a turn (`re.ASCII`); `agent:`
+// is the pre-ADR-0027 spelling, accepted as an alias for one release.
+const _ROLE_DECL_RE = /^[ \t\n\r\f\v]*🧭[ \t\n\r\f\v]*(?:role|agent):[ \t\n\r\f\v]*([A-Za-z][A-Za-z0-9_-]*)/u;
 
 /**
  * The text of an assistant turn: its string content, or its text blocks joined by a space.
@@ -2396,7 +2456,7 @@ function _readAt(fd, position, size) {
 }
 
 /**
- * The lines of the open file `fd` that contain `needle`, last line first (A19).
+ * The lines of the open file `fd` that contain `needle` (or any of an array of needles), last line first (A19).
  *
  * Both transcript scanners want the *last* record that qualifies, so reading from the end and
  * stopping at the first qualifying record returns what a full forward scan returns, at a cost
@@ -2405,7 +2465,7 @@ function _readAt(fd, position, size) {
  * UTF-8. A line that does not decode is skipped. Memory stays at one block plus the longest
  * line.
  * @param {number} fd
- * @param {Buffer} needle
+ * @param {Buffer | Buffer[]} needle
  * @returns {Generator<string>}
  */
 function* _linesFromEnd(fd, needle) {
@@ -2433,12 +2493,12 @@ function* _linesFromEnd(fd, needle) {
 /**
  * The lines holding `needle`, decoded; a line that is not strict UTF-8 is skipped.
  * @param {Buffer[]} lines
- * @param {Buffer} needle
+ * @param {Buffer | Buffer[]} needle
  * @returns {Generator<string>}
  */
 function* _decoded(lines, needle) {
   for (const raw of lines) {
-    if (raw.includes(needle)) {
+    if ((Array.isArray(needle) ? needle : [needle]).some((item) => raw.includes(item))) {
       let text;
       try {
         text = _decode(raw);
@@ -2479,7 +2539,7 @@ function _mainChainAssistant(line) {
  * a filesystem failure (`OSError`) ends the scan with `fallback`, anything else propagates.
  * @template T
  * @param {string} path
- * @param {Buffer} needle
+ * @param {Buffer | Buffer[]} needle
  * @param {(line: string) => T | undefined} visit
  * @param {T} fallback
  * @returns {T}
@@ -2517,7 +2577,8 @@ function _scanFromEnd(path, needle, visit, fallback) {
 }
 
 /**
- * The role from the last qualifying `🧭 agent: <name>` transcript declaration.
+ * The role from the last qualifying `🧭 role: <name>` transcript declaration (`🧭 agent: <name>`
+ * is read the same way, an alias for one release — ADR 0027/D03).
  *
  * Only main-chain assistant turns are read, so the SessionStart reminder / a subagent echo
  * never masquerades as the declaration. A declaration qualifies only as the first
@@ -2533,11 +2594,11 @@ export function activeRole(transcriptPath) {
   if (path === null) {
     return null;
   }
-  // Cheap ascii pre-filter: the emoji may be \u-escaped in the JSONL, but "agent:" is
-  // always literal. JSON.parse then decodes the real marker.
+  // Cheap ascii pre-filter: the emoji may be \u-escaped in the JSONL, but "role:" and "agent:"
+  // are always literal. JSON.parse then decodes the real marker.
   return _scanFromEnd(
     path,
-    Buffer.from("agent:"),
+    [Buffer.from("role:"), Buffer.from("agent:")],
     (line) => {
       const entry = _mainChainAssistant(line);
       const match = entry !== null ? _ROLE_DECL_RE.exec(_assistantText(entry)) : null;
@@ -3126,14 +3187,18 @@ export function staleness(data, config, registry, settingsModel) {
  * @param {Json} registry
  * @param {Json} config
  * @param {string} orchestratorVendor
+ * @param {string | null} projectRoot
  * @returns {[string, string | null]}
  */
-function _secondOpinionStatus(data, runtimeData, registry, config, orchestratorVendor) {
+function _secondOpinionStatus(data, runtimeData, registry, config, orchestratorVendor, projectRoot) {
   const enabled = _truthy(_get(config, "second_opinion"));
-  const [display, warning] = opinionHead(data, runtimeData, registry, {
-    ...config,
-    vendor: _or(_get(config, "vendor"), orchestratorVendor),
-  });
+  const [display, warning] = opinionHead(
+    data,
+    runtimeData,
+    registry,
+    { ...config, vendor: _or(_get(config, "vendor"), orchestratorVendor) },
+    projectRoot,
+  );
   const state = enabled ? "on" : "off";
   return [`second-opinion=${display} (${state})`, enabled ? warning : null];
 }
@@ -3296,12 +3361,20 @@ function _escalationHint(config) {
  * @param {Json} config
  * @param {Json} registry
  * @param {string} initCommand
+ * @param {string | null} projectRoot
  * @returns {string[]}
  */
-export function statusLines(data, runtimeData, config, registry, initCommand) {
+export function statusLines(data, runtimeData, config, registry, initCommand, projectRoot) {
   const binding = _get(config, "binding", {});
   const orchestratorVendor = _pyStr(_or(_get(config, "vendor"), "anthropic"));
-  const [secondDisplay, secondWarning] = _secondOpinionStatus(data, runtimeData, registry, config, orchestratorVendor);
+  const [secondDisplay, secondWarning] = _secondOpinionStatus(
+    data,
+    runtimeData,
+    registry,
+    config,
+    orchestratorVendor,
+    projectRoot,
+  );
   const orchestrator = _get(config, "orchestrator", "?");
   const texts = data.status_lines;
   const lines = [

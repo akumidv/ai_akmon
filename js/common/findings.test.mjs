@@ -276,3 +276,14 @@ test("exitCode: errors fail; warnings fail only under strict", () => {
     assert.equal(exitCode(findings, { strict: true }), strict);
   }
 });
+
+test("exitCode: a strict-exempt warning stays visible and never fails; the exemption is per code and never covers an error", () => {
+  const exempt = new Set(["area.rule"]);
+  assert.equal(exitCode([finding("warn")], { strict: true, strictExempt: exempt }), 0);
+  assert.equal(exitCode([finding("warn")], { strictExempt: exempt }), 0);
+  assert.equal(
+    exitCode([finding("warn"), finding("warn", { code: "area.other" })], { strict: true, strictExempt: exempt }),
+    1,
+  );
+  assert.equal(exitCode([finding("error")], { strictExempt: exempt }), 1);
+});

@@ -17,7 +17,7 @@
 > `akmon_runtime_root` no longer consults the record at all: it returns the tree the hook is
 > *executing* from (`Path(__file__).parent.parent`). The reasoning below stays as written,
 > because it was correct for its state of the world — package mode copied the hooks and their
-> data into `<AITNA_ROOT>/.akmon/`, so that directory really was a tree, and the record really
+> data into `<dev root>/.akmon/`, so that directory really was a tree, and the record really
 > was the only way to tell it from a stale mount. Once the materialization narrowed to the
 > imported guardrails, that directory stopped being a tree and the veto would have pointed the
 > hooks at one with no registry in it. What the veto defended against is not given up: a stale
@@ -30,7 +30,7 @@
 > kept as the record of what it cost. C77 supersedes that runtime-root answer as stated above.
 
 `hooks/hook_core.py::akmon_runtime_root` answers with **directory existence**:
-`<AITNA_ROOT>/akmon` if that directory is there, else `<AITNA_ROOT>/.akmon`. Every other owner
+`<dev root>/akmon` if that directory is there, else `<dev root>/.akmon`. Every other owner
 of the same decision reads the record instead — `bin/sync.py::is_package_mode` /
 `standard_tree_root`, `src/akmon/cli.py::_mounted_akmon_root`, and (since C37)
 `tools/model_routing/init.py::_standard_tree_root` — each carrying a comment that a stale mount
@@ -62,7 +62,7 @@ hooks are wrong.
 ## The fork (why it is not a one-line copy of `is_package_mode`)
 
 `hook_core` must stay stdlib-only **and** runnable from the materialized
-`<AITNA_ROOT>/.akmon/hooks/` copy — so it cannot import `sync`, which is not materialized at
+`<dev root>/.akmon/hooks/` copy — so it cannot import `sync`, which is not materialized at
 all. A local read would have made it another narrow `.akmon.toml` reader. That was the fork:
 
 - **one shared home** for the reader that every carrier can reach, or
@@ -99,7 +99,7 @@ justification to re-examine on its own, and three of the four are weaker than wh
 > [C74](../../../meta/TASKS_ARCHIVE.md)).** This note previously said `bin/` "does not exist at all" in the
 > materialized tree, and priced the shared home off that. It was already untrue — `_materialized_files`
 > had been copying a module there since C57 — and it is now moot: C74 gave the shared stdlib-only
-> utilities their own package, `common/`, materialized whole into `<AITNA_ROOT>/.akmon/` beside
+> utilities their own package, `common/`, materialized whole into `<dev root>/.akmon/` beside
 > `hooks/` and present at the same tree-relative path in the mounted tree and the wheel's embedded
 > tree. `hooks/hook_core.py` already imports from it (the project-root walk, C73/C74), so the
 > "one shared home" branch is no longer a proposal to cost — **it is built, it is proven by the
@@ -111,7 +111,7 @@ justification to re-examine on its own, and three of the four are weaker than wh
 > against the shared home is withdrawn — it can no longer be the reason to pick duplication.
 
 > **Narrowed since — [D2-35](../../../meta/D2_LEDGER.md) (C77).** "Materialized whole into
-> `<AITNA_ROOT>/.akmon/`" above is this row's state, not today's: package mode stopped
+> `<dev root>/.akmon/`" above is this row's state, not today's: package mode stopped
 > materializing an executable surface at all. The only files it now writes under `.akmon/` are
 > the guardrails a committed `AGENTS.md` imports; `common/`, `hooks/`, the model-routing library
 > and the D2-ledger tool run from the installed package (`akmon hook <name>`), never copied into

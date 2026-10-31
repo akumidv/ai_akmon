@@ -399,7 +399,7 @@ function runHook(args, input = "", env = {}) {
       input: typeof input === "string" ? input.replaceAll("{{root}}", project) : input,
       encoding: "utf8",
       cwd: project,
-      env: { ...process.env, TMPDIR: tmp, AITNA_ROOT: "", ...env },
+      env: { ...process.env, TMPDIR: tmp, ...env },
     });
     result = { status: run.status, stdout: run.stdout, stderr: run.stderr };
   });

@@ -44,30 +44,30 @@ def generated_marker() -> str:
     return _materialization_data()["generated_banner"]["prefix"]
 
 
-def generated_banner() -> str:
+def generated_banner(project_root: Path | None) -> str:
     """The do-not-edit banner; tracks the configured root so it never drifts from real paths.
 
     The root is the only dynamic part: the fragments around it come from the shared data file,
     so the byte identity a freshness gate checks is the identity of that one spelling.
     """
     banner = _materialization_data()["generated_banner"]
-    return f"{banner['prefix']}{aitna_root_name()}{banner['suffix']}"
+    return f"{banner['prefix']}{aitna_root_name(project_root)}{banner['suffix']}"
 
 
-def materialized_markdown(source_text: str) -> str:
+def materialized_markdown(source_text: str, project_root: Path | None) -> str:
     """``source_text`` with the generated-pointer banner inserted as an HTML comment.
 
     Matching the convention the other generated ``.md`` pointers already use, right after
     a leading top-level heading when present, else at the very top.
     """
-    banner_line = f"<!-- {generated_banner()} -->"
+    banner_line = f"<!-- {generated_banner(project_root)} -->"
     lines = source_text.splitlines(keepends=True)
     if lines and lines[0].lstrip().startswith("#"):
         return lines[0] + banner_line + "\n\n" + "".join(lines[1:])
     return banner_line + "\n\n" + source_text
 
 
-def materialized_text(name: str, source_text: str) -> str:
+def materialized_text(name: str, source_text: str, project_root: Path | None) -> str:
     """The materialized copy of one standard file.
 
     Markdown carries the banner as an HTML comment (:func:`materialized_markdown`); a TOML
@@ -75,15 +75,15 @@ def materialized_text(name: str, source_text: str) -> str:
     TOML parser skips it.
     """
     if name.endswith(".md"):
-        return materialized_markdown(source_text)
-    return f"# {generated_banner()}\n\n{source_text}"
+        return materialized_markdown(source_text, project_root)
+    return f"# {generated_banner(project_root)}\n\n{source_text}"
 
 
 def imported_dirs() -> tuple[str, ...]:
     """The standard directories whose files a consumer's ``AGENTS.md`` ``@``-imports.
 
     The universal guardrails and the language and environment profiles. Package mode writes
-    the imported ones under ``<AITNA_ROOT>/.akmon/<directory>/``; mounted modes import them
+    the imported ones under ``<dev root>/.akmon/<directory>/``; mounted modes import them
     from the mount.
     """
     return tuple(_materialization_data()["imported_dirs"])
@@ -121,7 +121,7 @@ def stale_materialized(project_root: Path, tree_root: Path) -> list[str]:
             source = tree_root / relative
             try:
                 if not source.is_file() or path.read_text(encoding="utf-8") != materialized_text(
-                    path.name, source.read_text(encoding="utf-8")
+                    path.name, source.read_text(encoding="utf-8"), project_root
                 ):
                     stale.append(relative)
             except OSError:

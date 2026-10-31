@@ -86,8 +86,6 @@ test("every strip case of the units table pins the quote-aware comment rule", ()
 
 test("a leading BOM stays out of the first key (C101), strict and lenient included", () => {
   const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-bom-"));
-  const saved = process.env.AITNA_ROOT;
-  delete process.env.AITNA_ROOT;
   try {
     const root = dir;
     fs.mkdirSync(posix.join(root, "_aitna"));
@@ -103,9 +101,6 @@ test("a leading BOM stays out of the first key (C101), strict and lenient includ
     // And strict must refuse the BOM the way tomllib does, not fold it in silently.
     assert.throws(() => readAkmonTomlStrict(record), RecordError);
   } finally {
-    if (saved !== undefined) {
-      process.env.AITNA_ROOT = saved;
-    }
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -119,8 +114,6 @@ test(
     // `is_file()` swallows ENOENT, ENOTDIR, EBADF and ELOOP only: a permission error must not read
     // as an absent record, which would silently answer the default ecosystem.
     const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-locked-"));
-    const saved = process.env.AITNA_ROOT;
-    delete process.env.AITNA_ROOT;
     const aitna = posix.join(root, "_aitna");
     fs.mkdirSync(aitna);
     fs.writeFileSync(posix.join(aitna, ".akmon.toml"), 'ecosystem = "node"\n');
@@ -131,9 +124,6 @@ test(
       assert.throws(() => readAkmonTomlStrict(posix.join(aitna, ".akmon.toml")), { code: "EACCES" });
     } finally {
       fs.chmodSync(aitna, 0o755);
-      if (saved !== undefined) {
-        process.env.AITNA_ROOT = saved;
-      }
       fs.rmSync(root, { recursive: true, force: true });
     }
   },
@@ -217,16 +207,8 @@ test("an absent record reads as nothing, and vetoes nothing", () => {
     const record = posix.join(dir, "_aitna", ".akmon.toml");
     assert.deepStrictEqual(readAkmonToml(record), _emptyTable());
     assert.deepStrictEqual(readAkmonTomlStrict(record), _emptyTable());
-    const saved = process.env.AITNA_ROOT;
-    delete process.env.AITNA_ROOT;
-    try {
-      assert.equal(recordedMount(dir), null);
-      assert.equal(recordsPackageMode(dir), false);
-    } finally {
-      if (saved !== undefined) {
-        process.env.AITNA_ROOT = saved;
-      }
-    }
+    assert.equal(recordedMount(dir), null);
+    assert.equal(recordsPackageMode(dir), false);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -234,17 +216,12 @@ test("an absent record reads as nothing, and vetoes nothing", () => {
 
 test("an empty mount declares nothing: null, not a default", () => {
   const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-empty-"));
-  const saved = process.env.AITNA_ROOT;
-  delete process.env.AITNA_ROOT;
   try {
     fs.mkdirSync(posix.join(dir, "_aitna"));
     fs.writeFileSync(posix.join(dir, "_aitna", ".akmon.toml"), 'mount = ""\n');
     assert.equal(recordedMount(dir), null);
     assert.equal(recordsPackageMode(dir), false);
   } finally {
-    if (saved !== undefined) {
-      process.env.AITNA_ROOT = saved;
-    }
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -298,32 +275,24 @@ test("bytes that are not UTF-8 degrade leniently and are refused strictly", () =
 
 /**
  * Run `body` on a fresh project root whose record (at `relative`, `_aitna` by default) holds
- * `text` (`null`: no record), with `AITNA_ROOT` set as given (`null`: unset), all restored after.
+ * `text` (`null`: no record), and whose `.aitna-root` holds `pointer` (`null`: no such file).
  */
 function withProject(
   /** @type {string | null} */ text,
   /** @type {(root: string) => void} */ body,
-  /** @type {{relative?: string, aitnaRoot?: string | null}} */ { relative = "_aitna", aitnaRoot = null } = {},
+  /** @type {{relative?: string, pointer?: string | null}} */ { relative = "_aitna", pointer = null } = {},
 ) {
   const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-ecosystem-"));
-  const saved = process.env.AITNA_ROOT;
-  if (aitnaRoot === null) {
-    delete process.env.AITNA_ROOT;
-  } else {
-    process.env.AITNA_ROOT = aitnaRoot;
-  }
   try {
+    if (pointer !== null) {
+      fs.writeFileSync(posix.join(root, ".aitna-root"), `${pointer}\n`);
+    }
     if (text !== null) {
       fs.mkdirSync(posix.join(root, relative), { recursive: true });
       fs.writeFileSync(posix.join(root, relative, ".akmon.toml"), text);
     }
     body(root);
   } finally {
-    if (saved === undefined) {
-      delete process.env.AITNA_ROOT;
-    } else {
-      process.env.AITNA_ROOT = saved;
-    }
     fs.rmSync(root, { recursive: true, force: true });
   }
 }
@@ -365,10 +334,10 @@ test("recordedEcosystem: bytes that are not UTF-8 and a directory in the record'
 
 test("recordedEcosystem reads the record of the relocated dev layer", () => {
   withProject('ecosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "python"), {
-    aitnaRoot: "tools/ai",
+    pointer: "tools/ai",
   });
   withProject('ecosystem = "node"\n', (root) => assert.equal(recordedEcosystem(root), "node"), {
     relative: "tools/ai",
-    aitnaRoot: "tools/ai",
+    pointer: "tools/ai",
   });
 });

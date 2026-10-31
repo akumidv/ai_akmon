@@ -190,6 +190,41 @@ test("main assembles a scoped map and reports it", () => {
   );
 });
 
+test("the default map lands under the dev root the project declares", () => {
+  const log = "2026-05-01T10:00:00\ts1\tk_explorer\thaiku\tauth\tx\n";
+  const root = project({ ".claude/model-routing.log": log, ".aitna-root": "meta\n" });
+  const result = run(["--project-root", root, "--all-sessions"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /\nmap: meta\/artifacts\/gates\/coverage-1\.md\n/);
+  assert.equal(fs.existsSync(path.join(root, "_aitna")), false);
+});
+
+test("with no project root and no --out it prints the notice, exits 2 and writes nothing", () => {
+  const lone = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "coverage-map-lone-")));
+  fs.mkdirSync(path.join(lone, ".claude"));
+  fs.writeFileSync(
+    path.join(lone, ".claude", "model-routing.log"),
+    "2026-05-01T10:00:00\ts1\tk_explorer\thaiku\tauth\tx\n",
+  );
+  const saved = process.cwd();
+  try {
+    process.chdir(lone);
+    const result = run(["--all-sessions"]);
+    assert.equal(result.code, 2);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /^\[akmon\] no project root at or above /);
+    assert.ok(result.stderr.includes("pass --project-root to name the root instead"));
+    assert.deepEqual(fs.readdirSync(lone), [".claude"]);
+    // an explicit --out is the owner's own destination, so it still writes
+    const out = run(["--all-sessions", "--out", "m.md"]);
+    assert.equal(out.code, 0, out.stderr);
+    assert.deepEqual(fs.readdirSync(lone).sort(), [".claude", "m.md"]);
+  } finally {
+    process.chdir(saved);
+    fs.rmSync(lone, { recursive: true, force: true });
+  }
+});
+
 test("main refuses a bad bound, a missing log and an unplaceable row", () => {
   const root = project({ ".claude/model-routing.log": "garbage\ts1\tk\t-\tz\td\n" });
   const base = ["--project-root", root, "--all-sessions"];

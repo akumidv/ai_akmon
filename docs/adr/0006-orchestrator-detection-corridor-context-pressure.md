@@ -3,7 +3,8 @@
 - **Status:** Accepted (extends [0004](0004-model-routing-capability-tiers.md)/[0005](0005-synthesizer-gate-audit-and-role-routing.md);
   revises 0004's committed-agents point; implementation C22–C23). C22 landed in `91888bb`, Claude
   only (Codex pending); the context-pressure amendment below landed in `7ba3ea8`, and its C80
-  amendment landed in `0541b7a`.
+  amendment landed in `0541b7a`. D02's unattended posture ("outside interactive default mode becomes
+  a deny") is narrowed to the unattended run by [0025](0025-actors-and-action-repertoire.md)/D06.
 - **Owner:** akuminov@gmail.com
 - **References:** design source [`docs/design/model-routing.md` §1 (req 9–12), §3, §4.3, §12](../design/model-routing.md) ·
   C22 and C23 landed ([archive](../../meta/TASKS_ARCHIVE.md)).

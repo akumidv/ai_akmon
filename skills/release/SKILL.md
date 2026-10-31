@@ -7,7 +7,7 @@ metadata:
 
 # release
 
-The procedural skill for the [`release`](../../roles/release.md) role. It teaches *how to
+The procedural skill for the [`release`](../../agents/release.md) agent. It teaches *how to
 run the release conversation* and *when to stop* (the D5 boundary). The pipeline of record
 is [`pipelines/release.md`](../../pipelines/release.md); this skill is the agent-facing
 how-to, and it drives the [`tools/release/release_check.py`](../../tools/release/release_check.py)
@@ -30,10 +30,10 @@ A release is cut for **exactly one subject**:
    `internal` · `consumer-visible` · `migration` · `breaking`.
 3. **the handoff** — an exact, owner-ready command set plus the residual risk.
 
-## Steps (the lightweight cut — steps 1–4, 8–11 of the pipeline)
+## Steps (the lightweight cut — steps 1–4, 8–11 of the pipeline, and 9a)
 
 Run the periodic-cadence sweeps (5–7, 12) only deliberately; they **route** findings to
-architect / engineer / [`learn`](../../roles/learn.md), they do not fix them here.
+architect / engineer / [`learning` agent](../../agents/learning.md), they do not fix them here.
 
 1. **Frame the subject** *(gate)*. Ask the owner which subject and, when ambiguous, which
    downstream consumers. Do not read anything against the release until this is fixed.
@@ -65,6 +65,9 @@ architect / engineer / [`learn`](../../roles/learn.md), they do not fix them her
    own checks and tests), resilient to the test runner (`uv` → project `.venv` → system `pytest`).
    All green before handoff; a version finding fails the mode outright, and a skip finding names
    a rule whose input was absent rather than one that passed.
+9a. **Learning run before the pull request** *(gate)* — follow step 9a of
+    [`pipelines/release.md`](../../pipelines/release.md): run `akmon learn status`, offer the
+    learning run when `sessions since the last run: N` is 1 or more, and never start it yourself.
 10. **Owner handoff** *(gate, D5)*. Run
     `akmon tool release/release_check --plan vX.Y.Z` to print the exact
     owner-run command set, then present it with the residual risk and **stop**. The owner
@@ -99,7 +102,7 @@ subject — a akmon **pin bump** — is deferred (backlog T18).
 
 - **`--subject akmon`** runs the akmon suite (pointer sync, contract verify, and
   akmon's own self-checks + tests); the plan tags from the submodule tree. Its `--state` reads
-  the mounted `<AITNA_ROOT>/akmon`, else the running akmon tree, and exits 2 with one line when
+  the mounted `<dev root>/akmon`, else the running akmon tree, and exits 2 with one line when
   that tree carries no development record (a package install): run it from the akmon git tree —
   a clone, or a project mounting it as a submodule or subtree.
 - **`--subject package`** runs the akmon contract check (`verify --strict`) and then

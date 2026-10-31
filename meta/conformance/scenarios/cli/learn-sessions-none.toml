@@ -1,0 +1,16 @@
+# No transcript of this project exists: sessions says so, in one line.
+id = "cli/learn-sessions-none"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:learn"]
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+argv = ["learn", "sessions"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "akmon learn: listed at {{ts}} (pass it as `akmon learn mark --at {{ts}}`)\nakmon learn: no sessions of this project found\n"

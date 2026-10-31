@@ -34,7 +34,7 @@ import tempfile
 import time
 import tomllib
 import types
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -155,11 +155,12 @@ def _record_ecosystem(module: types.ModuleType, table: dict) -> list[dict]:
         relative = case.get("aitna_root", "_aitna")
         with tempfile.TemporaryDirectory(prefix="akmon-probe-ecosystem-") as scratch:
             root = Path(scratch)
+            if "aitna_root" in case:
+                (root / ".aitna-root").write_text(relative, encoding="utf-8", newline="")
             if not case.get("absent"):
                 (root / relative).mkdir(parents=True, exist_ok=True)
                 (root / relative / ".akmon.toml").write_text(case.get("text", ""), encoding="utf-8", newline="")
-            with _environment({"AITNA_ROOT": case.get("aitna_root")}):
-                actual = module.recorded_ecosystem(root)
+            actual = module.recorded_ecosystem(root)
         results.append({"index": 1000 + index, "expected": case["expected"], "actual": actual})
     return results
 
@@ -690,6 +691,8 @@ def _materialization_world(case: dict) -> tuple[Path, Path, Path]:
     copies = project / case.get("aitna_dir", "_aitna") / ".akmon"
     project.mkdir()
     tree.mkdir()
+    if "aitna_root" in case:
+        (project / ".aitna-root").write_text(case["aitna_root"], encoding="utf-8", newline="")
     for base, prefix in ((copies, "project"), (tree, "tree")):
         files = {relative: text.encode("utf-8") for relative, text in case.get(prefix, {}).items()}
         files.update({relative: bytes.fromhex(hexed) for relative, hexed in case.get(f"{prefix}_hex", {}).items()})
@@ -712,8 +715,7 @@ def _materialization_stale(module: types.ModuleType, table: dict) -> list[dict]:
         scratch, project, tree = _materialization_world(case)
         copies = project / case.get("aitna_dir", "_aitna") / ".akmon"
         try:
-            with _environment({"AITNA_ROOT": case.get("aitna_root")}):
-                actual = _answered(lambda project=project, tree=tree: module.stale_materialized(project, tree))
+            actual = _answered(lambda project=project, tree=tree: module.stale_materialized(project, tree))
         finally:
             for prefix, base in (("project", copies), ("tree", tree)):
                 for relative in case.get(f"{prefix}_chmod", {}):
@@ -723,6 +725,32 @@ def _materialization_stale(module: types.ModuleType, table: dict) -> list[dict]:
     return results
 
 
+@contextlib.contextmanager
+def _declared_project(case: dict) -> Iterator[Path | None]:
+    """The project a row's ``aitna_root`` declares: a scratch directory holding ``.aitna-root``.
+
+    A row without ``aitna_root`` names no project (``None``: the default dev root, for reading only).
+    """
+    if "aitna_root" not in case:
+        yield None
+        return
+    with tempfile.TemporaryDirectory(prefix="akmon-probe-materialization-") as scratch:
+        project = Path(scratch).resolve()
+        (project / ".aitna-root").write_text(case["aitna_root"], encoding="utf-8", newline="")
+        yield project
+
+
+def _materialization_family(case: dict, answer: Callable[[Path | None], object]) -> object:
+    """One row's answer under its declared project; ``expected = { raises = true }`` rows ask for the refusal."""
+    with _declared_project(case) as project:
+        if isinstance(case.get("expected"), dict) and case["expected"].get("raises"):
+            return _answered(lambda: answer(project))
+        actual = answer(project)
+        return (
+            actual.replace(str(project), "{{project}}") if project is not None and isinstance(actual, str) else actual
+        )
+
+
 def probe_materialization(repo: Path, table: dict) -> list[dict]:
     """The generated banner, the copy format and the freshness check, against the tree's common/materialization."""
     module = _load_module(repo, "common/materialization.py", "conform_materialization")
@@ -730,24 +758,26 @@ def probe_materialization(repo: Path, table: dict) -> list[dict]:
     for index, case in enumerate(table.get("marker", [])):
         results.append({"index": index, "expected": case.get("expected"), "actual": module.generated_marker()})
     for index, case in enumerate(table.get("banner", [])):
-        with _environment({"AITNA_ROOT": case.get("aitna_root")}):
-            actual = module.generated_banner()
+        actual = _materialization_family(case, module.generated_banner)
         results.append({"index": 1000 + index, "expected": case.get("expected"), "actual": actual})
     for index, case in enumerate(table.get("markdown", [])):
-        with _environment({"AITNA_ROOT": case.get("aitna_root")}):
-            actual = module.materialized_markdown(case["input"])
+        actual = _materialization_family(
+            case, lambda project, case=case: module.materialized_markdown(case["input"], project)
+        )
         results.append({"index": 2000 + index, "expected": case.get("expected"), "actual": actual})
     for index, case in enumerate(table.get("text", [])):
-        with _environment({"AITNA_ROOT": case.get("aitna_root")}):
-            actual = module.materialized_text(case["name"], case["input"])
+        actual = _materialization_family(
+            case, lambda project, case=case: module.materialized_text(case["name"], case["input"], project)
+        )
         results.append({"index": 3000 + index, "expected": case.get("expected"), "actual": actual})
     for index, case in enumerate(table.get("dirs", [])):
         results.append(
             {"index": 4000 + index, "expected": case.get("expected"), "actual": list(module.imported_dirs())}
         )
     for index, case in enumerate(table.get("dir", [])):
-        with _environment({"AITNA_ROOT": case.get("aitna_root")}):
-            actual = str(module.materialized_dir(Path(case["project_root"])))
+        actual = _materialization_family(
+            case, lambda project, case=case: str(module.materialized_dir(project or Path(case["project_root"])))
+        )
         results.append({"index": 5000 + index, "expected": case.get("expected"), "actual": actual})
     results += _materialization_stale(module, table)
     return results
@@ -764,8 +794,10 @@ def probe_materialization(repo: Path, table: dict) -> list[dict]:
 # `drop` keys removed and, per vendor, its `unset` keys deleted (a vendor with no `harness_rungs` is the
 # semantic-fallback case); `$call` is another public function's answer to `args`/`kwargs`, one
 # element of it when `pick` names an index; `$new` is a dataclass built from its snake_case
-# `fields` — and every string may hold `{{dir}}`, the row's scratch directory. Keyword-only parameters ride
-# in `kwargs_json`. The answer is JSON: a dataclass is an object keyed by its field names, a tuple
+# `fields` (the JS mouth builds `OpinionRun`, the `run` argument of `opinion_command`, as the plain
+# options object `{model, effort, prompt}` that module takes after the project root) — and every string
+# may hold `{{dir}}`, the row's scratch directory. Keyword-only parameters ride in `kwargs_json`.
+# The answer is JSON: a dataclass is an object keyed by its field names, a tuple
 # an array, a `Path` its POSIX string, a raise `{"error": <class name>, "message": <first
 # argument>}` (the first argument, not `str()`: Python's `str(KeyError(x))` is `repr(x)`, the
 # quoting is the language's, the text is the owner's). Back in every string answer `{{dir}}`
@@ -778,7 +810,7 @@ def probe_materialization(repo: Path, table: dict) -> list[dict]:
 # World keys: `files` (relpath → text), `files_parts` (relpath → parts: a text, `{hex}` or
 # `{repeat, times}` — for the bytes TOML cannot spell and the 64 KiB a tail-read block needs),
 # `mtimes` (relpath → seconds in the past), `modes` (relpath → octal), `env` (name → value, `""`
-# unsets; AKMON_CONTEXT_RECOMMENDED_MAX and AITNA_ROOT are unset and TMPDIR is the scratch
+# unsets; AKMON_CONTEXT_RECOMMENDED_MAX is unset and TMPDIR is the scratch
 # directory unless a row says otherwise), `setup_json` (calls made first, answers dropped),
 # `ordered` (an object answer becomes its [key, value] pairs: the order is pinned), `nonroot`.
 # Expected and actual compare as canonical JSON, so `true` is not `1` and `1.0` is not `1`.
@@ -803,7 +835,6 @@ def probe_materialization(repo: Path, table: dict) -> list[dict]:
 
 _ROUTING_BASE_ENV = (
     "AKMON_CONTEXT_RECOMMENDED_MAX",
-    "AITNA_ROOT",
     "AKMON_DELEGATION_GRACE",
     "AKMON_DELEGATION_NUDGE_THRESHOLD",
     "AKMON_DELEGATION_ASK_THRESHOLD",
@@ -1036,8 +1067,7 @@ def _routing_case(module: types.ModuleType, repo: Path, case: dict, texts: list[
     working = Path.cwd()
     try:
         _routing_world(scratch, case, world)
-        if "cwd" in case:
-            os.chdir(scratch / case["cwd"])
+        os.chdir(scratch / case.get("cwd", "."))
         with _environment(changes):
             tempfile.tempdir = None
             return _routing_answer(module, world, case)
@@ -1134,9 +1164,19 @@ def probe_sync(repo: Path, table: dict) -> list[dict]:
     A row names the Python function, a private one included (``_upsert_toml_key``): the JS mouth
     drops the underscore and calls the camelCase export of ``js/bin/sync.mjs``, and hands it the
     sync data bundle (``readSyncData()``) as the first argument of the exports that read one. The
-    mounted tree is never consulted by the JS side, so no row builds ``<AITNA_ROOT>/akmon``.
+    mounted tree is never consulted by the JS side, so no row builds ``<dev root>/akmon``.
     """
     return _probe_rows(repo, table, _load_module(repo, "bin/sync.py", "conform_sync"), [])
+
+
+def probe_project_root(repo: Path, table: dict) -> list[dict]:
+    """The project-root owner (ADR 0022 D09), one public call per row, against the tree's ``common/project_root``.
+
+    The generic mouth: a row's project is its scratch directory (``{{dir}}``), the declaration is a ``files``
+    entry named ``.aitna-root``, and a ``DevRoot`` answers as an object keyed ``path`` and ``origin``. The JS
+    mouth hands ``resolveProjectRoot``'s answer back as the ``(root, notice)`` pair Python returns.
+    """
+    return _probe_rows(repo, table, _load_module(repo, "common/project_root.py", "conform_project_root"), [])
 
 
 def probe_always_loaded(repo: Path, table: dict) -> list[dict]:
@@ -1179,6 +1219,7 @@ PROBES = {
     "markers": probe_markers,
     "materialization": probe_materialization,
     "routing": probe_routing,
+    "project_root": probe_project_root,
     "hook_core": probe_hook_core,
     "claude_adapter": probe_claude_adapter,
     "codex_adapter": probe_codex_adapter,

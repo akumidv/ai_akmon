@@ -16,11 +16,6 @@ import pytest
 from common.record import recorded_ecosystem
 
 
-@pytest.fixture(autouse=True)
-def _default_aitna_root(monkeypatch):
-    monkeypatch.delenv("AITNA_ROOT", raising=False)
-
-
 def _record(root: Path, text: str, *, relative: str = "_aitna") -> None:
     (root / relative).mkdir(parents=True, exist_ok=True)
     (root / relative / ".akmon.toml").write_text(text, encoding="utf-8")
@@ -71,9 +66,9 @@ def test_a_directory_in_the_records_place_is_python(tmp_path):
     assert recorded_ecosystem(tmp_path) == "python"
 
 
-def test_the_record_is_read_from_the_relocated_dev_layer(tmp_path, monkeypatch):
+def test_the_record_is_read_from_the_relocated_dev_layer(tmp_path):
     _record(tmp_path, 'ecosystem = "node"\n')
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+    (tmp_path / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     assert recorded_ecosystem(tmp_path) == "python"
     _record(tmp_path, 'ecosystem = "node"\n', relative="tools/ai")
     assert recorded_ecosystem(tmp_path) == "node"

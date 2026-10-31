@@ -9,7 +9,7 @@ language; this file says how they read in Python, and only what no checker can s
 > configuration, [`ruff.toml`](ruff.toml) — each group annotated with its Google Python Style
 > Guide section — that runs with or without akmon. **The project's own rules win:** a project
 > with its own linter configuration keeps it, and `akmon check` runs whatever the project
-> declares under `[check]` in `<AITNA_ROOT>/.akmon.toml`. Where the project's configuration
+> declares under `[check]` in `<dev root>/.akmon.toml`. Where the project's configuration
 > switches a rule off or decides otherwise, follow the project, not this file.
 
 ## Toolchain — the project's own
@@ -23,7 +23,7 @@ language; this file says how they read in Python, and only what no checker can s
   its own configuration (`extend-ignore`, `per-file-ignores`), never in akmon's file.
 - **`akmon check` runs the project's checks** as declared under `[check]` — its linter, its type
   checker, whatever it runs — and the pre-commit step calls it.
-- **Tests:** the project's runner, pinned as `[test].runner` in `<AITNA_ROOT>/.akmon.toml`.
+- **Tests:** the project's runner, pinned as `[test].runner` in `<dev root>/.akmon.toml`.
 - **Types:** a type checker where the project adopts one. The public API is annotated either
   way (Google §2.21; ruff's `ANN` rules in akmon's configuration).
 

@@ -1,0 +1,23 @@
+# A state file that is not valid JSON is empty state, not a crash: the hook stays silent and rewrites the file.
+id = "hooks/learning-reminder-corrupt-state-rewritten"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:learning-reminder"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/local/learning.json" = "{broken" }
+
+[run]
+script = "learning-reminder"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-lr-corrupt"
+source = "startup"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

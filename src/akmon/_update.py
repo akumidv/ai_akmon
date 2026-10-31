@@ -25,7 +25,6 @@ version the project now pins, then ``sync --check`` and ``verify --strict``. Wha
 from __future__ import annotations
 
 import argparse
-import os
 import shlex
 import shutil
 import subprocess
@@ -290,7 +289,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--ref", help="Release to move to (default: the newest release tag; an older one rolls back).")
     parser.add_argument("--project-root", type=Path, help="Project to update. Defaults to the current directory.")
-    parser.add_argument("--aitna-root", help="Dev-layer root, project-root-relative (default: AITNA_ROOT or _aitna).")
+    parser.add_argument("--aitna-root", help="Dev-layer root, project-root-relative (default: _aitna).")
     repo = _init.akmon_repo()
     parser.add_argument("--repo", default=repo, help=f"akmon repository URL (default: {repo}).")
     return parser
@@ -300,9 +299,13 @@ def main(argv: list[str] | None = None) -> int:
     """Update the project to ``--ref`` or the newest release; the first failing exit code, else 0."""
     args = _build_parser().parse_args(argv)
     root = (args.project_root or Path.cwd()).resolve()
+    declared_before = _init._dev_root_pointer_text(root)
     try:
         aitna = _init._effective_aitna_root(args.aitna_root, root)
-        os.environ["AITNA_ROOT"] = aitna
+        if args.aitna_root:
+            # The flag names a root the project does not declare yet (a layer once relocated by the retired
+            # environment variable): the realign below reads it through `.aitna-root`, so it is written first.
+            _init._write_dev_root_pointer(root, aitna)
         mode = _init._recorded_mount(root, aitna)
         if mode not in _UPDATERS:
             raise _UpdateError(_jsondata().fill(_data()["missing_record"], {"root": str(root), "aitna": aitna}))
@@ -321,6 +324,8 @@ def main(argv: list[str] | None = None) -> int:
         _log(_jsondata().fill(_data()["banner"], {"root": str(root), "mode": mode, "note": plan.note}))
         code, launcher = _UPDATERS[mode](root, aitna, plan, args.repo)
     except (_UpdateError, _init._InitError) as exc:
+        # a refusal before `init` applied anything gives back the declaration the flag wrote early
+        _init._restore_dev_root_pointer(root, declared_before)
         print(f"akmon update: {exc}", file=sys.stderr)
         return 2
     if code != 0:

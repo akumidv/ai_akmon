@@ -14,7 +14,14 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { pyError } from "../common/pyvalue.mjs";
-import { normalizeTool, parsePayload, projectRoot, renderResult, runGuarded } from "./claude_adapter.mjs";
+import {
+  attendedFromEnvironment,
+  normalizeTool,
+  parsePayload,
+  projectRoot,
+  renderResult,
+  runGuarded,
+} from "./claude_adapter.mjs";
 import { HookResult, hookFailureNotice } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 
@@ -212,26 +219,56 @@ test("runGuarded: the document on stdout, nothing for no result, exit 0 either w
 });
 
 test("runGuarded: a crash is the class on stderr and the owner's notice on stdout, never the message", () => {
-  const crashed = captured(() =>
-    runGuarded("role-on-code", data, () => {
-      throw pyError("KeyError", "secret/path");
-    }),
-  );
-  assert.equal(crashed.code, 0);
-  assert.equal(crashed.err, "akmon role-on-code hook: KeyError\n");
-  assert.equal(
-    crashed.out,
-    '{"systemMessage": "\\u26a0 akmon: the role-on-code hook failed (KeyError) and was skipped \\u2014 this action went ahead ' +
-      'without it. Check the setup: `akmon verify` (a mounted tree: `python3 _aitna/akmon/bin/verify.py`)."}\n',
-  );
-  const system = captured(() =>
-    runGuarded("h", data, () => {
-      fs.readFileSync("/nonexistent/akmon");
-      return null;
-    }),
-  );
-  assert.equal(system.err, "akmon h hook: FileNotFoundError\n");
-  assert.equal(JSON.parse(system.out).systemMessage.includes("secret"), false);
+  // The recovery command names the dev root of the project the hook runs in, so the cwd is a
+  // directory with no project around it: the default name.
+  withDir((dir) => {
+    const saved = process.cwd();
+    process.chdir(dir);
+    try {
+      const crashed = captured(() =>
+        runGuarded("role-on-code", data, () => {
+          throw pyError("KeyError", "secret/path");
+        }),
+      );
+      assert.equal(crashed.code, 0);
+      assert.equal(crashed.err, "akmon role-on-code hook: KeyError\n");
+      assert.equal(
+        crashed.out,
+        '{"systemMessage": "\\u26a0 akmon: the role-on-code hook failed (KeyError) and was skipped \\u2014 this action went ahead ' +
+          'without it. Check the setup: `akmon verify` (a mounted tree: `python3 _aitna/akmon/bin/verify.py`)."}\n',
+      );
+      const system = captured(() =>
+        runGuarded("h", data, () => {
+          fs.readFileSync("/nonexistent/akmon");
+          return null;
+        }),
+      );
+      assert.equal(system.err, "akmon h hook: FileNotFoundError\n");
+      assert.equal(JSON.parse(system.out).systemMessage.includes("secret"), false);
+    } finally {
+      process.chdir(saved);
+    }
+  });
+});
+
+test("runGuarded: the recovery command follows the dev root the project declares", () => {
+  withDir((dir) => {
+    fs.writeFileSync(posix.join(dir, "AGENTS.md"), "# A\n");
+    fs.writeFileSync(posix.join(dir, ".aitna-root"), "meta\n");
+    const saved = process.cwd();
+    process.chdir(dir);
+    try {
+      const crashed = captured(() =>
+        runGuarded("role-on-code", data, () => {
+          throw pyError("KeyError", "x");
+        }),
+      );
+      assert.ok(JSON.parse(crashed.out).systemMessage.includes("`python3 meta/akmon/bin/verify.py`"), crashed.out);
+      assert.ok(!crashed.out.includes("_aitna"));
+    } finally {
+      process.chdir(saved);
+    }
+  });
 });
 
 test("runGuarded: a render failure is a caught crash, and the crash path reads no data file", () => {
@@ -251,12 +288,15 @@ test("runGuarded: a render failure is a caught crash, and the crash path reads n
  * @param {string} script
  * @param {unknown} payload
  * @param {Record<string, string>} [env]
+ * @param {string} [cwd] the process's working directory (default: this one)
  */
-function run(script, payload, env = {}) {
+function run(script, payload, env = {}, cwd = process.cwd()) {
   const input = typeof payload === "string" || payload instanceof Uint8Array ? payload : JSON.stringify(payload);
   const result = spawnSync("node", [`${HOOKS}/${script}.mjs`], {
     input,
-    env: { ...process.env, AITNA_ROOT: "", AKMON_DELEGATION_GRACE: "", ...env },
+    cwd,
+    // CLAUDE_CODE_SESSION_ATTENDED: the session running the suite states its own attendance; a test sets it itself
+    env: { ...process.env, AKMON_DELEGATION_GRACE: "", CLAUDE_CODE_SESSION_ATTENDED: "", ...env },
     encoding: "utf8",
   });
   return { stdout: result.stdout, stderr: result.stderr, status: result.status };
@@ -276,18 +316,20 @@ function withProject(/** @type {(project: string, tmp: string) => void} */ body)
 }
 
 test("an over-long cwd is the ordinary crash report on Claude: one stderr line, the notice, exit 0 (C121)", () => {
-  withProject((_project, tmp) => {
+  withProject((project, tmp) => {
     const cwd = `/${"a/".repeat(32_769)}`;
     const crashed = run(
       "role-on-code",
       { tool_name: "Edit", cwd, tool_input: { file_path: "/src/app.py" } },
       { TMPDIR: tmp },
+      project,
     );
     assert.equal(crashed.status, 0);
     assert.equal(crashed.stderr, "akmon role-on-code hook: ValueError\n");
     assert.deepEqual(JSON.parse(crashed.stdout), {
-      systemMessage: hookFailureNotice("role-on-code", pyError("ValueError", "")),
+      systemMessage: hookFailureNotice("role-on-code", pyError("ValueError", ""), project),
     });
+    assert.ok(crashed.stdout.includes("python3 _aitna/akmon/bin/verify.py"));
   });
 });
 
@@ -355,6 +397,41 @@ test("git-commit-guard runs as a process: sudo and the AI trailer deny, push ask
   });
 });
 
+test("attendedFromEnvironment is 1 or 0 and nothing else (ADR-0025/D06)", () => {
+  assert.equal(attendedFromEnvironment({ CLAUDE_CODE_SESSION_ATTENDED: "1" }), true);
+  assert.equal(attendedFromEnvironment({ CLAUDE_CODE_SESSION_ATTENDED: "0" }), false);
+  for (const value of [undefined, "", "true", " 1"]) {
+    assert.equal(attendedFromEnvironment({ CLAUDE_CODE_SESSION_ATTENDED: value }), null, String(value));
+  }
+  assert.equal(attendedFromEnvironment({}), null);
+});
+
+test("git-commit-guard reads attendance from the environment at the entry point (ADR-0025/D06)", () => {
+  withProject((project, tmp) => {
+    /** @type {Array<[string, string | undefined, string]>} */
+    const cells = [
+      ["auto", "1", "ask"],
+      ["default", "0", "deny"],
+      ["default", undefined, "ask"],
+      ["auto", undefined, "deny"],
+      ["bypassPermissions", "1", "deny"],
+      ["dontAsk", "1", "deny"],
+    ];
+    for (const [mode, value, decision] of cells) {
+      const payload = {
+        tool_name: "Bash",
+        session_id: `att-${mode}-${value}`,
+        cwd: project,
+        permission_mode: mode,
+        tool_input: { command: "git push origin feature" },
+      };
+      const env = { TMPDIR: tmp, ...(value === undefined ? {} : { CLAUDE_CODE_SESSION_ATTENDED: value }) };
+      const result = run("git-commit-guard", payload, env);
+      assert.match(result.stdout, new RegExp(`"permissionDecision": "${decision}"`), `${mode} ${value}`);
+    }
+  });
+});
+
 test("delegation-nudge runs as a process: it counts, nudges once, and a subagent is exempt", () => {
   withProject((project, tmp) => {
     const env = { TMPDIR: tmp };
@@ -383,7 +460,10 @@ test("session-start-agent runs as a process: the roster from the payload's cwd, 
   withProject((project, tmp) => {
     const env = { TMPDIR: tmp };
     const viaPayload = run("session-start-agent", { session_id: "x", cwd: project }, env);
-    assert.match(viaPayload.stdout, /\\n- DEVELOP \(build the project\): engineer\\n/);
+    assert.match(
+      viaPayload.stdout,
+      /\\n- DEVELOP \(build the project\), agents and the roles they work in: engineer \\u2014 role engineer\\n/,
+    );
     assert.equal(run("session-start-agent", {}, { ...env, CLAUDE_PROJECT_DIR: project }).stdout, viaPayload.stdout);
     assert.equal(
       run("session-start-agent", { cwd: "" }, { ...env, CLAUDE_PROJECT_DIR: project }).stdout,

@@ -1,0 +1,37 @@
+id = "tools/gate-pack-no-project-root-refused"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/gate_pack"]
+
+# A writer of the local layer stops where no project root is found (ADR 0022 D09): with no
+# project root at or above the working directory and neither --project-root nor --out, gate-pack
+# prints the notice on stderr, exits 2 and writes no pack -- the fallback to the current
+# directory it used to take would have left `_aitna/artifacts/gates/` under a wrong root.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"docs/yardstick.md" = "All public callables read subject-first; every behaviour change ships with a test.\n"
+"docs/zone-plan.md" = "- auth\n- api\n- billing\n"
+
+[run]
+tool = "model_routing/gate_pack"
+argv = [
+  "--gate",
+  "code-verify",
+  "--role",
+  "architect",
+  "--kind",
+  "plan-check",
+  "--yardstick",
+  "docs/yardstick.md",
+  "--zone-plan",
+  "docs/zone-plan.md",
+]
+
+[expected]
+exit = 2
+stderr = "[akmon] no project root at or above {{root}}: expected AGENTS.md beside .aitna-root, _aitna/akmon or _aitna/.akmon.toml. Falling back to that directory, so anything this command reads or writes is relative to it; pass --project-root to name the root instead.\n"
+stdout = ""
+file_absent = ["_aitna/artifacts/gates/code-verify-plan-check-1.md", "_aitna/artifacts/gates/code-verify-plan-check.md"]

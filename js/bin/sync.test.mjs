@@ -101,7 +101,7 @@ function project(scratch, { record = NODE_RECORD, agents = COMMON, link = true }
 
 /**
  * A Node project under `scratch` attached in a mounted mode (C129): the record, an AGENTS.md importing
- * the common guardrail from the mount, and `<AITNA_ROOT>/akmon` linked to this tree.
+ * the common guardrail from the mount, and `<dev root>/akmon` linked to this tree.
  * @param {string} scratch
  * @param {{record?: string}} [options]
  * @returns {string} the project root
@@ -121,31 +121,6 @@ function mountedProject(scratch, { record = MOUNTED_RECORD } = {}) {
  */
 function withPackageProject(body) {
   withScratch((scratch) => body(project(scratch)));
-}
-
-/**
- * Run `body` with `AITNA_ROOT` set as given (`null`: unset), then restored.
- * @template T
- * @param {string | null} aitna
- * @param {() => T} body
- * @returns {T}
- */
-function withAitnaRoot(aitna, body) {
-  const saved = process.env.AITNA_ROOT;
-  try {
-    if (aitna === null) {
-      delete process.env.AITNA_ROOT;
-    } else {
-      process.env.AITNA_ROOT = aitna;
-    }
-    return body();
-  } finally {
-    if (saved === undefined) {
-      delete process.env.AITNA_ROOT;
-    } else {
-      process.env.AITNA_ROOT = saved;
-    }
-  }
 }
 
 /**
@@ -382,6 +357,7 @@ test("Codex wiring: node on codex-hook.mjs from the git toplevel, the advisory a
     'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" role-on-code',
     'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" analysis-guard',
     'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" session-start',
+    'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" learning-reminder',
   ]);
 });
 
@@ -392,7 +368,7 @@ test("every command the wiring writes is one sync recognises as its own, package
       for (const wiring of [claudeHooks(data, root), codexHooks(data, root)]) {
         for (const entries of wiring.get("hooks").values()) {
           for (const entry of entries) {
-            assert.ok(isAkmonEntry(data, entry), JSON.stringify([...entry]));
+            assert.ok(isAkmonEntry(data, entry, root), JSON.stringify([...entry]));
           }
         }
       }
@@ -426,19 +402,18 @@ test("a mounted record's hooks directory follows a relocated dev layer", () => {
   withScratch((scratch) => {
     const root = posix.join(scratch, "project");
     put(root, "tools/ai/.akmon.toml", MOUNTED_RECORD);
-    withAitnaRoot("tools/ai", () => {
-      assert.equal(nodeHooksDir(root), "tools/ai/akmon/js/hooks");
-      const commands = [...codexHooks(data, root).get("hooks").values()].flatMap((entries) =>
-        entries.flatMap((/** @type {Map<string, any>} */ entry) =>
-          entry.get("hooks").map((/** @type {Map<string, any>} */ hook) => hook.get("command")),
-        ),
-      );
-      assert.ok(
-        commands.every((command) => command.includes('/tools/ai/akmon/js/hooks/codex-hook.mjs"')),
-        commands.join("\n"),
-      );
-      assert.ok(isAkmonEntry(data, new Map([["hooks", [new Map([["command", commands[0]]])]]])));
-    });
+    put(root, ".aitna-root", "tools/ai\n");
+    assert.equal(nodeHooksDir(root), "tools/ai/akmon/js/hooks");
+    const commands = [...codexHooks(data, root).get("hooks").values()].flatMap((entries) =>
+      entries.flatMap((/** @type {Map<string, any>} */ entry) =>
+        entry.get("hooks").map((/** @type {Map<string, any>} */ hook) => hook.get("command")),
+      ),
+    );
+    assert.ok(
+      commands.every((command) => command.includes('/tools/ai/akmon/js/hooks/codex-hook.mjs"')),
+      commands.join("\n"),
+    );
+    assert.ok(isAkmonEntry(data, new Map([["hooks", [new Map([["command", commands[0]]])]]]), root));
   });
 });
 
@@ -514,11 +489,10 @@ test("a mounted Node record is served in every mounted mode (C129)", () => {
 test("the refusal names the relocated dev layer", () => {
   withScratch((scratch) => {
     const root = project(scratch, { record: null });
-    withAitnaRoot("tools/ai", () => {
-      assert.ok(
-        /** @type {string} */ (unsupportedRecord(data, root)).includes("no integration record (tools/ai/.akmon.toml)"),
-      );
-    });
+    put(root, ".aitna-root", "tools/ai\n");
+    assert.ok(
+      /** @type {string} */ (unsupportedRecord(data, root)).includes("no integration record (tools/ai/.akmon.toml)"),
+    );
   });
 });
 
@@ -738,7 +712,7 @@ test("with no project root in reach the notice names the fallback and the record
       assert.equal(result.code, 2);
       assert.ok(
         result.stderr.startsWith(
-          `[akmon] no project root at or above ${empty}: expected AGENTS.md beside _aitna/akmon or _aitna/.akmon.toml.`,
+          `[akmon] no project root at or above ${empty}: expected AGENTS.md beside .aitna-root, _aitna/akmon or _aitna/.akmon.toml.`,
         ),
         result.stderr,
       );
@@ -749,7 +723,7 @@ test("with no project root in reach the notice names the fallback and the record
   });
 });
 
-test("a custom AITNA_ROOT moves the record, the materialization and the markers", () => {
+test("a `.aitna-root` file moves the record, the materialization and the markers", () => {
   withScratch((scratch) => {
     const root = posix.join(scratch, "project");
     fs.mkdirSync(root);
@@ -757,12 +731,11 @@ test("a custom AITNA_ROOT moves the record, the materialization and the markers"
     put(root, "AGENTS.md", "@tools/ai/.akmon/guardrails/_common.md\n@tools/ai/.akmon/profiles/python.md\n");
     fs.mkdirSync(posix.join(root, "node_modules"));
     fs.symlinkSync(TREE, posix.join(root, "node_modules", "akmon"));
-    withAitnaRoot("tools/ai", () => {
-      assert.equal(run(["--project-root", root]).code, 0);
-      assert.ok(fs.existsSync(posix.join(root, "tools/ai/.akmon/profiles/python.md")));
-      assert.ok(get(root, "CLAUDE.md").includes("tools/ai"));
-      assert.equal(run(["--project-root", root, "--check"]).code, 0);
-    });
+    put(root, ".aitna-root", "tools/ai\n");
+    assert.equal(run(["--project-root", root]).code, 0);
+    assert.ok(fs.existsSync(posix.join(root, "tools/ai/.akmon/profiles/python.md")));
+    assert.ok(get(root, "CLAUDE.md").includes("tools/ai"));
+    assert.equal(run(["--project-root", root, "--check"]).code, 0);
   });
 });
 
@@ -924,20 +897,19 @@ test("readJson: a missing file is an empty object; the document keeps integer-li
 });
 
 test("mergeHookEntries: the stale akmon entry goes, the user's stays, and a repeat changes nothing", () => {
-  /** @type {any[]} */
-  let wanted = [];
   withPackageProject((root) => {
-    wanted = [...claudeHooks(data, root).get("hooks").get("PreToolUse")];
+    /** @type {any[]} */
+    const wanted = [...claudeHooks(data, root).get("hooks").get("PreToolUse")];
+    const user = { matcher: "Bash", hooks: [{ type: "command", command: "echo mine" }] };
+    const once = mergeHookEntries(data, [user, wanted[0]], wanted, root);
+    assert.equal(once[0], user);
+    assert.equal(once.length, 1 + wanted.length);
+    const twice = mergeHookEntries(data, once, wanted, root);
+    assert.deepEqual(
+      twice.map((entry) => JSON.stringify(entry instanceof Map ? [...entry] : entry)),
+      once.map((entry) => JSON.stringify(entry instanceof Map ? [...entry] : entry)),
+    );
   });
-  const user = { matcher: "Bash", hooks: [{ type: "command", command: "echo mine" }] };
-  const once = mergeHookEntries(data, [user, wanted[0]], wanted);
-  assert.equal(once[0], user);
-  assert.equal(once.length, 1 + wanted.length);
-  const twice = mergeHookEntries(data, once, wanted);
-  assert.deepEqual(
-    twice.map((entry) => JSON.stringify(entry instanceof Map ? [...entry] : entry)),
-    once.map((entry) => JSON.stringify(entry instanceof Map ? [...entry] : entry)),
-  );
 });
 
 // --------------------------------------------------------------------------------------
@@ -1081,9 +1053,8 @@ test("an import under a relocated dev layer matches exactly its own prefix", () 
     fs.mkdirSync(root);
     put(root, "a.b+c/.akmon.toml", 'mount = "package"\n');
     put(root, "AGENTS.md", "@a.b+c/.akmon/profiles/python.md\n@aXb+c/.akmon/profiles/quant.md\n");
-    withAitnaRoot("a.b+c", () => {
-      assert.deepEqual(importedStandardFiles(data, root), [["guardrails/_common.md", "profiles/python.md"], []]);
-    });
+    put(root, ".aitna-root", "a.b+c\n");
+    assert.deepEqual(importedStandardFiles(data, root), [["guardrails/_common.md", "profiles/python.md"], []]);
   });
 });
 
@@ -1189,7 +1160,6 @@ test("run as a program: the exit code is the command's, through a symlink as npm
     const link = posix.join(scratch, "sync-link.mjs");
     fs.symlinkSync(SYNC, link);
     const env = { ...process.env };
-    delete env.AITNA_ROOT;
     for (const entry of [SYNC, link]) {
       const stale = spawnSync(process.execPath, [entry, "--project-root", root, "--check"], { encoding: "utf-8", env });
       assert.equal(stale.status, 1, stale.stderr);

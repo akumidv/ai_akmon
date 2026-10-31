@@ -39,7 +39,7 @@ docs/
   skills/  tools/  memory/  agents/           development layer
 ```
 
-`<DEV>` is `<AITNA_ROOT>` (default `_aitna`) in a consumer and `meta/` in akmon
+`<DEV>` is `<dev root>` (default `_aitna`) in a consumer and `meta/` in akmon
 ([ADR 0022](../adr/0022-local-layer-index-and-plans.md)). In akmon the decisions are in
 `docs/adr/` and the designs in `docs/design/`; `meta/` holds the rest.
 
@@ -108,7 +108,7 @@ experiments (369) stay where they are.
 
 The accessor sits with the project-root and dev-root code (`common/project_root.py`, C157). It
 returns the decision directory and the design directory. Order of resolution: a declaration in
-`<AITNA_ROOT>/.akmon.toml`; else an existing directory (the `.adr-dir` marker, then a short list of
+`<dev root>/.akmon.toml`; else an existing directory (the `.adr-dir` marker, then a short list of
 known names); else the default. A project with two candidates is a finding, not a silent pick.
 `init` creates nothing; the first record creates its folder. The key names, the list and the
 two-candidate behaviour are C159's decision block, written before code.

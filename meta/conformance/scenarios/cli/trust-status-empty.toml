@@ -1,0 +1,16 @@
+id = "cli/trust-status-empty"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:trust"]
+
+[env]
+AKMON_TRUST_DIR = "{{tmp}}/trust"
+HOME = "{{tmp}}"
+
+[run]
+argv = ["trust", "status"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "akmon trust: no grant files under _aitna/grants/\n"

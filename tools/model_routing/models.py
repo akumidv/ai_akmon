@@ -41,7 +41,7 @@ def _standard_tree_root(project_root: Path) -> Path:
     The rule of ``init.py::_standard_tree_root``: the recorded ``mount`` field decides, so a stale
     mount directory from a prior mode does not shadow the installed tree.
     """
-    mounted = project_root / routing.aitna_root_name() / "akmon"
+    mounted = routing.aitna_root(project_root) / "akmon"
     if not records_package_mode(project_root) and mounted.is_dir():
         return mounted
     return Path(__file__).resolve().parents[2]
@@ -56,10 +56,10 @@ class _Plan:
     unmapped: tuple[str, ...]
 
 
-def _catalog_declaration(registry: dict, provider: str) -> tuple[str, str]:
+def _catalog_declaration(registry: dict, provider: str, root: Path) -> tuple[str, str]:
     """The row's ``catalog`` as ``(file, format)``; ``ValueError`` when the row has none or it is malformed."""
     texts = _texts()["errors"]
-    declared = routing.provider_row(registry, provider).get("catalog")
+    declared = routing.provider_row(registry, provider, root).get("catalog")
     if declared is None:
         raise ValueError(jsondata.fill(texts["no_catalog"], {"provider": provider}))
     file = declared.get("file") if isinstance(declared, dict) else None
@@ -69,10 +69,10 @@ def _catalog_declaration(registry: dict, provider: str) -> tuple[str, str]:
     return file, catalog_format
 
 
-def _plan(registry: dict, provider: str, home: str) -> _Plan:
+def _plan(registry: dict, provider: str, home: str, root: Path) -> _Plan:
     """Read the provider's declared catalog and map each of the row's aliases; the only read of a catalog."""
     texts = _texts()["errors"]
-    file, catalog_format = _catalog_declaration(registry, provider)
+    file, catalog_format = _catalog_declaration(registry, provider, root)
     values = {"file": file, "provider": provider}
     path = Path(routing.expand_home(file, home))
     if not path.is_file():
@@ -85,7 +85,7 @@ def _plan(registry: dict, provider: str, home: str) -> _Plan:
         catalog = routing.parse_catalog(text, catalog_format)
     except ValueError as exc:
         raise ValueError(jsondata.fill(texts["invalid"], {**values, "reason": exc.args[0]})) from exc
-    entries = routing.provider_row(registry, provider).get("models") or []
+    entries = routing.provider_row(registry, provider, root).get("models") or []
     # An entry may carry an @effort (ADR 0024/D17); the alias is the model before it, listed once.
     models = list(dict.fromkeys(model for model in (routing.split_model_effort(str(e))[0] for e in entries) if model))
     mapped = routing.catalog_aliases(catalog, models)
@@ -148,7 +148,7 @@ def _run(root: Path, registry: dict, args: argparse.Namespace, home: str) -> int
     """Plan every selected provider (nothing is written unless all of them planned), then list, preview or write."""
     output = _texts()["output"]
     providers = _selected(registry, args.provider)
-    plans = [_plan(registry, provider, home) for provider in providers]
+    plans = [_plan(registry, provider, home, root) for provider in providers]
     try:
         stored = routing.read_model_aliases(root)
     except ValueError:
@@ -159,7 +159,7 @@ def _run(root: Path, registry: dict, args: argparse.Namespace, home: str) -> int
     for plan in plans:
         lines += _entry_lines(plan.provider, plan.entry, "catalog", plan.unmapped)
     document = routing.model_aliases_document({**stored, **{plan.provider: plan.entry for plan in plans}})
-    relative = f"{routing.aitna_root_name()}/{routing.local_aliases_rel()}"
+    relative = f"{routing.aitna_root_name(root)}/{routing.local_aliases_rel()}"
     changed = routing.write_artifacts(root, {relative: document}, write=args.refresh and not args.dry_run)
     if args.refresh and not args.dry_run:
         verdict = "wrote" if changed else "unchanged"
@@ -176,6 +176,9 @@ def main(argv: list[str] | None = None) -> int:
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
         print(root_notice, file=sys.stderr)
+        if args.refresh and not args.dry_run:
+            # The resolved aliases are a file of the local layer, and with no project root there is none (ADR 0022 D09).
+            return 2
     home = os.environ.get("HOME") or str(Path.home())
     try:
         registry = routing.load_registry(_standard_tree_root(root), root)

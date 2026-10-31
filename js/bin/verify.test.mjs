@@ -102,7 +102,7 @@ function project(scratch, { pin = VERSION, link = true } = {}) {
   put(root, "_aitna/.akmon.toml", NODE_RECORD);
   put(root, "AGENTS.md", AGENTS);
   put(root, "_aitna/TASKS.md", "# Tasks\n\n- T1 · demo · active · engineer · keep valid\n");
-  put(root, "_aitna/agents/e/README.md", "# e\n\nFollows the akmon role `_aitna/akmon/roles/e.md`.\n");
+  put(root, "_aitna/agents/e/README.md", "# e\n\nFollows the akmon role `_aitna/akmon/roles/review.md`.\n");
   put(root, "_aitna/memory/README.md", "# memory\n- note.md\n");
   put(root, "_aitna/memory/note.md", "fact\n");
   put(root, ".gitignore", "*.env\n!*.env.example\n");
@@ -130,7 +130,7 @@ const MOUNTED_CI =
 /**
  * A Node project under `scratch` attached in a mounted mode (C129) that `verify` finds healthy once
  * synced: the package project's dev layer, a mounted record, AGENTS.md and CI, a `package.json` with
- * no akmon pin, and `<AITNA_ROOT>/akmon` linked to this tree (`mount: null` leaves the link out).
+ * no akmon pin, and `<dev root>/akmon` linked to this tree (`mount: null` leaves the link out).
  * @param {string} scratch
  * @param {{record?: string, mount?: string | null}} [options]
  * @returns {string} the project root
@@ -558,7 +558,7 @@ test("check.ruff-without-python: init's ruff.toml in a Node project with no Pyth
         "ruff.toml",
         "ruff.toml is the one akmon init writes for ruff, but this project has package.json and no Python " +
           "files (pyproject.toml, setup.py, setup.cfg, requirements*.txt, Pipfile, uv.lock, poetry.lock, or a " +
-          "*.py file outside <AITNA_ROOT> and node_modules (git-tracked in a work tree)): ruff has nothing to lint here",
+          "*.py file outside <dev root> and node_modules (git-tracked in a work tree)): ruff has nothing to lint here",
         "Remove ruff.toml, and name the project's own checks under [check] in _aitna/.akmon.toml.",
       ],
     ]);
@@ -618,6 +618,7 @@ test("node_wired_hook_scripts: the entry points and every module they import, an
     "delegation-log",
     "delegation-nudge",
     "gate-audit",
+    "learning-reminder",
   ];
   for (const entry of entries) {
     assert.ok(listed.includes(`${entry}.mjs`), entry);
@@ -705,7 +706,7 @@ async function refusal(record, found) {
       stdout: "",
       stderr:
         'akmon verify: the JavaScript implementation serves Node projects only (ecosystem = "node" in ' +
-        `<AITNA_ROOT>/.akmon.toml), but this project has ${found}; run the Python implementation of akmon for it.\n`,
+        `<dev root>/.akmon.toml), but this project has ${found}; run the Python implementation of akmon for it.\n`,
     });
   });
 }
@@ -789,6 +790,104 @@ test("a synced Node project is healthy: every finding ok, exit 0 even under --st
         assert.ok(!codes.includes("gitignore.akmon-pycache") && !codes.includes("changelog.unreleased"));
         const strict = await run(["--project-root", root, "--strict", "--quiet"]);
         assert.deepEqual(strict, { code: 0, stdout: "", stderr: "" });
+      });
+    });
+  });
+});
+
+/**
+ * Run `body` with `AITNA_ROOT` set to `value`, then restored: the entry point reads it to warn
+ * that it is ignored, and nothing else does.
+ * @template T
+ * @param {string} value
+ * @param {() => Promise<T>} body
+ * @returns {Promise<T>}
+ */
+async function withAitnaRootSet(value, body) {
+  const saved = process.env.AITNA_ROOT;
+  process.env.AITNA_ROOT = value;
+  try {
+    return await body();
+  } finally {
+    if (saved === undefined) {
+      delete process.env.AITNA_ROOT;
+    } else {
+      process.env.AITNA_ROOT = saved;
+    }
+  }
+}
+
+test("environment.aitna-root-ignored: a Verifier warns while it is handed the retired variable, and not otherwise", async () => {
+  await withScratch(async (scratch) => {
+    const root = project(scratch);
+    const empty = posix.join(scratch, "empty-path");
+    fs.mkdirSync(empty);
+    await withPath(empty, async () => {
+      const unset = new Verifier(root);
+      await unset.run();
+      assert.deepEqual(of(unset, "environment.aitna-root-ignored"), []);
+      const set = new Verifier(root, { aitnaRootEnv: "tools/ai" });
+      await set.run();
+      const [warning, ...rest] = of(set, "environment.aitna-root-ignored");
+      assert.deepEqual(rest, []);
+      assert.equal(warning[0], "warn");
+      assert.equal(warning[1], "AITNA_ROOT");
+      assert.equal(
+        warning[2],
+        "the AITNA_ROOT environment variable is set (tools/ai) and akmon no longer reads it: the dev layer is _aitna, " +
+          "as the project root's .aitna-root declares it (an absent file means _aitna)",
+      );
+      assert.match(
+        String(warning[3]),
+        /^Unset AITNA_ROOT; to relocate the dev layer, commit its project-root-relative path/,
+      );
+    });
+  });
+});
+
+test("environment.aitna-root-ignored: main warns while AITNA_ROOT is set, absent when unset, and --strict fails it", async () => {
+  await withScratch(async (scratch) => {
+    const root = project(scratch);
+    syncWrite(root);
+    const empty = posix.join(scratch, "empty-path");
+    fs.mkdirSync(empty);
+    await withPath(empty, async () => {
+      await withoutAitnaRoot(async () => {
+        const clean = await run(["--project-root", root]);
+        assert.equal(clean.code, 0, clean.stdout);
+        assert.ok(!clean.stdout.includes("environment.aitna-root-ignored"));
+        assert.equal((await run(["--project-root", root, "--strict", "--quiet"])).code, 0);
+      });
+      await withAitnaRootSet("tools/ai", async () => {
+        const warned = await run(["--project-root", root]);
+        assert.equal(warned.code, 0, "a warning fails nothing without --strict");
+        assert.match(
+          warned.stdout,
+          /^WARN environment\.aitna-root-ignored AITNA_ROOT: the AITNA_ROOT environment variable is set \(tools\/ai\)/m,
+        );
+        const strict = await run(["--project-root", root, "--strict", "--quiet"]);
+        assert.equal(strict.code, 1, "the warning is not strict-exempt");
+        assert.match(strict.stdout, /^WARN environment\.aitna-root-ignored /m);
+      });
+    });
+  });
+});
+
+test("a role-named charter directory warns and never fails --strict; another warning still does", async () => {
+  await withScratch(async (scratch) => {
+    const root = project(scratch);
+    await withoutAitnaRoot(async () => {
+      syncWrite(root);
+      put(root, "_aitna/agents/engineer/README.md", "# engineer\nsee akmon/roles/engineer.md\n");
+      const empty = posix.join(scratch, "empty-path");
+      fs.mkdirSync(empty);
+      await withPath(empty, async () => {
+        assert.equal((await run(["--project-root", root, "--quiet"])).code, 0);
+        const strict = await run(["--project-root", root, "--quiet", "--strict"]);
+        assert.equal(strict.code, 0, strict.stdout);
+        assert.match(strict.stdout, /^WARN charters\.legacy-role-dir _aitna\/agents\/engineer: /m);
+        put(root, ".gitignore", "node_modules\n");
+        assert.equal((await run(["--project-root", root, "--quiet", "--strict"])).code, 1);
       });
     });
   });
@@ -1289,6 +1388,83 @@ test("charters: agent directories in code point order, a link to a directory cou
         "ok charters.role-link _aitna/agents/e/README.md links a akmon role",
       ],
     );
+  });
+});
+
+test("charters: a role-named directory still verifies, with the legacy warning; release and development do not warn", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    put(root, "_aitna/agents/development/README.md", "# development\nsee akmon/roles/review.md\n");
+    put(root, "_aitna/agents/engineer/README.md", "# engineer\nsee akmon/roles/engineer.md\n");
+    put(root, "_aitna/agents/review/notes.md", "n");
+    put(root, "_aitna/agents/release/README.md", "# release\nsee akmon/agents/release.md\n");
+    put(root, "_aitna/agents/learn/README.md", "# learn\nsee akmon/agents/learning.md\n");
+    put(root, "_aitna/agents/learning/README.md", "# learning\nsee akmon/agents/learning.md\n");
+    const findings = recorded(root, (v) => v.checkAgentCharters());
+    // a learn/ directory is legacy and names the learning agent as its successor
+    const learn = new Verifier(root);
+    learn.checkAgentCharters();
+    const legacy = learn.findings.find((finding) => finding.target === "_aitna/agents/learn");
+    assert.match(
+      String(legacy?.fix),
+      /^Move its content into _aitna\/agents\/learning\/README\.md; a charter is one directory/,
+    );
+    assert.deepEqual(findings, [
+      "ok charters.role-link _aitna/agents/development/README.md links a akmon role",
+      "ok charters.role-link _aitna/agents/e/README.md links a akmon role", // the helper's own charter
+      "warn charters.legacy-role-dir _aitna/agents/engineer is named for a role, not an agent",
+      "ok charters.role-link _aitna/agents/engineer/README.md links a akmon role",
+      "warn charters.legacy-role-dir _aitna/agents/learn is named for a role, not an agent",
+      "ok charters.role-link _aitna/agents/learn/README.md links a akmon role",
+      "ok charters.role-link _aitna/agents/learning/README.md links a akmon role",
+      "ok charters.role-link _aitna/agents/release/README.md links a akmon role",
+      "warn charters.legacy-role-dir _aitna/agents/review is named for a role, not an agent",
+      "error charters.readme _aitna/agents/review/README.md is missing",
+    ]);
+  });
+});
+
+test("charters: a link to a role or agent definition the standard tree lacks warns once per target", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    put(
+      root,
+      "_aitna/agents/development/README.md",
+      "Roles `_aitna/akmon/roles/review.md`, `_aitna/akmon/roles/nope.md` and `_aitna/akmon/roles/nope.md` again; agent [x](../akmon/agents/ghost.md).\n",
+    );
+    const verifier = new Verifier(root);
+    verifier.checkAgentCharters();
+    const missing = verifier.findings.filter((finding) => finding.code === "charters.role-link-target");
+    assert.deepEqual(
+      missing.map((finding) => [finding.severity, finding.target, finding.message]),
+      [
+        [
+          "warn",
+          "_aitna/agents/development/README.md",
+          "_aitna/agents/development/README.md links _aitna/akmon/roles/nope.md, which is not in the standard tree",
+        ],
+        [
+          "warn",
+          "_aitna/agents/development/README.md",
+          "_aitna/agents/development/README.md links _aitna/akmon/agents/ghost.md, which is not in the standard tree",
+        ],
+      ],
+    );
+    assert.equal(missing[0].fix, "Link a role definition that exists under _aitna/akmon/roles/.");
+    assert.deepEqual(
+      verifier.findings.filter((finding) => finding.severity === "ok" && finding.target.includes("development")).length,
+      1,
+    );
+  });
+});
+
+test("charters: link targets are not resolved for a legacy role directory", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    put(root, "_aitna/agents/learn/README.md", "See `_aitna/akmon/roles/learn.md`.\n");
+    const verifier = new Verifier(root);
+    verifier.checkAgentCharters();
+    assert.equal(verifier.findings.filter((finding) => finding.code === "charters.role-link-target").length, 0);
   });
 });
 

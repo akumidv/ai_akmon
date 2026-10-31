@@ -36,9 +36,9 @@ not reopened merely because this mission is stated more prominently.
 
 ---
 
-## 1. Three orthogonal axes (do not conflate)
+## 1. Four orthogonal axes (do not conflate)
 
-The model stands on **three independent axes**. Conflating them is the usual source of
+The model stands on **four independent axes**. Conflating them is the usual source of
 confusion ("is a layer an agent?" — no).
 
 | Axis | Answers | Values (types) |
@@ -46,20 +46,26 @@ confusion ("is a layer an agent?" — no).
 | **Layer** | *where* an artifact lives + *whom it serves* (its consumer) | SHARED / LOCAL / USAGE |
 | **Role** | *who performs* the work + by which pipeline | architect / engineer / … |
 | **Archetype** | *what* the project exposes outward | package / service / mcp / frontend / job / platform / custom |
+| **Actor** | *who drives* a run | developer / autonomous / guided |
 
 Each axis is a **type dimension** — its values are kinds, not concrete things. SHARED is
 a kind of layer; `package` is a kind of project; `engineer` is a kind of **role**.
 
+The **Actor** axis is who drives a run — `developer`, `autonomous` or `guided` — and it is fixed
+for that run ([ADR 0025](../docs/adr/0025-actors-and-action-repertoire.md)/D01; the values in
+[ADR 0027](../docs/adr/0027-names-of-agents-actors-roles-and-delegates.md)/D02). It is the only meaning of *actor* in this model.
+
 The Layer and Role axes both mention people but ask different questions: **Layer** is
 about *whom an artifact serves* (its consumer); **Role** is about *who produces* it (the
-actor).
+agent).
 
-An **agent is not an axis value** — it is a concrete point where the axes meet: a role,
-applied in a project, on a layer. So `engineer` (role) × LOCAL (layer) × `package`
-(project type) = *alphavar's engineer agent*. A role is the reusable **definition** (in
-akmon); an agent is its **incarnation** in a project (in `_aitna/agents/`), inheriting
-the role and adding specifics. One role can have several agents (e.g. two `engineer`
-agents for two subsystems).
+An **agent is not an axis value** — it is the unit of responsibility: it works in a role, a mode on
+the Role axis, for a layer, in a project. So `engineer` (role) × LOCAL (layer) × `package` (project
+type) is the realization work of *alphavar's development agent*. A role is the reusable **definition**
+(in akmon) and a mode an agent works in; an agent is defined in a project by its **charter**
+(`_aitna/agents/<agent>/README.md`), which inherits the roles it works in and adds specifics. One agent
+can work in several roles, and a project can have several agents for one role (e.g. two agents in
+`engineer` mode for two subsystems).
 
 ---
 
@@ -117,7 +123,7 @@ OPERATE differs in kind: its risk is not a broken build or a wrong answer but **
 consequences** (lost money, irreversible action), so it needs its own hard runtime
 guardrails, not D#/USAGE rules. OPERATE is **deliberately out of scope for akmon for
 now** and tracked as an open question in [ROADMAP.md](ROADMAP.md) — do not fold a runtime
-actor into USAGE (using a library ≠ operating in a market). When formulated, it becomes a
+agent into USAGE (using a library ≠ operating in a market). When formulated, it becomes a
 third branch of this tree, not a layer under DEVELOP.
 
 **Relative to a subject — the relation is not a global mode.** DEVELOP / USE (USAGE) / OPERATE are
@@ -127,7 +133,7 @@ developing alphavar is **DEVELOP** relative to *alphavar* and **USAGE** relative
 **USAGE** is build/dev-time and reversible (using a library; following akmon); **OPERATE** is
 runtime with real, often irreversible consequences (orders, money). So mounting akmon is USAGE,
 **not** OPERATE: akmon's USAGE relation *is* the consuming project's DEVELOP relation — the same
-activity seen from two subjects. This is why a [release](../roles/release.md) is cut for a chosen
+activity seen from two subjects. This is why a [release](../agents/release.md) is cut for a chosen
 **subject** (the project's package, or akmon). Locked in
 [ADR 0001](../docs/adr/0001-release-and-roles-model.md) §6.
 
@@ -135,16 +141,16 @@ activity seen from two subjects. This is why a [release](../roles/release.md) is
 
 ## 3. Axis "Role" — role (here) vs agent (in the project)
 
-A **role** is a *definition*: **role = pipeline + requirements + guardrails**. The Role
-axis is what we classify by; its values (`architect`, `engineer`) are roles. An **agent**
-is a role *applied in a project* — its incarnation, not an axis value. One role may have
-several agents in a project (e.g. under `engineer`: a backend agent and a data-pipeline
-agent). So we split definition from incarnation:
+A **role** is a *definition*: **role = pipeline + requirements + guardrails**, and a *mode* an agent
+works in. The Role axis is what we classify by; its values (`architect`, `engineer`) are roles. An
+**agent** is the unit of responsibility: it has a repertoire, state and skills, and works in one or
+more roles. It is not an axis value. One role may be worked in by several agents in a project (e.g.
+under `engineer`: a backend agent and a data-pipeline agent). So we split definition from responsibility:
 
-- **Role** — the *definition* (pipeline, requirements, guardrails). Cross-project →
+- **Role** — the *definition* (pipeline, requirements, guardrails) and the mode. Cross-project →
   lives here in [`roles/`](../roles/). This is "the approaches and requirements for roles".
-- **Agent** — the *incarnation in a project*: inherits a role from akmon and adds
-  project specifics. Lives in the project at `_aitna/agents/`.
+- **Agent** — the unit of responsibility in a project: inherits roles from akmon and adds
+  project specifics. Its **charter** is `_aitna/agents/<agent>/README.md`, one directory per agent.
 
 The current [DEVELOP triad](../MODEL.md#3-role-vs-agent--the-develop-triad)
 separates review (analysis), architect (synthesis), and engineer (realization), with
@@ -288,8 +294,8 @@ _aitna/
 │   ├── skills/  tools/         #   cross-project skills (SKILL.md) + executable tools
 │   └── bin/                    #   stdlib CLIs: sync.py (pointers), verify.py (validator)
 │
-├── agents/                     # CONCRETE AGENTS of this project (inherit roles)
-│   ├── architect/  engineer/   #   each: README.md (charter) + pipeline.md
+├── agents/                     # CONCRETE AGENTS of this project (each defined by a charter)
+│   └── <agent>/                #   one directory per agent: README.md (its charter)
 ├── skills/  tools/  memory/    # LOCAL skills/tools + SHARED project memory (in git)
 └── TASKS.md                    # single backlog / TODO cycle / learn-loop sink
 ```
@@ -297,10 +303,10 @@ _aitna/
 The project root also holds `AGENTS.md` (single source for agents; `CLAUDE.md` is a thin
 pointer) and, for a package/service, the USAGE layer (`skills/`, `docs/`).
 
-**Inheritance contract** (agent → role): the agent charter at
-`_aitna/agents/<role>/README.md` links `akmon/roles/<role>.md` as its source of
+**Inheritance contract** (agent → role): the agent's charter at
+`_aitna/agents/<agent>/README.md` links the `akmon/roles/<role>.md` it works in as its source of
 requirements and pipeline, and adds only project specifics. The role changes in akmon
-(for all projects); the agent changes locally.
+(for all projects); the agent's charter changes locally.
 
 ---
 

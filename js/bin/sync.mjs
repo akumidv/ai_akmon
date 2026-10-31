@@ -19,7 +19,7 @@
  *
  * What is Node's own (ADR 0020 D05):
  * - the hook command is `node "<anchor>/<hooks dir>/<script>.mjs"`, the hooks directory being
- *   `node_modules/akmon/js/hooks` in package mode and `<AITNA_ROOT>/akmon/js/hooks` in a mounted one
+ *   `node_modules/akmon/js/hooks` in package mode and `<dev root>/akmon/js/hooks` in a mounted one
  *   (`nodeHooksDir`); the spelling is data (`node_hook_command`, `node_codex_hook_command`, one
  *   `{{hooks_dir}}` placeholder each);
  * - the standard tree of a Node package project is `<root>/node_modules/akmon`, spelled **unresolved**
@@ -136,7 +136,7 @@ const _NODE_ECOSYSTEM = "node";
 // --------------------------------------------------------------------------------------
 
 /**
- * The recorded `mount` value from `<AITNA_ROOT>/.akmon.toml` (ADR 0009 §3): `"submodule"`,
+ * The recorded `mount` value from `<dev root>/.akmon.toml` (ADR 0009 §3): `"submodule"`,
  * `"vendored"`, `"subtree"` or `"package"`. An absent record or key defaults to `"submodule"` — the
  * traditional mounted-tree default, kept for backward compatibility with every project that
  * predates this field.
@@ -149,7 +149,7 @@ export function readMountMode(projectRoot) {
 
 /**
  * Whether `projectRoot` is governed by mount mode `package` (ADR 0009 §4). Driven solely by the
- * recorded `mount` field, never by whether `<AITNA_ROOT>/akmon` happens to exist on disk.
+ * recorded `mount` field, never by whether `<dev root>/akmon` happens to exist on disk.
  * @param {string} projectRoot
  * @returns {boolean}
  */
@@ -223,7 +223,7 @@ function _sameDirectory(path, other) {
 
 /**
  * The standard-tree content this script operates against for `projectRoot`. A mounted record reads
- * the mount at `<AITNA_ROOT>/akmon` when it exists (`bin/sync.py::standard_tree_root`, ADR 0020 D02 as
+ * the mount at `<dev root>/akmon` when it exists (`bin/sync.py::standard_tree_root`, ADR 0020 D02 as
  * amended by C129). Package mode reads `<root>/node_modules/akmon` — spelled unresolved — when that
  * path is the running tree, the running tree's realpath otherwise: the installed package *is* the
  * pin, so a lingering mount directory from a prior mode does not shadow it.
@@ -241,13 +241,13 @@ export function standardTreeRoot(projectRoot) {
 
 /**
  * The directory the Node hook wiring runs its scripts from, relative to the project root:
- * `node_modules/akmon/js/hooks` in package mode (ADR 0020 D05), `<AITNA_ROOT>/akmon/js/hooks` in a
+ * `node_modules/akmon/js/hooks` in package mode (ADR 0020 D05), `<dev root>/akmon/js/hooks` in a
  * mounted one (the C129 amendment of D02). The `{{hooks_dir}}` of both hook-command templates.
  * @param {string} projectRoot
  * @returns {string}
  */
 export function nodeHooksDir(projectRoot) {
-  return isPackageMode(projectRoot) ? "node_modules/akmon/js/hooks" : `${aitnaRootName()}/akmon/js/hooks`;
+  return isPackageMode(projectRoot) ? "node_modules/akmon/js/hooks" : `${aitnaRootName(projectRoot)}/akmon/js/hooks`;
 }
 
 /**
@@ -592,26 +592,26 @@ export class Result {
 }
 
 /** The generated `CLAUDE.md` body (`sync.json`). */
-function _claudeMd(/** @type {SyncData} */ data) {
+function _claudeMd(/** @type {SyncData} */ data, /** @type {string} */ root) {
   return fill(data.sync.vendor_pointers.claude_md, {
-    banner: generatedBanner(data.materialization),
-    aitna: aitnaRootName(),
+    banner: generatedBanner(data.materialization, root),
+    aitna: aitnaRootName(root),
   });
 }
 
 /** The generated Copilot instructions body (`sync.json`). */
-function _copilotMd(/** @type {SyncData} */ data) {
-  return fill(data.sync.vendor_pointers.copilot_md, { banner: generatedBanner(data.materialization) });
+function _copilotMd(/** @type {SyncData} */ data, /** @type {string} */ root) {
+  return fill(data.sync.vendor_pointers.copilot_md, { banner: generatedBanner(data.materialization, root) });
 }
 
 /** The generated `GEMINI.md` body (`sync.json`). */
-function _geminiMd(/** @type {SyncData} */ data) {
-  return fill(data.sync.vendor_pointers.gemini_md, { banner: generatedBanner(data.materialization) });
+function _geminiMd(/** @type {SyncData} */ data, /** @type {string} */ root) {
+  return fill(data.sync.vendor_pointers.gemini_md, { banner: generatedBanner(data.materialization, root) });
 }
 
 /** The generated Codex `README.md` body (`sync.json`). */
-function _codexReadme(/** @type {SyncData} */ data) {
-  return fill(data.sync.vendor_pointers.codex_readme, { banner: generatedBanner(data.materialization) });
+function _codexReadme(/** @type {SyncData} */ data, /** @type {string} */ root) {
+  return fill(data.sync.vendor_pointers.codex_readme, { banner: generatedBanner(data.materialization, root) });
 }
 
 /**
@@ -621,10 +621,11 @@ function _codexReadme(/** @type {SyncData} */ data) {
  * leaving them orphaned beside the new ones (ADR 0009 §4). The closing quote of the launcher marker
  * is part of it: a bare `akmon hook ` would also match a project's own hook that merely mentions it.
  * @param {SyncData} data
+ * @param {string} root
  * @returns {string[]}
  */
-function _akmonHookMarkers(data) {
-  const aitna = aitnaRootName();
+function _akmonHookMarkers(data, root) {
+  const aitna = aitnaRootName(root);
   return data.sync.akmon_hook_markers.map((shape) => fill(shape, { aitna, cli: data.sync.cli_name }));
 }
 
@@ -742,11 +743,12 @@ function _hookCommands(entry) {
  * Whether every command of a settings entry is one akmon wrote (an entry with no command is not).
  * @param {SyncData} data
  * @param {Json} entry
+ * @param {string} root
  * @returns {boolean}
  */
-export function isAkmonEntry(data, entry) {
+export function isAkmonEntry(data, entry, root) {
   const commands = _hookCommands(entry);
-  const markers = _akmonHookMarkers(data);
+  const markers = _akmonHookMarkers(data, root);
   return commands.size > 0 && [...commands].every((command) => markers.some((marker) => command.includes(marker)));
 }
 
@@ -758,13 +760,14 @@ export function isAkmonEntry(data, entry) {
  * @param {SyncData} data
  * @param {Json} existing
  * @param {Json[]} wanted
+ * @param {string} root
  * @returns {Json[]}
  */
-export function mergeHookEntries(data, existing, wanted) {
+export function mergeHookEntries(data, existing, wanted, root) {
   if (!Array.isArray(existing)) {
     return [...wanted];
   }
-  const merged = existing.filter((entry) => !isAkmonEntry(data, entry));
+  const merged = existing.filter((entry) => !isAkmonEntry(data, entry, root));
   /** @type {Set<string>} */
   const existingCommands = new Set();
   for (const entry of merged) {
@@ -1180,7 +1183,7 @@ export function claudeSettings(data, root) {
     throw pyError("ValueError", `${path}: expected hooks to be a JSON object`);
   }
   for (const [eventName, wantedEntries] of claudeHooks(data, root).get("hooks")) {
-    hooks.set(eventName, mergeHookEntries(data, hooks.get(eventName), wantedEntries));
+    hooks.set(eventName, mergeHookEntries(data, hooks.get(eventName), wantedEntries, root));
   }
   return new PlannedFile(path, wiringForm(settings));
 }
@@ -1312,7 +1315,7 @@ export function skillStubs(data, root, source) {
       pointer = `Source skill: \`$(${data.sync.cli_name} path)/skills/${name}/SKILL.md\``;
     }
     const body = `${pointer}\n\nRead and follow the source SKILL.md. Do not duplicate its contents here.\n`;
-    const banner = generatedBanner(data.materialization);
+    const banner = generatedBanner(data.materialization, root);
     const content =
       frontmatter === null
         ? fill(shapes.no_frontmatter, { name, banner, body })
@@ -1357,7 +1360,8 @@ export function movedImports(data) {
  * @returns {string}
  */
 export function importPrefix(root) {
-  return isPackageMode(root) ? `@${aitnaRootName()}/.akmon/` : `@${aitnaRootName()}/akmon/`;
+  const name = aitnaRootName(root);
+  return isPackageMode(root) ? `@${name}/.akmon/` : `@${name}/akmon/`;
 }
 
 /**
@@ -1565,7 +1569,7 @@ export function materializedFiles(data, root) {
       (name) =>
         new PlannedFile(
           pyPath(dest, name),
-          materializedText(data.materialization, name, _readText(pyPath(source, name))),
+          materializedText(data.materialization, name, _readText(pyPath(source, name)), root),
         ),
     );
   return [files, errors];
@@ -1717,7 +1721,7 @@ export function plannedFiles(data, root) {
 const _BYTECODE_CACHE_DIR = "__pycache__";
 
 /**
- * `<AITNA_ROOT>/.akmon` — the one directory this tool owns outright.
+ * `<dev root>/.akmon` — the one directory this tool owns outright.
  * @param {string} root
  * @returns {string}
  */
@@ -1782,7 +1786,7 @@ function _walk(directory) {
  *
  * Two kinds of directory, two recognition rules, and the difference is deliberate. Under
  * `.claude/skills/` and `.agents/skills/` the project keeps its **own** skills beside ours, so only a
- * file carrying the generated banner is ours to delete. Under `<AITNA_ROOT>/.akmon/` nobody writes
+ * file carrying the generated banner is ours to delete. Under `<dev root>/.akmon/` nobody writes
  * but us, so everything unplanned is stale **whether or not it carries a banner** — which is
  * load-bearing rather than tidy: the materialized routing registry never carried one (it has to stay
  * parseable JSON), so a banner-only sweep would leave exactly that file behind forever.
@@ -1861,7 +1865,7 @@ export function sweepMaterializationBytecode(root) {
 }
 
 /**
- * How far up to prune emptied directories after deleting `path`: `<AITNA_ROOT>` for the
+ * How far up to prune emptied directories after deleting `path`: `<dev root>` for the
  * materialization, so `.akmon` itself disappears once its last file is gone; the skills directory the
  * stub sat in otherwise.
  * @param {SyncData} data
@@ -2041,7 +2045,7 @@ export function unsupportedRecord(data, root) {
 export function unsupportedFound(data, root) {
   const found = data.sync.unsupported_found;
   if (!isFile(pyPath(aitnaRoot(root), ".akmon.toml"))) {
-    return fill(found.no_record, { record: `${aitnaRootName()}/.akmon.toml` });
+    return fill(found.no_record, { record: `${aitnaRootName(root)}/.akmon.toml` });
   }
   if (recordedEcosystem(root) !== _NODE_ECOSYSTEM) {
     return fill(found.ecosystem, { value: recordedEcosystem(root) });

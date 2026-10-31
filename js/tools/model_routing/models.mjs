@@ -29,7 +29,7 @@ import { parseArgs } from "node:util";
 
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { fill, read } from "../../common/jsondata.mjs";
-import { aitnaRootName, resolveProjectRoot } from "../../common/project_root.mjs";
+import { aitnaRoot, aitnaRootName, resolveProjectRoot } from "../../common/project_root.mjs";
 import { dictGet, isDict, isFile, pyError, pyPath, readText } from "../../common/pyvalue.mjs";
 import { recordsPackageMode } from "../../common/record.mjs";
 import {
@@ -111,7 +111,7 @@ options:
  * @returns {string}
  */
 function _standardTreeRoot(projectRoot) {
-  const mounted = pyPath(projectRoot, aitnaRootName(), "akmon");
+  const mounted = pyPath(aitnaRoot(projectRoot), "akmon");
   if (!recordsPackageMode(projectRoot) && fs.existsSync(mounted) && fs.statSync(mounted).isDirectory()) {
     return mounted;
   }
@@ -123,11 +123,12 @@ function _standardTreeRoot(projectRoot) {
  * @param {Context} ctx
  * @param {Json} registry
  * @param {string} provider
+ * @param {string} root
  * @returns {[string, string]}
  */
-function _catalogDeclaration(ctx, registry, provider) {
+function _catalogDeclaration(ctx, registry, provider, root) {
   const texts = ctx.texts.errors;
-  const declared = dictGet(providerRow(ctx.agents, registry, provider), "catalog");
+  const declared = dictGet(providerRow(ctx.agents, registry, provider, root), "catalog");
   if (declared === null) {
     throw pyError("ValueError", fill(texts.no_catalog, { provider }));
   }
@@ -145,11 +146,12 @@ function _catalogDeclaration(ctx, registry, provider) {
  * @param {Json} registry
  * @param {string} provider
  * @param {string} home
+ * @param {string} root
  * @returns {Plan}
  */
-function _plan(ctx, registry, provider, home) {
+function _plan(ctx, registry, provider, home, root) {
   const texts = ctx.texts.errors;
-  const [file, format] = _catalogDeclaration(ctx, registry, provider);
+  const [file, format] = _catalogDeclaration(ctx, registry, provider, root);
   const values = { file, provider };
   const path = expandHome(file, home);
   if (!isFile(path)) {
@@ -170,7 +172,7 @@ function _plan(ctx, registry, provider, home) {
     }
     throw pyError("ValueError", fill(texts.invalid, { ...values, reason: exc.message }));
   }
-  const listed = dictGet(providerRow(ctx.agents, registry, provider), "models");
+  const listed = dictGet(providerRow(ctx.agents, registry, provider, root), "models");
   // An entry may carry an @effort (ADR 0024/D17); the alias is the model before it, listed once.
   const bare = (Array.isArray(listed) ? listed : []).map((entry) => splitModelEffort(String(entry))[0]);
   const models = [...new Set(bare.filter((model) => model !== null))];
@@ -310,7 +312,7 @@ function _stored(ctx, root, refresh) {
  */
 function _run(ctx, root, registry, options, home) {
   const names = _selected(ctx, registry, options.provider);
-  const plans = names.map((provider) => _plan(ctx, registry, provider, home));
+  const plans = names.map((provider) => _plan(ctx, registry, provider, home, root));
   const stored = _stored(ctx, root, options.refresh);
   /** @type {string[]} */
   const lines = options.refresh ? [] : _storedLines(ctx, stored, names);
@@ -322,7 +324,7 @@ function _run(ctx, root, registry, options, home) {
   for (const plan of plans) {
     merged[plan.provider] = plan.entry;
   }
-  const relative = `${aitnaRootName()}/${localAliasesRel(ctx.agents)}`;
+  const relative = `${aitnaRootName(root)}/${localAliasesRel(ctx.agents)}`;
   const writing = options.refresh && !options.dryRun;
   const changed = writeArtifacts(root, { [relative]: modelAliasesDocument(merged) }, { write: writing }).length > 0;
   const verdict = /** @type {"wrote" | "unchanged" | "would_write" | "would_leave"} */ (
@@ -374,6 +376,10 @@ export function main(argv = process.argv.slice(2)) {
   const { root, notice } = resolveProjectRoot(options.projectRoot);
   if (notice) {
     process.stderr.write(`${notice}\n`);
+    if (options.refresh && !options.dryRun) {
+      // The resolved aliases are a file of the local layer, and with no project root there is none (ADR 0022 D09).
+      return 2;
+    }
   }
   try {
     const registry = loadRegistry(ctx.agents, _standardTreeRoot(root), root);

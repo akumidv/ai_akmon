@@ -23,4 +23,4 @@ stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed
 [expected.stdout_json.hookSpecificOutput]
 hookEventName = "PreToolUse"
 permissionDecision = "deny"
-permissionDecisionReason = "Commit guardrail: the owner owns commits. push/tag/merge land history — confirm this is explicitly requested. [escalated ask→deny: permission_mode='acceptEdits' is not the interactive default, so 'ask' cannot be trusted to reach the owner (ADR-0006/D02, C31) — re-run from an attended default-mode session if this was genuinely intended.]"
+permissionDecisionReason = "Commit guardrail: the owner owns commits. push/tag/merge land history — confirm this is explicitly requested. [escalated ask→deny: the run is unattended — permission_mode='acceptEdits', CLAUDE_CODE_SESSION_ATTENDED=unset — so 'ask' cannot be trusted to reach the owner (ADR-0025/D06, C31) — re-run from an attended session if this was genuinely intended.]"

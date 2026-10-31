@@ -167,7 +167,7 @@ def changed_files(root: Path) -> list[str]:
                 )
             )
         names += [name for name in result.stdout.decode("utf-8", "replace").split("\0") if name]
-    dev_layer = f"{aitna_root_name()}/"
+    dev_layer = f"{aitna_root_name(root)}/"
     return sorted({name for name in names if not name.startswith(dev_layer) and (root / name).is_file()})
 
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -24,52 +23,7 @@ import routing  # noqa: E402
 import stats  # noqa: E402
 
 from common import jsondata  # noqa: E402
-
-# --------------------------------------------------------------------------------------
-# munged project dir + newest-jsonl selection
-# --------------------------------------------------------------------------------------
-
-
-def test_munged_project_dir_replaces_every_slash():
-    root = Path("/home/ai/workspace/alphavar")
-    assert stats.munged_project_dir(root) == "-home-ai-workspace-alphavar"
-
-
-def test_transcripts_dir_under_claude_home(tmp_path):
-    claude_home = tmp_path / "claude-home"
-    root = tmp_path / "project"
-    directory = stats.transcripts_dir(root, claude_home=claude_home)
-    assert directory == claude_home / "projects" / stats.munged_project_dir(root)
-
-
-def test_newest_jsonl_picks_most_recently_modified(tmp_path):
-    directory = tmp_path / "sessions"
-    directory.mkdir()
-    older = directory / "aaa.jsonl"
-    newer = directory / "zzz.jsonl"
-    older.write_text("{}\n", encoding="utf-8")
-    time.sleep(0.01)
-    newer.write_text("{}\n", encoding="utf-8")
-    # Touch the older file's mtime backwards to remove any doubt about write order.
-    import os
-
-    now = time.time()
-    os.utime(older, (now - 100, now - 100))
-    os.utime(newer, (now, now))
-
-    assert stats.newest_jsonl(directory) == newer
-
-
-def test_newest_jsonl_missing_directory_returns_none(tmp_path):
-    assert stats.newest_jsonl(tmp_path / "nope") is None
-
-
-def test_newest_jsonl_ignores_non_jsonl_files(tmp_path):
-    directory = tmp_path / "sessions"
-    directory.mkdir()
-    (directory / "notes.txt").write_text("hi", encoding="utf-8")
-    assert stats.newest_jsonl(directory) is None
-
+from common.transcripts import munged_project_dir  # noqa: E402
 
 # --------------------------------------------------------------------------------------
 # delegation log
@@ -396,7 +350,7 @@ def test_main_end_to_end_writes_report_and_prints_digest(tmp_path, capsys, monke
 
     fake_home = tmp_path / "home"
     claude_dir = fake_home / ".claude"
-    munged = stats.munged_project_dir(root)
+    munged = munged_project_dir(root)
     session_dir = claude_dir / "projects" / munged
     session_dir.mkdir(parents=True)
     session_path = session_dir / "abc123.jsonl"

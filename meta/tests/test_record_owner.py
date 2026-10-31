@@ -1,4 +1,4 @@
-"""C83: ``common/record.py`` stays the one reader of ``<AITNA_ROOT>/.akmon.toml``.
+"""C83: ``common/record.py`` stays the one reader of ``<dev root>/.akmon.toml``.
 
 Before a shared reader existed, four modules beside ``bin/sync.py`` grew narrow readers of their
 own, each justified in place; C69 gave the record one home and C75 folded them into it (D2-39).

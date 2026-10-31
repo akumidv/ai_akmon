@@ -10,7 +10,7 @@ covers = ["hook:gate-audit"]
 [fixture]
 attach = "native"
 tmp_files = { "akmon-gate-audit-review-79e85c9688379ba3-a6672ed065e9bf4969d9" = "" }
-files = { "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 agent: review — conformance"}]}}
+files = { "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 role: review — conformance"}]}}
 """}
 
 [run]

@@ -16,7 +16,7 @@ consumer runs the snapshot's own CLI, which resolves the snapshot as its embedde
 An *attach* says how the consumer is connected to the implementation under test
 (ADR 0020 D02): ``native`` is the implementation's own package mode (Python: a
 ``pyproject.toml`` dev pin and the ``.venv/bin/akmon`` launcher; Node: ``package.json`` and
-``node_modules/akmon``), ``mount`` is a mounted mode — ``<AITNA_ROOT>/akmon`` links the tree, and
+``node_modules/akmon``), ``mount`` is a mounted mode — ``<dev root>/akmon`` links the tree, and
 the Node implementation runs from the mount (the C129 amendment of ADR 0020 D02) — and ``none``
 connects nothing. The files of an attach live in ``fixtures/attach/<layer>/`` and are laid over the
 base fixture before the scenario's own files: ``NATIVE_LAYERS`` for ``native``, ``MOUNT_LAYERS`` for
@@ -287,6 +287,8 @@ SNAPSHOT_FILES = (
     "src/akmon/_init.py",
     "src/akmon/_tree.py",
     "src/akmon/_update.py",
+    "src/akmon/_trust.py",
+    "src/akmon/_learn.py",
     "src/akmon/init.json",
     "src/akmon/update.json",
     "src/akmon/cli.json",
@@ -302,8 +304,11 @@ SNAPSHOT_FILES = (
     "roles/review.md",
     "roles/architect.md",
     "roles/engineer.md",
-    "roles/learn.md",
-    "roles/release.md",
+    "agents/README.md",
+    "agents/agents.json",
+    "agents/development.md",
+    "agents/learning.md",
+    "agents/release.md",
     "guardrails/_common.md",
     "pipelines/pre-commit.md",
     "pipelines/code-flow.md",
@@ -322,6 +327,10 @@ SNAPSHOT_FILES = (
     "common/codex_hooks.py",
     "common/findings.json",
     "common/findings.py",
+    "common/grant_trust.json",
+    "common/grant_trust.py",
+    "common/learning.json",
+    "common/learning.py",
     "common/jsondata.py",
     "common/markers.json",
     "common/markers.py",
@@ -334,6 +343,7 @@ SNAPSHOT_FILES = (
     "common/report_path.py",
     "common/runtime.json",
     "common/runtime.py",
+    "common/transcripts.py",
     "common/versions.py",
     "bin/check.py",
     "bin/sync.py",

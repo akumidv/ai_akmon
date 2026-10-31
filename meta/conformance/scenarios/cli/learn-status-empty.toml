@@ -1,0 +1,16 @@
+# With no record, status says nothing has run or been counted and names the default thresholds.
+id = "cli/learn-status-empty"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:learn"]
+
+[env]
+HOME = "{{tmp}}"
+
+[run]
+argv = ["learn", "status"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "last run: never\ncounting since: no session recorded yet\nsessions since the last run: 0\ndays since the last run (or since counting began): -\nreminder at 10 sessions or 7 days (from <dev root>/.akmon.toml [learning])\nstate: _aitna/local/learning.json\n"

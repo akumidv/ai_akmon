@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import { fill } from "../common/jsondata.mjs";
 import { readSyncData } from "../bin/sync.mjs";
+import { validatedDevRootName } from "../common/project_root.mjs";
 import { switchTag } from "../common/versions.mjs";
 import {
   ciInstall,
@@ -23,6 +24,7 @@ import {
   detectedProfiles,
   detectNodeTools,
   effectiveAitnaRoot,
+  InitError,
   firstAttachEcosystem,
   main,
   mergeGitignore,
@@ -32,14 +34,19 @@ import {
   readInitData,
   shellWord,
   tagForVersion,
-  validatedAitnaRoot,
   withoutEmptyChecks,
   withoutRuffDefault,
+  writeDevRootPointer,
 } from "./_init.mjs";
+
+// The retired AITNA_ROOT makes `verify` warn while it is set (ADR 0022 D09): a shell that exports it must not
+// reach the CLIs this file runs, so only a test that sets it itself sees it.
+delete process.env.AITNA_ROOT;
 
 const TREE = posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const CLI = posix.join(TREE, "js", "akmon", "cli.mjs");
 const manifest = JSON.parse(fs.readFileSync(posix.join(TREE, "package.json"), "utf8"));
+
 const VERSION = manifest.version;
 const data = readInitData();
 
@@ -66,7 +73,7 @@ function project(files = {}, { linked = false } = {}) {
 const PINNED = JSON.stringify({ name: "demo", devDependencies: { akmon: VERSION } });
 
 /**
- * Run `main(args)` with both streams captured and `AITNA_ROOT` unset.
+ * Run `main(args)` with both streams captured.
  * @param {string[]} args
  * @returns {Promise<{status: number, stdout: string, stderr: string}>}
  */
@@ -74,8 +81,6 @@ async function run(args) {
   const out = /** @type {string[]} */ ([]);
   const err = /** @type {string[]} */ ([]);
   const write = { out: process.stdout.write, err: process.stderr.write };
-  const saved = process.env.AITNA_ROOT;
-  delete process.env.AITNA_ROOT;
   process.stdout.write = /** @type {typeof process.stdout.write} */ (
     (/** @type {string} */ text) =>
       (out.push(text), true)
@@ -89,9 +94,6 @@ async function run(args) {
   } finally {
     process.stdout.write = write.out;
     process.stderr.write = write.err;
-    if (saved !== undefined) {
-      process.env.AITNA_ROOT = saved;
-    }
   }
 }
 
@@ -952,28 +954,127 @@ test("end of input at a terminal prompt is not confirmed: nothing is written, ex
   assert.equal(probe.status, 1);
 });
 
-test("--aitna-root and AITNA_ROOT are validated whichever way they arrive", async () => {
+/**
+ * The state of `<root>/.aitna-root`: its text, or `null` when absent.
+ * @param {string} root
+ * @returns {string | null}
+ */
+function pointerState(root) {
+  const pointer = posix.join(root, ".aitna-root");
+  return fs.existsSync(pointer) ? fs.readFileSync(pointer, "utf8") : null;
+}
+
+for (const [before, flag] of /** @type {[string | null, string][]} */ ([
+  [null, "tools/ai"], // absent before: the early write is deleted again
+  ["old/root\n", "tools/ai"], // present before: its text is put back, byte for byte
+  ["tools/ai", "_aitna"], // init removes it for the default root: it is re-created
+])) {
+  test(`declining the prompt leaves the dev-root declaration as it was (${JSON.stringify(before)}, --aitna-root ${flag})`, () => {
+    const root = project({ "package.json": PINNED }, { linked: true });
+    if (before !== null) {
+      fs.writeFileSync(posix.join(root, ".aitna-root"), before);
+    }
+    const script = posix.join(TREE, "js", "akmon", "_init.mjs");
+    // `script` gives the child a terminal; stdin at EOF makes the prompt read end of input
+    const probe = spawnSync(
+      "script",
+      [
+        "-qec",
+        `node -e 'import(${JSON.stringify(script)}).then(m => m.main(["--project-root", ${JSON.stringify(root)}, "--aitna-root", ${JSON.stringify(flag)}])).then(c => process.exit(c))'`,
+        "/dev/null",
+      ],
+      { input: "", encoding: "utf8" },
+    );
+    if (probe.error) {
+      return; // no `script` binary: the terminal path cannot be driven here
+    }
+    assert.match(probe.stdout, /akmon init: aborted/);
+    assert.equal(probe.status, 1);
+    assert.equal(pointerState(root), before);
+    assert.ok(!fs.existsSync(posix.join(root, flag, ".akmon.toml")));
+  });
+}
+
+test("a refusal in the plan leaves the dev-root declaration as it was", async () => {
+  for (const before of [null, "old/root\n"]) {
+    // a Python repository: the Node implementation hands a first attach over, after the early write
+    const root = project({ "package.json": PINNED, "pyproject.toml": "[project]\n" }, { linked: true });
+    if (before !== null) {
+      fs.writeFileSync(posix.join(root, ".aitna-root"), before);
+    }
+    const result = await run(["--mode", "vendored", "--aitna-root", "dev", "--yes", "--project-root", root]);
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.equal(pointerState(root), before);
+  }
+});
+
+test("--aitna-root and `.aitna-root` are validated whichever way they arrive", async () => {
   const root = project({ "package.json": PINNED }, { linked: true });
-  assert.equal(validatedAitnaRoot(" dev/ ", root), "dev");
+  assert.equal(validatedDevRootName(" dev/ ", root), "dev");
   assert.equal(effectiveAitnaRoot(undefined, root), "_aitna");
   assert.equal(effectiveAitnaRoot("  ", root), "_aitna");
-  assert.throws(
-    () => validatedAitnaRoot("/tmp/escaped", root),
-    /--aitna-root must be relative to the project root and stay inside it: '\/tmp\/escaped'/,
-  );
-  assert.throws(
-    () => validatedAitnaRoot("../up", root),
-    /must be relative to the project root and stay inside it: '\.\.\/up'/,
-  );
-  assert.throws(() => validatedAitnaRoot("a/../b", root), /stay inside it/);
-  // a value of only slashes is absolute, as it is for `Path`; the "cannot be empty" branch is unreachable
-  assert.throws(() => validatedAitnaRoot("///", root), /must be relative to the project root/);
-  assert.throws(() => validatedAitnaRoot(".", root), /resolves outside the project root/);
+  assert.throws(() => validatedDevRootName("/tmp/escaped", root), {
+    name: "ValueError",
+    message: "--aitna-root must be relative to the project root and stay inside it: '/tmp/escaped'",
+  });
+  assert.throws(() => validatedDevRootName("../up", root), {
+    name: "ValueError",
+    message: /^--aitna-root must be relative to the project root and stay inside it: '\.\.\/up'/,
+  });
+  assert.throws(() => validatedDevRootName("a/../b", root), /stay inside it/);
+  // a value of only slashes is absolute, as it is for `Path`; a blank one is empty
+  assert.throws(() => validatedDevRootName("///", root), /must be relative to the project root/);
+  assert.throws(() => validatedDevRootName("  ", root), {
+    name: "ValueError",
+    message: "--aitna-root cannot be empty",
+  });
+  assert.throws(() => validatedDevRootName(".", root), /resolves outside the project root/);
   const outside = project();
   fs.symlinkSync(outside, posix.join(root, "leak"));
-  assert.throws(() => validatedAitnaRoot("leak", root), new RegExp(`resolves outside the project root: ${outside}`));
-  assert.equal(validatedAitnaRoot("x", root, "AITNA_ROOT"), "x");
-  assert.throws(() => validatedAitnaRoot("../x", root, "AITNA_ROOT"), /^Error: AITNA_ROOT must be/);
+  assert.throws(() => validatedDevRootName("leak", root), new RegExp(`resolves outside the project root: ${outside}`));
+  assert.equal(validatedDevRootName("x", root, ".aitna-root"), "x");
+  assert.throws(() => validatedDevRootName("../x", root, ".aitna-root"), {
+    name: "ValueError",
+    message: /^\.aitna-root must be/,
+  });
+});
+
+test("effectiveAitnaRoot: the flag wins, else the declaration; a refused declaration is an InitError", () => {
+  const root = project({ "package.json": PINNED });
+  assert.equal(effectiveAitnaRoot(undefined, root), "_aitna");
+  fs.writeFileSync(posix.join(root, ".aitna-root"), "meta/\n");
+  assert.equal(effectiveAitnaRoot(undefined, root), "meta");
+  assert.equal(effectiveAitnaRoot("  ", root), "meta");
+  assert.equal(effectiveAitnaRoot("dev", root), "dev");
+  for (const refused of ["../up\n", "/abs\n", "\n", "a\nb\n"]) {
+    fs.writeFileSync(posix.join(root, ".aitna-root"), refused);
+    assert.throws(
+      () => effectiveAitnaRoot(undefined, root),
+      (error) => {
+        assert.ok(error instanceof InitError, JSON.stringify(refused));
+        assert.match(error.message, /^\.aitna-root /);
+        return true;
+      },
+      JSON.stringify(refused),
+    );
+  }
+  // a flag is validated before the declaration is looked at
+  assert.throws(() => effectiveAitnaRoot("../up", root), InitError);
+});
+
+test("writeDevRootPointer writes the file for a non-default root only, and removes a stale one", () => {
+  const root = project();
+  const pointer = posix.join(root, ".aitna-root");
+  writeDevRootPointer(root, "_aitna");
+  assert.equal(fs.existsSync(pointer), false);
+  writeDevRootPointer(root, "dev");
+  assert.equal(fs.readFileSync(pointer, "utf8"), "dev\n");
+  writeDevRootPointer(root, "dev");
+  assert.equal(fs.readFileSync(pointer, "utf8"), "dev\n");
+  writeDevRootPointer(root, "meta");
+  assert.equal(fs.readFileSync(pointer, "utf8"), "meta\n");
+  writeDevRootPointer(root, "_aitna");
+  assert.equal(fs.existsSync(pointer), false);
 });
 
 // -- the attach --------------------------------------------------------------------------------
@@ -1055,11 +1156,10 @@ test("an attach with a dev exact pin and the package linked completes: exit 0, e
   ]) {
     assert.ok(fs.existsSync(posix.join(root, generated)), generated);
   }
-  assert.ok(text(root, "_aitna/agents/engineer/README.md").includes("`akmon path` prints the standard's root"));
+  assert.ok(text(root, "_aitna/agents/development/README.md").includes("`akmon path` prints the standard's root"));
   assert.ok(text(root, "AGENTS.md").includes("`library` / `javascript`"));
   assert.ok(text(root, "AGENTS.md").includes("hooks run from `node_modules/akmon/js/hooks`"));
   assert.ok(text(root, "AGENTS.md").includes("`npx akmon path` locates the rest"));
-  assert.equal(process.env.AITNA_ROOT, undefined, "the variable is given back");
 });
 
 test("the links of the AGENTS.md block name the standard repository at --ref (--repo changes nothing), else the tag of the installed version", async () => {
@@ -1098,14 +1198,32 @@ test("a hand-written record keeps its fields and a resolved archetype; the ecosy
   assert.ok(after.includes(`akmon_version = "${VERSION}"`) && after.includes(`last_realign = "${VERSION}"`));
 });
 
-test("a dev-layer root other than _aitna is used everywhere and named in the export step", async () => {
+test("a dev-layer root other than _aitna is used everywhere and declared in `.aitna-root`", async () => {
   const root = project({ "package.json": PINNED }, { linked: true });
   const result = await run(["--yes", "--aitna-root", "dev", "--project-root", root]);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.ok(fs.existsSync(posix.join(root, "dev", ".akmon.toml")));
   assert.ok(!fs.existsSync(posix.join(root, "_aitna")));
-  assert.ok(result.stdout.includes("export AITNA_ROOT=dev in every shell and CI job that runs the akmon tooling"));
-  assert.equal(process.env.AITNA_ROOT, undefined);
+  assert.equal(text(root, ".aitna-root"), "dev\n");
+  assert.ok(result.stdout.includes("akmon init: wrote .aitna-root (dev)\n"), result.stdout);
+  assert.ok(!result.stdout.includes("export AITNA_ROOT"), "the environment variable is not a step any more");
+  // a re-run with no flag keeps the declared root, and moving back to the default removes the file
+  const again = await run(["--yes", "--project-root", root]);
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.ok(again.stdout.includes("· dev layer: dev/\n"));
+  assert.ok(!fs.existsSync(posix.join(root, "_aitna")));
+  assert.equal(text(root, ".aitna-root"), "dev\n");
+  const back = await run(["--yes", "--aitna-root", "_aitna", "--project-root", root]);
+  assert.equal(back.status, 0, back.stdout + back.stderr);
+  assert.ok(!fs.existsSync(posix.join(root, ".aitna-root")));
+  assert.ok(fs.existsSync(posix.join(root, "_aitna", ".akmon.toml")));
+});
+
+test("a default attach writes no `.aitna-root`", async () => {
+  const root = project({ "package.json": PINNED }, { linked: true });
+  const result = await run(["--yes", "--project-root", root]);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.existsSync(posix.join(root, ".aitna-root")), false);
 });
 
 // -- AGENTS.md and .gitignore ------------------------------------------------------------------
@@ -1174,9 +1292,11 @@ test("mergeGitignore appends verbatim, collapses blanks, and returns the text it
  * @param {string} input
  */
 function spawnCli(args, input) {
-  const env = { ...process.env };
-  delete env.AITNA_ROOT;
-  const result = spawnSync(process.execPath, [CLI, "init", ...args], { env, input, encoding: "utf8" });
+  const result = spawnSync(process.execPath, [CLI, "init", ...args], {
+    env: { ...process.env },
+    input,
+    encoding: "utf8",
+  });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
@@ -1264,7 +1384,6 @@ function mountedCli(args, cwd = os.tmpdir()) {
     GIT_CONFIG_KEY_0: "protocol.file.allow",
     GIT_CONFIG_VALUE_0: "always",
   };
-  delete env.AITNA_ROOT;
   const result = spawnSync(process.execPath, [CLI, "init", ...args], { env, cwd, encoding: "utf8" });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
@@ -1343,7 +1462,23 @@ test("vendored: the mount carries the standard, the CLI data and package.json; t
   const agents = text(root, "AGENTS.md");
   assert.ok(agents.includes("@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/js.md\n"));
   assert.ok(agents.includes("[`MODEL.md`](_aitna/akmon/MODEL.md)") && agents.includes("SHARED = `_aitna/akmon/`"));
-  assert.ok(text(root, "_aitna/agents/review/README.md").includes("(_aitna/akmon/roles/review.md)"));
+  const charter = text(root, "_aitna/agents/development/README.md");
+  assert.ok(charter.startsWith("# Agent — development\n"));
+  for (const role of ["review", "architect", "engineer"]) {
+    assert.ok(charter.includes(`## ${role}\n`) && charter.includes(`(_aitna/akmon/roles/${role}.md)`), role);
+  }
+  assert.ok(charter.includes("`agents/development.md` in the akmon standard"));
+  for (const [agent, role] of [
+    ["release", "release"],
+    ["learning", "learn"],
+  ]) {
+    const own = text(root, `_aitna/agents/${agent}/README.md`);
+    assert.ok(own.startsWith(`# Agent — ${agent}\n`) && own.includes(`## ${role}\n`), agent);
+    assert.ok(own.includes(`(_aitna/akmon/agents/${agent}.md)`) && !own.includes("roles/"), agent);
+  }
+  for (const legacy of ["review", "architect", "engineer", "learn"]) {
+    assert.ok(!fs.existsSync(posix.join(root, "_aitna/agents", legacy)), `no role-named charter ${legacy}`);
+  }
   const workflow = text(root, ".github/workflows/akmon.yml");
   assert.ok(workflow.includes("submodules: recursive\n      - uses: actions/setup-node@v4\n"));
   assert.ok(workflow.includes("      - run: node _aitna/akmon/js/akmon/cli.mjs sync --check\n"));

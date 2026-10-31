@@ -1,0 +1,19 @@
+id = "cli/trust-status-new"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:trust"]
+
+[fixture]
+files = { "_aitna/grants/one.toml" = "a = 1\n", "_aitna/grants/sub/two.toml" = "b = 2\n" }
+
+[env]
+AKMON_TRUST_DIR = "{{tmp}}/trust"
+HOME = "{{tmp}}"
+
+[run]
+argv = ["trust", "status"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "new      cb78bd8a17f7  _aitna/grants/one.toml\nnew      17dd98c94951  _aitna/grants/sub/two.toml\n"

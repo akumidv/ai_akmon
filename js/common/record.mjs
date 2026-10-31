@@ -1,5 +1,5 @@
 /**
- * The one reader of `<AITNA_ROOT>/.akmon.toml` — the project's integration record.
+ * The one reader of `<dev root>/.akmon.toml` — the project's integration record.
  * The JavaScript twin of `common/record.py` (C103): the lenient reader degrades to the
  * same narrow line parser the Python fallback carries, so the corpus
  * (`meta/conformance/units/record.toml`) pins both twins on one tolerance. Stdlib plus
@@ -12,7 +12,7 @@ import { basename } from "node:path";
 
 import { TomlError, parse } from "../vendor/smol-toml/dist/index.js";
 import { aitnaRoot } from "./project_root.mjs";
-import { decodeUtf8, isFile, pyPath, pySplitlines, pyStrip } from "./pyvalue.mjs";
+import { decodeUtf8, isDict, isFile, pyPath, pySplitlines, pyStrip } from "./pyvalue.mjs";
 import { toml10Refusal } from "./toml10.mjs";
 
 const _PACKAGE_MODE = "package";
@@ -119,7 +119,7 @@ export class RecordError extends Error {
 }
 
 /**
- * Read `<AITNA_ROOT>/.akmon.toml` (the integration record) into a nested object.
+ * Read `<dev root>/.akmon.toml` (the integration record) into a nested object.
  *
  * Lenient on purpose: `{}` when the file is absent or unreadable — a failed read, or bytes
  * that are not UTF-8, never a value guessed at them; a malformed file falls through to the
@@ -166,7 +166,7 @@ export function readAkmonToml(filePath) {
 }
 
 /**
- * Read `<AITNA_ROOT>/.akmon.toml` strictly: `{}` when the file is absent, the parsed
+ * Read `<dev root>/.akmon.toml` strictly: `{}` when the file is absent, the parsed
  * table otherwise, and a {@link RecordError} when it cannot be read, is not valid UTF-8, is
  * BOM-prefixed, holds TOML 1.1.0-only syntax, or does not parse — no lenient fallback here,
  * unlike {@link readAkmonToml}.
@@ -228,6 +228,21 @@ export function readAkmonTomlStrict(filePath) {
 export function recordedMount(projectRoot) {
   const value = readAkmonToml(pyPath(aitnaRoot(projectRoot), ".akmon.toml"))["mount"];
   return typeof value === "string" && value !== "" ? value : null;
+}
+
+/**
+ * The `[name]` table the record holds, or `{}` when the record, the table or its shape is missing.
+ *
+ * Lenient like `readAkmonToml`: a caller that only consults an optional section gets its defaults
+ * from an absent or broken record, never an error.
+ *
+ * @param {string} projectRoot
+ * @param {string} name
+ * @returns {Record<string, any>}
+ */
+export function recordedTable(projectRoot, name) {
+  const table = readAkmonToml(pyPath(aitnaRoot(projectRoot), ".akmon.toml"))[name];
+  return isDict(table) ? /** @type {Record<string, any>} */ (table) : {};
 }
 
 /**

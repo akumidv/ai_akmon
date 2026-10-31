@@ -47,7 +47,7 @@ universal set*. Where an archetype exports a USAGE skill, its **shape** follows 
 | `mcp` | the MCP tool contract (names / IO / errors); how a consumer mounts it; unit + tool-contract tests |
 | `frontend` | UI/state conventions; build/test/lint in pre-commit; client-side secrets boundary |
 | `job` | the orchestration target; inputs/outputs, idempotency, retry/replay; data + secrets boundary |
-| `platform` | the runtime agent layer kept **separate** from `_aitna/`; which consumed USAGE contracts it relies on; agent isolation/safety. *(A runtime platform that hosts OPERATE actors is out of akmon scope.)* |
+| `platform` | the runtime agent layer kept **separate** from `_aitna/`; which consumed USAGE contracts it relies on; agent isolation/safety. *(A runtime platform that hosts OPERATE agents is out of akmon scope.)* |
 | `custom` | scope, toolchain, runtime, risk profile, USAGE placement, mandatory checks |
 
 ## USAGE requirement: the domain-concept → function map (`package`, and any archetype with a domain API)

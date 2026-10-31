@@ -15,7 +15,7 @@ is silent, the Python implementation is the reference, and the resolution become
 | `fixtures/<name>/` | static consumer-project files a scenario's project is copied from (`base`) |
 | `fixtures/attach/<layer>/` | the files a `native` attach lays over the base: `package` (both package modes), `python` (the Python carrier), `node` (C104: the record, with `ecosystem = "node"`, and the `package.json` dev pin); and a node `mount` attach: `node-mount` (C129: the record with `mount = "submodule"` and `ecosystem = "node"`, a `package.json` without an akmon pin, the `AGENTS.md` profile imports and the CI that runs the mount's JavaScript CLI) |
 | `fixtures/tree/` | corpus-owned stand-ins for the standard tree's prose documents (see the snapshot) |
-| `units/<name>.toml` | shared unit tables (inputs + expected answers) for a function whose answer a JS port cannot get for free: either a **stdlib gap** (`shlex`, `fnmatch`, `json.dumps`, float spelling) or a **shared data-driven module** whose answers are values (`runtime`, `check_runner`), or a **module that acts on files and the environment** (`markers`, `materialization`), whose table describes a world — a scratch directory, environment variables — that the probe builds, replays against and removes; `routing` (C104) is both kinds at once and too large for per-family mouths, so its table is **generic**: a row names a public function, its JSON arguments and the world it runs in, and pins the whole answer plus the files the call leaves (the row format is the block comment above `probe_routing` in `probe.py`); the three hook tables (`hook_core`, `claude_adapter`, `codex_adapter`, C104 pass 2) use that same mouth over `hooks/*.py` and `js/hooks/*.mjs` — on the JS side the module's `data` (the lazy bundle of `hook_data.mjs`) is handed over as the first argument of the exports that read a data file or a marker — and add the `{{tree}}` and `{{core:<key>}}` tokens, sequences (`steps_json`), links and a working directory to the world |
+| `units/<name>.toml` | shared unit tables (inputs + expected answers) for a function whose answer a JS port cannot get for free: either a **stdlib gap** (`shlex`, `fnmatch`, `json.dumps`, float spelling) or a **shared data-driven module** whose answers are values (`runtime`, `check_runner`), or a **module that acts on files and the environment** (`markers`, `materialization`), whose table describes a world — a scratch directory, environment variables — that the probe builds, replays against and removes; `routing` (C104) is both kinds at once and too large for per-family mouths, so its table is **generic**: a row names a public function, its JSON arguments and the world it runs in, and pins the whole answer plus the files the call leaves (the row format is the block comment above `probe_routing` in `probe.py`); the three hook tables (`hook_core`, `claude_adapter`, `codex_adapter`, C104 pass 2) use that same mouth over `hooks/*.py` and `js/hooks/*.mjs` — on the JS side the module's `data` (the lazy bundle of `hook_data.mjs`) is handed over as the first argument of the exports that read a data file or a marker — and add the `{{tree}}` and `{{core:<key>}}` tokens, sequences (`steps_json`), links and a working directory to the world; the `project_root` table (ADR 0022 D09) is generic too: where the project root is and what its dev layer is called, with the declaration written as a `.aitna-root` entry of `files` (the `AITNA_ROOT` variable is read nowhere), and `resolve_project_root` answering `[root, notice]` on both sides. Every generic row works in its own scratch directory (its working directory unless `cwd` names a subdirectory of it), never in the repository under test, which declares a dev root of its own |
 | `coverage.toml` | the coverage gate's **exceptions**: ecosystem ownership, exemptions, reviewed dynamic sites |
 | `pairing.toml` | the pairing gate's two lists: `[[exempt]]` — a `.py` whose port is outstanding, with reason and owning task — and `[[stub]]` — a `js/` counterpart that only announces it |
 | `normalize.py` | normalization v2 — the other half of the spec (tokens and rules) |
@@ -48,11 +48,11 @@ what it is spec for and how its consumer is connected:
   (ADR 0020 D05). The node project is synced by the JS `sync` itself (C105), so the hooks and the
   CLI commands under test read a project the implementation wrote, as a consumer's does; its
   record names `ecosystem = "node"`.
-- `attach = "mount"` — `<AITNA_ROOT>/akmon` links the snapshot, in either ecosystem (C129), so a
+- `attach = "mount"` — `<dev root>/akmon` links the snapshot, in either ecosystem (C129), so a
   mounted scenario may be `shared`, `python` or `node`. Python: the base fixture is a
   Python-mounted consumer already, and hooks run as `python3 <tree>/hooks/<name>.py`. Node: the
   `node-mount` layer is laid over the base, the CLI runs from the mount as
-  `node <AITNA_ROOT>/akmon/js/akmon/cli.mjs` and hooks as `node <AITNA_ROOT>/akmon/js/hooks/<name>.mjs`
+  `node <dev root>/akmon/js/akmon/cli.mjs` and hooks as `node <dev root>/akmon/js/hooks/<name>.mjs`
   (the link read unresolved, as the consumer's wiring names it).
 - `attach = "none"` — nothing connected (usage errors, `init` onto a bare project).
 
@@ -86,7 +86,7 @@ tree_remove = ["rel/path"]          # snapshot paths deleted from that scenario-
 tags = ["v1.1.0"]                   # git tags on the fixture's baseline commit (release checks)
 
 [env]                     # environment overrides for the process under test ({{tmp}} names the run tempdir: HOME = "{{tmp}}")
-AITNA_ROOT = "_aitna"
+AKMON_TRUST_DIR = "{{tmp}}/trust"
 
 [run]
 script = "role-on-code"   # hook: the hook name (python: hooks/<script>.py | node: js/hooks/<script>.mjs)

@@ -1,6 +1,6 @@
 # Pipeline: memory-distill
 
-The continuous cycle the [learn](../roles/learn.md) role follows. Steps **1–2** of the
+The continuous cycle the [learning](../agents/learning.md) agent follows (role `learn`). Steps **1–2** of the
 learn loop:
 turn raw insights into shared memory, and recurring memory into reusable local assets.
 This runs **continuously**, as work happens — not on a schedule (that is
@@ -31,7 +31,7 @@ This runs **continuously**, as work happens — not on a schedule (that is
    reusable:
    - a repeated procedure → a **LOCAL skill** (`_aitna/skills/<name>/SKILL.md`),
    - a repeated mechanical operation → a **LOCAL tool** (`_aitna/tools/<name>/`),
-   - a way a role should work here → the project **agent charter** (`_aitna/agents/`),
+   - a way a role should work here → the project **agent charter** (`_aitna/agents/<agent>/README.md`, under the role's section),
    - a refined requirement or decision → `docs/` via the [architect](../roles/architect.md)
      role (an ADR / requirement update).
 

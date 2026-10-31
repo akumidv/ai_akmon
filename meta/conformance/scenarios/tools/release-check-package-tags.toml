@@ -21,7 +21,7 @@ tags = ["v1.2.0", "1.1.0", "v0.9.0"]
 [fixture.files]
 "pyproject.toml" = "[project]\nname = \"consumer\"\nversion = \"1.2.0\"\n\n[dependency-groups]\ndev = [\"akmon=={{version}}\"]\n"
 "CHANGELOG.md" = "# Changelog\n\n## v1.2.0\n\n- this release\n\n## v1.1.0\n\n- an earlier release\n"
-"_aitna/agents/release/README.md" = "See `_aitna/akmon/roles/release.md`.\n"
+"_aitna/agents/release/README.md" = "See `_aitna/akmon/agents/release.md`.\n"
 
 [run]
 tool = "release/release_check"

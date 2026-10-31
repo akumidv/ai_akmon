@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -24,12 +25,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # The tree root, so the shared ``common`` package resolves: it holds the single owner of
 # project-root discovery (C73) and is reachable at the same tree-relative depth from the
-# mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+# mounted tree and from the materialized ``<dev root>/.akmon/`` copy alike.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import routing
 
-from common import jsondata
+from common import jsondata, learning
 from common.project_root import resolve_project_root
 from common.record import records_package_mode
 from common.report_path import create_report, next_report_path, report_prefix, safe_name, task_error
@@ -49,10 +50,10 @@ def _standard_tree_root(project_root: Path) -> Path:
     """The tree ``registry.json`` is read from: the mount for mounted modes, this script's own tree otherwise.
 
     The rule of ``bin/sync.py::standard_tree_root`` and ``init.py::_standard_tree_root``: in package
-    mode there is no ``<AITNA_ROOT>/akmon`` to read, and the recorded ``mount`` field decides, so
+    mode there is no ``<dev root>/akmon`` to read, and the recorded ``mount`` field decides, so
     a stale mount directory from a prior mode does not shadow the installed tree.
     """
-    mounted = project_root / routing.aitna_root_name() / "akmon"
+    mounted = routing.aitna_root(project_root) / "akmon"
     if not records_package_mode(project_root) and mounted.is_dir():
         return mounted
     return Path(__file__).resolve().parents[2]
@@ -139,43 +140,49 @@ def _model_text(model: str | None) -> str:
 
 
 def _shown_model(
-    registry: dict, stored: Mapping[str, routing.ProviderAliases], target: routing.SecondOpinionTarget
+    registry: dict, stored: Mapping[str, routing.ProviderAliases], target: routing.SecondOpinionTarget, root: Path
 ) -> str:
     """The model as the header prints it: ``alias→concrete``, or ``alias→(unresolved)`` without a mapping (D16)."""
     texts = _so_data()["model_shown"]
     suffix = "" if target.effort is None else f"@{target.effort}"
-    if target.model is None or not routing.is_model_alias(registry, target.provider, target.model):
+    if target.model is None or not routing.is_model_alias(registry, target.provider, target.model, root):
         return _model_text(target.model) + suffix
     try:
-        concrete = routing.resolve_opinion_model(registry, stored, target.provider, target.model)
+        concrete = routing.resolve_opinion_model(registry, stored, target.provider, target.model, root)
     except routing.UnresolvedAliasError:
         return jsondata.fill(texts["unresolved"], {"alias": target.model}) + suffix
     return jsondata.fill(texts["alias"], {"alias": target.model, "concrete": concrete}) + suffix
 
 
 def _identity(
-    registry: dict, stored: Mapping[str, routing.ProviderAliases], target: routing.SecondOpinionTarget, kind: str
+    registry: dict,
+    stored: Mapping[str, routing.ProviderAliases],
+    target: routing.SecondOpinionTarget,
+    kind: str,
+    root: Path,
 ) -> dict[str, object]:
     """The report-header fields of one run: provider, priors, carrier, repo, model and how it was chosen (D10)."""
     return {
         "provider": target.provider,
         "priors": target.family or "unknown",
-        "carrier": routing.opinion_carrier(registry, target.provider),
-        "repo": routing.opinion_repo(registry, target.provider),
-        "model": _shown_model(registry, stored, target),
+        "carrier": routing.opinion_carrier(registry, target.provider, root),
+        "repo": routing.opinion_repo(registry, target.provider, root),
+        "model": _shown_model(registry, stored, target, root),
         "kind": kind,
     }
 
 
-def _ledger_lines(registry: dict, session: routing.SecondOpinionSession, warnings: Sequence[str]) -> list[str]:
+def _ledger_lines(
+    registry: dict, session: routing.SecondOpinionSession, warnings: Sequence[str], root: Path
+) -> list[str]:
     """The lines that travel with every result: pinned-run warnings, the skip ledger and the asks (D08, D10)."""
     summary = _so_data()["summary"]
     lines = [jsondata.fill(summary["warning_line"], {"warning": warning}) for warning in warnings]
     lines += [
         jsondata.fill(summary["skip_line"], {"provider": provider, "reason": reason})
-        for provider, reason in routing.opinion_skips(registry, session)
+        for provider, reason in routing.opinion_skips(registry, session, root)
     ]
-    lines += [jsondata.fill(summary["ask_line"], {"ask": ask}) for ask in routing.opinion_asks(registry, session)]
+    lines += [jsondata.fill(summary["ask_line"], {"ask": ask}) for ask in routing.opinion_asks(registry, session, root)]
     return lines
 
 
@@ -187,15 +194,18 @@ def _default_mark(registry: dict, target: routing.SecondOpinionTarget, *, defaul
 
 
 def _alias_asks(
-    registry: dict, stored: Mapping[str, routing.ProviderAliases], targets: Sequence[routing.SecondOpinionTarget]
+    registry: dict,
+    stored: Mapping[str, routing.ProviderAliases],
+    targets: Sequence[routing.SecondOpinionTarget],
+    root: Path,
 ) -> list[str]:
     """One ask per distinct alias among ``targets`` that has no concrete id yet, naming the refresh command (D16)."""
     asks: list[str] = []
     for target in targets:
-        if target.model is None or not routing.is_model_alias(registry, target.provider, target.model):
+        if target.model is None or not routing.is_model_alias(registry, target.provider, target.model, root):
             continue
         try:
-            routing.resolve_opinion_model(registry, stored, target.provider, target.model)
+            routing.resolve_opinion_model(registry, stored, target.provider, target.model, root)
         except routing.UnresolvedAliasError:
             ask = jsondata.fill(
                 _so_data()["listing"]["alias_ask"], {"provider": target.provider, "model": target.model}
@@ -209,6 +219,7 @@ def _print_listing(
     registry: dict,
     stored: Mapping[str, routing.ProviderAliases],
     session: routing.SecondOpinionSession,
+    root: Path,
     *,
     default_model: bool,
 ) -> None:
@@ -226,30 +237,32 @@ def _print_listing(
             {"provider": session.provider, "model": _model_text(session.model), "priors": session.family or "unknown"},
         )
     )
-    chain = [_unpinned(target, default_model=default_model) for target in routing.opinion_chain(registry, session)]
+    chain = [
+        _unpinned(target, default_model=default_model) for target in routing.opinion_chain(registry, session, root)
+    ]
     shown = list(chain)
     for rank, target in enumerate(chain, start=routing.OPINION_RANK_SECOND):
-        identity = _identity(registry, stored, target, "chain")
+        identity = _identity(registry, stored, target, "chain", root)
         print(
             jsondata.fill(texts["candidate"], {**identity, "rank": rank})
             + _default_mark(registry, target, default_model=default_model)
         )
     if not chain:
         print(texts["empty"])
-        last, reason = _last_resort(registry, session, routing.OPINION_RANK_SECOND)
+        last, reason = _last_resort(registry, session, routing.OPINION_RANK_SECOND, root)
         if last is None:
             print(jsondata.fill(texts["no_last_resort"], {"reason": reason}))
         else:
             last = _unpinned(last, default_model=default_model)
             shown.append(last)
-            line = jsondata.fill(texts["last_resort"], _identity(registry, stored, last, "last-resort"))
+            line = jsondata.fill(texts["last_resort"], _identity(registry, stored, last, "last-resort", root))
             print(line + _default_mark(registry, last, default_model=default_model))
-    skips = routing.opinion_skips(registry, session)
+    skips = routing.opinion_skips(registry, session, root)
     if skips:
         print(texts["skipped"])
         for provider, reason in skips:
             print(jsondata.fill(texts["skip"], {"provider": provider, "reason": reason}))
-    asks = [*routing.opinion_asks(registry, session), *_alias_asks(registry, stored, shown)]
+    asks = [*routing.opinion_asks(registry, session, root), *_alias_asks(registry, stored, shown, root)]
     if asks:
         print(texts["asks"])
         for ask in asks:
@@ -262,7 +275,7 @@ def _unpinned(target: routing.SecondOpinionTarget, *, default_model: bool) -> ro
 
 
 def _pinned_choice(
-    registry: dict, session: routing.SecondOpinionSession, choice: str
+    registry: dict, session: routing.SecondOpinionSession, choice: str, root: Path
 ) -> tuple[routing.SecondOpinionTarget, list[str]]:
     """``--provider P[:model]``: the owner's explicit pick, with a warning for each way it fails to be diverse.
 
@@ -270,9 +283,9 @@ def _pinned_choice(
     owner may want exactly that — but it is disclosed ``kind=pinned`` and never counted as diverse.
     """
     provider, pinned = routing.split_opinion_entry(choice)
-    routing.provider_row(registry, provider)
-    model, effort = routing.opinion_pick(registry, provider, pinned)
-    family = routing.provider_family(registry, provider, model)
+    routing.provider_row(registry, provider, root)
+    model, effort = routing.opinion_pick(registry, provider, pinned, root)
+    family = routing.provider_family(registry, provider, root, model)
     texts = _so_data()["pinned_warnings"]
     values = {"provider": provider, "priors": family or "unknown"}
     warnings = []
@@ -286,7 +299,7 @@ def _pinned_choice(
 
 
 def _last_resort(
-    registry: dict, session: routing.SecondOpinionSession, rank: int
+    registry: dict, session: routing.SecondOpinionSession, rank: int, root: Path
 ) -> tuple[routing.SecondOpinionTarget | None, str]:
     """The last resort and its disclosure note, or ``(None, why nothing can be run)`` for the skip notice.
 
@@ -295,15 +308,15 @@ def _last_resort(
     to run and the notice says exactly that.
     """
     texts = _so_data()["unavailable_reasons"]
-    count = len(routing.opinion_chain(registry, session))
+    count = len(routing.opinion_chain(registry, session, root))
     if count or rank != routing.OPINION_RANK_SECOND:
         return None, jsondata.fill(texts["rank_past_chain"], {"count": count, "rank": rank})
     if session.provider not in routing.providers(registry):
         return None, jsondata.fill(texts["no_row"], {"provider": session.provider})
-    if not routing.carrier_present(registry, session.provider):
+    if not routing.carrier_present(registry, session.provider, root):
         return None, jsondata.fill(texts["carrier_absent"], {"provider": session.provider})
     note = jsondata.fill(_so_data()["last_resort_note"], {"session_model": _model_text(session.model)})
-    return routing.opinion_last_resort(registry, session), note
+    return routing.opinion_last_resort(registry, session, root), note
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -391,7 +404,7 @@ def main(argv: list[str] | None = None) -> int:
     config = _read_json(root / routing.local_config_rel())
     try:
         registry = routing.load_registry(_standard_tree_root(root), root)
-        routing.refuse_retired_keys(registry, config, project_root=root)
+        routing.refuse_retired_keys(registry, config, root, layered=True)
         stored = routing.read_model_aliases(root)
         session = routing.resolve_session(
             registry,
@@ -401,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
             family=args.session_family,
         )
         if args.list:
-            _print_listing(registry, stored, session, default_model=args.default_model)
+            _print_listing(registry, stored, session, root, default_model=args.default_model)
             return 0
         return _run(root, registry, stored, session, args)
     except routing.RetiredKeyError as exc:
@@ -421,18 +434,20 @@ class _Choice:
     warnings: tuple[str, ...] = ()
 
 
-def _choose(registry: dict, session: routing.SecondOpinionSession, args: argparse.Namespace) -> _Choice | str:
+def _choose(
+    registry: dict, session: routing.SecondOpinionSession, args: argparse.Namespace, root: Path
+) -> _Choice | str:
     """The run's choice — pinned, the chain's rank, or the disclosed last resort — else the reason nothing can run."""
     if args.provider:
         _, pinned = routing.split_opinion_entry(args.provider)
         if args.default_model and routing.split_model_effort(pinned)[0] not in (None, routing.default_model_token()):
             raise ValueError(jsondata.fill(_so_data()["errors"]["default_with_pin"], {"entry": args.provider}))
-        target, warnings = _pinned_choice(registry, session, args.provider)
+        target, warnings = _pinned_choice(registry, session, args.provider, root)
         choice = _Choice(target, "pinned", tuple(warnings))
-    elif (target := routing.resolve_opinion_chain(registry, session, rank=args.rank)) is not None:
+    elif (target := routing.resolve_opinion_chain(registry, session, root, rank=args.rank)) is not None:
         choice = _Choice(target, "chain")
     else:
-        target, text = _last_resort(registry, session, args.rank)
+        target, text = _last_resort(registry, session, args.rank, root)
         if target is None:
             return text
         choice = _Choice(target, "last-resort", (text,))
@@ -451,13 +466,13 @@ def _run(
     An alias is replaced by its concrete id before the command is built, and an alias with no id
     refuses the run, dry or not: the carrier is never sent a name it rejects (ADR 0024/D16).
     """
-    choice = _choose(registry, session, args)
+    choice = _choose(registry, session, args, root)
     if isinstance(choice, str):
         notice = _unavailable_notice(args.gate, args.rank, choice)
-        print("\n".join([notice, *_ledger_lines(registry, session, [])]))
+        print("\n".join([notice, *_ledger_lines(registry, session, [], root)]))
         return 0
     target = choice.target
-    row = routing.provider_row(registry, target.provider)
+    row = routing.provider_row(registry, target.provider, root)
     configured = _configured_report_dir(row, target.provider)
     report_dir = root / configured
     if (outside := _report_dir_error(root, report_dir, configured)) is not None:
@@ -466,12 +481,13 @@ def _run(
     # The resolved form, so the report line is always a path under the (resolved) root.
     report_dir = report_dir.resolve()
     prompt = _prompt(args.gate, args.gate_pack.read_text(encoding="utf-8"))
-    model = routing.resolve_opinion_model(registry, stored, target.provider, target.model)
-    command = routing.opinion_command(registry, target.provider, model=model, effort=target.effort, prompt=prompt)
+    model = routing.resolve_opinion_model(registry, stored, target.provider, target.model, root)
+    run = routing.OpinionRun(model=model, effort=target.effort, prompt=prompt)
+    command = routing.opinion_command(registry, target.provider, root, run)
     prefix = _report_prefix(args.gate, args.task)
-    identity = _identity(registry, stored, target, choice.kind)
+    identity = _identity(registry, stored, target, choice.kind, root)
     summary = _so_data()["summary"]
-    ledger = _ledger_lines(registry, session, choice.warnings)
+    ledger = _ledger_lines(registry, session, choice.warnings, root)
 
     if args.dry_run:
         print(" ".join(command))
@@ -489,7 +505,10 @@ def _run(
         else {"stdin": subprocess.DEVNULL}
     )
     try:
-        completed = subprocess.run(command, cwd=root, capture_output=True, check=False, **feed)
+        # The marker tells hooks of the child this is a second opinion, not a session of the owner's:
+        # the learning hook neither counts it nor sends it the reminder (ADR 0026/D07).
+        env = {**os.environ, learning.read_data()["second_opinion_variable"]: "1"}
+        completed = subprocess.run(command, cwd=root, env=env, capture_output=True, check=False, **feed)
     except OSError as exc:
         print(jsondata.fill(_so_data()["errors"]["not_run"], {"command": command[0], "reason": exc}), file=sys.stderr)
         return 2

@@ -92,7 +92,7 @@ options:
   --zone-plan ZONE_PLAN
                         Zone-plan file (§10.3) — enables uncovered-seam detection.
   --task TASK           Task id the map belongs to; prefixes the default name: <task>-coverage-<n>.md.
-  --out OUT             Output path. Defaults to <AITNA_ROOT>/artifacts/gates/[<task>-]coverage-<n>.md (gitignored), n the next ordinal.
+  --out OUT             Output path. Defaults to <dev root>/artifacts/gates/[<task>-]coverage-<n>.md (gitignored), n the next ordinal.
   --stdout              Also print the coverage map to stdout.
 `;
 
@@ -480,6 +480,25 @@ function _usageError(message) {
 }
 
 /**
+ * Write `text` to `--out`, else to the next free name under the project's gates directory; its path.
+ *
+ * The default lands under the project's *declared* dev layer, like every other generated artifact,
+ * named [<task>-]coverage-<n>.md, n the next free ordinal, created exclusively (C114).
+ * @param {string} text
+ * @param {{out: string | null, task: string | null}} options
+ * @param {string} root
+ * @returns {string}
+ */
+function _writeMap(text, options, root) {
+  if (options.out !== null) {
+    fs.mkdirSync(posix.dirname(options.out), { recursive: true });
+    writeText(options.out, text);
+    return options.out;
+  }
+  return createReport(pyPath(aitnaRoot(root), "artifacts", "gates"), reportPrefix("coverage", options.task), text);
+}
+
+/**
  * CLI entry point: assemble the scoped coverage map and write it under `artifacts/gates/`.
  * @param {string[]} [argv] the arguments (default: the process's)
  * @returns {number} The process exit code: 0, or 2 on a usage error.
@@ -514,6 +533,10 @@ export function main(argv = process.argv.slice(2)) {
   const { root, notice } = resolveProjectRoot(options.projectRoot);
   if (notice) {
     process.stderr.write(`${notice}\n`);
+    if (options.out === null) {
+      // The default map lands in the local layer, and with no project root there is none (ADR 0022 D09).
+      return 2;
+    }
   }
   const data = /** @type {AgentsData} */ (read(posix.join(TREE_ROOT, "tools", "model_routing", "agents.json")));
   const logPath = options.log !== null ? pyPath(options.log) : pyPath(root, delegationLogRel(data));
@@ -539,17 +562,7 @@ export function main(argv = process.argv.slice(2)) {
   }
   const coverage = buildCoverageMap(entries, zonePlan);
 
-  // The default lands under the *configured* dev layer, like every other generated artifact,
-  // named [<task>-]coverage-<n>.md, n the next free ordinal, created exclusively (C114).
-  /** @type {string} */ let out;
-  if (options.out !== null) {
-    out = options.out;
-    fs.mkdirSync(posix.dirname(out), { recursive: true });
-    writeText(out, `${coverage}\n`);
-  } else {
-    const gatesDir = pyPath(aitnaRoot(root), "artifacts", "gates");
-    out = createReport(gatesDir, reportPrefix("coverage", options.task), `${coverage}\n`);
-  }
+  const out = _writeMap(`${coverage}\n`, options, root);
 
   const marker = unlabelledMarker();
   const zones = new Set(entries.map((e) => e.zone || marker)).size;

@@ -194,6 +194,56 @@ def test_ask_escalates_to_deny_outside_interactive_default():
         assert "main" in result.permission_reason, mode  # original reason text preserved
 
 
+# ADR-0025/D06: the host's attendance statement decides; the permission mode decides only where the
+# host states nothing, and a mode that skips every question is never attended.
+_ATTENDANCE_CELLS = [
+    # (permission_mode, attended, the ask passes)
+    ("auto", True, True),
+    ("default", False, False),
+    ("default", None, True),
+    ("auto", None, False),
+    ("bypassPermissions", True, False),
+    ("dontAsk", True, False),
+]
+
+
+@pytest.mark.parametrize(("mode", "attended", "passes"), _ATTENDANCE_CELLS)
+def test_ask_is_attended_by_the_host_statement_then_the_mode(mode, attended, passes):
+    assert hook_core.ask_is_attended(mode, attended=attended) is passes
+
+
+@pytest.mark.parametrize(("mode", "attended", "passes"), _ATTENDANCE_CELLS)
+def test_commit_guard_ask_follows_attendance(mode, attended, passes):
+    result = git_commit_guard_result("git push origin x", "feature", permission_mode=mode, attended=attended)
+    assert result is not None
+    assert result.permission_decision == ("ask" if passes else "deny")
+    assert ("escalated ask" in result.permission_reason) is not passes
+    if not passes:
+        assert f"permission_mode={mode!r}" in result.permission_reason
+        assert f"CLAUDE_CODE_SESSION_ATTENDED={'unset' if attended is None else int(attended)}" in (
+            result.permission_reason
+        )
+        assert "ADR-0025/D06" in result.permission_reason
+
+
+@pytest.mark.parametrize(("mode", "attended", "passes"), _ATTENDANCE_CELLS)
+def test_delegation_ask_follows_attendance(monkeypatch, tmp_path, mode, attended, passes):
+    _nudge_setup(monkeypatch, tmp_path, threshold=2, ask_threshold=4)
+    for _ in range(3):
+        hook_core.delegation_nudge_result(hook_core.edit_tool(), "s1")
+    result = hook_core.delegation_nudge_result(hook_core.edit_tool(), "s1", permission_mode=mode, attended=attended)
+    assert isinstance(result, HookResult)
+    assert result.permission_decision == ("ask" if passes else "deny")
+
+
+def test_the_core_never_reads_the_environment_for_attendance(monkeypatch):
+    # Configuration is read at the entry point (ADR-0025/D06): the variable alone changes nothing here.
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ATTENDED", "1")
+    result = git_commit_guard_result("git push", "feature", permission_mode="auto")
+    assert result is not None
+    assert result.permission_decision == "deny"
+
+
 def test_ask_stays_ask_in_interactive_default_mode():
     result = git_commit_guard_result('git commit -m "x"', branch="main", permission_mode="default")
     assert result is not None
@@ -242,6 +292,28 @@ def test_agent_names_missing_directory_returns_empty(tmp_path):
     assert agent_names(tmp_path / "does-not-exist") == []
 
 
+def test_agent_names_lists_the_shipped_agents_in_chain_order_then_the_rest_by_name(tmp_path):
+    known = hook_core.agent_definitions()
+    for name in ("release", "analyst", "learning", "development", "zeta"):
+        _make_agent(tmp_path, name)
+    assert agent_names(tmp_path, known) == ["development", "learning", "release", "analyst", "zeta"]
+
+
+def test_agent_names_leaves_out_a_legacy_role_directory_whose_agent_has_its_own_charter(tmp_path):
+    known = hook_core.agent_definitions()
+    for name in ("development", "review", "architect", "engineer", "learn", "learning"):
+        _make_agent(tmp_path, name)
+    assert agent_names(tmp_path, known) == ["development", "learning"]
+
+
+def test_agent_names_keeps_a_legacy_role_directory_whose_agent_has_no_charter_yet(tmp_path):
+    known = hook_core.agent_definitions()
+    for name in ("development", "review", "learn"):
+        _make_agent(tmp_path, name)
+    # `development/` owns review, architect and engineer; `learning/` is absent, so `learn/` stays listed
+    assert agent_names(tmp_path, known) == ["development", "learn"]
+
+
 # --------------------------------------------------------------------------------------
 # session_start_result
 # --------------------------------------------------------------------------------------
@@ -256,9 +328,122 @@ def test_session_start_lists_dev_and_desk_agents(tmp_path):
     assert isinstance(result, HookResult)
     assert result.event_name == "SessionStart"
     ctx = result.additional_context
-    assert "DEVELOP (build the project): architect, engineer" in ctx
-    assert "OPERATE (run/use from outside): options-analyst" in ctx
+    assert "agents and the roles they work in: architect — role architect; engineer — role engineer" in ctx
+    assert "OPERATE (run/use from outside), agents and the roles they work in: options-analyst — role" in ctx
     assert "_aitna/memory/" in ctx
+
+
+def test_session_start_recommends_only_the_role_declaration_form(tmp_path):
+    # ADR 0027/D03: `🧭 role:` is the form the hooks recommend; `🧭 agent:` is read as an alias
+    # but never printed in guidance.
+    _make_agent(tmp_path / "_aitna" / "agents", "development")
+    ctx = session_start_result(tmp_path).additional_context
+    assert "🧭 role: <name> — <focus>" in ctx
+    assert "🧭 agent:" not in ctx
+    assert "agents and the roles they work in: development — roles review, architect, engineer" in ctx
+
+
+def test_role_and_planning_guidance_recommend_only_the_role_declaration_form(monkeypatch, tmp_path):
+    _isolate_marker_dir(monkeypatch, tmp_path)
+    code = role_on_code_result(hook_core.edit_tool(), "src/alphavar/x.py", "session-A")
+    planning = analysis_write_result(hook_core.edit_tool(), "_aitna/design/probe.md", "session-A", tmp_path / "repo")
+    for result in (code, planning):
+        assert result is not None
+        assert "🧭 role: " in result.additional_context
+        assert "🧭 agent:" not in result.additional_context
+
+
+def test_session_start_reads_an_agent_as_its_roles_never_as_a_role_to_declare(tmp_path):
+    agents = tmp_path / "_aitna" / "agents"
+    _make_agent(agents, "development")
+    (agents / "development" / "README.md").write_text(
+        "## review\nRole of record: `roles/review.md`.\n## architect\n`_aitna/akmon/roles/architect.md`\n"
+        "## engineer\n`roles/engineer.md` and again `roles/review.md`\n",
+        encoding="utf-8",
+    )
+    _make_agent(agents, "release")  # a charter that names no role: the agent is its own role
+    ctx = session_start_result(tmp_path).additional_context
+    assert "development — roles review, architect, engineer; release — role release" in ctx
+    assert "Pick by operation" in ctx or "Pick the role" in ctx
+    assert "decompose an existing thing → review" in ctx
+
+
+def test_agent_roles_follow_the_definitions_then_the_charter_then_the_agent_name(tmp_path):
+    _make_agent(tmp_path, "learn")
+    _make_agent(tmp_path, "development")
+    (tmp_path / "development" / "README.md").write_text("see roles/README.md and roles/Review.md\n", encoding="utf-8")
+    known = {"development": ["review", "architect", "engineer"], "learning": ["learn"]}
+    # a named agent takes its definition's roles, whatever its charter says
+    assert hook_core.agent_roles(tmp_path, "development", known) == ["review", "architect", "engineer"]
+    assert hook_core.agent_roles(tmp_path, "learning", known) == ["learn"]
+    # an agent no definition names keeps the charter fallback: its references, else its own name
+    assert hook_core.agent_roles(tmp_path, "learn", known) == ["learn"]
+    assert hook_core.agent_roles(tmp_path, "development", {}) == ["development"]
+    assert hook_core.agent_roles(tmp_path, "missing", known) == ["missing"]
+    (tmp_path / "learn" / "README.md").write_text("see `akmon/roles/review.md` and roles/learn.md\n", encoding="utf-8")
+    assert hook_core.agent_roles(tmp_path, "learn", known) == ["review", "learn"]
+
+
+def test_the_shipped_definitions_name_the_three_agents_and_their_roles():
+    assert hook_core.agent_definitions() == {
+        "development": ["review", "architect", "engineer"],
+        "learning": ["learn"],
+        "release": ["release"],
+    }
+
+
+def test_the_shipped_definitions_are_keyed_in_chain_order():
+    assert list(hook_core.agent_definitions()) == ["development", "learning", "release"]
+
+
+def test_session_start_names_the_roles_of_the_development_learning_and_release_agents(tmp_path):
+    for agent in ("release", "learning", "development"):
+        _make_agent(tmp_path / "_aitna" / "agents", agent)
+    ctx = session_start_result(tmp_path).additional_context
+    assert (
+        "agents and the roles they work in: development — roles review, architect, engineer; "
+        "learning — role learn; release — role release"
+    ) in ctx  # agents list in name order, as `agent_names` sorts them
+
+
+def test_session_start_lists_a_projects_own_agents_after_the_shipped_ones(tmp_path):
+    for agent in ("release", "analyst", "development"):
+        _make_agent(tmp_path / "_aitna" / "agents", agent)
+    (tmp_path / "_aitna" / "agents" / "analyst" / "README.md").write_text("runs `roles/analyst.md`\n", encoding="utf-8")
+    ctx = session_start_result(tmp_path).additional_context
+    assert ("development — roles review, architect, engineer; release — role release; analyst — role analyst") in ctx
+
+
+def test_session_start_does_not_list_a_legacy_role_directory_beside_its_agents_charter(tmp_path):
+    for agent in ("development", "engineer", "review", "learn"):
+        _make_agent(tmp_path / "_aitna" / "agents", agent)
+    ctx = session_start_result(tmp_path).additional_context
+    # `development/` replaces review/architect/engineer; `learning/` is absent, so `learn/` stays
+    assert "development — roles review, architect, engineer; learn — role learn" in ctx
+    assert "engineer — role" not in ctx
+    assert "review — role" not in ctx
+
+
+def test_a_legacy_learn_charter_directory_keeps_the_fallback_role(tmp_path):
+    _make_agent(tmp_path / "_aitna" / "agents", "learn")
+    ctx = session_start_result(tmp_path).additional_context
+    assert "agents and the roles they work in: learn — role learn" in ctx
+
+
+def test_the_shipped_agent_definition_files_are_not_operate_agents(tmp_path):
+    # akmon runs on itself: its root `agents/` holds definition files and `agents.json`, not charters.
+    desk = tmp_path / "agents"
+    desk.mkdir()
+    for name in ("README.md", "development.md", "release.md", "learning.md", "agents.json"):
+        (desk / name).write_text("definition", encoding="utf-8")
+    _make_agent(tmp_path / "_aitna" / "agents", "development")
+    ctx = session_start_result(tmp_path).additional_context
+    assert "OPERATE" not in ctx
+    # a project's own runtime agent is still listed, and its role is its charter's, never a shipped agent's
+    _make_agent(desk, "release")
+    (desk / "release" / "README.md").write_text("runs `roles/analyst.md`\n", encoding="utf-8")
+    ctx = session_start_result(tmp_path).additional_context
+    assert "OPERATE (run/use from outside), agents and the roles they work in: release — role analyst" in ctx
 
 
 def test_session_start_dev_only_omits_operate_line(tmp_path):
@@ -288,7 +473,7 @@ def test_session_start_operate_only_uses_generic_pick_line(tmp_path):
     _make_agent(tmp_path / "agents", "options-analyst")
     ctx = session_start_result(tmp_path).additional_context
     assert "→ review" not in ctx  # no DEVELOP discriminator
-    assert "Pick the one the task calls for" in ctx
+    assert "Pick the role the task calls for, one of the roles listed above, never an agent name" in ctx
 
 
 # --------------------------------------------------------------------------------------
@@ -307,7 +492,7 @@ def _materialized(root: Path, text: str) -> Path:
     dest = root / "_aitna" / ".akmon" / "guardrails"
     dest.mkdir(parents=True)
     path = dest / "_common.md"
-    path.write_text(materialized_markdown(text), encoding="utf-8")
+    path.write_text(materialized_markdown(text, root), encoding="utf-8")
     return path
 
 
@@ -383,6 +568,27 @@ def test_session_start_ignores_leftover_package_guardrails_in_mounted_mode(monke
 # --------------------------------------------------------------------------------------
 
 
+def _default_project(tmp_path: Path) -> Path:
+    """A fixture project with no ``.aitna-root``: its dev-layer root is the default ``_aitna``.
+
+    akmon's own repository declares ``meta`` there, so a test that expects the default root
+    must not classify against the working directory's project.
+    """
+    root = tmp_path / "repo"
+    (root / "_aitna").mkdir(parents=True)
+    (root / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    return root
+
+
+def _relocated_project(tmp_path: Path, name: str = "tools/ai") -> Path:
+    """A fixture project whose ``.aitna-root`` declares ``name`` as the dev-layer root."""
+    root = tmp_path / "repo"
+    (root / name).mkdir(parents=True)
+    (root / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (root / ".aitna-root").write_text(f"{name}\n", encoding="utf-8")
+    return root
+
+
 def test_is_code_path_true_for_source_extensions():
     assert is_code_path("src/alphavar/option_class.py")
     assert is_code_path("pkg/mod.ts")
@@ -395,12 +601,13 @@ def test_is_code_path_false_for_non_code_extensions():
     assert not is_code_path("data.csv")
 
 
-def test_is_code_path_false_for_excluded_segments():
+def test_is_code_path_false_for_excluded_segments(tmp_path):
     # Claude sends absolute file paths, so the segments are slash-delimited as designed.
-    assert not is_code_path("/repo/docs/dev/PROJECT_OVERVIEW.py")  # under /docs/
-    assert not is_code_path("/repo/_aitna/akmon/hooks/hook_core.py")  # akmon itself
-    assert not is_code_path("/repo/_aitna/memory/note.py")
-    assert not is_code_path("/repo/.claude/settings.py")
+    root = _default_project(tmp_path)
+    assert not is_code_path(f"{root}/docs/dev/PROJECT_OVERVIEW.py", root)  # under /docs/
+    assert not is_code_path(f"{root}/_aitna/akmon/hooks/hook_core.py", root)  # akmon itself
+    assert not is_code_path(f"{root}/_aitna/memory/note.py", root)
+    assert not is_code_path(f"{root}/.claude/settings.py", root)
 
 
 def test_is_code_path_handles_backslash_separators():
@@ -592,70 +799,76 @@ def test_core_names_no_vendor_tools():
 # --------------------------------------------------------------------------------------
 
 
-def test_is_planning_doc_matches_backlog_and_design_docs():
-    assert is_planning_doc("/repo/_aitna/TASKS.md")
-    assert is_planning_doc("/repo/_aitna/TASKS_ARCHIVE.md")
-    assert is_planning_doc("/repo/_aitna/design/forecast/README.md")
-    assert is_planning_doc("/repo/docs/dev/decisions/0003-x.md")
-    assert is_planning_doc("/repo/docs/dev/ARCHITECTURE_REQUIREMENTS.md")
-    assert is_planning_doc("/repo/_aitna/akmon/pipelines/tasks.md")
+def test_is_planning_doc_matches_backlog_and_design_docs(tmp_path):
+    root = _default_project(tmp_path)
+    assert is_planning_doc(f"{root}/_aitna/TASKS.md", root)
+    assert is_planning_doc(f"{root}/_aitna/TASKS_ARCHIVE.md", root)
+    assert is_planning_doc(f"{root}/_aitna/design/forecast/README.md", root)
+    assert is_planning_doc(f"{root}/docs/dev/decisions/0003-x.md", root)
+    assert is_planning_doc(f"{root}/docs/dev/ARCHITECTURE_REQUIREMENTS.md", root)
+    assert is_planning_doc(f"{root}/_aitna/akmon/pipelines/tasks.md", root)
 
 
-def test_is_planning_doc_rejects_code_and_unrelated_docs():
-    assert not is_planning_doc("/repo/src/alphavar/option_class.py")  # code
-    assert not is_planning_doc("/repo/_aitna/akmon/hooks/hook_core.py")  # akmon code, not .md
-    assert not is_planning_doc("/repo/README.md")  # top-level doc, not a planning root
-    assert not is_planning_doc("/repo/_aitna/memory/note.md")  # memory is not a backlog/design doc
+def test_is_planning_doc_rejects_code_and_unrelated_docs(tmp_path):
+    root = _default_project(tmp_path)
+    assert not is_planning_doc(f"{root}/src/alphavar/option_class.py", root)  # code
+    assert not is_planning_doc(f"{root}/_aitna/akmon/hooks/hook_core.py", root)  # akmon code, not .md
+    assert not is_planning_doc(f"{root}/README.md", root)  # top-level doc, not a planning root
+    assert not is_planning_doc(f"{root}/_aitna/memory/note.md", root)  # memory is not a backlog/design doc
 
 
 def test_analysis_write_ignores_non_edit_kinds(monkeypatch, tmp_path):
     _isolate_marker_dir(monkeypatch, tmp_path)
-    assert analysis_write_result("read", "/r/_aitna/TASKS.md", "s1") is None
-    assert analysis_write_result("bash", "/r/_aitna/TASKS.md", "s1") is None
+    root = _default_project(tmp_path)
+    assert analysis_write_result("read", f"{root}/_aitna/TASKS.md", "s1", root) is None
+    assert analysis_write_result("bash", f"{root}/_aitna/TASKS.md", "s1", root) is None
 
 
 def test_analysis_write_ignores_non_planning_paths(monkeypatch, tmp_path):
     _isolate_marker_dir(monkeypatch, tmp_path)
-    assert analysis_write_result(hook_core.edit_tool(), "/r/src/alphavar/x.py", "s1") is None
-    assert analysis_write_result(hook_core.edit_tool(), None, "s1") is None
+    root = _default_project(tmp_path)
+    assert analysis_write_result(hook_core.edit_tool(), f"{root}/src/alphavar/x.py", "s1", root) is None
+    assert analysis_write_result(hook_core.edit_tool(), None, "s1", root) is None
 
 
 def test_analysis_write_fires_once_per_session(monkeypatch, tmp_path):
     _isolate_marker_dir(monkeypatch, tmp_path)
+    root = _default_project(tmp_path)
     edit = hook_core.edit_tool()
 
-    first = analysis_write_result(edit, "/r/_aitna/TASKS.md", "session-A")
+    first = analysis_write_result(edit, f"{root}/_aitna/TASKS.md", "session-A", root)
     assert isinstance(first, HookResult)
     assert first.event_name == "PreToolUse"
     assert "Analysis-before-mutation" in first.additional_context
 
     # same session → suppressed
-    assert analysis_write_result(edit, "/r/_aitna/design/x.md", "session-A") is None
+    assert analysis_write_result(edit, f"{root}/_aitna/design/x.md", "session-A", root) is None
 
     # different session → fires again
-    assert isinstance(analysis_write_result(edit, "/r/_aitna/TASKS.md", "session-B"), HookResult)
+    assert isinstance(analysis_write_result(edit, f"{root}/_aitna/TASKS.md", "session-B", root), HookResult)
 
 
 def test_analysis_guard_and_role_on_code_are_disjoint(monkeypatch, tmp_path):
     # A code edit triggers role-on-code, not the analysis guard; a backlog edit, the reverse.
     _isolate_marker_dir(monkeypatch, tmp_path)
+    root = _default_project(tmp_path)
     edit = hook_core.edit_tool()
-    assert analysis_write_result(edit, "/r/src/alphavar/x.py", "s1") is None
-    assert role_on_code_result(edit, "/r/_aitna/TASKS.md", "s2") is None
+    assert analysis_write_result(edit, f"{root}/src/alphavar/x.py", "s1", root) is None
+    assert role_on_code_result(edit, f"{root}/_aitna/TASKS.md", "s2", root) is None
 
 
 # --------------------------------------------------------------------------------------
-# configurable dev-layer root (AITNA_ROOT) — A4
+# configurable dev-layer root (the `.aitna-root` declaration, ADR 0022 D09) — A4
 # --------------------------------------------------------------------------------------
 
 
-def test_aitna_root_resolvers_default_and_override(monkeypatch, tmp_path):
-    monkeypatch.delenv("AITNA_ROOT", raising=False)
-    assert hook_core.aitna_root_name() == "_aitna"
-    assert hook_core.aitna_root(tmp_path) == tmp_path / "_aitna"
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
-    assert hook_core.aitna_root_name() == "tools/ai"
-    assert hook_core.aitna_root(tmp_path) == tmp_path / "tools" / "ai"
+def test_aitna_root_resolvers_default_and_override(tmp_path):
+    root = _default_project(tmp_path)
+    assert hook_core.aitna_root_name(root) == "_aitna"
+    assert hook_core.aitna_root(root) == root / "_aitna"
+    (root / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
+    assert hook_core.aitna_root_name(root) == "tools/ai"
+    assert hook_core.aitna_root(root) == root / "tools" / "ai"
 
 
 def test_runtime_root_display_is_project_relative_when_the_tree_is_in_the_repo(monkeypatch, tmp_path):
@@ -685,30 +898,38 @@ def test_runtime_root_display_rejects_the_wheels_tree_inside_the_project_venv(mo
     assert hook_core.runtime_root_display(tmp_path) == "$(akmon path)"
 
 
-def test_is_code_path_excludes_custom_dev_root(monkeypatch):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
+def test_is_code_path_excludes_custom_dev_root(tmp_path):
+    root = _relocated_project(tmp_path)
     # the relocated dev tree is excluded from "code"...
-    assert not is_code_path("/repo/tools/ai/akmon/hooks/hook_core.py")
-    assert not is_code_path("/repo/tools/ai/memory/note.py")
+    assert not is_code_path(f"{root}/tools/ai/akmon/hooks/hook_core.py", root)
+    assert not is_code_path(f"{root}/tools/ai/memory/note.py", root)
     # ...and the old default path is now just ordinary code (the layer moved away from it)
-    assert is_code_path("/repo/_aitna/akmon/hooks/hook_core.py")
+    assert is_code_path(f"{root}/_aitna/akmon/hooks/hook_core.py", root)
 
 
-def test_is_planning_doc_tracks_custom_dev_root(monkeypatch):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
-    assert is_planning_doc("/repo/tools/ai/TASKS.md")
-    assert is_planning_doc("/repo/tools/ai/design/x.md")
-    assert is_planning_doc("/repo/tools/ai/akmon/pipelines/tasks.md")
+def test_is_planning_doc_tracks_custom_dev_root(tmp_path):
+    root = _relocated_project(tmp_path)
+    assert is_planning_doc(f"{root}/tools/ai/TASKS.md", root)
+    assert is_planning_doc(f"{root}/tools/ai/design/x.md", root)
+    assert is_planning_doc(f"{root}/tools/ai/akmon/pipelines/tasks.md", root)
     # the default path no longer counts as the planning surface under the custom root
-    assert not is_planning_doc("/repo/_aitna/TASKS.md")
+    assert not is_planning_doc(f"{root}/_aitna/TASKS.md", root)
 
 
-def test_session_start_reads_custom_dev_root_agents(monkeypatch, tmp_path):
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
-    agents = tmp_path / "tools" / "ai" / "agents" / "architect"
+def test_dev_root_declaration_is_read_from_the_project_root_not_the_working_directory(monkeypatch, tmp_path):
+    """The root passed in decides: akmon's own checkout (declaring ``meta``) is the cwd here."""
+    root = _default_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    assert not is_code_path(f"{root}/_aitna/memory/note.py", root)
+    assert is_code_path(f"{root}/meta/memory/note.py", root)
+
+
+def test_session_start_reads_custom_dev_root_agents(tmp_path):
+    root = _relocated_project(tmp_path)
+    agents = root / "tools" / "ai" / "agents" / "architect"
     agents.mkdir(parents=True)
     (agents / "README.md").write_text("# architect\n", encoding="utf-8")
-    result = session_start_result(tmp_path)
+    result = session_start_result(root)
     assert isinstance(result, HookResult)
     assert "architect" in result.additional_context
     assert "tools/ai/memory/" in result.additional_context  # memory hint tracks the root
@@ -983,6 +1204,7 @@ def test_hook_core_json_holds_the_policy_and_texts():
         "planning_doc_files",
         "delegation",
         "interactive_default_permission_mode",
+        "unattended_permission_modes",
         "unclassified_shell_route_notice",
         "session_start",
         "role_on_code_message",
@@ -1011,6 +1233,7 @@ def test_hook_core_json_holds_the_policy_and_texts():
         "weights": {"read": 0.5, "edit": 1.0, "shell": 1.0},
     }
     assert data["interactive_default_permission_mode"] == "default"
+    assert data["unattended_permission_modes"] == ["bypassPermissions", "dontAsk"]
     assert data["git_commit_detached_head"] == "detached HEAD"
     assert "🧭" in data["session_start"]["format_line"]
     assert "½" in data["drift_score_text"]

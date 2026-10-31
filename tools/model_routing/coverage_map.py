@@ -40,7 +40,7 @@ from pathlib import Path
 
 # The tree root, so the shared ``common`` package resolves: it holds the single owner of
 # project-root discovery (C73) and is reachable at the same tree-relative depth from the
-# mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+# mounted tree and from the materialized ``<dev root>/.akmon/`` copy alike.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import routing
@@ -229,7 +229,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out",
         type=Path,
-        help="Output path. Defaults to <AITNA_ROOT>/artifacts/gates/[<task>-]coverage-<n>.md (gitignored), "
+        help="Output path. Defaults to <dev root>/artifacts/gates/[<task>-]coverage-<n>.md (gitignored), "
         "n the next ordinal.",
     )
     parser.add_argument("--stdout", action="store_true", help="Also print the coverage map to stdout.")
@@ -246,6 +246,21 @@ def _read_zone_plan(
     if (unlabelled := unlabelled_plan_error(entries, zone_plan)) is not None:
         parser.error(unlabelled)
     return zone_plan
+
+
+def _write_map(text: str, args: argparse.Namespace, root: Path) -> Path:
+    """Write ``text`` to ``--out``, else to the next free name under the project's gates directory; its path.
+
+    The default lands under the project's *declared* dev layer, like every other generated artifact:
+    the literal this replaced wrote the map into `_aitna/` even when the project's dev layer is
+    somewhere else, i.e. into a directory the project does not read (same defect as gate_pack's).
+    Named [<task>-]coverage-<n>.md, n the next free ordinal, created exclusively (C114).
+    """
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(text, encoding="utf-8")
+        return args.out
+    return create_report(aitna_root(root) / "artifacts" / "gates", report_prefix("coverage", args.task), text)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -265,6 +280,9 @@ def main(argv: list[str] | None = None) -> int:
     root, root_notice = resolve_project_root(args.project_root)
     if root_notice:
         print(root_notice, file=sys.stderr)
+        if not args.out:
+            # The default map lands in the local layer, and with no project root there is none (ADR 0022 D09).
+            return 2
     log_path = args.log or (root / routing.delegation_log_rel())
     if not log_path.is_file():
         parser.error(f"delegation log not found: {log_path}")
@@ -280,17 +298,7 @@ def main(argv: list[str] | None = None) -> int:
     zone_plan = _read_zone_plan(parser, args.zone_plan, entries)
     coverage = build_coverage_map(entries, zone_plan)
 
-    # The default lands under the *configured* dev layer, like every other generated artifact:
-    # the literal this replaced wrote the map into `_aitna/` even when the project's dev layer is
-    # somewhere else, i.e. into a directory the project does not read (same defect as gate_pack's).
-    # Named [<task>-]coverage-<n>.md, n the next free ordinal, created exclusively (C114).
-    if args.out:
-        out = args.out
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(coverage + "\n", encoding="utf-8")
-    else:
-        gates_dir = aitna_root(root) / "artifacts" / "gates"
-        out = create_report(gates_dir, report_prefix("coverage", args.task), coverage + "\n")
+    out = _write_map(coverage + "\n", args, root)
     try:
         rel = out.relative_to(root)
     except ValueError:

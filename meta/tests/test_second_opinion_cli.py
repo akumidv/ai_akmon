@@ -91,7 +91,7 @@ _CONFIG = {"vendor": "anthropic", "orchestrator": "opus", "binding": {"auditor":
 @pytest.fixture(autouse=True)
 def _every_carrier_present(monkeypatch):
     """Presence is a host fact the test supplies; nothing here reads ``PATH`` (ADR 0024/D11)."""
-    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: True)
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider, project_root: True)
 
 
 def _write_project(tmp_path: Path, registry: dict, config: dict | None = None) -> Path:
@@ -281,6 +281,23 @@ def test_list_prints_the_ranked_chain_the_skip_ledger_and_the_asks_and_runs_noth
     ]
 
 
+def test_a_relocated_dev_root_declared_by_aitna_root_moves_the_files_the_asks_name(tmp_path, capsys, monkeypatch):
+    """ADR 0022 D09: the dev root comes from `<project>/.aitna-root`, never from the environment."""
+    root = _write_project(tmp_path, _REGISTRY)
+    (root / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
+    _no_subprocess(monkeypatch)
+
+    assert _main(root, "--list", gate=False) == 0
+
+    out = capsys.readouterr().out
+    assert (
+        "  opencode: priors unknown for its default model; declare providers.opencode.family"
+        " in tools/ai/local/model-routing.json to keep it to yourself,"
+        " or tools/ai/model-routing.json to share it with the team"
+    ) in out.splitlines()
+    assert "_aitna" not in out
+
+
 def test_list_reads_the_developers_local_overlay_as_the_strongest_layer(tmp_path, capsys, monkeypatch):
     """The local overlay declares the family the asks name, and its ladder replaces the project's whole."""
     root = _write_project(tmp_path, _REGISTRY)
@@ -379,7 +396,7 @@ def test_list_says_why_no_last_resort_exists_when_the_session_provider_has_no_ro
 
 
 def test_list_says_why_no_last_resort_exists_when_the_session_carrier_is_off_path(tmp_path, capsys, monkeypatch):
-    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: False)
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider, project_root: False)
     root = _write_project(tmp_path, _ONE_PROVIDER_REGISTRY)
 
     assert _main(root, "--list", gate=False) == 0
@@ -496,7 +513,7 @@ def test_a_session_provider_with_no_row_has_nothing_to_run_and_says_so(tmp_path,
 
 def test_a_session_provider_off_path_has_nothing_to_run_and_says_so(tmp_path, capsys, monkeypatch):
     root = _write_project(tmp_path, _ONE_PROVIDER_REGISTRY)
-    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider: False)
+    monkeypatch.setattr(routing, "carrier_present", lambda registry, provider, project_root: False)
     _no_subprocess(monkeypatch)
 
     assert _main(root) == 0
@@ -579,6 +596,24 @@ def test_a_shipped_carrier_gets_the_pack_as_the_last_argument_and_no_stdin(tmp_p
     assert "Review this change." in seen["command"][-1]
     assert seen.get("input") is None
     assert seen["stdin"] == subprocess.DEVNULL  # a prompt on argv leaves stdin nothing to carry (see the EOF test)
+
+
+def test_the_provider_runs_with_the_second_opinion_marker_in_its_environment(tmp_path, capsys, monkeypatch):
+    root = _write_project(tmp_path, _REGISTRY)
+    seen = {}
+
+    def fake_run(command, **kwargs):
+        seen.update(kwargs)
+        return _Completed()
+
+    monkeypatch.setattr(second_opinion.subprocess, "run", fake_run)
+    monkeypatch.setenv("KEEP_ME", "yes")
+
+    assert _main(root) == 0
+
+    capsys.readouterr()
+    assert seen["env"]["AKMON_SECOND_OPINION"] == "1"  # the learning hook neither counts nor reminds this child
+    assert seen["env"]["KEEP_ME"] == "yes"
 
 
 _STDIN_PROBE = (
@@ -681,7 +716,7 @@ def test_a_carrier_that_cannot_start_is_an_error_line_and_exit_2(tmp_path, capsy
 
 
 def test_package_mode_reads_the_registry_from_its_own_tree(tmp_path, capsys):
-    """A package-mode project has no ``<AITNA_ROOT>/akmon`` mount: the registry comes from the tree
+    """A package-mode project has no ``<dev root>/akmon`` mount: the registry comes from the tree
     the tool runs from (the conformance corpus's native attach found the mount path hardcoded)."""
     root = tmp_path / "proj"
     (root / "_aitna").mkdir(parents=True)

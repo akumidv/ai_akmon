@@ -4,7 +4,7 @@
  * mounted mode.
  *
  * A project whose record names a mounted `mount` and `ecosystem = "node"` is governed by its
- * mount's own CLI, `<AITNA_ROOT>/akmon/js/akmon/cli.mjs`: the pin governs, whichever CLI started.
+ * mount's own CLI, `<dev root>/akmon/js/akmon/cli.mjs`: the pin governs, whichever CLI started.
  * A JavaScript CLI that is not the mount's own (an `npx` copy, a global install) hands the command
  * over to it as a child process, and for the commands the Python dispatches (`cli.json`
  * `dispatched_commands`) prints the same one-line notice when its version differs from the pinned
@@ -24,7 +24,7 @@ import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { fill, read } from "../common/jsondata.mjs";
-import { aitnaRootName, resolvePath } from "../common/project_root.mjs";
+import { aitnaRoot, resolvePath } from "../common/project_root.mjs";
 import { readAkmonToml, recordedEcosystem, recordsPackageMode } from "../common/record.mjs";
 import { splitVersion } from "../common/versions.mjs";
 
@@ -49,7 +49,7 @@ function _exists(path) {
 }
 
 /**
- * The mounted tree (`<AITNA_ROOT>/akmon`) that governs `start`'s project, or `null` — the Python
+ * The mounted tree (`<dev root>/akmon`) that governs `start`'s project, or `null` — the Python
  * `_mounted_akmon_root`, walking up from `start` to the first `AGENTS.md` whose dev layer holds a
  * mount. A record that says `mount = "package"` has no mount, whatever lingers on disk; a mount
  * governs here only when the record names `ecosystem = "node"` and the mount carries a CLI.
@@ -57,14 +57,13 @@ function _exists(path) {
  * @returns {string | null}
  */
 export function mountedAkmonRoot(start) {
-  const aitna = aitnaRootName();
   let candidate = resolvePath(start);
   for (;;) {
     if (_isFile(posix.join(candidate, "AGENTS.md"))) {
       if (recordsPackageMode(candidate)) {
         return null;
       }
-      const mount = posix.join(candidate, aitna, "akmon");
+      const mount = posix.join(aitnaRoot(candidate), "akmon");
       if (_exists(mount)) {
         const governs = recordedEcosystem(candidate) === "node" && _isFile(posix.join(mount, CLI_PATH));
         return governs ? mount : null;
@@ -123,7 +122,7 @@ function _runningVersion() {
  * Python `_skew_notice`, `cli.json`'s texts): the versions compared without a leading `v` or a
  * `git describe` distance, and a distance is its own notice. `null` when the record names no
  * version, or nothing differs.
- * @param {string} mount the mounted tree, `<AITNA_ROOT>/akmon`
+ * @param {string} mount the mounted tree, `<dev root>/akmon`
  * @param {string | null} [cliVersion] default: the running CLI's
  * @returns {string | null}
  */

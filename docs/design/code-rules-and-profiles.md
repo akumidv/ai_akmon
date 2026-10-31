@@ -78,7 +78,7 @@ profiles/quant.md              domain profile, unchanged
 
 `guardrails/python.md` went. `bin/sync.py::imported_standard_files` and package-mode
 materialization cover `profiles/` (an imported profile is materialized at
-`<AITNA_ROOT>/.akmon/profiles/`, as a guardrail is); `common/materialization.py::stale_materialized`
+`<dev root>/.akmon/profiles/`, as a guardrail is); `common/materialization.py::stale_materialized`
 covers both directories and TOML; the `init` block's profile imports (one per detected language
 since C127, [ADR-0014/D02](../adr/0014-code-rules-catalog-and-language-profiles.md#d02--init-writes-the-language-profile-import-verify-warns-on-a-missing-or-unresolved-one)), `ARCHETYPES.md`'s map,
 `MODEL.md` §5, `meta/CONCEPT.md` §5, `README.md` and the role docs follow.
@@ -114,7 +114,7 @@ its own tests, and its `requires-python` still sets the target version.
 In package mode the path `extend` names must live in the repository — the same reason the imported
 guardrails and profiles are materialized — so `sync` reads the project's ruff configuration
 (`bin/sync.py::ruff_extends`) and materializes an extended `profiles/ruff.toml` at
-`<AITNA_ROOT>/.akmon/profiles/ruff.toml`, banner as a TOML comment, kept fresh like a profile.
+`<dev root>/.akmon/profiles/ruff.toml`, banner as a TOML comment, kept fresh like a profile.
 An `extend` of a file the standard does not ship is a plan error; an `extend` of the project's
 own file is none of akmon's business.
 
@@ -182,7 +182,7 @@ boundaries — is **P**.
 ## 7. `akmon check` and the project's choice
 
 **`akmon check` runs what the project declares** (`bin/check.py`, `common/check_runner.py`;
-mounted: `python3 <AITNA_ROOT>/akmon/bin/check.py`):
+mounted: `python3 <dev root>/akmon/bin/check.py`):
 
 ```toml
 [check]
@@ -191,7 +191,7 @@ types = { command = "uv run mypy {files}", files = ["*.py"] }
 ```
 
 - `{files}` becomes the files a run covers: `.` for the project, or under `--changed` the files
-  that differ from `HEAD` (plus new, unignored ones, never `<AITNA_ROOT>/`) matching the check's
+  that differ from `HEAD` (plus new, unignored ones, never `<dev root>/`) matching the check's
   `files` patterns — `*.py` when none are named. A check with no matching change is skipped; a
   command without the placeholder runs unchanged.
 - Each command runs in the project root without a shell; its output passes through untouched,

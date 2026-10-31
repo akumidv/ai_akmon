@@ -17,7 +17,9 @@ import {
   akmonMount,
   findProjectRoot,
   isProjectRoot,
+  locateProjectRoot,
   resolveProjectRoot,
+  validatedDevRootName,
 } from "./project_root.mjs";
 
 function tmpdir() {
@@ -27,38 +29,33 @@ function tmpdir() {
   return fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-project-root-")));
 }
 
-test("the default dev-layer name is _aitna", () => {
-  const saved = process.env.AITNA_ROOT;
-  delete process.env.AITNA_ROOT;
-  try {
-    assert.equal(aitnaRootName(), AITNA_ROOT_DEFAULT);
-    assert.equal(aitnaRootName(), "_aitna");
-    assert.equal(aitnaRoot("/proj"), "/proj/_aitna");
-    assert.equal(akmonMount("/proj"), "/proj/_aitna/akmon");
-  } finally {
-    if (saved !== undefined) {
-      process.env.AITNA_ROOT = saved;
-    }
-  }
+test("the default dev-layer name is _aitna, and none found answers it too", () => {
+  assert.equal(aitnaRootName(null), AITNA_ROOT_DEFAULT);
+  assert.equal(aitnaRootName(null), "_aitna");
+  assert.equal(aitnaRoot(null), "_aitna");
+  assert.equal(akmonMount(null), "_aitna/akmon");
+  const root = tmpdir();
+  assert.equal(aitnaRootName(root), "_aitna");
+  assert.equal(aitnaRoot(root), `${root}/_aitna`);
+  assert.equal(akmonMount(root), `${root}/_aitna/akmon`);
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
-test("AITNA_ROOT relocates the dev layer; slashes strip; empty falls back", () => {
-  const saved = process.env.AITNA_ROOT;
+test(".aitna-root relocates the dev layer; slashes strip; a refused value raises", () => {
+  const root = tmpdir();
   try {
-    process.env.AITNA_ROOT = "tools/ai";
-    assert.equal(aitnaRootName(), "tools/ai");
-    process.env.AITNA_ROOT = "/tools/ai/";
-    assert.equal(aitnaRootName(), "tools/ai");
-    process.env.AITNA_ROOT = "";
-    assert.equal(aitnaRootName(), "_aitna");
-    process.env.AITNA_ROOT = "/";
-    assert.equal(aitnaRootName(), "_aitna");
-  } finally {
-    if (saved === undefined) {
-      delete process.env.AITNA_ROOT;
-    } else {
-      process.env.AITNA_ROOT = saved;
+    fs.writeFileSync(posix.join(root, ".aitna-root"), "tools/ai\n");
+    assert.equal(aitnaRootName(root), "tools/ai");
+    assert.equal(aitnaRoot(root), `${root}/tools/ai`);
+    assert.equal(akmonMount(root), `${root}/tools/ai/akmon`);
+    fs.writeFileSync(posix.join(root, ".aitna-root"), "tools/ai/\n");
+    assert.equal(aitnaRootName(root), "tools/ai");
+    for (const refused of ["", "/", "/tools/ai", "../dev", "a\nb"]) {
+      fs.writeFileSync(posix.join(root, ".aitna-root"), refused);
+      assert.throws(() => aitnaRootName(root), { name: "ValueError" }, JSON.stringify(refused));
     }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -71,26 +68,22 @@ test("a mounted tree beside AGENTS.md is a project root", () => {
 });
 
 test("the dev-layer paths keep a `..` as Path does: it is the filesystem's to resolve, not a lexical join's", () => {
-  const saved = process.env.AITNA_ROOT;
-  delete process.env.AITNA_ROOT;
+  assert.equal(aitnaRoot("a/../b"), "a/../b/_aitna");
+  assert.equal(akmonMount("a/../b"), "a/../b/_aitna/akmon");
+  // The empty root is the cwd: an empty path reads `.aitna-root` beside the process, so the
+  // answer is pinned from a directory that carries none.
+  const bare = tmpdir();
+  const saved = process.cwd();
   try {
-    assert.equal(aitnaRoot("a/../b"), "a/../b/_aitna");
-    assert.equal(akmonMount("a/../b"), "a/../b/_aitna/akmon");
+    process.chdir(bare);
     assert.equal(aitnaRoot(""), "_aitna");
-    assert.equal(aitnaRoot("/p//q/"), "/p/q/_aitna");
-    assert.equal(aitnaRoot("//p"), "//p/_aitna");
-    assert.equal(aitnaRoot("///p"), "/p/_aitna");
-    process.env.AITNA_ROOT = "dev//sub/";
-    assert.equal(akmonMount("/p"), "/p/dev/sub/akmon");
-    process.env.AITNA_ROOT = "../dev";
-    assert.equal(aitnaRoot("/p"), "/p/../dev");
   } finally {
-    if (saved === undefined) {
-      delete process.env.AITNA_ROOT;
-    } else {
-      process.env.AITNA_ROOT = saved;
-    }
+    process.chdir(saved);
+    fs.rmSync(bare, { recursive: true, force: true });
   }
+  assert.equal(aitnaRoot("/p//q/"), "/p/q/_aitna");
+  assert.equal(aitnaRoot("//p"), "//p/_aitna");
+  assert.equal(aitnaRoot("///p"), "/p/_aitna");
   // `missing/..` cannot be walked through: Python's `Path.is_file` says no, a lexical join said yes
   const root = tmpdir();
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# A\n");
@@ -115,6 +108,50 @@ test("AGENTS.md alone is not a project root: neither marker present", () => {
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# A\n");
   assert.equal(isProjectRoot(root), false);
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a declaration file beside AGENTS.md is a project root, and the walk reads no content", () => {
+  const root = tmpdir();
+  fs.writeFileSync(posix.join(root, "AGENTS.md"), "# A\n");
+  fs.writeFileSync(posix.join(root, ".aitna-root"), "meta\n");
+  assert.equal(isProjectRoot(root), true);
+  // `.aitna-root` without AGENTS.md is no root
+  fs.rmSync(posix.join(root, "AGENTS.md"));
+  assert.equal(isProjectRoot(root), false);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("locateProjectRoot answers null where findProjectRoot guesses", () => {
+  const start = tmpdir();
+  assert.equal(locateProjectRoot(start), null);
+  assert.equal(findProjectRoot(start), start);
+  fs.writeFileSync(posix.join(start, "AGENTS.md"), "# A\n");
+  fs.writeFileSync(posix.join(start, ".aitna-root"), "meta\n");
+  fs.mkdirSync(posix.join(start, "a", "b"), { recursive: true });
+  assert.equal(locateProjectRoot(posix.join(start, "a", "b")), start);
+  fs.rmSync(start, { recursive: true, force: true });
+});
+
+test("validatedDevRootName names its source and refuses a link out of the project", () => {
+  const root = tmpdir();
+  const outside = tmpdir();
+  assert.throws(() => validatedDevRootName("/x/", root, ".aitna-root"), {
+    name: "ValueError",
+    message: /^\.aitna-root must be relative to the project root and stay inside it: '\/x\/'$/,
+  });
+  assert.equal(validatedDevRootName(" a/b ", root), "a/b");
+  assert.throws(() => validatedDevRootName("", root), { name: "ValueError", message: "--aitna-root cannot be empty" });
+  assert.throws(() => validatedDevRootName("../x", root, ".aitna-root"), {
+    name: "ValueError",
+    message: /^\.aitna-root must be relative to the project root and stay inside it: '\.\.\/x'$/,
+  });
+  fs.symlinkSync(outside, posix.join(root, "escape"));
+  assert.throws(() => validatedDevRootName("escape", root), {
+    name: "ValueError",
+    message: /^--aitna-root resolves outside the project root: /,
+  });
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(outside, { recursive: true, force: true });
 });
 
 test("the walk finds the root from a nested directory and stops at the nearest", () => {
@@ -163,7 +200,7 @@ test("a guessed root prints the notice naming the expected markers", () => {
   assert.equal(root, start);
   assert.ok(notice !== null);
   assert.ok(notice.includes(`no project root at or above ${start}`));
-  assert.ok(notice.includes("expected AGENTS.md beside _aitna/akmon or _aitna/.akmon.toml"));
+  assert.ok(notice.includes("expected AGENTS.md beside .aitna-root, _aitna/akmon or _aitna/.akmon.toml"));
   assert.ok(notice.includes("pass --project-root to name the root instead"));
   fs.rmSync(start, { recursive: true, force: true });
 });

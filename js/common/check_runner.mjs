@@ -240,7 +240,7 @@ export function changedFiles(data, root) {
       }
     }
   }
-  const devLayer = `${aitnaRootName()}/`;
+  const devLayer = `${aitnaRootName(root)}/`;
   // `is_file()`, not "exists": a directory or a link to one whose name matches a `files` pattern
   // is no file a linter can be handed, and the twin drops it — the run then has nothing to do.
   const kept = new Set(names.filter((name) => !name.startsWith(devLayer) && isFile(pyPath(root, name))));

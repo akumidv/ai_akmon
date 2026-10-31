@@ -3,11 +3,15 @@
 
 Both questions were answered independently by seven modules (C73): three walked up for
 ``AGENTS.md`` beside either a mounted tree or a package integration record, one ignored
-package mode, and three additionally hard-coded ``_aitna`` past ``AITNA_ROOT``. Every one of
+package mode, and three additionally hard-coded ``_aitna`` past an environment variable. Every one of
 them ended the walk with ``return start`` — the current directory — so a command that had
 found nothing was indistinguishable from one that had found the root, and it went on to write
 its artifacts under the cwd. Since the answer decides which registry binds and where a gate
 pack lands, it is one fact and gets one owner.
+
+The dev-layer root is declared by a file, not by the environment (ADR 0022 D09): ``<root>/.aitna-root``
+holds one project-root-relative POSIX path, an absent file means ``_aitna``, and ``dev_root`` is the
+accessor that answers it together with how it was found.
 
 Stdlib-only and free of project imports on purpose — see ``common/__init__.py`` for why
 that, and the package's reachability from every carrier, is what lets a single owner exist at
@@ -18,14 +22,23 @@ from __future__ import annotations
 
 import errno
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 # The dev-layer (LOCAL) root is configurable: ``_aitna`` is the default, but a project may
-# relocate it by declaring ``AITNA_ROOT`` (a path relative to the project root, e.g.
+# relocate it by committing ``.aitna-root`` (one line: a path relative to the project root, e.g.
 # ``tools/ai``). akmon is always mounted at ``<aitna-root>/akmon``. Public because the
-# *default* itself is a fact callers ask for: ``akmon init`` tells the owner to export
-# ``AITNA_ROOT`` only when the chosen root is not this one.
+# *default* itself is a fact callers ask for: ``akmon init`` writes the declaration only when
+# the chosen root is not this one.
 AITNA_ROOT_DEFAULT = "_aitna"
+
+# The file at the project root that declares a dev-layer root other than the default.
+DEV_ROOT_FILE = ".aitna-root"
+
+# How a dev root was found (``DevRoot.origin``).
+ORIGIN_POINTER = "pointer"
+ORIGIN_DEFAULT = "default"
+ORIGIN_NO_PROJECT_ROOT = "no-project-root"
 
 # The longest start path the walk accepts, in UTF-8 bytes: Linux's PATH_MAX. No longer path
 # names anything the kernel can look up, and resolving one costs time quadratic in its depth.
@@ -56,17 +69,86 @@ def resolve_path(path: Path) -> Path:
     return path.resolve()
 
 
-def aitna_root_name() -> str:
-    """The configured dev-layer root, as a project-root-relative POSIX path (default ``_aitna``)."""
-    return (os.environ.get("AITNA_ROOT") or AITNA_ROOT_DEFAULT).strip("/") or AITNA_ROOT_DEFAULT
+@dataclass(frozen=True)
+class DevRoot:
+    """The dev-layer root of a project and how it was found.
+
+    ``path`` is ``<project root>/<name>`` — absolute when the project root is — except for
+    ``ORIGIN_NO_PROJECT_ROOT``, where there is no root to anchor it and it is the bare default
+    name, usable for reading only: a writer of the local layer stops there.
+    """
+
+    path: Path
+    origin: str
 
 
-def aitna_root(project_root: Path) -> Path:
-    """Absolute dev-layer root for ``project_root`` (``<project_root>/<AITNA_ROOT>``)."""
-    return project_root / aitna_root_name()
+def validated_dev_root_name(value: str, project_root: Path, source: str = "--aitna-root") -> str:
+    """A dev-layer root as a project-root-relative POSIX path, or a ``ValueError`` naming ``value``.
+
+    The root is *project-root-relative* by contract and ``akmon init`` writes a whole layout under
+    it — backlog, memory, charters, the integration record, and in package mode the materialized
+    imported guardrails. An absolute path or one climbing out with ``..`` would scatter all of
+    that outside the project the caller named, silently, because every later step simply follows
+    the declaration. Checked both lexically and by resolution: a symlinked segment can leave the
+    project without a single ``..`` in the string. ``source`` names the declaration in the message
+    (``--aitna-root`` or ``.aitna-root``).
+
+    Raises:
+        ValueError: the value is empty, absolute, climbs with ``..`` or resolves outside the project.
+    """
+    raw = value.strip()
+    # Absoluteness is decided on the *raw* value: stripping the slashes first would turn
+    # `/tmp/escaped` into the innocent-looking relative `tmp/escaped` and let it through.
+    if Path(raw).is_absolute():
+        raise ValueError(f"{source} must be relative to the project root and stay inside it: {value!r}")
+    cleaned = raw.strip("/")
+    if not cleaned:
+        raise ValueError(f"{source} cannot be empty")
+    candidate = Path(cleaned)
+    if ".." in candidate.parts:
+        raise ValueError(f"{source} must be relative to the project root and stay inside it: {value!r}")
+    resolved = resolve_path(project_root / candidate)
+    if resolve_path(project_root) not in resolved.parents:
+        raise ValueError(f"{source} resolves outside the project root: {resolved}")
+    return cleaned
 
 
-def akmon_mount(project_root: Path) -> Path:
+def dev_root(project_root: Path | None) -> DevRoot:
+    """The dev-layer root of ``project_root``, and how it was found (ADR 0022 D09).
+
+    ``<project_root>/.aitna-root`` holds one line, a project-root-relative POSIX path: ``pointer``
+    when it names the root, ``default`` (``_aitna``) when the file is absent. ``None`` — no
+    project root was found — answers ``_aitna`` as ``no-project-root``, for reading only.
+
+    Raises:
+        ValueError: the declaration is empty, spans several lines, is absolute, climbs with
+            ``..`` or resolves outside the project.
+    """
+    if project_root is None:
+        return DevRoot(Path(AITNA_ROOT_DEFAULT), ORIGIN_NO_PROJECT_ROOT)
+    declaration = project_root / DEV_ROOT_FILE
+    if not declaration.is_file():
+        return DevRoot(project_root / AITNA_ROOT_DEFAULT, ORIGIN_DEFAULT)
+    text = declaration.read_text(encoding="utf-8").strip()
+    if len(text.splitlines()) > 1:
+        raise ValueError(f"{DEV_ROOT_FILE} must hold one line, a project-root-relative path: {text!r}")
+    return DevRoot(project_root / validated_dev_root_name(text, project_root, DEV_ROOT_FILE), ORIGIN_POINTER)
+
+
+def aitna_root_name(project_root: Path | None) -> str:
+    """The dev-layer root of ``project_root`` as a project-root-relative POSIX path (default ``_aitna``)."""
+    found = dev_root(project_root)
+    if project_root is None:
+        return found.path.as_posix()
+    return found.path.relative_to(project_root).as_posix()
+
+
+def aitna_root(project_root: Path | None) -> Path:
+    """Absolute dev-layer root for ``project_root`` (see ``dev_root``)."""
+    return dev_root(project_root).path
+
+
+def akmon_mount(project_root: Path | None) -> Path:
     """Absolute akmon mount for ``project_root`` (``<aitna-root>/akmon``).
 
     The *mounted* tree's path, computed — not a claim that it exists, and not a claim that it is
@@ -79,16 +161,20 @@ def akmon_mount(project_root: Path) -> Path:
 
 
 def is_project_root(candidate: Path) -> bool:
-    """A project ``AGENTS.md`` beside either a mounted tree or an integration record.
+    """A project ``AGENTS.md`` beside a mounted tree, an integration record or ``.aitna-root``.
 
-    The record (``<AITNA_ROOT>/.akmon.toml``) is the only marker a package-mode project
+    The record (``<dev root>/.akmon.toml``) is the only marker a package-mode project
     carries, since it has no mounted tree at all (ADR 0009 §4); requiring the tree alone is
     the defect that made ``second_opinion.py`` and its two neighbours miss such a project
-    entirely and fall back to the cwd.
+    entirely and fall back to the cwd. The declaration file is a marker of its own (ADR 0022 D09):
+    a project that names its dev root has said it is one. Without the file the dev root is the
+    default, so the question never has to read the declaration.
     """
     if not (candidate / "AGENTS.md").is_file():
         return False
-    aitna = aitna_root(candidate)
+    if (candidate / DEV_ROOT_FILE).is_file():
+        return True
+    aitna = candidate / AITNA_ROOT_DEFAULT
     return (aitna / "akmon").exists() or (aitna / ".akmon.toml").is_file()
 
 
@@ -119,6 +205,25 @@ def _bounded_start(start: Path | None = None) -> Path:
     return origin
 
 
+def locate_project_root(start: Path | None = None) -> Path | None:
+    """Walk up from ``start`` (default: the cwd) to the nearest project root, or ``None``.
+
+    The answer a writer of the local layer needs: ``None`` is "no project root", so it writes
+    nothing, where ``find_project_root`` hands back a guess. The walk is linear: each step is the
+    candidate's parent, until the parent stops changing.
+
+    Raises:
+        ValueError: the start path is longer than ``_START_PATH_MAX_BYTES``.
+    """
+    candidate = resolve_path(_bounded_start(start))
+    while not is_project_root(candidate):
+        parent = candidate.parent
+        if parent == candidate:
+            return None
+        candidate = parent
+    return candidate
+
+
 def find_project_root(start: Path | None = None) -> Path:
     """Walk up from ``start`` (default: the cwd) to the nearest project root, else ``start``.
 
@@ -129,8 +234,6 @@ def find_project_root(start: Path | None = None) -> Path:
     ``_START_PATH_MAX_BYTES`` is not a fallback: it is refused with a ``ValueError`` before it is
     resolved (``_bounded_start``), and a hook takes that as its ordinary failure exit (C121).
 
-    The walk is linear: each step is the candidate's parent, until the parent stops changing.
-
     ``hooks/hook_core.py`` imports this rather than repeating it. That was previously deferred
     on the belief that it waited on the C69/ADR-0009/D02 fork; it does not. That fork is about which
     *tree* the hooks read (``akmon_runtime_root``), not about where the project root is, and the
@@ -140,14 +243,8 @@ def find_project_root(start: Path | None = None) -> Path:
     Raises:
         ValueError: the start path is longer than ``_START_PATH_MAX_BYTES``.
     """
-    current = resolve_path(_bounded_start(start))
-    candidate = current
-    while not is_project_root(candidate):
-        parent = candidate.parent
-        if parent == candidate:
-            return current
-        candidate = parent
-    return candidate
+    found = locate_project_root(start)
+    return found if found is not None else resolve_path(_bounded_start(start))
 
 
 def resolve_project_root(explicit: Path | None, start: Path | None = None) -> tuple[Path, str | None]:
@@ -156,18 +253,18 @@ def resolve_project_root(explicit: Path | None, start: Path | None = None) -> tu
     Returns ``(root, None)`` when the root was named on the command line or found by the walk,
     and ``(cwd, notice)`` when it was not. The notice exists because the fallback root is where
     the tool then reads its registry and writes its reports: unstated, a gate pack under a wrong
-    root looks exactly like one under the right root, which is the failure C73 was filed for.
+    root looks exactly like one under the right root, which is the failure C73 was filed for. A
+    command that writes the local layer prints the notice and stops (ADR 0022 D09).
     """
     if explicit is not None:
         return resolve_path(explicit), None
     origin = resolve_path(_bounded_start(start))
-    found = find_project_root(origin)
-    if is_project_root(found):
+    found = locate_project_root(origin)
+    if found is not None:
         return found, None
-    aitna = aitna_root_name()
     notice = (
-        f"[akmon] no project root at or above {origin}: expected AGENTS.md beside {aitna}/akmon "
-        f"or {aitna}/.akmon.toml. Falling back to that directory, so anything this command reads "
-        f"or writes is relative to it; pass --project-root to name the root instead."
+        f"[akmon] no project root at or above {origin}: expected AGENTS.md beside {DEV_ROOT_FILE}, "
+        f"{AITNA_ROOT_DEFAULT}/akmon or {AITNA_ROOT_DEFAULT}/.akmon.toml. Falling back to that directory, "
+        f"so anything this command reads or writes is relative to it; pass --project-root to name the root instead."
     )
     return origin, notice

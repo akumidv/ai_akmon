@@ -32,7 +32,7 @@
  *   only `model` is read.
  */
 
-import { aitnaRootName, findProjectRoot } from "../common/project_root.mjs";
+import { locateProjectRoot } from "../common/project_root.mjs";
 import { JSONDecodeError, jsonLoads } from "../common/pyjson.mjs";
 import { dictGet, isDict, isDir, isFile, pyEq, pyError, pyPath, readText, truthy } from "../common/pyvalue.mjs";
 import {
@@ -128,7 +128,6 @@ export function modelRoutingResult(data, root, payload) {
   const hookEvent = dictGet(payload, "hook_event_name");
   const event = truthy(hookEvent) ? hookEvent : "SessionStart";
 
-  const aitna = aitnaRootName();
   // Recovery instructions must name a command that works in the tree this project actually has:
   // the mount's script when one exists, `akmon tool` from the installed package, whose literal
   // path would carry the install layout (C77, ADR-0020/D06). Naming the mount unconditionally
@@ -136,7 +135,7 @@ export function modelRoutingResult(data, root, payload) {
   const initCommand = toolCommand(data.agents, runtimeRootDisplay(root), "model_routing/init");
   // An overlay `briefs` key matching no agent makes every regeneration lossy, so the
   // rebind is refused rather than run — and the reason is stated instead of swallowed (C50).
-  const briefWarn = briefWarning(data.agents, registry, aitna);
+  const briefWarn = briefWarning(data.agents, registry, root);
 
   // Detect the model the main chain actually runs on (authoritative over settings) and
   // rebind the subagents when it moved. Needs an existing config for the `available`
@@ -192,7 +191,7 @@ export function modelRoutingResult(data, root, payload) {
       systemMessage: [lines[0], ...overlay, ...pressure].join("\n"),
     });
   }
-  const lines = [...statusLines(data.agents, data.runtime, config, registry, initCommand), ...overlay];
+  const lines = [...statusLines(data.agents, data.runtime, config, registry, initCommand, root), ...overlay];
   // Owner-addressed subset: the corridor warning, the fact of a rebind and — for the owner
   // alone — the context-pressure reminder at either level (its info line carries ℹ, not ⚠);
   // the steady-state status line itself stays context-only so the UI is quiet when healthy.
@@ -208,9 +207,10 @@ export function modelRoutingResult(data, root, payload) {
 }
 
 /**
- * The project root the payload's `cwd` (else `$CLAUDE_PROJECT_DIR`, else the process's) is in.
+ * The project root the payload's `cwd` (else `$CLAUDE_PROJECT_DIR`, else the process's) is in, or
+ * `null`: with no project root the hook stays silent (ADR 0022 D09).
  * @param {Json} payload
- * @returns {string}
+ * @returns {string | null}
  */
 function _projectRoot(payload) {
   let cwd = dictGet(payload, "cwd");
@@ -224,7 +224,7 @@ function _projectRoot(payload) {
     throw pyError("TypeError", "argument should be a str or an os.PathLike object where __fspath__ returns a str");
   }
   assertEncodablePath(cwd); // `Path(cwd).resolve()` refuses a NUL or a lone surrogate
-  return findProjectRoot(pyPath(cwd));
+  return locateProjectRoot(pyPath(cwd));
 }
 
 /**
@@ -253,8 +253,12 @@ function _overlayProblemResult(data, payload, error) {
  */
 function _decide(data) {
   const payload = loadPayload();
+  const root = _projectRoot(payload);
+  if (root === null) {
+    return null;
+  }
   try {
-    return modelRoutingResult(data, _projectRoot(payload), payload);
+    return modelRoutingResult(data, root, payload);
   } catch (error) {
     if (!(error instanceof OverlayError)) {
       throw error;

@@ -392,7 +392,7 @@ Each task runs in its own session with the owner reviewing at the task boundary 
 Start prompt:
 
 ```
-🧭 agent: engineer — Node.js implementation of akmon, starting with C101.
+🧭 role: engineer — Node.js implementation of akmon, starting with C101.
 
 Read AGENTS.md, ADR docs/adr/0020-node-consumers-js-implementation.md and
 docs/design/node-consumers.md (§5 corpus, §6 plan). The decisions are accepted: do not

@@ -5,7 +5,7 @@
  * the same texts, the same exit code and the same stdout and stderr.
  *
  * The checks are the project's own: its linter, its type checker, or ruff with akmon's rules,
- * named in `[check]` of `<AITNA_ROOT>/.akmon.toml`. akmon runs them and reports the result; it
+ * named in `[check]` of `<dev root>/.akmon.toml`. akmon runs them and reports the result; it
  * checks no code itself. The engine is `common/check_runner.mjs`.
  *
  *     akmon check              every declared check over the whole project
@@ -56,7 +56,7 @@ const TREE_ROOT = posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "
 /** What `-h` / `--help` prints (the Python has `argparse`'s own block; see the header). */
 const USAGE = `usage: akmon check [-h] [--project-root PROJECT_ROOT] [--changed]
 
-Run the checks the project declares in [check] of <AITNA_ROOT>/.akmon.toml.
+Run the checks the project declares in [check] of <dev root>/.akmon.toml.
 
 options:
   -h, --help            show this help message and exit

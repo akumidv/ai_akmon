@@ -1,13 +1,19 @@
 # 0025 — Actors and the action repertoire
 
-- **Status:** Accepted for **D01–D04**. The owner decided each point in session: that who drives a run
+- **Status:** Accepted for **D01–D06**. The owner decided each point in session: that who drives a run
   is an axis of its own and cannot change during the run (**D01**); that a permission is a
   repertoire of allowed actions plus a short list of unconditional prohibitions, with result quality
   weighed above bypass risk and the bypass contained outside the hooks (**D02**); that a run's
   instructions and skills are prepared for it and never committed (**D03**); and that a project's own
   grants are trusted by an owner-accepted digest as a trial, measured before it is kept (**D04**).
-  What carries the actor, the composition of actor and repertoire, how the repertoire is made the
-  recommended path, and the names, stay open in the design. Implementation has not started.
+  How the trial is built — content-keyed digests in a user-level store with the accepted copies, and
+  a provisional place for the grant files — the owner decided when C172 started (**D05**). That a
+  hook's `ask` becomes a deny only in a run nobody attends the owner decided on the N14 probes
+  (**D06**).
+  What carries the actor, the composition of actor and repertoire, and how the repertoire is made
+  the recommended path stay open in the design; the names are decided in
+  [0027](0027-names-of-agents-actors-roles-and-delegates.md). C172 implements D04 and D05; C178
+  implements D06.
 - **Owner:** akuminov@gmail.com
 - **References:** [design: actors, agents and the action repertoire](../design/actors-agents-repertoire.md) ·
   [0026](0026-agents-of-the-delivery-chain.md) (the agents that hold a repertoire) ·
@@ -15,7 +21,7 @@
   [0013](0013-hook-survivability-and-crash-posture.md) (crash posture) ·
   [0022](0022-local-layer-index-and-plans.md) (the local layer) ·
   tasks [A71](../../meta/TASKS.md), [A72](../../meta/TASKS.md), [A73](../../meta/TASKS.md),
-  [C171](../../meta/TASKS.md), [C172](../../meta/TASKS.md), [C173](../../meta/TASKS.md).
+  [C174](../../meta/TASKS.md), [C172](../../meta/TASKS.md), [C173](../../meta/TASKS.md).
 
 ## Context
 
@@ -42,6 +48,10 @@ the system user it runs as.
    for it and never committed (**D03**).
 4. A project's own grants are trusted once the owner accepted their digest; this is a trial,
    implemented first and measured before it is kept (**D04**).
+5. The trial keys a digest on content, keeps accepted copies in a user-level store and asks at an
+   interactive terminal; grant files sit provisionally under `<AITNA_ROOT>/grants/` (**D05**).
+6. A hook's `ask` stays a question when someone attends the run and becomes a deny only when nobody
+   does (**D06**).
 
 ## Alternatives considered
 
@@ -121,3 +131,34 @@ This is a trial. Its named risk is a loop of re-approvals that is slow and buys 
 approval rounds of A22 were. It is implemented first and measured over the period the rest of the
 plan takes — re-acceptances, owner time, changes it caught — then kept, simplified or dropped by a
 new block.
+
+### D05 — How the digest trial is built
+
+`Decision-ID: ADR-0025/D05`
+
+An accepted digest is the SHA-256 of a grant file's content and is not bound to a project or a path:
+the same text carries the same grants in any clone, so a fresh isolated checkout needs no new
+acceptance and only a real change asks the owner again. The store is a user-level directory —
+`$AKMON_TRUST_DIR`, else `$XDG_STATE_HOME/akmon/trust`, else `~/.local/state/akmon/trust` — outside
+every checkout; a launcher gives an autonomous run that directory read-only, which akmon documents
+and does not supply. The store keeps a copy of every accepted file, so a re-acceptance shows the owner
+the change since the last accepted version of the same path rather than the whole file. An
+acceptance is confirmed at an interactive terminal; there is no non-interactive acceptance.
+
+A project's grant files live, provisionally, under `<AITNA_ROOT>/grants/`; the name may change with
+the taxonomy (A72) and the repertoire artifact (C173), and the trust mechanism does not depend on it.
+
+### D06 — An ask becomes a deny only when nobody attends
+
+`Decision-ID: ADR-0025/D06`
+
+A hook that forms an `ask` lets it through as a question when the run is attended and turns it into
+a deny when it is not. Attendance is read from what the host states: Claude Code sets
+`CLAUDE_CODE_SESSION_ATTENDED` in the hook process, `1` in an interactive session and `0` under
+`-p`, on the main chain and in a subagent alike (M199, M200). Where the host states nothing (Codex,
+an older Claude Code), the earlier rule stands: only the interactive `default` permission mode
+attends. A mode that skips every question (`bypassPermissions`, `dontAsk`) is never attended, since
+the question would not be asked (M193). The permission mode alone no longer decides: an attended
+session in `auto` shows a hook's question (M197), and an unattended `-p` run reports `default`
+(M199). This narrows [0006](0006-orchestrator-detection-corridor-context-pressure.md)/D02's
+"outside interactive default mode becomes a deny" to the unattended run.

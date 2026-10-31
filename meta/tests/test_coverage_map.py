@@ -151,16 +151,16 @@ def test_cli_scopes_by_session_and_writes(tmp_path, capsys):
     assert "entries=1" in captured
 
 
-def test_the_default_map_path_follows_the_configured_dev_layer_root(tmp_path, monkeypatch, capsys):
+def test_the_default_map_path_follows_the_configured_dev_layer_root(tmp_path, capsys):
     """No ``--out`` must land under the *configured* dev layer, not the default literal.
 
     The sibling of the gate-pack carrier, and the same defect: this path was spelled
     ``_aitna`` directly, so a project that relocated its dev layer got its coverage map
     written into a directory it does not read — silently, with a success line printed.
     """
-    monkeypatch.setenv("AITNA_ROOT", "tools/ai")
     root = tmp_path
     (root / "AGENTS.md").write_text("x", encoding="utf-8")
+    (root / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     (root / "tools" / "ai" / "akmon").mkdir(parents=True)
     log = root / routing.delegation_log_rel()
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -177,6 +177,18 @@ def test_the_default_map_path_follows_the_configured_dev_layer_root(tmp_path, mo
     assert coverage_map.main(["--project-root", str(root), "--all-sessions", "--task", "C7"]) == 0
     assert coverage_map.main(["--project-root", str(root), "--all-sessions", "--task", "C7"]) == 0
     assert "map: tools/ai/artifacts/gates/C7-coverage-2.md" in capsys.readouterr().out
+
+
+def test_no_out_with_no_project_root_refuses_and_writes_nothing(tmp_path, monkeypatch, capsys):
+    """ADR 0022 D09: the default map lands in the local layer, and with no project root there is none."""
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    log = tmp_path / "delegation.tsv"
+    log.write_text("T0\tsess-1\tk_explorer\tsmall\tauth\tcheck tokens\n", encoding="utf-8")
+    monkeypatch.chdir(bare)
+    assert coverage_map.main(["--all-sessions", "--log", str(log)]) == 2
+    assert "no project root at or above" in capsys.readouterr().err
+    assert list(bare.iterdir()) == []
 
 
 # --------------------------------------------------------------------------------------

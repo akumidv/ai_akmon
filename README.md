@@ -30,7 +30,7 @@ knowledge and judgment where they matter, and let agents carry routine work with
 appropriate models and verifiable results.
 
 The [mission and priorities](MODEL.md#mission-and-priorities) put **human attention and
-joint decision quality** alongside **token efficiency for quality**. Roles, subagents,
+joint decision quality** alongside **token efficiency for quality**. Roles, delegates,
 model routing, reusable skills, and hooks serve those outcomes; they are not the goal.
 Truthful reports and decisions that can be challenged matter more than easy agreement.
 
@@ -129,17 +129,18 @@ by itself, but better decisions and results at an explicit human and computation
 
 *The name states the purpose.* In the myth, the **Kyklōpes** (Cyclopes) work the **akmon**
 (anvil) in the forge beneath **Aitna** (Mount Etna). This is that forge for software: the
-shared **anvil** every project is hammered into shape on, worked by the assistant's smiths,
+shared **anvil** every project is hammered into shape on, worked by the assistant's delegates,
 inside each project's own forge-workspace. The vocabulary maps one-to-one onto the system:
 
 | myth (Greek) | in the system | name |
 |--------------|---------------|------|
 | **AItna** (Αἴτνη) — the volcano the forge sits under | each project's **dev-layer workspace** — the fire where the project is built; begins with **ai** | `_aitna/` |
 | **akmon** (ἄκμων) — the AnvIl in the forge | this **shared standard/engine**, mounted inside the workspace | `akmon` / repo `ai_akmon`, at `_aitna/akmon/` |
-| **Kyklōpes** (Κύκλωπες) — Zeus's smiths | the **subagents** — the `k-` prefix (`k_explorer`, `k_implementer`, …) | `k_*` (prefix kept) |
+| **Kyklōpes** (Κύκλωπες) — Zeus's smiths | the **delegates** — the `k-` prefix (`k_explorer`, `k_implementer`, …) | `k_*` (prefix kept) |
 
 Containment is literal: the anvil sits **inside** the volcano-forge, exactly as `akmon/`
-sits inside `_aitna/`; the `k-` prefix of the subagents reads as *Kyklōpes*.
+sits inside `_aitna/`; the `k-` prefix of the delegates reads as *Kyklōpes*, the myth gloss of the delegates only
+([ADR 0027](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0027-names-of-agents-actors-roles-and-delegates.md)).
 
 > The names are **locked** ([ADR 0008](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0008-mythological-naming-aitna-akmon-kyklopes.md)),
 > and the on-disk rename is tracked as one migration release ([V1](https://github.com/akumidv/ai_akmon/blob/main/meta/TASKS.md)).
@@ -168,7 +169,8 @@ tracked as **N1** in [meta/TASKS.md](https://github.com/akumidv/ai_akmon/blob/ma
 | [MODEL.md](MODEL.md) | the operative model — axes, roles, tiers, principles; **the rulebook a consumer applies** |
 | [BOOTSTRAP.md](BOOTSTRAP.md) | attach akmon to a project, or realign one |
 | [ARCHETYPES.md](ARCHETYPES.md) | the archetype taxonomy + per-archetype USAGE/requirement checklists |
-| [roles/](roles/) | the role definitions: `review` · `architect` · `engineer` + `learn` · `release` |
+| [roles/](roles/) | the role definitions of the development agent: `review` · `architect` · `engineer` |
+| [agents/](agents/) | the agent definitions: `development` · `learning` · `release` (the learning and release agents define their `learn` and `release` modes there) |
 | [pipelines/](pipelines/) | how each role works: review-flow · design-flow · code-flow · pre-commit · release · tasks · the learn loop |
 | [guardrails/](guardrails/) | always-on hard rules for every project (`_common`) |
 | [profiles/](profiles/) | always-on language and environment profiles (`python`, `python-stdlib`, `js`), the checkable rules as standard linter configurations (`ruff.toml`, `oxlint.json`), and opt-in domain rules (`quant`, …) |
@@ -213,9 +215,9 @@ Everything below is the complete operating model behind
 [the simple idea](#the-simple-idea). Attaching akmon does not require it; return here
 once the basics run and you want to see the machinery — or to change it.
 
-### The model in three axes
+### The model in four axes
 
-Every artifact and every action classifies on **three independent axes** —
+Every artifact and every action classifies on **four independent axes** —
 [MODEL.md](MODEL.md) owns the definitions; this is the orientation:
 
 - **Layer** — *whom an artifact serves*: **SHARED** (this submodule — every project),
@@ -224,13 +226,17 @@ Every artifact and every action classifies on **three independent axes** —
   SHARED+LOCAL point inward (building the repo); USAGE points outward.
 - **Role** — *who performs the work*: the DEVELOP triad **review** (analysis — assess
   what *is*) → **architect** (synthesis — design what *should be*) → **engineer**
-  (realization — code and tests), plus cross-cutting **learn** and **release**. Each role
-  is a definition here ([roles/](roles/)) with its own pipeline
-  ([pipelines/](pipelines/)); a project instantiates it as an *agent* in
-  `_aitna/agents/`, inheriting the definition and adding only project specifics.
+  (realization — code and tests), the modes of the development agent; the release and
+  learning agents work in `learn` and `release`. Each role is a definition here
+  ([roles/](roles/), [agents/](agents/)) with its own pipeline
+  ([pipelines/](pipelines/)); a project's agent works in it under a charter in
+  `_aitna/agents/<agent>/`, which inherits the definition and adds only project specifics.
 - **Archetype** — *what the project exposes outward* (`package` / `service` / `mcp` /
   `frontend` / …): chosen by the contract, not the language; decides whether a USAGE
   layer exists and its shape ([ARCHETYPES.md](ARCHETYPES.md)).
+- **Actor** — *who drives a run*: a **developer**, an **autonomous** agent running alone in an
+  isolated environment, or a **guided** non-developer whose key actions are explained and
+  confirmed. Set when the run is launched and fixed for the whole run.
 
 On top of the axes sit the always-on **[guardrails/](guardrails/)** (the universal floor,
 applied automatically) and **[profiles/](profiles/)** — language and environment profiles
@@ -240,9 +246,9 @@ concern (`quant`, …).
 ### How a session runs — the model in one picture
 
 One session = one **orchestrator** (the main assistant, on the session's own model) plus
-the `k_*` smiths it delegates to. The orchestrator keeps only what cannot be delegated —
+the `k_*` delegates it hands work to. The orchestrator keeps only what cannot be delegated —
 decompose, route, synthesize, owner dialogue — and hands every named **task kind** to the
-smith bound to it:
+delegate bound to it:
 
 ```
 owner ──► orchestrator (session model)
@@ -260,7 +266,7 @@ owner ◄── synthesis + audit verdict + the items only the owner can verify
 
 - **Routing is data.** The task-kind → tier matrix and the per-vendor selection policy live
   in [`tools/model_routing/registry.json`](tools/model_routing/registry.json) — the single
-  owner; `init.py` binds tiers to locally available models and generates the `k_*` agent
+  owner; `init.py` binds tiers to locally available models and generates the `k_*` delegate
   definitions. Operative rules: [MODEL.md §10](MODEL.md#10-capability-tiers--model-routing).
 - **Quality concentrates where leverage is highest.** Cheap models fan out to sweep and
   edit; the maximal model runs at a few low-token points — plan checks and the **gate
@@ -268,16 +274,16 @@ owner ◄── synthesis + audit verdict + the items only the owner can verify
   against a yardstick. Worked, real example: [examples/gate-anatomy.md](examples/gate-anatomy.md).
 - **Hooks keep it true at runtime.** SessionStart shows the binding; a PreToolUse hook logs
   every delegation at zero token cost; the delegation nudge pushes a drifting orchestrator
-  back to the smiths; the commit guard holds D5 at the tool boundary. What each of those
+  back to the delegates; the commit guard holds D5 at the tool boundary. What each of those
   actually reaches, per harness, is in [CAPABILITIES.md](CAPABILITIES.md).
 
-> **The smiths are used, not just named.** Delegation to the `k_*` smiths carries a forcing
+> **The delegates are used, not just named.** Delegation to the `k_*` delegates carries a forcing
 > function, not just prose — because restating "delegate by task kind" did not stop the
 > orchestrator from doing everything itself. A PreToolUse hook counts the orchestrator's own
 > consecutive delegable calls (read/sweep, edit, shell) with no delegation and, past a
-> threshold, nudges — then hard-asks — to hand the work to a smith. How far that reaches on
+> threshold, nudges — then hard-asks — to hand the work to a delegate. How far that reaches on
 > each harness is one row in [CAPABILITIES.md](CAPABILITIES.md).
-> The smiths themselves are exempt (a `k_*` delegate has no delegation tool of its own).
+> The delegates themselves are exempt (a `k_*` delegate has no delegation tool of its own).
 > Mechanism + motivation: [model-routing §13](https://github.com/akumidv/ai_akmon/blob/main/docs/design/model-routing.md).
 
 ## akmon's own development

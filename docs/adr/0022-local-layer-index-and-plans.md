@@ -1,12 +1,14 @@
 # 0022 — The local layer, its index, and the plan
 
-- **Status:** Accepted for **D01–D08**. The owner decided each choice in session: the local root,
+- **Status:** Accepted for **D01–D09**. The owner decided each choice in session: the local root,
   akmon's symmetric dev root, the raw-material home, the direction of references between local and
   project material, the nature and lifecycle of a plan, the split between a pipeline and two skills,
   the home of development skills (**D05**) and which skills those are (**D07**), the id a piece of
   material carries (**D08**), and that a project's
   dev root is resolved by code. The form of
-  that code is not part of this record (**D06**, task **C157**). Implementation has not started.
+  that code is not part of this record (**D06**, task **C157**). When C157 started the owner chose
+  the form: a pointer file, `AITNA_ROOT` retired at once, and no local write without a found root
+  (**D09**). Implementation has not started.
 - **Confirmed by the owner afterwards:** the three provisions the architect derived — the id
   exemption of local rows and the narrowing of 0002 (D03), a companion row carrying no copy of its
   project status (D03), and resume prompts naming paths from the project root only (D01); a token of
@@ -68,6 +70,9 @@ steps of one task (A39) and a trunk over backlog rows with a goal (the roadmap d
    skills, `plan` and `roadmap`; development skills live in `<DEV>/skills/` (**D05**).
 6. A project's dev root is resolved by one code accessor; akmon's own repository resolves `meta/`
    by it (**D06**).
+7. A project states a dev root other than `_aitna/` in a one-line `.aitna-root` file at its root;
+   the environment no longer states it, and nothing writes the local layer without a found project
+   root (**D09**).
 
 ## Alternatives considered
 
@@ -304,3 +309,19 @@ rule: **material carries the id of the row it serves.**
   packs for; **C152** reads `kits` beside `members`, and a tracked output still carries no local row
   (**D02**). The token belongs to the row format, so `pipelines/tasks.md` § Id states it; this block
   decides it.
+
+### D09 — How the dev root is declared and found
+
+`Decision-ID: ADR-0022/D09`
+
+The accessor of D06 takes the project root as its subject and reads the dev root from
+`<root>/.aitna-root`, one line holding a project-root-relative POSIX path; it answers the root
+together with how it was found. An absent file means `_aitna`. `akmon init` writes the file only for
+another root, and a line that is absolute, climbs with `..` or resolves outside the project is
+refused as `--aitna-root` is. akmon's own repository is recognized by the same declaration — it
+commits a `.aitna-root` holding `meta` — and by nothing about its contents, so a consumer with a
+`meta/` of its own is not mistaken for it. A project root is `AGENTS.md` beside a mounted tree, an
+integration record or that file. The `AITNA_ROOT` environment variable is no longer read; verify
+warns while it is still set. When no project root is found the accessor answers `_aitna` for
+reading, and no writer of the local layer writes: a hook stays silent, a command prints the notice it
+already gives and stops.

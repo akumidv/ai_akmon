@@ -1,0 +1,16 @@
+id = "cli/trust-report-empty"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:trust"]
+
+[env]
+AKMON_TRUST_DIR = "{{tmp}}/trust"
+HOME = "{{tmp}}"
+
+[run]
+argv = ["trust", "report"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "accepts: 0\nre-accepts: 0\nrevokes: 0\nuntrusted digests sighted: 0\nsighted digests later accepted: 0\nmedian seconds from sighting to acceptance: -\n"

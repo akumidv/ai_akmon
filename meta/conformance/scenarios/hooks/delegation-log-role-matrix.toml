@@ -9,7 +9,7 @@ covers = ["hook:delegation-log"]
 
 [fixture]
 attach = "native"
-files = { "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 agent: review — conformance"}]}}
+files = { "transcript.jsonl" = """{"type": "assistant", "isSidechain": false, "message": {"content": [{"type": "text", "text": "🧭 role: review — conformance"}]}}
 """}
 
 [run]

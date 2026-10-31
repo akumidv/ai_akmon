@@ -25,13 +25,13 @@ from typing import BinaryIO
 
 # The optional-harness command map lives in the standard tree's ``bin/`` (C57, §7). Two parents
 # up from ``tools/model_routing/`` is that tree root in every mount mode — the mounted
-# ``<AITNA_ROOT>/akmon/`` and the materialized ``<AITNA_ROOT>/.akmon/`` alike — so this resolves
+# ``<dev root>/akmon/`` and the materialized ``<dev root>/.akmon/`` alike — so this resolves
 # without reading the mount record and stays clear of the tree-resolution fork (C69).
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from common import jsondata
 from common.markers import claim_diagnostic_marker, release_diagnostic_markers
-from common.project_root import aitna_root_name
+from common.project_root import aitna_root, aitna_root_name
 from common.runtime import harness_command, harness_commands
 
 
@@ -119,7 +119,7 @@ def registry_path(akmon_dir: Path) -> Path:
 
 def overlay_path(project_root: Path) -> Path:
     """Path to the project's committed model-routing overlay file, if any."""
-    return project_root / aitna_root_name() / overlay_name()
+    return aitna_root(project_root) / overlay_name()
 
 
 def local_overlay_path(project_root: Path) -> Path:
@@ -129,7 +129,7 @@ def local_overlay_path(project_root: Path) -> Path:
     the strongest layer (ADR-0024/D11) — a developer states which harnesses and models they run
     without asking the team to share it.
     """
-    return project_root / aitna_root_name() / local_overlay_rel()
+    return aitna_root(project_root) / local_overlay_rel()
 
 
 def local_aliases_path(project_root: Path) -> Path:
@@ -138,7 +138,7 @@ def local_aliases_path(project_root: Path) -> Path:
     Written only by ``tools/model_routing/models.py`` and never hand-owned: it maps each alias of an
     ``aliases: true`` provider row to the concrete id the carrier accepts on this machine.
     """
-    return project_root / aitna_root_name() / local_aliases_rel()
+    return aitna_root(project_root) / local_aliases_rel()
 
 
 class OverlayError(ValueError):
@@ -172,8 +172,8 @@ def _overlay_layers(project_root: Path) -> list[tuple[str, dict]]:
     Each is ``(project-root-relative file, parsed object)``; a missing file is no layer.
     """
     candidates = (
-        (_overlay_file(), overlay_path(project_root)),
-        (_local_overlay_file(), local_overlay_path(project_root)),
+        (_overlay_file(project_root), overlay_path(project_root)),
+        (_local_overlay_file(project_root), local_overlay_path(project_root)),
     )
     return [(file, _read_overlay(path, file)) for file, path in candidates if path.is_file()]
 
@@ -439,18 +439,20 @@ def _retired_overlay_keys(layer: dict) -> list[str]:
     return found
 
 
-def refuse_retired_keys(registry: dict, config: dict, *, project_root: Path | None = None) -> None:
+def refuse_retired_keys(registry: dict, config: dict, project_root: Path | None, *, layered: bool = False) -> None:
     """Raise ``RetiredKeyError`` naming the file when an overlay or the local config holds a retired key.
 
     The shipped registry carries none of them, so one found in the merged registry came from an
-    overlay. With ``project_root`` each overlay file is read in turn, strongest first, and the error
-    quotes the one that holds the key — the file to edit. Without it only the merged registry is
-    known, so the error names both candidate files. The local config is a generated file, so its
+    overlay. With ``layered`` each overlay file of ``project_root`` is read in turn, strongest first, and
+    the error quotes the one that holds the key — the file to edit. Without it only the merged registry
+    is known, so the error names both candidate files (under ``project_root``'s dev root). The local
+    config is a generated file, so its
     error says to regenerate it; an overlay is hand-owned, so its error says which keys to delete.
     """
     texts = _agents_data()["retired_key_errors"]
-    if project_root is None:
-        holders = [(f"{_local_overlay_file()} or {_overlay_file()}", _retired_overlay_keys(registry))]
+    if not layered or project_root is None:
+        names = f"{_local_overlay_file(project_root)} or {_overlay_file(project_root)}"
+        holders = [(names, _retired_overlay_keys(registry))]
     else:
         holders = [(file, _retired_overlay_keys(layer)) for file, layer in reversed(_overlay_layers(project_root))]
     for file, keys in holders:
@@ -516,7 +518,7 @@ def providers(registry: dict) -> dict:
     return rows if isinstance(rows, dict) else {}
 
 
-def provider_row(registry: dict, provider: str) -> dict:
+def provider_row(registry: dict, provider: str, project_root: Path | None) -> dict:
     """One row by id. A ladder id the table does not declare is a named error, never a silent skip.
 
     The error names the two overlay files that can hold the ladder (the developer's and the team's),
@@ -525,7 +527,11 @@ def provider_row(registry: dict, provider: str) -> dict:
     row = providers(registry).get(provider)
     if isinstance(row, dict):
         return row
-    values = {"provider": provider, "local_overlay": _local_overlay_file(), "overlay": _overlay_file()}
+    values = {
+        "provider": provider,
+        "local_overlay": _local_overlay_file(project_root),
+        "overlay": _overlay_file(project_root),
+    }
     raise KeyError(jsondata.fill(_agents_data()["opinion_ladder_unknown"], values))
 
 
@@ -541,7 +547,7 @@ def family_vocabulary(registry: dict) -> tuple[str, ...]:
     return tuple(str(name) for name in families) if isinstance(families, dict) else ()
 
 
-def check_session_family(registry: dict, family: str) -> None:
+def check_session_family(registry: dict, family: str, project_root: Path | None) -> None:
     """Raise ``ValueError`` naming the files that extend the vocabulary when ``family`` is not in it."""
     known = family_vocabulary(registry)
     if family in known:
@@ -549,8 +555,8 @@ def check_session_family(registry: dict, family: str) -> None:
     values = {
         "family": family,
         "known": ", ".join(known),
-        "local_overlay": _local_overlay_file(),
-        "overlay": _overlay_file(),
+        "local_overlay": _local_overlay_file(project_root),
+        "overlay": _overlay_file(project_root),
     }
     raise ValueError(jsondata.fill(_agents_data()["session_family_unknown"], values))
 
@@ -610,7 +616,7 @@ def ladder_pins_default(registry: dict, provider: str) -> bool:
     return False
 
 
-def provider_family(registry: dict, provider: str, model: str | None = None) -> str | None:
+def provider_family(registry: dict, provider: str, project_root: Path | None, model: str | None = None) -> str | None:
     """The priors that answer when ``provider`` runs ``model``: the model's own entry, else the row's, else unknown.
 
     A carrier that fronts several families (a gateway, a multi-provider harness) states each model's
@@ -618,7 +624,11 @@ def provider_family(registry: dict, provider: str, model: str | None = None) -> 
     names resolves to ``None``, which the walk treats as unknown and fails closed (ADR-0024/D08) —
     guessing a family from the model id would be the silent weakness this record removes.
     """
-    row = provider_row(registry, provider)
+    return _row_family(provider_row(registry, provider, project_root), model)
+
+
+def _row_family(row: dict, model: str | None) -> str | None:
+    """The priors one provider row states for ``model``, else for itself, else ``None`` (``provider_family``)."""
     families = row.get("model_families")
     if model and isinstance(families, dict) and families.get(model):
         return str(families[model])
@@ -626,7 +636,7 @@ def provider_family(registry: dict, provider: str, model: str | None = None) -> 
     return str(family) if family else None
 
 
-def carrier_present(registry: dict, provider: str) -> bool:
+def carrier_present(registry: dict, provider: str, project_root: Path | None) -> bool:
     """Whether the carrier's executable resolves on `PATH` — a yes-or-no about a binary, nothing more.
 
     This is the one host fact the resolver takes (ADR-0024/D11): it reads no carrier settings file, no
@@ -635,7 +645,7 @@ def carrier_present(registry: dict, provider: str) -> bool:
     the row's ``requires_command``, a declared ``argv``'s first element, or — for a shipped carrier —
     the command map's own name for it, so the map stays the only place that spells one.
     """
-    row = provider_row(registry, provider)
+    row = provider_row(registry, provider, project_root)
     argv = row.get("argv")
     mapped = harness_commands().get(provider)
     binary = str(
@@ -646,7 +656,7 @@ def carrier_present(registry: dict, provider: str) -> bool:
     return bool(binary) and shutil.which(binary) is not None
 
 
-def opinion_model(registry: dict, provider: str) -> str | None:
+def opinion_model(registry: dict, provider: str, project_root: Path | None) -> str | None:
     """The model the second opinion takes inside ``provider``: its strongest declared one.
 
     This rule belongs to the second opinion alone (ADR-0024/D14) and reads the provider table's
@@ -659,7 +669,7 @@ def opinion_model(registry: dict, provider: str) -> str | None:
     rule = str(policy.get("model_rule", "max")) if isinstance(policy, dict) else "max"
     if rule != "max":
         raise ValueError(f"second opinion: unknown model_rule {rule!r}; the only rule implemented is 'max'")
-    models = provider_row(registry, provider).get("models")
+    models = provider_row(registry, provider, project_root).get("models")
     if not isinstance(models, list) or not models:
         return None
     return str(models[-1])
@@ -669,7 +679,7 @@ class EffortError(ValueError):
     """An effort a row cannot take: it declares no ``efforts``, or the level is not one of its ``levels``."""
 
 
-def check_effort(registry: dict, provider: str, effort: str | None) -> None:
+def check_effort(registry: dict, provider: str, effort: str | None, project_root: Path | None) -> None:
     """Raise ``EffortError`` unless ``effort`` is ``None`` or a level the provider's ``efforts`` lists (ADR-0024/D17).
 
     akmon never guesses a level and never forwards one the row does not list: a carrier with no
@@ -677,15 +687,15 @@ def check_effort(registry: dict, provider: str, effort: str | None) -> None:
     """
     if effort is None:
         return
-    declared = provider_row(registry, provider).get("efforts")
+    declared = provider_row(registry, provider, project_root).get("efforts")
     levels = declared.get("levels") if isinstance(declared, dict) else None
     texts = _agents_data()["effort_errors"]
     if not isinstance(levels, list):
         values = {
             "provider": provider,
             "effort": effort,
-            "local_overlay": _local_overlay_file(),
-            "overlay": _overlay_file(),
+            "local_overlay": _local_overlay_file(project_root),
+            "overlay": _overlay_file(project_root),
         }
         raise EffortError(jsondata.fill(texts["unsupported"], values))
     if effort not in levels:
@@ -693,7 +703,9 @@ def check_effort(registry: dict, provider: str, effort: str | None) -> None:
         raise EffortError(jsondata.fill(texts["unknown"], values))
 
 
-def opinion_pick(registry: dict, provider: str, pinned: str | None) -> tuple[str | None, str | None]:
+def opinion_pick(
+    registry: dict, provider: str, pinned: str | None, project_root: Path | None
+) -> tuple[str | None, str | None]:
     """The ``(model, effort)`` a ``carrier[:model[@effort]]`` entry runs (ADR-0024/D16, D17).
 
     ``default`` is a token, not a model id: it drops the pin altogether, so the carrier uses the model
@@ -703,12 +715,12 @@ def opinion_pick(registry: dict, provider: str, pinned: str | None) -> tuple[str
     not list raises ``EffortError``.
     """
     model, effort = split_model_effort(pinned)
-    check_effort(registry, provider, effort)
+    check_effort(registry, provider, effort, project_root)
     if model == default_model_token():
         return None, effort
     if model is not None:
         return model, effort
-    strongest, strongest_effort = split_model_effort(opinion_model(registry, provider))
+    strongest, strongest_effort = split_model_effort(opinion_model(registry, provider, project_root))
     return strongest, effort if pinned is not None else strongest_effort
 
 
@@ -753,48 +765,49 @@ def resolve_session(
 
     resolved_model = stated("model")
     resolved_family = stated("family")
-    if resolved_family is None and chosen in providers(registry):
-        resolved_family = provider_family(registry, chosen, resolved_model)
+    chosen_row = providers(registry).get(chosen)
+    if resolved_family is None and isinstance(chosen_row, dict):
+        resolved_family = _row_family(chosen_row, resolved_model)
     return SecondOpinionSession(chosen, resolved_family, resolved_model)
 
 
-def _overlay_file() -> str:
+def _overlay_file(project_root: Path | None) -> str:
     """The project routing overlay's path, project-root-relative — where an owner declares a missing prior."""
-    return f"{aitna_root_name()}/{overlay_name()}"
+    return f"{aitna_root_name(project_root)}/{overlay_name()}"
 
 
-def _local_overlay_file() -> str:
+def _local_overlay_file(project_root: Path | None) -> str:
     """The developer-local routing overlay's path, project-root-relative — the strongest place to declare a prior."""
-    return f"{aitna_root_name()}/{local_overlay_rel()}"
+    return f"{aitna_root_name(project_root)}/{local_overlay_rel()}"
 
 
-def _priors_ask(provider: str, model: str | None) -> str:
+def _priors_ask(provider: str, model: str | None, project_root: Path | None) -> str:
     """The named key that would settle an unknown family, and the file to write it in (ADR-0024/D08, D11)."""
     asks = _agents_data()["opinion_asks"]
     values = {
         "provider": provider,
         "model": str(model),
-        "local_overlay": _local_overlay_file(),
-        "overlay": _overlay_file(),
+        "local_overlay": _local_overlay_file(project_root),
+        "overlay": _overlay_file(project_root),
     }
     return jsondata.fill(asks["provider" if model else "provider_default"], values)
 
 
-def _session_ask(session: SecondOpinionSession) -> str:
+def _session_ask(session: SecondOpinionSession, project_root: Path | None) -> str:
     """The ask for a session whose own family cannot be resolved: nothing is counted as diverse until it is."""
     asks = _agents_data()["opinion_asks"]
     values = {
         "provider": session.provider,
         "model": str(session.model),
-        "local_overlay": _local_overlay_file(),
-        "overlay": _overlay_file(),
+        "local_overlay": _local_overlay_file(project_root),
+        "overlay": _overlay_file(project_root),
         "local": local_config_rel(),
     }
     return jsondata.fill(asks["session" if session.model else "session_default"], values)
 
 
 def _walk_opinion_ladder(
-    registry: dict, session: SecondOpinionSession
+    registry: dict, session: SecondOpinionSession, project_root: Path | None
 ) -> tuple[list[tuple[str, str | None, str | None]], list[tuple[str, str]], list[str]]:
     """The one top-down walk: the admissible chain, every provider passed over with its reason, and the asks.
 
@@ -812,7 +825,7 @@ def _walk_opinion_ladder(
     """
     reasons = _agents_data()["opinion_skip_reasons"]
     if not session.family:
-        return [], [(session.provider, str(reasons["session_priors_unknown"]))], [_session_ask(session)]
+        return [], [(session.provider, str(reasons["session_priors_unknown"]))], [_session_ask(session, project_root)]
     chain: list[tuple[str, str | None, str | None]] = []
     skips: list[tuple[str, str]] = []
     asks: list[str] = []
@@ -820,19 +833,23 @@ def _walk_opinion_ladder(
     models: dict[str, str] = {str(session.model): session.provider} if session.model else {}
     for entry in opinion_ladder(registry):
         provider, pinned = split_opinion_entry(entry)
-        provider_row(registry, provider)  # an id the table does not declare is a named error, even for the self-skip
-        check_effort(registry, provider, split_model_effort(pinned)[1])  # so is an effort the row cannot take (D17)
+        provider_row(
+            registry, provider, project_root
+        )  # an id the table does not declare is a named error, even for the self-skip
+        check_effort(
+            registry, provider, split_model_effort(pinned)[1], project_root
+        )  # so is an effort the row cannot take (D17)
         if provider == session.provider:
             skips.append((provider, str(reasons["self"])))
             continue
-        if not carrier_present(registry, provider):
+        if not carrier_present(registry, provider, project_root):
             skips.append((provider, str(reasons["absent"])))
             continue
-        chosen, effort = opinion_pick(registry, provider, pinned)
-        family = provider_family(registry, provider, chosen)
+        chosen, effort = opinion_pick(registry, provider, pinned, project_root)
+        family = provider_family(registry, provider, project_root, chosen)
         if not family:
             skips.append((provider, str(reasons["priors_unknown"])))
-            asks.append(_priors_ask(provider, chosen))
+            asks.append(_priors_ask(provider, chosen, project_root))
             continue
         if family in families:
             skips.append((provider, jsondata.fill(reasons["same_priors"], {"owner": families[family]})))
@@ -847,39 +864,45 @@ def _walk_opinion_ladder(
     return chain, skips, asks
 
 
-def opinion_chain(registry: dict, session: SecondOpinionSession) -> tuple[SecondOpinionTarget, ...]:
+def opinion_chain(
+    registry: dict, session: SecondOpinionSession, project_root: Path | None
+) -> tuple[SecondOpinionTarget, ...]:
     """The whole admissible chain, in rank order from rank 2: every provider the walk kept, resolved."""
-    chain, _, _ = _walk_opinion_ladder(registry, session)
+    chain, _, _ = _walk_opinion_ladder(registry, session, project_root)
     return tuple(
-        SecondOpinionTarget(provider, model, provider_family(registry, provider, model), effort)
+        SecondOpinionTarget(provider, model, provider_family(registry, provider, project_root, model), effort)
         for provider, model, effort in chain
     )
 
 
 def resolve_opinion_chain(
-    registry: dict, session: SecondOpinionSession, *, rank: int = OPINION_RANK_SECOND
+    registry: dict, session: SecondOpinionSession, project_root: Path | None, *, rank: int = OPINION_RANK_SECOND
 ) -> SecondOpinionTarget | None:
     """The provider at ``rank`` of the chain the walk produced, or ``None`` past its end.
 
     ``None`` says the chain is empty or shorter than asked; the caller then takes the disclosed last
     resort (ADR-0024/D07) rather than arriving at the same model without saying so.
     """
-    chain = opinion_chain(registry, session)
+    chain = opinion_chain(registry, session, project_root)
     index = rank - OPINION_RANK_SECOND
     return chain[index] if 0 <= index < len(chain) else None
 
 
-def opinion_skips(registry: dict, session: SecondOpinionSession) -> tuple[tuple[str, str], ...]:
+def opinion_skips(
+    registry: dict, session: SecondOpinionSession, project_root: Path | None
+) -> tuple[tuple[str, str], ...]:
     """Every provider passed over and why — the ledger that travels with the report (ADR-0024/D08)."""
-    return tuple(_walk_opinion_ladder(registry, session)[1])
+    return tuple(_walk_opinion_ladder(registry, session, project_root)[1])
 
 
-def opinion_asks(registry: dict, session: SecondOpinionSession) -> tuple[str, ...]:
+def opinion_asks(registry: dict, session: SecondOpinionSession, project_root: Path | None) -> tuple[str, ...]:
     """One line per unknown prior the walk met, each naming the key and the file that would settle it (D08, D11)."""
-    return tuple(_walk_opinion_ladder(registry, session)[2])
+    return tuple(_walk_opinion_ladder(registry, session, project_root)[2])
 
 
-def opinion_last_resort(registry: dict, session: SecondOpinionSession) -> SecondOpinionTarget:
+def opinion_last_resort(
+    registry: dict, session: SecondOpinionSession, project_root: Path | None
+) -> SecondOpinionTarget:
     """The disclosed last resort for an empty chain: the session's own provider, on a different model if declared.
 
     The strongest entry of the provider's declared ``models`` whose model differs from the session's —
@@ -887,21 +910,21 @@ def opinion_last_resort(registry: dict, session: SecondOpinionSession) -> Second
     none differs the carrier's own default in a clean context (D07). The caller files the run as
     ``kind=last-resort``: same priors are never bought, only disclosed.
     """
-    row = provider_row(registry, session.provider)
+    row = provider_row(registry, session.provider, project_root)
     declared = [str(entry) for entry in row.get("models") or [] if split_model_effort(str(entry))[0] != session.model]
     model, effort = split_model_effort(declared[-1] if declared else None)
-    family = provider_family(registry, session.provider, model) or session.family
+    family = provider_family(registry, session.provider, project_root, model) or session.family
     return SecondOpinionTarget(session.provider, model, family, effort)
 
 
-def opinion_repo(registry: dict, provider: str) -> str:
+def opinion_repo(registry: dict, provider: str, project_root: Path | None) -> str:
     """What the reviewer could see: derived for a carrier akmon ships, stated or unknown for the rest.
 
     A knob would let a report claim repository access a bare completion cannot have, so a harness
     carrier is ``worktree``, a tool carrier is ``none``, and a carrier its owner declared with
     nothing said reports ``unknown`` instead of the optimistic reading (ADR-0024/D10, D12).
     """
-    row = provider_row(registry, provider)
+    row = provider_row(registry, provider, project_root)
     stated = row.get("repo")
     if stated:
         return str(stated)
@@ -910,9 +933,9 @@ def opinion_repo(registry: dict, provider: str) -> str:
     return "none" if row.get("carrier") == "tool" or row.get("raw_model") else "worktree"
 
 
-def opinion_carrier(registry: dict, provider: str) -> str:
+def opinion_carrier(registry: dict, provider: str, project_root: Path | None) -> str:
     """The carrier kind the report names: ``declared`` for an owner's own argv, else the row's kind or ``harness``."""
-    row = provider_row(registry, provider)
+    row = provider_row(registry, provider, project_root)
     return "declared" if row.get("argv") else str(row.get("carrier") or "harness")
 
 
@@ -927,8 +950,17 @@ def _without_model_placeholder(parts: Sequence[str]) -> list[str]:
     return kept
 
 
+@dataclass(frozen=True)
+class OpinionRun:
+    """What one run sends its provider beside the carrier's own command: the model pin, the effort and the prompt."""
+
+    model: str | None = None
+    effort: str | None = None
+    prompt: str | None = None
+
+
 def opinion_command(
-    registry: dict, provider: str, *, model: str | None = None, effort: str | None = None, prompt: str | None = None
+    registry: dict, provider: str, project_root: Path | None, run: OpinionRun | None = None
 ) -> list[str]:
     """The argv for one provider: the command map for a shipped carrier, the owner's own list for a declared one.
 
@@ -948,8 +980,10 @@ def opinion_command(
     is ever forwarded. It needs no model pin: ``effort`` alone sends only the level.
     A row with ``prompt: "stdin"`` gets no prompt argument; the caller feeds the pack on stdin.
     """
-    check_effort(registry, provider, effort)
-    row = provider_row(registry, provider)
+    run = run or OpinionRun()
+    model, effort, prompt = run.model, run.effort, run.prompt
+    check_effort(registry, provider, effort, project_root)
+    row = provider_row(registry, provider, project_root)
     argv = row.get("argv")
     if isinstance(argv, list):
         parts = [str(part) for part in argv]
@@ -1014,9 +1048,9 @@ class Catalog:
     models: tuple[CatalogModel, ...]
 
 
-def _alias_file() -> str:
+def _alias_file(project_root: Path | None) -> str:
     """The resolved-aliases file's path, project-root-relative — what an unresolved alias asks to have refreshed."""
-    return f"{aitna_root_name()}/{local_aliases_rel()}"
+    return f"{aitna_root_name(project_root)}/{local_aliases_rel()}"
 
 
 def _valid_provider_aliases(value: object) -> ProviderAliases | None:
@@ -1040,7 +1074,7 @@ def read_model_aliases(project_root: Path) -> dict[str, ProviderAliases]:
     path = local_aliases_path(project_root)
     if not path.is_file():
         return {}
-    invalid = ValueError(jsondata.fill(_agents_data()["alias_errors"]["invalid"], {"file": _alias_file()}))
+    invalid = ValueError(jsondata.fill(_agents_data()["alias_errors"]["invalid"], {"file": _alias_file(project_root)}))
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as exc:
@@ -1060,9 +1094,9 @@ def model_aliases_document(stored: Mapping[str, ProviderAliases]) -> str:
     return json.dumps(document, indent=2) + "\n"
 
 
-def is_model_alias(registry: dict, provider: str, model: str) -> bool:
+def is_model_alias(registry: dict, provider: str, model: str, project_root: Path | None) -> bool:
     """Whether ``model`` is an alias the carrier does not accept: the row says ``aliases: true`` and lists it."""
-    row = provider_row(registry, provider)
+    row = provider_row(registry, provider, project_root)
     models = row.get("models")
     if row.get("aliases") is not True or not isinstance(models, list):
         return False
@@ -1070,7 +1104,7 @@ def is_model_alias(registry: dict, provider: str, model: str) -> bool:
 
 
 def resolve_opinion_model(
-    registry: dict, stored: Mapping[str, ProviderAliases], provider: str, model: str | None
+    registry: dict, stored: Mapping[str, ProviderAliases], provider: str, model: str | None, project_root: Path | None
 ) -> str | None:
     """The model a carrier is sent: an alias replaced by its concrete id, anything else passed through.
 
@@ -1079,12 +1113,12 @@ def resolve_opinion_model(
     raises ``UnresolvedAliasError`` naming the refresh command — fail closed, never an unresolved
     alias sent to the carrier (ADR-0024/D16, D08).
     """
-    if model is None or not is_model_alias(registry, provider, model):
+    if model is None or not is_model_alias(registry, provider, model, project_root):
         return model
     entry = stored.get(provider)
     concrete = entry.aliases.get(model) if entry else None
     if not concrete:
-        values = {"provider": provider, "model": model, "file": _alias_file()}
+        values = {"provider": provider, "model": model, "file": _alias_file(project_root)}
         raise UnresolvedAliasError(jsondata.fill(_agents_data()["alias_errors"]["unresolved"], values))
     return concrete
 
@@ -1159,7 +1193,7 @@ def _rank_of(model: CatalogModel) -> float:
     return float("inf") if model.priority is None else float(model.priority)
 
 
-def opinion_head(registry: dict, config: dict) -> tuple[str, str | None]:
+def opinion_head(registry: dict, config: dict, project_root: Path | None) -> tuple[str, str | None]:
     """What the second opinion would run first, as a display and any warning (the status line and the init summary).
 
     Resolved through the same walk the runner takes rather than through any stored provider: a
@@ -1168,15 +1202,15 @@ def opinion_head(registry: dict, config: dict) -> tuple[str, str | None]:
     the warning carries the ask beside it (ADR-0024/D08); a stale key raises out of here
     (``refuse_retired_keys``) and costs the whole status block, deliberately.
     """
-    refuse_retired_keys(registry, config)
+    refuse_retired_keys(registry, config, project_root)
     texts = _agents_data()["opinion_status"]
     try:
         session = resolve_session(registry, config)
     except SessionUnknownError as exc:
         return str(texts["unavailable_unknown"]), str(exc)
     if not session.family:
-        return str(texts["unavailable_unknown"]), _session_ask(session)
-    chain = opinion_chain(registry, session)
+        return str(texts["unavailable_unknown"]), _session_ask(session, project_root)
+    chain = opinion_chain(registry, session, project_root)
     if not chain:
         return str(texts["unavailable"]), jsondata.fill(texts["chain_empty"], {"provider": session.provider})
     head = chain[0]
@@ -1318,13 +1352,12 @@ def resolve_briefs(registry: dict) -> dict[str, str]:
     return resolved
 
 
-def brief_warning(registry: dict, aitna: str | None = None) -> str | None:
+def brief_warning(registry: dict, project_root: Path | None) -> str | None:
     """Owner-addressed line naming an unusable overlay ``briefs`` map, or None when it is fine."""
     try:
         resolve_briefs(registry)
     except BriefError as exc:
-        root = aitna or aitna_root_name()
-        return f"⚠ {exc} — fix {root}/{overlay_name()}; k_* definitions are not regenerated until it resolves"
+        return f"⚠ {exc} — fix {_overlay_file(project_root)}; k_* definitions are not regenerated until it resolves"
     return None
 
 
@@ -1431,7 +1464,9 @@ def bound_model_for(config: dict, subagent_type: str) -> str | None:
 # text differently. Each one reads ASCII markup — a role declaration, a zone label, a markdown
 # heading, list item or table row — so the real answers are unchanged. ``_HEADING_WORD_RE`` is the
 # deliberate exception: its words are any script's letters (C98).
-_ROLE_DECL_RE = re.compile(r"\A\s*🧭\s*agent:\s*([A-Za-z][\w-]*)", re.ASCII)
+# ``agent:`` is the pre-ADR-0027 spelling, accepted as an alias for one release.
+_ROLE_DECL_RE = re.compile(r"\A\s*🧭\s*(?:role|agent):\s*([A-Za-z][\w-]*)", re.ASCII)
+_ROLE_DECL_NEEDLES = (b"role:", b"agent:")
 
 
 def _assistant_text(entry: dict) -> str:
@@ -1462,8 +1497,8 @@ def _transcript_file(transcript_path: str | Path | None) -> Path | None:
     return path if path.is_file() else None
 
 
-def _lines_from_end(handle: BinaryIO, needle: bytes) -> Iterator[str]:
-    r"""The lines of ``handle`` that contain ``needle``, last line first (A19).
+def _lines_from_end(handle: BinaryIO, needle: bytes | tuple[bytes, ...]) -> Iterator[str]:
+    r"""The lines of ``handle`` that contain ``needle`` (or any of a tuple of needles), last line first (A19).
 
     Both transcript scanners want the *last* record that qualifies, so reading from the end and
     stopping at the first qualifying record returns what a full forward scan returns, at a cost
@@ -1492,9 +1527,10 @@ def _lines_from_end(handle: BinaryIO, needle: bytes) -> Iterator[str]:
     yield from _decoded([b"".join(carry)], needle)
 
 
-def _decoded(lines: Iterable[bytes], needle: bytes) -> Iterator[str]:
+def _decoded(lines: Iterable[bytes], needle: bytes | tuple[bytes, ...]) -> Iterator[str]:
+    needles = (needle,) if isinstance(needle, bytes) else needle
     for raw in lines:
-        if needle in raw:
+        if any(item in raw for item in needles):
             try:
                 yield raw.decode("utf-8")
             except UnicodeDecodeError:
@@ -1517,7 +1553,9 @@ def _main_chain_assistant(line: str) -> dict | None:
 
 
 def active_role(transcript_path: str | Path | None) -> str | None:
-    """The role from the last qualifying ``🧭 agent: <name>`` transcript declaration.
+    """The role from the last qualifying ``🧭 role: <name>`` transcript declaration.
+
+    ``🧭 agent: <name>`` is read the same way, an alias for one release (ADR 0027/D03).
 
     The chat declaration is invisible to a hook as chat, but the transcript records it in the
     assistant turns a hook can already scan (as C22/C23 do). Only main-chain assistant turns
@@ -1535,9 +1573,9 @@ def active_role(transcript_path: str | Path | None) -> str | None:
         return None
     try:
         with path.open("rb") as handle:
-            # Cheap ascii pre-filter: the emoji may be \u-escaped in the JSONL, but "agent:" is
-            # always literal. json.loads then decodes the real marker.
-            for line in _lines_from_end(handle, b"agent:"):
+            # Cheap ascii pre-filter: the emoji may be \u-escaped in the JSONL, but "role:" and
+            # "agent:" are always literal. json.loads then decodes the real marker.
+            for line in _lines_from_end(handle, _ROLE_DECL_NEEDLES):
                 entry = _main_chain_assistant(line)
                 match = _ROLE_DECL_RE.match(_assistant_text(entry)) if entry is not None else None
                 if match:
@@ -1966,7 +2004,9 @@ def staleness(config: dict, registry: dict, settings_model: str | None) -> str |
     return None
 
 
-def _second_opinion_status(registry: dict, config: dict, orchestrator_vendor: str) -> tuple[str, str | None]:
+def _second_opinion_status(
+    registry: dict, config: dict, orchestrator_vendor: str, project_root: Path | None
+) -> tuple[str, str | None]:
     """What the second-opinion gate will actually do, as one status field plus any warning.
 
     The head of the chain the runner would walk (``opinion_head``), with the on/off state. The
@@ -1974,7 +2014,9 @@ def _second_opinion_status(registry: dict, config: dict, orchestrator_vendor: st
     reads as the hook reads it.
     """
     enabled = bool(config.get("second_opinion"))
-    display, warning = opinion_head(registry, {**config, "vendor": config.get("vendor") or orchestrator_vendor})
+    display, warning = opinion_head(
+        registry, {**config, "vendor": config.get("vendor") or orchestrator_vendor}, project_root
+    )
     state = "on" if enabled else "off"
     return f"second-opinion={display} ({state})", warning if enabled else None
 
@@ -2080,7 +2122,7 @@ def _escalation_hint(config: dict) -> str:
     return f" (escalation path: {' → '.join(str(rung) for rung in path)})"
 
 
-def status_lines(config: dict, registry: dict, init_command: str) -> list[str]:
+def status_lines(config: dict, registry: dict, init_command: str, project_root: Path | None) -> list[str]:
     """The steady-state status injection: one binding line + self-check, plus any warning.
 
     ``init_command`` is how this project runs the routing initializer (``tool_command``). It is
@@ -2089,7 +2131,7 @@ def status_lines(config: dict, registry: dict, init_command: str) -> list[str]:
     """
     binding = config.get("binding", {})
     orchestrator_vendor = str(config.get("vendor") or "anthropic")
-    second_display, second_warning = _second_opinion_status(registry, config, orchestrator_vendor)
+    second_display, second_warning = _second_opinion_status(registry, config, orchestrator_vendor, project_root)
     orchestrator = config.get("orchestrator", "?")
     texts = _agents_data()["status_lines"]
     lines = [

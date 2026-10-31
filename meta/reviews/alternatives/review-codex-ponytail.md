@@ -55,7 +55,7 @@ copies, or weak minimum testing standard.
 ### 2.1 What is already stronger or more complete in akmon
 
 - Three independent Layer / Role / Archetype axes and explicit separation of DEVELOP
-  operations ([MODEL.md](../../../MODEL.md#1-three-orthogonal-axes-do-not-conflate)).
+  operations ([MODEL.md](../../../MODEL.md#1-four-orthogonal-axes-do-not-conflate)).
 - Separate gated pipelines for analysis, design, and implementation:
   [review-flow](../../../pipelines/review-flow.md),
   [design-flow](../../../pipelines/design-flow.md), and

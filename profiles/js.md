@@ -11,7 +11,7 @@ language; this file says how they read in JavaScript, and only what no checker c
 > Google JavaScript Style Guide's checkable rules, each annotated with its section — that runs with
 > or without akmon. **The project's own rules win:** a project with its own linter configuration
 > keeps it, and `akmon check` runs whatever the project declares under `[check]` in
-> `<AITNA_ROOT>/.akmon.toml`. Where the project's configuration switches a rule off or decides
+> `<dev root>/.akmon.toml`. Where the project's configuration switches a rule off or decides
 > otherwise, follow the project, not this file.
 
 ## Toolchain — the project's own
@@ -28,7 +28,7 @@ language; this file says how they read in JavaScript, and only what no checker c
   comments: oxlint does not read them.
 - **`akmon check` runs the project's checks** as declared under `[check]` — its linter, its type
   checker, its formatter check — and the pre-commit step calls it.
-- **Tests:** the project's runner, pinned as `[test].runner` in `<AITNA_ROOT>/.akmon.toml`.
+- **Tests:** the project's runner, pinned as `[test].runner` in `<dev root>/.akmon.toml`.
 - **Types.** A TypeScript project keeps `strict` on in `tsconfig.json` (at the least
   `noImplicitThis`): `tsc` is what checks `this` (§5.9) and the bug class the ruleset leaves to it
   in `.ts` files. A JavaScript project that adopts types writes them as JSDoc and checks them with

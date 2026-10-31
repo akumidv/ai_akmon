@@ -4,7 +4,7 @@ kind = "tool"
 covers = ["tool:model_routing/second_opinion"]
 
 # An alias pin of the shipped codex row (`aliases: true`) is replaced by the concrete id the local, generated
-# `<aitna_root>/local/model-aliases.json` maps it to (ADR 0024 D16): the command carries `gpt-6.1-sol` and the
+# `<dev root>/local/model-aliases.json` maps it to (ADR 0024 D16): the command carries `gpt-6.1-sol` and the
 # header records `sol→gpt-6.1-sol`, the concrete model run.
 
 [fixture.files]

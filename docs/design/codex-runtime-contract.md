@@ -11,7 +11,7 @@ vendor through `AGENTS.md`. The alphavar package-mode pilot disproved two assump
 
 - Codex loads the literal `AGENTS.md` text but does not expand the nested `@.../_common.md`
   line into model-visible instructions, so the delegation rule never reaches the orchestrator;
-- hooks still discovered a project through `<AITNA_ROOT>/akmon`, which does not
+- hooks still discovered a project through `<dev root>/akmon`, which does not
   exist in package mode, so SessionStart becomes silent from a nested working directory.
 
 Good means that a fresh Codex session receives the operative delegation rule without an owner
@@ -41,14 +41,14 @@ agent definitions or child-model selection.
 
 ### Package runtime is self-contained
 
-Project-root discovery accepts `AGENTS.md` plus either a mounted `<AITNA_ROOT>/akmon` tree or the
-package integration record `<AITNA_ROOT>/.akmon.toml`.
+Project-root discovery accepts `AGENTS.md` plus either a mounted `<dev root>/akmon` tree or the
+package integration record `<dev root>/.akmon.toml`.
 
 **Amended by C77.** Runtime paths resolve to the tree the hook is *executing* from, not to a
 recorded mode: the mounted tree in mounted modes, the wheel's embedded tree in package mode,
 where the Codex wiring calls `"$(git rev-parse --show-toplevel)/.venv/bin/akmon" hook codex-hook
 <advisory>`. That replaces the earlier rule that every dependency of a wired hook must be copied
-into `<AITNA_ROOT>/.akmon/`: nothing executable is copied any more, and the dependencies are
+into `<dev root>/.akmon/`: nothing executable is copied any more, and the dependencies are
 already installed beside the consumer inside the wheel. A hook still never imports the consumer's
 own packages — only the stdlib and the tree it runs from. What mode `package` does require is
 that the virtualenv live inside the project root, since the wiring names the console script by a
@@ -166,8 +166,8 @@ immutable. Commit, tag, push, publish, and consumer pin updates remain owner-run
 
 ## Acceptance
 
-- meta tests cover mounted and package root discovery, including nested cwd and custom
-  `AITNA_ROOT`;
+- meta tests cover mounted and package root discovery, including nested cwd and a custom
+  dev-layer root declared in `.aitna-root`;
 - a real stdin-to-JSON Codex SessionStart test contains the direct delegation instruction;
 - verifier rejects an `AGENTS.md` block with only the guardrail import and accepts the explicit
   anchor;

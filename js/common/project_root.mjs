@@ -14,10 +14,18 @@
 import fs from "node:fs";
 import { posix } from "node:path";
 
-import { isFile, pyError, pyPath, pyStat } from "./pyvalue.mjs";
+import { isFile, pyError, pyPath, pyStat, pyStrip, pySplitlines, readText, strRepr } from "./pyvalue.mjs";
 
-/** The default dev-layer (local) root; a project may relocate it via the `AITNA_ROOT` env var. */
+/** The default dev-layer (local) root; a project may relocate it by committing `.aitna-root`. */
 export const AITNA_ROOT_DEFAULT = "_aitna";
+
+/** The file at the project root that declares a dev-layer root other than the default (ADR 0022 D09). */
+export const DEV_ROOT_FILE = ".aitna-root";
+
+/** How a dev root was found (`DevRoot.origin`). */
+export const ORIGIN_POINTER = "pointer";
+export const ORIGIN_DEFAULT = "default";
+export const ORIGIN_NO_PROJECT_ROOT = "no-project-root";
 
 // Dangling links followed by hand before the walk calls it a loop: Linux's own MAXSYMLINKS.
 const _MAX_HOPS = 40;
@@ -151,28 +159,96 @@ function _reattach(resolved, beyond) {
 }
 
 /**
- * The configured dev-layer root, as a project-root-relative POSIX path (default `_aitna`).
- * Mirrors `common/project_root.py::aitna_root_name`: the env var is the configuration, read
- * at the point the name is asked for, never cached at module level.
+ * @typedef {{readonly path: string, readonly origin: string}} DevRoot
+ * The dev-layer root of a project and how it was found. `path` is `<project root>/<name>`, except
+ * for `no-project-root`, where it is the bare default name, usable for reading only: a writer of
+ * the local layer stops there.
  */
-export function aitnaRootName() {
-  const declared = (process.env.AITNA_ROOT || "").replace(/^\/+|\/+$/g, "");
-  return declared || AITNA_ROOT_DEFAULT;
+
+/**
+ * A dev-layer root as a project-root-relative POSIX path, or a `ValueError` naming `value`:
+ * not empty, not absolute, not climbing out with `..`, and (links followed) inside the project.
+ * `common/project_root.py::validated_dev_root_name`. `source` names the declaration in the message
+ * (`--aitna-root` or `.aitna-root`).
+ * @param {string} value
+ * @param {string} projectRoot
+ * @param {string} [source]
+ * @returns {string}
+ * @throws {Error} `ValueError` when the value is refused
+ */
+export function validatedDevRootName(value, projectRoot, source = "--aitna-root") {
+  const raw = pyStrip(value);
+  // Absoluteness is decided on the *raw* value: stripping the slashes first would turn
+  // `/tmp/escaped` into the innocent-looking relative `tmp/escaped`.
+  if (raw.startsWith("/")) {
+    throw pyError("ValueError", `${source} must be relative to the project root and stay inside it: ${strRepr(value)}`);
+  }
+  const cleaned = raw.replace(/^\/+|\/+$/g, "");
+  if (cleaned === "") {
+    throw pyError("ValueError", `${source} cannot be empty`);
+  }
+  if (cleaned.split("/").includes("..")) {
+    throw pyError("ValueError", `${source} must be relative to the project root and stay inside it: ${strRepr(value)}`);
+  }
+  const rootReal = resolvePath(projectRoot);
+  const resolved = resolvePath(`${rootReal === "/" ? "" : rootReal}/${cleaned}`);
+  if (resolved === rootReal || !isRelativeTo(resolved, rootReal)) {
+    throw pyError("ValueError", `${source} resolves outside the project root: ${resolved}`);
+  }
+  return cleaned;
 }
 
 /**
- * Absolute dev-layer root for `projectRoot` (`<projectRoot>/<AITNA_ROOT>`).
- * @param {string} projectRoot
+ * The dev-layer root of `projectRoot`, and how it was found (ADR 0022 D09): `.aitna-root` at the
+ * project root holds one line, a project-root-relative POSIX path (`pointer`); an absent file
+ * means `_aitna` (`default`); `null` — no project root found — answers `_aitna` as
+ * `no-project-root`, for reading only.
+ * @param {string | null} projectRoot
+ * @returns {DevRoot}
+ * @throws {Error} `ValueError` when the declaration is refused
+ */
+export function devRoot(projectRoot) {
+  if (projectRoot === null) {
+    return Object.freeze({ path: AITNA_ROOT_DEFAULT, origin: ORIGIN_NO_PROJECT_ROOT });
+  }
+  const declaration = pyPath(projectRoot, DEV_ROOT_FILE);
+  if (!isFile(declaration)) {
+    return Object.freeze({ path: pyPath(projectRoot, AITNA_ROOT_DEFAULT), origin: ORIGIN_DEFAULT });
+  }
+  const text = pyStrip(readText(declaration));
+  if (pySplitlines(text).length > 1) {
+    throw pyError("ValueError", `${DEV_ROOT_FILE} must hold one line, a project-root-relative path: ${strRepr(text)}`);
+  }
+  const name = validatedDevRootName(text, projectRoot, DEV_ROOT_FILE);
+  return Object.freeze({ path: pyPath(projectRoot, name), origin: ORIGIN_POINTER });
+}
+
+/**
+ * The dev-layer root of `projectRoot` as a project-root-relative POSIX path (default `_aitna`).
+ * @param {string | null} projectRoot
+ * @returns {string}
+ */
+export function aitnaRootName(projectRoot) {
+  const found = devRoot(projectRoot);
+  if (projectRoot === null) {
+    return found.path;
+  }
+  return posix.relative(pyPath(projectRoot), found.path);
+}
+
+/**
+ * Absolute dev-layer root for `projectRoot` (see `devRoot`).
+ * @param {string | null} projectRoot
  * @returns {string}
  */
 export function aitnaRoot(projectRoot) {
-  return pyPath(projectRoot, aitnaRootName());
+  return devRoot(projectRoot).path;
 }
 
 /**
  * Absolute akmon mount for `projectRoot` (`<aitna-root>/akmon`) — the mounted tree's path,
  * computed, not a claim that it exists.
- * @param {string} projectRoot
+ * @param {string | null} projectRoot
  * @returns {string}
  */
 export function akmonMount(projectRoot) {
@@ -180,8 +256,10 @@ export function akmonMount(projectRoot) {
 }
 
 /**
- * A project `AGENTS.md` beside either a mounted tree or an integration record. The record
- * (`<AITNA_ROOT>/.akmon.toml`) is the only marker a package-mode project carries.
+ * A project `AGENTS.md` beside a mounted tree, an integration record or `.aitna-root`. The record
+ * (`<dev root>/.akmon.toml`) is the only marker a package-mode project carries; the declaration
+ * file is a marker of its own (ADR 0022 D09), and without it the dev root is the default, so the
+ * question never reads the declaration.
  * @param {string} candidate
  * @returns {boolean}
  */
@@ -189,7 +267,10 @@ export function isProjectRoot(candidate) {
   if (!isFile(pyPath(candidate, "AGENTS.md"))) {
     return false;
   }
-  const aitna = aitnaRoot(candidate);
+  if (isFile(pyPath(candidate, DEV_ROOT_FILE))) {
+    return true;
+  }
+  const aitna = pyPath(candidate, AITNA_ROOT_DEFAULT);
   // `Path.exists()`, not `existsSync`: a failure other than "not there" (a name too long, a
   // directory that cannot be searched) raises in both twins rather than in one only (C121).
   return pyStat(pyPath(aitna, "akmon")) !== null || isFile(pyPath(aitna, ".akmon.toml"));
@@ -229,26 +310,37 @@ function _boundedStart(start) {
 }
 
 /**
+ * Walk up from `start` (default: the cwd) to the nearest project root, or `null`. The answer a
+ * writer of the local layer needs: `null` is "no project root", so it writes nothing, where
+ * `findProjectRoot` hands back a guess. The walk is linear: each step is the candidate's parent.
+ * @param {string | null} [start]
+ * @returns {string | null}
+ * @throws {Error} `ValueError` when the start path is longer than the bound
+ */
+export function locateProjectRoot(start = null) {
+  let candidate = resolvePath(_boundedStart(start));
+  while (!isProjectRoot(candidate)) {
+    const parent = posix.dirname(candidate);
+    if (parent === candidate) {
+      return null;
+    }
+    candidate = parent;
+  }
+  return candidate;
+}
+
+/**
  * Walk up from `start` (default: the cwd) to the nearest project root, else `start`. The
  * fallback is deliberate and stays: a hook must not abort a session invoked outside a project.
  * A start path longer than 4096 UTF-8 bytes (Linux's PATH_MAX) is not a fallback: it is refused
  * with a `ValueError` before it is resolved, and a hook takes that as its ordinary failure exit
- * (C121). The walk is linear: each step is the candidate's parent, until it stops changing.
+ * (C121).
  * @param {string | null} [start]
  * @returns {string}
  * @throws {Error} `ValueError` when the start path is longer than the bound
  */
 export function findProjectRoot(start = null) {
-  const origin = resolvePath(_boundedStart(start));
-  let candidate = origin;
-  while (!isProjectRoot(candidate)) {
-    const parent = posix.dirname(candidate);
-    if (parent === candidate) {
-      return origin;
-    }
-    candidate = parent;
-  }
-  return candidate;
+  return locateProjectRoot(start) ?? resolvePath(_boundedStart(start));
 }
 
 /** @typedef {{root: string, notice: string | null}} ResolvedRoot */
@@ -256,7 +348,8 @@ export function findProjectRoot(start = null) {
 /**
  * The root a command-line entry point works in, plus the notice to print if it guessed.
  * `{root, null}` when the root was named or found; `{cwd, notice}` when it was not — the
- * notice exists because the fallback root is where the tool then reads and writes.
+ * notice exists because the fallback root is where the tool then reads and writes. A command
+ * that writes the local layer prints the notice and stops (ADR 0022 D09).
  * @param {string | null} explicit the `--project-root` value, when the caller was given one
  * @param {string | null} [start]
  * @returns {ResolvedRoot}
@@ -266,14 +359,13 @@ export function resolveProjectRoot(explicit, start = null) {
     return { root: resolvePath(explicit), notice: null };
   }
   const origin = resolvePath(_boundedStart(start));
-  const found = findProjectRoot(origin);
-  if (isProjectRoot(found)) {
+  const found = locateProjectRoot(origin);
+  if (found !== null) {
     return { root: found, notice: null };
   }
-  const aitna = aitnaRootName();
   const notice =
-    `[akmon] no project root at or above ${origin}: expected AGENTS.md beside ${aitna}/akmon ` +
-    `or ${aitna}/.akmon.toml. Falling back to that directory, so anything this command reads ` +
-    `or writes is relative to it; pass --project-root to name the root instead.`;
+    `[akmon] no project root at or above ${origin}: expected AGENTS.md beside ${DEV_ROOT_FILE}, ` +
+    `${AITNA_ROOT_DEFAULT}/akmon or ${AITNA_ROOT_DEFAULT}/.akmon.toml. Falling back to that directory, ` +
+    `so anything this command reads or writes is relative to it; pass --project-root to name the root instead.`;
   return { root: origin, notice };
 }

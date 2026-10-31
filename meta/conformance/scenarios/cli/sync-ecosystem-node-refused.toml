@@ -17,4 +17,4 @@ argv = ["sync"]
 [expected]
 exit = 2
 stdout = ""
-stderr = "akmon sync: this project's integration record names ecosystem = \"node\" (<AITNA_ROOT>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon sync\n"
+stderr = "akmon sync: this project's integration record names ecosystem = \"node\" (<dev root>/.akmon.toml), and the Python implementation serves Python projects only; run the JavaScript implementation for it: npx akmon sync\n"

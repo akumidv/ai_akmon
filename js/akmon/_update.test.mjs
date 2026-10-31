@@ -17,6 +17,10 @@ import { fileURLToPath } from "node:url";
 import { main, moveCommand, newestRelease, pinSpec, plan, readUpdateData } from "./_update.mjs";
 import { readInitData } from "./_init.mjs";
 
+// The retired AITNA_ROOT makes `verify` warn while it is set (ADR 0022 D09): a shell that exports it must not
+// reach the CLIs this file runs, so only a test that sets it itself sees it.
+delete process.env.AITNA_ROOT;
+
 const TREE = posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const CLI = posix.join(TREE, "js", "akmon", "cli.mjs");
 const LAUNCHER_TAIL = "node_modules/akmon/js/akmon/cli.mjs";
@@ -79,7 +83,7 @@ function deps({ codes = () => 0, registry = null, path = ["npm", "pnpm", "yarn",
 }
 
 /**
- * Run `main(args, stand-ins)` with both streams captured and `AITNA_ROOT` unset.
+ * Run `main(args, stand-ins)` with both streams captured.
  * @param {string[]} args
  * @param {ReturnType<typeof deps>} stand
  */
@@ -87,8 +91,6 @@ function run(args, stand) {
   const out = /** @type {string[]} */ ([]);
   const err = /** @type {string[]} */ ([]);
   const write = { out: process.stdout.write, err: process.stderr.write };
-  const saved = process.env.AITNA_ROOT;
-  delete process.env.AITNA_ROOT;
   process.stdout.write = /** @type {typeof process.stdout.write} */ (
     (/** @type {string} */ text) =>
       (out.push(text), true)
@@ -102,9 +104,6 @@ function run(args, stand) {
   } finally {
     process.stdout.write = write.out;
     process.stderr.write = write.err;
-    if (saved !== undefined) {
-      process.env.AITNA_ROOT = saved;
-    }
   }
 }
 
@@ -358,6 +357,20 @@ test("an unusable --aitna-root is refused with the init text", () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("a refused update leaves the dev-root declaration as it was", () => {
+  for (const before of [null, "old/root\n"]) {
+    const root = project(); // no record under `dev/`: refused after the flag wrote the declaration
+    const pointer = posix.join(root, ".aitna-root");
+    if (before !== null) {
+      fs.writeFileSync(pointer, before);
+    }
+    const result = run(["--aitna-root", "dev", "--ref", "v0.4.0", "--project-root", root], deps());
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.equal(fs.existsSync(pointer) ? fs.readFileSync(pointer, "utf8") : null, before);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // -- after init --------------------------------------------------------------------------------
 
 test("a failed init or check is the exit code, and the closing steps name what is left", () => {
@@ -441,7 +454,6 @@ test("the real process realigns a Node project through its installed CLI, keepin
   const scratch = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-update-path-")));
   const env = { ...process.env };
   env.PATH = pathWithout("codex", scratch);
-  delete env.AITNA_ROOT;
   const result = spawnSync(process.execPath, [CLI, "update", "--ref", version, "--project-root", root], {
     encoding: "utf8",
     env,

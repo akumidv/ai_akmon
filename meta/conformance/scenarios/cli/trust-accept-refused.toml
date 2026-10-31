@@ -1,0 +1,19 @@
+id = "cli/trust-accept-refused"
+ecosystem = "shared"
+kind = "cli"
+covers = ["command:trust"]
+
+[fixture]
+files = { "_aitna/grants/one.toml" = "a = 1\n" }
+
+[env]
+AKMON_TRUST_DIR = "{{tmp}}/trust"
+HOME = "{{tmp}}"
+
+[run]
+argv = ["trust", "accept"]
+
+[expected]
+exit = 2
+stderr = "akmon trust accept: acceptance needs an interactive terminal; stdin is not one (ADR 0025/D05: there is no non-interactive acceptance)\n"
+stdout = ""

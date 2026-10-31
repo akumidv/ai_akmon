@@ -1,0 +1,22 @@
+# The first session records itself (counting starts) and says nothing: no session has passed since a run, and the thresholds are far.
+id = "hooks/learning-reminder-first-session-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:learning-reminder"]
+
+[fixture]
+attach = "native"
+
+[run]
+script = "learning-reminder"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-lr-first"
+source = "startup"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

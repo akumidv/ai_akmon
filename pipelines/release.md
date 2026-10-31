@@ -1,6 +1,6 @@
 # Pipeline: release
 
-The cycle the [release](../roles/release.md) role follows to cut a release for one **subject** —
+The cycle the [release](../agents/release.md) agent follows to cut a release for one **subject** —
 akmon itself, a consuming project's package, or an akmon pin bump inside a consuming project.
 
 > A pipeline is a **declarative, ordered cycle** — the steps and their gates, not a script.
@@ -12,7 +12,7 @@ akmon itself, a consuming project's package, or an akmon pin bump inside a consu
 When accepted work has accumulated for a subject and the owner wants to publish a reviewed state —
 or to bump an akmon pin. **Not** every commit. Pick the mode:
 
-- **lightweight cut** (default) — the everyday path; steps 1–4, 8–11.
+- **lightweight cut** (default) — the everyday path; steps 1–4, 8–11 (with 9a).
 - **periodic cadence** (deliberate, not every tag) — the lightweight cut **plus** the sweeps
   (steps 5–7) and post-release learning (step 12). Run on a cadence or when drift is suspected.
 
@@ -30,7 +30,7 @@ or to bump an akmon pin. **Not** every commit. Pick the mode:
 5. **Hygiene sweep** *(cadence — route, don't fix)* — file tasks for stale backlog/orphaned
    generated files/stale memory/missing skill contracts/obsolete tools/missing pointers. The
    owning role fixes them; `release` only files.
-6. **Learning sweep** *(cadence — hand off to [learn](../roles/learn.md))* — invoke the `learn`
+6. **Learning sweep** *(cadence — hand off to [learning agent](../agents/learning.md))* — invoke the `learn`
    role to run the learn loop. `release` does not promote memory itself; candidates become `learn`
    tasks.
 7. **Architecture / guardrail sweep** *(cadence — route, don't fix)* — triage requirement/ADR
@@ -40,13 +40,18 @@ or to bump an akmon pin. **Not** every commit. Pick the mode:
    version) and downstream bump notes. The archive stays traceability, not release prose.
 9. **Verify** — run the subject's release check set via the release tool's `--check`
    (runner-resilient: it picks an available test runner).
+9a. **Learning run before the pull request** *(gate)* — run `akmon learn status` (a Node project:
+    `npx akmon learn status`) and read its `sessions since the last run: N` line. When `N` is 1 or
+    more, tell the owner a learning run is due before the pull request and offer the
+    [`learning`](../skills/learning/SKILL.md) skill; **do not start it yourself**, and continue only
+    after the owner chooses. What the owner confirms in the run lands in the same pull request.
 10. **Owner handoff** *(gate, D5)* — present exact commit/tag/publish/pin-bump commands and the
     residual risk. **Stop.** The owner runs the landing commands.
 11. **Propagate** — for each selected consumer: prepare the owner-run pin/version bump plan,
     then run local sync + verify only after the owner-approved workspace changes exist; record
     the bump **in the consuming project** and hand off owner-owned landing actions.
 12. **Post-release learning** *(cadence)* — capture release friction into memory/tasks via
-    [learn](../roles/learn.md); promote only through explicit tasks.
+    the [learning agent](../agents/learning.md); promote only through explicit tasks.
 
 ## Gates (no step past these without the owner)
 
@@ -59,7 +64,7 @@ or to bump an akmon pin. **Not** every commit. Pick the mode:
 
 `release` **coordinates, it does not implement.** Every sweep finding is routed to
 the owning role — architecture/ADR → [architect](../roles/architect.md), code/tooling →
-[engineer](../roles/engineer.md), memory/promotion → [learn](../roles/learn.md) — and `release`
+[engineer](../roles/engineer.md), memory/promotion → [learning](../agents/learning.md) — and `release`
 edits only release artifacts (release notes, changelog, bump records, release plan files). It never
 edits ADRs, production code, or `_aitna/memory/` in-cycle.
 

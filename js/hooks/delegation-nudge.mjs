@@ -8,7 +8,7 @@
  * injects a soft reminder — once per drift episode — that the work may belong to a `k_*`
  * delegate (MODEL.md § Capability tiers). Below the ask threshold, advisory only — nothing is
  * blocked; past it, the next edit or shell call (never a read) carries a hard `ask`, which
- * escalates to `deny` outside the interactive default permission mode (C31, ADR-0006/D02 — an
+ * escalates to `deny` when the run is unattended (C31, ADR-0006/D02, narrowed by ADR-0025/D06 — an
  * unattended `ask` was observed to be a silent no-op). This fires only for main-chain calls: a
  * subagent call (detected via the payload's `agent_id`, present only inside a subagent) is
  * exempt, since Claude Code shares the `session_id` between the main chain and its subagents
@@ -17,7 +17,7 @@
  */
 
 import { dictGet, dictItem, pyStr, truthy } from "../common/pyvalue.mjs";
-import { loadPayload, normalizeTool, runAsEntryPoint, runGuarded } from "./claude_adapter.mjs";
+import { attendedFromEnvironment, loadPayload, normalizeTool, runAsEntryPoint, runGuarded } from "./claude_adapter.mjs";
 import { delegationNudgeResult, neutralKind } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 
@@ -48,6 +48,7 @@ function decide(data) {
   return delegationNudgeResult(data, kind, typeof sessionId === "string" ? sessionId : null, {
     isSubagent,
     permissionMode: typeof permissionMode === "string" ? permissionMode : null,
+    attended: attendedFromEnvironment(process.env),
   });
 }
 

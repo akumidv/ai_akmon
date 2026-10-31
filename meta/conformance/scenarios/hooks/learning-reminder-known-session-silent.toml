@@ -1,0 +1,23 @@
+# A resumed session with a known id is not counted again: nine sessions stay nine, and the threshold of 10 is not reached.
+id = "hooks/learning-reminder-known-session-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:learning-reminder"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/local/learning.json" = "{\n  \"last_run\": null,\n  \"since\": \"2999-01-01T00:00:00Z\",\n  \"sessions\": [\n    \"seed-0\",\n    \"seed-1\",\n    \"seed-2\",\n    \"seed-3\",\n    \"seed-4\",\n    \"seed-5\",\n    \"seed-6\",\n    \"seed-7\",\n    \"seed-8\"\n  ]\n}\n" }
+
+[run]
+script = "learning-reminder"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "seed-3"
+source = "resume"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

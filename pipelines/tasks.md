@@ -82,7 +82,7 @@ scheme applies to the live backlog and every new task. Don't renumber history.
 
 ## The local layer
 
-`<DEV>` is the dev-layer root, `<AITNA_ROOT>` (default `_aitna`).
+`<DEV>` is the dev-layer root, `<dev root>` (default `_aitna`).
 Everything a session resumes from lives under `<DEV>/local/`, **gitignored by one rule**. Raw
 material read once (another model's review, an export, a work area) lives in `.tmp/` at the
 project root, also ignored and inside the project so no outside permission is needed; nothing a

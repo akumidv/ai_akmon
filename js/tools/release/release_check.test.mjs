@@ -194,26 +194,17 @@ for (const [aitna, mount] of /** @type {[string | null, string][]} */ ([
   ["tools/ai", "tools/ai/akmon"],
 ])) {
   test(`runPlan cds into the mounted tree ${mount} (C130)`, () => {
-    const saved = process.env.AITNA_ROOT;
-    if (aitna === null) {
-      delete process.env.AITNA_ROOT;
-    } else {
-      process.env.AITNA_ROOT = aitna;
-    }
-    try {
-      const root = tree({ "AGENTS.md": "x\n", [`${mount}/AGENTS.md`]: "x\n" });
-      const result = capture(() => runPlan(DATA, "v9.9.9", "akmon", path.join(root, mount)));
-      assert.equal(result.code, 0);
-      const lines = result.stdout.split("\n");
-      assert.equal(lines[4], `cd ${mount}            # tag is cut from the submodule's own tree`);
-      assert.equal(lines[5], "");
-    } finally {
-      if (saved === undefined) {
-        delete process.env.AITNA_ROOT;
-      } else {
-        process.env.AITNA_ROOT = saved;
-      }
-    }
+    // a relocated dev layer is declared by `.aitna-root`, which is also the project's root marker
+    const root = tree({
+      "AGENTS.md": "x\n",
+      [`${mount}/AGENTS.md`]: "x\n",
+      ...(aitna === null ? {} : { ".aitna-root": `${aitna}\n` }),
+    });
+    const result = capture(() => runPlan(DATA, "v9.9.9", "akmon", path.join(root, mount)));
+    assert.equal(result.code, 0);
+    const lines = result.stdout.split("\n");
+    assert.equal(lines[4], `cd ${mount}            # tag is cut from the submodule's own tree`);
+    assert.equal(lines[5], "");
   });
 }
 

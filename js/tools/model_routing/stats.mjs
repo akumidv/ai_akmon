@@ -33,7 +33,7 @@
 
 import fs from "node:fs";
 import os from "node:os";
-import { basename, dirname } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -59,7 +59,12 @@ import {
 } from "../../common/pyvalue.mjs";
 import { createReport, reportPrefix, taskError } from "../../common/report_path.mjs";
 import { codePointCompare } from "../../common/sort.mjs";
+import { mungedProjectDir, newestJsonl, pyStem, pySuffix, transcriptsDir } from "../../common/transcripts.mjs";
 import { agentSpecs, delegationLogRel, parseDelegationEntries } from "./routing.mjs";
+
+// The three transcript-location helpers moved to `common/transcripts.mjs` (C177); they stay part of
+// this module's public surface (tools/README.md), so the one copy is re-exported, not duplicated.
+export { mungedProjectDir, newestJsonl, transcriptsDir };
 
 /** @typedef {import("./routing.mjs").AgentsData} AgentsData */
 /** @typedef {import("../../common/pyvalue.mjs").Json} Json */
@@ -265,71 +270,6 @@ export class TranscriptStats {
 }
 
 /**
- * The `~/.claude/projects/` directory name for a project root: every `/` becomes `-`.
- * @param {string} projectRoot
- * @returns {string}
- */
-export function mungedProjectDir(projectRoot) {
-  return resolvePath(projectRoot).replaceAll("/", "-");
-}
-
-/**
- * The project's transcript directory under `<claudeHome>/projects/`.
- * @param {string} projectRoot
- * @param {string | null} [claudeHome] default: `~/.claude`
- * @returns {string}
- */
-export function transcriptsDir(projectRoot, claudeHome = null) {
-  const home = claudeHome || pyPath(os.homedir(), ".claude");
-  return pyPath(home, "projects", mungedProjectDir(projectRoot));
-}
-
-/**
- * `Path.suffix`: the last dot-suffix of the name, `""` for a dotfile or a trailing dot.
- * @param {string} name
- * @returns {string}
- */
-function _suffix(name) {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 && dot < name.length - 1 ? name.slice(dot) : "";
-}
-
-/**
- * `Path.stem`: the name without its last suffix.
- * @param {string} path
- * @returns {string}
- */
-function pyStem(path) {
-  const name = basename(path);
-  return name.slice(0, name.length - _suffix(name).length);
-}
-
-/**
- * The most recently modified `*.jsonl` file in `directory` — the current session; null when none.
- * @param {string} directory
- * @returns {string | null}
- */
-export function newestJsonl(directory) {
-  if (!isDir(directory)) {
-    return null;
-  }
-  /** @type {string | null} */ let best = null;
-  /** @type {bigint} */ let bestTime = 0n;
-  for (const name of fs.readdirSync(directory)) {
-    const path = pyPath(directory, name);
-    if (!isFile(path) || _suffix(name) !== ".jsonl") {
-      continue;
-    }
-    const mtime = fs.statSync(path, { bigint: true }).mtimeNs;
-    if (best === null || mtime > bestTime) {
-      best = path;
-      bestTime = mtime;
-    }
-  }
-  return best;
-}
-
-/**
  * One transcript line as a JSON object; null for a blank, unparseable or non-object line.
  * @param {string} raw
  * @returns {Record<string, Json> | null}
@@ -510,7 +450,7 @@ export function collectSubagentStats(subagentsDir, tierMap) {
   }
   const names = fs
     .readdirSync(subagentsDir)
-    .filter((name) => name.startsWith("agent-") && _suffix(name) === ".jsonl")
+    .filter((name) => name.startsWith("agent-") && pySuffix(name) === ".jsonl")
     .sort(codePointCompare);
   /** @type {SubagentRecord[]} */ const records = [];
   for (const name of names) {

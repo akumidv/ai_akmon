@@ -51,7 +51,13 @@ import {
   unidentifiedIdentity,
 } from "../common/markers.mjs";
 import { staleMaterialized } from "../common/materialization.mjs";
-import { aitnaRootName, findProjectRoot, resolvePath } from "../common/project_root.mjs";
+import {
+  AITNA_ROOT_DEFAULT,
+  aitnaRootName,
+  findProjectRoot,
+  locateProjectRoot,
+  resolvePath,
+} from "../common/project_root.mjs";
 import {
   pyError,
   pyTypeName,
@@ -77,7 +83,7 @@ import { TREE_ROOT } from "./hook_data.mjs";
 
 /** @typedef {import("./hook_data.mjs").HookData} HookData */
 
-export { aitnaRootName, findProjectRoot };
+export { aitnaRootName, findProjectRoot, locateProjectRoot };
 
 /**
  * The fields of a {@link HookResult}; only `eventName` is required.
@@ -117,7 +123,7 @@ function _resolve(path) {
  * `akmon hook` (C77). No record read, no directory probe, and no way for the two to disagree.
  *
  * `projectRoot` stays in the signature: the project overlay it locates
- * (`<AITNA_ROOT>/model-routing.json`) is still layered onto whatever registry this tree
+ * (`<dev root>/model-routing.json`) is still layered onto whatever registry this tree
  * carries, and callers pass the pair together.
  * @param {string} projectRoot
  * @returns {string}
@@ -137,10 +143,10 @@ export function akmonRuntimeRoot(projectRoot) {
  * @returns {string}
  */
 export function runtimeRootDisplay(projectRoot) {
-  const mount = pyPath(projectRoot, aitnaRootName(), "akmon");
+  const mount = pyPath(projectRoot, aitnaRootName(projectRoot), "akmon");
   try {
     if (_resolve(akmonRuntimeRoot(projectRoot)) === _resolve(mount)) {
-      return `${aitnaRootName()}/akmon`;
+      return `${aitnaRootName(projectRoot)}/akmon`;
     }
   } catch (error) {
     if (!isOSError(error)) {
@@ -205,9 +211,9 @@ export function hookFailureDiagnostic(hookName, exc) {
  * What the owner is told when an entry point crashed (C87, ADR-0013/D01): the fact, then the command.
  *
  * The same two facts as {@link hookFailureDiagnostic} and nothing from the exception's text.
- * It is written inside a crash handler, so it reads nothing that can raise — the dev-layer
- * name is an environment lookup with a default, not a filesystem question, and the text is
- * code, not data.
+ * It is written inside a crash handler, so nothing it reads can raise out of it — the dev-layer
+ * name is looked up from `start` (default: the cwd) and falls back to the default name when
+ * that lookup itself fails, and the text is code, not data.
  *
  * Runtime classification: operational
  * Rationale: the owner-facing half of the same crash report (ADR-0013/D01) — it states that a
@@ -216,13 +222,20 @@ export function hookFailureDiagnostic(hookName, exc) {
  * even though it sits outside the `*Result` join.
  * @param {string} hookName
  * @param {unknown} exc
+ * @param {string | null} [start]
  * @returns {string}
  */
-export function hookFailureNotice(hookName, exc) {
+export function hookFailureNotice(hookName, exc, start = null) {
+  let devName = AITNA_ROOT_DEFAULT;
+  try {
+    devName = aitnaRootName(locateProjectRoot(start));
+  } catch {
+    // the lookup itself failed: the default name stands, the crash report must not crash
+  }
   return (
     `⚠ akmon: the ${hookName} hook failed (${exceptionClassName(exc)}) and was skipped — this action ` +
     `went ahead without it. Check the setup: \`akmon verify\` (a mounted tree: ` +
-    `\`python3 ${aitnaRootName()}/akmon/bin/verify.py\`).`
+    `\`python3 ${devName}/akmon/bin/verify.py\`).`
   );
 }
 
@@ -305,10 +318,11 @@ export function subagentTool(data) {
  * lowercased path *substrings*, so the segment uses the lowercased root name.
  * @param {HookData} data
  * @param {string} key the `hook_core.json` list to fill
+ * @param {string | null} root the project, or `null` for the one found from the cwd
  * @returns {string[]}
  */
-function _segments(data, key) {
-  const aitna = aitnaRootName().toLowerCase();
+function _segments(data, key, root) {
+  const aitna = aitnaRootName(root === null ? locateProjectRoot() : root).toLowerCase();
   return /** @type {string[]} */ (_core(data, key)).map((segment) => fill(segment, { aitna }));
 }
 
@@ -372,26 +386,61 @@ export function currentGitBranch() {
   return pyStrip(decodeUtf8(result.stdout));
 }
 
-// ask->deny escalation for unattended sessions (C31, ADR-0006/D02). A live test
-// showed a hook-forced `ask` is a silent no-op — no prompt, no block — in a Claude Code
-// background/child session running in `acceptEdits` mode; the PreToolUse payload carries a
-// `permission_mode` field (same enum on Codex) that tells a hook whether an interactive
-// owner is actually there to answer. Only the strict `default` mode is known to gate on
-// `ask`; everywhere else (or the field missing outright) the owner asked to be stricter
-// rather than silently pass through, so the decision is escalated to a hard `deny` — the one
-// decision every vendor is confirmed to enforce unconditionally.
+// ask->deny escalation for an unattended run (C31, ADR-0006/D02, narrowed by ADR-0025/D06). A live
+// test showed a hook-forced `ask` is a silent no-op -- no prompt, no block -- in a Claude Code
+// background/child session, so an ask that nobody can answer becomes a hard `deny`, the one
+// decision every vendor is confirmed to enforce unconditionally. Who attends is read from what the
+// host states: Claude Code sets `CLAUDE_CODE_SESSION_ATTENDED` (the adapter reads it at the entry
+// point and hands it down as `attended`; M199, M200). Where the host states nothing, only the
+// interactive `default` permission mode attends. A mode that skips every question never does.
+
+/**
+ * Whether a hook's `ask` reaches an owner who can answer it (ADR-0025/D06).
+ *
+ * `attended` is the host's own statement (`CLAUDE_CODE_SESSION_ATTENDED`: `true` for `1`, `false`
+ * for `0`), or `null` where it states nothing; the permission mode then decides, as it did
+ * before. A mode that skips every question is never attended, whatever `attended` says.
+ * @param {HookData} data
+ * @param {string | null} permissionMode
+ * @param {{attended?: boolean | null}} [options]
+ * @returns {boolean}
+ */
+export function askIsAttended(data, permissionMode, { attended = null } = {}) {
+  if (
+    /** @type {string[]} */ (_core(data, "unattended_permission_modes")).includes(
+      /** @type {string} */ (permissionMode),
+    )
+  ) {
+    return false;
+  }
+  if (attended !== null) {
+    return attended;
+  }
+  return permissionMode === _core(data, "interactive_default_permission_mode");
+}
+
+/** The attendance value as the host spells it, or `unset` where it stated nothing. */
+const _ATTENDED_LABELS = new Map([
+  [true, "1"],
+  [false, "0"],
+  [null, "unset"],
+]);
 
 /**
  * @param {HookData} data
  * @param {HookResult} result
  * @param {string | null} permissionMode
+ * @param {boolean | null} attended
  * @returns {HookResult}
  */
-function _escalateUnattendedAsk(data, result, permissionMode) {
-  if (result.permissionDecision !== "ask" || permissionMode === _core(data, "interactive_default_permission_mode")) {
+function _escalateUnattendedAsk(data, result, permissionMode, attended) {
+  if (result.permissionDecision !== "ask" || askIsAttended(data, permissionMode, { attended })) {
     return result;
   }
-  const suffix = fill(_core(data, "escalated_ask_suffix"), { permission_mode: pyRepr(permissionMode) });
+  const suffix = fill(_core(data, "escalated_ask_suffix"), {
+    permission_mode: pyRepr(permissionMode),
+    attended: /** @type {string} */ (_ATTENDED_LABELS.get(attended)),
+  });
   return new HookResult({
     eventName: result.eventName,
     additionalContext: result.additionalContext,
@@ -463,10 +512,10 @@ export function privilegeEscalationGuardResult(data, command) {
  * @param {HookData} data
  * @param {unknown} command
  * @param {string | null} [branch] the current branch (default: asked of git)
- * @param {{permissionMode?: string | null}} [options]
+ * @param {{permissionMode?: string | null, attended?: boolean | null}} [options]
  * @returns {HookResult | null}
  */
-export function gitCommitGuardResult(data, command, branch = null, { permissionMode = null } = {}) {
+export function gitCommitGuardResult(data, command, branch = null, { permissionMode = null, attended = null } = {}) {
   if (!pyContains(command, "git")) {
     return null;
   }
@@ -491,6 +540,7 @@ export function gitCommitGuardResult(data, command, branch = null, { permissionM
         permissionReason: _core(data, "git_commit_push_tag_merge_reason"),
       }),
       permissionMode,
+      attended,
     );
   }
 
@@ -507,6 +557,7 @@ export function gitCommitGuardResult(data, command, branch = null, { permissionM
           }),
         }),
         permissionMode,
+        attended,
       );
     }
   }
@@ -519,20 +570,98 @@ export function gitCommitGuardResult(data, command, branch = null, { permissionM
 // --------------------------------------------------------------------------------------
 
 /**
- * Sorted names of the agent charters (subdirectories with a `README.md`) under `directory`.
+ * The agent charters (subdirectories with a `README.md`) under `directory`, in roster order.
+ *
+ * `known` is {@link agentDefinitions}, whose key order is the delivery chain's (ADR 0026/D08): the
+ * shipped agents with a charter come first, in that order, then the rest sorted by name. A charter
+ * directory named for a role of a shipped agent that has a charter of its own is the legacy layout of
+ * that agent (ADR 0026/D06), and is left out so that one agent is not listed twice; with no such
+ * charter it is listed as any other.
  * @param {string} directory
+ * @param {Record<string, string[]>} [known]
  * @returns {string[]}
  */
-export function agentNames(directory) {
+export function agentNames(directory, known = {}) {
   const base = pyPath(directory);
   if (!isDir(base)) {
     return [];
   }
-  return codePointSort(
+  const found = new Set(
     fs
       .readdirSync(base)
       .filter((name) => isDir(pyPath(base, name)) && !name.startsWith(".") && isFile(pyPath(base, name, "README.md"))),
   );
+  const shipped = Object.keys(known).filter((agent) => found.has(agent));
+  const legacy = new Set(
+    shipped.flatMap((agent) => dictItem(known, agent)).filter((role) => !Object.hasOwn(known, role)),
+  );
+  return [...shipped, ...codePointSort([...found].filter((name) => !shipped.includes(name) && !legacy.has(name)))];
+}
+
+// A role a charter names: a reference to the standard's `roles/<role>.md`.
+const _CHARTER_ROLE_RE = /roles\/([a-z][a-z0-9_-]*)\.md/gu;
+
+/**
+ * The roles of each agent akmon ships, by agent (`agents/agents.json` of this tree).
+ *
+ * The one owner of the agent -> roles table: `akmon init` writes each charter's sections from the
+ * same file (ADR 0026/D06).
+ * @param {HookData} data
+ * @returns {Record<string, string[]>}
+ */
+export function agentDefinitions(data) {
+  return Object.fromEntries(Object.entries(data.definitions).map(([agent, spec]) => [agent, [...spec.roles]]));
+}
+
+/**
+ * The roles of `agent`: its definition's when `known` names it, else the charter's own.
+ *
+ * `known` is {@link agentDefinitions} (ADR 0026/D06). An agent it does not name — a project's own,
+ * or a pre-0027 role-named charter directory — falls back: the charter (`directory/<agent>/README.md`)
+ * names each role it works in by a reference to `roles/<role>.md` (ADR 0027/D04), and a charter that
+ * names none belongs to an agent whose charter directory is its role name (`learn`), so the agent's
+ * own name is its one role.
+ * @param {string} directory
+ * @param {string} agent
+ * @param {Record<string, string[]>} known
+ * @returns {string[]}
+ */
+export function agentRoles(directory, agent, known) {
+  if (Object.hasOwn(known, agent)) {
+    return [...dictItem(known, agent)];
+  }
+  let text;
+  try {
+    text = fs.readFileSync(pyPath(directory, agent, "README.md"), "utf8");
+  } catch (error) {
+    if (!isOSError(error)) {
+      throw error;
+    }
+    return [agent];
+  }
+  const roles = [...new Set([...text.matchAll(_CHARTER_ROLE_RE)].map((match) => match[1]))];
+  return roles.length > 0 ? roles : [agent];
+}
+
+/**
+ * The agents of `directory` each with its roles, as the session-start roster line names them.
+ *
+ * `known` is {@link agentDefinitions}: the shipped agents' roles come from it, and only the
+ * development layer passes it — a project's runtime agents keep their charters' own roles.
+ * @param {string} directory
+ * @param {string[]} agents
+ * @param {Record<string, string>} start the `session_start` data
+ * @param {Record<string, string[]>} known
+ * @returns {string}
+ */
+export function agentRoster(directory, agents, start, known) {
+  return agents
+    .map((agent) => {
+      const roles = agentRoles(directory, agent, known);
+      const template = dictItem(start, roles.length === 1 ? "agent_one_role" : "agent_many_roles");
+      return fill(template, { agent, roles: roles.join(", ") });
+    })
+    .join(dictItem(start, "agent_separator"));
 }
 
 /**
@@ -541,7 +670,7 @@ export function agentNames(directory) {
  * The interactive half of the freshness guarantee (C77). `sync --check` and `verify` already
  * catch this copy in CI, but they run on a commit; the window this closes opens earlier and
  * closes silently. A pin bump installs the new hooks the instant the dependency resolves — they
- * run from the package — while `<AITNA_ROOT>/.akmon/` still holds the previous release's text
+ * run from the package — while `<dev root>/.akmon/` still holds the previous release's text
  * until someone runs `akmon sync`.
  *
  * Package execution is the precondition: mounted modes import their guardrails directly from
@@ -560,7 +689,7 @@ export function agentNames(directory) {
 export function staleGuardrailNotice(data, root) {
   const runtimeRoot = akmonRuntimeRoot(root);
   try {
-    if (_resolve(runtimeRoot) === _resolve(pyPath(root, aitnaRootName(), "akmon"))) {
+    if (_resolve(runtimeRoot) === _resolve(pyPath(root, aitnaRootName(root), "akmon"))) {
       return null;
     }
   } catch (error) {
@@ -576,7 +705,7 @@ export function staleGuardrailNotice(data, root) {
     return null;
   }
   return fill(_core(data, "stale_guardrail_notice"), {
-    root_name: aitnaRootName(),
+    root_name: aitnaRootName(root),
     names: names.join(", "),
   });
 }
@@ -596,7 +725,7 @@ export function staleGuardrailNotice(data, root) {
  */
 export function sessionStartResult(data, root) {
   const stale = staleGuardrailNotice(data, root);
-  const dev = agentNames(pyPath(root, aitnaRootName(), "agents"));
+  const dev = agentNames(pyPath(root, aitnaRootName(root), "agents"), agentDefinitions(data));
   const desk = agentNames(pyPath(root, "agents"));
   if (dev.length === 0 && desk.length === 0) {
     // A project with no agent charters still has to hear this one: it is about the rules
@@ -612,10 +741,14 @@ export function sessionStartResult(data, root) {
   const start = _core(data, "session_start");
   const lines = [dictItem(start, "title"), dictItem(start, "format_line")];
   if (dev.length > 0) {
-    lines.push(fill(dictItem(start, "develop_line"), { agents: dev.join(", ") }));
+    lines.push(
+      fill(dictItem(start, "develop_line"), {
+        agents: agentRoster(pyPath(root, aitnaRootName(root), "agents"), dev, start, agentDefinitions(data)),
+      }),
+    );
   }
   if (desk.length > 0) {
-    lines.push(fill(dictItem(start, "operate_line"), { agents: desk.join(", ") }));
+    lines.push(fill(dictItem(start, "operate_line"), { agents: agentRoster(pyPath(root, "agents"), desk, start, {}) }));
   }
   lines.push(dictItem(start, "no_agent_line"));
   if (dev.length > 0) {
@@ -626,7 +759,7 @@ export function sessionStartResult(data, root) {
     lines.push(dictItem(start, "pick_generic"));
   }
   lines.push(dictItem(start, "delegation_line"));
-  lines.push(fill(dictItem(start, "memory_line"), { root_name: aitnaRootName() }));
+  lines.push(fill(dictItem(start, "memory_line"), { root_name: aitnaRootName(root) }));
   if (stale !== null) {
     lines.push(stale);
   }
@@ -805,7 +938,7 @@ function _suffix(target) {
  */
 export function isCodePath(data, filePath, root = null) {
   const target = classifyTarget(filePath, root);
-  if (_segments(data, "non_code_segments").some((segment) => target.includes(segment))) {
+  if (_segments(data, "non_code_segments", root).some((segment) => target.includes(segment))) {
     return false;
   }
   return /** @type {string[]} */ (_core(data, "code_extensions")).includes(_suffix(target));
@@ -814,10 +947,12 @@ export function isCodePath(data, filePath, root = null) {
 /**
  * Owner-facing text for the role-on-code reminder (hooks/hook_core.json, C102).
  * @param {HookData} data
+ * @param {string | null} [root]
  * @returns {string}
  */
-export function roleOnCodeMessage(data) {
-  return fill(_core(data, "role_on_code_message"), { tasks: `${aitnaRootName()}/TASKS.md` });
+export function roleOnCodeMessage(data, root = null) {
+  const dev = aitnaRootName(root === null ? locateProjectRoot() : root);
+  return fill(_core(data, "role_on_code_message"), { tasks: `${dev}/TASKS.md` });
 }
 
 /**
@@ -843,7 +978,7 @@ export function roleOnCodeResult(data, toolName, filePath, sessionId, projectRoo
     return null;
   }
 
-  return new HookResult({ eventName: "PreToolUse", additionalContext: roleOnCodeMessage(data) });
+  return new HookResult({ eventName: "PreToolUse", additionalContext: roleOnCodeMessage(data, projectRoot) });
 }
 
 /**
@@ -855,13 +990,13 @@ export function roleOnCodeResult(data, toolName, filePath, sessionId, projectRoo
  */
 export function isPlanningDoc(data, filePath, root = null) {
   const target = classifyTarget(filePath, root);
-  if (_segments(data, "planning_doc_files").some((name) => target.endsWith(name))) {
+  if (_segments(data, "planning_doc_files", root).some((name) => target.endsWith(name))) {
     return true;
   }
   if (!target.endsWith(".md")) {
     return false;
   }
-  return _segments(data, "planning_doc_segments").some((segment) => target.includes(segment));
+  return _segments(data, "planning_doc_segments", root).some((segment) => target.includes(segment));
 }
 
 /**
@@ -930,7 +1065,7 @@ export function analysisWriteResult(data, toolName, filePath, sessionId, project
 //   too, but cheaper to undo than an edit.
 // - **The opening calls of a stretch are free** (`delegationGrace`): orientation before the
 //   first delegation is not yet a failure to delegate.
-// - **A read never carries the ask.** Outside the interactive default mode the ask is a deny, and
+// - **A read never carries the ask.** In an unattended run the ask is a deny, and
 //   a denied look costs the agent the means to find out what it was about to do. The score stays
 //   over the threshold, so the ask lands on the next edit or shell call.
 //
@@ -1251,10 +1386,10 @@ function _updateDelegationCounter(data, counter, toolName) {
  * @param {number} score
  * @param {string} toolName
  * @param {string} askMarker
- * @param {string | null} permissionMode
+ * @param {{permissionMode: string | null, attended: boolean | null}} options
  * @returns {HookResult | null}
  */
-function _delegationAskResult(data, score, toolName, askMarker, permissionMode) {
+function _delegationAskResult(data, score, toolName, askMarker, { permissionMode, attended }) {
   // A read never carries the ask and does not spend it; the next edit or shell call does.
   if (_exists(askMarker) || toolName === readTool(data)) {
     return null;
@@ -1268,6 +1403,7 @@ function _delegationAskResult(data, score, toolName, askMarker, permissionMode) 
       permissionReason: delegationAskMessage(data, score),
     }),
     permissionMode,
+    attended,
   );
 }
 
@@ -1293,10 +1429,15 @@ function _delegationSoftNudgeResult(data, score, marker) {
  * @param {HookData} data
  * @param {string} toolName
  * @param {string | null} sessionId
- * @param {{isSubagent?: boolean, permissionMode?: string | null}} [options]
+ * @param {{isSubagent?: boolean, permissionMode?: string | null, attended?: boolean | null}} [options]
  * @returns {HookResult | null}
  */
-export function delegationNudgeResult(data, toolName, sessionId, { isSubagent = false, permissionMode = null } = {}) {
+export function delegationNudgeResult(
+  data,
+  toolName,
+  sessionId,
+  { isSubagent = false, permissionMode = null, attended = null } = {},
+) {
   // C28d: subagent-originated calls (agent_id present in the payload) must never touch
   // the counter. k_* delegates can't delegate (no Task tool), so nudging/asking them is
   // noise and the hard ask blocks their legit reads. The session_id is shared with the
@@ -1322,7 +1463,7 @@ export function delegationNudgeResult(data, toolName, sessionId, { isSubagent = 
   const score = _updateDelegationCounter(data, counter, toolName);
 
   if (score >= delegationAskThreshold(data)) {
-    return _delegationAskResult(data, score, toolName, askMarker, permissionMode);
+    return _delegationAskResult(data, score, toolName, askMarker, { permissionMode, attended });
   }
   if (score >= delegationNudgeThreshold(data)) {
     return _delegationSoftNudgeResult(data, score, marker);

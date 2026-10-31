@@ -21,7 +21,7 @@ The rules that make a module belong here, all of them load-bearing:
 - **Python 3.12.** The single floor declared by the package and every shipped venv-free entry
   point, checked by the lower CI leg rather than inferred from the development interpreter.
 - **Reachable at the same tree-relative path from every carrier**: the mounted
-  ``<AITNA_ROOT>/akmon/`` and ``akmon/_tree/`` inside the wheel — which since C77 is where a
+  ``<dev root>/akmon/`` and ``akmon/_tree/`` inside the wheel — which since C77 is where a
   package-mode consumer's hooks run from, rather than a copy in its repository. That is what
   lets one owner exist at all, and it is why this directory is in ``pyproject.toml``'s
   force-include list.

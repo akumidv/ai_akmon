@@ -10,8 +10,8 @@
 
 akmon gives a project a model for **skills** and their delivery. Projects now also need
 **standing agents**: an agent that lives in a long-open session, owns state of its own (a folder,
-an index, a retention rule), uses a set of skills, and is switched on per installation. akmon's
-word *agent* today means only the **development charter of a role** (`<DEV>/agents/<name>/README.md`).
+an index, a retention rule), uses a set of skills, and is switched on per installation. The
+word *agent* now names the unit of responsibility ([ADR 0027](../adr/0027-names-of-agents-actors-roles-and-delegates.md)); the tree still reads it as the **development charter of a role** (`<DEV>/agents/<name>/README.md`) until A72's code lands.
 The OPERATE side exists as a roster line and nothing more. The question is a contract for the
 OPERATE side that does not clash with the charter checks.
 
@@ -22,9 +22,9 @@ OPERATE side that does not clash with the charter checks.
 | The session-start roster scans two lists: `<DEV>/agents/` (development charters) and the project root `agents/` (the OPERATE side); a charter is a subdirectory holding a `README.md` | `agent_names`, `session_start` in `hooks/hook_core.py` and its twin `js/hooks/hook_core.mjs` |
 | The roster prints `OPERATE (run/use from outside): …` from the data key `operate_line` | `hooks/hook_core.json` |
 | `verify` checks `<DEV>/agents/` only: `charters.present`, `charters.readme`, `charters.role-link`; root `agents/` is not validated | `checkAgentCharters` in `js/bin/verify.mjs`, the same ids in `bin/verify.py` |
-| The `platform` archetype excludes a runtime that hosts OPERATE actors | `ARCHETYPES.md` |
+| The `platform` archetype excludes a runtime that hosts OPERATE agents | `ARCHETYPES.md` |
 | OPERATE is an undesigned third branch whose hard runtime part is propose ≠ execute | `meta/ROADMAP.md` § O1 |
-| A role is the definition, a project's charter its incarnation; `k_*` delegates are workers by task kind | `roles/README.md`, `MODEL.md` § Capability tiers |
+| A role is the definition; a project's charter defines its agent; `k_*` delegates are workers by task kind | `roles/README.md`, `MODEL.md` § Capability tiers |
 
 ## The first case: general or specific
 
@@ -38,9 +38,9 @@ interim; akmon is to be the source of the standard.
 Each is a bounded choice; options, pros and cons, and a recommendation come with the A69 draft.
 Items 2 and 3 presuppose neither a shared skill nor a rename of the folder.
 
-- **D-AGENT-CONCEPTS** — the relation of role, development charter, standing agent, skill and
-  worker (`k_*`); names that collide neither with each other nor with a host's own "agent" (a host
-  subagent); which of them akmon owns.
+- **D-AGENT-CONCEPTS** — the words are settled by [ADR 0027](../adr/0027-names-of-agents-actors-roles-and-delegates.md)
+  (agent, standing, project agent, project delegate, delegate, host subagent, charter); still open: the
+  relation of role, development charter, standing agent, skill and worker (`k_*`), and which of them akmon owns.
 - **D-AGENT-AUTHORING** — when something is an agent and not a skill; the charter's shape
   (frontmatter, mission, skills used, owned state, never-list, session start and close, workers);
   retention of owned state; how a charter points at skills instead of copying their rules; the

@@ -1,10 +1,10 @@
 # Pipeline: learning
 
-The periodic cycle the [learn](../roles/learn.md) role follows. Step **3 (PROMOTE)** of the
+The periodic cycle the [learning](../agents/learning.md) agent follows (role `learn`). Step **3 (PROMOTE)** of the
 learn loop:
 the review that lifts proven local assets into akmon so every project inherits them. Where
 [memory-distill](memory-distill.md) runs continuously and stays LOCAL, this runs **periodically**
-and crosses the LOCAL → SHARED boundary. [release](../roles/release.md)'s periodic cadence hands
+and crosses the LOCAL → SHARED boundary. The [release](../agents/release.md) agent's periodic cadence hands
 off to this cycle rather than promoting memory itself.
 
 ## When

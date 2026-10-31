@@ -30,7 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # The tree root, so the shared ``common`` package resolves: it holds the single owner of
 # project-root discovery (C73) and is reachable at the same tree-relative depth from the
-# mounted tree and from the materialized ``<AITNA_ROOT>/.akmon/`` copy alike.
+# mounted tree and from the materialized ``<dev root>/.akmon/`` copy alike.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import routing
@@ -43,15 +43,14 @@ def _standard_tree_root(project_root: Path) -> Path:
     """The tree this script reads ``registry.json`` from: the mount for mounted modes, this script's own tree otherwise.
 
     (ADR 0009 §4, mirroring ``bin/sync.py::standard_tree_root``.) In package mode that own tree
-    is either the materialized ``<AITNA_ROOT>/.akmon/`` copy or the installed package's
+    is either the materialized ``<dev root>/.akmon/`` copy or the installed package's
     embedded tree, whichever this file was executed from — both carry
     ``tools/model_routing/registry.json``. The recorded ``mount`` field decides, never the mere
-    presence of the directory: a stale ``<AITNA_ROOT>/akmon`` left over from a prior mode must
+    presence of the directory: a stale ``<dev root>/akmon`` left over from a prior mode must
     not shadow the pin.
     """
-    aitna = project_root / routing.aitna_root_name()
     if not records_package_mode(project_root):
-        mounted = aitna / "akmon"
+        mounted = routing.aitna_root(project_root) / "akmon"
         if mounted.is_dir():
             return mounted
     return Path(__file__).resolve().parents[2]
@@ -88,7 +87,7 @@ def _existing_second_opinion(project_root: Path) -> bool:
     return bool(_existing_config(project_root).get("second_opinion"))
 
 
-def _session_stanza(args: argparse.Namespace, registry: dict, existing: dict) -> dict | None:
+def _session_stanza(args: argparse.Namespace, registry: dict, existing: dict, root: Path) -> dict | None:
     """The ``session`` stanza to record: the flags over the one already recorded, else none.
 
     Record only: it names the harness, model and priors the session runs on so the second opinion
@@ -104,7 +103,7 @@ def _session_stanza(args: argparse.Namespace, registry: dict, existing: dict) ->
     if not (args.session_provider or args.session_model or args.session_family):
         return dict(recorded) or None
     if args.session_family:
-        routing.check_session_family(registry, args.session_family)
+        routing.check_session_family(registry, args.session_family, root)
     vendor_block = registry.get(args.vendor)
     carrier = vendor_block.get("carrier") if isinstance(vendor_block, dict) else None
     provider = args.session_provider or recorded.get("provider") or carrier
@@ -223,8 +222,8 @@ def main(argv: list[str] | None = None) -> int:
     second_opinion = _existing_second_opinion(root) if args.second_opinion is None else args.second_opinion == "on"
 
     try:
-        routing.refuse_retired_keys(registry, {}, project_root=root)
-        session = _session_stanza(args, registry, _existing_config(root))
+        routing.refuse_retired_keys(registry, {}, root, layered=True)
+        session = _session_stanza(args, registry, _existing_config(root), root)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -249,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         changed.append(path)
         print(f"{'would delete' if not write else 'deleted'}: {path.relative_to(root)}")
 
-    head, _ = routing.opinion_head(registry, json.loads(artifacts[routing.local_config_rel()]))
+    head, _ = routing.opinion_head(registry, json.loads(artifacts[routing.local_config_rel()]), root)
     print(
         "model routing: "
         f"vendor={binding.vendor} · orchestrator={binding.orchestrator} · reasoner={binding.reasoner} · "

@@ -27,7 +27,7 @@ with `--ref`. Nothing put the steps in order.
 ## Behavior
 
 1. **Read the record.** The mount mode, `akmon_version` and `last_realign` come from
-   `<AITNA_ROOT>/.akmon.toml`; a project without one is refused with `akmon init` named.
+   `<dev root>/.akmon.toml`; a project without one is refused with `akmon init` named.
 2. **Resolve and compare.** The target is `--ref` or the newest release.
    `common/versions.py::order_key` places both versions (a development version before its release,
    a `git describe` distance after it). If the target is ahead, the pin moves. If it equals the

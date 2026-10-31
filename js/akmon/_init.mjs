@@ -64,8 +64,24 @@ import { parseArgs } from "node:util";
 import { blockHeading, readAlwaysLoadedData } from "../common/always_loaded.mjs";
 import { fnmatchCase } from "../common/glob.mjs";
 import { fill, read } from "../common/jsondata.mjs";
-import { AITNA_ROOT_DEFAULT, resolvePath } from "../common/project_root.mjs";
-import { isDir, isFile, pySplitlines, pyStrip, readText, strRepr, truthy, writeText } from "../common/pyvalue.mjs";
+import {
+  AITNA_ROOT_DEFAULT,
+  DEV_ROOT_FILE,
+  aitnaRootName,
+  resolvePath,
+  validatedDevRootName,
+} from "../common/project_root.mjs";
+import {
+  dictItem,
+  isDir,
+  isFile,
+  pySplitlines,
+  pyStrip,
+  readText,
+  strRepr,
+  truthy,
+  writeText,
+} from "../common/pyvalue.mjs";
 import { readAkmonToml, recordedEcosystem, recordedMount } from "../common/record.mjs";
 import { shlexJoin } from "../common/shlex.mjs";
 import { compareVersions, isFinal, splitVersion, switchTag } from "../common/versions.mjs";
@@ -101,6 +117,20 @@ import { embeddedTreeRoot } from "./_tree.mjs";
  */
 
 /**
+ * One default agent charter: the agent's focus, its roles in write order, and whether each role is a
+ * file under `roles/` (`roleFiles`) or is defined inside the agent's own definition `agents/<agent>.md`.
+ * @typedef {object} Charter
+ * @property {string} focus
+ * @property {Record<string, string>} roles
+ * @property {boolean} roleFiles
+ */
+
+/**
+ * The agent → roles table `agents/agents.json` of the embedded tree, the one owner of it.
+ * @typedef {Record<string, {roles: string[], role_files: boolean}>} AgentDefinitions
+ */
+
+/**
  * The keys of `src/akmon/init.json` the JavaScript init reads.
  * @typedef {object} InitData
  * @property {string} akmon_repo
@@ -112,8 +142,10 @@ import { embeddedTreeRoot } from "./_tree.mjs";
  * @property {string} agents_shared_layer_mounted
  * @property {string} tasks_skeleton
  * @property {string} memory_index
- * @property {Record<string, string>} charters
+ * @property {Record<string, string>} charters the focus of each agent's charter
+ * @property {Record<string, string>} charter_role_focus the focus of each role's section
  * @property {string} charter
+ * @property {string} charter_role
  * @property {string} charter_locate_package
  * @property {string} charter_locate_mounted
  * @property {string[]} gitignore_lines_node
@@ -219,7 +251,7 @@ function _mount(attach) {
 }
 
 /**
- * The spelling of the mount's CLI in printed commands (`node <AITNA_ROOT>/akmon/js/akmon/cli.mjs`).
+ * The spelling of the mount's CLI in printed commands (`node <dev root>/akmon/js/akmon/cli.mjs`).
  * @param {InitData} data
  * @param {string} aitna
  * @returns {string}
@@ -234,6 +266,35 @@ export function mountedCli(data, aitna) {
  */
 export function readInitData() {
   return /** @type {InitData} */ (read(posix.join(embeddedTreeRoot(), "src", "akmon", "init.json")));
+}
+
+/**
+ * The agent → roles table (`agents/agents.json` of the embedded tree), read on the call; the
+ * Python init and the session-start hook read the same file.
+ * @returns {AgentDefinitions}
+ */
+export function readAgentDefinitions() {
+  return /** @type {AgentDefinitions} */ (read(posix.join(embeddedTreeRoot(), "agents", "agents.json")));
+}
+
+/**
+ * The default agent charters by agent, in write order (`agents.json`); the agent's and each role's
+ * focus text is `init.json`'s, which roles an agent works in is not.
+ * @param {InitData} data
+ * @param {AgentDefinitions} definitions
+ * @returns {Record<string, Charter>}
+ */
+function _charters(data, definitions) {
+  return Object.fromEntries(
+    Object.entries(definitions).map(([agent, spec]) => [
+      agent,
+      {
+        focus: dictItem(data.charters, agent),
+        roles: Object.fromEntries(spec.roles.map((role) => [role, dictItem(data.charter_role_focus, role)])),
+        roleFiles: spec.role_files,
+      },
+    ]),
+  );
 }
 
 // --------------------------------------------------------------------------------------
@@ -307,50 +368,83 @@ function _confirm(question) {
 // --------------------------------------------------------------------------------------
 
 /**
- * The dev-layer root this run will use — from `--aitna-root` or from `AITNA_ROOT`, validated
- * whichever way it arrived (the two are one contract).
+ * The dev-layer root this run will use — `--aitna-root`, else the one `root` already declares.
+ *
+ * Validated whichever way it arrived, by the one validator (`common/project_root.mjs`). A flag that
+ * is empty or blank states nothing, and the declaration (`.aitna-root`, else `_aitna`) stands. The
+ * environment is not read: the declaration is the project's, not the shell's (ADR 0022 D09).
  * @param {string | undefined} flag
  * @param {string} root
  * @returns {string}
  */
 export function effectiveAitnaRoot(flag, root) {
-  const source = flag !== undefined ? "--aitna-root" : "AITNA_ROOT";
-  const raw = flag !== undefined ? flag : process.env.AITNA_ROOT;
-  if (raw === undefined || pyStrip(raw) === "") {
-    return AITNA_ROOT_DEFAULT;
+  try {
+    if (flag !== undefined && pyStrip(flag) !== "") {
+      return validatedDevRootName(flag, root, "--aitna-root");
+    }
+    return aitnaRootName(root);
+  } catch (error) {
+    if (error instanceof Error && error.name === "ValueError") {
+      throw new InitError(error.message);
+    }
+    throw error;
   }
-  return validatedAitnaRoot(raw, root, source);
 }
 
 /**
- * A dev-layer root as a project-root-relative path, or a hard error: not absolute, not climbing
- * out with `..`, and (links followed) inside the project.
- * @param {string} value
+ * Declare `aitna` as the dev layer in `<root>/.aitna-root`, only when it is not the default: the
+ * default is declared by the file's absence (ADR 0022 D09), so a project that moves back to
+ * `_aitna` loses a pointer that named another root. Written before anything reads the root, since
+ * every later step (the mount, sync, the routing initializer) reads it through that file.
  * @param {string} root
- * @param {string} [source]
- * @returns {string}
+ * @param {string} aitna
+ * @returns {void}
  */
-export function validatedAitnaRoot(value, root, source = "--aitna-root") {
-  const raw = pyStrip(value);
-  // Absoluteness is decided on the *raw* value: stripping the slashes first would turn
-  // `/tmp/escaped` into the innocent-looking relative `tmp/escaped`.
-  if (raw.startsWith("/")) {
-    throw new InitError(`${source} must be relative to the project root and stay inside it: ${strRepr(value)}`);
+export function writeDevRootPointer(root, aitna) {
+  const pointer = posix.join(root, DEV_ROOT_FILE);
+  const declared = isFile(pointer) ? pyStrip(fs.readFileSync(pointer, "utf8")) : null;
+  if (aitna === AITNA_ROOT_DEFAULT) {
+    if (declared !== null && declared !== aitna) {
+      fs.unlinkSync(pointer);
+      _log(`removed ${DEV_ROOT_FILE} (the dev layer is the default, ${aitna}/)`);
+    }
+  } else if (declared !== aitna) {
+    fs.writeFileSync(pointer, `${aitna}\n`);
+    _log(`wrote ${DEV_ROOT_FILE} (${aitna})`);
   }
-  const cleaned = raw.replace(/^\/+|\/+$/g, "");
-  if (cleaned === "") {
-    throw new InitError(`${source} cannot be empty`);
+}
+
+/**
+ * The text of `<root>/.aitna-root`, or `null` when the project has no such file. Kept raw (not
+ * stripped) so that `restoreDevRootPointer` can put back exactly what was there.
+ * @param {string} root
+ * @returns {string | null}
+ */
+export function devRootPointerText(root) {
+  const pointer = posix.join(root, DEV_ROOT_FILE);
+  return isFile(pointer) ? fs.readFileSync(pointer, "utf8") : null;
+}
+
+/**
+ * Put `<root>/.aitna-root` back to `previous` (`devRootPointerText`'s value), when it differs. A run
+ * that declines or refuses before it applies anything must leave the declaration it wrote early
+ * (`writeDevRootPointer`) as it found it: deleted when it was absent, its old text when it existed,
+ * re-created when the run removed it.
+ * @param {string} root
+ * @param {string | null} previous
+ * @returns {void}
+ */
+export function restoreDevRootPointer(root, previous) {
+  if (devRootPointerText(root) === previous) {
+    return;
   }
-  if (cleaned.split("/").includes("..")) {
-    throw new InitError(`${source} must be relative to the project root and stay inside it: ${strRepr(value)}`);
+  const pointer = posix.join(root, DEV_ROOT_FILE);
+  if (previous === null) {
+    fs.unlinkSync(pointer);
+  } else {
+    fs.writeFileSync(pointer, previous);
   }
-  const rootReal = resolvePath(root);
-  const resolved = resolvePath(`${rootReal === "/" ? "" : rootReal}/${cleaned}`);
-  const inside = resolved !== rootReal && resolved.startsWith(rootReal === "/" ? "/" : `${rootReal}/`);
-  if (!inside) {
-    throw new InitError(`${source} resolves outside the project root: ${resolved}`);
-  }
-  return cleaned;
+  _log(`left ${DEV_ROOT_FILE} as it was (nothing was applied)`);
 }
 
 /**
@@ -867,17 +961,27 @@ export function npxSpec(repo, ref) {
 // --------------------------------------------------------------------------------------
 
 /**
- * One agent charter (`init.json`), with the locate line picked by mount mode.
+ * One agent charter (`init.json`): the agent's header, its definition link and one section per
+ * role; each locate line is picked by mount mode, and a role's record is `roles/<role>.md` or,
+ * when the agent defines its roles itself, `agents/<agent>.md`.
  * @param {InitData} data
- * @param {string} role
- * @param {string} focus
+ * @param {string} agent
+ * @param {Charter} spec
  * @param {string} aitna
  * @param {boolean} mounted
  * @returns {string}
  */
-function _charter(data, role, focus, aitna, mounted) {
-  const locate = fill(mounted ? data.charter_locate_mounted : data.charter_locate_package, { aitna, role });
-  return fill(data.charter, { role, focus, locate });
+function _charter(data, agent, spec, aitna, mounted) {
+  const template = mounted ? data.charter_locate_mounted : data.charter_locate_package;
+  /** @param {string} path */
+  const locate = (path) => fill(template, { aitna, path });
+  const sections = Object.entries(spec.roles)
+    .map(([role, focus]) => {
+      const path = spec.roleFiles ? `roles/${role}.md` : `agents/${agent}.md`;
+      return fill(data.charter_role, { role, focus, path, locate: locate(path) });
+    })
+    .join("\n");
+  return fill(data.charter, { agent, focus: spec.focus, locate: locate(`agents/${agent}.md`), sections });
 }
 
 /**
@@ -999,11 +1103,11 @@ function _writeLocalLayout(data, attach) {
   }
   _writeIfAbsent(posix.join(root, aitna, "TASKS.md"), fill(data.tasks_skeleton, { aitna }), `${aitna}/TASKS.md`);
   _writeIfAbsent(posix.join(root, aitna, "memory", "README.md"), data.memory_index, `${aitna}/memory/README.md`);
-  for (const [role, focus] of Object.entries(data.charters)) {
+  for (const [agent, spec] of Object.entries(_charters(data, readAgentDefinitions()))) {
     _writeIfAbsent(
-      posix.join(root, aitna, "agents", role, "README.md"),
-      _charter(data, role, focus, aitna, _mounted(attach)),
-      `${aitna}/agents/${role}/README.md`,
+      posix.join(root, aitna, "agents", agent, "README.md"),
+      _charter(data, agent, spec, aitna, _mounted(attach)),
+      `${aitna}/agents/${agent}/README.md`,
     );
   }
 }
@@ -1100,7 +1204,7 @@ function _writeCi(data, attach, { noCi }) {
 }
 
 /**
- * Create or prepare `<AITNA_ROOT>/.akmon.toml`: a fresh record is written whole; an existing one is
+ * Create or prepare `<dev root>/.akmon.toml`: a fresh record is written whole; an existing one is
  * upserted key by key, so a hand-written `[test].runner`, comments and every field this command
  * does not own survive. `last_realign` is left to {@link _markRealignComplete}.
  * @param {InitData} data
@@ -1598,9 +1702,6 @@ function _addClosingSteps(data, attach, { archetype, profiles, pinStatus, versio
   if (pinStep) {
     nextSteps.unshift(pinStep);
   }
-  if (aitna !== AITNA_ROOT_DEFAULT) {
-    nextSteps.push(fill(steps["export_aitna"], { aitna }));
-  }
   if (attach.ecosystemSwitch) {
     nextSteps.push(data.node_switch_codex_step);
     if (_isRuffTemplate(attach)) {
@@ -2005,10 +2106,6 @@ export async function main(argv = process.argv.slice(2)) {
     return 2;
   }
   const data = readInitData();
-  // Every path in the tooling derives from this variable (sync, the routing initializer and the
-  // hooks read it at call time), so it is set once, validated, for the whole in-process run and
-  // given back afterwards.
-  const previousEnv = process.env.AITNA_ROOT;
   try {
     return await _run(data, options, root);
   } catch (error) {
@@ -2017,12 +2114,6 @@ export async function main(argv = process.argv.slice(2)) {
       return 2;
     }
     throw error;
-  } finally {
-    if (previousEnv === undefined) {
-      delete process.env.AITNA_ROOT;
-    } else {
-      process.env.AITNA_ROOT = previousEnv;
-    }
   }
 }
 
@@ -2049,15 +2140,21 @@ function _mountStandard(data, attach, options) {
 }
 
 /**
- * The run proper: plan and refuse, confirm, mount, write the layout and documents, generate, report.
+ * The run's dev layer and mount mode, and why that mode; refuses what the run cannot serve.
+ * Every path in the tooling derives from the project's dev-root declaration (sync, verify and the
+ * hooks read `.aitna-root`), so the root is resolved once here — from the flag or from the
+ * declaration, validated either way — and declared before anything reads it, which makes the whole
+ * run, including the sync and routing steps, agree on one dev-layer root that is inside the project.
+ * The declaration is the one file this run writes before it asks to proceed: the reads below go
+ * through it.
  * @param {InitData} data
  * @param {InitOptions} options
  * @param {string} root
- * @returns {Promise<number>}
+ * @returns {{attach: Attach, reason: string}}
  */
-async function _run(data, options, root) {
+function _plan(data, options, root) {
   const aitna = effectiveAitnaRoot(options.aitnaRoot, root);
-  process.env.AITNA_ROOT = aitna;
+  writeDevRootPointer(root, aitna);
   const previous = isFile(posix.join(root, aitna, ".akmon.toml")) ? recordedMount(root) : null;
   /** @type {[string, string]} */
   const [mode, reason] =
@@ -2077,6 +2174,29 @@ async function _run(data, options, root) {
     nextSteps: [],
   };
   _refuseUnservedRun(data, options, attach);
+  return { attach, reason };
+}
+
+/**
+ * The run proper: plan and refuse, confirm, mount, write the layout and documents, generate, report.
+ * @param {InitData} data
+ * @param {InitOptions} options
+ * @param {string} root
+ * @returns {Promise<number>}
+ */
+async function _run(data, options, root) {
+  // `_plan` writes the dev-root declaration before the owner is asked; a refusal or a "no" gives it back.
+  const declaredBefore = devRootPointerText(root);
+  /** @type {{attach: Attach, reason: string}} */
+  let planned;
+  try {
+    planned = _plan(data, options, root);
+  } catch (error) {
+    restoreDevRootPointer(root, declaredBefore);
+    throw error;
+  }
+  const { attach, reason } = planned;
+  const { aitna, mode, previous } = attach;
 
   _log(`attaching to ${root}`);
   _log(`mount mode: ${mode} (${reason}) · dev layer: ${aitna}/`);
@@ -2087,6 +2207,7 @@ async function _run(data, options, root) {
     _log(`migrating the mount mode: ${previous} → ${mode}`);
   }
   if (!options.yes && !_confirm(`akmon init: attach akmon to ${root}?`)) {
+    restoreDevRootPointer(root, declaredBefore);
     process.stderr.write("akmon init: aborted\n");
     return 1;
   }

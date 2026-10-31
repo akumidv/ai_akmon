@@ -1,0 +1,28 @@
+# The hook finds the project from the payload's cwd. A cwd with no project root at or above it writes
+# nothing and says nothing (ADR 0022 D09), although the process itself runs inside a project whose
+# state is due: the root is the payload's, never the process's.
+id = "hooks/learning-reminder-no-project-root-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:learning-reminder"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/local/learning.json" = "{\n  \"last_run\": null,\n  \"since\": \"2999-01-01T00:00:00Z\",\n  \"sessions\": [\n    \"seed-0\",\n    \"seed-1\",\n    \"seed-2\",\n    \"seed-3\",\n    \"seed-4\",\n    \"seed-5\",\n    \"seed-6\",\n    \"seed-7\",\n    \"seed-8\",\n    \"seed-9\"\n  ]\n}\n" }
+
+[run]
+script = "learning-reminder"
+
+[run.payload]
+hook_event_name = "SessionStart"
+session_id = "sess-lr-nowhere"
+source = "startup"
+cwd = "{{tmp}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""
+
+[expected.files]
+"_aitna/local/learning.json" = "{\n  \"last_run\": null,\n  \"since\": \"2999-01-01T00:00:00Z\",\n  \"sessions\": [\n    \"seed-0\",\n    \"seed-1\",\n    \"seed-2\",\n    \"seed-3\",\n    \"seed-4\",\n    \"seed-5\",\n    \"seed-6\",\n    \"seed-7\",\n    \"seed-8\",\n    \"seed-9\"\n  ]\n}\n"

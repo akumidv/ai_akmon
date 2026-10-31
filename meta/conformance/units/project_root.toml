@@ -1,0 +1,558 @@
+# Unit table: the project-root owner (common/project_root.py; JS mirror js/common/project_root.mjs,
+# ADR 0020 D01, ADR 0022 D09). Where the project root is, and what its dev layer is called: the dev root
+# is declared by a one-line file at the project root, `.aitna-root` (a project-root-relative POSIX path),
+# an absent file means `_aitna`, and the `AITNA_ROOT` environment variable is read nowhere.
+#
+# Generic rows over the same mouth as the hook tables (the row format is the block comment above
+# `probe_routing` in probe.py): a row names the Python public name, its JSON arguments and the world it
+# runs in. The row's project is its scratch directory (`{{dir}}`, or a subdirectory of it); the declaration
+# is a `files` entry named `.aitna-root`; a `DevRoot` answers as `{path, origin}`; `resolve_project_root`
+# answers `[root, notice]` on both sides (the JS mouth hands its `{root, notice}` back as the pair). A
+# refusal is `{"error": "ValueError", "message": ...}` and its message names the declared value.
+#
+# Families (the `id` prefix): `dev` -- dev_root: the pointer read, the default, no project root and the
+# refusals; `validated` -- validated_dev_root_name, the shared check (also the `akmon init --aitna-root`
+# one); `name` -- aitna_root_name, aitna_root and akmon_mount over the same declarations; `is` --
+# is_project_root's markers (AGENTS.md beside the pointer, the record, or the mount); `locate` --
+# locate_project_root, the walk that answers None where find_project_root guesses; `find` -- the
+# fallback; `resolve` -- the root a command works in and the notice it prints when it had to guess;
+# `repo` -- the two layouts the pointer exists to tell apart (akmon's own, `.aitna-root` = `meta`, and a
+# project that merely owns a `meta/` directory).
+
+[[case]]
+# The declared path, anchored at the project root.
+id = "dev/pointer"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
+expected_json = '{"path": "{{dir}}/tools/ai", "origin": "pointer"}'
+
+[[case]]
+# The file as an editor writes it: one line and a newline.
+id = "dev/pointer-trailing-newline"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai\n" }
+expected_json = '{"path": "{{dir}}/tools/ai", "origin": "pointer"}'
+
+[[case]]
+# Surrounding whitespace is stripped.
+id = "dev/pointer-padded"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "  tools/ai  \n\n" }
+expected_json = '{"path": "{{dir}}/tools/ai", "origin": "pointer"}'
+
+[[case]]
+# A trailing slash is stripped from the value; the path is spelled as a POSIX path.
+id = "dev/pointer-trailing-slash"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai/" }
+expected_json = '{"path": "{{dir}}/tools/ai", "origin": "pointer"}'
+
+[[case]]
+# An inner `//` collapses in the answer's path.
+id = "dev/pointer-inner-double-slash"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools//ai" }
+expected_json = '{"path": "{{dir}}/tools/ai", "origin": "pointer"}'
+
+[[case]]
+id = "dev/pointer-unicode"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "é/中" }
+expected_json = '{"path": "{{dir}}/é/中", "origin": "pointer"}'
+
+[[case]]
+# Case is kept (the classifiers lowercase for matching, the name is as declared).
+id = "dev/pointer-uppercase"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "Tools/AI" }
+expected_json = '{"path": "{{dir}}/Tools/AI", "origin": "pointer"}'
+
+[[case]]
+id = "dev/pointer-single-segment"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "meta" }
+expected_json = '{"path": "{{dir}}/meta", "origin": "pointer"}'
+
+[[case]]
+# No declaration: `_aitna`, found by default.
+id = "dev/default-no-file"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '{"path": "{{dir}}/_aitna", "origin": "default"}'
+
+[[case]]
+# Nothing but the file declares a root: a `meta/` directory beside the default changes nothing.
+id = "dev/default-no-file-other-files"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "meta/TASKS.md" = "x", "_aitna/.akmon.toml" = "" }
+expected_json = '{"path": "{{dir}}/_aitna", "origin": "default"}'
+
+[[case]]
+# No project root was found: the bare default, for reading only.
+id = "dev/no-project-root"
+fn = "dev_root"
+args_json = '[null]'
+expected_json = '{"path": "_aitna", "origin": "no-project-root"}'
+
+[[case]]
+# The retired AITNA_ROOT variable moves nothing.
+id = "dev/env-ignored"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+env = { AITNA_ROOT = "elsewhere" }
+expected_json = '{"path": "{{dir}}/_aitna", "origin": "default"}'
+
+[[case]]
+id = "dev/env-does-not-override-pointer"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+env = { AITNA_ROOT = "elsewhere" }
+files = { ".aitna-root" = "tools/ai" }
+expected_json = '{"path": "{{dir}}/tools/ai", "origin": "pointer"}'
+
+[[case]]
+# An absolute path is refused as written, not stripped to a relative one.
+id = "dev/refuses-absolute"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "/etc/akmon" }
+expected_json = '''{"error": "ValueError", "message": ".aitna-root must be relative to the project root and stay inside it: '/etc/akmon'"}'''
+
+[[case]]
+id = "dev/refuses-only-slashes"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "///" }
+expected_json = '''{"error": "ValueError", "message": ".aitna-root must be relative to the project root and stay inside it: '///'"}'''
+
+[[case]]
+id = "dev/refuses-parent"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "../outside" }
+expected_json = '''{"error": "ValueError", "message": ".aitna-root must be relative to the project root and stay inside it: '../outside'"}'''
+
+[[case]]
+id = "dev/refuses-parent-inner"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "a/../../b" }
+expected_json = '''{"error": "ValueError", "message": ".aitna-root must be relative to the project root and stay inside it: 'a/../../b'"}'''
+
+[[case]]
+id = "dev/refuses-dotdot-alone"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = ".." }
+expected_json = '''{"error": "ValueError", "message": ".aitna-root must be relative to the project root and stay inside it: '..'"}'''
+
+[[case]]
+# `.` is the project root itself, not a dev layer inside it.
+id = "dev/refuses-dot"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "." }
+expected_json = '{"error": "ValueError", "message": ".aitna-root resolves outside the project root: {{dir}}"}'
+
+[[case]]
+id = "dev/refuses-empty"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "" }
+expected_json = '{"error": "ValueError", "message": ".aitna-root cannot be empty"}'
+
+[[case]]
+id = "dev/refuses-blank"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = " \n" }
+expected_json = '{"error": "ValueError", "message": ".aitna-root cannot be empty"}'
+
+[[case]]
+# One line only; the message quotes the whole text.
+id = "dev/refuses-several-lines"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai\nmore\n" }
+expected_json = '''{"error": "ValueError", "message": ".aitna-root must hold one line, a project-root-relative path: 'tools/ai\\nmore'"}'''
+
+[[case]]
+# A symlinked segment can leave the project without a `..`: refused by resolution.
+id = "dev/refuses-symlink-escape"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}/proj"}]'
+files = { "proj/.aitna-root" = "esc/dev", "out/keep" = "" }
+links = { "proj/esc" = "{{dir}}/out" }
+expected_json = '{"error": "ValueError", "message": ".aitna-root resolves outside the project root: {{dir}}/out/dev"}'
+
+[[case]]
+# A link that stays inside the project is fine; the answer keeps the declared spelling.
+id = "dev/symlink-inside-ok"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}/proj"}]'
+files = { "proj/.aitna-root" = "lnk/dev", "proj/real/keep" = "" }
+links = { "proj/lnk" = "{{dir}}/proj/real" }
+expected_json = '{"path": "{{dir}}/proj/lnk/dev", "origin": "pointer"}'
+
+[[case]]
+id = "validated/relative"
+fn = "validated_dev_root_name"
+args_json = '["tools/ai", {"$path": "{{dir}}"}]'
+expected_json = '"tools/ai"'
+
+[[case]]
+id = "validated/slashes-stripped"
+fn = "validated_dev_root_name"
+args_json = '["tools/ai/", {"$path": "{{dir}}"}]'
+expected_json = '"tools/ai"'
+
+[[case]]
+id = "validated/padded"
+fn = "validated_dev_root_name"
+args_json = '["  tools/ai ", {"$path": "{{dir}}"}]'
+expected_json = '"tools/ai"'
+
+[[case]]
+# The name is returned as cleaned, not normalized.
+id = "validated/inner-double-slash-kept"
+fn = "validated_dev_root_name"
+args_json = '["tools//ai", {"$path": "{{dir}}"}]'
+expected_json = '"tools//ai"'
+
+[[case]]
+# The default source is the flag `akmon init` takes.
+id = "validated/default-source-names-the-flag"
+fn = "validated_dev_root_name"
+args_json = '["/abs", {"$path": "{{dir}}"}]'
+expected_json = '''{"error": "ValueError", "message": "--aitna-root must be relative to the project root and stay inside it: '/abs'"}'''
+
+[[case]]
+id = "validated/source-named"
+fn = "validated_dev_root_name"
+args_json = '["/abs", {"$path": "{{dir}}"}, ".aitna-root"]'
+expected_json = '''{"error": "ValueError", "message": ".aitna-root must be relative to the project root and stay inside it: '/abs'"}'''
+
+[[case]]
+# Absoluteness is decided on the stripped value, the message quotes the value as given.
+id = "validated/absolute-quotes-the-raw-value"
+fn = "validated_dev_root_name"
+args_json = '[" /abs ", {"$path": "{{dir}}"}, "--aitna-root"]'
+expected_json = '''{"error": "ValueError", "message": "--aitna-root must be relative to the project root and stay inside it: ' /abs '"}'''
+
+[[case]]
+id = "validated/parent"
+fn = "validated_dev_root_name"
+args_json = '["a/../b", {"$path": "{{dir}}"}, "--aitna-root"]'
+expected_json = '''{"error": "ValueError", "message": "--aitna-root must be relative to the project root and stay inside it: 'a/../b'"}'''
+
+[[case]]
+id = "validated/empty"
+fn = "validated_dev_root_name"
+args_json = '["", {"$path": "{{dir}}"}, "--aitna-root"]'
+expected_json = '{"error": "ValueError", "message": "--aitna-root cannot be empty"}'
+
+[[case]]
+id = "validated/only-slashes-is-absolute"
+fn = "validated_dev_root_name"
+args_json = '["/", {"$path": "{{dir}}"}, "--aitna-root"]'
+expected_json = '''{"error": "ValueError", "message": "--aitna-root must be relative to the project root and stay inside it: '/'"}'''
+
+[[case]]
+id = "validated/dot-resolves-outside"
+fn = "validated_dev_root_name"
+args_json = '[".", {"$path": "{{dir}}"}, "--aitna-root"]'
+expected_json = '{"error": "ValueError", "message": "--aitna-root resolves outside the project root: {{dir}}"}'
+
+[[case]]
+id = "name/default"
+fn = "aitna_root_name"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '"_aitna"'
+
+[[case]]
+id = "name/pointer"
+fn = "aitna_root_name"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
+expected_json = '"tools/ai"'
+
+[[case]]
+id = "name/pointer-trailing-slash"
+fn = "aitna_root_name"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai/\n" }
+expected_json = '"tools/ai"'
+
+[[case]]
+id = "name/no-project-root"
+fn = "aitna_root_name"
+args_json = '[null]'
+expected_json = '"_aitna"'
+
+[[case]]
+id = "name/refused-pointer"
+fn = "aitna_root_name"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "/abs" }
+expected_json = '''{"error": "ValueError", "message": ".aitna-root must be relative to the project root and stay inside it: '/abs'"}'''
+
+[[case]]
+id = "root/default"
+fn = "aitna_root"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '"{{dir}}/_aitna"'
+
+[[case]]
+id = "root/pointer"
+fn = "aitna_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
+expected_json = '"{{dir}}/tools/ai"'
+
+[[case]]
+id = "root/no-project-root"
+fn = "aitna_root"
+args_json = '[null]'
+expected_json = '"_aitna"'
+
+[[case]]
+id = "mount/default"
+fn = "akmon_mount"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '"{{dir}}/_aitna/akmon"'
+
+[[case]]
+id = "mount/pointer"
+fn = "akmon_mount"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
+expected_json = '"{{dir}}/tools/ai/akmon"'
+
+[[case]]
+id = "mount/no-project-root"
+fn = "akmon_mount"
+args_json = '[null]'
+expected_json = '"_aitna/akmon"'
+
+[[case]]
+# The declaration is a marker of its own: AGENTS.md beside `.aitna-root` is a project, with no record and no mount.
+id = "is/agents-and-pointer-only"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", ".aitna-root" = "meta" }
+expected_json = 'true'
+
+[[case]]
+id = "is/agents-and-default-record"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", "_aitna/.akmon.toml" = "" }
+expected_json = 'true'
+
+[[case]]
+id = "is/agents-and-default-mount"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", "_aitna/akmon/README.md" = "" }
+expected_json = 'true'
+
+[[case]]
+id = "is/agents-and-pointer-record-elsewhere"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", ".aitna-root" = "meta", "_aitna/.akmon.toml" = "" }
+expected_json = 'true'
+
+[[case]]
+id = "is/agents-only"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "" }
+expected_json = 'false'
+
+[[case]]
+# No AGENTS.md: not a project, whatever else is there.
+id = "is/pointer-without-agents"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "meta", "meta/.akmon.toml" = "" }
+expected_json = 'false'
+
+[[case]]
+# A record under a root nobody declared marks nothing: the default root is not asked about `tools/ai`.
+id = "is/record-under-undeclared-root"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", "tools/ai/.akmon.toml" = "" }
+expected_json = 'false'
+
+[[case]]
+id = "is/record-under-meta-no-pointer"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", "meta/.akmon.toml" = "", "meta/TASKS.md" = "" }
+expected_json = 'false'
+
+[[case]]
+# The question never reads the declaration: a file that is there marks the project, and a reader refuses its content later.
+id = "is/refused-pointer-still-a-marker"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", ".aitna-root" = "/abs" }
+expected_json = 'true'
+
+[[case]]
+id = "is/not-a-directory-start"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}/absent"}]'
+expected_json = 'false'
+
+[[case]]
+id = "locate/pointer-marks-the-project"
+fn = "locate_project_root"
+args_json = '[{"$path": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/.aitna-root" = "meta", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "locate/default-record"
+fn = "locate_project_root"
+args_json = '[{"$path": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+# Nothing marks a project at or above the start: None, where find_project_root would answer the start.
+id = "locate/none"
+fn = "locate_project_root"
+args_json = '[{"$path": "{{dir}}/proj/sub"}]'
+files = { "proj/sub/x" = "" }
+expected_json = 'null'
+
+[[case]]
+id = "locate/record-under-undeclared-root"
+fn = "locate_project_root"
+args_json = '[{"$path": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/tools/ai/.akmon.toml" = "", "proj/sub/x" = "" }
+expected_json = 'null'
+
+[[case]]
+id = "locate/nearest-wins"
+fn = "locate_project_root"
+args_json = '[{"$path": "{{dir}}/proj/inner/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/.aitna-root" = "meta", "proj/inner/AGENTS.md" = "", "proj/inner/_aitna/.akmon.toml" = "", "proj/inner/sub/x" = "" }
+expected_json = '"{{dir}}/proj/inner"'
+
+[[case]]
+id = "locate/start-is-the-root"
+fn = "locate_project_root"
+args_json = '[{"$path": "{{dir}}/proj"}]'
+files = { "proj/AGENTS.md" = "", "proj/.aitna-root" = "meta" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+# No start: the walk begins at the process's directory.
+id = "locate/default-start-is-the-cwd"
+fn = "locate_project_root"
+args_json = '[]'
+files = { "proj/AGENTS.md" = "", "proj/.aitna-root" = "meta", "proj/sub/x" = "" }
+cwd = "proj/sub"
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "find/pointer"
+fn = "find_project_root"
+args_json = '[{"$path": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/.aitna-root" = "meta", "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj"'
+
+[[case]]
+id = "find/none-falls-back-to-the-start"
+fn = "find_project_root"
+args_json = '[{"$path": "{{dir}}/proj/sub"}]'
+files = { "proj/sub/x" = "" }
+expected_json = '"{{dir}}/proj/sub"'
+
+[[case]]
+# A root named on the command line is not checked for markers.
+id = "resolve/explicit-wins"
+fn = "resolve_project_root"
+args_json = '[{"$path": "{{dir}}/named"}, {"$path": "{{dir}}/proj/sub"}]'
+files = { "named/x" = "", "proj/AGENTS.md" = "", "proj/.aitna-root" = "meta", "proj/sub/x" = "" }
+expected_json = '["{{dir}}/named", null]'
+
+[[case]]
+id = "resolve/found-by-the-walk"
+fn = "resolve_project_root"
+args_json = '[null, {"$path": "{{dir}}/proj/sub"}]'
+files = { "proj/AGENTS.md" = "", "proj/.aitna-root" = "meta", "proj/sub/x" = "" }
+expected_json = '["{{dir}}/proj", null]'
+
+[[case]]
+# No root: the start, and the sentence a writer of the local layer prints before it stops.
+id = "resolve/none-prints-the-notice"
+fn = "resolve_project_root"
+args_json = '[null, {"$path": "{{dir}}/proj/sub"}]'
+files = { "proj/sub/x" = "" }
+expected_json = '["{{dir}}/proj/sub", "[akmon] no project root at or above {{dir}}/proj/sub: expected AGENTS.md beside .aitna-root, _aitna/akmon or _aitna/.akmon.toml. Falling back to that directory, so anything this command reads or writes is relative to it; pass --project-root to name the root instead."]'
+
+[[case]]
+# akmon's own layout: `.aitna-root` = `meta`.
+id = "repo/akmon-style-dev-root"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", ".aitna-root" = "meta\n", "meta/TASKS.md" = "x", "meta/local/.keep" = "" }
+expected_json = '{"path": "{{dir}}/meta", "origin": "pointer"}'
+
+[[case]]
+id = "repo/akmon-style-name"
+fn = "aitna_root_name"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", ".aitna-root" = "meta\n", "meta/TASKS.md" = "x", "meta/local/.keep" = "" }
+expected_json = '"meta"'
+
+[[case]]
+id = "repo/akmon-style-is-project"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", ".aitna-root" = "meta\n", "meta/TASKS.md" = "x", "meta/local/.keep" = "" }
+expected_json = 'true'
+
+[[case]]
+# A project that merely has a `meta/` directory, with no declaration: `_aitna`.
+id = "repo/own-meta-dir-dev-root"
+fn = "dev_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", "meta/TASKS.md" = "x", "meta/notes.md" = "x", "_aitna/.akmon.toml" = "" }
+expected_json = '{"path": "{{dir}}/_aitna", "origin": "default"}'
+
+[[case]]
+id = "repo/own-meta-dir-name"
+fn = "aitna_root_name"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", "meta/TASKS.md" = "x", "meta/notes.md" = "x", "_aitna/.akmon.toml" = "" }
+expected_json = '"_aitna"'
+
+[[case]]
+id = "repo/own-meta-dir-mount"
+fn = "akmon_mount"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", "meta/TASKS.md" = "x", "meta/notes.md" = "x", "_aitna/.akmon.toml" = "" }
+expected_json = '"{{dir}}/_aitna/akmon"'
+
+[[case]]
+# Without a declaration or a record under `_aitna`, a `meta/` directory marks nothing.
+id = "repo/own-meta-dir-no-record-not-a-project"
+fn = "is_project_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { "AGENTS.md" = "", "meta/TASKS.md" = "x" }
+expected_json = 'false'

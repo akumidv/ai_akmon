@@ -7,8 +7,8 @@ Scores orchestrator edit/shell/read calls since session start or the last subage
 injects a soft reminder — once per drift episode — that the work may belong to a ``k_*``
 delegate (MODEL.md § Capability tiers). Below the ask threshold, advisory only — nothing is
 blocked; past it, the next edit or shell call (never a read) carries a hard ``ask``, which
-escalates to ``deny`` outside the interactive default permission mode (C31, ADR-0006/D02 — an
-unattended ``ask`` was observed to be a silent no-op). This fires only for main-chain calls: a
+escalates to ``deny`` when the run is unattended (C31, ADR-0006/D02, narrowed by ADR-0025/D06 —
+an unattended ``ask`` was observed to be a silent no-op). This fires only for main-chain calls: a
 subagent call (detected via the payload's ``agent_id``, present only inside a subagent) is
 exempt, since Claude Code shares the ``session_id`` between the main chain and its subagents
 and a k_* delegate has no ``Task`` tool to act on the nudge anyway. The decision logic lives
@@ -17,10 +17,11 @@ in ``hook_core.py``; this entrypoint only adapts Claude Code's payload.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
-from claude_adapter import load_payload, normalize_tool, run_guarded
+from claude_adapter import attended_from_environment, load_payload, normalize_tool, run_guarded
 from hook_core import HookResult, delegation_nudge_result, neutral_kind
 
 from common import jsondata  # hook_core put the tree root on sys.path
@@ -50,6 +51,7 @@ def _decide() -> HookResult | None:
         sid,
         is_subagent=is_subagent,
         permission_mode=permission_mode if isinstance(permission_mode, str) else None,
+        attended=attended_from_environment(os.environ),
     )
 
 

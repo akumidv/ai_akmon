@@ -16,9 +16,12 @@ import { spawnSync } from "node:child_process";
 import { pyError } from "../common/pyvalue.mjs";
 import {
   HookResult,
+  agentDefinitions,
   agentNames,
+  agentRoles,
   analysisBeforeMutationMessage,
   analysisWriteResult,
+  askIsAttended,
   classifyTarget,
   currentGitBranch,
   delegationAskThreshold,
@@ -62,10 +65,10 @@ function withDir(/** @type {(dir: string) => void} */ body) {
 /** Run `body` with `TMPDIR` a fresh directory (the markers and counters land there) and `env` set. */
 function withState(/** @type {Record<string, string | null>} */ env, /** @type {(tmp: string) => void} */ body) {
   withDir((tmp) => {
-    const names = ["TMPDIR", "TEMP", "TMP", "AITNA_ROOT", ...Object.keys(env)];
+    const names = ["TMPDIR", "TEMP", "TMP", ...Object.keys(env)];
     const saved = names.map((name) => process.env[name]);
     try {
-      for (const name of ["TEMP", "TMP", "AITNA_ROOT"]) {
+      for (const name of ["TEMP", "TMP"]) {
         delete process.env[name];
       }
       process.env.TMPDIR = tmp;
@@ -124,11 +127,24 @@ test("the crash report is the class name, never the message", () => {
   const missing = thrown(() => fs.readFileSync("/nonexistent/x"));
   assert.equal(hookFailureDiagnostic("h", missing), "akmon h hook: FileNotFoundError");
   assert.equal(hookFailureDiagnostic("h", "not an error"), "akmon h hook: Exception");
-  assert.equal(
-    hookFailureNotice("gate-audit", pyError("ValueError", "x")),
-    "⚠ akmon: the gate-audit hook failed (ValueError) and was skipped — this action went ahead without it. " +
-      "Check the setup: `akmon verify` (a mounted tree: `python3 _aitna/akmon/bin/verify.py`).",
-  );
+  withDir((start) => {
+    // the recovery command names the dev root found from `start`: the default where no project is
+    assert.equal(
+      hookFailureNotice("gate-audit", pyError("ValueError", "x"), start),
+      "⚠ akmon: the gate-audit hook failed (ValueError) and was skipped — this action went ahead without it. " +
+        "Check the setup: `akmon verify` (a mounted tree: `python3 _aitna/akmon/bin/verify.py`).",
+    );
+    fs.writeFileSync(posix.join(start, "AGENTS.md"), "# A\n");
+    fs.writeFileSync(posix.join(start, ".aitna-root"), "meta\n");
+    assert.ok(
+      hookFailureNotice("gate-audit", pyError("ValueError", "x"), start).endsWith(
+        "(a mounted tree: `python3 meta/akmon/bin/verify.py`).",
+      ),
+    );
+    // a declaration the lookup refuses is no reason for the crash report to crash
+    fs.writeFileSync(posix.join(start, ".aitna-root"), "../out\n");
+    assert.ok(hookFailureNotice("gate-audit", pyError("ValueError", "x"), start).includes("python3 _aitna/akmon"));
+  });
 });
 
 test("the neutral kinds come from vocabulary.json; an unknown stem is a KeyError", () => {
@@ -289,10 +305,11 @@ test("isPlanningDoc: the backlog files, and a .md under a planning segment", () 
     }
   });
   // a substring, not a prefix: the segment matches anywhere in the project-relative path
-  withState({ AITNA_ROOT: "Dev/" }, () => {
-    assert.equal(isPlanningDoc(data, "dev/design/a.md", "/proj"), true);
-    assert.equal(isPlanningDoc(data, "_aitna/design/a.md", "/proj"), false);
-    assert.equal(isCodePath(data, "dev/memory/a.py", "/proj"), false);
+  withDir((project) => {
+    fs.writeFileSync(posix.join(project, ".aitna-root"), "Dev/\n");
+    assert.equal(isPlanningDoc(data, "dev/design/a.md", project), true);
+    assert.equal(isPlanningDoc(data, "_aitna/design/a.md", project), false);
+    assert.equal(isCodePath(data, "dev/memory/a.py", project), false);
   });
 });
 
@@ -356,7 +373,10 @@ test("a non-string command is the TypeError re.search raises", () => {
 test("an unattended ask is a deny that spells the permission mode with repr()", () => {
   const reasonTail = (/** @type {string | null} */ mode) => {
     const result = gitCommitGuardResult(data, "git push", "feat", { permissionMode: mode });
-    return [result?.permissionDecision, String(result?.permissionReason).match(/permission_mode=(.*?) is not/)?.[1]];
+    return [
+      result?.permissionDecision,
+      String(result?.permissionReason).match(/permission_mode=(.*?), CLAUDE_CODE_SESSION_ATTENDED=/)?.[1],
+    ];
   };
   assert.deepEqual(reasonTail("default"), ["ask", undefined]);
   assert.deepEqual(reasonTail(null), ["deny", "None"]);
@@ -367,6 +387,50 @@ test("an unattended ask is a deny that spells the permission mode with repr()", 
   assert.deepEqual(reasonTail("a\nb"), ["deny", "'a\\nb'"]);
   assert.deepEqual(reasonTail(""), ["deny", "''"]);
   assert.deepEqual(reasonTail("Default"), ["deny", "'Default'"]);
+});
+
+// ADR-0025/D06: the host's attendance statement decides; the permission mode decides only where the host
+// states nothing, and a mode that skips every question is never attended. [mode, attended, the ask passes]
+/** @type {Array<[string | null, boolean | null, boolean]>} */
+const ATTENDANCE_CELLS = [
+  ["auto", true, true],
+  ["default", false, false],
+  ["default", null, true],
+  ["auto", null, false],
+  ["bypassPermissions", true, false],
+  ["dontAsk", true, false],
+  [null, true, true],
+  [null, null, false],
+];
+
+test("an ask is attended by the host's statement, then by the mode (ADR-0025/D06)", () => {
+  for (const [mode, attended, passes] of ATTENDANCE_CELLS) {
+    assert.equal(askIsAttended(data, mode, { attended }), passes, `${mode} ${attended}`);
+  }
+});
+
+test("the commit guard's ask follows attendance and names both values when it escalates", () => {
+  for (const [mode, attended, passes] of ATTENDANCE_CELLS) {
+    const result = gitCommitGuardResult(data, "git push", "feat", { permissionMode: mode, attended });
+    assert.equal(result?.permissionDecision, passes ? "ask" : "deny", `${mode} ${attended}`);
+    const reason = String(result?.permissionReason);
+    assert.equal(reason.includes("escalated ask"), !passes);
+    if (!passes) {
+      const label = attended === null ? "unset" : attended ? "1" : "0";
+      assert.ok(reason.includes(`CLAUDE_CODE_SESSION_ATTENDED=${label}`), reason);
+      assert.ok(reason.includes("ADR-0025/D06"), reason);
+    }
+  }
+});
+
+test("the delegation ask follows attendance", () => {
+  withState({}, (tmp) => {
+    let n = 0;
+    for (const [mode, attended, passes] of ATTENDANCE_CELLS) {
+      const result = nudge(tmp, `att${n++}`, "shell", "130 125.0", { permissionMode: mode, attended })[1];
+      assert.equal(result?.permissionDecision, passes ? "ask" : "deny", `${mode} ${attended}`);
+    }
+  });
 });
 
 test("role-on-code and analysis-guard fire once per session on a matching edit", () => {
@@ -454,7 +518,9 @@ function nudge(
   /** @type {string} */ sid,
   /** @type {string} */ kind,
   /** @type {string | null} */ seed,
-  /** @type {{permissionMode?: string | null, isSubagent?: boolean}} */ options = { permissionMode: "default" },
+  /** @type {{permissionMode?: string | null, isSubagent?: boolean, attended?: boolean | null}} */ options = {
+    permissionMode: "default",
+  },
 ) {
   const counter = posix.join(tmp, `akmon-delegation-nudge-${sid}.count`);
   if (seed !== null) {
@@ -588,6 +654,56 @@ test("agentNames: sorted by code point, directories with a README, no dotted nam
   });
 });
 
+/**
+ * Write a README into each named charter directory under `base`.
+ * @param {string} base
+ * @param {string[]} names
+ * @returns {void}
+ */
+function charters(base, names) {
+  for (const name of names) {
+    fs.mkdirSync(posix.join(base, name), { recursive: true });
+    fs.writeFileSync(posix.join(base, name, "README.md"), "charter\n");
+  }
+}
+
+test("agentNames: the shipped agents in chain order, then the rest by name", () => {
+  withDir((dir) => {
+    charters(dir, ["release", "analyst", "learning", "development", "zeta"]);
+    assert.deepEqual(agentNames(dir, agentDefinitions(data)), [
+      "development",
+      "learning",
+      "release",
+      "analyst",
+      "zeta",
+    ]);
+  });
+});
+
+test("agentNames: a legacy role directory is left out only beside its agent's own charter", () => {
+  withDir((dir) => {
+    charters(dir, ["development", "review", "architect", "engineer", "learn", "learning"]);
+    assert.deepEqual(agentNames(dir, agentDefinitions(data)), ["development", "learning"]);
+  });
+  withDir((dir) => {
+    charters(dir, ["development", "review", "learn"]);
+    assert.deepEqual(agentNames(dir, agentDefinitions(data)), ["development", "learn"]);
+  });
+});
+
+test("sessionStartResult: a project's own agents follow the shipped ones, and no legacy role is listed twice", () => {
+  withDir((dir) => {
+    project(dir, { mount: true, agents: false });
+    charters(posix.join(dir, "_aitna/agents"), ["release", "analyst", "development", "engineer", "review"]);
+    fs.writeFileSync(posix.join(dir, "_aitna/agents/analyst/README.md"), "runs `roles/analyst.md`\n");
+    const context = String(sessionStartResult(data, dir)?.additionalContext);
+    assert.match(
+      context,
+      /development — roles review, architect, engineer; release — role release; analyst — role analyst\n/,
+    );
+  });
+});
+
 test("sessionStartResult: the roster on a mounted project, no stale notice", () => {
   withDir((dir) => {
     project(dir, { mount: true });
@@ -595,15 +711,112 @@ test("sessionStartResult: the roster on a mounted project, no stale notice", () 
     assert.equal(result?.eventName, "SessionStart");
     assert.equal(result?.systemMessage, null);
     assert.deepEqual(String(result?.additionalContext).split("\n").slice(0, 5), [
-      "[akmon] Active-agent declaration",
-      "Before doing project work, state which agent you are operating as, and restate it whenever you switch. Format: `🧭 agent: <name> — <focus>`.",
-      "- DEVELOP (build the project): Alpha, engineer, zeta",
-      "- OPERATE (run/use from outside): ops",
-      "No agent is active yet.",
+      "[akmon] Role declaration",
+      "Before doing project work, state which role you are operating in, and restate it whenever you switch. Format: `🧭 role: <name> — <focus>`.",
+      "- DEVELOP (build the project), agents and the roles they work in: Alpha — role Alpha; engineer — role engineer; zeta — role zeta",
+      "- OPERATE (run/use from outside), agents and the roles they work in: ops — role ops",
+      "No role is declared yet.",
     ]);
     assert.match(
       String(result?.additionalContext),
       /\nAlso: read `_aitna\/memory\/` at session start \(project memory\)\.$/,
+    );
+  });
+});
+
+test("sessionStartResult: an agent reads as its roles, release as its own role, and the pick names a role", () => {
+  withDir((dir) => {
+    project(dir, { mount: true });
+    fs.mkdirSync(posix.join(dir, "_aitna/agents/development"), { recursive: true });
+    fs.writeFileSync(
+      posix.join(dir, "_aitna/agents/development/README.md"),
+      "## review\nRole of record: `roles/review.md`.\n## architect\n`_aitna/akmon/roles/architect.md`\n" +
+        "## engineer\n`roles/engineer.md` and again `roles/review.md`\n",
+    );
+    const context = String(sessionStartResult(data, dir)?.additionalContext);
+    assert.match(context, /: development — roles review, architect, engineer; Alpha — role Alpha; zeta — role zeta\n/);
+    assert.match(context, /\nPick the role \(never an agent name\) by operation: decompose an existing thing → review/);
+  });
+  withDir((dir) => {
+    project(dir, { mount: true, agents: false });
+    fs.mkdirSync(posix.join(dir, "agents/ops"), { recursive: true });
+    fs.writeFileSync(posix.join(dir, "agents/ops/README.md"), "x\n");
+    const context = String(sessionStartResult(data, dir)?.additionalContext);
+    assert.match(
+      context,
+      /\nPick the role the task calls for, one of the roles listed above, never an agent name; if unclear, ask\.\n/,
+    );
+  });
+});
+
+test("agentRoles: the definitions' roles, else the charter's role references in order, else the agent's own name", () => {
+  withDir((dir) => {
+    fs.mkdirSync(posix.join(dir, "development"));
+    fs.writeFileSync(posix.join(dir, "development/README.md"), "see roles/README.md and roles/Review.md\n");
+    fs.mkdirSync(posix.join(dir, "learn"));
+    fs.writeFileSync(posix.join(dir, "learn/README.md"), "x\n");
+    const known = { development: ["review", "architect", "engineer"], learning: ["learn"] };
+    // a named agent takes its definition's roles, whatever its charter says
+    assert.deepEqual(agentRoles(dir, "development", known), ["review", "architect", "engineer"]);
+    assert.deepEqual(agentRoles(dir, "learning", known), ["learn"]);
+    // an agent no definition names keeps the charter fallback: its references, else its own name
+    assert.deepEqual(agentRoles(dir, "learn", known), ["learn"]);
+    assert.deepEqual(agentRoles(dir, "development", {}), ["development"]);
+    assert.deepEqual(agentRoles(dir, "missing", known), ["missing"]);
+    assert.deepEqual(agentRoles(dir, "constructor", known), ["constructor"]);
+    fs.writeFileSync(posix.join(dir, "learn/README.md"), "see `akmon/roles/review.md` and roles/learn.md\n");
+    assert.deepEqual(agentRoles(dir, "learn", known), ["review", "learn"]);
+  });
+});
+
+test("agentDefinitions: the shipped agents and their roles, read from agents/agents.json", () => {
+  assert.deepEqual(agentDefinitions(data), {
+    development: ["review", "architect", "engineer"],
+    learning: ["learn"],
+    release: ["release"],
+  });
+  assert.deepEqual(Object.keys(agentDefinitions(data)), ["development", "learning", "release"]);
+});
+
+test("sessionStartResult: the development, learning and release agents name their roles", () => {
+  withDir((dir) => {
+    project(dir, { mount: true, agents: false });
+    for (const agent of ["release", "learning", "development"]) {
+      fs.mkdirSync(posix.join(dir, "_aitna/agents", agent), { recursive: true });
+      fs.writeFileSync(posix.join(dir, "_aitna/agents", agent, "README.md"), "x\n");
+    }
+    const context = String(sessionStartResult(data, dir)?.additionalContext);
+    assert.match(
+      context,
+      /agents and the roles they work in: development — roles review, architect, engineer; learning — role learn; release — role release\n/,
+    );
+  });
+});
+
+test("sessionStartResult: a legacy learn charter keeps its fallback role", () => {
+  withDir((dir) => {
+    project(dir, { mount: true, agents: false });
+    fs.mkdirSync(posix.join(dir, "_aitna/agents/learn"), { recursive: true });
+    fs.writeFileSync(posix.join(dir, "_aitna/agents/learn/README.md"), "x\n");
+    const context = String(sessionStartResult(data, dir)?.additionalContext);
+    assert.match(context, /agents and the roles they work in: learn — role learn\n/);
+  });
+});
+
+test("sessionStartResult: akmon's own root agents/ definition files are not OPERATE agents", () => {
+  withDir((dir) => {
+    project(dir, { mount: true, agents: false });
+    fs.mkdirSync(posix.join(dir, "agents"));
+    for (const name of ["README.md", "development.md", "release.md", "learning.md", "agents.json"]) {
+      fs.writeFileSync(posix.join(dir, "agents", name), "definition\n");
+    }
+    assert.doesNotMatch(String(sessionStartResult(data, dir)?.additionalContext), /OPERATE/);
+    // a project's own runtime agent is still listed; its role is its charter's, never a shipped agent's
+    fs.mkdirSync(posix.join(dir, "agents/release"));
+    fs.writeFileSync(posix.join(dir, "agents/release/README.md"), "runs `roles/analyst.md`\n");
+    assert.match(
+      String(sessionStartResult(data, dir)?.additionalContext),
+      /OPERATE \(run\/use from outside\), agents and the roles they work in: release — role analyst\n/,
     );
   });
 });

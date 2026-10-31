@@ -264,7 +264,7 @@ def test_a_moved_guardrail_copy_is_removed_by_the_sync_that_writes_its_profile(t
     root = _make_package_root(tmp_path)
     old = root / "_aitna" / ".akmon" / "guardrails" / "python.md"
     old.parent.mkdir(parents=True)
-    old.write_text(materialization.materialized_markdown("# Guardrails: Python\n\nold rule\n"), encoding="utf-8")
+    old.write_text(materialization.materialized_markdown("# Guardrails: Python\n\nold rule\n", root), encoding="utf-8")
 
     files, errors = sync._planned_files(root)
     assert errors == []
@@ -312,7 +312,7 @@ def test_stale_materialized_names_a_ruff_rules_copy_the_package_has_moved_past(t
     root = tmp_path / "project"
     rules = materialization.materialized_dir(root) / "profiles" / "ruff.toml"
     rules.parent.mkdir(parents=True)
-    rules.write_text(materialization.materialized_text("ruff.toml", "line-length = 100\n"), encoding="utf-8")
+    rules.write_text(materialization.materialized_text("ruff.toml", "line-length = 100\n", root), encoding="utf-8")
 
     assert materialization.stale_materialized(root, tree) == ["profiles/ruff.toml"]
 
@@ -327,7 +327,7 @@ def test_stale_materialized_names_a_profile_the_package_has_moved_past(tmp_path)
     profiles = materialization.materialized_dir(root) / "profiles"
     profiles.mkdir(parents=True)
     (profiles / "python.md").write_text(
-        materialization.materialized_markdown("# Python\n\nold rule\n"), encoding="utf-8"
+        materialization.materialized_markdown("# Python\n\nold rule\n", root), encoding="utf-8"
     )
 
     assert materialization.stale_materialized(root, tree) == ["profiles/python.md"]
@@ -549,13 +549,12 @@ def _launcher_entry() -> dict:
     }
 
 
-def test_is_akmon_entry_recognises_every_spelling_the_generator_ever_emitted(monkeypatch):
+def test_is_akmon_entry_recognises_every_spelling_the_generator_ever_emitted(tmp_path):
     """Including the retired ones. Recognition is what lets a mode switch *replace* an entry
     instead of leaving the old one running beside the new."""
-    monkeypatch.delenv("AITNA_ROOT", raising=False)
-    assert sync._is_akmon_entry(_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py"))
-    assert sync._is_akmon_entry(_akmon_entry("_aitna/.akmon/hooks/git-commit-guard.py"))
-    assert sync._is_akmon_entry(_launcher_entry())
+    assert sync._is_akmon_entry(_akmon_entry("_aitna/akmon/hooks/git-commit-guard.py"), tmp_path)
+    assert sync._is_akmon_entry(_akmon_entry("_aitna/.akmon/hooks/git-commit-guard.py"), tmp_path)
+    assert sync._is_akmon_entry(_launcher_entry(), tmp_path)
 
 
 def _node_wiring_commands(hooks_dir: str = "node_modules/akmon/js/hooks") -> list[str]:
@@ -589,40 +588,37 @@ def _node_wiring_commands(hooks_dir: str = "node_modules/akmon/js/hooks") -> lis
     return [*claude, *codex]
 
 
-def test_is_akmon_entry_recognises_the_node_package_spelling(monkeypatch):
+def test_is_akmon_entry_recognises_the_node_package_spelling(tmp_path):
     """ADR 0020 D05: ``node "<anchor>/node_modules/akmon/js/hooks/<script>.mjs"``. The JS ``sync`` (C105)
     writes it; this implementation never does, but a project that moves from a Node package
     to another mode must have the entries replaced, not left running beside the new ones."""
-    monkeypatch.delenv("AITNA_ROOT", raising=False)
     commands = _node_wiring_commands()
     assert '"$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/role-on-code.mjs"' in " ".join(commands)
     for command in commands:
         entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": command}]}
-        assert sync._is_akmon_entry(entry), command
+        assert sync._is_akmon_entry(entry, tmp_path), command
     own = {"matcher": "Bash", "hooks": [{"type": "command", "command": "node tools/node_modules/other/hooks/x.mjs"}]}
-    assert not sync._is_akmon_entry(own)
+    assert not sync._is_akmon_entry(own, tmp_path)
 
 
-def test_is_akmon_entry_recognises_the_node_mount_spelling(monkeypatch):
+def test_is_akmon_entry_recognises_the_node_mount_spelling(tmp_path):
     """The C129 amendment of ADR 0020 D02: a mounted Node record's wiring is
-    ``node "<anchor>/<AITNA_ROOT>/akmon/js/hooks/<script>.mjs"``. This implementation never writes it,
+    ``node "<anchor>/<dev root>/akmon/js/hooks/<script>.mjs"``. This implementation never writes it,
     and recognising it changes nothing it writes for its own records."""
-    monkeypatch.delenv("AITNA_ROOT", raising=False)
     commands = _node_wiring_commands("_aitna/akmon/js/hooks")
     assert '"$CLAUDE_PROJECT_DIR/_aitna/akmon/js/hooks/role-on-code.mjs"' in " ".join(commands)
     for command in commands:
         entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": command}]}
-        assert sync._is_akmon_entry(entry), command
+        assert sync._is_akmon_entry(entry, tmp_path), command
     own = {"matcher": "Bash", "hooks": [{"type": "command", "command": "node _aitna/tools/js/hooks/x.mjs"}]}
-    assert not sync._is_akmon_entry(own)
+    assert not sync._is_akmon_entry(own, tmp_path)
 
 
-def test_a_projects_own_hook_mentioning_akmon_is_not_recognised_as_ours(monkeypatch):
+def test_a_projects_own_hook_mentioning_akmon_is_not_recognised_as_ours(tmp_path):
     """The marker carries the closing quote (``akmon" hook ``) for this reason: a bare
     ``akmon hook`` would also match a project hook that merely names the package."""
-    monkeypatch.delenv("AITNA_ROOT", raising=False)
     mine = {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 tools/akmon hook check.py"}]}
-    assert not sync._is_akmon_entry(mine)
+    assert not sync._is_akmon_entry(mine, tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -637,9 +633,8 @@ def test_a_projects_own_hook_mentioning_akmon_is_not_recognised_as_ours(monkeypa
         ),
     ],
 )
-def test_merge_replaces_the_other_spellings_entry(monkeypatch, name, stale, wanted):
-    monkeypatch.delenv("AITNA_ROOT", raising=False)
-    merged = sync._merge_hook_entries([stale], [wanted])
+def test_merge_replaces_the_other_spellings_entry(tmp_path, name, stale, wanted):
+    merged = sync._merge_hook_entries([stale], [wanted], tmp_path)
     assert stale not in merged, name
     assert merged == [wanted], name
 
@@ -764,7 +759,7 @@ def _materialize(root: Path, name: str, text: str) -> Path:
     dest = materialization.materialized_dir(root) / "guardrails"
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / name
-    path.write_text(materialization.materialized_markdown(text), encoding="utf-8")
+    path.write_text(materialization.materialized_markdown(text, root), encoding="utf-8")
     return path
 
 

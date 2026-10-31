@@ -2,7 +2,7 @@
 """Run the checks a project declares — ``akmon check`` (ADR 0014 §4, as amended).
 
 The checks are the project's own: its linter, its type checker, or ruff with akmon's rules
-(``profiles/ruff.toml``), named in ``[check]`` of ``<AITNA_ROOT>/.akmon.toml``. akmon runs them
+(``profiles/ruff.toml``), named in ``[check]`` of ``<dev root>/.akmon.toml``. akmon runs them
 and reports the result; it checks no code itself. The engine is ``common/check_runner.py``.
 
     akmon check              every declared check over the whole project

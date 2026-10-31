@@ -49,11 +49,14 @@ import {
   declaredManager,
   defaultRef,
   detectManager,
+  devRootPointerText,
   effectiveAitnaRoot,
   mountedCli,
   npxSpec,
   readInitData,
+  restoreDevRootPointer,
   shellWord,
+  writeDevRootPointer,
 } from "./_init.mjs";
 import { CLI_PATH } from "./_mount.mjs";
 import { embeddedTreeRoot } from "./_tree.mjs";
@@ -453,7 +456,7 @@ options:
                         Project to update. Defaults to the current directory.
   --aitna-root AITNA_ROOT
                         Dev-layer root, project-root-relative (default:
-                        AITNA_ROOT or _aitna).
+                        _aitna).
   --repo REPO           akmon repository URL of a mounted mode (package mode:
                         accepted; the release comes from the npm registry).
 `;
@@ -553,21 +556,17 @@ export function main(argv = process.argv.slice(2), deps = DEFAULT_DEPS) {
     return 0;
   }
   const root = resolvePath(options.projectRoot ?? process.cwd());
-  const previousEnv = process.env.AITNA_ROOT;
+  const declaredBefore = devRootPointerText(root);
   try {
     return _run(options, deps, root);
   } catch (error) {
     if (error instanceof UpdateError || error instanceof InitError) {
+      // a refusal before `init` applied anything gives back the declaration the flag wrote early
+      restoreDevRootPointer(root, declaredBefore);
       process.stderr.write(`akmon update: ${error.message}\n`);
       return 2;
     }
     throw error;
-  } finally {
-    if (previousEnv === undefined) {
-      delete process.env.AITNA_ROOT;
-    } else {
-      process.env.AITNA_ROOT = previousEnv;
-    }
   }
 }
 
@@ -581,7 +580,11 @@ export function main(argv = process.argv.slice(2), deps = DEFAULT_DEPS) {
 function _run(options, deps, root) {
   const data = { update: readUpdateData(), init: readInitData() };
   const aitna = effectiveAitnaRoot(options.aitnaRoot, root);
-  process.env.AITNA_ROOT = aitna;
+  if (options.aitnaRoot) {
+    // The flag names a root the project does not declare yet (a layer once relocated by the retired
+    // environment variable): the realign below reads it through `.aitna-root`, so it is written first.
+    writeDevRootPointer(root, aitna);
+  }
   const mode = recordedMount(root);
   if (mode === null || !MODES.includes(mode)) {
     throw new UpdateError(fill(data.update.missing_record, { root, aitna }));

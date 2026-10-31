@@ -35,7 +35,7 @@ import { parseArgs } from "node:util";
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { fill, read } from "../../common/jsondata.mjs";
 import { JSONDecodeError, jsonLoads } from "../../common/pyjson.mjs";
-import { aitnaRootName, isRelativeTo, resolvePath, resolveProjectRoot } from "../../common/project_root.mjs";
+import { aitnaRoot, isRelativeTo, resolvePath, resolveProjectRoot } from "../../common/project_root.mjs";
 import {
   dictGet,
   isDict,
@@ -47,6 +47,7 @@ import {
   readText,
   universalNewlines,
 } from "../../common/pyvalue.mjs";
+import { readData as readLearningData } from "../../common/learning.mjs";
 import { recordsPackageMode } from "../../common/record.mjs";
 import {
   createReport,
@@ -127,6 +128,7 @@ import {
  * @property {AgentsData} agents
  * @property {RuntimeData} runtime
  * @property {Record<string, ProviderAliases>} stored the resolved-aliases file, read after the registry (D16)
+ * @property {string} root the project root, once resolved: where the overlay files the messages name live (ADR 0022 D09)
  */
 
 /**
@@ -198,13 +200,13 @@ options:
  * The tree `registry.json` is read from: the mount for mounted modes, the running tree otherwise.
  *
  * The rule of `bin/sync.py::standard_tree_root`: in package mode there is no
- * `<AITNA_ROOT>/akmon` to read, and the recorded `mount` field decides, so a stale mount
+ * `<dev root>/akmon` to read, and the recorded `mount` field decides, so a stale mount
  * directory from a prior mode does not shadow the installed tree.
  * @param {string} projectRoot
  * @returns {string}
  */
 export function standardTreeRoot(projectRoot) {
-  const mounted = pyPath(projectRoot, aitnaRootName(), "akmon");
+  const mounted = pyPath(aitnaRoot(projectRoot), "akmon");
   if (!recordsPackageMode(projectRoot) && fs.existsSync(mounted) && fs.statSync(mounted).isDirectory()) {
     return mounted;
   }
@@ -342,11 +344,11 @@ function modelText(model) {
 function _shownModel(ctx, registry, target) {
   const texts = ctx.texts.model_shown;
   const suffix = target.effort === null ? "" : `@${target.effort}`;
-  if (target.model === null || !isModelAlias(ctx.agents, registry, target.provider, target.model)) {
+  if (target.model === null || !isModelAlias(ctx.agents, registry, target.provider, target.model, ctx.root)) {
     return modelText(target.model) + suffix;
   }
   try {
-    const concrete = resolveOpinionModel(ctx.agents, registry, ctx.stored, target.provider, target.model);
+    const concrete = resolveOpinionModel(ctx.agents, registry, ctx.stored, target.provider, target.model, ctx.root);
     return fill(texts.alias, { alias: target.model, concrete: String(concrete) }) + suffix;
   } catch (exc) {
     if (exc instanceof UnresolvedAliasError) {
@@ -368,8 +370,8 @@ function _identity(ctx, registry, target, kind) {
   return {
     provider: target.provider,
     priors: target.family || "unknown",
-    carrier: opinionCarrier(ctx.agents, registry, target.provider),
-    repo: opinionRepo(ctx.agents, registry, target.provider),
+    carrier: opinionCarrier(ctx.agents, registry, target.provider, ctx.root),
+    repo: opinionRepo(ctx.agents, registry, target.provider, ctx.root),
     model: _shownModel(ctx, registry, target),
     kind,
   };
@@ -387,10 +389,10 @@ function _ledgerLines(ctx, registry, session, warnings) {
   const summary = ctx.texts.summary;
   return [
     ...warnings.map((warning) => fill(summary.warning_line, { warning })),
-    ...opinionSkips(ctx.agents, ctx.runtime, registry, session).map(([provider, reason]) =>
+    ...opinionSkips(ctx.agents, ctx.runtime, registry, session, ctx.root).map(([provider, reason]) =>
       fill(summary.skip_line, { provider, reason }),
     ),
-    ...opinionAsks(ctx.agents, ctx.runtime, registry, session).map((ask) => fill(summary.ask_line, { ask })),
+    ...opinionAsks(ctx.agents, ctx.runtime, registry, session, ctx.root).map((ask) => fill(summary.ask_line, { ask })),
   ];
 }
 
@@ -427,11 +429,11 @@ function _aliasAsks(ctx, registry, targets) {
   /** @type {string[]} */
   const asks = [];
   for (const target of targets) {
-    if (target.model === null || !isModelAlias(ctx.agents, registry, target.provider, target.model)) {
+    if (target.model === null || !isModelAlias(ctx.agents, registry, target.provider, target.model, ctx.root)) {
       continue;
     }
     try {
-      resolveOpinionModel(ctx.agents, registry, ctx.stored, target.provider, target.model);
+      resolveOpinionModel(ctx.agents, registry, ctx.stored, target.provider, target.model, ctx.root);
     } catch (exc) {
       if (!(exc instanceof UnresolvedAliasError)) {
         throw exc;
@@ -468,7 +470,7 @@ function _printListing(ctx, registry, session, defaultModel) {
       priors: session.family || "unknown",
     }),
   );
-  const chain = opinionChain(ctx.agents, ctx.runtime, registry, session).map((target) =>
+  const chain = opinionChain(ctx.agents, ctx.runtime, registry, session, ctx.root).map((target) =>
     _unpinned(target, defaultModel),
   );
   const shown = [...chain];
@@ -493,14 +495,17 @@ function _printListing(ctx, registry, session, defaultModel) {
       );
     }
   }
-  const skips = opinionSkips(ctx.agents, ctx.runtime, registry, session);
+  const skips = opinionSkips(ctx.agents, ctx.runtime, registry, session, ctx.root);
   if (skips.length > 0) {
     out(texts.skipped);
     for (const [provider, reason] of skips) {
       out(fill(texts.skip, { provider, reason }));
     }
   }
-  const asks = [...opinionAsks(ctx.agents, ctx.runtime, registry, session), ..._aliasAsks(ctx, registry, shown)];
+  const asks = [
+    ...opinionAsks(ctx.agents, ctx.runtime, registry, session, ctx.root),
+    ..._aliasAsks(ctx, registry, shown),
+  ];
   if (asks.length > 0) {
     out(texts.asks);
     for (const ask of asks) {
@@ -522,9 +527,9 @@ function _printListing(ctx, registry, session, defaultModel) {
  */
 function _pinnedChoice(ctx, registry, session, choice) {
   const [provider, pinned] = splitOpinionEntry(choice);
-  providerRow(ctx.agents, registry, provider);
-  const [model, effort] = opinionPick(ctx.agents, registry, provider, pinned);
-  const family = providerFamily(ctx.agents, registry, provider, model);
+  providerRow(ctx.agents, registry, provider, ctx.root);
+  const [model, effort] = opinionPick(ctx.agents, registry, provider, pinned, ctx.root);
+  const family = providerFamily(ctx.agents, registry, provider, ctx.root, model);
   const texts = ctx.texts.pinned_warnings;
   const values = { provider, priors: family || "unknown" };
   /** @type {string[]} */ const warnings = [];
@@ -552,19 +557,19 @@ function _pinnedChoice(ctx, registry, session, choice) {
  */
 function _lastResort(ctx, registry, session, rank) {
   const texts = ctx.texts.unavailable_reasons;
-  const count = opinionChain(ctx.agents, ctx.runtime, registry, session).length;
+  const count = opinionChain(ctx.agents, ctx.runtime, registry, session, ctx.root).length;
   if (count > 0 || rank !== OPINION_RANK_SECOND) {
     return fill(texts.rank_past_chain, { count: String(count), rank: String(rank) });
   }
   if (!Object.hasOwn(providers(registry), session.provider)) {
     return fill(texts.no_row, { provider: session.provider });
   }
-  if (!carrierPresent(ctx.agents, ctx.runtime, registry, session.provider)) {
+  if (!carrierPresent(ctx.agents, ctx.runtime, registry, session.provider, ctx.root)) {
     return fill(texts.carrier_absent, { provider: session.provider });
   }
   const note = fill(ctx.texts.last_resort_note, { session_model: modelText(session.model) });
   return {
-    target: opinionLastResort(ctx.agents, registry, session),
+    target: opinionLastResort(ctx.agents, registry, session, ctx.root),
     kind: "last-resort",
     warnings: [note],
   };
@@ -589,7 +594,7 @@ function _choose(ctx, registry, session, options) {
     }
     choice = _pinnedChoice(ctx, registry, session, options.provider);
   } else {
-    const target = resolveOpinionChain(ctx.agents, ctx.runtime, registry, session, { rank: options.rank });
+    const target = resolveOpinionChain(ctx.agents, ctx.runtime, registry, session, ctx.root, { rank: options.rank });
     choice =
       target !== null ? { target, kind: "chain", warnings: [] } : _lastResort(ctx, registry, session, options.rank);
   }
@@ -735,7 +740,7 @@ function _run(ctx, root, registry, session, options) {
     return 0;
   }
   const target = choice.target;
-  const row = providerRow(ctx.agents, registry, target.provider);
+  const row = providerRow(ctx.agents, registry, target.provider, ctx.root);
   const configuredDir = configuredReportDir(ctx.texts, row, target.provider);
   const outside = reportDirError(ctx.texts, root, pyPath(root, configuredDir), configuredDir);
   if (outside !== null) {
@@ -745,8 +750,8 @@ function _run(ctx, root, registry, session, options) {
   // The resolved form, so the report line is always a path under the (resolved) root.
   const reportDir = resolvePath(pyPath(root, configuredDir));
   const prompt = reviewPrompt(ctx.texts, options.gate, readText(options.gatePack));
-  const model = resolveOpinionModel(ctx.agents, registry, ctx.stored, target.provider, target.model);
-  const command = opinionCommand(ctx.agents, ctx.runtime, registry, target.provider, {
+  const model = resolveOpinionModel(ctx.agents, registry, ctx.stored, target.provider, target.model, ctx.root);
+  const command = opinionCommand(ctx.agents, ctx.runtime, registry, target.provider, ctx.root, {
     model,
     effort: target.effort,
     prompt,
@@ -771,8 +776,12 @@ function _run(ctx, root, registry, session, options) {
   const onStdin = pyStr(dictGet(row, "prompt", "argv")) === "stdin";
   // A prompt that travels as an argument leaves the child no use for stdin, and an inherited open
   // pipe can hold a carrier forever (`opencode run` does): fd 0 is the null device, which is EOF.
+  // The marker tells hooks of the child this is a second opinion, not a session of the owner's: the
+  // learning hook neither counts it nor sends it the reminder (ADR 0026 D07).
+  const env = { ...process.env, [readLearningData().second_opinion_variable]: "1" };
   const completed = spawnSync(command[0], command.slice(1), {
     cwd: root,
+    env,
     encoding: "utf8",
     maxBuffer: Infinity,
     ...(onStdin ? { input: prompt, stdio: ["pipe", "pipe", "pipe"] } : { stdio: ["ignore", "pipe", "pipe"] }),
@@ -837,6 +846,7 @@ export function main(argv = process.argv.slice(2)) {
     agents: /** @type {AgentsData} */ (read(join(modelRouting, "agents.json"))),
     runtime: /** @type {RuntimeData} */ (read(join(TREE_ROOT, "common", "runtime.json"))),
     stored: {},
+    root: "",
   };
   if (options.rank < OPINION_RANK_SECOND) {
     process.stderr.write(`${PROG}: error: ${fill(ctx.texts.errors.bad_rank, { rank: String(options.rank) })}\n`);
@@ -851,10 +861,11 @@ export function main(argv = process.argv.slice(2)) {
   if (notice) {
     process.stderr.write(`${notice}\n`);
   }
+  ctx.root = root;
   const config = readJsonObject(pyPath(root, localConfigRel(ctx.agents)));
   try {
     const registry = loadRegistry(ctx.agents, standardTreeRoot(root), root);
-    refuseRetiredKeys(ctx.agents, registry, config, { projectRoot: root });
+    refuseRetiredKeys(ctx.agents, registry, config, root, { layered: true });
     ctx.stored = readModelAliases(ctx.agents, root);
     const session = resolveSession(ctx.agents, registry, config, {
       provider: _sessionProvider(ctx, registry, options),

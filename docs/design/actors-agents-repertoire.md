@@ -5,7 +5,7 @@
 > run environment, trust in a project's grants) and
 > [ADR 0026](../adr/0026-agents-of-the-delivery-chain.md) (which agents exist and what each owns).
 > Everything else here is a proposal or an open question, settled while the plan's tasks are
-> implemented, not before them. Names are working names until [A72](../../meta/TASKS.md) fixes them.
+> implemented, not before them. Names are accepted in [ADR 0027](../adr/0027-names-of-agents-actors-roles-and-delegates.md); code and file layout follow under [A72](../../meta/TASKS.md).
 
 ## Why this changes
 
@@ -30,14 +30,14 @@ its pull request and posts its review without prompting anyone.
 | Fact | Where |
 |---|---|
 | The only run signal a hook reads is the harness `permission_mode`; who drives is not known | `hooks/git-commit-guard.py`, `hooks/delegation-nudge.py`; M33, M35 |
-| Every `ask` becomes a `deny` outside `default` mode, so an unattended run has no allow path for a push or a pull request | `_escalate_unattended_ask` in `hooks/hook_core.py`; [0006](../adr/0006-orchestrator-detection-corridor-context-pressure.md) D02 |
+| An `ask` becomes a `deny` when the run is unattended (the host's `CLAUDE_CODE_SESSION_ATTENDED`, else any mode but `default`), so an unattended run has no allow path for a push or a pull request | `_escalate_unattended_ask` in `hooks/hook_core.py`; [0025](../adr/0025-actors-and-action-repertoire.md) D06, narrowing [0006](../adr/0006-orchestrator-detection-corridor-context-pressure.md) D02 |
 | The commit guard asks on every `push` regardless of branch and does not see `gh pr create`, `glab mr create`, `--force` or `HEAD:main` | `git_commit_guard_result` in `hooks/hook_core.py`; [C1](../../meta/TASKS.md) |
 | No commit guard is wired on Codex | `bin/sync.json` `codex_hooks`; `CAPABILITIES.md` |
 | A crashed hook lets the action through | [0013](../adr/0013-hook-survivability-and-crash-posture.md) |
 | `.akmon.toml` has no table for checks, actors or agents | `common/record.py` |
-| A hook-forced `ask` is not enforced in a background or child session | M34 (version not recorded) |
+| A hook-forced `ask` is not enforced in a background or child session; in a `-p` main chain under `acceptEdits`, `plan` or `auto` it acts as a deny | M34 (version not recorded), M191 |
 | "Agent" means six things: a role's definition, a project's dev charter, a `k_*` delegate, a standing agent, a project's narrow subagent, the host's own subagent tool | `roles/`, `<DEV>/agents/`, `.claude/agents/`, [standing agents](standing-agents.md) |
-| The concept has three axes — Layer, Role, Archetype — and no driver axis | `meta/CONCEPT.md` |
+| The concept's axes are Layer, Role, Archetype and Actor | `meta/CONCEPT.md` § 1 |
 | Roles were split because one bar cannot optimize analysis, synthesis and implementation at once | `roles/README.md`; [0003](../adr/0003-role-triad-and-develop-use-separation.md) |
 
 ## The model in one picture
@@ -67,12 +67,12 @@ its pull request and posts its review without prompting anyone.
 
 ## Concepts
 
-Working names; the taxonomy and the final names are task A72, which also joins the standing-agent
-standard of [A69](standing-agents.md) and the OPERATE rename of C168.
+The names are accepted in [ADR 0027](../adr/0027-names-of-agents-actors-roles-and-delegates.md) (task A72): one word per meaning. A72 also joins the
+standing-agent standard of [A69](standing-agents.md) and the OPERATE rename of C168.
 
 | Concept | What it is | Who sets it | Lifetime | Carries permissions |
 |---|---|---|---|---|
-| **Actor** | who drives a run: `developer`, `autonomous`, `guided` (a non-developer) | whoever launches the run | one run, never changed inside it | yes — the ceiling |
+| **Actor** | who drives a run: `developer`, `autonomous`, `guided` (a person who does not know software development) | whoever launches the run | one run, never changed inside it | yes — the ceiling |
 | **Run environment** | the prepared checkout an agent works in | the launcher | one run | indirectly — what is installed and reachable |
 | **Agent** | a responsibility with its repertoire, its state and its skills | the project (akmon ships the delivery chain) | as long as the project keeps it | yes — the repertoire |
 | **Role** | a mode an agent works in, with its own quality bar | the agent, by operation | a stretch of a run | no — it selects the pipeline |
@@ -80,15 +80,18 @@ standard of [A69](standing-agents.md) and the OPERATE rename of C168.
 | **Repertoire** | the closed vocabulary of actions an agent is expected to use | agent metadata | — | it is the permission |
 | **Prohibition** | an action denied to every actor and every agent | akmon | — | unconditional `deny` |
 | **Verb** | the one-call implementation of a repertoire action | a skill or an `akmon` command | — | inherits the agent's |
-| **Delegate** | a stateless worker by task kind (`k_*`) | the orchestrating agent | one call | never wider than the caller |
-| **Project agent** | an agent a consuming project builds: a standing session, a narrow executor | the project | the project's | the same contract |
+| **Delegate** | a stateless worker by task kind (`k_*`), run as a host subagent | the orchestrating agent | one call | never wider than the caller |
+| **Project agent** | an agent a consuming project builds: a unit of responsibility with its own repertoire and state | the project | the project's | the same contract |
+| **Standing** (attribute) | a lifetime attribute of an agent: a long session that owns its state; not a noun of its own | the project | the agent's | — |
+| **Project delegate** | a project's own narrow executor that holds neither state nor a repertoire; runs as a host subagent | the project | one call | never wider than the caller |
+| **Host subagent** | the host's own mechanism (Claude's Agent tool, Codex `spawn_agent`); bare *subagent* means only this | the host | one call | — |
+| **Charter** | the file that defines an agent: `agents/<agent>/README.md`, one directory per agent, its roles' specifics as sections | the project (akmon links the roles) | as long as the agent | — |
 
-**Naming.** The market word for the thing that carries a responsibility and a repertoire is
-*agent*, and a user will look for it. The collisions are on the other five meanings. A72 weighs two
-directions: keep *agent* for the responsibility and give every other meaning its own word (the
-delegates are already *delegates* in MODEL.md; the charter becomes the agent's card), or choose a
-distinct, readable word for akmon's agents in the myth cluster of [0008](../adr/0008-mythological-naming-aitna-akmon-kyklopes.md).
-Either way the role is a mode of an agent and never an agent itself.
+**Naming.** Accepted in [ADR 0027](../adr/0027-names-of-agents-actors-roles-and-delegates.md) (D01–D06): *agent* names the unit of responsibility and
+nothing else; *standing* is an attribute of an agent; *project agent* and *project delegate* name a
+project's own; a `k_*` is a *delegate*; bare *subagent* names the host's mechanism; *actor* means only
+who drives a run; the role is a mode an agent works in, and the charter defines the agent. The myth
+cluster of [0008](../adr/0008-mythological-naming-aitna-akmon-kyklopes.md) glosses the delegates only.
 
 ## The agents akmon ships
 
@@ -187,6 +190,17 @@ this can become a loop of re-approvals that is slow and buys little — the expe
 implemented first and measured over the period the rest of the plan takes (re-acceptances, owner time,
 changes it caught), then kept, simplified or dropped.
 
+How it is built is accepted in [0025/D05](../adr/0025-actors-and-action-repertoire.md#d05--how-the-digest-trial-is-built):
+a digest is keyed on content, not on a clone, so only a real change asks again; the user-level store
+keeps the accepted copies, so a re-acceptance shows a diff; `akmon trust` accepts only at an
+interactive terminal and logs every acceptance and every untrusted sighting, which is the trial's
+measurement. Denying `akmon trust accept` to an agent's own shell is a prohibition for C173.
+
+**Launcher posture.** The store must be outside the checkout — `akmon trust` now refuses a store whose
+resolved path lies inside the project root — and the launcher mounts it read-only for an autonomous
+run. Neither the terminal check nor the store check bars a same-user process from writing the store.
+C173 adds the prohibition of `akmon trust accept` in an agent's shell.
+
 ## The run environment
 
 [0025/D03](../adr/0025-actors-and-action-repertoire.md#d03--the-run-environment-run-local-instructions-never-committed):
@@ -210,7 +224,7 @@ and an agent run on akmon receives its repertoire from the run-local layer.
 | [0012](../adr/0012-stage1-contracts-and-vocabulary.md) | new policy ids for repertoire, prohibition and actor checks | C173 |
 | [0013](../adr/0013-hook-survivability-and-crash-posture.md) | whether a gate fails closed for `autonomous` — open | A73 |
 | [0015](../adr/0015-mission-and-resource-allocation.md), MODEL.md mission | the integration agent's merge decision is the separately accepted acceptance authority the mission requires | 0026/D03 |
-| `meta/CONCEPT.md`, `roles/README.md`, README | a fourth axis (actor) and the agent ↔ role relation | A72 |
+| `meta/CONCEPT.md`, `roles/README.md`, README | a fourth axis (actor) and the agent ↔ role relation; the names by [0027](../adr/0027-names-of-agents-actors-roles-and-delegates.md) | A72 |
 
 ## Open questions for the start
 
@@ -218,7 +232,8 @@ Each is decided while its task is implemented, not before it.
 
 - **D-ACTOR-CARRIER** — what carries the actor: an environment value from the launcher, a user-level
   file, both; may a tracked file narrow it.
-- **D-AGENT-TERM** — the word for akmon's agents and for each colliding meaning (A72).
+- **D-AGENT-TERM** — decided by [ADR 0027](../adr/0027-names-of-agents-actors-roles-and-delegates.md): one word per meaning; the code (declaration and
+  charter layout) follows (A72).
 - **D-PIPELINE-SIGNAL** — how a hook learns the agent and pipeline per actor (above).
 - **D-REPERTOIRE-ARTIFACT** — one data file per agent, or the repertoire in pipeline metadata, as the
   single owner the SessionStart block, the nudge and the log all read.
@@ -227,7 +242,7 @@ Each is decided while its task is implemented, not before it.
 - **D-AUTONOMOUS-FORK** — at a design fork with no owner: take the conservative option and list the
   question in the pull request, or stop.
 - **D-GUIDED-PROFILE** — what a non-developer does unasked, which actions need an explanation, which
-  surface they use (an `ask` reaches only an interactive `default` session), how much of the process
+  surface they use (an `ask` reaches only an attended session, ADR-0025/D06), how much of the process
   (roles, ADR, decision codes) applies.
 - **D-COAUTHOR** — the AI trailer in an autonomous run's commits: forbid, allow or require.
 - **D-MERGE-CONDITIONS** — what the integration agent requires before a merge, and into which branch.
@@ -244,7 +259,7 @@ enough to rebuild it.
   happen. The developer's behaviour is unchanged.
 - **First, by the owner's order:** digest trust for a project's grants (C172), so its cost is
   observed through the rest of the plan.
-- **Trunk:** names fixed (A72) before any file is named after them → run environment (C171) →
+- **Trunk:** names fixed (A72) before any file is named after them → run environment (C174) →
   actor carrier, repertoire data, SessionStart injection, event log for the development agent (C173)
   → the target run.
 - **Branches back to the trunk:** steering layers B and C (A73, after C1); the integration, release

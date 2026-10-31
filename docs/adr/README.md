@@ -128,7 +128,7 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   tree; a plan is a goal-bearing working document
   with S.M.A.R.T. criteria, not a queue and not kept in history; pipelines own the facts, two skills
   (`plan`, `roadmap`) own the procedure, development skills in `<DEV>/skills/`; the dev root is
-  resolved by code. Supersedes 0021/D01's path and 0021/D02's line home in part; amends 0002's scope.
+  resolved by code from a one-line `.aitna-root` file, never from the environment. Supersedes 0021/D01's path and 0021/D02's line home in part; amends 0002's scope.
 - [0023 — Where project documents live](0023-project-documents-layout.md)
   — lasting knowledge in `docs/` (`docs/adr/` for decisions, `docs/design/` for living designs, flat);
   process and evidence (tasks, roadmap, reviews, measurements, experiments, benchmarks, local layer) in
@@ -152,9 +152,15 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   launch and fixed for the run; a permission is a closed repertoire of allowed actions plus a short
   list of unconditional prohibitions, result quality weighed above bypass risk, the bypass contained
   by isolation and forge limits; a run's instructions and skills are generated run-local and never
-  committed; a project's own grants are trusted by an owner-accepted digest, as a measured trial.
+  committed; a project's own grants are trusted by an owner-accepted digest, as a measured trial;
+  a hook's ask becomes a deny only when nobody attends the run.
 - [0026 — Agents of the delivery chain](0026-agents-of-the-delivery-chain.md)
   — architect, engineer and review are roles of one development agent; learning, integration
   (decides a merge, sorts findings into blockers and new tasks), release (branch, commit, pull
-  request, review without prompting) and publish (tag, publish) are agents of their own. Supersedes
-  0001 D5 in part.
+  request, review without prompting) and publish (tag, publish) are agents of their own; agent definitions sit apart from the
+  roles, and the learning agent is recalled after 10 sessions or 7 days and before a pull request;
+  agents are listed in the order of the chain. Supersedes 0001 D5 in part.
+- [0027 — Names of agents, actors, roles and delegates](0027-names-of-agents-actors-roles-and-delegates.md)
+  — "agent" is the unit of responsibility; actor values `developer`, `autonomous`, `guided`; the
+  declaration becomes `🧭 role:`; a charter per agent in `agents/<agent>/`; `k_*` are delegates and
+  bare "subagent" is the host's mechanism; "actor" has one meaning.

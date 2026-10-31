@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:release/release_check"]
 
-# --state over the akmon subject in the corpus fixture: no <AITNA_ROOT>/akmon is mounted, so it
+# --state over the akmon subject in the corpus fixture: no <dev root>/akmon is mounted, so it
 # reads the running tree, and the corpus snapshot carries no meta/ (as a package carrier ships
 # none): refused before any output, exit 2, one line naming where meta/ lives (C120).
 

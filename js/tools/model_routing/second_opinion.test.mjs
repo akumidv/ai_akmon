@@ -453,6 +453,14 @@ test("main: a run writes the header, the ledger and the review to the report, an
   assert.match(again.stdout, /\nreport: \.codex\/second-opinion\/C7-g-1\.md\n/);
 });
 
+test("main: the provider runs with the second-opinion marker in its environment", () => {
+  const root = project();
+  const dir = bin({ codex: 'echo "marker:$AKMON_SECOND_OPINION"' });
+  const result = withPath(dir, () => run(args(root, ...SESSION)));
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /\nmarker:1\n/);
+});
+
 test("main: a declared carrier gets the pack on stdin and never as an argument", () => {
   const root = project();
   overlay(root, {

@@ -7,7 +7,7 @@ covers = ["command:verify", "code:charters.present"]
 attach = "native"
 name = "base"
 warmup = true
-remove = ["_aitna/agents/engineer"]
+remove = ["_aitna/agents/development"]
 
 [run]
 argv = ["verify"]

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Codex command-hook entrypoint for akmon guardrail reminders.
 
-Usage from .codex/hooks.json (``_aitna`` is the default dev-layer root; a project that sets
-``AITNA_ROOT`` gets the matching path written by ``sync.py``)::
+Usage from .codex/hooks.json (``_aitna`` is the default dev-layer root; a project that declares
+another root in ``.aitna-root`` gets the matching path written by ``sync.py``)::
 
     python3 "$(git rev-parse --show-toplevel)/_aitna/akmon/hooks/codex-hook.py" analysis-guard
 
@@ -13,8 +13,10 @@ payloads into those neutral functions and prints plain-text reminders for Codex 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -37,13 +39,14 @@ from hook_core import (
     analysis_write_result,
     edit_tool,
     find_project_root,
+    locate_project_root,
     report_unclassified_shell_route,
     role_on_code_result,
     session_start_result,
     shell_tool,
 )
 
-from common import jsondata  # hook_core put the tree root on sys.path
+from common import jsondata, learning  # hook_core put the tree root on sys.path
 from common.markers import (
     claim_diagnostic_marker,
     marker_kind,
@@ -159,6 +162,35 @@ def _session_start(payload: dict) -> None:
     print_result(session_start_result(find_project_root(start)))
 
 
+def _learning_reminder(payload: dict) -> None:
+    """The learning-run reminder (C177): record the session, remind once a run is due.
+
+    Codex reads ``additionalContext`` on ``SessionStart`` (M65) and has no owner channel, so only
+    the model half of the reminder is printed — the adapter drops ``system_message``.
+    """
+    start = Path(cwd(payload)) if cwd(payload) else None
+    root = locate_project_root(start)
+    if root is None:
+        # No project root: the record has no local layer to live in, so nothing is written (ADR 0022 D09).
+        return
+    data = learning.read_data()
+    sid = session_id(payload)
+    source = payload.get("source")
+    event = learning.session_event(
+        None if sid == unidentified_identity() else sid,
+        source if isinstance(source, str) else None,
+        os.environ,
+        data,
+    )
+    if event is None:
+        return
+    reminder = learning.record_and_remind(
+        learning.state_path(root, data), event, learning.read_thresholds(root, data), datetime.now(UTC), data
+    )
+    if reminder is not None:
+        print_result(HookResult(event_name="SessionStart", additional_context=reminder[0]))
+
+
 def _routes() -> tuple[str, ...]:
     """The hook routes this wrapper dispatches (hooks/codex_hook.json, C102)."""
     return tuple(_codex_hook_data()["routes"])
@@ -182,6 +214,8 @@ def _dispatch(route: str, payload: dict) -> None:
         _advisory(payload, role_on_code_result)
     elif route == "session-start":
         _session_start(payload)
+    elif route == "learning-reminder":
+        _learning_reminder(payload)
     elif route == "git-commit-guard":
         # Intentionally not wired by sync.py yet; C28(b) owns the exact live-probe,
         # owner verification, then generated-wiring sequence for Bash+git behavior.
