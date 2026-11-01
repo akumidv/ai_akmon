@@ -47,7 +47,12 @@ from common.codex_hooks import (
     default_runner as _default_codex_hooks_runner,
 )
 from common.findings import Finding, exit_code, line_safe, print_findings, read_findings_data
-from common.project_root import resolve_project_root
+from common.project_root import (
+    ergon_root,
+    legacy_local_root,
+    local_root,
+    resolve_project_root,
+)
 from common.record import RecordError, read_akmon_toml_strict, recorded_ecosystem
 from common.runtime import codex_hooks_list_command, harness_commands
 from common.versions import split_version, switch_tag
@@ -361,6 +366,42 @@ def _inline_code_spans(text: str) -> list[str]:
         elif marker == open_fence:
             open_fence = None
     return spans
+
+
+def _ignore_spellings(relative: str) -> frozenset[str]:
+    """Every literal ``.gitignore`` spelling that ignores ``relative`` or one of its parent folders.
+
+    A path and each parent, bare or anchored at the root, with or without the trailing slash; and
+    the last name alone (``.local``), which a pattern with no inner slash matches at any depth.
+    """
+    parts = relative.split("/")
+    spellings = {parts[-1], f"{parts[-1]}/"}
+    for end in range(1, len(parts) + 1):
+        prefix = "/".join(parts[:end])
+        spellings.update((prefix, f"{prefix}/", f"/{prefix}", f"/{prefix}/"))
+    return frozenset(spellings)
+
+
+def _gitignore_covers(text: str, relative: str) -> bool:
+    """Whether the ``.gitignore`` ``text`` ignores ``relative``, a project-root-relative POSIX path.
+
+    Only literal lines count — no wildcard is expanded — and the last line that names the path
+    (or a parent) wins, so a later ``!`` line un-ignores it, as git reads them. This is the text of
+    the one ``.gitignore`` ``akmon init`` writes, not ``git check-ignore``: verify must run where
+    no work tree exists.
+    """
+    spellings = _ignore_spellings(relative)
+    ignored = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("!"):
+            if line[1:] in spellings:
+                ignored = False
+        elif line in spellings:
+            ignored = True
+    return ignored
 
 
 def _vendor_pointers(data: Mapping[str, Any]) -> dict[str, list]:
@@ -1665,6 +1706,36 @@ class Verifier:
                 fix="Add '*.env' and '!*.env.example' to .gitignore.",
             )
 
+    def check_local_layer(self) -> None:
+        """Warn about the pre-0028 ``local/`` folder, and about a dotted layer folder the ignore list misses.
+
+        Both are silent while the folder is absent, so a project that has none is untouched
+        (ADR 0028 D01). akmon never moves ``local/`` itself: the warning names the move.
+        """
+        folders = {
+            "legacy": legacy_local_root(self.root),
+            "local": local_root(self.root),
+            "ergon": ergon_root(self.root),
+        }
+        names = {key: folder.relative_to(self.root).as_posix() for key, folder in folders.items()}
+        if folders["legacy"].is_dir():
+            self.warn(
+                "layout.local-legacy",
+                jsondata.fill(self.data["local_layer_legacy"], names),
+                target=names["legacy"],
+                fix=jsondata.fill(self.data["local_layer_legacy_fix"], names),
+            )
+        gitignore = self.root / ".gitignore"
+        text = gitignore.read_text(encoding="utf-8") if gitignore.is_file() else ""
+        for key in ("local", "ergon"):
+            if folders[key].is_dir() and not _gitignore_covers(text, names[key]):
+                self.warn(
+                    "gitignore.local-layer",
+                    jsondata.fill(self.data["local_layer_unignored"], {"path": names[key]}),
+                    target=".gitignore",
+                    fix=jsondata.fill(self.data["local_layer_unignored_fix"], {"path": names[key]}),
+                )
+
     def check_akmon_gitignore(self) -> None:
         """Warn when the akmon submodule has no .gitignore ignoring __pycache__.
 
@@ -1971,6 +2042,7 @@ class Verifier:
         self.check_codex_host_trust()
         self.check_model_routing()
         self.check_gitignore()
+        self.check_local_layer()
         self.check_akmon_gitignore()
         self.check_vendored_leftovers()
         self.check_ci()

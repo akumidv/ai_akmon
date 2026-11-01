@@ -6,7 +6,7 @@
  *
  * A provider row that says `aliases: true` ships unversioned aliases (`luna`, `terra`, `sol`) that
  * its carrier may not accept; the second-opinion runner sends the concrete id kept in the local,
- * generated file `<aitna_root>/local/model-aliases.json`. This tool is the ONE place that reads a
+ * generated file `<aitna_root>/.local/model-aliases.json`. This tool is the ONE place that reads a
  * carrier's catalog — the file the row's `catalog` declares — and it reads it only when an owner
  * runs it: `--refresh` writes the file, no flag lists what is stored and what a refresh would
  * write, and `--dry-run` previews a refresh. It never calls a carrier and never guesses an id for

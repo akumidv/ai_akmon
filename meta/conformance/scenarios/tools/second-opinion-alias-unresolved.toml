@@ -15,5 +15,5 @@ argv = ["--gate", "design-align", "--gate-pack", "docs/gate-pack.md", "--session
 
 [expected]
 exit = 2
-stderr = "second-opinion: provider 'codex' declares model aliases, and 'sol' has no concrete id in _aitna/local/model-aliases.json; write it with `{{tool model_routing/models}} --refresh --provider codex`, pin a concrete id with `--provider codex:<id>`, or run the carrier's own model with `--provider codex:default`\n"
+stderr = "second-opinion: provider 'codex' declares model aliases, and 'sol' has no concrete id in _aitna/.local/model-aliases.json; write it with `{{tool model_routing/models}} --refresh --provider codex`, pin a concrete id with `--provider codex:<id>`, or run the carrier's own model with `--provider codex:default`\n"
 stdout = ""

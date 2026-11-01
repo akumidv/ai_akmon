@@ -232,6 +232,10 @@
   "python_mount_without_python_fix": "Switch the mount to the JavaScript implementation with `{{command}}`.",
   "aitna_root_ignored": "the AITNA_ROOT environment variable is set ({{value}}) and akmon no longer reads it: the dev layer is {{aitna}}, as the project root's .aitna-root declares it (an absent file means _aitna)",
   "aitna_root_ignored_fix": "Unset AITNA_ROOT; to relocate the dev layer, commit its project-root-relative path as the one line of .aitna-root at the project root (ADR 0022/D09).",
+  "local_layer_legacy": "{{legacy}}/ is the pre-0028 local layer, and its content moves by hand: {{legacy}}/ to {{local}}/, and {{legacy}}/handoff/ and {{legacy}}/plans/ into {{ergon}}/<id>-<name>/ (ADR 0028 D01); akmon never moves it silently",
+  "local_layer_legacy_fix": "Move the content to {{local}}/ and {{ergon}}/<id>-<name>/ yourself, then remove {{legacy}}/.",
+  "local_layer_unignored": "{{path}}/ exists but .gitignore does not ignore it, so what only this machine needs could be committed (ADR 0028 D01)",
+  "local_layer_unignored_fix": "Add {{path}}/ to .gitignore, the line `akmon init` writes for the dotted layer.",
   "python_mount_switch": {
     "mounted": "node {{akmon}}/js/akmon/cli.mjs init --ecosystem node",
     "vendored": "npx github:akumidv/ai_akmon#{{tag}} init --ecosystem node"

@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:model_routing/second_opinion"]
 
-# The developer-local routing overlay `<dev root>/local/model-routing.json` is the strongest
+# The developer-local routing overlay `<dev root>/.local/model-routing.json` is the strongest
 # layer (ADR 0024 D11 layer 1): it merges over the project overlay, and a ladder it declares
 # replaces the project's whole (D05) — `codex` is neither ranked nor in the skip ledger. The project
 # overlay is the list scenario's: `shfake` is a qwen carrier and `shmute` has no family. The local
@@ -20,7 +20,7 @@ covers = ["tool:model_routing/second_opinion"]
   "second_opinion_policy": {"ladder": ["claude", "shfake", "codex", "shmute"]}
 }
 """
-"_aitna/local/model-routing.json" = """
+"_aitna/.local/model-routing.json" = """
 {
   "providers": {
     "shfake": {"family": "gpt"},

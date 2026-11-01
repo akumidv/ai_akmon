@@ -321,12 +321,12 @@ function scratch(files = {}) {
 }
 
 test("the developer's overlay sits under the dev layer's local folder, wherever `.aitna-root` puts the layer", () => {
-  assert.equal(localOverlayRel(AGENTS), "local/model-routing.json");
+  assert.equal(localOverlayRel(AGENTS), ".local/model-routing.json");
   const root = scratch();
-  assert.equal(localOverlayPath(AGENTS, root), `${root}/_aitna/local/model-routing.json`);
+  assert.equal(localOverlayPath(AGENTS, root), `${root}/_aitna/.local/model-routing.json`);
   assert.equal(overlayPath(AGENTS, root), `${root}/_aitna/model-routing.json`);
   fs.writeFileSync(posix.join(root, ".aitna-root"), "meta\n");
-  assert.equal(localOverlayPath(AGENTS, root), `${root}/meta/local/model-routing.json`);
+  assert.equal(localOverlayPath(AGENTS, root), `${root}/meta/.local/model-routing.json`);
   assert.equal(overlayPath(AGENTS, root), `${root}/meta/model-routing.json`);
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -337,7 +337,7 @@ test("the local overlay is the strongest layer, a ladder is replaced whole and a
       second_opinion_policy: { ladder: ["claude", "codex"], model_rule: "max" },
       briefs: { k_explorer: "Team." },
     }),
-    "_aitna/local/model-routing.json": JSON.stringify({
+    "_aitna/.local/model-routing.json": JSON.stringify({
       second_opinion_policy: { ladder: ["codex"] },
       briefs: { k_explorer: "Mine." },
     }),
@@ -349,17 +349,17 @@ test("the local overlay is the strongest layer, a ladder is replaced whole and a
 });
 
 test("the local overlay alone merges over the shipped registry; a directory is no layer", () => {
-  const alone = scratch({ "_aitna/local/model-routing.json": '{"briefs": {"k_explorer": "Mine."}}' });
+  const alone = scratch({ "_aitna/.local/model-routing.json": '{"briefs": {"k_explorer": "Mine."}}' });
   assert.deepEqual(loadRegistry(AGENTS, posix.join(alone, "_aitna", "akmon"), alone).briefs, { k_explorer: "Mine." });
   const folder = scratch();
-  fs.mkdirSync(posix.join(folder, "_aitna", "local", "model-routing.json"), { recursive: true });
+  fs.mkdirSync(posix.join(folder, "_aitna", ".local", "model-routing.json"), { recursive: true });
   assert.deepEqual(loadRegistry(AGENTS, posix.join(folder, "_aitna", "akmon"), folder), SHIPPED);
 });
 
 test("an overlay layer that is not a JSON object is a named one-line error quoting its file", () => {
   for (const [layer, file] of [
     ["_aitna/model-routing.json", "_aitna/model-routing.json"],
-    ["_aitna/local/model-routing.json", "_aitna/local/model-routing.json"],
+    ["_aitna/.local/model-routing.json", "_aitna/.local/model-routing.json"],
   ]) {
     for (const content of ["{ not json", "[1, 2]"]) {
       const root = scratch({ [layer]: content });
@@ -380,7 +380,7 @@ test("an overlay layer that is not a JSON object is a named one-line error quoti
 test("a retired key is named in the layer that holds it: the strongest holder first, only its own keys", () => {
   const local = scratch({
     "_aitna/model-routing.json": '{"briefs": {}}',
-    "_aitna/local/model-routing.json": '{"second_opinion_policy": {"diversity_ladder": []}}',
+    "_aitna/.local/model-routing.json": '{"second_opinion_policy": {"diversity_ladder": []}}',
   });
   assert.throws(
     () => refuseRetiredKeys(AGENTS, {}, {}, local, { layered: true }),
@@ -388,22 +388,22 @@ test("a retired key is named in the layer that holds it: the strongest holder fi
       assert.ok(error instanceof RetiredKeyError);
       assert.match(
         error.message,
-        /^the routing overlay _aitna\/local\/model-routing\.json still carries the retired key\(s\) second_opinion_policy\.diversity_ladder /,
+        /^the routing overlay _aitna\/.local\/model-routing\.json still carries the retired key\(s\) second_opinion_policy\.diversity_ladder /,
       );
       return true;
     },
   );
   const both = scratch({
     "_aitna/model-routing.json": '{"openai": {"second_opinion": {}}}',
-    "_aitna/local/model-routing.json": '{"second_opinion_policy": {"diversity_ladder": []}}',
+    "_aitna/.local/model-routing.json": '{"second_opinion_policy": {"diversity_ladder": []}}',
   });
   assert.throws(
     () => refuseRetiredKeys(AGENTS, {}, {}, both, { layered: true }),
-    /the routing overlay _aitna\/local\/model-routing\.json still carries the retired key\(s\) second_opinion_policy\.diversity_ladder \(ADR/,
+    /the routing overlay _aitna\/.local\/model-routing\.json still carries the retired key\(s\) second_opinion_policy\.diversity_ladder \(ADR/,
   );
   const project = scratch({
     "_aitna/model-routing.json": '{"openai": {"second_opinion": {"report_dir": "x"}}}',
-    "_aitna/local/model-routing.json": '{"briefs": {}}',
+    "_aitna/.local/model-routing.json": '{"briefs": {}}',
   });
   assert.throws(
     () => refuseRetiredKeys(AGENTS, {}, {}, project, { layered: true }),
@@ -414,7 +414,7 @@ test("a retired key is named in the layer that holds it: the strongest holder fi
 test("without a project root a retired key in the merged registry names both candidate files", () => {
   assert.throws(
     () => refuseRetiredKeys(AGENTS, { second_opinion_policy: { diversity_ladder: [] } }, {}, null),
-    /the routing overlay _aitna\/local\/model-routing\.json or _aitna\/model-routing\.json still carries/,
+    /the routing overlay _aitna\/.local\/model-routing\.json or _aitna\/model-routing\.json still carries/,
   );
 });
 
@@ -425,7 +425,7 @@ test("an unlayered retired-key refusal names both files under the declared dev r
       () => refuseRetiredKeys(AGENTS, { second_opinion_policy: { diversity_ladder: [] } }, {}, root),
       (error) => {
         assert.ok(error instanceof RetiredKeyError);
-        assert.ok(error.message.includes("tools/ai/local/model-routing.json or tools/ai/model-routing.json"));
+        assert.ok(error.message.includes("tools/ai/.local/model-routing.json or tools/ai/model-routing.json"));
         assert.ok(!error.message.includes("_aitna"));
         return true;
       },
@@ -458,7 +458,7 @@ test("an unpinned declared argv drops each element holding the placeholder and t
 });
 
 test("an ask names the local overlay first and the project overlay second; a session ask then the recorded family", () => {
-  const local = "_aitna/local/model-routing.json";
+  const local = "_aitna/.local/model-routing.json";
   const project = "_aitna/model-routing.json";
   const registry = {
     ...SHIPPED,
@@ -496,7 +496,7 @@ test("an unknown ladder id names both overlay files to edit", () => {
       assert.match(error.message, /declare providers\.ghost or remove it from second_opinion_policy\.ladder in /);
       assert.match(
         error.message,
-        /_aitna\/local\/model-routing\.json \(yours\) or _aitna\/model-routing\.json \(the team's\)/,
+        /_aitna\/.local\/model-routing\.json \(yours\) or _aitna\/model-routing\.json \(the team's\)/,
       );
       return true;
     },
@@ -520,7 +520,7 @@ test("checkSessionFamily accepts a member and refuses the rest naming the overla
         error.message,
         /^--session-family 'mimo' is not in the family vocabulary \(claude, gpt, qwen, gemini\)/,
       );
-      assert.match(error.message, /second_opinion_policy\.families\.mimo in _aitna\/local\/model-routing\.json/);
+      assert.match(error.message, /second_opinion_policy\.families\.mimo in _aitna\/.local\/model-routing\.json/);
       return true;
     },
   );
@@ -704,7 +704,7 @@ test("an alias without a mapping is refused naming the refresh", () => {
     (error) => {
       assert.ok(error instanceof UnresolvedAliasError);
       assert.match(error.message, /'sol'/);
-      assert.ok(error.message.includes("_aitna/local/model-aliases.json"));
+      assert.ok(error.message.includes("_aitna/.local/model-aliases.json"));
       assert.ok(error.message.includes("akmon tool model_routing/models --refresh --provider codex"));
       return true;
     },
@@ -742,7 +742,7 @@ test("a resolved aliases file of the wrong shape is refused naming it", () => {
     fs.writeFileSync(path, text);
     assert.throws(() => readModelAliases(AGENTS, root), {
       name: "ValueError",
-      message: /_aitna\/local\/model-aliases\.json/,
+      message: /_aitna\/.local\/model-aliases\.json/,
     });
   }
 });
@@ -768,7 +768,7 @@ test("a default ladder entry walks to a target with no pin", () => {
 });
 
 test("agents.json carries the alias file location, the default token and the two error tables", () => {
-  assert.equal(AGENTS.local_aliases_rel, "local/model-aliases.json");
+  assert.equal(AGENTS.local_aliases_rel, ".local/model-aliases.json");
   assert.equal(AGENTS.default_model_token, "default");
   for (const key of ["catalog_errors", "alias_errors"]) {
     assert.equal(typeof AGENTS[key], "object");

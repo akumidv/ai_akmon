@@ -35,7 +35,8 @@ docs/
 <DEV>/
   TASKS.md  TASKS_ARCHIVE.md  ROADMAP.md      the backlog and the plan view
   reviews/  MEASUREMENTS.md  experiments/  benchmarks/    evidence
-  local/{handoff,plans,tasks}/<id>/  TASKS.md  ignored (0022)
+  .local/  TASKS.md  tasks/                    ignored: the local index (0022, 0028)
+  .ergon/<id>-<name>/                         ignored: one kit per piece of work (0028)
   skills/  tools/  memory/  agents/           development layer
 ```
 

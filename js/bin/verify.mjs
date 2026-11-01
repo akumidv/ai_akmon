@@ -95,7 +95,14 @@ import { fnmatchCase } from "../common/glob.mjs";
 import { Finding, exitCode, lineSafe, printFindings, readFindingsData } from "../common/findings.mjs";
 import { fill, read } from "../common/jsondata.mjs";
 import { generatedMarker } from "../common/materialization.mjs";
-import { aitnaRoot, aitnaRootName, resolveProjectRoot } from "../common/project_root.mjs";
+import {
+  aitnaRoot,
+  aitnaRootName,
+  ergonRoot,
+  legacyLocalRoot,
+  localRoot,
+  resolveProjectRoot,
+} from "../common/project_root.mjs";
 import {
   isDir,
   isFile,
@@ -172,6 +179,10 @@ import { splitVersion } from "../common/versions.mjs";
  * @property {string} ruff_without_python_fix
  * @property {string} aitna_root_ignored
  * @property {string} aitna_root_ignored_fix
+ * @property {string} local_layer_legacy
+ * @property {string} local_layer_legacy_fix
+ * @property {string} local_layer_unignored
+ * @property {string} local_layer_unignored_fix
  * @property {Record<string, any>} node the Node-only texts
  */
 
@@ -300,6 +311,54 @@ function _fenceMarker(line) {
     }
   }
   return null;
+}
+
+/**
+ * Every literal `.gitignore` spelling that ignores `relative` or one of its parent folders: a path
+ * and each parent, bare or anchored at the root, with or without the trailing slash; and the last
+ * name alone (`.local`), which a pattern with no inner slash matches at any depth.
+ * @param {string} relative
+ * @returns {Set<string>}
+ */
+function _ignoreSpellings(relative) {
+  const parts = relative.split("/");
+  const last = parts[parts.length - 1];
+  const spellings = new Set([last, `${last}/`]);
+  for (let end = 1; end <= parts.length; end += 1) {
+    const prefix = parts.slice(0, end).join("/");
+    for (const spelling of [prefix, `${prefix}/`, `/${prefix}`, `/${prefix}/`]) {
+      spellings.add(spelling);
+    }
+  }
+  return spellings;
+}
+
+/**
+ * Whether the `.gitignore` `text` ignores `relative`, a project-root-relative POSIX path. Only
+ * literal lines count — no wildcard is expanded — and the last line that names the path (or a
+ * parent) wins, so a later `!` line un-ignores it, as git reads them. This is the text of the one
+ * `.gitignore` `akmon init` writes, not `git check-ignore`: verify must run where no work tree exists.
+ * @param {string} text
+ * @param {string} relative
+ * @returns {boolean}
+ */
+function _gitignoreCovers(text, relative) {
+  const spellings = _ignoreSpellings(relative);
+  let ignored = false;
+  for (const raw of pySplitlines(text)) {
+    const line = pyStrip(raw);
+    if (line === "" || line.startsWith("#")) {
+      continue;
+    }
+    if (line.startsWith("!")) {
+      if (spellings.has(line.slice(1))) {
+        ignored = false;
+      }
+    } else if (spellings.has(line)) {
+      ignored = true;
+    }
+  }
+  return ignored;
 }
 
 /**
@@ -2317,6 +2376,41 @@ export class Verifier {
   }
 
   /**
+   * Warn about the pre-0028 `local/` folder, and about a dotted layer folder the ignore list misses
+   * (the Python `check_local_layer`). Both are silent while the folder is absent, so a project that
+   * has none is untouched (ADR 0028 D01). akmon never moves `local/` itself: the warning names the move.
+   */
+  checkLocalLayer() {
+    const root = pyPath(this.root);
+    const folders = {
+      legacy: legacyLocalRoot(this.root),
+      local: localRoot(this.root),
+      ergon: ergonRoot(this.root),
+    };
+    const names = {
+      legacy: posix.relative(root, folders.legacy),
+      local: posix.relative(root, folders.local),
+      ergon: posix.relative(root, folders.ergon),
+    };
+    if (isDir(folders.legacy)) {
+      this.warn("layout.local-legacy", fill(this.data.local_layer_legacy, names), {
+        target: names.legacy,
+        fix: fill(this.data.local_layer_legacy_fix, names),
+      });
+    }
+    const gitignore = pyPath(this.root, ".gitignore");
+    const text = isFile(gitignore) ? readText(gitignore) : "";
+    for (const key of /** @type {const} */ (["local", "ergon"])) {
+      if (isDir(folders[key]) && !_gitignoreCovers(text, names[key])) {
+        this.warn("gitignore.local-layer", fill(this.data.local_layer_unignored, { path: names[key] }), {
+          target: ".gitignore",
+          fix: fill(this.data.local_layer_unignored_fix, { path: names[key] }),
+        });
+      }
+    }
+  }
+
+  /**
    * Warn about each top-level entry of a `vendored` mount that the carrier does not ship (the Python
    * `check_vendored_leftovers`). A re-run of `init --mode vendored` replaces the standard's members
    * and touches nothing else, so a member a later carrier dropped stays in the mount; akmon deletes
@@ -2614,6 +2708,7 @@ export class Verifier {
     await this.checkCodexHostTrust();
     this.checkModelRouting();
     this.checkGitignore();
+    this.checkLocalLayer();
     this.checkVendoredLeftovers();
     this.checkCi();
     this.checkChangelog();

@@ -6,7 +6,7 @@ covers = ["hook:learning-reminder"]
 
 [fixture]
 attach = "native"
-files = { "_aitna/local/learning.json" = "{broken" }
+files = { "_aitna/.local/learning.json" = "{broken" }
 
 [run]
 script = "learning-reminder"

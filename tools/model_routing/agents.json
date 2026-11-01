@@ -10,8 +10,8 @@
   },
   "zone_convention": "In a zoned fan-out, start each call's description with [zone:<label>].",
   "overlay_name": "model-routing.json",
-  "local_overlay_rel": "local/model-routing.json",
-  "local_aliases_rel": "local/model-aliases.json",
+  "local_overlay_rel": ".local/model-routing.json",
+  "local_aliases_rel": ".local/model-aliases.json",
   "default_model_token": "default",
   "catalog_errors": {
     "format": "format '{{format}}' is not one of: {{known}}",

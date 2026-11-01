@@ -34,4 +34,4 @@ argv = [
 [expected]
 exit = 0
 stderr = ""
-stdout = "session: provider=claude model=opus priors=claude\nrank 2: provider=shfake model=big priors=qwen repo=unknown\nskipped:\n  claude: self\n  codex: carrier absent\n  shmute: priors unknown\nasks:\n  shmute: priors unknown for its default model; declare providers.shmute.family in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team\n"
+stdout = "session: provider=claude model=opus priors=claude\nrank 2: provider=shfake model=big priors=qwen repo=unknown\nskipped:\n  claude: self\n  codex: carrier absent\n  shmute: priors unknown\nasks:\n  shmute: priors unknown for its default model; declare providers.shmute.family in _aitna/.local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team\n"

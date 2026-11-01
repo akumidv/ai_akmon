@@ -1,0 +1,25 @@
+id = "tools/park-write-row-with-link"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The existing row already carries a link of its own: the status flips to `parked` and the row's
+# link is kept; no `[park]` link is added beside it.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- C183 · Park helper · active · engineer · local detail · [notes](../notes/c183.md)\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/C183-park-helper\n"
+[expected.files]
+"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- C183 · Park helper · parked · engineer · local detail · [notes](../notes/c183.md)\n"

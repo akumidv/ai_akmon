@@ -1,0 +1,23 @@
+id = "tools/park-write-newline-refused"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A scalar that spans two lines (`--next` here) would not survive the header's round trip, so it is
+# refused: exit 1, the error line names the field, nothing is written.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it\nin JS"]
+
+[expected]
+exit = 1
+stderr = "error: next must be a single line with no surrounding whitespace\n"
+stdout = ""
+file_absent = ["_aitna/.ergon/C183-park-helper", "_aitna/.local/TASKS.md"]

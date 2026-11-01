@@ -14,9 +14,11 @@ __pycache__/
 __pycache__
 .pytest_cache
 /.tmp
+.tmp/
 
-# akmon's dev root is meta/, so its local layer is meta/local/ (everything a session resumes from).
-/meta/local/
+# akmon's dev root is meta/, so its local layer is meta/.local/ and its kits meta/.ergon/ (everything a session resumes from).
+/meta/.local/
+/meta/.ergon/
 .ipynb_checkpoints
 scripts/_*
 /data

@@ -207,7 +207,7 @@ export function overlayName(data) {
 }
 
 /**
- * The developer-local overlay's path under the aitna root (gitignored with `<aitna_root>/local/`).
+ * The developer-local overlay's path under the aitna root (gitignored with `<aitna_root>/.local/`).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @returns {string}
  */
@@ -216,7 +216,7 @@ export function localOverlayRel(data) {
 }
 
 /**
- * The generated resolved-aliases file's path under the aitna root (gitignored with `<aitna_root>/local/`).
+ * The generated resolved-aliases file's path under the aitna root (gitignored with `<aitna_root>/.local/`).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @returns {string}
  */
@@ -328,7 +328,7 @@ export function overlayPath(data, projectRoot) {
 /**
  * Path to the developer's own routing overlay (gitignored, hand-owned, never generated), if any.
  *
- * Same shape and file name as the project overlay, but under `<aitna_root>/local/` (ADR 0022):
+ * Same shape and file name as the project overlay, but under `<aitna_root>/.local/` (ADR 0022):
  * the strongest layer (ADR-0024/D11) — a developer states which harnesses and models they run
  * without asking the team to share it.
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`

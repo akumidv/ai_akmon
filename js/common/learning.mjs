@@ -4,7 +4,7 @@
  * texts, the same state file byte for byte.
  *
  * The learning agent reads the sessions of the project it serves, recorded since its last run.
- * This module keeps that record — `<dev root>/local/learning.json` in the project's local layer
+ * This module keeps that record — `<dev root>/.local/learning.json` in the project's local layer
  * (ADR 0022), gitignored — and decides when a session-start hook should remind the owner to run it.
  *
  * State is three fields: `last_run` (UTC ISO seconds, `null` before the first run), `since` (when

@@ -1,7 +1,7 @@
 /**
  * node:test for `js/tools/model_routing/models.mjs` — the alias-refresh tool (ADR 0024/D16), the
  * twin of `meta/tests/test_models.py`. The tool reads a provider's declared catalog only when it is
- * run and writes the generated `<aitna_root>/local/model-aliases.json`. Every test points `HOME` at
+ * run and writes the generated `<aitna_root>/.local/model-aliases.json`. Every test points `HOME` at
  * a scratch directory, so the real `~/.codex` is never read.
  */
 
@@ -47,7 +47,7 @@ const REGISTRY = {
 };
 
 const SOURCE = "~/.codex/models_cache.json (codex-models-cache)";
-const FILE = "_aitna/local/model-aliases.json";
+const FILE = "_aitna/.local/model-aliases.json";
 
 /**
  * A scratch directory holding the project (`proj`) and the stand-in home (`home`).
@@ -178,8 +178,8 @@ test("a refresh follows the dev root the project declares", () => {
   fs.writeFileSync(path.join(root, ".aitna-root"), "meta\n");
   const result = run(base, "--refresh");
   assert.equal(result.code, 0, result.stderr);
-  assert.ok(fs.existsSync(path.join(root, "meta", "local", "model-aliases.json")));
-  assert.equal(fs.existsSync(path.join(root, "_aitna", "local")), false);
+  assert.ok(fs.existsSync(path.join(root, "meta", ".local", "model-aliases.json")));
+  assert.equal(fs.existsSync(path.join(root, "_aitna", ".local")), false);
 });
 
 test("--refresh with no project root prints the notice, exits 2 and writes nothing; a preview still runs", () => {

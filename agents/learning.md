@@ -18,7 +18,7 @@ serves, recorded since its last run, and proposes what to keep; nothing is persi
 confirms it. The run is the [`learning`](../skills/learning/SKILL.md) skill: `akmon learn sessions`
 lists the project's Claude transcripts and Codex sessions since the last run, read-only `summarize`
 passes extract owner corrections, repeated failures, hook denials, delegation drift and unrecorded
-decisions, and `akmon learn mark` records the end of the run in `<dev root>/local/learning.json`
+decisions, and `akmon learn mark` records the end of the run in `<dev root>/.local/learning.json`
 (`last_run`, `since`, `sessions`; gitignored with the local layer). A session-start hook
 (`learning-reminder`) counts each session once and reminds the owner and the model once at least one
 session has passed since the last run and 10 sessions or 7 days have gone by, whichever comes first;

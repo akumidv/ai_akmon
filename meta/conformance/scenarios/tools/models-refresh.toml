@@ -22,7 +22,7 @@ argv = ["--refresh"]
 [expected]
 exit = 0
 stderr = ""
-stdout = "catalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=0.164.0\n  luna → gpt-6-luna\n  terra → gpt-6.1-terra\n  sol → gpt-6.1-sol\nwrote _aitna/local/model-aliases.json\n"
+stdout = "catalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=0.164.0\n  luna → gpt-6-luna\n  terra → gpt-6.1-terra\n  sol → gpt-6.1-sol\nwrote _aitna/.local/model-aliases.json\n"
 
 [expected.files]
-"_aitna/local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": \"0.164.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"terra\": \"gpt-6.1-terra\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"
+"_aitna/.local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": \"0.164.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"terra\": \"gpt-6.1-terra\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"

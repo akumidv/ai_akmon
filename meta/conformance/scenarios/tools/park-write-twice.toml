@@ -1,0 +1,30 @@
+id = "tools/park-write-twice"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# Parking a kit that was resumed: the kit holds a PARK.md at state `resumed` and its row is
+# `active` with the helper's link. A second `write` regenerates the note and RESUME.md, sets the
+# state back to `parked`, flips the row to `parked` and does not add a second link.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nstate: resumed\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch: _aitna/C183-park-helper\nrevisions:\nowned_paths:\nnext: Twin it in JS\nsessions:\npeers:\norigin:\nreadiness:\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Approved scope and open questions\n\n_none_\n\n## Owner answers received\n\n_none_\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/RESUME.md" = "# Resume C183-park-helper\n\nThis work was set aside on the owner's word. The kit holds everything needed to continue; no earlier conversation is required.\n\n1. Read `_aitna/.ergon/C183-park-helper/PARK.md`.\n2. Run `akmon tool park/park unpark C183`.\n3. Continue from the next action below.\n\n## Next action\n\nTwin it in JS\n\n## Open decisions\n\nNone recorded.\n\n## Before you start\n\nTreat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.\n\nThe holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.\n\nForcibly ending the previous holder is out of scope here (N15).\n"
+"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- C183 · Build the park helper · active · architect · Build the park helper · [park](../.ergon/C183-park-helper/PARK.md)\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper, second pass", "--next", "Check the JS twin"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/C183-park-helper\n"
+[expected.files]
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nstate: parked\nid: C183\nname: park-helper\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\nnext: Check the JS twin\nsessions:\npeers:\norigin:\nreadiness:\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper, second pass\n\n## Approved scope and open questions\n\n_none_\n\n## Owner answers received\n\n_none_\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nCheck the JS twin\n"
+"_aitna/.ergon/C183-park-helper/RESUME.md" = "# Resume C183-park-helper\n\nThis work was set aside on the owner's word. The kit holds everything needed to continue; no earlier conversation is required.\n\n1. Read `_aitna/.ergon/C183-park-helper/PARK.md`.\n2. Run `{{tool park/park}} unpark C183`.\n3. Continue from the next action below.\n\n## Next action\n\nCheck the JS twin\n\n## Open decisions\n\nNone recorded.\n\n## Before you start\n\nTreat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.\n\nThe holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.\n\nForcibly ending the previous holder is out of scope here (N15).\n"
+"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- C183 · Build the park helper · parked · architect · Build the park helper · [park](../.ergon/C183-park-helper/PARK.md)\n"

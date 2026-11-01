@@ -164,3 +164,9 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   — "agent" is the unit of responsibility; actor values `developer`, `autonomous`, `guided`; the
   declaration becomes `🧭 role:`; a charter per agent in `agents/<agent>/`; `k_*` are delegates and
   bare "subagent" is the host's mechanism; "actor" has one meaning.
+- [0028 — Park and resume: the kit, the dotted layer and the active kit](0028-park-and-resume-the-kit-and-the-dotted-layer.md)
+  — the local layer becomes `<DEV>/.local/` and the home of work `<DEV>/.ergon/`; one folder (a kit)
+  per piece of work holds plan, steps, park note, resume prompt, briefs in rounds and material; the
+  act is *park*, the state `parked`, the branch `_aitna/<id>-<name>` with the kit's own string; plan →
+  task → step; a session's active kit and the confirmed switch of task; scratch in three tiers.
+  Supersedes parts of 0022 D01/D03/D04 and 0021 D01; amends 0021 D03 and 0008 §4.

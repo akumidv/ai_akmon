@@ -17,6 +17,6 @@ argv = [
 
 [expected]
 exit = 2
-stderr = "error: --session-family 'deepseek' is not in the family vocabulary (claude, gpt, qwen, gemini); add it by declaring second_opinion_policy.families.deepseek in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team\n"
+stderr = "error: --session-family 'deepseek' is not in the family vocabulary (claude, gpt, qwen, gemini); add it by declaring second_opinion_policy.families.deepseek in _aitna/.local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team\n"
 stdout = ""
 file_absent = [".claude/model-routing.local.json"]

@@ -1,0 +1,26 @@
+id = "tools/park-digest"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The digest of a note: the summary line (kit and state), the non-empty header facts, the goal
+# (continuation lines indented), the next action, the open decisions and the owner answers. Under
+# the default cap of 3000 characters nothing is cut and no overflow line is added.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nstate: parked\nid: C183\nname: park-helper\nplan: A59\nrow: C183\nbranch: _aitna/C183-park-helper\nrevisions:\nowned_paths:\nnext: Twin it in JS\nsessions:\npeers:\norigin:\nreadiness: ready for a successor\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\nso a successor can resume\n\n## Approved scope and open questions\n\n- D-C183-TWIN\n- D-C183-NAME\n\n## Owner answers received\n\n- owner: go\n- owner: keep the name\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/RESUME.md" = "# Resume C183-park-helper\n\nThis work was set aside on the owner's word. The kit holds everything needed to continue; no earlier conversation is required.\n\n1. Read `_aitna/.ergon/C183-park-helper/PARK.md`.\n2. Run `akmon tool park/park unpark C183`.\n3. Continue from the next action below.\n\n## Next action\n\nTwin it in JS\n\n## Open decisions\n\n- D-C183-TWIN\n- D-C183-NAME\n\n## Before you start\n\nTreat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.\n\nThe holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.\n\nForcibly ending the previous holder is out of scope here (N15).\n"
+"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- C183 · Build the park helper · parked · architect · Build the park helper · [park](../.ergon/C183-park-helper/PARK.md)\n"
+
+[run]
+tool = "park/park"
+argv = ["digest", "C183"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "park C183-park-helper · parked\nplan: A59\nrow: C183\nbranch: _aitna/C183-park-helper\nreadiness: ready for a successor\nGoal: Build the park helper\n  so a successor can resume\nNext action: Twin it in JS\nOpen decisions:\n- D-C183-TWIN\n- D-C183-NAME\nOwner answers:\n- owner: go\n- owner: keep the name\n"

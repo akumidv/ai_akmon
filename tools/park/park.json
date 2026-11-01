@@ -1,0 +1,93 @@
+{
+  "invocation": "akmon tool park/park",
+  "default_cap": 3000,
+  "next_width": 60,
+  "default_role": "architect",
+  "index_header": "# TASKS — local index",
+  "status_parked": "parked",
+  "status_active": "active",
+  "state_parked": "parked",
+  "state_resumed": "resumed",
+  "state_never_parked": "never-parked",
+  "none_marker": "_none_",
+  "empty_cell": "-",
+  "ellipsis": "…",
+  "headings": {
+    "goal": "Goal",
+    "decisions": "Approved scope and open questions",
+    "answers": "Owner answers received",
+    "checks": "Checks run",
+    "unverified": "Unverified",
+    "agents": "Active agents and background processes",
+    "next": "Next action",
+    "purpose": "Purpose"
+  },
+  "resume": {
+    "title": "# Resume {{kit}}",
+    "intro": "This work was set aside on the owner's word. The kit holds everything needed to continue; no earlier conversation is required.",
+    "steps": [
+      "1. Read `{{park_path}}`.",
+      "2. Run `{{command}} unpark {{id}}`.",
+      "3. Continue from the next action below."
+    ],
+    "next_heading": "## Next action",
+    "decisions_heading": "## Open decisions",
+    "decisions_none": "None recorded.",
+    "retirement_heading": "## Before you start",
+    "retirement": [
+      "Treat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.",
+      "The holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.",
+      "Forcibly ending the previous holder is out of scope here (N15)."
+    ]
+  },
+  "note": {
+    "title": "# {{kit}}"
+  },
+  "row": {
+    "link": "[park]({{link}})"
+  },
+  "digest": {
+    "title": "park {{kit}} · {{state}}",
+    "field": "{{key}}: {{value}}",
+    "goal": "Goal: {{text}}",
+    "next": "Next action: {{text}}",
+    "decisions": "Open decisions:",
+    "decisions_none": "Open decisions: none",
+    "answers": "Owner answers:",
+    "answers_none": "Owner answers: none",
+    "overflow": "… {{count}} more lines in {{path}}"
+  },
+  "list": {
+    "line": "{{id}} | {{name}} | {{state}} | {{plan}} | {{next}} | {{decisions}} | {{branch}} | {{age}}",
+    "empty": "no kits in {{path}}",
+    "no_match": "no kit matches the filters"
+  },
+  "errors": {
+    "bad_id": "{{label}} {{value}} is not a task id (a capital letter or _T followed by digits, e.g. C183 or _T3)",
+    "bad_name": "name {{value}} is not kebab-case (lowercase letters and digits joined by single hyphens)",
+    "bad_line": "{{label}} must be a single line with no surrounding whitespace",
+    "bad_text": "{{label}} must not have surrounding whitespace",
+    "empty": "{{label}} must not be empty",
+    "bad_state": "state {{value}} is not parked or resumed",
+    "bad_session": "session {{value}} is not harness|session_id|machine with no further |",
+    "session_needs_harness": "--session-id and --machine need --harness",
+    "bad_heading": "{{label}} has a line that starts with '## ', which would open a section",
+    "bad_key": "purpose key {{value}} must be lowercase letters, digits and underscores",
+    "bad_cell": "{{label}} must not contain '·', the field separator of an index row",
+    "bad_cap": "--cap must be a whole number of at least 0, got {{value}}",
+    "no_project_root_dir": "--root {{path}} is not a directory",
+    "header_missing": "{{path}}: no header between two '---' lines at the top of the note",
+    "header_line": "{{path}}: header line {{line}} is neither 'key: value' nor an indented '- item'",
+    "header_key": "{{path}}: header key {{key}} is unknown or repeated",
+    "header_item": "{{path}}: header line {{line}} is a list item with no list key above it",
+    "header_scalar_list": "{{path}}: header key {{key}} takes a single value, not a list",
+    "header_required": "{{path}}: header has no value for {{key}}",
+    "header_invalid": "{{path}}: {{reason}}",
+    "kit_other_name": "kit {{existing}} already carries id {{id}}; keep its name or retire it before writing {{name}}",
+    "no_kit": "no kit with id {{id}} under {{ergon}}; kits: {{kits}}",
+    "several_kits": "several kits carry id {{id}} under {{ergon}}: {{kits}}",
+    "never_parked": "kit {{kit}} was never parked: it has no PARK.md",
+    "no_resume": "kit {{kit}} has no RESUME.md; write it again to regenerate it",
+    "bad_row": "index row of {{id}} has too few fields to carry a status: {{row}}"
+  }
+}

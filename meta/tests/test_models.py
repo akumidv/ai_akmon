@@ -1,7 +1,7 @@
 """Unit tests for the model-alias refresh tool (``tools/model_routing/models.py``, ADR 0024/D16).
 
 The tool reads a provider's declared catalog only when it is run, and writes the generated
-``<aitna_root>/local/model-aliases.json``. Every test points ``HOME`` at a scratch directory, so the
+``<aitna_root>/.local/model-aliases.json``. Every test points ``HOME`` at a scratch directory, so the
 real ``~/.codex`` is never read.
 """
 
@@ -97,7 +97,7 @@ def test_refresh_writes_the_file_with_the_highest_version_of_each_alias(tmp_path
     assert capsys.readouterr().out == (
         "catalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=0.164.0\n"
         "  luna → gpt-6-luna\n  terra → gpt-6.1-terra\n  sol → gpt-6.1-sol\n"
-        "wrote _aitna/local/model-aliases.json\n"
+        "wrote _aitna/.local/model-aliases.json\n"
     )
 
 
@@ -114,7 +114,7 @@ def test_a_second_refresh_is_idempotent_and_says_unchanged(tmp_path, monkeypatch
 
     assert path.read_bytes() == first
     assert path.stat().st_mtime_ns == mtime
-    assert capsys.readouterr().out.endswith("_aitna/local/model-aliases.json unchanged\n")
+    assert capsys.readouterr().out.endswith("_aitna/.local/model-aliases.json unchanged\n")
 
 
 def test_dry_run_writes_nothing_and_says_what_it_would_write(tmp_path, monkeypatch, capsys):
@@ -124,7 +124,7 @@ def test_dry_run_writes_nothing_and_says_what_it_would_write(tmp_path, monkeypat
     assert _run(tmp_path, monkeypatch, "--refresh", "--dry-run") == 0
 
     assert not routing.local_aliases_path(tmp_path / "proj").exists()
-    assert capsys.readouterr().out.endswith("would write _aitna/local/model-aliases.json\n")
+    assert capsys.readouterr().out.endswith("would write _aitna/.local/model-aliases.json\n")
 
 
 def test_the_listing_shows_what_is_stored_and_what_a_refresh_would_write_without_writing(tmp_path, monkeypatch, capsys):
@@ -139,9 +139,9 @@ def test_the_listing_shows_what_is_stored_and_what_a_refresh_would_write_without
     after = capsys.readouterr().out
 
     assert before.startswith("stored codex: none\ncatalog codex: source=")
-    assert before.endswith("would write _aitna/local/model-aliases.json\n")
+    assert before.endswith("would write _aitna/.local/model-aliases.json\n")
     assert after.startswith("stored codex: source=~/.codex/models_cache.json (codex-models-cache) client=0.164.0\n")
-    assert after.endswith("would leave _aitna/local/model-aliases.json unchanged\n")
+    assert after.endswith("would leave _aitna/.local/model-aliases.json unchanged\n")
 
 
 def test_an_alias_the_catalog_does_not_list_is_reported_and_left_unmapped(tmp_path, monkeypatch, capsys):

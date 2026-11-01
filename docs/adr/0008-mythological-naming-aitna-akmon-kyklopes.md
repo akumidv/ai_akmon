@@ -77,3 +77,11 @@ An ordinary project takes no name for being a workshop; only the general reposit
 `lemnos` is a value of the archetype field or a separate axis, and what it changes in behaviour, is
 decided in the ADR block that A51 produces, not here. This amendment only reserves and places the
 name.
+
+## Amendment — the reservoir gains ergon (A59)
+
+**ergon** (ἔργον) joins the reservoir of §4. It names **the work and what it has made so far**: the
+folder `<DEV>/.ergon/` holds one kit per piece of work, live or parked, the way the forge of this ADR
+holds work on the anvil. It is a place for work, not a state: the act of setting work aside is *park*
+([ADR 0028](0028-park-and-resume-the-kit-and-the-dotted-layer.md)). In prose, `\.ergon\b` is the form to
+search for — the substring sits in "ergonomics".

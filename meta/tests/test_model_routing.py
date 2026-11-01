@@ -233,9 +233,9 @@ def _write_local_overlay(root: Path, data: object) -> Path:
 
 
 def test_local_overlay_path_sits_under_the_dev_layers_local_folder(tmp_path):
-    assert routing.local_overlay_path(tmp_path) == tmp_path / "_aitna" / "local" / "model-routing.json"
+    assert routing.local_overlay_path(tmp_path) == tmp_path / "_aitna" / ".local" / "model-routing.json"
     (tmp_path / ".aitna-root").write_text("meta\n", encoding="utf-8")
-    assert routing.local_overlay_path(tmp_path) == tmp_path / "meta" / "local" / "model-routing.json"
+    assert routing.local_overlay_path(tmp_path) == tmp_path / "meta" / ".local" / "model-routing.json"
 
 
 def test_local_overlay_is_the_strongest_layer_and_a_ladder_is_replaced_whole(tmp_path):
@@ -307,7 +307,7 @@ def test_an_unreadable_overlay_layer_raises_a_named_error_quoting_its_file(tmp_p
         expected = "_aitna/model-routing.json"
     else:
         _write_local_overlay(root, content)
-        expected = "_aitna/local/model-routing.json"
+        expected = "_aitna/.local/model-routing.json"
 
     with pytest.raises(routing.OverlayError) as caught:
         routing.load_registry(root / "_aitna" / "akmon", root)
@@ -327,7 +327,7 @@ def test_a_retired_key_names_the_local_layer_that_holds_it(tmp_path):
         routing.refuse_retired_keys(registry, {}, root, layered=True)
 
     message = str(caught.value)
-    assert "_aitna/local/model-routing.json" in message
+    assert "_aitna/.local/model-routing.json" in message
     assert "_aitna/model-routing.json " not in message  # the project layer is clean and not blamed
     assert "second_opinion_policy.diversity_ladder" in message
 
@@ -344,7 +344,7 @@ def test_a_retired_key_names_the_project_layer_that_holds_it(tmp_path):
         routing.refuse_retired_keys(registry, {}, root, layered=True)
 
     assert "_aitna/model-routing.json" in str(caught.value)
-    assert "local/model-routing.json" not in str(caught.value)
+    assert ".local/model-routing.json" not in str(caught.value)
 
 
 def test_a_retired_key_without_a_project_root_names_both_candidate_layers():
@@ -355,7 +355,7 @@ def test_a_retired_key_without_a_project_root_names_both_candidate_layers():
         routing.refuse_retired_keys(registry, {}, None)
 
     message = str(caught.value)
-    assert "_aitna/local/model-routing.json" in message
+    assert "_aitna/.local/model-routing.json" in message
     assert "_aitna/model-routing.json" in message
 
 
@@ -368,7 +368,7 @@ def test_an_unlayered_refusal_names_both_files_under_the_declared_dev_root(tmp_p
         routing.refuse_retired_keys(registry, {}, tmp_path)
 
     message = str(caught.value)
-    assert "tools/ai/local/model-routing.json" in message
+    assert "tools/ai/.local/model-routing.json" in message
     assert "tools/ai/model-routing.json" in message
     assert "_aitna" not in message
 
@@ -391,11 +391,11 @@ def test_init_refuses_a_retired_key_in_the_local_overlay_and_names_that_file(tmp
 
     assert _load_init().main(["--project-root", str(root), "--orchestrator", "opus"]) == 2
 
-    assert "_aitna/local/model-routing.json" in capsys.readouterr().err
+    assert "_aitna/.local/model-routing.json" in capsys.readouterr().err
     assert not (root / ".claude" / "model-routing.local.json").exists()
 
 
-@pytest.mark.parametrize("layer", ["_aitna/model-routing.json", "_aitna/local/model-routing.json"])
+@pytest.mark.parametrize("layer", ["_aitna/model-routing.json", "_aitna/.local/model-routing.json"])
 @pytest.mark.parametrize("content", ["{ not json", "[1, 2]"])
 def test_init_reports_an_overlay_that_is_not_a_json_object_as_one_error_line(tmp_path, capsys, layer, content):
     root = _make_project(tmp_path)
@@ -1205,7 +1205,7 @@ def test_init_refuses_a_family_outside_the_vocabulary_naming_the_overlay_to_exte
     assert err.startswith(
         "error: --session-family 'deepseek' is not in the family vocabulary (claude, gpt, qwen, gemini)"
     )
-    assert "second_opinion_policy.families.deepseek in _aitna/local/model-routing.json" in err
+    assert "second_opinion_policy.families.deepseek in _aitna/.local/model-routing.json" in err
     assert "_aitna/model-routing.json to share it with the team" in err
     assert not (root / ".claude" / "model-routing.local.json").exists()
 
@@ -2350,8 +2350,8 @@ def test_agents_data_pins_the_structure_and_characteristic_texts():
     }
     assert data["zone_convention"] == "In a zoned fan-out, start each call's description with [zone:<label>]."
     assert data["overlay_name"] == "model-routing.json"
-    assert data["local_overlay_rel"] == "local/model-routing.json"
-    assert data["local_aliases_rel"] == "local/model-aliases.json"
+    assert data["local_overlay_rel"] == ".local/model-routing.json"
+    assert data["local_aliases_rel"] == ".local/model-aliases.json"
     assert data["default_model_token"] == "default"
     assert data["settings_probe_names"] == ["settings.local.json", "settings.json"]
     assert data["retired_second_opinion_keys"] == {
@@ -2780,7 +2780,7 @@ def test_an_alias_without_a_mapping_is_refused_naming_the_refresh():
 
     message = caught.value.args[0]
     assert "'sol'" in message
-    assert "_aitna/local/model-aliases.json" in message
+    assert "_aitna/.local/model-aliases.json" in message
     assert "akmon tool model_routing/models --refresh --provider codex" in message
     assert isinstance(caught.value, ValueError)
 
@@ -2814,7 +2814,7 @@ def test_a_resolved_aliases_file_of_the_wrong_shape_is_refused_naming_it(tmp_pat
     path.parent.mkdir(parents=True)
     path.write_text(text, encoding="utf-8")
 
-    with pytest.raises(ValueError, match=r"_aitna/local/model-aliases\.json"):
+    with pytest.raises(ValueError, match=r"_aitna/.local/model-aliases\.json"):
         routing.read_model_aliases(tmp_path)
 
 
@@ -3078,7 +3078,7 @@ def test_an_unresolved_alias_names_the_aliases_file_under_the_declared_dev_root(
     with pytest.raises(routing.UnresolvedAliasError) as caught:
         routing.resolve_opinion_model(_ALIAS_REGISTRY, {}, "codex", "sol", tmp_path)
 
-    assert "tools/ai/local/model-aliases.json" in caught.value.args[0]
+    assert "tools/ai/.local/model-aliases.json" in caught.value.args[0]
     assert "_aitna" not in caught.value.args[0]
 
 

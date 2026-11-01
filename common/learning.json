@@ -1,5 +1,5 @@
 {
-  "state_rel": "local/learning.json",
+  "state_rel": ".local/learning.json",
   "reminder_sessions": 10,
   "reminder_days": 7,
   "record_section": "learning",

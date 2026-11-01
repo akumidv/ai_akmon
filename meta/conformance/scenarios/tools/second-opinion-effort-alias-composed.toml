@@ -9,7 +9,7 @@ covers = ["tool:model_routing/second_opinion"]
 
 [fixture.files]
 "docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
-"_aitna/local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": \"0.164.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"terra\": \"gpt-6.1-terra\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"
+"_aitna/.local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": \"0.164.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"terra\": \"gpt-6.1-terra\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"
 
 [run]
 tool = "model_routing/second_opinion"

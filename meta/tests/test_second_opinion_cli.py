@@ -276,7 +276,7 @@ def test_list_prints_the_ranked_chain_the_skip_ledger_and_the_asks_and_runs_noth
         "  opencode: priors unknown",
         "asks:",
         "  opencode: priors unknown for its default model; declare providers.opencode.family"
-        " in _aitna/local/model-routing.json to keep it to yourself,"
+        " in _aitna/.local/model-routing.json to keep it to yourself,"
         " or _aitna/model-routing.json to share it with the team",
     ]
 
@@ -292,7 +292,7 @@ def test_a_relocated_dev_root_declared_by_aitna_root_moves_the_files_the_asks_na
     out = capsys.readouterr().out
     assert (
         "  opencode: priors unknown for its default model; declare providers.opencode.family"
-        " in tools/ai/local/model-routing.json to keep it to yourself,"
+        " in tools/ai/.local/model-routing.json to keep it to yourself,"
         " or tools/ai/model-routing.json to share it with the team"
     ) in out.splitlines()
     assert "_aitna" not in out
@@ -328,7 +328,7 @@ def test_a_retired_key_in_the_local_overlay_is_refused_naming_that_file(tmp_path
     assert _main(root, "--list", gate=False) == 2
 
     err = capsys.readouterr().err
-    assert "_aitna/local/model-routing.json" in err and "diversity_ladder" in err
+    assert "_aitna/.local/model-routing.json" in err and "diversity_ladder" in err
 
 
 @pytest.mark.parametrize("content", ["{ not json", "[1, 2]"])
@@ -344,7 +344,7 @@ def test_an_overlay_that_is_not_a_json_object_is_one_error_line_and_exit_2(tmp_p
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == (
-        "second-opinion: the routing overlay _aitna/local/model-routing.json is not a valid JSON object;"
+        "second-opinion: the routing overlay _aitna/.local/model-routing.json is not a valid JSON object;"
         " repair or delete it (it is hand-owned, so akmon never rewrites it)\n"
     )
 
@@ -991,7 +991,7 @@ def test_a_corrupt_aliases_file_refuses_naming_it(tmp_path, capsys):
 
     assert _main(root, "--list", gate=False) == 2
 
-    assert "_aitna/local/model-aliases.json is not a valid alias map" in capsys.readouterr().err
+    assert "_aitna/.local/model-aliases.json is not a valid alias map" in capsys.readouterr().err
 
 
 def test_the_default_token_runs_the_carriers_own_model_without_any_alias_file(tmp_path, capsys):

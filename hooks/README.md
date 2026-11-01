@@ -86,7 +86,7 @@ project-local hook surface.
   in [`../tools/model_routing/routing.py`](../tools/model_routing/routing.py).
 - [`learning-reminder.py`](learning-reminder.py) — Claude **SessionStart** hook for the learning
   agent's run reminder (C177, ADR 0026/D07). It records the session id once (a resumed or compacted
-  session keeps its id, so it is not counted twice) in `<dev root>/local/learning.json`, and once at
+  session keeps its id, so it is not counted twice) in `<dev root>/.local/learning.json`, and once at
   least one session has passed since the last learning run **and** 10 sessions or 7 days have gone by
   (`[learning] reminder_sessions` / `reminder_days` in `<dev root>/.akmon.toml`) it emits
   `additionalContext` (the model tells the owner once in its first reply) and a `systemMessage` for

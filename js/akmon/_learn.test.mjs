@@ -33,7 +33,7 @@ function terminal({ record = "", now = NOW } = {}) {
     root,
     claudeHome,
     codexHome,
-    state: path.join(root, "_aitna", "local", "learning.json"),
+    state: path.join(root, "_aitna", ".local", "learning.json"),
     out: "",
     err: "",
     io: {
@@ -80,7 +80,7 @@ test("status before any run says never run, no counting, and the thresholds", ()
       "sessions since the last run: 0\n" +
       "days since the last run (or since counting began): -\n" +
       "reminder at 10 sessions or 7 days (from <dev root>/.akmon.toml [learning])\n" +
-      "state: _aitna/local/learning.json\n",
+      "state: _aitna/.local/learning.json\n",
   );
   assert.equal(term.err, "");
 });
@@ -96,7 +96,7 @@ test("status reports the run, the count, the days and the configured thresholds"
       "sessions since the last run: 2\n" +
       "days since the last run (or since counting began): 7\n" +
       "reminder at 4 sessions or 7 days (from <dev root>/.akmon.toml [learning])\n" +
-      "state: _aitna/local/learning.json\n",
+      "state: _aitna/.local/learning.json\n",
   );
   writeState(new LearningState(null, "2026-10-26T12:00:00Z", ["a"]), term.state);
   term.run(["status"]);
@@ -270,7 +270,7 @@ test("--project-root names the project from a cwd that is inside none, with no n
   assert.equal(term.run(["status", "--project-root", term.root]), 0, term.err);
   assert.equal(term.err, "");
   assert.match(term.out, /^last run: never\n/);
-  assert.match(term.out, /\nstate: _aitna\/local\/learning\.json\n$/);
+  assert.match(term.out, /\nstate: _aitna\/.local\/learning\.json\n$/);
   // a relative value is taken against the cwd
   term.io.cwd = term.base;
   assert.equal(term.run(["sessions", "--project-root", "proj", "--all"]), 0, term.err);

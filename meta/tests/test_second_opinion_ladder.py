@@ -536,7 +536,7 @@ def test_an_ask_names_the_local_overlay_first_and_the_project_overlay_second(all
     """D11 layer 1: the strongest file is offered first, the shared one second, in the same sentence."""
     registry = _gateway_registry(["opencode:undeclared/model", "pi"])
     asks = routing.opinion_asks(registry, _session("claude", "claude"), project)
-    local_file, project_file = "_aitna/local/model-routing.json", "_aitna/model-routing.json"
+    local_file, project_file = "_aitna/.local/model-routing.json", "_aitna/model-routing.json"
     assert asks[1] == (
         f"pi: priors unknown for its default model; declare providers.pi.family in {local_file}"
         f" to keep it to yourself, or {project_file} to share it with the team"
@@ -547,7 +547,7 @@ def test_an_ask_names_the_local_overlay_first_and_the_project_overlay_second(all
 def test_a_session_ask_names_both_overlays_then_the_recorded_session_family(all_present, project):
     session = _session("opencode", None, "undeclared/model")
     [ask] = routing.opinion_asks(_PRIORS_REGISTRY, session, project)
-    local_file, project_file = "_aitna/local/model-routing.json", "_aitna/model-routing.json"
+    local_file, project_file = "_aitna/.local/model-routing.json", "_aitna/model-routing.json"
     assert ask.index(local_file) < ask.index(project_file) < ask.index("session.family")
     assert "to keep it to yourself" in ask and "to share it with the team" in ask
 
@@ -788,7 +788,7 @@ def test_an_unknown_ladder_id_names_both_overlay_files_to_edit(project):
     message = raised.value.args[0]
     assert "the ladder names 'ghost', which the providers table does not declare" in message
     assert "declare providers.ghost or remove it from second_opinion_policy.ladder in" in message
-    assert "_aitna/local/model-routing.json (yours)" in message
+    assert "_aitna/.local/model-routing.json (yours)" in message
     assert "_aitna/model-routing.json (the team's)" in message
 
 
@@ -812,7 +812,7 @@ def test_check_session_family_accepts_a_member_and_refuses_the_rest_naming_the_f
     routing.check_session_family(_SHIPPED, "qwen", project)
     with pytest.raises(ValueError, match=r"--session-family 'mimo' is not in the family vocabulary") as raised:
         routing.check_session_family(_SHIPPED, "mimo", project)
-    assert "second_opinion_policy.families.mimo in _aitna/local/model-routing.json" in str(raised.value)
+    assert "second_opinion_policy.families.mimo in _aitna/.local/model-routing.json" in str(raised.value)
 
 
 # --------------------------------------------------------------------------------------
@@ -824,7 +824,7 @@ def test_a_relocated_dev_root_moves_the_files_an_ask_names(all_present, project)
     (project / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     registry = _gateway_registry(["pi"])
     [ask] = routing.opinion_asks(registry, _session("claude", "claude"), project)
-    assert "providers.pi.family in tools/ai/local/model-routing.json" in ask
+    assert "providers.pi.family in tools/ai/.local/model-routing.json" in ask
     assert "or tools/ai/model-routing.json to share it with the team" in ask
     assert "_aitna" not in ask
 
@@ -833,23 +833,23 @@ def test_a_relocated_dev_root_moves_the_files_an_unknown_ladder_id_names(project
     (project / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
     with pytest.raises(KeyError) as raised:
         routing.provider_row({"providers": {}}, "ghost", project)
-    assert "tools/ai/local/model-routing.json (yours)" in raised.value.args[0]
+    assert "tools/ai/.local/model-routing.json (yours)" in raised.value.args[0]
     assert "tools/ai/model-routing.json (the team's)" in raised.value.args[0]
 
 
 def test_akmons_own_dev_root_is_declared_by_its_tracked_file():
     with pytest.raises(KeyError) as raised:
         routing.provider_row({"providers": {}}, "ghost", _AKMON)
-    assert "meta/local/model-routing.json (yours)" in raised.value.args[0]
+    assert "meta/.local/model-routing.json (yours)" in raised.value.args[0]
 
 
 def test_without_a_project_root_the_files_an_ask_names_are_the_default_dev_root(all_present):
     [ask] = routing.opinion_asks(_gateway_registry(["pi"]), _session("claude", "claude"), None)
-    assert "_aitna/local/model-routing.json" in ask and " _aitna/model-routing.json" in ask
+    assert "_aitna/.local/model-routing.json" in ask and " _aitna/model-routing.json" in ask
 
 
 def test_a_layered_refusal_reads_each_overlay_file_and_names_the_one_that_holds_the_key(project):
-    (project / "_aitna" / "local").mkdir()
+    (project / "_aitna" / ".local").mkdir()
     (project / "_aitna" / "model-routing.json").write_text(
         '{"second_opinion_policy": {"diversity_ladder": ["x"]}}', encoding="utf-8"
     )
@@ -857,7 +857,7 @@ def test_a_layered_refusal_reads_each_overlay_file_and_names_the_one_that_holds_
         routing.refuse_retired_keys({}, {}, project, layered=True)
     message = str(raised.value)
     assert "_aitna/model-routing.json" in message and "second_opinion_policy.diversity_ladder" in message
-    assert "local/model-routing.json" not in message
+    assert ".local/model-routing.json" not in message
 
 
 def test_an_unlayered_refusal_names_both_overlay_files_under_the_dev_root(project):
@@ -865,4 +865,4 @@ def test_an_unlayered_refusal_names_both_overlay_files_under_the_dev_root(projec
     registry = {"second_opinion_policy": {"diversity_ladder": ["x"]}}
     with pytest.raises(routing.RetiredKeyError) as raised:
         routing.refuse_retired_keys(registry, {}, project)
-    assert "tools/ai/local/model-routing.json or tools/ai/model-routing.json" in str(raised.value)
+    assert "tools/ai/.local/model-routing.json or tools/ai/model-routing.json" in str(raised.value)

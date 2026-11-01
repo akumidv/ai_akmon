@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claude SessionStart hook for the learning-run reminder (C177, ADR 0026/D07).
 
-Records the session in the project's learning record (``<dev root>/local/learning.json``) and,
+Records the session in the project's learning record (``<dev root>/.local/learning.json``) and,
 once enough sessions or days have passed since the learning agent's last run, tells the model (to
 say so once, in its first reply) and the owner to run the ``learning`` skill. Silent when nothing is
 due, and never blocking: a failure goes through the shared crash guard, which exits 0.

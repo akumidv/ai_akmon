@@ -22,6 +22,16 @@ export const AITNA_ROOT_DEFAULT = "_aitna";
 /** The file at the project root that declares a dev-layer root other than the default (ADR 0022 D09). */
 export const DEV_ROOT_FILE = ".aitna-root";
 
+/**
+ * The two dotted folders under the dev root (ADR 0028 D01): `.local` holds the local index and what
+ * only this machine needs, `.ergon` holds one kit per piece of work. Both are gitignored.
+ */
+export const LOCAL_DIR_NAME = ".local";
+export const ERGON_DIR_NAME = ".ergon";
+
+// The folder the local layer had before ADR 0028; named only so the legacy check can find it.
+const _LEGACY_LOCAL_DIR_NAME = "local";
+
 /** How a dev root was found (`DevRoot.origin`). */
 export const ORIGIN_POINTER = "pointer";
 export const ORIGIN_DEFAULT = "default";
@@ -243,6 +253,39 @@ export function aitnaRootName(projectRoot) {
  */
 export function aitnaRoot(projectRoot) {
   return devRoot(projectRoot).path;
+}
+
+/**
+ * The local layer `<dev root>/.local` of `projectRoot` (ADR 0028 D01): the path, computed, not a
+ * claim that it exists. With no project root it is the default-name relative path
+ * (`_aitna/.local`), for reading only, as `aitnaRoot` is.
+ * @param {string | null} projectRoot
+ * @returns {string}
+ */
+export function localRoot(projectRoot) {
+  return pyPath(aitnaRoot(projectRoot), LOCAL_DIR_NAME);
+}
+
+/**
+ * The kit folder `<dev root>/.ergon` of `projectRoot` (ADR 0028 D01): the path, computed, not a
+ * claim that it exists. With no project root it is the default-name relative path
+ * (`_aitna/.ergon`), for reading only, as `aitnaRoot` is.
+ * @param {string | null} projectRoot
+ * @returns {string}
+ */
+export function ergonRoot(projectRoot) {
+  return pyPath(aitnaRoot(projectRoot), ERGON_DIR_NAME);
+}
+
+/**
+ * The pre-0028 local layer `<dev root>/.local` of `projectRoot`. Used only to detect the old
+ * folder and warn that it moves by hand to `.local` and `.ergon` (ADR 0028 D01); akmon never
+ * reads state from it and never moves it. The path, computed, not a claim that it exists.
+ * @param {string | null} projectRoot
+ * @returns {string}
+ */
+export function legacyLocalRoot(projectRoot) {
+  return pyPath(aitnaRoot(projectRoot), _LEGACY_LOCAL_DIR_NAME);
 }
 
 /**

@@ -19,4 +19,4 @@ argv = ["--refresh"]
 exit = 2
 stdout = ""
 stderr = "models: ~/.codex/models_cache.json (providers.codex.catalog) is not valid JSON\n"
-file_absent = ["_aitna/local/model-aliases.json"]
+file_absent = ["_aitna/.local/model-aliases.json"]

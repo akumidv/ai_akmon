@@ -59,7 +59,7 @@ expected_json = '"model-routing.json"'
 [[case]]
 id = "data/local-overlay-rel"
 fn = "local_overlay_rel"
-expected_json = '"local/model-routing.json"'
+expected_json = '".local/model-routing.json"'
 
 [[case]]
 id = "data/local-config-rel"
@@ -217,28 +217,28 @@ expected_json = '"{{dir}}/_aitna/model-routing.json"'
 id = "reg/local-overlay-path-default"
 fn = "local_overlay_path"
 args_json = '[{"$path": "{{dir}}"}]'
-expected_json = '"{{dir}}/_aitna/local/model-routing.json"'
+expected_json = '"{{dir}}/_aitna/.local/model-routing.json"'
 
 [[case]]
 id = "reg/local-overlay-path-pointer"
 fn = "local_overlay_path"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { ".aitna-root" = "meta" }
-expected_json = '"{{dir}}/meta/local/model-routing.json"'
+expected_json = '"{{dir}}/meta/.local/model-routing.json"'
 
 [[case]]
 # The developer-local overlay is the strongest layer: it merges over the project overlay key by key, and a list (a ladder) is replaced whole, not extended.
 id = "reg/load-local-overlay-strongest"
 fn = "load_registry"
 args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
-files = { "akmon/tools/model_routing/registry.json" = '{"a": {"b": 1, "c": 2}, "ladder": ["x", "y", "z"], "k": 0}', "_aitna/model-routing.json" = '{"a": {"c": 3, "d": 4}, "ladder": ["p", "q"], "k": 1}', "_aitna/local/model-routing.json" = '{"a": {"c": 5}, "ladder": ["q"], "n": true}' }
+files = { "akmon/tools/model_routing/registry.json" = '{"a": {"b": 1, "c": 2}, "ladder": ["x", "y", "z"], "k": 0}', "_aitna/model-routing.json" = '{"a": {"c": 3, "d": 4}, "ladder": ["p", "q"], "k": 1}', "_aitna/.local/model-routing.json" = '{"a": {"c": 5}, "ladder": ["q"], "n": true}' }
 expected_json = '{"a": {"b": 1, "c": 5, "d": 4}, "ladder": ["q"], "k": 1, "n": true}'
 
 [[case]]
 id = "reg/load-local-overlay-alone"
 fn = "load_registry"
 args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
-files = { "akmon/tools/model_routing/registry.json" = '{"a": 1, "b": 1}', "_aitna/local/model-routing.json" = '{"b": 2}' }
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1, "b": 1}', "_aitna/.local/model-routing.json" = '{"b": 2}' }
 expected_json = '{"a": 1, "b": 2}'
 
 [[case]]
@@ -246,7 +246,7 @@ expected_json = '{"a": 1, "b": 2}'
 id = "reg/load-local-overlay-under-declared-root"
 fn = "load_registry"
 args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
-files = { ".aitna-root" = "dev", "akmon/tools/model_routing/registry.json" = '{"a": 1}', "dev/local/model-routing.json" = '{"a": 2}', "_aitna/local/model-routing.json" = '{"a": 3}' }
+files = { ".aitna-root" = "dev", "akmon/tools/model_routing/registry.json" = '{"a": 1}', "dev/.local/model-routing.json" = '{"a": 2}', "_aitna/.local/model-routing.json" = '{"a": 3}' }
 expected_json = '{"a": 2}'
 
 [[case]]
@@ -254,7 +254,7 @@ expected_json = '{"a": 2}'
 id = "reg/load-local-overlay-is-dir"
 fn = "load_registry"
 args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
-files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/local/model-routing.json/inner" = "x" }
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/.local/model-routing.json/inner" = "x" }
 expected_json = '{"a": 1}'
 
 [[case]]
@@ -262,8 +262,8 @@ expected_json = '{"a": 1}'
 id = "reg/load-local-overlay-invalid"
 fn = "load_registry"
 args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
-files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/local/model-routing.json" = '{ not json' }
-expected_json = '{"error": "OverlayError", "message": "the routing overlay _aitna/local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)"}'
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/.local/model-routing.json" = '{ not json' }
+expected_json = '{"error": "OverlayError", "message": "the routing overlay _aitna/.local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)"}'
 
 [[case]]
 id = "reg/load-project-overlay-invalid"
@@ -277,8 +277,8 @@ expected_json = '{"error": "OverlayError", "message": "the routing overlay _aitn
 id = "reg/load-local-overlay-not-an-object"
 fn = "load_registry"
 args_json = '[{"$path": "{{dir}}/akmon"}, {"$path": "{{dir}}"}]'
-files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/local/model-routing.json" = '[1, 2]' }
-expected_json = '{"error": "OverlayError", "message": "the routing overlay _aitna/local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)"}'
+files = { "akmon/tools/model_routing/registry.json" = '{"a": 1}', "_aitna/.local/model-routing.json" = '[1, 2]' }
+expected_json = '{"error": "OverlayError", "message": "the routing overlay _aitna/.local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)"}'
 
 [[case]]
 id = "reg/load-without-project"
@@ -766,7 +766,7 @@ expected_json = '{"operation": "review", "model_flag": "-m {model}", "family": n
 id = "so/provider-row-undeclared"
 fn = "provider_row"
 args_json = '[{"$registry": {}}, "ghost", null]'
-expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
+expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/.local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
 id = "so/split-bare"
@@ -842,7 +842,7 @@ expected_json = '"claude"'
 id = "so/family-undeclared-provider"
 fn = "provider_family"
 args_json = '[{"$registry": {}}, "ghost", null, "m"]'
-expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
+expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/.local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
 # The closed family vocabulary is the keys of second_opinion_policy.families, in declared order (D01).
@@ -882,7 +882,7 @@ expected_json = 'null'
 id = "so/session-family-refused"
 fn = "check_session_family"
 args_json = '[{"$registry": {}}, "deepseek", null]'
-expected_json = '''{"error": "ValueError", "message": "--session-family 'deepseek' is not in the family vocabulary (claude, gpt, qwen, gemini); add it by declaring second_opinion_policy.families.deepseek in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team"}'''
+expected_json = '''{"error": "ValueError", "message": "--session-family 'deepseek' is not in the family vocabulary (claude, gpt, qwen, gemini); add it by declaring second_opinion_policy.families.deepseek in _aitna/.local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team"}'''
 
 [[case]]
 id = "so/session-family-overlay-extended"
@@ -1215,7 +1215,7 @@ expected_json = '[["claude", "self"], ["sh2", "same priors as claude"], ["gone",
 id = "so/chain-asks"
 fn = "opinion_asks"
 args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
-expected_json = '["unk: priors unknown for its default model; declare providers.unk.family in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team"]'
+expected_json = '["unk: priors unknown for its default model; declare providers.unk.family in _aitna/.local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team"]'
 
 [[case]]
 # Relativity is a consequence of the self-skip: another session, another rotation of the same ladder.
@@ -1242,19 +1242,19 @@ expected_json = '[["opencode", "session priors unknown"]]'
 id = "so/chain-session-priors-unknown-asks"
 fn = "opinion_asks"
 args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": "x/y"}}, null]'
-expected_json = '["session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'
+expected_json = '["session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/.local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'
 
 [[case]]
 id = "so/chain-session-priors-unknown-no-model-asks"
 fn = "opinion_asks"
 args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh2", "gone", "unk", "multi:a/b:c", "sh3", "dup"], "model_rule": "max"}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "opencode", "family": null, "model": null}}, null]'
-expected_json = '["session opencode: priors unknown; declare providers.opencode.family in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (second_opinion.py --session-family)"]'
+expected_json = '["session opencode: priors unknown; declare providers.opencode.family in _aitna/.local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (second_opinion.py --session-family)"]'
 
 [[case]]
 id = "so/chain-undeclared-ladder-id"
 fn = "resolve_opinion_chain"
 args_json = '[{"$registry": {"set": {"second_opinion_policy": {"ladder": ["claude", "ghost"]}}}}, {"$new": "SecondOpinionSession", "fields": {"provider": "claude", "family": "claude", "model": "opus"}}, null]'
-expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
+expected_json = '''{"error": "KeyError", "message": "second opinion: the ladder names 'ghost', which the providers table does not declare; declare providers.ghost or remove it from second_opinion_policy.ladder in _aitna/.local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
 # The strongest declared model that differs from the session's (D07).
@@ -1304,7 +1304,7 @@ expected_json = '''["unavailable", "second-opinion is on but the provider chain 
 id = "so/head-session-priors-unknown"
 fn = "opinion_head"
 args_json = '[{"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "sh1": {"argv": ["/bin/sh", "-m", "{model}"], "family": "gpt", "models": ["m1", "m2"], "report_dir": "r/sh1/"}, "sh2": {"argv": ["/bin/sh", "-m", "{model}"], "family": "claude", "models": ["m3"], "report_dir": "r/sh2/"}, "gone": {"argv": ["akmon-corpus-no-such-binary"], "family": "gemini", "report_dir": "r/gone/"}, "unk": {"argv": ["/bin/sh"], "report_dir": "r/unk/"}, "multi": {"argv": ["/bin/sh", "-m", "{model}"], "family": null, "model_families": {"a/b:c": "gemini"}, "report_dir": "r/multi/"}, "sh3": {"argv": ["/bin/sh", "-p"], "family": "qwen", "report_dir": "r/sh3/"}, "dup": {"argv": ["/bin/sh", "-m", "{model}"], "family": "llama", "models": ["m2"], "report_dir": "r/dup/"}}, "second_opinion_policy": {"ladder": ["claude", "sh1", "sh3"]}}}}, {"session": {"provider": "opencode", "model": "x/y"}}, null]'
-expected_json = '["unavailable priors=unknown", "session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'
+expected_json = '["unavailable priors=unknown", "session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/.local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'
 
 [[case]]
 id = "so/head-session-unnamed"
@@ -1322,20 +1322,20 @@ expected_json = '{"error": "RetiredKeyError", "message": "the local config .clau
 id = "so/retired-overlay-policy"
 fn = "refuse_retired_keys"
 args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"diversity_ladder": ["other-vendor"]}}}}, {}, null]'
-expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/.local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 id = "so/retired-overlay-vendor"
 fn = "refuse_retired_keys"
 args_json = '[{"$registry": {"merge": {"openai": {"second_opinion": {"report_dir": "x"}}}}}, {}, null]'
-expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/.local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 # Every retired key is named, policy first, then each registry block in order.
 id = "so/retired-overlay-both"
 fn = "refuse_retired_keys"
 args_json = '[{"$registry": {"merge": {"second_opinion_policy": {"diversity_ladder": []}, "openai": {"second_opinion": {}}}}}, {}, null]'
-expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder, openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/.local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder, openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 # With the project root each overlay file is read, strongest first, and the error quotes the one that holds the key.
@@ -1343,15 +1343,15 @@ id = "so/retired-overlay-names-the-local-layer"
 fn = "refuse_retired_keys"
 args_json = '[{"$registry": {}}, {}, {"$path": "{{dir}}"}]'
 kwargs_json = '{"layered": true}'
-files = { "_aitna/model-routing.json" = '{"briefs": {}}', "_aitna/local/model-routing.json" = '{"second_opinion_policy": {"diversity_ladder": []}}' }
-expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+files = { "_aitna/model-routing.json" = '{"briefs": {}}', "_aitna/.local/model-routing.json" = '{"second_opinion_policy": {"diversity_ladder": []}}' }
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/.local/model-routing.json still carries the retired key(s) second_opinion_policy.diversity_ladder (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 id = "so/retired-overlay-names-the-project-layer"
 fn = "refuse_retired_keys"
 args_json = '[{"$registry": {}}, {}, {"$path": "{{dir}}"}]'
 kwargs_json = '{"layered": true}'
-files = { "_aitna/model-routing.json" = '{"openai": {"second_opinion": {"report_dir": "x"}}}', "_aitna/local/model-routing.json" = '{"briefs": {}}' }
+files = { "_aitna/model-routing.json" = '{"openai": {"second_opinion": {"report_dir": "x"}}}', "_aitna/.local/model-routing.json" = '{"briefs": {}}' }
 expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
@@ -2622,7 +2622,7 @@ expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opu
 id = "stat/status-session-priors-unknown"
 fn = "status_lines"
 args_json = '[{"vendor": "anthropic", "orchestrator": "opus", "binding": {"reasoner": "opus", "worker": "haiku", "mid": "sonnet", "auditor": "opus", "escalation": ["sonnet"]}, "second_opinion": true, "available": ["haiku", "sonnet", "opus"], "session": {"provider": "opencode", "model": "x/y"}}, {"$registry": {"set": {"providers": {"claude": {"argv": ["/bin/sh", "-c", "{model}"], "family": "claude", "models": ["haiku", "sonnet", "opus"], "report_dir": "r/claude/"}, "shfake": {"argv": ["/bin/sh", "-m", "{model}"], "family": "qwen", "models": ["small", "big"], "report_dir": "r/shfake/"}, "opencode": {"argv": ["/bin/sh"], "family": null, "model_families": {}, "report_dir": "r/opencode/"}}, "second_opinion_policy": {"ladder": ["claude", "shfake"]}}}}, "x", null]'
-expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable priors=unknown (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`.", "⚠ session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'''
+expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=opus · reasoner=opus · auditor=opus · worker=haiku · mid=sonnet · second-opinion=unavailable priors=unknown (on)", "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals (escalation path: sonnet). In a zoned fan-out, start each call's description with [zone:<label>].", "Self-check: if your actual model is not 'opus', re-run `x --orchestrator <alias>`.", "⚠ session opencode: priors unknown for model x/y; declare providers.opencode.model_families.x/y (or providers.opencode.family) in _aitna/.local/model-routing.json to keep it to yourself, or _aitna/model-routing.json to share it with the team, or record session.family in .claude/model-routing.local.json (init --session-provider, second_opinion.py --session-family)"]'''
 
 [[case]]
 # Semantic: no escalation hint without a ladder; missing binding fields read "?".
@@ -2635,7 +2635,7 @@ expected_json = '''["[akmon] model routing: vendor=anthropic · orchestrator=str
 id = "stat/status-retired-key"
 fn = "status_lines"
 args_json = '[{"orchestrator": "large", "available": ["small", "large"]}, {"$registry": {"merge": {"openai": {"second_opinion": {"cli": "codex"}}}}}, "x", null]'
-expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
+expected_json = '{"error": "RetiredKeyError", "message": "the routing overlay _aitna/.local/model-routing.json or _aitna/model-routing.json still carries the retired key(s) openai.second_opinion (ADR 0024). The second opinion now walks one ladder, `second_opinion_policy.ladder`, over the `providers` table, and a vendor block no longer owns a `second_opinion` object. Delete only the listed keys from this hand-owned file and leave the rest alone: it is deep-merged over the shipped registry, so the shipped providers are inherited. To change what the second opinion uses, declare a `providers` row or replace `second_opinion_policy.ladder` there. The initializer reads this file and will not rewrite it."}'
 
 [[case]]
 id = "stat/rebind-notice-weak"
@@ -3376,7 +3376,7 @@ expected_json = '"opus"'
 id = "alias/resolve-unmapped-refused"
 fn = "resolve_opinion_model"
 args_json = '[{"providers": {"codex": {"operation": "review", "model_flag": "--model {model}", "family": "gpt", "models": ["luna", "terra", "sol"], "aliases": true, "catalog": {"file": "~/.codex/models_cache.json", "format": "codex-models-cache"}}, "claude": {"operation": "review", "family": "claude", "models": ["opus"]}}, "second_opinion_policy": {"ladder": ["codex:default", "claude"], "model_rule": "max"}}, {"codex": {"$new": "ProviderAliases", "fields": {"source": "s", "client": null, "aliases": {"sol": "gpt-6.1-sol"}}}}, "codex", "luna", null]'
-expected_json = '''{"error": "UnresolvedAliasError", "message": "provider 'codex' declares model aliases, and 'luna' has no concrete id in _aitna/local/model-aliases.json; write it with `akmon tool model_routing/models --refresh --provider codex`, pin a concrete id with `--provider codex:<id>`, or run the carrier's own model with `--provider codex:default`"}'''
+expected_json = '''{"error": "UnresolvedAliasError", "message": "provider 'codex' declares model aliases, and 'luna' has no concrete id in _aitna/.local/model-aliases.json; write it with `akmon tool model_routing/models --refresh --provider codex`, pin a concrete id with `--provider codex:<id>`, or run the carrier's own model with `--provider codex:default`"}'''
 
 [[case]]
 id = "alias/is-alias-yes"
@@ -3443,7 +3443,7 @@ expected_json = '"{\n  \"codex\": {\n    \"source\": \"~/x (codex-models-cache)\
 id = "alias/read-file"
 fn = "read_model_aliases"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "_aitna/local/model-aliases.json" = "{\"codex\": {\"source\": \"s\", \"client\": null, \"aliases\": {\"sol\": \"gpt-6.1-sol\"}}}" }
+files = { "_aitna/.local/model-aliases.json" = "{\"codex\": {\"source\": \"s\", \"client\": null, \"aliases\": {\"sol\": \"gpt-6.1-sol\"}}}" }
 expected_json = '{"codex": {"source": "s", "client": null, "aliases": {"sol": "gpt-6.1-sol"}}}'
 
 [[case]]
@@ -3456,21 +3456,21 @@ expected_json = '{}'
 id = "alias/read-file-not-json"
 fn = "read_model_aliases"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "_aitna/local/model-aliases.json" = "{ nope" }
-expected_json = '{"error": "ValueError", "message": "the resolved-aliases file _aitna/local/model-aliases.json is not a valid alias map; it is generated and never hand-edited, so delete it and run `akmon tool model_routing/models --refresh`"}'
+files = { "_aitna/.local/model-aliases.json" = "{ nope" }
+expected_json = '{"error": "ValueError", "message": "the resolved-aliases file _aitna/.local/model-aliases.json is not a valid alias map; it is generated and never hand-edited, so delete it and run `akmon tool model_routing/models --refresh`"}'
 
 [[case]]
 id = "alias/read-file-wrong-shape"
 fn = "read_model_aliases"
 args_json = '[{"$path": "{{dir}}"}]'
-files = { "_aitna/local/model-aliases.json" = "{\"codex\": {\"source\": \"s\", \"client\": 3, \"aliases\": {}}}" }
-expected_json = '{"error": "ValueError", "message": "the resolved-aliases file _aitna/local/model-aliases.json is not a valid alias map; it is generated and never hand-edited, so delete it and run `akmon tool model_routing/models --refresh`"}'
+files = { "_aitna/.local/model-aliases.json" = "{\"codex\": {\"source\": \"s\", \"client\": 3, \"aliases\": {}}}" }
+expected_json = '{"error": "ValueError", "message": "the resolved-aliases file _aitna/.local/model-aliases.json is not a valid alias map; it is generated and never hand-edited, so delete it and run `akmon tool model_routing/models --refresh`"}'
 
 [[case]]
 id = "alias/local-aliases-path"
 fn = "local_aliases_path"
 args_json = '[{"$path": "{{dir}}"}]'
-expected_json = '"{{dir}}/_aitna/local/model-aliases.json"'
+expected_json = '"{{dir}}/_aitna/.local/model-aliases.json"'
 
 # Reasoning effort (ADR 0024 D17): `model@effort` parsed at the last `@`, checked against the row's levels, appended as the row's flag.
 
@@ -3540,7 +3540,7 @@ expected_json = 'null'
 id = "effort/check-unsupported"
 fn = "check_effort"
 args_json = '[{"$registry": {}}, "qwen", "high", null]'
-expected_json = '''{"error": "EffortError", "message": "provider 'qwen' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.qwen.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
+expected_json = '''{"error": "EffortError", "message": "provider 'qwen' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.qwen.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/.local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
 id = "effort/check-unknown-level"
@@ -3610,7 +3610,7 @@ expected_json = '["d-bin", "-m", "m", "--think", "high", "p"]'
 id = "effort/command-unsupported"
 fn = "opinion_command"
 args_json = '[{"$registry": {}}, "opencode", null, {"$new": "OpinionRun", "fields": {"effort": "high", "prompt": "p"}}]'
-expected_json = '''{"error": "EffortError", "message": "provider 'opencode' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.opencode.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
+expected_json = '''{"error": "EffortError", "message": "provider 'opencode' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.opencode.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/.local/model-routing.json (yours) or _aitna/model-routing.json (the team's)"}'''
 
 [[case]]
 # A ladder entry's effort travels into its target; the second `sh1` entry is skipped as the same family.

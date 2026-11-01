@@ -1,0 +1,23 @@
+id = "tools/park-write-bad-id"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# An id that is not a typed task id (`c183`: lowercase) is refused before anything is written:
+# exit 1, one `error:` line on stderr naming the value, no kit and no index.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+
+[run]
+tool = "park/park"
+argv = ["write", "c183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS"]
+
+[expected]
+exit = 1
+stderr = "error: id c183 is not a task id (a capital letter or _T followed by digits, e.g. C183 or _T3)\n"
+stdout = ""
+file_absent = ["_aitna/.ergon/c183-park-helper", "_aitna/.local/TASKS.md"]

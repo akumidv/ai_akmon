@@ -18,4 +18,4 @@ argv = ["learn", "mark"]
 exit = 2
 stderr = "[akmon] no project root at or above {{root}}: expected AGENTS.md beside .aitna-root, _aitna/akmon or _aitna/.akmon.toml. Falling back to that directory, so anything this command reads or writes is relative to it; pass --project-root to name the root instead.\n"
 stdout = ""
-file_absent = ["_aitna/local/learning.json"]
+file_absent = ["_aitna/.local/learning.json"]

@@ -19,4 +19,4 @@ argv = ["--refresh"]
 exit = 2
 stdout = ""
 stderr = "models: ~/.codex/models_cache.json (providers.codex.catalog.file) does not exist; the carrier writes it, so start the carrier once or point the row at its catalog\n"
-file_absent = ["_aitna/local/model-aliases.json"]
+file_absent = ["_aitna/.local/model-aliases.json"]

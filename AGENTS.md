@@ -48,7 +48,7 @@ the shipped block states it directly: Codex does not expand nested `@` imports i
   backlog stay in `meta/`.
 - Record non-trivial implementation work in `meta/TASKS.md` before code.
 - **`<DEV>` is `meta/`.** akmon has no `_aitna/`; its `.aitna-root` file declares `meta`, so its local
-  layer is `meta/local/` and its development skills would live in `meta/skills/`
+  layer is `meta/.local/` and its development skills would live in `meta/skills/`
   ([ADR 0022](docs/adr/0022-local-layer-index-and-plans.md)).
 - To look for alternatives to a design choice, or to check a decision against how other projects
   solved it, open [`meta/reviews/alternatives/`](meta/reviews/alternatives/README.md). It is

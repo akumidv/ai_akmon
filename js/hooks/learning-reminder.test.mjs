@@ -24,7 +24,7 @@ function project(record = '[learning]\nreminder_sessions = "2"\n') {
   fs.mkdirSync(path.join(root, "_aitna"));
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# a\n");
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), record);
-  return { root, state: path.join(root, "_aitna", "local", "learning.json") };
+  return { root, state: path.join(root, "_aitna", ".local", "learning.json") };
 }
 
 /**

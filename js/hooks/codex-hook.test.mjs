@@ -22,7 +22,7 @@ function project() {
   fs.mkdirSync(path.join(root, "_aitna"));
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# a\n");
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), '[learning]\nreminder_sessions = "2"\n');
-  return { root, state: path.join(root, "_aitna", "local", "learning.json") };
+  return { root, state: path.join(root, "_aitna", ".local", "learning.json") };
 }
 
 /**

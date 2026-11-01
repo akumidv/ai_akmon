@@ -367,6 +367,8 @@ SNAPSHOT_FILES = (
     "tools/model_routing/gate_pack.py",
     "tools/model_routing/coverage_map.py",
     "tools/model_routing/stats.py",
+    "tools/park/park.py",
+    "tools/park/park.json",
     "tools/release/release.json",
     "tools/release/release_check.py",
     "tools/tasks/archive.py",

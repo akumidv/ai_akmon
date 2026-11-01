@@ -1855,7 +1855,7 @@ test("routing overlay: the merged ladder and each overlay-declared row are check
       ],
     );
     // the developer-local overlay is gitignored and absent in CI: it is never read
-    put(root, "_aitna/local/model-routing.json", JSON.stringify({ providers: { x: { family: "mimo" } } }));
+    put(root, "_aitna/.local/model-routing.json", JSON.stringify({ providers: { x: { family: "mimo" } } }));
     fs.rmSync(posix.join(root, "_aitna/model-routing.json"));
     assert.deepEqual(overlayFindings(root, {}), []);
   });
@@ -2068,6 +2068,104 @@ test("CI: workflows are read in code point order, .yml before .yaml, and the pac
       recorded(root, (v) => v.checkCi()),
       ["ok ci.akmon-checks CI checks akmon generated pointers and verify"],
     );
+  });
+});
+
+// -- the dotted layer (ADR 0028 D01) -----------------------------------------------------------
+
+test("local layer: a project without the folders raises no finding, and a legacy local/ is one warning naming the move", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    assert.deepEqual(
+      recorded(root, (v) => v.checkLocalLayer()),
+      [],
+    );
+    put(root, "_aitna/local/handoff/C1-x/HANDOFF.md", "x\n");
+    const verifier = new Verifier(root);
+    verifier.checkLocalLayer();
+    const [[severity, target, message, fix], ...rest] = of(verifier, "layout.local-legacy");
+    assert.deepEqual(rest, []);
+    assert.equal(severity, "warn");
+    assert.equal(target, "_aitna/local");
+    assert.match(message, /_aitna\/local\/ to _aitna\/\.local\//);
+    assert.match(message, /_aitna\/local\/handoff\/ and _aitna\/local\/plans\/ into _aitna\/\.ergon\/<id>-<name>\//);
+    assert.match(message, /never moves it silently/);
+    assert.match(String(fix), /^Move the content to _aitna\/\.local\/ and _aitna\/\.ergon\/<id>-<name>\/ yourself/);
+    assert.equal(fs.existsSync(posix.join(root, "_aitna/local/handoff/C1-x/HANDOFF.md")), true);
+    assert.equal(fs.existsSync(posix.join(root, "_aitna/.local")), false);
+  });
+});
+
+test("local layer: the legacy folder follows a declared dev root", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    put(root, ".aitna-root", "tools/ai\n");
+    put(root, "tools/ai/local/TASKS.md", "x\n");
+    const verifier = new Verifier(root);
+    verifier.checkLocalLayer();
+    assert.deepEqual(
+      of(verifier, "layout.local-legacy").map((row) => row[1]),
+      ["tools/ai/local"],
+    );
+  });
+});
+
+test("local layer: an unignored .local or .ergon is a warning on .gitignore, an ignored one is silent", async () => {
+  await withScratch((scratch) => {
+    const root = project(scratch);
+    for (const name of [".local", ".ergon"]) {
+      put(root, `_aitna/${name}/x`, "x\n");
+      const verifier = new Verifier(root);
+      verifier.checkLocalLayer();
+      const [[severity, target, message, fix], ...rest] = of(verifier, "gitignore.local-layer");
+      assert.deepEqual(rest, [], name);
+      assert.equal(severity, "warn");
+      assert.equal(target, ".gitignore");
+      assert.equal(
+        message,
+        `_aitna/${name}/ exists but .gitignore does not ignore it, so what only this machine needs could be committed (ADR 0028 D01)`,
+      );
+      assert.equal(fix, `Add _aitna/${name}/ to .gitignore, the line \`akmon init\` writes for the dotted layer.`);
+      fs.rmSync(posix.join(root, "_aitna", name), { recursive: true });
+    }
+    put(root, "_aitna/.local/x", "x\n");
+    put(root, "_aitna/.ergon/x", "x\n");
+    for (const [text, expected] of /** @type {Array<[string, number]>} */ ([
+      ["*.env\n_aitna/.local/\n_aitna/.ergon/\n", 0],
+      ["/_aitna/.local\n.ergon/\n", 0],
+      ["_aitna/\n", 0],
+      ["# _aitna/.local/\n_aitna/.ergon/\n", 1],
+      ["_aitna/.local/\n_aitna/.ergon/\n!_aitna/.ergon/\n", 1],
+      ["_aitna/local/\n", 2],
+      ["", 2],
+    ])) {
+      put(root, ".gitignore", text);
+      const verifier = new Verifier(root);
+      verifier.checkLocalLayer();
+      assert.equal(of(verifier, "gitignore.local-layer").length, expected, JSON.stringify(text));
+    }
+    fs.rmSync(posix.join(root, ".gitignore"));
+    const verifier = new Verifier(root);
+    verifier.checkLocalLayer();
+    assert.equal(of(verifier, "gitignore.local-layer").length, 2);
+  });
+});
+
+test("local layer: the warnings fail only under --strict", async () => {
+  await withScratch(async (scratch) => {
+    const root = project(scratch);
+    syncWrite(root);
+    put(root, "_aitna/local/x", "x\n");
+    const empty = posix.join(scratch, "empty-path");
+    fs.mkdirSync(empty);
+    await withPath(empty, async () => {
+      await withoutAitnaRoot(async () => {
+        const plain = await run(["--project-root", root]);
+        assert.equal(plain.code, 0, plain.stdout);
+        assert.match(plain.stdout, /^WARN layout\.local-legacy _aitna\/local: /m);
+        assert.equal((await run(["--project-root", root, "--strict", "--quiet"])).code, 1);
+      });
+    });
   });
 });
 

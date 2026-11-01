@@ -38,7 +38,8 @@ One task = **one line**:
   `[#…]` is provenance, not the id. Distinct from the trailing `[detail](link)`.
 - **status** — exactly one of `active | blocked | deferred | done`. `blocked` = waiting on an
   external dependency; `deferred` = a deliberate not-now (still a real intent, just parked).
-  The local index adds `handoff` — set aside for another session, resumed from its package.
+  Work set aside on the owner's word is parked in its kit; its state is read from the kit, never
+  a status.
 - **a status must be checkable.** "complete in the tree", "done locally" and their variants are not
   statuses: they describe an uncommitted working copy nobody else can verify, and they outlive the
   code they claim — a task can end up asserting finished work that no commit ever carried and whose
@@ -54,9 +55,9 @@ One task = **one line**:
   detail exists; omit only for a one-line task that needs none.
 - **A paragraph is the size criterion for a task** in `TASKS.md`, project or local. A task whose
   description does not fit one — how to reproduce it, data, a longer statement — is one file,
-  `<DEV>/tasks/<id>-<name>.md` (a local task: `<DEV>/local/tasks/<id>-<name>.md`), linked as its
-  detail. It holds the task's own description, not a decision (an ADR block) or an open design
-  question (a design doc).
+  `<DEV>/tasks/<id>-<name>.md`, linked as its detail. It holds the task's own description, not a
+  decision (an ADR block) or an open design question (a design doc). Local work that outgrows a
+  paragraph is a kit (§ The local layer).
 
 A short multi-line note under an entry is allowed **only** for a genuine loose end that has no
 other home yet — and that is a signal to write the design doc, not to grow the entry.
@@ -75,49 +76,54 @@ scheme applies to the live backlog and every new task. Don't renumber history.
   project's `_aitna/TASKS.md`.
 - **Detail** — lives in `docs/design/` docs, thematic `docs/adr/` ADR blocks, or task/evidence
   records. `TASKS.md` links; it does not duplicate.
-- **`<DEV>/local/`** — the ignored local layer: the local index and the materials of local work,
-  owned by [The local layer](#the-local-layer) below. It is input, not a record: what local work
-  concludes becomes a `docs/design/` doc, an ADR block, or a `TASKS.md` row.
+- **`<DEV>/.local/`** — the ignored local layer: what only this machine needs (learning state,
+  model overlays). Local work lives in kits under `<DEV>/.ergon/`, owned by
+  [The local layer](#the-local-layer) below. A kit is input, not a record: what local work
+  concludes still becomes a design doc, an ADR block or a `TASKS.md` row.
 - An optional **Status** block at the top of `TASKS.md` is fine: ≤5 lines, current focus only.
 
 ## The local layer
 
 `<DEV>` is the dev-layer root, `<dev root>` (default `_aitna`).
-Everything a session resumes from lives under `<DEV>/local/`, **gitignored by one rule**. Raw
+Everything a session resumes from lives under `<DEV>/.ergon/`, with `<DEV>/.local/` for machine
+state; both are **gitignored**. Raw
 material read once (another model's review, an export, a work area) lives in `.tmp/` at the
 project root, also ignored and inside the project so no outside permission is needed; nothing a
 task or a plan needs is kept there.
 
 ```
 <DEV>/TASKS.md  TASKS_ARCHIVE.md        tracked project index
-<DEV>/local/TASKS.md  TASKS_ARCHIVE.md  local index — the same row format
 <DEV>/tasks/<id>-<name>.md              a project task's description, when it does not fit a paragraph
-<DEV>/local/tasks/<id>-<name>.md        a local task's description, when it does not fit a paragraph
-<DEV>/local/plans/<id>-<name>.md        a plan: one working document
-<DEV>/local/handoff/<id>-<name>/        a self-sufficient kit: HANDOFF, RESUME, prompts, and the evidence,
-                                        probes and reports a task or a plan needs beyond its file
+<DEV>/.local/                           machine state and overlays (learning state, model overlays)
+<DEV>/.ergon/<id>-<name>/PLAN.md        a plan: one working document, inside its kit, made of jobs
+<DEV>/.ergon/<id>-<name>/                a kit: one folder per piece of work, named for its primary task — PLAN,
+                                        HOLDER, PARK, RESUME, jobs/, and the evidence, probes and reports it needs
+<DEV>/.ergon/.closed/<id>-<name>/       a closed kit, moved there on the owner's word
+.worktrees/<id>-<name>.<n>/             at the project root: a parallel job's worktree (ignored)
 <DEV>/skills/                           development skills, apart from the shipped root `skills/`
 ```
 
-- **Id.** A local row's id is the project id when the row is the local companion of a project task
-  (its status stays in the project row), otherwise `_T<n>`: `_T` marks the row local, `<n>` counts
-  over the local index and its archive and is never reused. A slug is not an id. The id leads the
-  name, `local/<kind>/<id>-<name>`, where `<name>` is a short kebab name of its subject, and every
-  plan, task file and handoff folder has a row; local rows are exempt from the typed id, which
-  governs the project backlog. A handoff is a session package with a row of its own (status
-  `handoff`, token `members`) and stands on its own: the material a task's file or a plan's one
-  document cannot hold lives in it. It carries no copy of the local rows or the plan until the
-  owner says a transfer to another machine needs them.
+- **Id.** There are no local rows. A kit is named `<id>-<name>` for its plan's primary task; work
+  with no backlog task takes `_T<n>`: `_T` marks it local, and `<n>` is counted over the kits, live
+  and closed, and never reused. A slug is not an id; `<name>` is a short kebab name of its subject.
+  The kit's `PLAN.md` header (id, name, title, tasks) is its local record, and `park list` is the
+  local index. The plan names its tasks; a task row never names its plan. A transfer to another
+  machine is copying the kit, which carries its jobs.
 - **Direction.** A local record may reference project material. A tracked file never references a
-  path under `local/`: a tracked reference is dead on every other machine. Promoting a local record
+  path under `.local/` or `.ergon/`: a tracked reference is dead on every other machine. Promoting a local record
   is refused while a local reference remains in it. Once `verify` carries the check, a tracked file that
-  links or names a path under `local/` is an error; a local slug written in prose cannot be
+  links or names a path under `.local/` or `.ergon/` is an error; a local slug written in prose cannot be
   checked and is a rule only.
 - **No per-task folder in the project tree.** A task's requirements are its row, a paragraph, or
-  one description file linked from the row; its working materials are local. A finished local task
-  stays in the local archive until the owner prunes it.
-- **Handoff.** The line of a work package set aside for another session goes to the local index with
-  the status `handoff`, which only the local index has; a project row is not changed by it.
+  one description file linked from the row; its working materials are local. A closed kit moves to
+  `<DEV>/.ergon/.closed/` on the owner's word and stays until the owner prunes it.
+- **Parked.** Work set aside on the owner's word is parked in its kit: its state is read from the
+  kit's lease and park note, never typed, and no row changes.
+- **A task is not a job.** A task is what a backlog records; a plan names its tasks, and its own
+  units — jobs, and the steps inside them — never become rows. What a plan's work discovers is
+  refined in the plan when it falls within the plan's target and its tasks: a finer or new step goes
+  into its job's `JOB.md`, a new job or a refinement branch into `PLAN.md`. What lies beyond the
+  target and the plan's tasks becomes a task here, on the owner's word.
 - **Resume prompts** name paths from the project root only.
 - **A plan** is a local working document, not a record: [design-flow § Plans](design-flow.md#plans).
 

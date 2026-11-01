@@ -8,7 +8,7 @@ covers = ["tool:model_routing/second_opinion"]
 # The parser's own words are not part of the message, so the line is the same on both implementations.
 
 [fixture.files]
-"_aitna/local/model-routing.json" = "{ not json"
+"_aitna/.local/model-routing.json" = "{ not json"
 
 [run]
 tool = "model_routing/second_opinion"
@@ -22,5 +22,5 @@ argv = [
 
 [expected]
 exit = 2
-stderr = "second-opinion: the routing overlay _aitna/local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)\n"
+stderr = "second-opinion: the routing overlay _aitna/.local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)\n"
 stdout = ""

@@ -164,6 +164,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "tools/model_routing/init.py",
         "tools/model_routing/models.py",
         "tools/model_routing/second_opinion.py",
+        "tools/park/park.json",
         "tools/release/release.json",
         "tools/tasks/archive.json",
     ):
@@ -399,7 +400,7 @@ def _check_session_start_output(fixture: Path, vendor: str, command: str, stdout
     are silent by design, so only these are required to speak).
     """
     if "learning-reminder" in command:
-        if not list(fixture.glob("*/local/learning.json")):
+        if not list(fixture.glob("*/.local/learning.json")):
             raise RuntimeError(f"learning-reminder hook recorded no session ({label})")
         return 0
     if not stdout.strip():

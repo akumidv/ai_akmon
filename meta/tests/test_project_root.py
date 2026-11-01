@@ -43,6 +43,25 @@ def _package_root(tmp_path: Path, aitna: str = "_aitna") -> Path:
 # --------------------------------------------------------------------------------------
 
 
+def test_the_dotted_layer_folders_sit_under_the_dev_root(tmp_path):
+    """ADR 0028 D01: ``.local`` and ``.ergon`` under the dev root, computed and never created."""
+    assert (project_root.LOCAL_DIR_NAME, project_root.ERGON_DIR_NAME) == (".local", ".ergon")
+    assert project_root.local_root(tmp_path) == tmp_path / "_aitna" / ".local"
+    assert project_root.ergon_root(tmp_path) == tmp_path / "_aitna" / ".ergon"
+    assert project_root.legacy_local_root(tmp_path) == tmp_path / "_aitna" / "local"
+    (tmp_path / ".aitna-root").write_text("tools/ai\n", encoding="utf-8")
+    assert project_root.local_root(tmp_path) == tmp_path / "tools" / "ai" / ".local"
+    assert project_root.ergon_root(tmp_path) == tmp_path / "tools" / "ai" / ".ergon"
+    assert project_root.legacy_local_root(tmp_path) == tmp_path / "tools" / "ai" / "local"
+    assert not project_root.local_root(tmp_path).exists()
+
+
+def test_the_dotted_layer_without_a_project_root_is_the_default_name_path():
+    assert project_root.local_root(None) == Path("_aitna/.local")
+    assert project_root.ergon_root(None) == Path("_aitna/.ergon")
+    assert project_root.legacy_local_root(None) == Path("_aitna/local")
+
+
 def test_find_project_root_walks_up_from_nested_cwd(tmp_path):
     root = _mounted_root(tmp_path)
     nested = root / "src" / "pkg"

@@ -35,6 +35,14 @@ AITNA_ROOT_DEFAULT = "_aitna"
 # The file at the project root that declares a dev-layer root other than the default.
 DEV_ROOT_FILE = ".aitna-root"
 
+# The two dotted folders under the dev root (ADR 0028 D01): ``.local`` holds the local index and
+# what only this machine needs, ``.ergon`` holds one kit per piece of work. Both are gitignored.
+LOCAL_DIR_NAME = ".local"
+ERGON_DIR_NAME = ".ergon"
+
+# The folder the local layer had before ADR 0028; named only so the legacy check can find it.
+_LEGACY_LOCAL_DIR_NAME = "local"
+
 # How a dev root was found (``DevRoot.origin``).
 ORIGIN_POINTER = "pointer"
 ORIGIN_DEFAULT = "default"
@@ -146,6 +154,34 @@ def aitna_root_name(project_root: Path | None) -> str:
 def aitna_root(project_root: Path | None) -> Path:
     """Absolute dev-layer root for ``project_root`` (see ``dev_root``)."""
     return dev_root(project_root).path
+
+
+def local_root(project_root: Path | None) -> Path:
+    """The local layer ``<dev root>/.local`` of ``project_root`` (ADR 0028 D01).
+
+    The path, computed — not a claim that it exists. With no project root it is the default-name
+    relative path (``_aitna/.local``), usable for reading only, as ``aitna_root`` is.
+    """
+    return aitna_root(project_root) / LOCAL_DIR_NAME
+
+
+def ergon_root(project_root: Path | None) -> Path:
+    """The kit folder ``<dev root>/.ergon`` of ``project_root`` (ADR 0028 D01).
+
+    The path, computed — not a claim that it exists. With no project root it is the default-name
+    relative path (``_aitna/.ergon``), usable for reading only, as ``aitna_root`` is.
+    """
+    return aitna_root(project_root) / ERGON_DIR_NAME
+
+
+def legacy_local_root(project_root: Path | None) -> Path:
+    """The pre-0028 local layer ``<dev root>/.local`` of ``project_root``.
+
+    Used only to detect the old folder and warn that it moves by hand to ``.local`` and
+    ``.ergon`` (ADR 0028 D01); akmon never reads state from it and never moves it. The path,
+    computed — not a claim that it exists.
+    """
+    return aitna_root(project_root) / _LEGACY_LOCAL_DIR_NAME
 
 
 def akmon_mount(project_root: Path | None) -> Path:

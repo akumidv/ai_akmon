@@ -15,5 +15,5 @@ argv = ["--gate", "design-align", "--gate-pack", "docs/gate-pack.md", "--session
 
 [expected]
 exit = 2
-stderr = "second-opinion: provider 'opencode' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.opencode.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/local/model-routing.json (yours) or _aitna/model-routing.json (the team's)\n"
+stderr = "second-opinion: provider 'opencode' declares no `efforts`, so the effort 'high' cannot be sent to it; drop '@high', or declare providers.opencode.efforts (a flag holding {effort} and the levels, weakest first) in _aitna/.local/model-routing.json (yours) or _aitna/model-routing.json (the team's)\n"
 stdout = ""

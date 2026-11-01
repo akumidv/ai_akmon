@@ -19,6 +19,7 @@
     "model_routing/models",
     "model_routing/second_opinion",
     "model_routing/stats",
+    "park/park",
     "release/release_check",
     "tasks/archive"
   ]

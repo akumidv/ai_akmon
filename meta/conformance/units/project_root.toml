@@ -12,7 +12,9 @@
 #
 # Families (the `id` prefix): `dev` -- dev_root: the pointer read, the default, no project root and the
 # refusals; `validated` -- validated_dev_root_name, the shared check (also the `akmon init --aitna-root`
-# one); `name` -- aitna_root_name, aitna_root and akmon_mount over the same declarations; `is` --
+# one); `name` -- aitna_root_name, aitna_root and akmon_mount over the same declarations; `local`, `ergon`
+# and `legacy` -- local_root, ergon_root and legacy_local_root (ADR 0028 D01), the dotted folders and the
+# pre-0028 `local` under that root; `is` --
 # is_project_root's markers (AGENTS.md beside the pointer, the record, or the mount); `locate` --
 # locate_project_root, the walk that answers None where find_project_root guesses; `find` -- the
 # fallback; `resolve` -- the root a command works in and the notice it prints when it had to guess;
@@ -342,6 +344,63 @@ id = "mount/no-project-root"
 fn = "akmon_mount"
 args_json = '[null]'
 expected_json = '"_aitna/akmon"'
+
+[[case]]
+id = "local/default"
+fn = "local_root"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '"{{dir}}/_aitna/.local"'
+
+[[case]]
+id = "local/pointer"
+fn = "local_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
+expected_json = '"{{dir}}/tools/ai/.local"'
+
+[[case]]
+id = "local/no-project-root"
+fn = "local_root"
+args_json = '[null]'
+expected_json = '"_aitna/.local"'
+
+[[case]]
+id = "ergon/default"
+fn = "ergon_root"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '"{{dir}}/_aitna/.ergon"'
+
+[[case]]
+id = "ergon/pointer"
+fn = "ergon_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
+expected_json = '"{{dir}}/tools/ai/.ergon"'
+
+[[case]]
+id = "ergon/no-project-root"
+fn = "ergon_root"
+args_json = '[null]'
+expected_json = '"_aitna/.ergon"'
+
+[[case]]
+id = "legacy/default"
+fn = "legacy_local_root"
+args_json = '[{"$path": "{{dir}}"}]'
+expected_json = '"{{dir}}/_aitna/local"'
+
+[[case]]
+id = "legacy/pointer"
+fn = "legacy_local_root"
+args_json = '[{"$path": "{{dir}}"}]'
+files = { ".aitna-root" = "tools/ai" }
+expected_json = '"{{dir}}/tools/ai/local"'
+
+[[case]]
+id = "legacy/no-project-root"
+fn = "legacy_local_root"
+args_json = '[null]'
+expected_json = '"_aitna/local"'
 
 [[case]]
 # The declaration is a marker of its own: AGENTS.md beside `.aitna-root` is a project, with no record and no mount.

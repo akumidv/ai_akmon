@@ -15,8 +15,13 @@ import {
   aitnaRoot,
   aitnaRootName,
   akmonMount,
+  ERGON_DIR_NAME,
+  ergonRoot,
   findProjectRoot,
   isProjectRoot,
+  legacyLocalRoot,
+  LOCAL_DIR_NAME,
+  localRoot,
   locateProjectRoot,
   resolveProjectRoot,
   validatedDevRootName,
@@ -39,6 +44,28 @@ test("the default dev-layer name is _aitna, and none found answers it too", () =
   assert.equal(aitnaRoot(root), `${root}/_aitna`);
   assert.equal(akmonMount(root), `${root}/_aitna/akmon`);
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("the dotted layer folders sit under the dev root, and none found answers the default-name path (ADR 0028 D01)", () => {
+  assert.equal(LOCAL_DIR_NAME, ".local");
+  assert.equal(ERGON_DIR_NAME, ".ergon");
+  assert.equal(localRoot(null), "_aitna/.local");
+  assert.equal(ergonRoot(null), "_aitna/.ergon");
+  assert.equal(legacyLocalRoot(null), "_aitna/local");
+  const root = tmpdir();
+  try {
+    assert.equal(localRoot(root), `${root}/_aitna/.local`);
+    assert.equal(ergonRoot(root), `${root}/_aitna/.ergon`);
+    assert.equal(legacyLocalRoot(root), `${root}/_aitna/local`);
+    fs.writeFileSync(posix.join(root, ".aitna-root"), "tools/ai\n");
+    assert.equal(localRoot(root), `${root}/tools/ai/.local`);
+    assert.equal(ergonRoot(root), `${root}/tools/ai/.ergon`);
+    assert.equal(legacyLocalRoot(root), `${root}/tools/ai/local`);
+    // computed, never a claim that the folder exists
+    assert.equal(fs.existsSync(localRoot(root)), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test(".aitna-root relocates the dev layer; slashes strip; a refused value raises", () => {

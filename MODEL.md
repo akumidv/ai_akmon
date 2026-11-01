@@ -78,14 +78,14 @@ a layer; a role is the reusable definition (here), and an agent is defined in a 
 Does this artifact help DEVELOP this project — or USE it from outside?
 ├─ DEVELOP ─► common to all my projects, or specific to this one?
 │            ├─ common       → SHARED → _aitna/akmon/   (this submodule)
-│            └─ this project  → LOCAL  → _aitna/{skills,tools,memory,agents,local}/
+│            └─ this project  → LOCAL  → _aitna/{skills,tools,memory,agents,.local}/
 └─ USE from outside ► USAGE → root skills/ (+ tools/ where applicable)
 ```
 
 | Layer | Job | Consumer | Lives in |
 |---|---|---|---|
 | **SHARED** | assist development in general | any of my projects | `_aitna/akmon/` |
-| **LOCAL** | assist development of *this* project | this repo's developer | `_aitna/{skills,tools,memory,agents,local}/` |
+| **LOCAL** | assist development of *this* project | this repo's developer | `_aitna/{skills,tools,memory,agents,.local}/` |
 | **USAGE** | assist *using* what the project exposes | a downstream project | root `skills/` (+ `tools/`) |
 
 SHARED+LOCAL point inward (building this repo); USAGE points outward.
@@ -95,7 +95,7 @@ by declaring the root in its `.aitna-root` file (a project-root-relative path, e
 akmon then mounts at `<dev root>/akmon` and the tooling derives every path from it. No
 `.aitna-root` file → `_aitna` ([BOOTSTRAP](BOOTSTRAP.md#a-what-the-agent-does-on-attach)).
 
-The LOCAL layer also holds the working state of a session: `<DEV>/local/`, gitignored, indexed in
+The LOCAL layer also holds the working state of a session: `<DEV>/.local/`, gitignored, indexed in
 the project row format and never referenced from a tracked file
 ([tasks](pipelines/tasks.md#the-local-layer)). `<DEV>` is the dev-layer root, `<dev root>`.
 Development skills live in `<DEV>/skills/`, apart from the shipped root `skills/`.

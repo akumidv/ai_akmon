@@ -1,0 +1,23 @@
+id = "tools/park-write-no-project-root-refused"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A writer of the local layer stops where no project root is found (ADR 0022 D09): with no project
+# root at or above the working directory and no --root, `write` reports the notice as its one
+# `error:` line, exits 1 and writes neither a kit nor an index.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS"]
+
+[expected]
+exit = 1
+stderr = "error: [akmon] no project root at or above {{root}}: expected AGENTS.md beside .aitna-root, _aitna/akmon or _aitna/.akmon.toml. Falling back to that directory, so anything this command reads or writes is relative to it; pass --project-root to name the root instead.\n"
+stdout = ""
+file_absent = ["_aitna/.ergon/C183-park-helper", "_aitna/.local/TASKS.md"]

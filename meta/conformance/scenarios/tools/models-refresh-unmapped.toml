@@ -20,7 +20,7 @@ argv = ["--refresh"]
 [expected]
 exit = 0
 stderr = ""
-stdout = "catalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=(unknown)\n  luna → acme-6-luna\n  sol → gpt-6.1-sol\n  terra: no match in the catalog; left unmapped\nwrote _aitna/local/model-aliases.json\n"
+stdout = "catalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=(unknown)\n  luna → acme-6-luna\n  sol → gpt-6.1-sol\n  terra: no match in the catalog; left unmapped\nwrote _aitna/.local/model-aliases.json\n"
 
 [expected.files]
-"_aitna/local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": null,\n    \"aliases\": {\n      \"luna\": \"acme-6-luna\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"
+"_aitna/.local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": null,\n    \"aliases\": {\n      \"luna\": \"acme-6-luna\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"

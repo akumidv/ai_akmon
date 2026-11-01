@@ -4,12 +4,12 @@ kind = "tool"
 covers = ["tool:model_routing/second_opinion"]
 
 # An alias pin of the shipped codex row (`aliases: true`) is replaced by the concrete id the local, generated
-# `<dev root>/local/model-aliases.json` maps it to (ADR 0024 D16): the command carries `gpt-6.1-sol` and the
+# `<dev root>/.local/model-aliases.json` maps it to (ADR 0024 D16): the command carries `gpt-6.1-sol` and the
 # header records `sol→gpt-6.1-sol`, the concrete model run.
 
 [fixture.files]
 "docs/gate-pack.md" = "Gate material: findings A and B, against yardstick Y.\n"
-"_aitna/local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": \"0.164.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"terra\": \"gpt-6.1-terra\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"
+"_aitna/.local/model-aliases.json" = "{\n  \"codex\": {\n    \"source\": \"~/.codex/models_cache.json (codex-models-cache)\",\n    \"client\": \"0.164.0\",\n    \"aliases\": {\n      \"luna\": \"gpt-6-luna\",\n      \"terra\": \"gpt-6.1-terra\",\n      \"sol\": \"gpt-6.1-sol\"\n    }\n  }\n}\n"
 
 [run]
 tool = "model_routing/second_opinion"

@@ -1267,7 +1267,7 @@ test(".gitignore gains only the lines it lacks, with no dev-layer venv block and
   await run(["--yes", "--project-root", fresh]);
   assert.ok(
     text(fresh, ".gitignore").startsWith(
-      "# secrets\n*.env\n!*.env.example\n\n# Node dependencies\nnode_modules/\n\n# local layer (index, plans, handoffs, session state) — never committed\n_aitna/local/\n\n# akmon model routing",
+      "# secrets\n*.env\n!*.env.example\n\n# Node dependencies\nnode_modules/\n\n# local layer (index, session state), kits and scratch — never committed\n_aitna/.local/\n_aitna/.ergon/\n.tmp/\n\n# akmon model routing",
     ),
   );
 });

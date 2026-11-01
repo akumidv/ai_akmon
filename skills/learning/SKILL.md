@@ -79,6 +79,6 @@ Declare `🧭 role: learn — <focus>` before starting.
 ## Boundaries
 
 - Reads this project's sessions only; writes nothing but what the owner confirmed and
-  the run record (`<dev root>/local/learning.json`, gitignored).
+  the run record (`<dev root>/.local/learning.json`, gitignored).
 - Proposes promotions into akmon as tasks or PRs the owner reviews; it never copies up silently and
   never tags, pushes or bumps a pin.

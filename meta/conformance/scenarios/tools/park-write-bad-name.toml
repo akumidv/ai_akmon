@@ -1,0 +1,23 @@
+id = "tools/park-write-bad-name"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A name that is not kebab-case is refused before anything is written: exit 1, the error line
+# names the value, and neither the kit nor the local index appears.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "Park_Helper", "--goal", "Build the park helper", "--next", "Twin it in JS"]
+
+[expected]
+exit = 1
+stderr = "error: name Park_Helper is not kebab-case (lowercase letters and digits joined by single hyphens)\n"
+stdout = ""
+file_absent = ["_aitna/.ergon/C183-Park_Helper", "_aitna/.ergon/C183-park-helper", "_aitna/.local/TASKS.md"]

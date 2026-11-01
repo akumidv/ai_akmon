@@ -17,6 +17,7 @@
     "./tools/model_routing/models": "./js/tools/model_routing/models.mjs",
     "./tools/model_routing/second_opinion": "./js/tools/model_routing/second_opinion.mjs",
     "./tools/model_routing/stats": "./js/tools/model_routing/stats.mjs",
+    "./tools/park/park": "./js/tools/park/park.mjs",
     "./tools/release/release_check": "./js/tools/release/release_check.mjs",
     "./tools/tasks/archive": "./js/tools/tasks/archive.mjs"
   },

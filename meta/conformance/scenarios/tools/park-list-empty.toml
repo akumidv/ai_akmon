@@ -1,0 +1,21 @@
+id = "tools/park-list-empty"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# No `.ergon/` folder at all: `list` says so and names the folder it looked in; exit 0.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+
+[run]
+tool = "park/park"
+argv = ["list"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "no kits in _aitna/.ergon\n"

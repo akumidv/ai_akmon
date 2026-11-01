@@ -43,7 +43,7 @@ function project(record = "") {
   fs.mkdirSync(path.join(root, "_aitna"));
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# a\n");
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), record);
-  return { root, state: path.join(root, "_aitna", "local", "learning.json") };
+  return { root, state: path.join(root, "_aitna", ".local", "learning.json") };
 }
 
 /** The names left beside the state file. */
@@ -52,7 +52,7 @@ function leftovers(/** @type {string} */ state) {
 }
 
 test("the data file carries the defaults and the state location", () => {
-  assert.equal(DATA.state_rel, "local/learning.json");
+  assert.equal(DATA.state_rel, ".local/learning.json");
   assert.equal(DATA.reminder_sessions, 10);
   assert.equal(DATA.reminder_days, 7);
   assert.deepEqual(DATA.skip_sources, ["compact"]);
@@ -85,7 +85,7 @@ test("parseUtc refuses another shape and every impossible calendar moment, as st
 });
 
 test("the state file lives in the local layer of the dev-layer root", () => {
-  assert.equal(statePath("/p", DATA), "/p/_aitna/local/learning.json");
+  assert.equal(statePath("/p", DATA), "/p/_aitna/.local/learning.json");
 });
 
 test("a missing, corrupt or ill-typed state file is the empty state", () => {

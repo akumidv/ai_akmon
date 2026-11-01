@@ -816,6 +816,113 @@ def test_gitignore_without_env_pattern_is_warning(tmp_path):
     assert any("*.env" in message for message in _messages(verifier.findings, "warn"))
 
 
+# --------------------------------------------------------------------------------------
+# the dotted layer (ADR 0028 D01): the legacy local/ folder, and .local/ .ergon/ not ignored
+# --------------------------------------------------------------------------------------
+
+
+def _local_layer(findings, code):
+    return [finding for finding in findings if finding.code == code]
+
+
+@pytest.mark.parametrize(
+    ("text", "covered"),
+    [
+        ("", False),
+        ("_aitna/.local/\n", True),
+        ("/_aitna/.local/\n", True),
+        ("_aitna/.local\n", True),
+        (".local/\n", True),
+        ("_aitna/\n", True),
+        ("# _aitna/.local/\n", False),
+        ("_aitna/local/\n", False),
+        ("_aitna/.local/\n!_aitna/.local/\n", False),
+        ("!_aitna/.local/\n_aitna/.local/\n", True),
+        ("  _aitna/.local/  \n", True),
+    ],
+)
+def test_gitignore_covers_a_literal_line_naming_the_path_or_a_parent(text, covered):
+    assert verify._gitignore_covers(text, "_aitna/.local") is covered
+
+
+def test_gitignore_covers_a_pointer_declared_dev_root(tmp_path):
+    assert verify._gitignore_covers("/tools/ai/.ergon/\n", "tools/ai/.ergon") is True
+    assert verify._gitignore_covers("/_aitna/.ergon/\n", "tools/ai/.ergon") is False
+    assert verify._gitignore_covers(".ergon/\n", "tools/ai/.ergon") is True
+
+
+def test_a_project_without_the_local_layer_folders_raises_no_finding_about_them(tmp_path):
+    root = _make_project(tmp_path)
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert _local_layer(verifier.findings, "layout.local-legacy") == []
+    assert _local_layer(verifier.findings, "gitignore.local-layer") == []
+
+
+def test_a_legacy_local_folder_is_one_warning_naming_the_move_and_nothing_is_moved(tmp_path):
+    root = _make_project(tmp_path)
+    _write(root / "_aitna" / "local" / "handoff" / "C1-x" / "HANDOFF.md")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    (finding,) = _local_layer(verifier.findings, "layout.local-legacy")
+    assert finding.severity == "warn"
+    assert finding.target == "_aitna/local"
+    assert "_aitna/local/ to _aitna/.local/" in finding.message
+    assert "_aitna/local/handoff/ and _aitna/local/plans/ into _aitna/.ergon/<id>-<name>/" in finding.message
+    assert "never moves it silently" in finding.message
+    assert (root / "_aitna" / "local" / "handoff" / "C1-x" / "HANDOFF.md").is_file()
+    assert not (root / "_aitna" / ".local").exists()
+
+
+def test_a_legacy_local_folder_follows_a_declared_dev_root(tmp_path):
+    root = _make_project(tmp_path)
+    _write(root / ".aitna-root", "tools/ai\n")
+    _write(root / "tools" / "ai" / "local" / "TASKS.md")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert [f.target for f in _local_layer(verifier.findings, "layout.local-legacy")] == ["tools/ai/local"]
+
+
+@pytest.mark.parametrize("name", [".local", ".ergon"])
+def test_an_unignored_dotted_folder_is_a_warning_naming_the_folder(tmp_path, name):
+    root = _make_project(tmp_path)
+    (root / "_aitna" / name).mkdir()
+    verifier = verify.Verifier(root)
+    verifier.run()
+    (finding,) = _local_layer(verifier.findings, "gitignore.local-layer")
+    assert finding.severity == "warn"
+    assert finding.target == ".gitignore"
+    assert f"_aitna/{name}/ exists but .gitignore does not ignore it" in finding.message
+    assert f"Add _aitna/{name}/ to .gitignore" in finding.fix
+
+
+def test_an_ignored_dotted_folder_raises_no_warning(tmp_path):
+    root = _make_project(tmp_path)
+    (root / "_aitna" / ".local").mkdir()
+    (root / "_aitna" / ".ergon").mkdir()
+    (root / ".gitignore").write_text(GITIGNORE + "_aitna/.local/\n_aitna/.ergon/\n", encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert _local_layer(verifier.findings, "gitignore.local-layer") == []
+
+
+def test_a_dotted_folder_without_any_gitignore_is_unignored(tmp_path):
+    root = _make_project(tmp_path)
+    (root / ".gitignore").unlink()
+    (root / "_aitna" / ".ergon").mkdir()
+    verifier = verify.Verifier(root)
+    verifier.run()
+    assert len(_local_layer(verifier.findings, "gitignore.local-layer")) == 1
+
+
+def test_the_local_layer_warnings_fail_only_under_strict(tmp_path, capsys):
+    root = _make_project(tmp_path)
+    (root / "_aitna" / "local").mkdir()
+    assert verify.main(["--project-root", str(root)]) == 0
+    assert verify.main(["--project-root", str(root), "--strict"]) == 1
+    assert "WARN layout.local-legacy _aitna/local:" in capsys.readouterr().out
+
+
 def test_ci_missing_akmon_commands_is_warning(tmp_path):
     root = _make_project(tmp_path)
     (root / ".github" / "workflows" / "ci.yml").write_text("name: CI\non: [push]\n", encoding="utf-8")
@@ -2357,7 +2464,7 @@ def test_an_overlay_may_extend_the_family_vocabulary_and_use_the_new_family(tmp_
 
 def test_the_overlay_checks_do_not_read_the_developer_local_overlay(tmp_path):
     root = _make_project(tmp_path)
-    _write(root / "_aitna" / "local" / "model-routing.json", json.dumps({"providers": {"x": {"family": "mimo"}}}))
+    _write(root / "_aitna" / ".local" / "model-routing.json", json.dumps({"providers": {"x": {"family": "mimo"}}}))
     assert _second_opinion_errors(root) == []
 
 
@@ -2563,6 +2670,11 @@ def test_verify_data_pins_its_structure():
         # the retired AITNA_ROOT variable still set in the environment (ADR 0022 D09)
         "aitna_root_ignored",
         "aitna_root_ignored_fix",
+        # the pre-0028 local/ folder and an unignored dotted layer folder (ADR 0028 D01)
+        "local_layer_legacy",
+        "local_layer_legacy_fix",
+        "local_layer_unignored",
+        "local_layer_unignored_fix",
         # the JavaScript verify's own keys (C105); this file never reads them
         "unsupported_record",
         "node_wired_hook_scripts",

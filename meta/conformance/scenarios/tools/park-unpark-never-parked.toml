@@ -1,0 +1,24 @@
+id = "tools/park-unpark-never-parked"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A kit folder with no PARK.md was never parked: `unpark` refuses it (exit 1, the error names the
+# kit) and writes nothing.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/NOTES.md" = "scratch\n"
+
+[run]
+tool = "park/park"
+argv = ["unpark", "C183"]
+
+[expected]
+exit = 1
+stderr = "error: kit C183-park-helper was never parked: it has no PARK.md\n"
+stdout = ""
+file_absent = ["_aitna/.ergon/C183-park-helper/PARK.md", "_aitna/.local/TASKS.md"]

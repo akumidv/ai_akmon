@@ -302,11 +302,11 @@ test("--session-family outside the vocabulary is exit 2 naming the overlays that
   assert.equal(refused.code, 2);
   assert.match(
     refused.stderr,
-    /^error: --session-family 'deepseek' is not in the family vocabulary \(claude, gpt, qwen, gemini\); add it by declaring second_opinion_policy\.families\.deepseek in _aitna\/local\/model-routing\.json to keep it to yourself, or _aitna\/model-routing\.json to share it with the team\n$/,
+    /^error: --session-family 'deepseek' is not in the family vocabulary \(claude, gpt, qwen, gemini\); add it by declaring second_opinion_policy\.families\.deepseek in _aitna\/.local\/model-routing\.json to keep it to yourself, or _aitna\/model-routing\.json to share it with the team\n$/,
   );
   assert.equal(fs.existsSync(path.join(root, ".claude", "model-routing.local.json")), false);
   const extended = project({
-    "_aitna/local/model-routing.json": JSON.stringify({
+    "_aitna/.local/model-routing.json": JSON.stringify({
       second_opinion_policy: { families: { deepseek: "DeepSeek" } },
     }),
   });
@@ -343,7 +343,7 @@ test("a retired overlay key is exit 2 naming the file and the key, with nothing 
 
 test("init reads the local overlay and records the hash of the merged registry", () => {
   const root = project({
-    "_aitna/local/model-routing.json": JSON.stringify({ second_opinion_policy: { ladder: ["codex"] } }),
+    "_aitna/.local/model-routing.json": JSON.stringify({ second_opinion_policy: { ladder: ["codex"] } }),
   });
   const first = run(["--project-root", root, "--orchestrator", "opus"]);
   assert.equal(first.code, 0);
@@ -354,18 +354,18 @@ test("init reads the local overlay and records the hash of the merged registry",
 
 test("a retired key in the local overlay is exit 2 naming that file, with nothing written", () => {
   const root = project({
-    "_aitna/local/model-routing.json": JSON.stringify({ second_opinion_policy: { diversity_ladder: [] } }),
+    "_aitna/.local/model-routing.json": JSON.stringify({ second_opinion_policy: { diversity_ladder: [] } }),
   });
   const result = run(["--project-root", root, "--orchestrator", "opus"]);
   assert.equal(result.code, 2);
-  assert.match(result.stderr, /^error: the routing overlay _aitna\/local\/model-routing\.json still carries/);
+  assert.match(result.stderr, /^error: the routing overlay _aitna\/.local\/model-routing\.json still carries/);
   assert.equal(fs.existsSync(path.join(root, ".claude", "model-routing.local.json")), false);
 });
 
 test("an overlay that is not a JSON object is one error line and exit 2, with nothing written", () => {
   for (const [rel, content] of [
     ["_aitna/model-routing.json", "{ not json"],
-    ["_aitna/local/model-routing.json", "[1, 2]"],
+    ["_aitna/.local/model-routing.json", "[1, 2]"],
   ]) {
     const root = project({ [rel]: content });
     const result = run(["--project-root", root]);

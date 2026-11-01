@@ -6,7 +6,7 @@ covers = ["command:learn"]
 
 [fixture]
 attach = "native"
-files = { "_aitna/local/learning.json" = "{\n  \"last_run\": \"2999-01-01T00:00:00Z\",\n  \"since\": null,\n  \"sessions\": [\n    \"a\",\n    \"b\"\n  ]\n}\n" }
+files = { "_aitna/.local/learning.json" = "{\n  \"last_run\": \"2999-01-01T00:00:00Z\",\n  \"since\": null,\n  \"sessions\": [\n    \"a\",\n    \"b\"\n  ]\n}\n" }
 
 [env]
 HOME = "{{tmp}}"
@@ -17,4 +17,4 @@ argv = ["learn", "status"]
 [expected]
 exit = 0
 stderr = ""
-stdout = "last run: 2999-01-01T00:00:00Z\ncounting since: no session recorded yet\nsessions since the last run: 2\ndays since the last run (or since counting began): 0\nreminder at 10 sessions or 7 days (from <dev root>/.akmon.toml [learning])\nstate: _aitna/local/learning.json\n"
+stdout = "last run: 2999-01-01T00:00:00Z\ncounting since: no session recorded yet\nsessions since the last run: 2\ndays since the last run (or since counting began): 0\nreminder at 10 sessions or 7 days (from <dev root>/.akmon.toml [learning])\nstate: _aitna/.local/learning.json\n"

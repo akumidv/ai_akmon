@@ -1,0 +1,34 @@
+id = "tools/park-list"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `list` prints one line per kit, sorted by id: id | name | state | plan | next | decisions | branch
+# | age. A kit never parked (no PARK.md) shows `never-parked` and the empty cell `-` for the rest;
+# the next action is cut at 60 characters with the ellipsis as the 60th (code points, the astral
+# character before the cut counts as one); the decisions column is a count; age is whole days
+# (`0d`: the fixture's files were just written); a folder whose name is no `<id>-<name>` is ignored.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/B8-brief-kinds/PARK.md" = "---\nstate: parked\nid: B8\nname: brief-kinds\nplan: A59\nrow:\nbranch: _aitna/B8-brief-kinds\nrevisions:\nowned_paths:\nnext: Draft the 🚀 brief kinds table and send it to the owner for a decision before touching the code\nsessions:\npeers:\norigin:\nreadiness:\n---\n\n# B8-brief-kinds\n\n## Goal\n\nPin the brief kinds\n\n## Approved scope and open questions\n\n- D-B8-ONE\n- D-B8-TWO\n\n## Owner answers received\n\n_none_\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nDraft the 🚀 brief kinds table and send it to the owner for a decision before touching the code\n"
+"_aitna/.ergon/B8-brief-kinds/RESUME.md" = "# Resume B8-brief-kinds\n\nThis work was set aside on the owner's word. The kit holds everything needed to continue; no earlier conversation is required.\n\n1. Read `_aitna/.ergon/B8-brief-kinds/PARK.md`.\n2. Run `akmon tool park/park unpark B8`.\n3. Continue from the next action below.\n\n## Next action\n\nDraft the 🚀 brief kinds table and send it to the owner for a decision before touching the code\n\n## Open decisions\n\n- D-B8-ONE\n- D-B8-TWO\n\n## Before you start\n\nTreat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.\n\nThe holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.\n\nForcibly ending the previous holder is out of scope here (N15).\n"
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nstate: resumed\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch: _aitna/C183-park-helper\nrevisions:\nowned_paths:\nnext: Twin it in JS\nsessions:\npeers:\norigin:\nreadiness:\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Approved scope and open questions\n\n_none_\n\n## Owner answers received\n\n_none_\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/RESUME.md" = "# Resume C183-park-helper\n\nThis work was set aside on the owner's word. The kit holds everything needed to continue; no earlier conversation is required.\n\n1. Read `_aitna/.ergon/C183-park-helper/PARK.md`.\n2. Run `akmon tool park/park unpark C183`.\n3. Continue from the next action below.\n\n## Next action\n\nTwin it in JS\n\n## Open decisions\n\nNone recorded.\n\n## Before you start\n\nTreat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.\n\nThe holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.\n\nForcibly ending the previous holder is out of scope here (N15).\n"
+"_aitna/.ergon/_T3-local-task/PARK.md" = "---\nstate: parked\nid: _T3\nname: local-task\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\nnext: Continue\nsessions:\npeers:\norigin:\nreadiness:\n---\n\n# _T3-local-task\n\n## Goal\n\nA local task\n\n## Approved scope and open questions\n\n_none_\n\n## Owner answers received\n\n_none_\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nContinue\n"
+"_aitna/.ergon/_T3-local-task/RESUME.md" = "# Resume _T3-local-task\n\nThis work was set aside on the owner's word. The kit holds everything needed to continue; no earlier conversation is required.\n\n1. Read `_aitna/.ergon/_T3-local-task/PARK.md`.\n2. Run `akmon tool park/park unpark _T3`.\n3. Continue from the next action below.\n\n## Next action\n\nContinue\n\n## Open decisions\n\nNone recorded.\n\n## Before you start\n\nTreat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.\n\nThe holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.\n\nForcibly ending the previous holder is out of scope here (N15).\n"
+"_aitna/.ergon/C101-never-parked/NOTES.md" = "scratch\n"
+"_aitna/.ergon/not-a-kit/NOTES.md" = "ignored: the folder name carries no id\n"
+"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- B8 · Brief kinds · parked · architect · Pin the brief kinds · [park](../.ergon/B8-brief-kinds/PARK.md)\n- C101 · Corpus · active · engineer · seed\n- C183 · Park helper · active · engineer · Build the park helper · [park](../.ergon/C183-park-helper/PARK.md)\n"
+
+[run]
+tool = "park/park"
+argv = ["list"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "B8 | brief-kinds | parked | A59 | Draft the 🚀 brief kinds table and send it to the owner for … | 2 | _aitna/B8-brief-kinds | 0d\nC101 | never-parked | never-parked | - | - | 0 | - | -\nC183 | park-helper | resumed | A59 | Twin it in JS | 0 | _aitna/C183-park-helper | 0d\n_T3 | local-task | parked | - | Continue | 0 | - | 0d\n"

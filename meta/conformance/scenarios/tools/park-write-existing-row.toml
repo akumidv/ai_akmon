@@ -1,0 +1,27 @@
+id = "tools/park-write-existing-row"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The kit's row already sits in the local index at another status: `write` flips only the status
+# cell to `parked`, keeps the row's prose and every other row byte for byte, and, as the row has no
+# link, adds the `[park]` detail link at its end.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- C183 · Park helper · active · engineer · local detail\n- _T1 · other · active · architect · untouched\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/C183-park-helper\n"
+[expected.files]
+"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- C183 · Park helper · parked · engineer · local detail · [park](../.ergon/C183-park-helper/PARK.md)\n- _T1 · other · active · architect · untouched\n"
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nstate: parked\nid: C183\nname: park-helper\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\nnext: Twin it in JS\nsessions:\npeers:\norigin:\nreadiness:\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Approved scope and open questions\n\n_none_\n\n## Owner answers received\n\n_none_\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nTwin it in JS\n"

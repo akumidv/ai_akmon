@@ -7,7 +7,7 @@ covers = ["tool:model_routing/init"]
 # (OverlayError): one `error:` line on stderr quoting the file, exit 2, and nothing is written.
 
 [fixture.files]
-"_aitna/local/model-routing.json" = "[1, 2]"
+"_aitna/.local/model-routing.json" = "[1, 2]"
 
 [run]
 tool = "model_routing/init"
@@ -15,6 +15,6 @@ argv = []
 
 [expected]
 exit = 2
-stderr = "error: the routing overlay _aitna/local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)\n"
+stderr = "error: the routing overlay _aitna/.local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)\n"
 stdout = ""
 file_absent = [".claude/model-routing.local.json"]

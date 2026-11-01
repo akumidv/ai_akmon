@@ -53,9 +53,9 @@ def _seed(path: Path, *, last_run: str | None, since: str | None, sessions: list
 
 def test_state_lives_in_the_local_layer_of_the_dev_root(tmp_path):
     root = _project(tmp_path)
-    assert learning.state_path(root, DATA) == root / "_aitna" / "local" / "learning.json"
+    assert learning.state_path(root, DATA) == root / "_aitna" / ".local" / "learning.json"
     (root / ".aitna-root").write_text("meta\n", encoding="utf-8")
-    assert learning.state_path(root, DATA) == root / "meta" / "local" / "learning.json"
+    assert learning.state_path(root, DATA) == root / "meta" / ".local" / "learning.json"
 
 
 def test_recording_dedupes_a_known_session_and_starts_the_count_once(tmp_path):
@@ -82,7 +82,7 @@ def test_a_known_session_writes_nothing(tmp_path):
 
 
 def test_writes_are_atomic_and_leave_no_temporary_file(tmp_path, monkeypatch):
-    path = tmp_path / "local" / "learning.json"
+    path = tmp_path / ".local" / "learning.json"
     learning.record_session(path, "s1", NOW, DATA)
     assert sorted(item.name for item in path.parent.iterdir()) == ["learning.json"]
 
@@ -293,7 +293,7 @@ def test_the_claude_hook_records_the_session_and_stays_silent_until_due(tmp_path
     assert document["hookSpecificOutput"]["hookEventName"] == "SessionStart"
     assert "`learning` skill" in document["hookSpecificOutput"]["additionalContext"]
     assert document["systemMessage"].startswith("[akmon] learning: 2 sessions and 0 days since akmon began counting")
-    assert learning.read_state(root / "_aitna" / "local" / "learning.json").sessions == ("s1", "s2", "s3")
+    assert learning.read_state(root / "_aitna" / ".local" / "learning.json").sessions == ("s1", "s2", "s3")
 
 
 def test_the_claude_hook_does_not_remind_on_a_compaction_and_never_without_an_id_counts(tmp_path, monkeypatch, capsys):
@@ -302,12 +302,12 @@ def test_the_claude_hook_does_not_remind_on_a_compaction_and_never_without_an_id
     assert (
         _run_hook(root, {"source": "startup"}, monkeypatch, capsys) != ""
     )  # reads state, s1 counts, id-less is not added
-    assert learning.read_state(root / "_aitna" / "local" / "learning.json").sessions == ("s1",)
+    assert learning.read_state(root / "_aitna" / ".local" / "learning.json").sessions == ("s1",)
 
 
 def test_the_claude_hook_neither_records_nor_reminds_a_second_opinion_run(tmp_path, monkeypatch, capsys):
     root = _project(tmp_path, 'mount = "package"\n[learning]\nreminder_sessions = 1\n')
-    path = root / "_aitna" / "local" / "learning.json"
+    path = root / "_aitna" / ".local" / "learning.json"
     _seed(path, last_run=None, since=_ago(1), sessions=["s0"])
     monkeypatch.setenv(DATA["second_opinion_variable"], "1")
     assert _run_hook(root, {"session_id": "so1", "source": "startup"}, monkeypatch, capsys) == ""
@@ -316,7 +316,7 @@ def test_the_claude_hook_neither_records_nor_reminds_a_second_opinion_run(tmp_pa
 
 def test_the_claude_hook_records_an_unattended_run_without_a_reminder(tmp_path, monkeypatch, capsys):
     root = _project(tmp_path, 'mount = "package"\n[learning]\nreminder_sessions = 1\n')
-    path = root / "_aitna" / "local" / "learning.json"
+    path = root / "_aitna" / ".local" / "learning.json"
     _seed(path, last_run=None, since=_ago(1), sessions=["s0"])
     monkeypatch.setenv(DATA["attended_variable"], "0")
     assert _run_hook(root, {"session_id": "p1", "source": "startup"}, monkeypatch, capsys) == ""
@@ -335,7 +335,7 @@ def test_the_claude_hook_with_no_project_root_stays_silent_and_writes_no_file(tm
 
 def test_the_claude_hook_survives_a_corrupt_state_file(tmp_path, monkeypatch, capsys):
     root = _project(tmp_path)
-    path = root / "_aitna" / "local" / "learning.json"
+    path = root / "_aitna" / ".local" / "learning.json"
     path.parent.mkdir(parents=True)
     path.write_text("{broken", encoding="utf-8")
     assert _run_hook(root, {"session_id": "s1"}, monkeypatch, capsys) == ""
@@ -344,7 +344,7 @@ def test_the_claude_hook_survives_a_corrupt_state_file(tmp_path, monkeypatch, ca
 
 def test_the_claude_hook_is_crash_open_when_the_state_cannot_be_written(tmp_path, monkeypatch, capsys):
     root = _project(tmp_path)
-    (root / "_aitna" / "local").write_text("a file where the local layer should be", encoding="utf-8")
+    (root / "_aitna" / ".local").write_text("a file where the local layer should be", encoding="utf-8")
     out = _run_hook(root, {"session_id": "s1"}, monkeypatch, capsys)
     assert json.loads(out) == {"systemMessage": hook_core.hook_failure_notice("learning-reminder", FileExistsError())}
 
@@ -358,7 +358,7 @@ def _codex_hook():
 
 def test_the_codex_route_prints_only_the_model_half(tmp_path, monkeypatch, capsys):
     root = _project(tmp_path, 'mount = "package"\n[learning]\nreminder_sessions = 1\n')
-    _seed(root / "_aitna" / "local" / "learning.json", last_run=None, since=_ago(0), sessions=["c0"])
+    _seed(root / "_aitna" / ".local" / "learning.json", last_run=None, since=_ago(0), sessions=["c0"])
     hook = _codex_hook()
     monkeypatch.setattr(hook, "load_payload", lambda: {"cwd": str(root), "session_id": "c1", "source": "startup"})
     assert hook.main(["learning-reminder"]) == 0
@@ -369,7 +369,7 @@ def test_the_codex_route_prints_only_the_model_half(tmp_path, monkeypatch, capsy
 
 def test_the_codex_route_neither_records_nor_reminds_a_second_opinion_run(tmp_path, monkeypatch, capsys):
     root = _project(tmp_path, 'mount = "package"\n[learning]\nreminder_sessions = 1\n')
-    path = root / "_aitna" / "local" / "learning.json"
+    path = root / "_aitna" / ".local" / "learning.json"
     _seed(path, last_run=None, since=_ago(1), sessions=["c0"])
     monkeypatch.setenv(DATA["second_opinion_variable"], "1")
     hook = _codex_hook()
@@ -385,7 +385,7 @@ def test_the_codex_route_skips_recording_an_unidentified_session(tmp_path, monke
     monkeypatch.setattr(hook, "load_payload", lambda: {"cwd": str(root)})
     assert hook.main(["learning-reminder"]) == 0
     assert capsys.readouterr().out == ""
-    assert not (root / "_aitna" / "local" / "learning.json").exists()
+    assert not (root / "_aitna" / ".local" / "learning.json").exists()
 
 
 # --- CLI -------------------------------------------------------------------------------
@@ -396,7 +396,7 @@ class _Cli:
         self.root = _project(tmp_path, record)
         self.claude = tmp_path / "claude"
         self.codex = tmp_path / "codex"
-        self.state = self.root / "_aitna" / "local" / "learning.json"
+        self.state = self.root / "_aitna" / ".local" / "learning.json"
         self.out, self.err = io.StringIO(), io.StringIO()
 
     def run(self, *argv: str, now: datetime = NOW) -> int:
@@ -424,7 +424,7 @@ def test_status_without_a_record_says_nothing_has_run_or_been_counted(tmp_path):
         "sessions since the last run: 0\n"
         "days since the last run (or since counting began): -\n"
         "reminder at 10 sessions or 7 days (from <dev root>/.akmon.toml [learning])\n"
-        "state: _aitna/local/learning.json\n"
+        "state: _aitna/.local/learning.json\n"
     )
 
 
@@ -438,7 +438,7 @@ def test_status_reports_sessions_days_and_the_configured_thresholds(tmp_path):
         "sessions since the last run: 2\n"
         "days since the last run (or since counting began): 5\n"
         "reminder at 10 sessions or 3 days (from <dev root>/.akmon.toml [learning])\n"
-        "state: _aitna/local/learning.json\n"
+        "state: _aitna/.local/learning.json\n"
     )
 
 
@@ -563,7 +563,7 @@ def test_status_with_project_root_reads_that_project_from_any_directory(tmp_path
     environ = {"CLAUDE_CONFIG_DIR": str(cli.claude), "CODEX_HOME": str(cli.codex)}
     io_ = _learn.LearnIO(environ, elsewhere, cli.out, cli.err, lambda: NOW)
     assert _learn.main(["status", "--project-root", str(cli.root)], io_) == 0
-    assert "_aitna/local/learning.json" in cli.out.getvalue()
+    assert "_aitna/.local/learning.json" in cli.out.getvalue()
     assert cli.err.getvalue() == ""
 
 
@@ -581,7 +581,7 @@ def test_mark_with_no_project_root_refuses_and_writes_nothing(tmp_path):
 
 def test_an_unwritable_local_layer_is_one_line_and_exit_2(tmp_path):
     cli = _Cli(tmp_path)
-    (cli.root / "_aitna" / "local").write_text("a file", encoding="utf-8")
+    (cli.root / "_aitna" / ".local").write_text("a file", encoding="utf-8")
     assert cli.run("mark") == 2
     assert cli.err.getvalue().startswith("akmon learn: ")
     assert cli.err.getvalue().count("\n") == 1

@@ -181,6 +181,8 @@ The reason is portability: a tracked reference into local material is dead on ev
 
 `Decision-ID: ADR-0022/D03`
 
+*Superseded by [ADR 0028 D12](0028-park-and-resume-the-kit-and-the-dotted-layer.md#d12--the-local-index-retires-a-kit-is-its-own-record): the local index retires and a kit is its own record.*
+
 `<DEV>/local/TASKS.md` and `TASKS_ARCHIVE.md` use the project row format of
 [pipelines/tasks.md](../../pipelines/tasks.md). A row's id is the project id when the row is the
 local companion of a project task, otherwise `_T<n>`: `_T` marks the row local and `<n>` is a number

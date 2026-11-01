@@ -258,12 +258,12 @@ and its argv in `common/runtime.py`, the single map of harness commands. The per
 overlay still carrying it fails `routing.second-opinion` at `verify`, which names the overlay
 file. The initializer does not repair it — the overlay is hand-owned input it reads, not an
 artifact it writes — so the fix is a hand edit of `<dev root>/model-routing.json` (or the
-developer-local `<dev root>/local/model-routing.json`), then a re-`init` to regenerate the
+developer-local `<dev root>/.local/model-routing.json`), then a re-`init` to regenerate the
 local config against the moved `registry_hash`.
 
 A provider whose row carries `aliases: true` ships its model names as aliases (the codex `luna`,
 `terra`, `sol`), because a carrier rejects an unversioned name and a versioned one goes stale. The
-concrete id each alias resolves to lives only in the developer-local `<dev root>/local/model-aliases.json`,
+concrete id each alias resolves to lives only in the developer-local `<dev root>/.local/model-aliases.json`,
 written by the refresh tool on request, and the runner resolves a pin through that file; the split and
 its fail-closed rules are [ADR 0024 D16](../adr/0024-second-opinion-by-model-priors.md).
 The reserved token `default` (`codex:default`, or the runner's `--default-model`) is the other way past an

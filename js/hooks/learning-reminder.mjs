@@ -4,7 +4,7 @@
  * `hooks/learning-reminder.py` (C177, ADR 0026 D07; ADR 0020 D01). The Python module is the spec:
  * the same answers, the same texts, the same exit code and the same stdout and stderr.
  *
- * Records the session in the project's learning record (`<dev root>/local/learning.json`) and,
+ * Records the session in the project's learning record (`<dev root>/.local/learning.json`) and,
  * once enough sessions or days have passed since the learning agent's last run, tells the model (to
  * say so once, in its first reply) and the owner to run the `learning` skill. Silent when nothing
  * is due, and never blocking: a failure goes through the shared crash guard, which exits 0.

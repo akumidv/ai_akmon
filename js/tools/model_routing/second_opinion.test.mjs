@@ -45,9 +45,9 @@ function run(argv) {
  * @param {Record<string, string>} aliases codex's alias to concrete id
  */
 function writeAliases(root, aliases) {
-  fs.mkdirSync(path.join(root, "_aitna", "local"), { recursive: true });
+  fs.mkdirSync(path.join(root, "_aitna", ".local"), { recursive: true });
   const stored = { codex: { source: SOURCE, client: "0.164.0", aliases } };
-  fs.writeFileSync(path.join(root, "_aitna", "local", "model-aliases.json"), `${JSON.stringify(stored, null, 2)}\n`);
+  fs.writeFileSync(path.join(root, "_aitna", ".local", "model-aliases.json"), `${JSON.stringify(stored, null, 2)}\n`);
 }
 
 const SOURCE = "~/.codex/models_cache.json (codex-models-cache)";
@@ -160,14 +160,14 @@ function overlay(root, overlay) {
 }
 
 /**
- * Put the developer-local overlay in place (`<aitna_root>/local/model-routing.json`).
+ * Put the developer-local overlay in place (`<aitna_root>/.local/model-routing.json`).
  * @param {string} root
  * @param {object | string} content an object, or raw text
  */
 function localOverlay(root, content) {
-  fs.mkdirSync(path.join(root, "_aitna", "local"), { recursive: true });
+  fs.mkdirSync(path.join(root, "_aitna", ".local"), { recursive: true });
   fs.writeFileSync(
-    path.join(root, "_aitna", "local", "model-routing.json"),
+    path.join(root, "_aitna", ".local", "model-routing.json"),
     typeof content === "string" ? content : JSON.stringify(content),
   );
 }
@@ -215,7 +215,7 @@ test("main: --list of an empty chain names the last resort; an unknown-priors pr
   assert.match(result.stdout, /^ {2}opencode: priors unknown$/m);
   assert.match(
     result.stdout,
-    /^asks:\n {2}opencode: priors unknown for its default model; declare providers\.opencode\.family in _aitna\/local\/model-routing\.json to keep it to yourself, or _aitna\/model-routing\.json to share it with the team$/m,
+    /^asks:\n {2}opencode: priors unknown for its default model; declare providers\.opencode\.family in _aitna\/.local\/model-routing\.json to keep it to yourself, or _aitna\/model-routing\.json to share it with the team$/m,
   );
 });
 
@@ -417,7 +417,7 @@ test("main: a retired key in the local overlay is refused naming that file", () 
   localOverlay(root, { second_opinion_policy: { diversity_ladder: [] } });
   const result = withPath(bin({}), () => run(["--project-root", root, "--list", ...SESSION]));
   assert.equal(result.code, 2);
-  assert.match(result.stderr, /^second-opinion: .*_aitna\/local\/model-routing\.json.*diversity_ladder/);
+  assert.match(result.stderr, /^second-opinion: .*_aitna\/.local\/model-routing\.json.*diversity_ladder/);
 });
 
 test("main: an overlay that is not a JSON object is one error line and exit 2, never a stack trace", () => {
@@ -429,7 +429,7 @@ test("main: an overlay that is not a JSON object is one error line and exit 2, n
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      "second-opinion: the routing overlay _aitna/local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)\n",
+      "second-opinion: the routing overlay _aitna/.local/model-routing.json is not a valid JSON object; repair or delete it (it is hand-owned, so akmon never rewrites it)\n",
     );
   }
 });
@@ -656,7 +656,7 @@ test("main: a carrier fed its prompt as an argument sees EOF on stdin, even when
 // -- ADR-0024/D16: aliases resolve to a concrete id from the local file; `default` is the carrier's own model --
 
 const UNMAPPED_LINE =
-  "second-opinion: provider 'codex' declares model aliases, and 'sol' has no concrete id in _aitna/local/model-aliases.json; ";
+  "second-opinion: provider 'codex' declares model aliases, and 'sol' has no concrete id in _aitna/.local/model-aliases.json; ";
 const REFRESH = "akmon tool model_routing/models --refresh --provider codex";
 
 /**
@@ -730,11 +730,11 @@ test("main: --list shows the resolution, and an unmapped alias with its ask", ()
 
 test("main: a corrupt aliases file is refused naming it", () => {
   const root = project(false);
-  fs.mkdirSync(path.join(root, "_aitna", "local"), { recursive: true });
-  fs.writeFileSync(path.join(root, "_aitna", "local", "model-aliases.json"), "[]");
+  fs.mkdirSync(path.join(root, "_aitna", ".local"), { recursive: true });
+  fs.writeFileSync(path.join(root, "_aitna", ".local", "model-aliases.json"), "[]");
   const result = withCodex(["--project-root", root, "--list", ...SESSION]);
   assert.equal(result.code, 2);
-  assert.ok(result.stderr.includes("_aitna/local/model-aliases.json is not a valid alias map"));
+  assert.ok(result.stderr.includes("_aitna/.local/model-aliases.json is not a valid alias map"));
 });
 
 test("main: the default token runs the carrier's own model without any alias file", () => {

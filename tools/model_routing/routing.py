@@ -51,12 +51,12 @@ def overlay_name() -> str:
 
 
 def local_overlay_rel() -> str:
-    """The developer-local overlay's path under the aitna root (gitignored with ``<aitna_root>/local/``)."""
+    """The developer-local overlay's path under the aitna root (gitignored with ``<aitna_root>/.local/``)."""
     return _agents_data()["local_overlay_rel"]
 
 
 def local_aliases_rel() -> str:
-    """The generated resolved-aliases file's path under the aitna root (gitignored with ``<aitna_root>/local/``)."""
+    """The generated resolved-aliases file's path under the aitna root (gitignored with ``<aitna_root>/.local/``)."""
     return _agents_data()["local_aliases_rel"]
 
 
@@ -125,7 +125,7 @@ def overlay_path(project_root: Path) -> Path:
 def local_overlay_path(project_root: Path) -> Path:
     """Path to the developer's own routing overlay (gitignored, hand-owned, never generated), if any.
 
-    Same shape and file name as the project overlay, but under ``<aitna_root>/local/`` (ADR 0022):
+    Same shape and file name as the project overlay, but under ``<aitna_root>/.local/`` (ADR 0022):
     the strongest layer (ADR-0024/D11) — a developer states which harnesses and models they run
     without asking the team to share it.
     """

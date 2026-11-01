@@ -18,5 +18,5 @@ argv = ["--refresh", "--dry-run"]
 [expected]
 exit = 0
 stderr = ""
-stdout = "catalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=0.164.0\n  luna → gpt-6-luna\n  terra → gpt-6.1-terra\n  sol → gpt-6.1-sol\nwould write _aitna/local/model-aliases.json\n"
-file_absent = ["_aitna/local/model-aliases.json"]
+stdout = "catalog codex: source=~/.codex/models_cache.json (codex-models-cache) client=0.164.0\n  luna → gpt-6-luna\n  terra → gpt-6.1-terra\n  sol → gpt-6.1-sol\nwould write _aitna/.local/model-aliases.json\n"
+file_absent = ["_aitna/.local/model-aliases.json"]

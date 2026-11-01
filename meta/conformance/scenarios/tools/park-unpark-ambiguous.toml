@@ -1,0 +1,23 @@
+id = "tools/park-unpark-ambiguous"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# Two kit folders carry the same id: the helper refuses to guess (exit 1, the error lists both).
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-one/NOTES.md" = "one\n"
+"_aitna/.ergon/C183-two/NOTES.md" = "two\n"
+
+[run]
+tool = "park/park"
+argv = ["unpark", "C183"]
+
+[expected]
+exit = 1
+stderr = "error: several kits carry id C183 under _aitna/.ergon: C183-one, C183-two\n"
+stdout = ""
