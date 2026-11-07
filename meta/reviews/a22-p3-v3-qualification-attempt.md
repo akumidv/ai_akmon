@@ -6,9 +6,9 @@ One of 32 A cells has two accepted scorer readings; the next has two accepted
 subject turns but no accepted scorer reading. No qualification map or B/C
 comparison is established.
 
-The [operational seal](../experiments/a22-p3/runs/v3-qualification-operational-seal-v1.json),
-[offline preflight](../experiments/a22-p3/runs/v3-qualification-preflight-v1.json)
-and [phase approval](../experiments/a22-p3/runs/v3-qualification-approval-v1.json)
+The `meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-operational-seal-v1.json`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-preflight-v1.json`
+and `meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-approval-v1.json`
 bind the 128-call schedule, 214,673-token V3 Codex opening, exact inputs and
 owner's qualification-only authorization. Dispatch occurred in the detached
 `/tmp/a22-p3-v3-qualification-checkout` worktree. The private runtime is

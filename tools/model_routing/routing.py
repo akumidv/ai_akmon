@@ -1607,7 +1607,7 @@ def role_matrix_directive(registry: dict, subagent_type: str, role: str | None) 
     """The model-addressed form of ``role_matrix_warning``: re-route or switch role.
 
     Same predicate, same silence; the delegation log sends it as ``additionalContext`` beside
-    the owner's ``systemMessage`` (ADR 0006 item 4, M149).
+    the owner's ``systemMessage`` (ADR 0006 item 4, M209).
     """
     fields = _role_matrix_fields(registry, subagent_type, role)
     return None if fields is None else jsondata.fill(_agents_data()["role_matrix_directive"], fields)
@@ -2090,7 +2090,7 @@ def delegation_floor_directive(config: dict, subagent_type: str, call_model: obj
     """The model-addressed form of ``delegation_floor_warning``: from the next call on, the floor's model.
 
     Same predicate, same silence; the delegation log sends it as ``additionalContext`` beside
-    the owner's ``systemMessage`` (ADR 0006 item 4, M149).
+    the owner's ``systemMessage`` (ADR 0006 item 4, M209).
     """
     open_gaps = _open_floor_gaps(config, subagent_type, call_model)
     if not open_gaps:
@@ -2288,7 +2288,7 @@ def unlabelled_fanout_directive(
     """The model-addressed form of ``unlabelled_fanout_warning``: label the fan-out calls.
 
     Same predicate, same silence; the delegation log sends it as ``additionalContext`` beside
-    the owner's ``systemMessage`` (ADR 0006 item 4, M149).
+    the owner's ``systemMessage`` (ADR 0006 item 4, M209).
     """
     labelled = _zoned_labels(entries, session_id, subagent, zone)
     if not labelled:

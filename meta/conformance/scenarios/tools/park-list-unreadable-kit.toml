@@ -1,0 +1,25 @@
+id = "tools/park-list-unreadable-kit"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# One kit whose note does not parse does not stop `list` for the others: it is reported on a line of its
+# own (id, name, `unreadable`, and the failure naming the file) in its place in the id order, the other
+# kit is listed as usual, and the command exits 0. Nothing is written.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "broken\n"
+"_aitna/.ergon/C184-other-kit/PARK.md" = "---\nid: C184\nname: other-kit\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C184-other-kit\n\n## Goal\n\nGoal\n\n## Next action\n\nTwin it in JS\n"
+
+[run]
+tool = "park/park"
+argv = ["list", "--machine", "laptop"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "C183 | park-helper | unreadable | C183-park-helper/PARK.md: no header between two '---' lines at the top of the note\nC184 | other-kit | parked | - | Twin it in JS | 0 | - | 0d\n"

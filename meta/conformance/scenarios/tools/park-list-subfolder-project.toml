@@ -1,0 +1,29 @@
+id = "tools/park-list-subfolder-project"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A project that sits in a repository subfolder (`proj/` in a repository whose top is a project too)
+# keeps its own dev root: its kits are `proj/_aitna/.ergon/`, not the top's `_aitna/.ergon/` (ADR 0028
+# D11, "the kits of the project"). The repository's common directory is read for the main checkout and
+# the project's prefix in it is kept.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"AGENTS.md" = "# top\n"
+"_aitna/.akmon.toml" = ""
+"proj/AGENTS.md" = "# proj\n"
+"proj/_aitna/.akmon.toml" = ""
+"proj/_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nGoal\n\n## Next action\n\nTwin it in JS\n"
+
+[run]
+tool = "park/park"
+argv = ["list", "--root", "proj", "--machine", "laptop"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "C183 | park-helper | parked | - | Twin it in JS | 0 | - | 0d\n"
+file_absent = ["_aitna/.ergon"]

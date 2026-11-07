@@ -894,7 +894,7 @@ def test_role_matrix_warning_renders_effective_allowed_in_registry_order():
 
 
 def test_role_matrix_directive_shares_the_warning_predicate():
-    """ADR 0006 item 4: the model's copy says re-route or switch role, silent with the owner's (M149)."""
+    """ADR 0006 item 4: the model's copy says re-route or switch role, silent with the owner's (M209)."""
     base_registry = {**routing.load_registry(_AKMON), "cross_cutting_kinds": []}
     directive = routing.role_matrix_directive(base_registry, "k_mechanic", "review")
     assert directive is not None and "re-route this work" in directive and "role switch" in directive
@@ -2030,7 +2030,7 @@ def test_the_delegation_floor_warning_speaks_to_the_owner():
 
 
 def test_the_delegation_floor_directive_speaks_to_the_orchestrator():
-    """ADR 0006 item 4: the model's copy names the override per open kind, silent with the owner's (M149).
+    """ADR 0006 item 4: the model's copy names the override per open kind, silent with the owner's (M209).
 
     The hook is PreToolUse and does not block, so the call already runs: the directive applies from
     the next call on and never asks for a re-issue, which would run the subagent twice.
@@ -2093,7 +2093,7 @@ def test_unlabelled_fanout_warns_only_in_a_zoned_session():
 
 
 def test_unlabelled_fanout_directive_tells_the_orchestrator_to_label():
-    """ADR 0006 item 4: the model's copy, silent exactly where the owner's warning is (M149)."""
+    """ADR 0006 item 4: the model's copy, silent exactly where the owner's warning is (M209)."""
     earlier = [_entry("s1", "auth"), _entry("s1", "io")]
     directive = routing.unlabelled_fanout_directive(earlier, "s1", "k_explorer", None)
     assert directive is not None and "(auth, io)" in directive

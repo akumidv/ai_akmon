@@ -1,0 +1,31 @@
+id = "tools/park-close-refused-existing"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `close` over a kit of the same id and name that is already in the closed folder is refused in one line, before any lease is
+# released: the kit, its lease and the closed kit are all left as they were.
+
+[fixture]
+attach = "none"
+git = false
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree: \nwritten: 2099-01-01T00:00:00Z\n---\n"
+"_aitna/.ergon/.closed/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Old\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nOld\n"
+
+[run]
+tool = "park/park"
+argv = ["close", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stderr = "error: kit C183-park-helper was not closed: _aitna/.ergon/.closed/C183-park-helper already exists\n"
+stdout = ""
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree: \nwritten: 2099-01-01T00:00:00Z\n---\n"
+"_aitna/.ergon/.closed/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Old\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nOld\n"

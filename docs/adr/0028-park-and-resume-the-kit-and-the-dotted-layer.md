@@ -126,7 +126,7 @@ not use the word *checkpoint*, which the harness already uses for rewinding (M53
 - **Not machine-checked yet.** That a tracked file names no path under `.local/` or `.ergon/` is
   C156's check on the new paths (branch B5); until then a rule.
 - **Untouched.** 0021/D04–D07, the athlos vocabulary, the typed id scheme of the project backlog, the
-  index format and D02 of 0022, and the rule that akmon transmits nothing between machines.
+  index format and D02 of 0022, and the rule that akmon transmits nothing between machines. *Amended by [0029](0029-ergon-athlos-step-one-method-of-work.md): 0021/D04's key and the athlos vocabulary are now 0029's.*
 
 ## Addressable accepted decision blocks
 
@@ -151,6 +151,8 @@ retire; `local/tasks/` of 0022/D03 is left as it is.
 *Amended by **D08** (`jobs/<n>-<name>/` takes the place of `steps/<n>-<name>.md`) and **D09** (the
 lease file `HOLDER`); superseded in part by **D12**: a kit has no row in a local index, and `verify`
 warns on a kit with no `PLAN.md` header instead.*
+
+*Superseded in part by [0029/D02](0029-ergon-athlos-step-one-method-of-work.md#d02--the-words-ergon-athlos-no-kit-no-job-no-argos): the piece of work is an **ergon**; the word *kit* retires.*
 
 A **kit** is the one folder of a piece of work, a plan or a task: `<DEV>/.ergon/<id>-<name>/`, where
 `<id>` is the id of the row it serves (0022/D08) and `<name>` a short kebab name of its subject. It
@@ -252,6 +254,8 @@ a measurement says it is not enough.
 
 `Decision-ID: ADR-0028/D08`
 
+*Superseded in part by [0029/D02](0029-ergon-athlos-step-one-method-of-work.md#d02--the-words-ergon-athlos-no-kit-no-job-no-argos): the plan's unit is an **athlos**; the word *job* retires.*
+
 Four words, one thing each:
 
 - A **task** is a row of a backlog kept outside any plan: the project's `TASKS.md`, where a tracker
@@ -312,6 +316,8 @@ written by two sessions.
 
 `Decision-ID: ADR-0028/D10`
 
+*Superseded in part by [0029/D06](0029-ergon-athlos-step-one-method-of-work.md#d06--worktrees-follow-the-harness): a session in a harness-made worktree finds its athlos from the recorded binding, before the folder name.*
+
 Which unit a session is in is a local fact and is read from local files, never kept in git. A session
 in a job's worktree is in that job: the worktree's folder, `<id>-<name>.<n>`, names it, and the job's
 lease says whether this session may write it. A session in the main checkout has no active unit until
@@ -322,6 +328,8 @@ another worktree with a session of its own, never applied as a checkout over unc
 ### D11 — Worktrees for parallel jobs: free inside, carried on the owner's word
 
 `Decision-ID: ADR-0028/D11`
+
+*Amended by [0029/D06](0029-ergon-athlos-step-one-method-of-work.md#d06--worktrees-follow-the-harness): where the harness makes worktrees the athlos runs in the harness's; `.worktrees/` is the fallback. Amended by [0029/D09](0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree): the commit carve-out covers any worktree an athlos is bound to.*
 
 A job run in parallel with others gets a local git worktree, which the agent may create, inside the
 project under an ignored folder that `init` writes. Git needs a branch to commit on in a worktree; it is

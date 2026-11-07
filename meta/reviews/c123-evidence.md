@@ -77,7 +77,7 @@ outside `check` and `verify` reads `check`.
 - `uv run pytest -q`: 10 failed, 2392 passed — the 9 known `test_a22_p3_*` reds and
   `test_ruff_profile.py::test_akmon_meets_every_size_limit_without_an_exception` (its offenders are `test_a22_p3_*`
   files only).
-- `uv run ruff check .`: 1 error, the known I001 in `meta/tests/test_a22_p3_dispatch_v3.py`.
+- `uv run ruff check .`: 1 error, the known I001 in `meta/.ergon/A22-p3-routing/materials/tests/test_a22_p3_dispatch_v3.py`.
 - `uv run ruff format --check` on the touched Python files: the touched files already formatted.
 - `node --test "js/**/*.test.mjs"`: 601 tests, 601 pass.
 - `npx --no-install tsc --checkJs --noEmit -p .`: exit 0. `npx --no-install oxlint .`: exit 0.

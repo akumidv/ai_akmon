@@ -8,6 +8,7 @@ carrier is the guard against the copies growing back.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import sys
@@ -129,9 +130,10 @@ def test_the_bound_counts_utf8_bytes_and_is_inclusive(tmp_path):
     filler = 4096 - len(base.encode()) - 1
     at_bound = Path(base + "/" + "é" * (filler // 2) + "x" * (filler % 2))
     assert len(str(at_bound).encode()) == 4096
-    with pytest.raises(OSError) as kernel:  # ENAMETOOLONG from is_file(), not the refusal
+    # Not refused by the bound: up to Python 3.13 is_file() raises the kernel's ENAMETOOLONG; from
+    # 3.14 it reports False and the walk goes on, so either outcome passes, the refusal does not.
+    with contextlib.suppress(OSError):
         project_root.find_project_root(at_bound)
-    assert not isinstance(kernel.value, ValueError)
     with pytest.raises(ValueError, match="4097 bytes"):
         project_root.find_project_root(Path(str(at_bound) + "x"))
 

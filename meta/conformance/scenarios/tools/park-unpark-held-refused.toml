@@ -1,0 +1,28 @@
+id = "tools/park-unpark-held-refused"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A parked kit whose lease a live session holds is not resumed by a second session: the refusal names
+# the holder, the stderr is one `error:` line, and the holder's lease file is left as it was.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/RESUME.md" = "# Resume C183-park-helper\n\nThis work was set aside on the owner's word.\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree:\nwritten: 2099-01-01T00:00:00Z\n---\n"
+
+[run]
+tool = "park/park"
+argv = ["unpark", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stderr = "error: C183-park-helper is held by claude s2 laptop; a stale lease is taken over only on the owner's word (--takeover)\n"
+stdout = ""
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree:\nwritten: 2099-01-01T00:00:00Z\n---\n"

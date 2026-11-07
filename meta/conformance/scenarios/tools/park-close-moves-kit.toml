@@ -1,0 +1,28 @@
+id = "tools/park-close-moves-kit"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `close` moves the kit to the closed folder `.ergon/.closed/<kit name>/` and releases its leases first:
+# the kit's HOLDER is not carried along. Its note moves with it, unchanged. No local index is written.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree:\nwritten: 2099-01-01T00:00:00Z\n---\n"
+
+[run]
+tool = "park/park"
+argv = ["close", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/.closed/C183-park-helper\n"
+file_absent = ["_aitna/.ergon/C183-park-helper", "_aitna/.ergon/.closed/C183-park-helper/HOLDER", "_aitna/.local/TASKS.md"]
+
+[expected.files]
+"_aitna/.ergon/.closed/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"

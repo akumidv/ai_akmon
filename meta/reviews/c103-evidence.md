@@ -499,7 +499,7 @@ place rather than redone.
   the tree it tests, so an edit mid-run is a real failure of a real snapshot); which leg it was was
   not captured, and the settled tree re-runs green — stated here rather than smoothed over.
 * `uv run ruff check .` — **All checks passed** over this round's paths. Repo-wide it currently
-  reports 13 errors, all of them in `meta/experiments/a22-p3/{approval,scorer_preflight}.py`:
+  reports 13 errors, all of them in `meta/.ergon/A22-p3-routing/materials/{approval,scorer_preflight}.py`:
   untracked files a **parallel A22 session** wrote minutes earlier (10:35), which ruff scans because
   they are inside the repository. Same shared-tree hazard as the staged index (round 1, finding 1);
   the size-limit test fails for those files alone.

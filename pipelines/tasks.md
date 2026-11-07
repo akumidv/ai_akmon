@@ -53,7 +53,7 @@ One task = **one line**:
 - **goal** — ≤12 words, the outcome. Not the plan.
 - **detail link** — design doc, accepted ADR block, or task/evidence record. Required once
   detail exists; omit only for a one-line task that needs none.
-- **A paragraph is the size criterion for a task** in `TASKS.md`, project or local. A task whose
+- **A paragraph is the size criterion for a task** in `TASKS.md`. A task whose
   description does not fit one — how to reproduce it, data, a longer statement — is one file,
   `<DEV>/tasks/<id>-<name>.md`, linked as its detail. It holds the task's own description, not a
   decision (an ADR block) or an open design question (a design doc). Local work that outgrows a
@@ -105,10 +105,11 @@ task or a plan needs is kept there.
 
 - **Id.** There are no local rows. A kit is named `<id>-<name>` for its plan's primary task; work
   with no backlog task takes `_T<n>`: `_T` marks it local, and `<n>` is counted over the kits, live
-  and closed, and never reused. A slug is not an id; `<name>` is a short kebab name of its subject.
+  and closed, and never reused; `akmon tool park/park local-id` prints the next free one. A slug is
+  not an id; `<name>` is a short kebab name of its subject.
   The kit's `PLAN.md` header (id, name, title, tasks) is its local record, and `park list` is the
-  local index. The plan names its tasks; a task row never names its plan. A transfer to another
-  machine is copying the kit, which carries its jobs.
+  local index. The plan names its tasks; a task row never names its plan. A transfer to another machine is an explicit export: a directory with the kit's
+  folder, the git bundles of its unpushed commits, a patch of its uncommitted changes and a manifest.
 - **Direction.** A local record may reference project material. A tracked file never references a
   path under `.local/` or `.ergon/`: a tracked reference is dead on every other machine. Promoting a local record
   is refused while a local reference remains in it. Once `verify` carries the check, a tracked file that
@@ -124,7 +125,8 @@ task or a plan needs is kept there.
   refined in the plan when it falls within the plan's target and its tasks: a finer or new step goes
   into its job's `JOB.md`, a new job or a refinement branch into `PLAN.md`. What lies beyond the
   target and the plan's tasks becomes a task here, on the owner's word.
-- **Resume prompts** name paths from the project root only.
+- **Resume prompts** name a path from the project root when the file lies inside it, and by its
+  absolute path when it lies outside it (a kit in the main checkout, read from a linked worktree).
 - **A plan** is a local working document, not a record: [design-flow § Plans](design-flow.md#plans).
 
 ## When to write

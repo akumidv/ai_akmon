@@ -111,6 +111,15 @@ What akmon does differently, on purpose:
   there are **no per-task description files in a kit**; a job's description is its `JOB.md`.
 - **D-A59-LOCALINDEX — decided: b, the local index retires;** a kit is its own record and `park list`
   is the index (§ The kit is its own record; ADR 0028 D12).
+- **D-C186-PATH — answered: the design's path sentence carries the exception.** A path inside the
+  project is named from the project root; a path outside it — a kit in the main checkout read from a
+  linked worktree — is named by its absolute path (§ Portability). The files that already carried the
+  exception keep it.
+- **D-C186-DATES — confirmed: the corpus's lease fixtures keep their own days.** A stale lease and a
+  fresh one are stamped with fixed days of their own, and under the corpus's normalization rule 5 a
+  day that is not the run's own day is fixture data, compared literally, so both scenarios are stable
+  on any run day. The convention and its stamps are owned by the corpus's fixture model
+  ([the conformance README](../../meta/conformance/README.md)).
 - The folded tasks close with A59; the plan carries the trunk and everything the similar project
   has.
 - A parked task must move: to another session, **another harness** and **another machine**; it must
@@ -172,8 +181,7 @@ subject; the git branch of the work is `_aitna/<id>-<name>`, the same string.
 - **`PARK.md` is the result of parking.** A unit without it was never parked. Its state is not written
   in it: held is active, free with a note is parked, free without one has not started (ADR 0028 D09).
   The next parking rewrites the note.
-- **Transfer is one folder.** Copy the kit, or point at it; `park export` makes the single file
-  (§ Portability).
+- **Transfer is one folder.** Copy the kit, or point at it. Another machine gets an export, a directory that carries the work too (§ Portability; [ADR 0029/D07](../adr/0029-ergon-athlos-step-one-method-of-work.md#d07--only-an-explicit-export-moves-an-ergon)).
 - **A kit holds facts and material, never transcript, logs, secrets or customer payloads.** Tracked
   files never name a path under it (ADR 0022 D02).
 - A kit is its own record: its `PLAN.md` header is what a local index row used to say; `verify` warns
@@ -259,8 +267,55 @@ tasks: A59, C181, C182, C183, C184, C185, C186
   decided here for plans; D-EDGE-FIELD in [roadmap-view](roadmap-view.md) stays the question of edges
   between backlog rows.
 
-The labels P0–P4, P2b and B1–B16 below are this design's working labels; in the kit's `PLAN.md` they
+The labels P0–P4, P2b and B1–B17 below are this design's working labels; in the kit's `PLAN.md` they
 are jobs `A59.<n>`.
+
+## The athlos and the job — one rung, two sides
+
+ADR 0021 (the *athlos*) and ADR 0028 (the *job*) describe the same rung of the same ladder from two
+sides. This section states that rung and the rules that follow from the union; the word that names
+it, and what a rename would cost, are the owner's decision and live in
+[the merge record](ergon-athlos-merge.md).
+
+**The overlap.** An athlos is "the bounded labour of an approved plan, keyed by (task id, zone)",
+carried by a session, executed by `k_*` delegates, outliving both (ADR 0021 D04). A job is "a unit
+of a plan, run in isolation by one holder toward a measurable result of its own", with its own
+lease, its own folder and its own worktree when it runs beside another (ADR 0028 D08–D11). Both
+are: one bounded piece of an approved plan's work, with an acceptance condition of its own, held by
+one session, done by delegates.
+
+**What differs is the carrier and the key, not the thing.** The athlos was defined before the
+ergon's machinery existed; its record was a work package (ADR 0021 D01) — a kit with a `HANDOFF.md`
+note, which the legacy-kit branch gives a `PARK.md` header. The kit is that carrier, built: the
+lease that names the holder, the note that carries the facts, the folder that travels, the worktree
+that isolates a parallel run. The keys differ as well: the athlos is named by the pair (task id,
+zone), the job by its id `<kit-id>.<n>` and the tasks it serves. A union keeps both — the id as the
+unit's place in the plan, the pair as its content ([the merge record](ergon-athlos-merge.md) §6.3).
+
+**The ladder, one owner per rung.**
+
+| Rung | Word | Owner | What it is | Its carrier |
+|---|---|---|---|---|
+| a unit of a plan's work | **athlos** ([ADR 0029/D02](../adr/0029-ergon-athlos-step-one-method-of-work.md#d02--the-words-ergon-athlos-no-kit-no-job-no-argos)) | the merge of ADR 0021 D04 and ADR 0028 D08 | a bounded unit with an acceptance condition of its own, serving one or more tasks, run in isolation by one holder, placed by its id and named by its (task, zone) | the kit: folder, lease, note, worktree |
+| a part of a unit, done in order | **step** | ADR 0028 D08 | one part of a unit, done in order by its holder | the unit's own file |
+| a frame of a fan-out | **zone** | ADR 0021 D04, ADR 0028 D08 | where the work lands; the delegation ledger's label | the ledger and the coverage map |
+| the doer | **Kyklops** (`k_*`) | ADR 0008 | the delegate that does part of a zone | the session's tool call |
+
+**The rules that follow.**
+
+- **One unit, one acceptance condition.** The condition is the unit's own, not the plan's; the plan
+  is met when its units are met.
+- **A unit runs in parallel in two ways.** Inside one unit, the zones of its steps run at once in one
+  session (ADR 0021 D06). Beside other work, a unit that must be isolated, paused, resumed or
+  carried to another machine is leased, gets its own folder and its own worktree — that is what makes
+  it possible. *This is the merge's payoff: the athlos's clauses (its own acceptance condition, the
+  zone where its work lands) and the ergon's machinery (lease, note, worktree) end up on one rung.*
+- **The zone is one mechanism, not two.** Both records use the same frame word: the zone is where
+  the work lands, recorded as the delegation ledger's label and read by the coverage map. Its
+  spelling is a data format, not a word to be swept (ADR 0021 D04, "Why the frame word stays").
+- **The merge is decided.** [ADR 0029](../adr/0029-ergon-athlos-step-one-method-of-work.md) accepts it and names what it amends; ADR 0021 D04–D07 and ADR 0028 D01–D12 otherwise stand as written ([the merge record](ergon-athlos-merge.md) keeps the options).
+
+**The alternatives.** The shapes this section weighs — one word for the merged unit, and what each of them costs — live in [the merge record](ergon-athlos-merge.md); [ADR 0029](../adr/0029-ergon-athlos-step-one-method-of-work.md) owns the decision, and this section owns the model.
 
 ## The park note — fields
 
@@ -288,17 +343,16 @@ it was written**, which the digest compares with the last edit (§ The return af
 
 The record belongs to the **work**, not to the session that wrote it.
 
-- **Any holder.** `RESUME.md` is harness-neutral: it names paths from the project root and the
-  commands to run, never a slash command of one harness. A harness adapter adds only the
-  re-injection (Claude and Codex SessionStart; for a harness with no hook, the owner pastes the
-  prompt). The adapters are branches; the record is the same for all.
+- **Any holder.** `RESUME.md` is harness-neutral: it names a path from the project root when the
+  file lies inside it, and by its absolute path when it lies outside it (a kit in the main
+  checkout, read from a linked worktree), together with the commands to run, never a slash
+  command of one harness. A harness adapter adds only the re-injection (Claude and Codex
+  SessionStart; for a harness with no hook, the owner pastes the prompt). The adapters are
+  branches; the record is the same for all.
 - **Sessions are references, never requirements.** `sessions` lists where the work was done. On the
   same machine a resumer may open the old transcript to gather material; elsewhere the field is
   only provenance.
-- **Another machine.** `park export <id>` writes one bundle file of the kit — its plan, jobs, notes,
-  briefs and material, never its leases — to a place the owner chooses; the owner moves it — ADR 0022
-  D01 keeps delivery between machines with the owner, and akmon transmits nothing. `park import
-  <bundle>` places the kit under `.ergon/`; with no local index there is no row to carry. The note states, from `git`, whether its branch and revisions are reachable from a remote; if
+- **Another machine.** `park export <id> --out <dir>` writes a directory: the ergon's folder without leases and scratch, a git bundle of each athlos's commits that no remote has, a patch of its uncommitted changes, and a manifest the import checks ([ADR 0029/D07](../adr/0029-ergon-athlos-step-one-method-of-work.md#d07--only-an-explicit-export-moves-an-ergon)); the owner moves it — ADR 0022 D01 keeps delivery between machines with the owner, and akmon transmits nothing. `park import <dir>` places the ergon under `.ergon/`; until C191 lands, `park export` still writes one bundle file of the kit, leases left out. with no local index there is no row to carry. The note states, from `git`, whether its branch and revisions are reachable from a remote; if
   not, the readiness line says the owner must push — akmon never pushes.
 - **The kit's id on another machine** (D-A59-TRANSFER-ID). A kit is named for its primary task. A
   project task's id is the same everywhere, so the kit, its jobs and their branches keep their names.
@@ -382,9 +436,15 @@ once without sharing a working tree.
   lease written on another machine, which came with a copied kit, is stale at once, and `park export`
   leaves leases out. A stale lease is offered to the
   owner for takeover, never taken silently; a takeover keeps the replaced holder in the note's
-  `sessions`, and the replaced holder's uncommitted paths are named before anything else is done.
+  `sessions`, and the replaced holder's uncommitted paths are named before anything else is done. A write never
+  takes a stale lease; it is refused and points at `hold --takeover`. Where the unit has no note yet,
+  the replaced holder waits in a `SESSIONS` file beside the lease until the next write merges it into
+  the note; where the replaced holder's worktree cannot be read, the takeover says so in one line.
 - **The state is derived** (ADR 0028 D09): held → **active**; free with `PARK.md` → **parked**; free
-  without → **not started**; `JOB.md` says `done` → **done**. A plan's state is joined from its jobs.
+  without → **not started**; `JOB.md` says `done` → **done**. A plan's state is joined from its jobs:
+  active if the plan or any job is held, else done if every job is done, else parked if the plan or any
+  job is parked, else not started. `park list` shows a kit it cannot read as `unreadable` with the
+  reason, in its place, and goes on listing the others.
 - **No shared file.** A holder writes only inside its unit's folder, and only the plan's holder writes
   `PLAN.md`; with the local index retired (§ The kit is its own record) no file is written by two
   sessions, so there is no lost update to guard against.
@@ -395,7 +455,7 @@ Which unit a session is in is a local fact, so it is read from local files and n
 in git (ADR 0028 D10).
 
 - **In a job's worktree** the session is in that job: the worktree's folder
-  `.worktrees/<id>-<name>.<n>/` names it, and SessionStart reads it from the path. The job's lease
+  `.worktrees/<id>-<name>.<n>/` names it, and SessionStart reads it from the path. *Current code, superseded by [ADR 0029/D06](../adr/0029-ergon-athlos-step-one-method-of-work.md#d06--worktrees-follow-the-harness): the active unit is read from the git top level (C190).* The job's lease
   says whether this session may write it — a new session after the old one ended takes the lease over
   on the owner's word, as above.
 - **In the main checkout** no kit is active until `park pick <id>`, recorded under the hashed session
@@ -419,8 +479,7 @@ in git (ADR 0028 D10).
   owner carries into the project branch.
 - **Inside the worktree the agent works on its own.** It creates the worktree, edits, runs the gates
   and commits on the job's branch as it goes, with no confirmation asked; it never pushes or tags. The
-  shipped guardrail's § Commits & ownership states this permission, and the harness's approval
-  settings for the worktree are what A79 measures so that nothing there asks either.
+  shipped guardrail's § Commits & ownership states this permission, and the harness's approval settings for the worktree are what A79 measures so that nothing there asks either. *Current code, superseded by [ADR 0029/D06](../adr/0029-ergon-athlos-step-one-method-of-work.md#d06--worktrees-follow-the-harness) (the harness makes the worktree where it has one) and [D09](../adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree) (the agent commits only inside one); the guard follows in C190.*
 - **Carrying a result is the owner's call.** When a job — or a step worth carrying on its own — is
   finished, the agent says so and stops there. Its result enters the current branch only when the
   owner starts the carry, in the way the owner picks: the agent carries it on that word, by a merge
@@ -600,7 +659,7 @@ by the commands it prints; a k_auditor audit of the run closes it. More harnesse
 | **B3** Role switch | a fresh-session offer on architect→engineer for a large task, with the note written first | the offer calls P2 |
 | **B4** Cleanup | closing or archiving a task prunes its kit through `tools/tasks/archive.py` | the kit has a `PLAN.md` header; a closed kit moves to `.ergon/.closed/` (D12) |
 | **B5** Guards | `verify` errors when `.local/`, `.ergon/` or `.tmp/` is not ignored or a tracked file names a path under them; warns on a kit with no `PLAN.md` header and on a legacy local index (C155 and C156 on the new paths) | `init` writes the ignore lines |
-| **B6** Branch namespace | the commit guard's reason text and the note use `_aitna/<id>-<name>` and a job's `_aitna/<id>-<name>.<n>`; the guard still passes any non-default branch, so this is a convention plus a message, with its JS twin and scenarios | the note records the branch |
+| **B6** Branch namespace | the commit guard's reason text and the note use `_aitna/<id>-<name>` and a job's `_aitna/<id>-<name>.<n>`; the guard still passes any non-default branch (current code; C190 changes the guard to [ADR 0029/D09](../adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree)), so this is a convention plus a message, with its JS twin and scenarios | the note records the branch |
 | **B7** Sessions table | a code-made table of kits and live sessions for the owner, on C152's renderer (plain `park list` is already in the trunk) | C152 exists |
 | **B8** Briefs | the purpose block, the series and rounds (`BRIEF.md`, `answers/`, `DISPOSITION.md`), the kinds (`second-opinion`, `audit`, `review`, `plan-to-realize`, `evaluate`), the completeness check, `gate_pack.py` and A38's pack feeding the helper, the second-opinion answer returning to the round, the harness `report_dir`s retiring; **starts after A79** (decided) | one review runs two rounds from briefs end to end |
 | **B9** Worktrees | **moved into the trunk as P2b** | — |
@@ -611,6 +670,7 @@ by the commands it prints; a k_auditor audit of the run closes it. More harnesse
 | **B14** Scratch and writes per harness | the `.tmp/` rule in the agent instructions, `init`'s ignore line and a decision on the hook markers; the **research of how each harness writes** — Codex, Qwen and Claude by mode, target and model, deciding whether agents on different harnesses and models run side by side with no owner prompts — is the separate task **A79**, and B14 takes its result | A79's matrix exists and the rule matches it |
 | **B15** Task switch in a session | the prompt hook reads a row id other than the active kit's and proposes the switch with the recommendation on the work left; a probe of the prompt hook's payload per harness first; a by-subject change stays advice (A21 axis 2); its scenarios and JS twin | `park pick` exists (P4) |
 | **B16** Legacy kits | the kits written before this design (`HANDOFF.md`, `RESUME.md`, `PLAN-rev1.md`, loose reports) are given a `PARK.md` header and a `PLAN.md` header from what they hold, by the helper and with the owner's check, so each can be listed and resumed; the rows of the retired local index move into their kits' headers, and `.local/tasks/` files into kits (D12) | `park list` shows every legacy kit with a state |
+| **B17** The athlos and the job | the merge of ADR 0021's *athlos* with ADR 0028's *job* into one rung (§ The athlos and the job — one rung, two sides): the relation recorded in a new thematic ADR that owns it, and the vocabulary moved as [ADR 0029](../adr/0029-ergon-athlos-step-one-method-of-work.md) decides ([the merge record](ergon-athlos-merge.md)); under a rename the sweep is mechanical — the helper and its twin, their tests, the plan's line format, the park scenarios, the shipped prose — and the migration is one release with a compatibility read for kits written before it | done: the codes are answered in ADR 0029 (C188); the rename is C189 |
 
 ### Parity and honesty
 
@@ -649,4 +709,6 @@ kit, or a kit to be.
 
 ## Open
 
-No owner code is open on the design. The probes P0 and B14 name are measurements rather than choices.
+- **The merge's codes** — D-A59-ATHLOS, D-A59-PIECE, D-A59-KEY and D-A59-ARGOS — are answered in [ADR 0029](../adr/0029-ergon-athlos-step-one-method-of-work.md) D02 and D03; the merge record §8 keeps the answers and the options behind them.
+
+The probes P0 and B14 name are measurements rather than choices.

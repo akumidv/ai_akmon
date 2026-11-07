@@ -1,0 +1,23 @@
+id = "tools/park-list-status-flag-retired"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The status flag is gone: the state of a kit is derived (`--state` filters on it), so `--status` is
+# an unknown argument. The usage error is the parser's own: exit 2, nothing on stdout, and the stderr
+# line names the argument.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+
+[run]
+tool = "park/park"
+argv = ["list", "--status", "active"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr_contains = ["unrecognized arguments: --status active"]

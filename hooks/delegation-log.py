@@ -13,7 +13,7 @@ one of its task kinds and the call does not override the model to meet it (C32);
 fan-out delegation carries no zone label while earlier delegations of the session did (C33).
 Each such warning goes out on two channels (ADR 0006 item 4): the owner's text in the system
 message, and a text addressed to the orchestrator — what to do from the next call on — as
-``additionalContext`` (M149). With no warning there is no ``additionalContext``.
+``additionalContext`` (M209). With no warning there is no ``additionalContext``.
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ def _decide() -> HookResult | None:
         handle.write(line + "\n")
     # The console line and the owner's warnings go to the UI only (`systemMessage`); each warning
     # also reaches the model as `additionalContext`, addressed to the orchestrator (ADR 0006
-    # item 4). On PreToolUse both are delivered and the call still runs (M149).
+    # item 4). On PreToolUse both are delivered and the call still runs (M209).
     messages = [_format_system_message(line)]
     # C20 — advise when the agent has no overlap with the role's effective allowed set.
     try:

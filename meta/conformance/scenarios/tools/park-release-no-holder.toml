@@ -1,0 +1,23 @@
+id = "tools/park-release-no-holder"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A unit with no lease has no holder to release: refused (exit 1, one `error:` line naming the unit),
+# and nothing is written.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+
+[run]
+tool = "park/park"
+argv = ["release", "C183"]
+
+[expected]
+exit = 1
+stderr = "error: C183-park-helper has no holder file\n"
+stdout = ""

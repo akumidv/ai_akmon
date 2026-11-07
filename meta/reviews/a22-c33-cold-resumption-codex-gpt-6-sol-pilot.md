@@ -4,20 +4,20 @@
 gates. Both answers scored 6/6 blind with no false closure. The pointer
 corrected no observed recovery failure in this case.
 
-The [C33 protocol](../experiments/a22-resumption-pilot/C33_PROTOCOL.md) and
-[manifest](../experiments/a22-resumption-pilot/C33_MANIFEST.json) froze the
+The `meta/.ergon/A22-resumption-pilot/materials/C33_PROTOCOL.md` and
+`meta/.ergon/A22-resumption-pilot/materials/C33_MANIFEST.json` froze the
 same clean detached repository snapshot used for C98, exact source and packet
 hashes, model pins and stop gates. Both calls were fresh, read-only
 `codex-cli 0.162.1` sessions with `gpt-6-sol` medium roots and `gpt-6-luna`
 mechanical readers. Current practice ran first. The evaluator key remained
 outside the subject worktree, which stayed clean. No retry occurred.
 
-The [current answer](../experiments/a22-resumption-pilot/runs/c33-current-final.md)
-and [pointer answer](../experiments/a22-resumption-pilot/runs/c33-pointer-final.md)
+The `meta/.ergon/A22-resumption-pilot/materials/runs/c33-current-final.md`
+and `meta/.ergon/A22-resumption-pilot/materials/runs/c33-pointer-final.md`
 both preserved the owner's accepted zone-plan interpretation, distinguished
 implementation from owner verification, named the false warning on non-fan-out
 calls and located its follow-up in C128. Both identified owner verification
-of C33 as the next acceptance action. The [blind score](../experiments/a22-resumption-pilot/runs/c33-blind-score.md)
+of C33 as the next acceptance action. The `meta/.ergon/A22-resumption-pilot/materials/runs/c33-blind-score.md`
 was 6/6 for each, with no critical false closure.
 
 The runner retained each stdout, stderr, answer and descendant rollout in

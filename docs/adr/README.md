@@ -170,3 +170,9 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   act is *park*, the state `parked`, the branch `_aitna/<id>-<name>` with the kit's own string; plan →
   task → step; a session's active kit and the confirmed switch of task; scratch in three tiers.
   Supersedes parts of 0022 D01/D03/D04 and 0021 D01; amends 0021 D03 and 0008 §4.
+- [0029 — Ergon, athlos, step: one method of work](0029-ergon-athlos-step-one-method-of-work.md)
+  — three fixed levels, ergon → athlos → step, each with a result of its own, promotion not nesting;
+  *ergon* names the piece of work (kit retires), *athlos* the unit (job retires), no *argos*; the key is
+  id + `zone:`; only a session holds a lease, the head holds the ergon and one athlos at a time; the
+  record in the folder, the harness the transport; worktrees follow the harness; only an explicit export
+  moves an ergon. Supersedes parts of 0028 D02/D08/D10 and 0021 D04; amends 0028 D11.

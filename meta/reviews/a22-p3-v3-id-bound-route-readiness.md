@@ -13,23 +13,23 @@ as an unscored mechanics fixture. No failed reading is repaired, reclassified
 or carried into the new 32-cell dataset.
 
 [ADR 0019 D03](../../docs/adr/0019-collaboration-guidance-from-a22.md#d03--prospective-p3-scorer-packet-identity-binding)
-records the accepted prospective format. The [identity proposal](../experiments/a22-p3/V3_SCORER_ID_BINDING_PROPOSAL.md)
-explains the alternatives. The [new parser](../experiments/a22-p3/v3_scorer_id_binding.py)
+records the accepted prospective format. The `meta/.ergon/A22-p3-routing/materials/V3_SCORER_ID_BINDING_PROPOSAL.md`
+explains the alternatives. The `meta/.ergon/A22-p3-routing/materials/v3_scorer_id_binding.py`
 requires exactly E1–E4 with PASS/FAIL and nonblank reasons, rejects extra
 columns/text, and creates a four-column canonical TSV using only the scheduled
-packet ID. The [qualification candidate](../experiments/a22-p3/v3_qualification_id_bound.py)
+packet ID. The `meta/.ergon/A22-p3-routing/materials/v3_qualification_id_bound.py`
 stores raw and canonical replies separately and checks their packet/request,
-call and evidence binding on ledger replay. Its [fresh schedule](../experiments/a22-p3/runs/v3-qualification-id-bound-schedule-v1.json)
+call and evidence binding on ledger replay. Its `meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-id-bound-schedule-v1.json`
 excludes IDs from both terminal qualification schedules; SHA-256
 `d8084e398dfa07ae3ce8e0047ce2aed24ae526ebbe201fa1c13986dbc08f8625`.
 No qualification seal, preflight or approval exists yet.
 
-The [route proposal](../experiments/a22-p3/V3_ID_BOUND_ROUTE_PROPOSAL.md),
-[runner](../experiments/a22-p3/v3_id_bound_route_check.py),
-[plan](../experiments/a22-p3/runs/v3-id-bound-route-plan-v1.json),
-[seal](../experiments/a22-p3/runs/v3-id-bound-route-seal-v1.json),
-[offline preflight](../experiments/a22-p3/runs/v3-id-bound-route-preflight-v1.json)
-and [approval template](../experiments/a22-p3/runs/v3-id-bound-route-approval-v1.json)
+The `meta/.ergon/A22-p3-routing/materials/V3_ID_BOUND_ROUTE_PROPOSAL.md`,
+`meta/.ergon/A22-p3-routing/materials/v3_id_bound_route_check.py`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-id-bound-route-plan-v1.json`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-id-bound-route-seal-v1.json`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-id-bound-route-preflight-v1.json`
+and `meta/.ergon/A22-p3-routing/materials/runs/v3-id-bound-route-approval-v1.json`
 bind two fresh call IDs, the same blind packet and prompt, model/CLI pins,
 private runtime, resource stops, predecessor failure, exact code and tests.
 The plan SHA-256 is `4907fe21f504391cfd52c39832c147f1306b33a55db40890ae6a655a0ac4e0f3`;

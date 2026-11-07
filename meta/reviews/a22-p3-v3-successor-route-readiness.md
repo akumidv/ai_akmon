@@ -12,14 +12,14 @@ scorer-prompt bytes. No source run ID, arm, tier, model, or qualification label
 appears in the model-visible packet. Source identity and exact hashes remain
 evaluator-only. Both checks are unscored and cannot count toward qualification.
 
-The [proposal](../experiments/a22-p3/V3_SUCCESSOR_ROUTE_CHECK_PROPOSAL.md),
-[V3 packet builder](../experiments/a22-p3/v3_successor_route_packet.py), and
-[route gate](../experiments/a22-p3/v3_successor_route_check.py) are bound by the
-candidate [seal](../experiments/a22-p3/runs/successor-route-check-seal-v6.json),
+The `meta/.ergon/A22-p3-routing/materials/V3_SUCCESSOR_ROUTE_CHECK_PROPOSAL.md`,
+`meta/.ergon/A22-p3-routing/materials/v3_successor_route_packet.py`, and
+`meta/.ergon/A22-p3-routing/materials/v3_successor_route_check.py` are bound by the
+candidate `meta/.ergon/A22-p3-routing/materials/runs/successor-route-check-seal-v6.json`,
 SHA-256 `b42d0a8a6962f800b71e2cfe526bad27ee0e84359def3845aa4a0f40abd01f79`.
 It carries the successful source record, exchange, source ledger, packet,
 frozen prompt, helper sources, and regression hash. The
-[offline preflight](../experiments/a22-p3/runs/successor-route-check-preflight-v6.json)
+`meta/.ergon/A22-p3-routing/materials/runs/successor-route-check-preflight-v6.json`
 passed with zero provider calls and 54,010 prior observed V3 Codex tokens.
 Seven focused synthetic tests passed; Ruff check and format check passed. The
 default-deny dispatch probe returned `DISPATCH_BLOCKED` before creating a
@@ -37,7 +37,7 @@ reservations and completions, turn IDs, subject-attempt ID, route, outcome,
 and usage. The append-only route journal binds the candidate seal and prior
 V3 source ledger; a failed or usage-unknown attempt blocks the other route.
 
-The [route approval](../experiments/a22-p3/runs/successor-route-check-approval-v6.json)
+The `meta/.ergon/A22-p3-routing/materials/runs/successor-route-check-approval-v6.json`
 is still default-deny: no authorized phase, no owner acceptance, and no
 provider dispatch. The earlier technical-source approval permits only its
 completed source cell. The user's request to start the next phase preceded

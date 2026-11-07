@@ -3,21 +3,23 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# Two kit folders carry the same id: the helper refuses to guess (exit 1, the error lists both).
+# Two kit folders carry the same id: the helper refuses to guess (exit 1, the error lists both) and
+# takes no lease on either.
 
 [fixture]
 attach = "none"
 
 [fixture.files]
 "_aitna/.akmon.toml" = ""
-"_aitna/.ergon/C183-one/NOTES.md" = "one\n"
-"_aitna/.ergon/C183-two/NOTES.md" = "two\n"
+"_aitna/.ergon/C183-one/NOTES.md" = "scratch\n"
+"_aitna/.ergon/C183-two/NOTES.md" = "scratch\n"
 
 [run]
 tool = "park/park"
-argv = ["unpark", "C183"]
+argv = ["unpark", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
 
 [expected]
 exit = 1
 stderr = "error: several kits carry id C183 under _aitna/.ergon: C183-one, C183-two\n"
 stdout = ""
+file_absent = ["_aitna/.ergon/C183-one/HOLDER", "_aitna/.ergon/C183-two/HOLDER"]

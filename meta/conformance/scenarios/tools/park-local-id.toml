@@ -1,0 +1,27 @@
+id = "tools/park-local-id"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `local-id` prints the next free local id, `_T<n>`: one more than the largest number any kit carries,
+# counted over the live kits and the closed ones together (ADR 0028 D12). The closed `_T7` is counted,
+# so `_T7` is not handed out again; a kit named by a task id (C183) carries no local number and is not
+# counted.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/_T3-scratch-probe/PARK.md" = "---\nid: _T3\nname: scratch-probe\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Probe the twin\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n# _T3-scratch-probe\n\n## Goal\n\nProbe\n\n## Next action\n\nProbe the twin\n"
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/.closed/_T7-old-probe/PARK.md" = "---\nid: _T7\nname: old-probe\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Retired\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n# _T7-old-probe\n\n## Goal\n\nProbe\n\n## Next action\n\nRetired\n"
+
+[run]
+tool = "park/park"
+argv = ["local-id"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_T8\n"

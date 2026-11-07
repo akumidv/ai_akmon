@@ -1,0 +1,23 @@
+id = "tools/park-active-main-checkout"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A session in the main checkout has no active unit until it picks one: the folder is not a worktree
+# folder, so `active` says so on one line and exits 0.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+
+[run]
+tool = "park/park"
+argv = ["active"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "no active unit: this session is in the main checkout, and a pick has not been made\n"

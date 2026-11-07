@@ -1,10 +1,11 @@
 # 0023 — Where project documents live
 
-- **Status:** Accepted for **D01–D06**. The owner decided each choice in session: lasting knowledge
+- **Status:** Accepted for **D01–D07**. The owner decided each choice in session: lasting knowledge
   in `docs/` and process and evidence in `<DEV>`, the directory names, the flat shape, resolution by
   code, the migration of akmon's own records, and the names of the other folders of `docs/`. The
   owner then ordered akmon's own move ahead of the two accessors (**D05**); it is done in the
-  working copy. The accessors are not started.
+  working copy. The accessors are not started. After C194 the owner decided where an experiment's results and its
+  raw materials live (**D07**, D-EXPERIMENTS-HOME).
 - **Owner:** akuminov@gmail.com
 - **Amends:** the `docs/dev/` split recommended in [CONCEPT](../../meta/CONCEPT.md) § Dev docs — the
   recommendation becomes this layout.
@@ -161,3 +162,24 @@ Knowledge that one skill alone needs lives with that skill, in `<skill>/referenc
 development skill `<DEV>/skills/<name>/references/` — and not in `docs/`. Knowledge about the
 product that any developer reads lives in `docs/`, `reference/` included. The test is that of **D01**:
 whether a newcomer reads it to understand the product, or only a procedure needs it.
+
+### D07 — An experiment leaves its results in the tree and its materials in its ergon
+
+`Decision-ID: ADR-0023/D07`
+
+`<DEV>/experiments/` keeps what other work reuses: per experiment one results document,
+`<task>-<subject>.md`, and an index, `README.md`. The results document states the question, the
+method in enough detail to judge and repeat it, the results with their numbers, the limits, and
+where its facts are recorded (`MEASUREMENTS.md` rows, design sections). Refuted hypotheses and
+negative or failed results are kept as findings, because they spare another task the same run. The
+index has one line per experiment — its task, the question, the verdict, negative ones included,
+and its rows — and an agent reads it, with `MEASUREMENTS.md`, before it designs an experiment, so
+that what was measured is not measured again.
+
+The raw materials — fixtures, runners, transcripts, per-run outputs — are the working material of
+the experiment's task and live in its ergon, `<DEV>/.ergon/<id>-<name>/materials/`, in the ignored
+local layer; they travel only by an explicit export ([0029/D07](0029-ergon-athlos-step-one-method-of-work.md#d07--only-an-explicit-export-moves-an-ergon)).
+The results document and the rows stand without them: no record defers to the materials (the
+common guardrail's § Documentation hygiene). A runner or fixture that other tasks keep reusing
+becomes a tool or a test fixture of the project, not material. Sealed inputs (D05) keep their bytes
+and names wherever their seal records them.

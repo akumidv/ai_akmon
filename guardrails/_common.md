@@ -51,6 +51,12 @@ Runtime check: privilege.no-escalation — the whole rule: any Bash command cont
 - **Tests pass before a commit is offered.** No commit on red (see
   [pre-commit](../pipelines/pre-commit.md)).
 - Branch for non-trivial work; do not commit straight to the default branch unless asked.
+- **Job-branch carve-out** — the one standing exception to the first bullet. A parallel job runs
+  in its own worktree, `.worktrees/<id>-<name>.<n>/`, on the local branch
+  `_aitna/<id>-<name>.<n>`. Inside that worktree the agent commits its own work on that branch
+  without asking. It never pushes or tags. Carrying the branch's work into the branch the owner is
+  on is started by the owner only: the owner asks the agent to merge or squash it, or runs the
+  printed commands. The carve-out covers no other branch, no other commit and no push.
 
 Runtime check: commits.owner-owned — subset: an AI `Co-Authored-By` trailer is denied, and
 `push`/`tag`/`merge` or a commit on the default branch or a detached/unresolved HEAD asks when

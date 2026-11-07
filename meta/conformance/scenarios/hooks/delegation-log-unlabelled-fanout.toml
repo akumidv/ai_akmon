@@ -1,6 +1,6 @@
 # C33: an earlier delegation of the same session carried a zone label (seeded into the log),
 # so this unlabelled one gets the advisory ⚠ line in the systemMessage, and the orchestrator gets
-# its own — label fan-out calls with [zone:<label>] — in additionalContext (ADR 0006 item 4, M149).
+# its own — label fan-out calls with [zone:<label>] — in additionalContext (ADR 0006 item 4, M209).
 id = "hooks/delegation-log-unlabelled-fanout"
 ecosystem = "shared"
 kind = "hook"

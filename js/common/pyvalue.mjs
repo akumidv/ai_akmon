@@ -618,7 +618,8 @@ function _isOSError(/** @type {unknown} */ error) {
 /**
  * The `stat` behind `Path.is_file()`/`is_dir()` (3.11–3.13): a missing path, a non-directory
  * parent, a bad descriptor, a link loop or an unencodable path (an embedded NUL) answer
- * "no"; any other failure — a permission error on the way — raises.
+ * "no"; any other failure — a permission error on the way — raises. 3.14's pathlib answers "no"
+ * to every failure; this keeps the floor's answer, and the split is DIVERGENCES.md DV40.
  * @param {string | Buffer} path a path, or the bytes of one that no string spells (`os.fsencode`)
  * @returns {fs.Stats | null}
  */

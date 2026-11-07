@@ -1,0 +1,28 @@
+id = "tools/park-release"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `release` removes the lease of a unit and keeps its note: the HOLDER file is gone, PARK.md is as it
+# was. stdout names the unit released.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree:\nwritten: 2099-01-01T00:00:00Z\n---\n"
+
+[run]
+tool = "park/park"
+argv = ["release", "C183"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "C183-park-helper\n"
+file_absent = ["_aitna/.ergon/C183-park-helper/HOLDER"]
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"

@@ -1,0 +1,30 @@
+id = "tools/park-close-refused-held"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `close` refuses a kit while a live lease of another session is in it: one line, the holder named. Nothing is moved and
+# no lease is released.
+
+[fixture]
+attach = "none"
+git = false
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree: \nwritten: 2099-01-01T00:00:00Z\n---\n"
+
+[run]
+tool = "park/park"
+argv = ["close", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stderr = "error: C183-park-helper is held by claude s2 laptop; close it after that session releases it, or ask the owner\n"
+stdout = ""
+file_absent = ["_aitna/.ergon/.closed"]
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree: \nwritten: 2099-01-01T00:00:00Z\n---\n"

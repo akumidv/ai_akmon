@@ -6,6 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import { posix } from "node:path";
@@ -18,6 +19,7 @@ import {
   ERGON_DIR_NAME,
   ergonRoot,
   findProjectRoot,
+  gitCommonRoot,
   isProjectRoot,
   legacyLocalRoot,
   LOCAL_DIR_NAME,
@@ -33,6 +35,131 @@ function tmpdir() {
   // never equal what `findProjectRoot` answers.
   return fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-project-root-")));
 }
+
+/**
+ * Whether git can be run here.
+ * @returns {boolean}
+ */
+function gitAvailable() {
+  try {
+    execFileSync("git", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @param {string} cwd
+ * @param {string[]} args
+ */
+function git(cwd, args) {
+  execFileSync("git", args, { cwd, stdio: "ignore" });
+}
+
+test("outside a repository the main checkout is the project root itself, and no root answers none", () => {
+  assert.equal(gitCommonRoot(null), null);
+  const root = tmpdir();
+  try {
+    assert.equal(gitCommonRoot(root), root);
+    assert.equal(ergonRoot(root), `${root}/_aitna/.ergon`);
+    // a directory that is not there is no repository either
+    assert.equal(gitCommonRoot(`${root}/missing`), `${root}/missing`);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a linked worktree resolves its kits to the main checkout (ADR 0028 D11)", { skip: !gitAvailable() }, () => {
+  const main = tmpdir();
+  try {
+    fs.writeFileSync(posix.join(main, "AGENTS.md"), "# agents\n");
+    git(main, ["init", "-q"]);
+    const linked = posix.join(main, ".worktrees", "C1-demo.1");
+    git(main, ["worktree", "add", "-q", "--orphan", "-b", "feat", linked]);
+    assert.equal(gitCommonRoot(main), main);
+    assert.equal(gitCommonRoot(linked), main);
+    assert.equal(ergonRoot(main), `${main}/_aitna/.ergon`);
+    assert.equal(ergonRoot(linked), `${main}/_aitna/.ergon`);
+    // the dev root is the main checkout's: its declaration is the one that counts
+    fs.writeFileSync(posix.join(main, ".aitna-root"), "tools/ai\n");
+    assert.equal(ergonRoot(main), `${main}/tools/ai/.ergon`);
+  } finally {
+    fs.rmSync(main, { recursive: true, force: true });
+  }
+});
+
+test(
+  "a repository whose main checkout is no project keeps the root it was asked about",
+  { skip: !gitAvailable() },
+  () => {
+    const main = tmpdir();
+    try {
+      git(main, ["init", "-q"]);
+      const nested = posix.join(main, "pkg");
+      fs.mkdirSync(nested);
+      fs.writeFileSync(posix.join(nested, "AGENTS.md"), "# agents\n");
+      // the repository root has no AGENTS.md and no .aitna-root: it is not a project root, so the answer stays put
+      assert.equal(gitCommonRoot(nested), nested);
+      assert.equal(ergonRoot(nested), `${nested}/_aitna/.ergon`);
+    } finally {
+      fs.rmSync(main, { recursive: true, force: true });
+    }
+  },
+);
+
+test("a project in a repository subfolder keeps its own dev root", { skip: !gitAvailable() }, () => {
+  const top = tmpdir();
+  try {
+    const proj = posix.join(top, "proj");
+    fs.mkdirSync(proj);
+    fs.writeFileSync(posix.join(top, "AGENTS.md"), "# agents\n");
+    fs.writeFileSync(posix.join(proj, "AGENTS.md"), "# agents\n");
+    fs.writeFileSync(posix.join(proj, ".aitna-root"), "_aitna\n");
+    git(top, ["init", "-q"]);
+    assert.equal(gitCommonRoot(proj), proj);
+    assert.equal(ergonRoot(proj), `${proj}/_aitna/.ergon`);
+    assert.equal(ergonRoot(top), `${top}/_aitna/.ergon`);
+  } finally {
+    fs.rmSync(top, { recursive: true, force: true });
+  }
+});
+
+test("a linked worktree of a subfolder project uses the main checkout's subfolder", { skip: !gitAvailable() }, () => {
+  const main = tmpdir();
+  const linked = tmpdir();
+  try {
+    const proj = posix.join(main, "proj");
+    fs.mkdirSync(proj);
+    fs.writeFileSync(posix.join(proj, "AGENTS.md"), "# agents\n");
+    git(main, ["init", "-q"]);
+    git(main, ["add", "proj/AGENTS.md"]);
+    git(main, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"]);
+    fs.rmSync(linked, { recursive: true });
+    git(main, ["worktree", "add", "-q", "-b", "job-1", linked]);
+    assert.equal(gitCommonRoot(posix.join(linked, "proj")), proj);
+    assert.equal(ergonRoot(posix.join(linked, "proj")), `${proj}/_aitna/.ergon`);
+  } finally {
+    fs.rmSync(main, { recursive: true, force: true });
+    fs.rmSync(linked, { recursive: true, force: true });
+  }
+});
+
+test("the answer for a root is kept: a repository's common directory does not move", { skip: !gitAvailable() }, () => {
+  const main = tmpdir();
+  try {
+    fs.writeFileSync(posix.join(main, "AGENTS.md"), "# agents\n");
+    git(main, ["init", "-q"]);
+    const linked = posix.join(main, ".worktrees", "C1-demo.1");
+    git(main, ["worktree", "add", "-q", "--orphan", "-b", "feat", linked]);
+    assert.equal(gitCommonRoot(linked), main);
+    // without the link file git would answer the worktree itself; the kept answer is still the main checkout
+    fs.rmSync(posix.join(linked, ".git"));
+    assert.equal(gitCommonRoot(linked), main);
+  } finally {
+    fs.rmSync(main, { recursive: true, force: true });
+  }
+});
 
 test("the default dev-layer name is _aitna, and none found answers it too", () => {
   assert.equal(aitnaRootName(null), AITNA_ROOT_DEFAULT);

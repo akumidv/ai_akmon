@@ -7,14 +7,14 @@ runner implementation, but it is not ready for provider dispatch.
 The original P3 seal still binds eight cards, the A arm, the scoring prompt and
 the legacy qualification map. That map has a complete 32-cell A grid, but its
 run IDs belong to the older packet. Reusing them would violate V3's fresh-ID
-condition. The new [candidate schedule](../experiments/a22-p3/runs/v3-qualification-schedule-v1.json)
+condition. The new `meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-schedule-v1.json`
 allocates one fresh run, subject attempt and two subject call IDs for each
 card × tier × repeat. It fixes one opaque scorer packet ID shared by Codex and
 Qwen per output, two scorer call IDs, a randomized subject order and alternating
 scorer order. The verifier rechecks the packet seal and rejects missing or
 duplicate cells, IDs and changed second-turn material.
 
-The [candidate packet renderer](../experiments/a22-p3/v3_qualification_packet.py)
+The `meta/.ergon/A22-p3-routing/materials/v3_qualification_packet.py`
 reads only the frozen case, prompt and renderer; it checks a two-turn exchange
 against the actual first prompt and the case's fixed response to a `CHECK` or
 no-item reply. It passes only the exchange and scoring criteria to the scorer.
@@ -32,7 +32,7 @@ of four pairs are required. This floor can select uneven coverage; the B/C
 comparison must use two repeats under each arm within every selected stratum
 and report coverage. The existing `grid.py` expresses the run-level rule, but
 its hardcoded legacy map/output paths cannot be the V3 importer as-is.
-The [candidate reducer](../experiments/a22-p3/v3_qualification_reduce.py)
+The `meta/.ergon/A22-p3-routing/materials/v3_qualification_reduce.py`
 requires both complete 32-cell datasets, retains E-level disagreements, and
 implements that same-repeat floor without issuing a comparison permit.
 

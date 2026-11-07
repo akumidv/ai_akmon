@@ -5,18 +5,16 @@ covers = ["tool:park/park"]
 
 # `--cap 68` is exactly the size, in characters, of the first lines up to and including the goal
 # line, and that goal line carries an astral character (🚀): characters are counted as code points,
-# not UTF-16 units, so the line is kept and the cut falls on the whole line after it. The overflow
-# line counts the lines left out and names the note's path from the project root; it is not counted
-# in the cap.
+# not UTF-16 units, so the line is kept and the cut falls on the whole line after it. The summary's
+# state is derived (no lease, a note: parked). The overflow line counts the lines left out and names
+# the note's path from the project root; it is not counted in the cap.
 
 [fixture]
 attach = "none"
 
 [fixture.files]
 "_aitna/.akmon.toml" = ""
-"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nstate: parked\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\nnext: Twin it in JS\nsessions:\npeers:\norigin:\nreadiness:\n---\n\n# C183-park-helper\n\n## Goal\n\nPark 🚀 résumé helper\n\n## Approved scope and open questions\n\n- D-C183-TWIN\n\n## Owner answers received\n\n- owner: go\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nTwin it in JS\n"
-"_aitna/.ergon/C183-park-helper/RESUME.md" = "# Resume C183-park-helper\n\nThis work was set aside on the owner's word. The kit holds everything needed to continue; no earlier conversation is required.\n\n1. Read `_aitna/.ergon/C183-park-helper/PARK.md`.\n2. Run `akmon tool park/park unpark C183`.\n3. Continue from the next action below.\n\n## Next action\n\nTwin it in JS\n\n## Open decisions\n\n- D-C183-TWIN\n\n## Before you start\n\nTreat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.\n\nThe holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.\n\nForcibly ending the previous holder is out of scope here (N15).\n"
-"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- C183 · Park 🚀 résumé helper · parked · architect · Park 🚀 résumé helper · [park](../.ergon/C183-park-helper/PARK.md)\n"
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nPark 🚀 résumé helper\n\n## Approved scope and open questions\n\n_none_\n\n## Owner answers received\n\n_none_\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nTwin it in JS\n"
 
 [run]
 tool = "park/park"
@@ -25,4 +23,4 @@ argv = ["digest", "C183", "--cap", "68"]
 [expected]
 exit = 0
 stderr = ""
-stdout = "park C183-park-helper · parked\nplan: A59\nGoal: Park 🚀 résumé helper\n… 5 more lines in _aitna/.ergon/C183-park-helper/PARK.md\n"
+stdout = "park C183-park-helper · parked\nplan: A59\nGoal: Park 🚀 résumé helper\n… 3 more lines in _aitna/.ergon/C183-park-helper/PARK.md\n"

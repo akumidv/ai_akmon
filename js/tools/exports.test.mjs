@@ -32,7 +32,7 @@ test("tools/README.md documents every exported module and exactly its exports", 
   /** @type {Record<string, string[]>} */
   const documented = {};
   for (const match of readme.matchAll(/^\| `(akmon\/tools\/[a-z_/]+)` \| (.+) \|$/gm)) {
-    documented[match[1]] = match[2] === "—" ? [] : [...match[2].matchAll(/`([A-Za-z]+)`/g)].map((m) => m[1]);
+    documented[match[1]] = match[2] === "—" ? [] : [...match[2].matchAll(/`([A-Za-z_]+)`/g)].map((m) => m[1]);
   }
   /** @type {Record<string, string[]>} */
   const actual = {};

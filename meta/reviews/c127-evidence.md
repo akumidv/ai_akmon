@@ -106,7 +106,7 @@ akmon-shipped cap; that scope is not measured by self-CI and the cap is not re-b
 
 - `uv run pytest -q`: 10 failed, 2440 passed — the 9 known `test_a22_p3_*` reds and
   `test_ruff_profile.py::test_akmon_meets_every_size_limit_without_an_exception` (offenders: `test_a22_p3_*` only).
-- `uv run ruff check .`: 11 errors, all in `meta/tests/test_a22_p3_*` (I001, PLR0913, C901, RUF100).
+- `uv run ruff check .`: 11 errors, all in `meta/.ergon/A22-p3-routing/materials/tests/test_a22_p3_*` (I001, PLR0913, C901, RUF100).
   `uv run ruff format --check .`: 131 files already formatted.
 - `node --test "js/**/*.test.mjs"`: 626 tests, 626 pass.
 - `npx --no-install tsc --checkJs --noEmit -p .`: exit 0. `npx --no-install oxlint .`: exit 0 at the time of the gate

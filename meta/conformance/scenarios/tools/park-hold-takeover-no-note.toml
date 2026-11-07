@@ -1,0 +1,28 @@
+id = "tools/park-hold-takeover-no-note"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A takeover of a kit that has no `PARK.md` yet still keeps the replaced holder: `SESSIONS` beside the lease holds it for
+# the next `write` to merge into the note. The replaced holder's worktree is not readable here, and the output says so first.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PLAN.md" = "---\nid: C183\nname: park-helper\ntitle: Park helper\ntasks: C183\n---\n\n# C183-park-helper\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree: \nwritten: 2000-01-01T00:00:00Z\n---\n"
+
+[run]
+tool = "park/park"
+argv = ["hold", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop", "--takeover"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "the uncommitted paths of claude s2 laptop could not be read\nC183-park-helper: claude s1 laptop {{root}}\n"
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree: {{root}}\nwritten: {{ts}}\n---\n"
+"_aitna/.ergon/C183-park-helper/SESSIONS" = "claude|s2|laptop\n"

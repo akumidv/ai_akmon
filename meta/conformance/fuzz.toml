@@ -16,6 +16,8 @@
 #   stdin_regex         a regex the case's stdin (decoded with replacement) must contain
 #   python_stdin_errors a host condition: the error handler of Python's stdin under the run's
 #                       environment ("strict" under a UTF-8 locale, "surrogateescape" under C/POSIX)
+#   python_enametoolong a host condition: what the running Python's Path.is_file()/is_dir() do with
+#                       a name too long for one stat ("raises" on 3.12 and 3.13, "swallows" from 3.14)
 
 [[known]]
 dv = "DV4"
@@ -57,3 +59,10 @@ mutation = [
   "big-number:neg-zero-float:tool_input.subagent_type",
   "big-number:beyond-2^*:tool_input.subagent_type",
 ]
+
+[[known]]
+dv = "DV40"
+reason = "a payload path too long for one stat: the running Python's Path.is_file()/is_dir() answer False instead of raising, so the hook finds no agents and stays silent where node's mirror of the 3.12/3.13 errno set raises and the crash guard speaks"
+streams = ["stdout", "stderr"]
+mutation = "long-string:*"
+python_enametoolong = "swallows"

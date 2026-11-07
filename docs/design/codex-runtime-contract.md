@@ -183,8 +183,17 @@ immutable. Commit, tag, push, publish, and consumer pin updates remain owner-run
 
 The following require a live Codex protocol spike and stay explicitly unsupported until proven:
 
-- exact PreToolUse names/payloads for read/search and subagent calls (**shell is now
-  measured** — see the route contract below);
-- whether subagent calls are observable by project hooks and expose parent/child identity;
+- exact PreToolUse names/payloads for read/search calls (**shell is now measured** — see the
+  route contract below; subagent calls are measured, see below);
+- whether a child's own `PreToolUse` `additionalContext` reaches the child (M192 measured the
+  parent's; the child's receipt is unmeasured — its `SubagentStart` `additionalContext` is
+  measured to reach it, M62);
 - attended and non-interactive `ask`/`deny` behavior;
 - user-visible hook output and child model selection.
+
+**Answered (measured):** subagent calls are observable by project hooks and expose parent/child
+identity. The parent's spawn and wait are `PreToolUse` `collaborationspawn_agent` (`task_name`,
+`fork_turns`, `model`, `message`) and `collaborationwait_agent` (M62, codex-cli 0.153.4; the spawn's parameters, M29, codex-cli 0.146.0). The
+child fires `SubagentStart` and `SubagentStop` with its own `agent_id`, `agent_type: default`, and
+the parent's `session_id` (M62); its tool events carry the same `agent_id` under a different
+`turn_id`, and the spawn names no `agent_id` (M192; codex-cli 0.159.2).

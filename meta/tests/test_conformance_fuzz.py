@@ -280,6 +280,31 @@ def test_a_known_entry_matches_by_script_streams_mutation_stdin_and_host():
     assert not entry.matches(_case(["invalid-utf8:ff:x"], stdin=b"{}"), ("stdout",), host)
 
 
+def test_a_known_entry_can_be_scoped_to_the_running_interpreters_stat_answer():
+    """DV40 is accepted only on an interpreter whose pathlib swallows a name-too-long ``stat``."""
+    entry = fuzz.Known(
+        dv="DV40",
+        reason="r",
+        streams=("stdout", "stderr"),
+        mutation="long-string:*",
+        python_enametoolong="swallows",
+    )
+    host = {"python_enametoolong": "swallows"}
+    case = _case(["long-string:cwd", "lone-surrogate:start:session_id"], script="session-start-agent")
+    assert entry.matches(case, ("stdout", "stderr"), host)
+    assert not entry.matches(case, ("stdout", "stderr"), {"python_enametoolong": "raises"})
+    assert not entry.matches(case, ("exit",), host)  # a stream the entry does not allow
+    assert not entry.matches(_case(["path-like:cwd"], script="session-start-agent"), ("stdout", "stderr"), host)
+
+
+def test_the_host_facts_are_answered_by_the_running_interpreter():
+    """A host condition a table entry names has to be a fact the run can actually ask of itself."""
+    facts = fuzz.host_facts({})
+    assert set(facts) == {"python_stdin_errors", "python_enametoolong"}
+    assert facts["python_stdin_errors"] in {"strict", "surrogateescape", "backslashreplace"}
+    assert facts["python_enametoolong"] in {"raises", "swallows"}
+
+
 def test_judge_counts_a_matched_difference_as_known_and_any_other_as_divergent():
     known = [fuzz.Known(dv="DV2", reason="r", mutation="big-number:beyond-2^*")]
     results = {"python": _observed(), "node": _observed(stderr="x")}

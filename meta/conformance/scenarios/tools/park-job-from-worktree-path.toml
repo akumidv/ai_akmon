@@ -1,0 +1,38 @@
+id = "tools/park-job-from-worktree-path"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The path rule for a linked worktree: the kit lives in the main checkout, outside the session's root
+# (the worktree folder `.worktrees/C186-holders-jobs.1/`), so `job` prints the job folder by its absolute
+# path, not as a relative `../..` chain. The job file is written into the main checkout's kit.
+#
+# The worktree is a real linked one: the fixture lays out by hand what `git worktree add` writes (the `.git`
+# link file in the worktree folder, `HEAD` and `commondir` in the repository's `worktrees/` folder), and
+# ignores the folder, so git answers the repository's common directory. A plain subfolder would be a
+# project of its own (a repository subfolder keeps its own dev root).
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C186-holders-jobs/PLAN.md" = "---\nid: C186\nname: holders-jobs\ntitle: Holders and jobs\ntasks: C186\n---\n\n# C186-holders-jobs\n\n## Jobs\n\n- C186.1 · write the lease · tasks C186 · result: the lease is created exclusively\n- C186.2 · job file · tasks C186 · after C186.1 · result: the job file is written\n"
+".gitignore" = ".worktrees/\n"
+".git/worktrees/C186-holders-jobs.1/HEAD" = "ref: refs/heads/_aitna/C186-holders-jobs.1\n"
+".git/worktrees/C186-holders-jobs.1/commondir" = "../..\n"
+".worktrees/C186-holders-jobs.1/.git" = "gitdir: ../../.git/worktrees/C186-holders-jobs.1\n"
+".worktrees/C186-holders-jobs.1/README.md" = "a linked worktree folder\n"
+
+[run]
+tool = "park/park"
+argv = ["job", "C186", "--number", "2", "--step", "write it", "--root", ".worktrees/C186-holders-jobs.1", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{{root}}/_aitna/.ergon/C186-holders-jobs/jobs/2-job-file\n"
+
+[expected.files]
+"_aitna/.ergon/C186-holders-jobs/jobs/2-job-file/JOB.md" = "---\nid: C186\nname: holders-jobs\nplan: C186\njob: C186.2\nrow:\nbranch: main\nrevisions:\nowned_paths:\ntasks:\n  - C186\nnext: the job file is written\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n## Steps\n\n- [ ] write it\n"
+"_aitna/.ergon/C186-holders-jobs/jobs/2-job-file/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree: {{root}}\nwritten: {{ts}}\n---\n"

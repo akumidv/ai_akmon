@@ -123,7 +123,7 @@ project-local hook surface.
   `systemMessage`, which the model does not see (M77), and a text addressed to the orchestrator
   in `hookSpecificOutput.additionalContext` — re-route or switch role (C20), re-issue with
   `model=<floor>` (C32), label fan-out calls with `[zone:<label>]` (C33). On PreToolUse both
-  reach their reader and the call runs with no permission decision (M149). A call with no
+  reach their reader and the call runs with no permission decision (M209). A call with no
   warning carries no `additionalContext`. The
   per-call floor check is **Claude-only**: a Codex delegation is a `collaborationspawn_agent`
   call that names neither an agent nor a model, and the `Task`/`Agent` matchers do not fire on

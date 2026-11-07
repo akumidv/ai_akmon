@@ -1,0 +1,30 @@
+id = "tools/park-hold-takeover-stale"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The owner's word (`--takeover`) replaces a stale lease: the new holder's HOLDER file is written, and
+# the replaced holder is kept among the note's sessions, so the takeover leaves a trace. The replaced holder's
+# uncommitted paths come first in the output (here its worktree is not named, so they cannot be read). The rest of the
+# note (its header and its body) is kept as it was.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree:\nwritten: 2000-01-01T00:00:00Z\n---\n"
+
+[run]
+tool = "park/park"
+argv = ["hold", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop", "--takeover"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "the uncommitted paths of claude s2 laptop could not be read\nC183-park-helper: claude s1 laptop {{root}}\n"
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree: {{root}}\nwritten: {{ts}}\n---\n"
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\njob:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\n  - claude|s2|laptop\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"

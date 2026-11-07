@@ -12,9 +12,21 @@
  */
 
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import { posix } from "node:path";
 
-import { isFile, pyError, pyPath, pyStat, pyStrip, pySplitlines, readText, strRepr } from "./pyvalue.mjs";
+import {
+  decodeUtf8,
+  isFile,
+  isOSError,
+  pyError,
+  pyPath,
+  pyStat,
+  pyStrip,
+  pySplitlines,
+  readText,
+  strRepr,
+} from "./pyvalue.mjs";
 
 /** The default dev-layer (local) root; a project may relocate it by committing `.aitna-root`. */
 export const AITNA_ROOT_DEFAULT = "_aitna";
@@ -23,8 +35,9 @@ export const AITNA_ROOT_DEFAULT = "_aitna";
 export const DEV_ROOT_FILE = ".aitna-root";
 
 /**
- * The two dotted folders under the dev root (ADR 0028 D01): `.local` holds the local index and what
- * only this machine needs, `.ergon` holds one kit per piece of work. Both are gitignored.
+ * The two dotted folders under the dev root (ADR 0028 D01): `.local` holds what only this machine
+ * needs (learning state, model overlays), `.ergon` holds one kit per piece of work. Both are
+ * gitignored. The local index retired with ADR 0028 D12, so no row is written anywhere.
  */
 export const LOCAL_DIR_NAME = ".local";
 export const ERGON_DIR_NAME = ".ergon";
@@ -36,6 +49,14 @@ const _LEGACY_LOCAL_DIR_NAME = "local";
 export const ORIGIN_POINTER = "pointer";
 export const ORIGIN_DEFAULT = "default";
 export const ORIGIN_NO_PROJECT_ROOT = "no-project-root";
+
+// How long the git probe that resolves a worktree's main checkout may take, in milliseconds.
+const _GIT_TIMEOUT_MS = 10_000;
+
+// The resolved main checkout per project root: a repository's common directory does not move
+// while a session runs, and the probe costs a process.
+/** @type {Map<string, string>} */
+const _GIT_COMMON_CACHE = new Map();
 
 // Dangling links followed by hand before the walk calls it a loop: Linux's own MAXSYMLINKS.
 const _MAX_HOPS = 40;
@@ -267,14 +288,99 @@ export function localRoot(projectRoot) {
 }
 
 /**
- * The kit folder `<dev root>/.ergon` of `projectRoot` (ADR 0028 D01): the path, computed, not a
+ * The main checkout of the repository that holds `projectRoot`, or `projectRoot` itself.
+ *
+ * A linked worktree keeps its own working tree but shares the repository, so
+ * `git rev-parse --git-common-dir` answers where the repository really is. The kits live in the
+ * main checkout (ADR 0028 D11), so the accessor resolves them through it: a session in a worktree
+ * writes into the main checkout's kits, and one kit is one folder for the project.
+ *
+ * Outside a repository, or when git is absent, the answer is the project root unchanged. With no
+ * project root at all, the answer is `null`, as everywhere else in this module.
+ * @param {string | null} projectRoot
+ * @returns {string | null}
+ */
+export function gitCommonRoot(projectRoot) {
+  if (projectRoot === null) {
+    return null;
+  }
+  const cached = _GIT_COMMON_CACHE.get(projectRoot);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const resolved = _resolveGitCommonRoot(projectRoot);
+  _GIT_COMMON_CACHE.set(projectRoot, resolved);
+  return resolved;
+}
+
+/**
+ * What git says of `projectRoot`: the repository's resolved common directory and the project
+ * root's prefix inside its working tree (`mono/proj/`, or empty at the top); `null` when git cannot
+ * say.
+ * @param {string} projectRoot
+ * @returns {{common: string, prefix: string} | null}
+ */
+function _gitAnswer(projectRoot) {
+  // Loaded where it is used, so a caller that never asks pays nothing for `node:child_process`.
+  const { spawnSync } = /** @type {typeof import("node:child_process")} */ (
+    createRequire(import.meta.url)("node:child_process")
+  );
+  const done = spawnSync("git", ["rev-parse", "--git-common-dir", "--show-prefix"], {
+    cwd: projectRoot,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: _GIT_TIMEOUT_MS,
+  });
+  if (done.error !== undefined || done.status !== 0) {
+    return null; // no git, a timeout, a missing cwd, or not a repository
+  }
+  const answer = decodeUtf8(done.stdout);
+  const newline = answer.indexOf("\n");
+  const common = pyStrip(newline < 0 ? answer : answer.slice(0, newline));
+  if (common === "") {
+    return null;
+  }
+  const absolute = posix.isAbsolute(common) ? pyPath(common) : pyPath(projectRoot, common);
+  try {
+    return { common: resolvePath(absolute), prefix: newline < 0 ? "" : pyStrip(answer.slice(newline + 1)) };
+  } catch (error) {
+    if (!isOSError(error)) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+/**
+ * The main checkout's copy of `projectRoot`, read from git; the project root when there is none.
+ *
+ * One git call answers two things: the repository's common directory (its parent is the main
+ * checkout) and the project root's own prefix inside its working tree. A project in a repository
+ * subfolder (`mono/proj`) keeps that subfolder in the main checkout, so its kits stay its own and do
+ * not land in the repository top's dev root (ADR 0028 D11).
+ * @param {string} projectRoot
+ * @returns {string}
+ */
+function _resolveGitCommonRoot(projectRoot) {
+  const answer = _gitAnswer(projectRoot);
+  if (answer === null) {
+    return projectRoot;
+  }
+  // The common directory is the repository's `.git`; its parent is the main checkout.
+  const top = posix.basename(answer.common) === ".git" ? posix.dirname(answer.common) : answer.common;
+  const root = pyPath(top, answer.prefix);
+  return isFile(pyPath(root, DEV_ROOT_FILE)) || isFile(pyPath(root, "AGENTS.md")) ? root : projectRoot;
+}
+
+/**
+ * The kit folder `<dev root>/.ergon` of `projectRoot` (ADR 0028 D01, D11): the path, computed, not a
  * claim that it exists. With no project root it is the default-name relative path
- * (`_aitna/.ergon`), for reading only, as `aitnaRoot` is.
+ * (`_aitna/.ergon`), for reading only, as `aitnaRoot` is. In a linked worktree it is the main
+ * checkout's folder: the kits are shared, the working tree is not.
  * @param {string | null} projectRoot
  * @returns {string}
  */
 export function ergonRoot(projectRoot) {
-  return pyPath(aitnaRoot(projectRoot), ERGON_DIR_NAME);
+  return pyPath(aitnaRoot(gitCommonRoot(projectRoot)), ERGON_DIR_NAME);
 }
 
 /**

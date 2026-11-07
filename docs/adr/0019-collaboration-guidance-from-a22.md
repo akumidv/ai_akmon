@@ -154,7 +154,7 @@ four-column TSV for downstream qualification. Preserve both raw and canonical
 bytes and hashes, bound to the packet, request, call, model, usage and ledger.
 Do not alter the E-element rubric, two independent scorers, same-repeat
 qualification rule, or prior failed call. Near-match ID normalization is not
-accepted. The [design proposal](../../meta/experiments/a22-p3/V3_SCORER_ID_BINDING_PROPOSAL.md)
+accepted. The `meta/.ergon/A22-p3-routing/materials/V3_SCORER_ID_BINDING_PROPOSAL.md`
 records the alternatives and verification criteria.
 
 This decision does not authorize route checks or qualification dispatch. New
@@ -182,7 +182,7 @@ This decision authorizes implementation, not retrospective reclassification,
 provider dispatch, qualification, or B/C comparison. A separate seal and
 unscored route checks on two distinct blinded packets for both scorer models
 must pass before a fresh qualification package is proposed. The
-[design proposal](../../meta/experiments/a22-p3/V3_HEADER_OPTIONAL_SCORER_PROPOSAL.md)
+`meta/.ergon/A22-p3-routing/materials/V3_HEADER_OPTIONAL_SCORER_PROPOSAL.md`
 records alternatives and failure conditions; D02's resource and stop limits
 continue to apply.
 
@@ -241,7 +241,7 @@ the superseded reply, in a distinct reviewed seal. Charge 1,608,025 observed V3
 Codex tokens at opening and retain D05's eight-event ceiling, 5,000,000-token
 aggregate ceiling, quota stops and observed-no-retry rule. A new failure stops the
 sealed generation. B/C comparison stays outside this decision. The
-[accepted design](../../meta/experiments/a22-p3/V3_A_SUBJECT_PAIR_RESTART_PROPOSAL.md)
+`meta/.ergon/A22-p3-routing/materials/V3_A_SUBJECT_PAIR_RESTART_PROPOSAL.md`
 specifies the pair identity, reduction and replay requirements.
 
 ### D07 — Stop the current P3 comparison at its qualification floor

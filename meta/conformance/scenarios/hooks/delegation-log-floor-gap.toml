@@ -1,7 +1,7 @@
 # C32: the recorded binding runs the orchestrator — and so k_reasoner — on sonnet, one rung below
 # the quant-derivation floor (opus, the corridor's boundary). A k_reasoner call with no model
 # override gets the owner-facing floor line in the systemMessage and the orchestrator-facing one —
-# model=<floor> from the next call on — in additionalContext (ADR 0006 item 4, M149); the log
+# model=<floor> from the next call on — in additionalContext (ADR 0006 item 4, M209); the log
 # line names the bound model. The call does not say which kind it carries, so both are conditional
 # on the kind.
 id = "hooks/delegation-log-floor-gap"

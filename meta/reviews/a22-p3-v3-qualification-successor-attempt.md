@@ -6,10 +6,10 @@ both scorer readings, and the eighth has two accepted subject turns but no
 accepted scorer reading. No qualification map or B/C comparison is established.
 The failed call is not eligible for retry or replacement under this seal.
 
-The [proposal](../experiments/a22-p3/V3_QUALIFICATION_SUCCESSOR_PROPOSAL.md),
-[operational seal](../experiments/a22-p3/runs/v3-qualification-successor-seal-v1.json),
-[offline preflight](../experiments/a22-p3/runs/v3-qualification-successor-preflight-v1.json)
-and [owner approval](../experiments/a22-p3/runs/v3-qualification-successor-approval-v1.json)
+The `meta/.ergon/A22-p3-routing/materials/V3_QUALIFICATION_SUCCESSOR_PROPOSAL.md`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-successor-seal-v1.json`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-successor-preflight-v1.json`
+and `meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-successor-approval-v1.json`
 bind the 32-cell schedule and qualification-only dispatch. The seal SHA-256 is
 `0966558a7fcc575ed2d24400f802f02481003d821f2970d8ebac8531fe6d3206`.
 Execution was in the detached `/tmp/a22-p3-v3-qualification-checkout` worktree.

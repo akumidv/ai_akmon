@@ -1,0 +1,30 @@
+id = "tools/park-write-refused-held"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A write into a unit another live session holds is refused, with the holder named: the note and the
+# lease are left exactly as they were, and no file is written. The write names session s1, which is
+# not the holder of the live lease (session s2).
+
+[fixture]
+attach = "none"
+git = false
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree:\nwritten: 2099-01-01T00:00:00Z\n---\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Something else", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stderr = "error: C183-park-helper is held by claude s2 laptop; read the note, hold another unit, or ask the owner\n"
+stdout = ""
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree:\nwritten: 2099-01-01T00:00:00Z\n---\n"

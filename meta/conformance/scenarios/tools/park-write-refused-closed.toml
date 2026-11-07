@@ -1,0 +1,27 @@
+id = "tools/park-write-refused-closed"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A closed kit keeps its id and name: `write` of the same id and name is refused in one line, and no kit is created.
+
+[fixture]
+attach = "none"
+git = false
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/.closed/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Again"]
+
+[expected]
+exit = 1
+stderr = "error: kit C183-park-helper is closed and keeps its id and name; write under another id or name\n"
+stdout = ""
+file_absent = ["_aitna/.ergon/C183-park-helper"]
+
+[expected.files]
+"_aitna/.ergon/.closed/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"

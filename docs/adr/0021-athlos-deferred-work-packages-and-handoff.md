@@ -206,6 +206,8 @@ of D01, not in a louder warning.
 
 `Decision-ID: ADR-0021/D04`
 
+*Superseded in part by [0029/D03](0029-ergon-athlos-step-one-method-of-work.md#d03--the-key-the-id-and-the-zone-on-the-line): the athlos is keyed by its id `<ergon-id>.<n>`; the pair (task id, zone) is its content, the zone a field of its line.*
+
 An **athlos** (ἆθλον, pl. *aethla*) is one bounded labor of an approved plan: a piece of work with
 its own acceptance condition, named by the pair (task id, zone) — the zone names where the work
 lands, the athlos names the work itself. It is carried by a session and executed by `k_*` delegates,

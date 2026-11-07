@@ -729,10 +729,13 @@ class Known:
     mutation: str | tuple[str, ...] = "*"  # one glob, or several (any matches)
     stdin_regex: str = ""
     python_stdin_errors: str = ""
+    python_enametoolong: str = ""
 
     def matches(self, case: Case, streams: tuple[str, ...], host: dict[str, str]) -> bool:
         """Whether the case's divergence is this entry's: script, streams, mutation, stdin and host condition."""
         if self.python_stdin_errors and host.get("python_stdin_errors") != self.python_stdin_errors:
+            return False
+        if self.python_enametoolong and host.get("python_enametoolong") != self.python_enametoolong:
             return False
         if not any(fnmatch.fnmatchcase(case.seed.script, pattern) for pattern in self.scripts):
             return False
@@ -775,16 +778,39 @@ def load_known(path: Path = KNOWN_FILE, divergences: Path = DIVERGENCES_FILE) ->
     return known
 
 
+#: What the running Python's ``Path.is_file()``/``is_dir()`` do with a path whose name is too long
+#: for one ``stat``: ``raises`` on 3.12 and 3.13, ``swallows`` (the call answers "no") from 3.14,
+#: whose pathlib rewrite hides every filesystem error there. The two answers DV40 is about (M208).
+_STAT_ENAMETOOLONG_PROBE = (
+    "import pathlib\n"
+    "try:\n"
+    f"    pathlib.Path('x' * {LONG_STRING_BYTES + 1}).is_file()\n"
+    "except OSError:\n"
+    "    print('raises')\n"
+    "else:\n"
+    "    print('swallows')\n"
+)
+
+#: The host conditions a ``fuzz.toml`` entry may be scoped to, each asked of the interpreter itself.
+_HOST_PROBES = (
+    ("python_stdin_errors", "import sys; print(sys.stdin.errors)"),
+    ("python_enametoolong", _STAT_ENAMETOOLONG_PROBE),
+)
+
+
 def host_facts(env: dict[str, str]) -> dict[str, str]:
-    """The host conditions a ``fuzz.toml`` entry may depend on: the error handler of Python's stdin."""
-    result = subprocess.run(
-        [sys.executable, "-c", "import sys; print(sys.stdin.errors)"],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return {"python_stdin_errors": result.stdout.strip()}
+    """The host conditions a ``fuzz.toml`` entry may depend on, as the running interpreter answers them."""
+    facts: dict[str, str] = {}
+    for name, source in _HOST_PROBES:
+        result = subprocess.run(
+            [sys.executable, "-c", source],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        facts[name] = result.stdout.strip()
+    return facts
 
 
 # --- draft scenarios --------------------------------------------------------------------

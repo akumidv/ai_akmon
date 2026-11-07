@@ -1,0 +1,30 @@
+id = "tools/park-hold-takeover-no-harness"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A takeover replaces a stale lease whose holder names no harness. The replaced holder is kept among the
+# note's sessions only when it names both a harness and a session id (a session a note can carry); this
+# one names a session but no harness, so the note's sessions stay empty. The new holder's lease is
+# written as usual, and the rest of the note is kept as it was.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness:\nsession: s2\nmachine: laptop\nworktree:\nwritten: 2000-01-01T00:00:00Z\n---\n"
+
+[run]
+tool = "park/park"
+argv = ["hold", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop", "--takeover"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "the uncommitted paths of ? s2 laptop could not be read\nC183-park-helper: claude s1 laptop {{root}}\n"
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree: {{root}}\nwritten: {{ts}}\n---\n"
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"

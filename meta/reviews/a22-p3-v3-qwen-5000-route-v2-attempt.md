@@ -6,10 +6,10 @@ TSV parser rejected it. The model placed explanatory prose before the TSV
 header. This one-shot route is terminal and does not establish accepted scorer
 mechanics, qualification data or a comparison result.
 
-The [successor proposal](../experiments/a22-p3/V3_QWEN_5000_ROUTE_V2_PROPOSAL.md),
-[seal](../experiments/a22-p3/runs/v3-qwen-5000-route-seal-v2.json),
-[offline preflight](../experiments/a22-p3/runs/v3-qwen-5000-route-preflight-v2.json)
-and [phase approval](../experiments/a22-p3/runs/v3-qwen-5000-route-approval-v2.json)
+The `meta/.ergon/A22-p3-routing/materials/V3_QWEN_5000_ROUTE_V2_PROPOSAL.md`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-qwen-5000-route-seal-v2.json`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-qwen-5000-route-preflight-v2.json`
+and `meta/.ergon/A22-p3-routing/materials/runs/v3-qwen-5000-route-approval-v2.json`
 bind a new runtime, the preceding terminal DNS attempt, the frozen P3-01 blind
 packet and scoring prompt, Qwen CLI 0.24.7 / `qwen3.8-27b`, default thinking,
 `maxRetries: 0` and a local 5,000-token output setting. Their seal, preflight

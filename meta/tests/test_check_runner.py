@@ -235,5 +235,9 @@ def test_a_missing_data_file_fails_from_the_public_functions(monkeypatch):
 
 def test_a_negated_class_ending_at_u10fffe_matches_u10ffff_dv37():
     """Python's answer for the case V8 gets wrong (DIVERGENCES.md DV37); ``glob.test.mjs`` pins node's."""
-    assert fnmatch.translate("[!-\U0010fffe]") == "(?s:[^\\-\U0010fffe])\\Z"
+    # Python 3.14 ends the translation with ``\z`` (its new spelling of end-of-string), 3.12-3.13 with ``\Z``.
+    assert fnmatch.translate("[!-\U0010fffe]") in (
+        "(?s:[^\\-\U0010fffe])\\Z",
+        "(?s:[^\\-\U0010fffe])\\z",
+    )
     assert fnmatch.fnmatchcase("\U0010ffff", "[!-\U0010fffe]") is True

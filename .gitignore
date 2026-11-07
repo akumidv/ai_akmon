@@ -15,6 +15,7 @@ __pycache__
 .pytest_cache
 /.tmp
 .tmp/
+.worktrees/
 
 # akmon's dev root is meta/, so its local layer is meta/.local/ and its kits meta/.ergon/ (everything a session resumes from).
 /meta/.local/
@@ -51,6 +52,7 @@ node_modules/
 .claude/model-routing.log
 .claude/second-opinion/
 .codex/second-opinion/
+.ai-sync-trash/
 .qwen/second-opinion/
 .opencode/second-opinion/
 .pi/second-opinion/

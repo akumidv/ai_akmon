@@ -56,7 +56,7 @@ this pilot branch without a new rule or live transfer. This closes the
 cold-resumption branch only; A22's broader disposition and any other
 interaction scope remain open.
 
-For task-level continuation in this pilot, the [runner](../../meta/experiments/a22-resumption-pilot/run_c98_pair.py)
+For task-level continuation in this pilot, the `meta/.ergon/A22-resumption-pilot/materials/run_c98_pair.py`
 turns a frozen task case into a sequential two-arm run: it checks source and
 packet hashes, clean HEAD, model routing, all descendant usage and stopping
 gates before advancing. A planned next case that passes these controls can

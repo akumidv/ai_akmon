@@ -6,14 +6,14 @@ cost comparison or evidence for a new operative rule.
 
 ## Method and retained evidence
 
-The owner instructed the pilot to run. The [first-pair protocol](../experiments/a22-resumption-pilot/PROTOCOL.md)
+The owner instructed the pilot to run. The `meta/.ergon/A22-resumption-pilot/materials/PROTOCOL.md`
 froze one A44 implementation handoff on clean detached HEAD
 `f3f5235f3aa4e6a58ed8237fd295597e3df034cd`. Both fresh read-only
 `codex-cli 0.162.1` sessions requested `gpt-6-sol` at medium reasoning and
 read the same repository snapshot. The only designed difference was the
-[record-derived resume point](../experiments/a22-resumption-pilot/PROMPT_POINTER.md)
-added to the [ordinary prompt](../experiments/a22-resumption-pilot/PROMPT_CURRENT.md).
-The [key](../experiments/a22-resumption-pilot/KEY.md) remained outside the
+`meta/.ergon/A22-resumption-pilot/materials/PROMPT_POINTER.md`
+added to the `meta/.ergon/A22-resumption-pilot/materials/PROMPT_CURRENT.md`.
+The `meta/.ergon/A22-resumption-pilot/materials/KEY.md` remained outside the
 subject worktree. Source and prompt hashes matched before and after dispatch;
 the worktree stayed clean. The CLI rollout metadata confirms the model in all
 seven root and child sessions.
@@ -23,18 +23,18 @@ its app-server client (`Read-only file system (os error 30)`). Its stderr was
 overwritten by the successful rerun to the same path, so only the observed
 error in the operator transcript survives; no JSONL or usage was emitted.
 This is an evidence-retention error. The successful root transcripts and final
-answers are retained in [runs](../experiments/a22-resumption-pilot/runs/).
+answers are retained in `meta/.ergon/A22-resumption-pilot/materials/runs/`.
 The final answers are raw model output and contain absolute links into the
 detached worktree; those links depend on that local worktree remaining present.
 After the first successful call exceeded the 200,000-token root-only
-monitoring ceiling, the [separate continuation](../experiments/a22-resumption-pilot/SUCCESSOR.md)
+monitoring ceiling, the `meta/.ergon/A22-resumption-pilot/materials/SUCCESSOR.md`
 allowed only the unrun pointer arm under a 500,000-token cumulative ceiling.
 The first answer was already visible when this continuation was written.
 
 ## Answer reading
 
-An independent `gpt-6-luna` evaluator saw only [answers X and Y](../experiments/a22-resumption-pilot/runs/blind-answers.md)
-and the fixed key. Its [instruction and reported ratings](../experiments/a22-resumption-pilot/runs/blind-score.md)
+An independent `gpt-6-luna` evaluator saw only `meta/.ergon/A22-resumption-pilot/materials/runs/blind-answers.md`
+and the fixed key. Its `meta/.ergon/A22-resumption-pilot/materials/runs/blind-score.md`
 are retained as a copy of its collaboration reply; a full scorer provider
 transcript is unavailable. It scored goal, accepted rationale, truthful state, material
 limit, next action, and absence of unnecessary owner intake as **6/6 for X and
@@ -44,8 +44,8 @@ revealed: X was the pointer answer and Y was current practice.
 Both answers correctly say A44 is implemented but still active pending owner
 verification; preserve the passing 52 record/cap checks and the full-tree,
 build, and JS-test evidence limits; and direct the next handoff toward owner
-verification without reopening ADR 0016 D04. See the [current answer](../experiments/a22-resumption-pilot/runs/current-final.md)
-and [pointer answer](../experiments/a22-resumption-pilot/runs/pointer-final.md).
+verification without reopening ADR 0016 D04. See the `meta/.ergon/A22-resumption-pilot/materials/runs/current-final.md`
+and `meta/.ergon/A22-resumption-pilot/materials/runs/pointer-final.md`.
 No observable recovery failure was corrected by the pointer in this case.
 The pair does not measure owner effort, rework, or transfer to a genuine fresh
 task. One comparatively easy implementation handoff cannot establish

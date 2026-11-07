@@ -1,0 +1,28 @@
+id = "tools/park-local-id-legacy-index"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The retired local index `<DEV>/.local/TASKS.md` is read as legacy input (ADR 0028 D12): a `_T<n>` row
+# in it is a number already handed out, so `local-id` skips it. The kits hold `_T3`, the index holds
+# `_T6`, so the next id is `_T7`. The index is read only: it is left as it was.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.local/TASKS.md" = "# TASKS\n\n- _T6 \u00b7 plan: ported candidates \u00b7 active\n- C9 \u00b7 a project row\n"
+"_aitna/.ergon/_T3-scratch-probe/PARK.md" = "---\nid: _T3\nname: scratch-probe\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Probe the twin\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# _T3-scratch-probe\n\n## Goal\n\nGoal\n\n## Next action\n\nProbe the twin\n"
+
+[run]
+tool = "park/park"
+argv = ["local-id"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_T7\n"
+
+[expected.files]
+"_aitna/.local/TASKS.md" = "# TASKS\n\n- _T6 \u00b7 plan: ported candidates \u00b7 active\n- C9 \u00b7 a project row\n"

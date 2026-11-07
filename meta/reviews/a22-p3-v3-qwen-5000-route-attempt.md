@@ -6,10 +6,10 @@ configuration passed offline preflight, but scorer mechanics did not pass. The
 one-shot call is terminal. No qualification call, scorer reading, or comparison
 was added by this successor.
 
-The [proposal](../experiments/a22-p3/V3_QWEN_5000_ROUTE_PROPOSAL.md),
-[operational seal](../experiments/a22-p3/runs/v3-qwen-5000-route-seal-v1.json),
-[offline preflight](../experiments/a22-p3/runs/v3-qwen-5000-route-preflight-v1.json),
-and [phase approval](../experiments/a22-p3/runs/v3-qwen-5000-route-approval-v1.json)
+The `meta/.ergon/A22-p3-routing/materials/V3_QWEN_5000_ROUTE_PROPOSAL.md`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-qwen-5000-route-seal-v1.json`,
+`meta/.ergon/A22-p3-routing/materials/runs/v3-qwen-5000-route-preflight-v1.json`,
+and `meta/.ergon/A22-p3-routing/materials/runs/v3-qwen-5000-route-approval-v1.json`
 bind the one-call route. Their SHA-256 values are respectively recorded in the
 seal, `a8403cf0a9a8b233574c16f13725d094652441535f2f9b3867256b6561b2c012`,
 `df4f623646f6b02c9455dcf0cbd21abdbb14b452ca83e77d714cc82c9b35e38a`,

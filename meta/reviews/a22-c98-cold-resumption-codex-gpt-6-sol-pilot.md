@@ -7,16 +7,16 @@ population result or an operative rule.
 
 ## Method and evidence
 
-The [C98 protocol](../experiments/a22-resumption-pilot/C98_PROTOCOL.md) and
-[manifest](../experiments/a22-resumption-pilot/C98_MANIFEST.json) froze the clean
+The `meta/.ergon/A22-resumption-pilot/materials/C98_PROTOCOL.md` and
+`meta/.ergon/A22-resumption-pilot/materials/C98_MANIFEST.json` froze the clean
 detached snapshot, six source hashes, two prompts, evaluator key, runner hash,
 models and gates before dispatch. The ordinary arm ran first, then the pointer
 arm. Both were read-only `codex-cli 0.162.1` calls with `gpt-6-sol` at medium
 reasoning; mechanical readers used `gpt-6-luna`. The subject worktree remained
 clean and source hashes matched after each call. The key stayed outside it.
 
-The [current answer](../experiments/a22-resumption-pilot/runs/c98-current-final.md)
-and [pointer answer](../experiments/a22-resumption-pilot/runs/c98-pointer-final.md)
+The `meta/.ergon/A22-resumption-pilot/materials/runs/c98-current-final.md`
+and `meta/.ergon/A22-resumption-pilot/materials/runs/c98-pointer-final.md`
 both recovered C98's active status, settled Unicode/language changes, open
 trigger designs, pre-clause evidence limit and next replay. Neither chose a
 trigger or asked the owner to repeat the settled language choice. A blinded
@@ -24,7 +24,7 @@ trigger or asked the owner to repeat the settled language choice. A blinded
 X down solely for omitting the count of 18 sessions. On a wording-versus-
 substance clarification under the frozen key, it corrected X to 6/6: X had
 preserved the 1,139-turn zero-hold result and its non-transfer to post-clause
-turns. The [score record](../experiments/a22-resumption-pilot/runs/c98-blind-score.md)
+turns. The `meta/.ergon/A22-resumption-pilot/materials/runs/c98-blind-score.md`
 preserves this correction. No critical false closure appeared.
 
 ## Session-tree account

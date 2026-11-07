@@ -5,8 +5,8 @@ decision. The default-deny approval remains unset; no successor provider call
 has been dispatched and its private runtime does not exist. The terminal
 seven-call qualification remains historical evidence only.
 
-The [proposal](../experiments/a22-p3/V3_QUALIFICATION_SUCCESSOR_PROPOSAL.md)
-and [fresh schedule](../experiments/a22-p3/runs/v3-qualification-successor-schedule-v1.json)
+The `meta/.ergon/A22-p3-routing/materials/V3_QUALIFICATION_SUCCESSOR_PROPOSAL.md`
+and `meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-successor-schedule-v1.json`
 bind 32 new A cells and 128 sequential provider calls. No run, packet, subject
 or scorer call ID overlaps the terminal schedule. Both scorers receive the
 same blinded packet/request generated with the format-only prompt that passed
@@ -14,16 +14,16 @@ their separate mechanics checks (M148–M149). Qwen retains default thinking
 and uses a 5,000-token local output setting; its setting is not a proven hard
 provider cap. The strict TSV parser and E1–E4 criteria remain unchanged.
 
-The [operational seal](../experiments/a22-p3/runs/v3-qualification-successor-seal-v1.json)
+The `meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-successor-seal-v1.json`
 has SHA-256 `0966558a7fcc575ed2d24400f802f02481003d821f2970d8ebac8531fe6d3206`.
 It binds the terminal ledger, both passed format-route seals/outcomes, the
 new prompt, packet, schedule, code, tests, model/settings and 285,782-token
 Codex opening. The
-[preflight](../experiments/a22-p3/runs/v3-qualification-successor-preflight-v1.json)
+`meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-successor-preflight-v1.json`
 has SHA-256 `932ad03e8ce97d4bc46649d8c195e5fe6984dfc8caabbe201931a96afb640113`
 and reports `PASSED_OFFLINE_QUALIFICATION_SUCCESSOR_PREFLIGHT`,
 `provider_calls: 0`, `dispatch_allowed: false`. The
-[approval record](../experiments/a22-p3/runs/v3-qualification-successor-approval-v1.json)
+`meta/.ergon/A22-p3-routing/materials/runs/v3-qualification-successor-approval-v1.json`
 is the exact default-deny template. A direct `advance` attempt stopped with
 `QualificationError` before creating the runtime.
 

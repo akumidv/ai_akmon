@@ -1,0 +1,28 @@
+id = "tools/park-hold-refused-stale"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A lease older than the stale threshold (24 hours) holds nothing for the state, but it is still a
+# lease: another session is refused with the holder named and the word `stale`, and only the owner's
+# word (`--takeover`) replaces it. The lease file is left as it was.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree:\nwritten: 2000-01-01T00:00:00Z\n---\n"
+
+[run]
+tool = "park/park"
+argv = ["hold", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stderr = "error: C183-park-helper is held by claude s2 laptop, whose lease is stale; take it over only on the owner's word (--takeover)\n"
+stdout = ""
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/HOLDER" = "---\nharness: claude\nsession: s2\nmachine: laptop\nworktree:\nwritten: 2000-01-01T00:00:00Z\n---\n"

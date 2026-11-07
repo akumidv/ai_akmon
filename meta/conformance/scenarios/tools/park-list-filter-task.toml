@@ -1,0 +1,28 @@
+id = "tools/park-list-filter-task"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `--task C186` keeps the kits that carry the task in any of three places: the plan header's `tasks`
+# (C186-by-plan), a job line of the plan (C187-by-line) or a job's own file (C188-by-file, whose job
+# line is listed under it). C190 carries another task and is left out.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C186-by-plan/PLAN.md" = "---\nid: C186\nname: by-plan\ntitle: Kit with the task in its plan header\ntasks: C186\n---\n\n# C186-by-plan\n\n## Jobs\n\n"
+"_aitna/.ergon/C187-by-line/PLAN.md" = "---\nid: C187\nname: by-line\ntitle: Kit with the task on a job line\n---\n\n# C187-by-line\n\n## Jobs\n\n- C187.1 · the line · tasks C186\n"
+"_aitna/.ergon/C188-by-file/PLAN.md" = "---\nid: C188\nname: by-file\ntitle: Kit with the task in a job file\n---\n\n# C188-by-file\n\n## Jobs\n\n- C188.1 · the file\n"
+"_aitna/.ergon/C188-by-file/jobs/1-the-file/JOB.md" = "---\nid: C188\nname: by-file\nplan:\njob: C188.1\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\n  - C186\nnext: Write the file\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n## Steps\n\n_none_\n"
+"_aitna/.ergon/C190-other/PLAN.md" = "---\nid: C190\nname: other\ntitle: Another task\ntasks: C191\n---\n\n# C190-other\n\n## Jobs\n\n"
+
+[run]
+tool = "park/park"
+argv = ["list", "--task", "C186"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "C186 | by-plan | not started | - | - | 0 | - | -\nC187 | by-line | not started | - | - | 0 | - | -\nC188 | by-file | not started | - | - | 0 | - | -\n  C188.1 | 1-the-file | not started | C186 | - | - | 0d\n"

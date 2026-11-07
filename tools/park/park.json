@@ -3,15 +3,17 @@
   "default_cap": 3000,
   "next_width": 60,
   "default_role": "architect",
-  "index_header": "# TASKS — local index",
-  "status_parked": "parked",
-  "status_active": "active",
-  "state_parked": "parked",
-  "state_resumed": "resumed",
-  "state_never_parked": "never-parked",
+  "stale_after_hours": 24,
+  "unknown_holder": "unknown",
   "none_marker": "_none_",
   "empty_cell": "-",
   "ellipsis": "…",
+  "states": {
+    "active": "active",
+    "parked": "parked",
+    "not_started": "not started",
+    "done": "done"
+  },
   "headings": {
     "goal": "Goal",
     "decisions": "Approved scope and open questions",
@@ -43,9 +45,6 @@
   "note": {
     "title": "# {{kit}}"
   },
-  "row": {
-    "link": "[park]({{link}})"
-  },
   "digest": {
     "title": "park {{kit}} · {{state}}",
     "field": "{{key}}: {{value}}",
@@ -59,21 +58,37 @@
   },
   "list": {
     "line": "{{id}} | {{name}} | {{state}} | {{plan}} | {{next}} | {{decisions}} | {{branch}} | {{age}}",
+    "unreadable": "{{id}} | {{name}} | unreadable | {{reason}}",
+    "job_line": "  {{id}} | {{name}} | {{state}} | {{tasks}} | {{next}} | {{branch}} | {{age}}",
     "empty": "no kits in {{path}}",
-    "no_match": "no kit matches the filters"
+    "no_match": "no kit matches the filters",
+    "warning_shared_paths": "warning: jobs {{jobs}} may run at once and share path {{path}}",
+    "closed_prefix": "closed"
+  },
+  "active": {
+    "none": "no active unit: this session is in the main checkout, and a pick has not been made",
+    "line": "{{kind}}: {{id}} | {{name}} | {{state}} | {{holder}} | {{path}}"
+  },
+  "takeover": {
+    "uncommitted": "{{holder}} left uncommitted paths: {{paths}}",
+    "unreadable": "the uncommitted paths of {{holder}} could not be read"
+  },
+  "export": {
+    "title": "# akmon kit bundle: {{kit}}",
+    "file_header": "--- file: {{path}}",
+    "end": "--- end"
   },
   "errors": {
     "bad_id": "{{label}} {{value}} is not a task id (a capital letter or _T followed by digits, e.g. C183 or _T3)",
+    "bad_job_id": "{{label}} {{value}} is not a job id (a task id and a number, e.g. C186.1)",
     "bad_name": "name {{value}} is not kebab-case (lowercase letters and digits joined by single hyphens)",
     "bad_line": "{{label}} must be a single line with no surrounding whitespace",
     "bad_text": "{{label}} must not have surrounding whitespace",
     "empty": "{{label}} must not be empty",
-    "bad_state": "state {{value}} is not parked or resumed",
     "bad_session": "session {{value}} is not harness|session_id|machine with no further |",
     "session_needs_harness": "--session-id and --machine need --harness",
     "bad_heading": "{{label}} has a line that starts with '## ', which would open a section",
     "bad_key": "purpose key {{value}} must be lowercase letters, digits and underscores",
-    "bad_cell": "{{label}} must not contain '·', the field separator of an index row",
     "bad_cap": "--cap must be a whole number of at least 0, got {{value}}",
     "no_project_root_dir": "--root {{path}} is not a directory",
     "header_missing": "{{path}}: no header between two '---' lines at the top of the note",
@@ -88,6 +103,18 @@
     "several_kits": "several kits carry id {{id}} under {{ergon}}: {{kits}}",
     "never_parked": "kit {{kit}} was never parked: it has no PARK.md",
     "no_resume": "kit {{kit}} has no RESUME.md; write it again to regenerate it",
-    "bad_row": "index row of {{id}} has too few fields to carry a status: {{row}}"
+    "held": "{{unit}} is held by {{holder}}; a stale lease is taken over only on the owner's word (--takeover)",
+    "held_write": "{{unit}} is held by {{holder}}; read the note, hold another unit, or ask the owner",
+    "held_write_stale": "{{unit}} is held by {{holder}}, whose lease is stale; a write does not take it: take it with 'hold --takeover' on the owner's word, then write",
+    "held_stale": "{{unit}} is held by {{holder}}, whose lease is stale; take it over only on the owner's word (--takeover)",
+    "no_holder": "{{unit}} has no holder file",
+    "no_job": "kit {{kit}} has no job {{job}}",
+    "no_plan": "kit {{kit}} has no PLAN.md, so it has no jobs",
+    "bad_plan": "kit {{kit}}: {{reason}}",
+    "job_label": "job {{id}} has no label, so its folder has no name",
+    "kit_closed": "kit {{kit}} is closed and keeps its id and name; write under another id or name",
+    "close_held": "{{unit}} is held by {{holder}}; close it after that session releases it, or ask the owner",
+    "close_exists": "kit {{kit}} was not closed: {{target}} already exists",
+    "close_failed": "kit {{kit}} was not closed: {{reason}}"
   }
 }

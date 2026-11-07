@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import errno
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,8 +36,9 @@ AITNA_ROOT_DEFAULT = "_aitna"
 # The file at the project root that declares a dev-layer root other than the default.
 DEV_ROOT_FILE = ".aitna-root"
 
-# The two dotted folders under the dev root (ADR 0028 D01): ``.local`` holds the local index and
-# what only this machine needs, ``.ergon`` holds one kit per piece of work. Both are gitignored.
+# The two dotted folders under the dev root (ADR 0028 D01): ``.local`` holds what only this
+# machine needs (learning state, model overlays), ``.ergon`` holds one kit per piece of work.
+# Both are gitignored. The local index retired with ADR 0028 D12, so no row is written anywhere.
 LOCAL_DIR_NAME = ".local"
 ERGON_DIR_NAME = ".ergon"
 
@@ -54,6 +56,13 @@ _START_PATH_MAX_BYTES = 4096
 
 # How much of a refused start path its error message quotes.
 _REFUSED_PREFIX_CHARS = 40
+
+# How long the git probe that resolves a worktree's main checkout may take.
+_GIT_TIMEOUT_SECONDS = 10
+
+# The resolved main checkout per project root: a repository's common directory does not move
+# while a session runs, and the probe costs a process.
+_GIT_COMMON_CACHE: dict[str, Path] = {}
 
 
 def resolve_path(path: Path) -> Path:
@@ -165,13 +174,85 @@ def local_root(project_root: Path | None) -> Path:
     return aitna_root(project_root) / LOCAL_DIR_NAME
 
 
+def git_common_root(project_root: Path | None) -> Path | None:
+    """The main checkout of the repository that holds ``project_root``, or ``project_root`` itself.
+
+    A linked worktree keeps its own working tree but shares the repository, so
+    ``git rev-parse --git-common-dir`` answers where the repository really is. The kits live in
+    the main checkout (ADR 0028 D11), so the accessor resolves them through it: a session in a
+    worktree writes into the main checkout's kits, and one kit is one folder for the project.
+
+    Outside a repository, or when git is absent, the answer is the project root unchanged. With
+    no project root at all, the answer is ``None``, as everywhere else in this module.
+    """
+    if project_root is None:
+        return None
+    cached = _GIT_COMMON_CACHE.get(str(project_root))
+    if cached is not None:
+        return cached
+    resolved = _resolve_git_common_root(project_root)
+    _GIT_COMMON_CACHE[str(project_root)] = resolved
+    return resolved
+
+
+def _git_answer(project_root: Path) -> tuple[Path, str] | None:
+    """The repository's resolved common directory and ``project_root``'s prefix in its working tree.
+
+    The prefix is ``mono/proj/``, or empty at the top. ``None`` when git cannot say: no git, a
+    timeout, a missing directory, or no repository.
+    """
+    try:
+        done = subprocess.run(  # a fixed argument list, no shell
+            ["git", "rev-parse", "--git-common-dir", "--show-prefix"],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    common, _, prefix = done.stdout.partition("\n")
+    common = common.strip()
+    if not common:
+        return None
+    path = Path(common)
+    if not path.is_absolute():
+        path = project_root / path
+    try:
+        return path.resolve(), prefix.strip()
+    except OSError:
+        return None
+
+
+def _resolve_git_common_root(project_root: Path) -> Path:
+    """The main checkout's copy of ``project_root``, read from git; the project root when there is none.
+
+    One git call answers two things: the repository's common directory (its parent is the main
+    checkout) and the project root's own prefix inside its working tree. A project in a repository
+    subfolder (``mono/proj``) keeps that subfolder in the main checkout, so its kits stay its own
+    and do not land in the repository top's dev root (ADR 0028 D11).
+    """
+    answer = _git_answer(project_root)
+    if answer is None:
+        return project_root
+    common, prefix = answer
+    # The common directory is the repository's ``.git``; its parent is the main checkout.
+    top = common.parent if common.name == ".git" else common
+    root = top / prefix
+    return root if (root / DEV_ROOT_FILE).is_file() or (root / "AGENTS.md").is_file() else project_root
+
+
 def ergon_root(project_root: Path | None) -> Path:
-    """The kit folder ``<dev root>/.ergon`` of ``project_root`` (ADR 0028 D01).
+    """The kit folder ``<dev root>/.ergon`` of ``project_root`` (ADR 0028 D01, D11).
 
     The path, computed — not a claim that it exists. With no project root it is the default-name
-    relative path (``_aitna/.ergon``), usable for reading only, as ``aitna_root`` is.
+    relative path (``_aitna/.ergon``), usable for reading only, as ``aitna_root`` is. In a linked
+    worktree it is the main checkout's folder: the kits are shared, the working tree is not.
     """
-    return aitna_root(project_root) / ERGON_DIR_NAME
+    return dev_root(git_common_root(project_root)).path / ERGON_DIR_NAME
 
 
 def legacy_local_root(project_root: Path | None) -> Path:

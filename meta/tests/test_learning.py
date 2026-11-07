@@ -124,7 +124,7 @@ def test_mark_run_records_the_end_and_clears_the_sessions(tmp_path):
     "text", ["2026-1-5T1:2:3Z", "2026-02-30T00:00:00Z", "2026-10-28T09:30:00", "٢٠٢٦-10-28T09:30:00Z"]
 )
 def test_parse_utc_refuses_anything_but_the_recorded_shape(text):
-    with pytest.raises(ValueError, match=r"UTC|day is out of range|does not match"):
+    with pytest.raises(ValueError, match=r"UTC|day is out of range|day \d+ must be in range|does not match"):
         learning.parse_utc(text)
 
 

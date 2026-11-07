@@ -1,0 +1,23 @@
+id = "tools/park-list-hides-closed"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# Without `--closed` the listing holds the live kits only: the closed kit C101 is not shown.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow: C183\nbranch: _aitna/C183-park-helper\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness: ready for a successor\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\nso a successor can resume\n\n## Approved scope and open questions\n\n- D-C183-TWIN\n- D-C183-NAME\n\n## Owner answers received\n\n- owner: go\n- owner: keep the name\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/.closed/C101-old/PARK.md" = "---\nid: C101\nname: old\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Continue\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C101-old\n\n## Goal\n\nOld work\n\n## Next action\n\nContinue\n"
+
+[run]
+tool = "park/park"
+argv = ["list"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "C183 | park-helper | parked | A59 | Twin it in JS | 2 | _aitna/C183-park-helper | 0d\n"

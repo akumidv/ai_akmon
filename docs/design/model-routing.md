@@ -368,7 +368,7 @@ system message and the harness already shows subagent calls live. The model neve
 switch. Its per-call warnings (C20, C32, C33) are the exception: each goes out on both channels —
 the owner's text in `systemMessage`, which the model does not see (M77), and a text addressed to
 the orchestrator in `additionalContext` (ADR 0006 item 4); on PreToolUse both are delivered and the
-call runs with no permission decision (M149). The harness payload names the subagent but carries
+call runs with no permission decision (M209). The harness payload names the subagent but carries
 no independently authoritative task kind.
 
 **Resolved model selection** is the call's explicit override if it carries one, else the routed
@@ -632,7 +632,7 @@ the evidence-based gate check is the authoritative signal.
    since a Codex delegation names neither agent nor model and no delegation-log route fires
    on it, M62). The per-call warning reaches both readers (ADR 0006 item 4): the owner in
    `systemMessage`, the orchestrator in `additionalContext` with the override to re-issue the
-   call with — `delegate <kind> with model=<floor>` (M149). A wrong under-powered draft at a
+   call with — `delegate <kind> with model=<floor>` (M209). A wrong under-powered draft at a
    gate is caught by the auditor — the safety net that makes the cheaper default acceptable.
 3. **`second-opinion` — always a *different model*, because it thinks differently.** The
    diversity requirement is about priors, not vendor branding: the reviewer must differ
@@ -889,7 +889,7 @@ predicate and the transcript role source. D2-6 independently owns the `cross_cut
 population added to `effective_allowed`; approving D2-4 does not approve that population. No
 Codex runtime claim is made because Codex does not wire this hook. The advisory reaches both
 readers (ADR 0006 item 4): the owner in `systemMessage`, the orchestrator in `additionalContext`
-— re-route the work or declare the role switch (M149).
+— re-route the work or declare the role switch (M209).
 
 The hook needs a machine-readable active role, and the `🧭` chat declaration is invisible to a
 hook *as chat* — so §10.4 decision 1 planned a session-state marker to land with C20. **C20 shipped
@@ -913,7 +913,7 @@ was not built, and nothing may name that marker as a carrier. See the note under
   reporting every zone uncovered (C33). An unlabelled call in a session whose earlier
   delegations carried labels is warned per call on both channels (ADR 0006 item 4): the owner
   in `systemMessage`, the orchestrator in `additionalContext` — label fan-out calls with
-  `[zone:<label>]` (M149). Today the
+  `[zone:<label>]` (M209). Today the
   decomposition lives in prose and the map would have no source.
 - **Loop-back edges become explicit steps** in review-flow (Calibrate → Decompose, one
   bounded re-round) and design-flow (Consolidate → Iterate) — §9.5's topology, written

@@ -76,7 +76,7 @@ on such a message from "ask for an audit" into `None`.
   and pairing gate (40 files: 9 paired, 31 exempt, 1 stub) OK.
 - `--impl node --area units`: 11 of 11. `--impl node` on the hook and CLI areas is pass 2's.
 - `pytest meta/tests`: 1927 passed, 1 failed — `test_akmon_meets_every_size_limit_without_an_exception`;
-  all 19 offenders are in `meta/experiments/a22-p3/` and one a22 test (not part of this change).
+  all 19 offenders are in `meta/.ergon/A22-p3-routing/materials/` and one a22 test (not part of this change).
 - `ruff check common js meta/tests meta/conformance tools/model_routing/routing.py`: clean.
 - `npm pack --dry-run`: `js/tools/model_routing/routing.mjs` and the two new `common` modules are in the
   tarball, beside the Python files (one file list, D05).
@@ -216,7 +216,7 @@ use `randomInt`. `NODE_COMPILE_CACHE` would gain about 7 ms more; not taken.
   `--impl node --area units --area hooks`: 50 of 50.
 - **Gates (working tree).** `python3 meta/self_ci.py`: exit 0, every line OK. `pytest meta/tests`: 1929
   passed with the a22 size-limit test deselected (it fails on the a22 files only). `tsc --checkJs`, `eslint js`
-  clean; `node --test` 178 of 178. `ruff check` clean on everything but `meta/experiments/a22-p3`; `ruff format
+  clean; `node --test` 178 of 178. `ruff check` clean on everything but `meta/.ergon/A22-p3-routing/materials`; `ruff format
   --check` fails on `hooks/hook_core.py`, `hooks/codex_adapter.py`, `meta/conformance/runner.py` and
   `meta/tests/test_hook_core.py` as it does at HEAD (no new failure). `npm pack --dry-run` lists the 13 hook
   files and `common/py*.mjs`, `sha256.mjs`; the carriers-match test (one file list) passes.

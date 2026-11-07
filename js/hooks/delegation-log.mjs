@@ -11,7 +11,7 @@
  * when the agent has no kind in the active role's allowed set (C20), is bound below the rung floor
  * of one of its task kinds (C32), or is an unlabelled delegation in a zoned fan-out (C33). Each
  * such warning also reaches the model as `additionalContext`, addressed to the orchestrator
- * (ADR 0006 item 4, M149); with no warning there is no `additionalContext`.
+ * (ADR 0006 item 4, M209); with no warning there is no `additionalContext`.
  *
  * Data (the C104 convention): `hooks/delegation_log.json` is `data.delegationLog`, read when the
  * first message is formatted, as the Python reads it; the routing calls get `data.agents`.
@@ -264,7 +264,7 @@ function _decide(data) {
   _append(logPath, `${line}\n`);
   // The console line and the owner's warnings go to the UI only (`systemMessage`); each warning
   // also reaches the model as `additionalContext`, addressed to the orchestrator (ADR 0006
-  // item 4). On PreToolUse both are delivered and the call still runs (M149).
+  // item 4). On PreToolUse both are delivered and the call still runs (M209).
   const messages = [_formatSystemMessage(data, line)];
   // C20 — advise when the agent has no overlap with the role's effective allowed set.
   const roleWarnings = _roleWarnings(data, root, payload, subagentType);

@@ -182,6 +182,13 @@ both implementations instead of `python3 $(akmon path)/tools/<tool>.py`.
   harness RPC, and the second-opinion chain's head — the first carrier *present* on `PATH`, which
   `init` prints and the status line shows — reads the same on every host. Its warn side is exempt
   in `coverage.toml`; live harness probes are N10's job.
+- **A point-in-time fixture keeps its own day.** A scenario that needs a stale or a fresh holder
+  stamps the lease with a fixed day of its own — `2000-01-01T00:00:00Z` for stale,
+  `2099-01-01T00:00:00Z` for fresh — and the expectation keeps the same stamp. Normalization rule 5
+  turns a date into a token only on the run's own day, so a fixture day is compared literally and the
+  scenario reads the same on every day it runs. The threshold itself belongs to the tool
+  (`tools/park/park.json`, `stale_after_hours`); the corpus does not re-state it. Owner-confirmed
+  (**D-C186-DATES**).
 
 ## Gates
 

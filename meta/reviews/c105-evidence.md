@@ -74,7 +74,7 @@ settings entry when a project changes ecosystem.
   --area cli`: 68 pass, 50 skip (pending `verify`/`init`/`update`, and the `python`-tagged ones).
 - **Gates (working tree).** `python3 meta/self_ci.py`: exit 0. `pytest meta/tests` without the owner's a22 tests: all
   pass except `test_akmon_meets_every_size_limit_without_an_exception` (a22 files only). `tsc`, `eslint js` clean;
-  `node --test`: 279 of 279. `ruff check` clean outside `meta/experiments/a22-p3`; `ruff format --check` fails on the files that
+  `node --test`: 279 of 279. `ruff check` clean outside `meta/.ergon/A22-p3-routing/materials`; `ruff format --check` fails on the files that
   fail at HEAD (`common/findings.py`, `hooks/hook_core.py`, `meta/conformance/pairing.py`, `runner.py`, `meta/tests/test_cli.py`,
   `meta/tests/test_hook_core.py`), no new failure.
 - **Latency of the dispatcher** (not on the hot path: the wiring names the hook file): `akmon hook analysis-guard` through

@@ -23,15 +23,15 @@ establish which executable was used for an earlier syntax review.
 
 The owner accepted the first V3 technical-source cell, and the source-phase approval records that
 phase-limited authorization. The operative full-campaign
-[`owner-approval-v3.json`](../experiments/a22-p3/runs/owner-approval-v3.json) remains
+`meta/.ergon/A22-p3-routing/materials/runs/owner-approval-v3.json` remains
 default-deny: `owner_accepted=false`, both bound hashes are null, `authorized_phases` is empty,
 `preflight_status` is `NOT_RUN`, and `dispatch_allowed=false`.
 
 The operative candidate seal is
-[`seal-v3.json`](../experiments/a22-p3/seal-v3.json), SHA-256
+`meta/.ergon/A22-p3-routing/materials/seal-v3.json`, SHA-256
 `58eea0362178111b0497e6fcd248dffb25b07dda295fa91de2d03205819cedde`. The separate source-phase
 amendment seal is
-[`source-phase-seal-v3.json`](../experiments/a22-p3/runs/source-phase-seal-v3.json), SHA-256
+`meta/.ergon/A22-p3-routing/materials/runs/source-phase-seal-v3.json`, SHA-256
 `c4977c962a4c216abdc57951c981a2691063657f8928f9201847045cd96e84a8`; it binds eight source
 files and the operative seal hash. The source-phase approval and passed source preflight are
 documented in the [source-attempt report](a22-p3-v3-source-attempt.md). The full-campaign static
@@ -49,7 +49,7 @@ ID-collision, and q1461-source-rejection checks pass. Six additional proofs rema
 The current preflight does reconcile the 96-reading-per-scorer schedule with the 240-pass ceiling
 arithmetically. The approval still has `schedule_accepted=false`; arithmetic is not owner
 acceptance. The separate source-only amendment proposal is at
-[`V3_PHASED_SOURCE_AMENDMENT_PROPOSAL.md`](../experiments/a22-p3/V3_PHASED_SOURCE_AMENDMENT_PROPOSAL.md).
+`meta/.ergon/A22-p3-routing/materials/V3_PHASED_SOURCE_AMENDMENT_PROPOSAL.md`.
 It describes a separately gated first technical-source phase. It has not changed the operative
 plan or approval; the operative seal now binds final runner, resolver, and preflight sources.
 

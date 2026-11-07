@@ -92,7 +92,7 @@ untouched.
   - coverage and pairing gates ok.
 - `uv run pytest`: 2114 passed, 1 deselected (`test_akmon_meets_every_size_limit_without_an_exception`, a22-only).
 - `meta/self_ci.py`: exit 0, with `selfci.js-lint` and `selfci.js-format` OK.
-- `ruff check .`: the only findings are 12 in `meta/experiments/a22-p3/` (a22-only).
+- `ruff check .`: the only findings are 12 in `meta/.ergon/A22-p3-routing/materials/` (a22-only).
 
 ## Limits
 

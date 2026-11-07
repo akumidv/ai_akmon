@@ -1,0 +1,22 @@
+id = "tools/park-local-id-empty"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# With no kit at all, neither live nor closed, the first free local id is `_T1`: the count starts at
+# zero, so the folder `.ergon/` need not exist yet.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+
+[run]
+tool = "park/park"
+argv = ["local-id"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_T1\n"

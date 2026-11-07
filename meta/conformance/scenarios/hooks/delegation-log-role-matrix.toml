@@ -1,7 +1,7 @@
 # C20: under the review role (read from the transcript's 🧭 declaration) a k_mechanic call has
 # no kind in the role's effective allowed set. The owner gets the advisory ⚠ line in the
 # systemMessage; the orchestrator gets its own — re-route or switch role — in additionalContext
-# (ADR 0006 item 4, M149). No permission decision: the call runs.
+# (ADR 0006 item 4, M209). No permission decision: the call runs.
 id = "hooks/delegation-log-role-matrix"
 ecosystem = "shared"
 kind = "hook"

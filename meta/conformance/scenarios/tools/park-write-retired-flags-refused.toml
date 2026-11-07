@@ -1,0 +1,25 @@
+id = "tools/park-write-retired-flags-refused"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The branch and the peers are no longer flags of `write`: the branch is read from git when the note
+# is written, and the peers are retired. The parser refuses both as unknown arguments (exit 2, nothing
+# on stdout, nothing written).
+
+[fixture]
+attach = "none"
+git = false
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS", "--branch", "_aitna/C183-park-helper", "--peer", "sibling session on B8"]
+
+[expected]
+exit = 2
+stdout = ""
+stderr_contains = ["unrecognized arguments: --branch _aitna/C183-park-helper --peer sibling session on B8"]
+file_absent = ["_aitna/.ergon/C183-park-helper", "_aitna/.local/TASKS.md"]

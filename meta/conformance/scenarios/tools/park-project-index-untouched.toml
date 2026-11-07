@@ -3,8 +3,9 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `write` keeps its row in the local index only: a project index (`_aitna/TASKS.md`) that carries a
-# row for the same id is left byte for byte as it was, while the local index gains the parked row.
+# `write` writes the kit and nothing else: no local index is written (ADR 0028 D12 retired it, so
+# `_aitna/.local/TASKS.md` never appears), and a project index (`_aitna/TASKS.md`) that carries a row
+# for the same id is left byte for byte as it was. `park list` is the index.
 
 [fixture]
 attach = "none"
@@ -21,6 +22,7 @@ argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park help
 exit = 0
 stderr = ""
 stdout = "_aitna/.ergon/C183-park-helper\n"
+file_absent = ["_aitna/.local/TASKS.md"]
+
 [expected.files]
 "_aitna/TASKS.md" = "# Tasks\n\n- C183 · Park helper · active · engineer · project row\n"
-"_aitna/.local/TASKS.md" = "# TASKS — local index\n\n- C183 · Build the park helper · parked · architect · Build the park helper · [park](../.ergon/C183-park-helper/PARK.md)\n"

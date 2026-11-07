@@ -1,0 +1,24 @@
+id = "tools/park-list-legacy-note"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A note written before the header dropped `state` and `peers` still parses: both retired keys are
+# read and ignored, the retired `peers` list takes its items with it, and the kit lists with its
+# derived state (`parked`: a note and no live lease), whatever the old `state` said.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nstate: resumed\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\nnext: Twin it in JS\nsessions:\npeers:\n  - sibling session on B8\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild\n\n## Next action\n\nTwin it in JS\n"
+
+[run]
+tool = "park/park"
+argv = ["list"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "C183 | park-helper | parked | A59 | Twin it in JS | 0 | - | 0d\n"

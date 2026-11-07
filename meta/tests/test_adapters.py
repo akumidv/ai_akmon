@@ -848,7 +848,7 @@ def _configure_delegation_log_hook(deleg_log, monkeypatch, tmp_path, payload, co
 
 
 def test_delegation_log_role_advisory_reaches_owner_and_model(tmp_path, monkeypatch, capsys):
-    """ADR 0006 item 4: the owner reads the systemMessage, the orchestrator the additionalContext (M149)."""
+    """ADR 0006 item 4: the owner reads the systemMessage, the orchestrator the additionalContext (M209)."""
     deleg_log = _claude_hook("delegation-log.py")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
@@ -1300,7 +1300,7 @@ def test_delegation_log_warns_when_the_agent_runs_below_a_kind_floor(tmp_path, m
     assert deleg_log.main() == 0
     emitted = json.loads(capsys.readouterr().out)
     assert "below the floor of quant-derivation (floor opus)" in emitted["systemMessage"]
-    # ADR 0006 item 4: the orchestrator is told which model the kind takes from the next call on (M149).
+    # ADR 0006 item 4: the orchestrator is told which model the kind takes from the next call on (M209).
     assert emitted["hookSpecificOutput"]["additionalContext"].endswith(
         "this call runs as issued; from the next call on, delegate quant-derivation with model=opus"
     )

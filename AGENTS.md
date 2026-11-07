@@ -56,13 +56,23 @@ the shipped block states it directly: Codex does not expand nested `@` imports i
 - Significant architecture choices require explicit owner acceptance and a stable decision
   block in a thematic ADR under `docs/adr/`. Open choices stay in design/tasks;
   implementation evidence and remaining verification stay with the implementing task.
+- **Experiments:** before designing one, read [`meta/experiments/README.md`](meta/experiments/README.md),
+  the index of what was tested and with what verdict, negative ones included, and grep
+  `meta/MEASUREMENTS.md`. An experiment leaves a results document and its index line there; its
+  fixtures, runners and raw runs stay in its ergon's `materials/`
+  ([ADR 0023/D07](docs/adr/0023-project-documents-layout.md#d07--an-experiment-leaves-its-results-in-the-tree-and-its-materials-in-its-ergon)).
 - Harness and vendor facts that took an experiment — not what vendor docs state plainly — live in
   `meta/MEASUREMENTS.md` with the version they were verified on. Grep it before a probe, cite a
   row that covers the version in use, and add a row after a new probe, replay or source reading.
 - **Commits — the one place akmon is narrower than the guardrail it ships.** The owner owns
-  merges into the default branch, tags, pushes, publishing, and consumer pin bumps. An agent
-  **may** commit on a local non-default branch to keep its work safe; it never pushes, merges
-  or tags. Everything else in § Commits & ownership stands as written.
+  merges into the default branch, tags, pushes, publishing, and consumer pin bumps. **The main
+  checkout is the owner's:** an agent changes no history there, on any branch. An agent commits
+  only inside a worktree — its own or the one the harness made for its athlos — on that worktree's
+  branch, and may bring other branches into it, never carry it out; carrying a worktree's branch
+  into the branch the owner is on is started by the owner only — the owner asks the agent to merge
+  or squash it, or runs the printed commands ([ADR 0029/D09](docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree);
+  the guard and the shipped carve-out follow in C190). Everything else in § Commits & ownership
+  stands as written.
 - **No dates, and never a date as an index.** Git history is the timeline. This applies to the
   text and file names of every tracked document: `meta/` (tasks, ADRs, designs, reviews,
   evidence) and the shipped prose. Name a file by its task id and a short subject

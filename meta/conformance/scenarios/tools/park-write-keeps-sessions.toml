@@ -1,0 +1,29 @@
+id = "tools/park-write-keeps-sessions"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `write` merges, it does not rebuild: the sessions the note already carries (here the holder a takeover kept) stay,
+# and the session on the command line is added after them.
+
+[fixture]
+attach = "none"
+git = false
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\n  - claude|s2|laptop\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+"_aitna/.ergon/C183-park-helper/RESUME.md" = "# Resume C183-park-helper\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--plan", "A59", "--goal", "Build the park helper, second pass", "--next", "Check the JS twin", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/C183-park-helper\n"
+file_absent = ["_aitna/.ergon/C183-park-helper/HOLDER", "_aitna/.ergon/C183-park-helper/SESSIONS"]
+
+[expected.files]
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\njob:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Check the JS twin\nsessions:\n  - claude|s2|laptop\n  - claude|s1|laptop\norigin:\nreadiness:\nwritten: {{ts}}\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper, second pass\n\n## Approved scope and open questions\n\n_none_\n\n## Owner answers received\n\n_none_\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nCheck the JS twin\n"

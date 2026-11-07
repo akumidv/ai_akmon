@@ -2633,7 +2633,7 @@ export function roleMatrixWarning(data, registry, subagentType, role) {
  * The model-addressed form of `roleMatrixWarning`: re-route or switch role.
  *
  * Same predicate, same silence; the delegation log sends it as `additionalContext` beside the
- * owner's `systemMessage` (ADR 0006 item 4, M149).
+ * owner's `systemMessage` (ADR 0006 item 4, M209).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} registry
  * @param {Json} subagentType
@@ -3300,7 +3300,7 @@ export function delegationFloorWarning(data, config, subagentType, callModel) {
  * The model-addressed form of `delegationFloorWarning`: from the next call on, the floor's model.
  *
  * Same predicate, same silence; the delegation log sends it as `additionalContext` beside the
- * owner's `systemMessage` (ADR 0006 item 4, M149).
+ * owner's `systemMessage` (ADR 0006 item 4, M209).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Json} config
  * @param {Json} subagentType
@@ -3551,7 +3551,7 @@ export function unlabelledFanoutWarning(data, entries, sessionId, subagent, zone
  * The model-addressed form of `unlabelledFanoutWarning`: label the fan-out calls.
  *
  * Same predicate, same silence; the delegation log sends it as `additionalContext` beside the
- * owner's `systemMessage` (ADR 0006 item 4, M149).
+ * owner's `systemMessage` (ADR 0006 item 4, M209).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @param {Iterable<DelegationEntry>} entries
  * @param {string | null} sessionId

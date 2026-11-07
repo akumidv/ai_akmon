@@ -8,4 +8,4 @@ This is implementation readiness evidence, not dispatch authorization. The curre
 
 The review’s main limit is that source-marker checks remain static assertions. They verify the inspected source and recorded bindings; they do not establish runtime behavior beyond the targeted tests or prove provider-side enforcement. The offline preflight likewise reports checks against the sealed inputs and records zero provider and network calls; it is not a live provider test.
 
-Evidence: [operational seal](../experiments/a22-p3/runs/lean-source-operational-seal-v1.json), [operational approval](../experiments/a22-p3/runs/lean-source-operational-approval-v1.json), and [offline preflight report](../experiments/a22-p3/runs/lean-source-preflight-report-v1.json). No provider call was made during this review.
+Evidence: `meta/.ergon/A22-p3-routing/materials/runs/lean-source-operational-seal-v1.json`, `meta/.ergon/A22-p3-routing/materials/runs/lean-source-operational-approval-v1.json`, and `meta/.ergon/A22-p3-routing/materials/runs/lean-source-preflight-report-v1.json`. No provider call was made during this review.

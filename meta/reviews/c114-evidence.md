@@ -70,7 +70,7 @@ uncommitted until the owner lands them.
 - `uv run pytest --ignore=akmon`: 2172 passed, 3 failed, all a22-only: `test_akmon_meets_every_size_limit_without_an_exception`
   and two in `test_a22_p3_quota_adapter_v3.py`. `--ignore=akmon` skips a stray root symlink `akmon -> .` that
   multiplies collection. `-k "link or doc or anchor or verify"`: 258 passed.
-- `ruff check .`: 13 findings, all in `meta/experiments/a22-p3/` and `meta/tests/test_a22_p3_*` (a22-only).
+- `ruff check .`: 13 findings, all in `meta/.ergon/A22-p3-routing/materials/` and `meta/.ergon/A22-p3-routing/materials/tests/test_a22_p3_*` (a22-only).
 - `tsc --checkJs --noEmit -p .`: clean.
 
 ## Limits
