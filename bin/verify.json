@@ -8,11 +8,13 @@
     "session-start-agent.py",
     "role-on-code.py",
     "analysis-guard.py",
+    "settings-env-guard.py",
     "model-routing.py",
     "delegation-log.py",
     "delegation-nudge.py",
     "gate-audit.py",
-    "learning-reminder.py"
+    "learning-reminder.py",
+    "work-style.py"
   ],
   "basic_layout_consumer_paths": [
     "AGENTS.md",
@@ -251,11 +253,13 @@
     "session-start-agent.mjs",
     "role-on-code.mjs",
     "analysis-guard.mjs",
+    "settings-env-guard.mjs",
     "model-routing.mjs",
     "delegation-log.mjs",
     "delegation-nudge.mjs",
     "gate-audit.mjs",
-    "learning-reminder.mjs"
+    "learning-reminder.mjs",
+    "work-style.mjs"
   ],
   "node": {
     "pnp_markers": [

@@ -1,0 +1,63 @@
+{
+  "protected_branches": {
+    "developer": [],
+    "autonomous": [
+      "develop",
+      "release/*"
+    ]
+  },
+  "run_branch_patterns": {
+    "developer": [],
+    "autonomous": [
+      "^agent/(?:[A-Z]\\d+|_T\\d+)(?:[-._/]|$)"
+    ]
+  },
+  "developer": {
+    "history_unresolved": "ask",
+    "history_not_repository": "ask",
+    "history_checkout_default": "ask",
+    "history_checkout_detached": "ask",
+    "history_checkout_branch": "ask",
+    "history_not_run_branch": "ask",
+    "history_worktree_default": "ask",
+    "history_worktree_detached": "ask",
+    "history_worktree_branch": "allow",
+    "push_own_branch": "ask",
+    "push_own_branch_forced": "ask",
+    "push_default_branch": "ask",
+    "push_other_branch": "ask",
+    "tag": "ask",
+    "ref_write": "ask",
+    "pr_create": "ask",
+    "pr_create_other_base": "ask",
+    "pr_merge": "ask",
+    "release_create": "ask",
+    "config_push_write": "allow",
+    "forge_write_other": "allow",
+    "ai_trailer": "deny"
+  },
+  "autonomous": {
+    "history_unresolved": "deny",
+    "history_not_repository": "deny",
+    "history_checkout_default": "deny",
+    "history_checkout_detached": "deny",
+    "history_checkout_branch": "allow",
+    "history_not_run_branch": "deny",
+    "history_worktree_default": "deny",
+    "history_worktree_detached": "deny",
+    "history_worktree_branch": "allow",
+    "push_own_branch": "allow",
+    "push_own_branch_forced": "ask",
+    "push_default_branch": "deny",
+    "push_other_branch": "deny",
+    "tag": "ask",
+    "ref_write": "ask",
+    "pr_create": "allow",
+    "pr_create_other_base": "deny",
+    "pr_merge": "ask",
+    "release_create": "ask",
+    "config_push_write": "deny",
+    "forge_write_other": "ask",
+    "ai_trailer": "deny"
+  }
+}

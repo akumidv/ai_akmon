@@ -1,0 +1,27 @@
+# D-C203-GUARD-CRASH: an access matrix that cannot be read denies an autonomous run.
+id = "hooks/git-commit-guard-autonomous-matrix-unreadable-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[fixture]
+tree_files = { "common/access_matrix.json" = "{ not json" }
+
+[env]
+AKMON_ACTOR = "autonomous"
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-gcm-crash-3"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { command = "gh pr create --fill" }
+
+[expected]
+exit = 0
+stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target\nakmon git-commit-guard hook: DataFileError\n"
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Commit guardrail (autonomous run): the access matrix could not be read, or the guard failed while evaluating this command, so an autonomous run is denied \\u2014 nothing was run. The owner restores the setup (`akmon verify`); a developer run is let through in the same case.\"}}\n"

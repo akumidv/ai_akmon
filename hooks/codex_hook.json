@@ -4,6 +4,7 @@
     "role-on-code",
     "session-start",
     "learning-reminder",
+    "work-style",
     "git-commit-guard"
   ],
   "unreadable_target": "akmon codex-hook: '{{tool_name}}' matched but no file path could be read from the payload — the advisory hooks are inert for this call ({{payload_shape}})",

@@ -231,21 +231,32 @@ export function printResult(data, result) {
  * The exit stays 0 — Claude Code shows nothing at all for a hook that exits 1 on `PreToolUse` or
  * `UserPromptSubmit` (M70), so a non-zero exit would only hide the failure. The action goes ahead
  * either way: crash-open, including the deny-class commit guard.
+ *
+ * The one exception is a `closedDocument` the entry point passes (the commit guard of an
+ * `autonomous` run, ADR-0031/D07 D-C203-GUARD-CRASH): a crash then writes that document, a deny,
+ * instead of the owner notice, and the action does not go ahead. The entry point decides whether to
+ * pass it from the actor it reads before anything that can crash; the document is built from no data
+ * file the crash may have broken (`guardCrashDenyDocument` of `hook_core.mjs`).
  * @param {string} hookName
  * @param {HookData} data
  * @param {() => HookResult | null} decide
+ * @param {(() => string) | null} [closedDocument] the deny a crash writes instead of the owner notice
  * @returns {number} the process exit code (always 0)
  */
-export function runGuarded(hookName, data, decide) {
+export function runGuarded(hookName, data, decide, closedDocument = null) {
   /** @type {string | null} */
   let document;
   try {
     document = renderResult(data, decide());
   } catch (exc) {
     process.stderr.write(`${hookFailureDiagnostic(hookName, exc)}\n`);
-    // A literal key, not the vocabulary.json table: the crash path reads no data file, since a
-    // missing or broken one may be the very failure it reports (C102 review F1).
-    document = hookForm(new Map([["systemMessage", hookFailureNotice(hookName, exc)]]));
+    if (closedDocument !== null) {
+      document = closedDocument();
+    } else {
+      // A literal key, not the vocabulary.json table: the crash path reads no data file, since a
+      // missing or broken one may be the very failure it reports (C102 review F1).
+      document = hookForm(new Map([["systemMessage", hookFailureNotice(hookName, exc)]]));
+    }
   }
   if (document !== null) {
     process.stdout.write(`${document}\n`);

@@ -1,0 +1,27 @@
+# D-C203-RUN-BRANCH: a push whose destination is not the run's own branch is denied, even the branch the run is on.
+id = "hooks/git-commit-guard-autonomous-push-other-branch-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[fixture]
+branch = "feat"
+
+[env]
+AKMON_ACTOR = "autonomous"
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-gcm-rb-5"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { command = "git push origin feat" }
+
+[expected]
+exit = 0
+stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target\n"
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Commit guardrail (autonomous run): push of 'feat' is denied \\u2014 an autonomous run pushes only the branch it is on, named by an explicit refspec (push.default, remote.*.push and a `-c` override can redirect a push that names none), and only if that is its own run branch (the one `AKMON_RUN_BRANCH` names, else a branch under `agent/` that starts with a task id).\"}}\n"

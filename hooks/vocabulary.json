@@ -24,6 +24,7 @@
       "tool_input": ["tool_input", "toolInput", "input", "args", "arguments", "params"],
       "command": ["command", "cmd", "script"],
       "cwd": ["cwd", "working_directory", "workingDirectory", "workdir"],
+      "prompt": ["prompt"],
       "unmeasured_string_keys": ["file_path", "filePath", "path", "target", "filename"],
       "unmeasured_list_keys": ["file_paths", "filePaths", "paths", "files"]
     }

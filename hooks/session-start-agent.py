@@ -21,7 +21,9 @@ def _project_root(payload: dict) -> Path:
 
 
 def _decide() -> HookResult | None:
-    return session_start_result(_project_root(load_payload()))
+    payload = load_payload()
+    session_id = payload.get("session_id")
+    return session_start_result(_project_root(payload), session_id if isinstance(session_id, str) else None)
 
 
 def main() -> int:

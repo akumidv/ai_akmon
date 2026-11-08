@@ -17,12 +17,16 @@
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { checkData } from "../common/access_matrix.mjs";
 import { read } from "../common/jsondata.mjs";
 
+/** @typedef {import("../common/access_matrix.mjs").AccessMatrix} AccessMatrix */
+/** @typedef {import("../common/harness_settings.mjs").HarnessSettingsData} HarnessSettingsData */
 /** @typedef {import("../common/learning.mjs").LearningData} LearningData */
 /** @typedef {import("../common/markers.mjs").MarkersData} MarkersData */
 /** @typedef {import("../common/materialization.mjs").MaterializationData} MaterializationData */
 /** @typedef {import("../common/runtime.mjs").RuntimeData} RuntimeData */
+/** @typedef {import("../common/work_style.mjs").WorkStyleData} WorkStyleData */
 /** @typedef {import("../tools/model_routing/routing.mjs").AgentsData} AgentsData */
 /** @typedef {import("../tools/model_routing/routing.mjs").GateData} GateData */
 
@@ -46,6 +50,9 @@ import { read } from "../common/jsondata.mjs";
  * @property {GateData} gate `tools/model_routing/gate.json`
  * @property {Record<string, {roles: string[], role_files: boolean}>} definitions `agents/agents.json`, the agent -> roles table
  * @property {RuntimeData} runtime `common/runtime.json`
+ * @property {WorkStyleData} workStyle `common/work_style.json`
+ * @property {AccessMatrix} accessMatrix `common/access_matrix.json`
+ * @property {HarnessSettingsData} harnessSettings `common/harness_settings.json`
  */
 
 /** The tree this module executes from: `<tree>/js/hooks/hook_data.mjs` → `<tree>`. */
@@ -64,6 +71,9 @@ const FILES = {
   gate: "tools/model_routing/gate.json",
   definitions: "agents/agents.json",
   runtime: "common/runtime.json",
+  workStyle: "common/work_style.json",
+  accessMatrix: "common/access_matrix.json",
+  harnessSettings: "common/harness_settings.json",
 };
 
 /**
@@ -80,7 +90,11 @@ export function lazyHookData(treeRoot = TREE_ROOT) {
     Object.defineProperty(bundle, name, {
       enumerable: true,
       get() {
-        loaded ??= { value: read(posix.join(treeRoot, relative)) };
+        if (loaded === null) {
+          const value = read(posix.join(treeRoot, relative));
+          // checked before it is cached, so a refused matrix is refused on every access
+          loaded = { value: name === "accessMatrix" ? checkData(/** @type {AccessMatrix} */ (value)) : value };
+        }
         return loaded.value;
       },
     });

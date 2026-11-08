@@ -1,0 +1,19 @@
+{
+  "files": [
+    {"directory": ".claude", "pattern": "settings*.json", "format": "json"},
+    {"directory": ".codex", "pattern": "config.toml", "format": "toml"}
+  ],
+  "toml_env_names": ["env", "shell_environment_policy"],
+  "shell": {
+    "write_all_operands": ["tee", "sponge"],
+    "in_place": {"sed": "i", "perl": "i"},
+    "in_place_long_option": "--in-place",
+    "write_last_operand": ["cp", "mv", "install"],
+    "target_directory_options": ["-t", "--target-directory"],
+    "operand_assignments": {"dd": "of="}
+  },
+  "texts": {
+    "edit": "Privilege guardrail: this edit changes the `env` of {{path}}, a harness settings file. The launcher sets the run's actor there (AKMON_ACTOR), so an agent never writes the `env` of a harness settings file. If the change is genuinely needed, ask the owner to make it themselves.",
+    "bash": "Privilege guardrail: this command writes {{path}}, a harness settings file whose `env` carries the run's actor (AKMON_ACTOR). An agent never writes the `env` of a harness settings file. If the change is genuinely needed, ask the owner to run it themselves."
+  }
+}

@@ -1424,6 +1424,86 @@ env = { "PATH" = "{{dir}}/bin" }
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (on \u0027main\u0027){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
+id = "git/lookup-autonomous-commit-on-named-run-branch-passes"
+fn = "git_commit_guard_result"
+args_json = '["git commit -m x"]'
+kwargs_json = '{"actor": "autonomous", "permission_mode": "default", "directory": "{{dir}}", "run_branch": "feat"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-autonomous-commit-on-task-branch-passes"
+fn = "git_commit_guard_result"
+args_json = '["git commit -m x"]'
+kwargs_json = '{"actor": "autonomous", "permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo agent/C203-x ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-autonomous-commit-off-run-branch-denied"
+fn = "git_commit_guard_result"
+args_json = '["git commit -m x"]'
+kwargs_json = '{"actor": "autonomous", "permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "Commit guardrail (autonomous run): git commit writes history in {{dir}} (on \u0027feat\u0027, not the run\u0027s own branch){{core:git_commit_history_reason_autonomous#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/lookup-autonomous-commit-off-a-named-run-branch-denied"
+fn = "git_commit_guard_result"
+args_json = '["git commit -m x"]'
+kwargs_json = '{"actor": "autonomous", "permission_mode": "default", "directory": "{{dir}}", "run_branch": "agent/C203-x"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo agent/C203-y ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "Commit guardrail (autonomous run): git commit writes history in {{dir}} (on \u0027agent/C203-y\u0027, not the run\u0027s own branch){{core:git_commit_history_reason_autonomous#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/lookup-autonomous-commit-in-worktree-passes"
+fn = "git_commit_guard_result"
+args_json = '["git commit -m x"]'
+kwargs_json = '{"actor": "autonomous", "permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-autonomous-commit-on-release-branch-denied"
+fn = "git_commit_guard_result"
+args_json = '["git commit -m x"]'
+kwargs_json = '{"actor": "autonomous", "permission_mode": "default", "directory": "{{dir}}", "run_branch": "release/1.0"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo release/1.0 ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "Commit guardrail (autonomous run): git commit writes history in {{dir}} (on \u0027release/1.0\u0027){{core:git_commit_history_reason_autonomous#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/lookup-autonomous-push-run-branch-passes"
+fn = "git_commit_guard_result"
+args_json = '["git push origin agent/C203-x"]'
+kwargs_json = '{"actor": "autonomous", "permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo agent/C203-x ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-autonomous-push-off-run-branch-denied"
+fn = "git_commit_guard_result"
+args_json = '["git push origin feat"]'
+kwargs_json = '{"actor": "autonomous", "permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_push_other_branch_reason_autonomous#0}}\u0027feat\u0027{{core:git_push_other_branch_reason_autonomous#1}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
 id = "git/lookup-failing-git-asks"
 fn = "git_commit_guard_result"
 args_json = '["git commit -m x"]'
@@ -1917,56 +1997,84 @@ id = "session/develop-only"
 fn = "session_start_result"
 args_json = '[{"$path": "{{dir}}/proj"}]'
 files = { "proj/_aitna/agents/engineer/README.md" = "x", "proj/_aitna/agents/review/README.md" = "x" }
-expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "session/work-style-project"
+fn = "session_start_result"
+args_json = '[{"$path": "{{dir}}/proj"}, "s1"]'
+files = { "proj/_aitna/agents/engineer/README.md" = "x", "proj/_aitna/.akmon.toml" = "[work]\nstyle = \"controlling\"\n" }
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: controlling (from _aitna/.akmon.toml [work])\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "session/work-style-developer"
+fn = "session_start_result"
+args_json = '[{"$path": "{{dir}}/proj"}, "s1"]'
+files = { "proj/_aitna/agents/engineer/README.md" = "x", "proj/_aitna/.akmon.toml" = "[work]\nstyle = \"controlling\"\n", "proj/_aitna/.local/work.json" = "{\"style\": \"delegating\"}" }
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: delegating (from _aitna/.local/work.json)\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "session/work-style-session"
+fn = "session_start_result"
+args_json = '[{"$path": "{{dir}}/proj"}, "s1"]'
+files = { "proj/_aitna/agents/engineer/README.md" = "x", "proj/_aitna/.local/work.json" = "{\"style\": \"delegating\"}", "proj/_aitna/.local/work-sessions.json" = "{\"sessions\": {\"s1\": \"controlling\"}}" }
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: controlling (set in this session with /style)\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "session/work-style-invalid-falls-through"
+fn = "session_start_result"
+args_json = '[{"$path": "{{dir}}/proj"}, "s1"]'
+files = { "proj/_aitna/agents/engineer/README.md" = "x", "proj/_aitna/.akmon.toml" = "[work]\nstyle = \"chaotic\"\n", "proj/_aitna/.local/work.json" = "{\"style\": 3}", "proj/_aitna/.local/work-sessions.json" = "{\"sessions\": {\"s1\": \"fast\"}}" }
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "session/develop-charter-roles"
 fn = "session_start_result"
 args_json = '[{"$path": "{{dir}}/proj"}]'
 files = { "proj/_aitna/agents/development/README.md" = "## review\n`roles/review.md`\n## architect\n`_aitna/akmon/roles/architect.md`\n## engineer\n`roles/engineer.md` and `roles/review.md`\n", "proj/_aitna/agents/release/README.md" = "x" }
-expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}development — roles review, architect, engineer; release — role release\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}development — roles review, architect, engineer; release — role release\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "session/operate-only"
 fn = "session_start_result"
 args_json = '[{"$path": "{{dir}}/proj"}]'
 files = { "proj/agents/ops/README.md" = "x", "proj/agents/analyst/README.md" = "x" }
-expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_generic}}\n{{core:session_start.delegation_line}}\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_generic}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "session/both"
 fn = "session_start_result"
 args_json = '[{"$path": "{{dir}}/proj"}]'
 files = { "proj/_aitna/agents/engineer/README.md" = "x", "proj/_aitna/agents/review/README.md" = "x", "proj/agents/ops/README.md" = "x", "proj/agents/analyst/README.md" = "x" }
-expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "session/develop-and-stale"
 fn = "session_start_result"
 args_json = '[{"$path": "{{dir}}/proj"}]'
 files = { "proj/_aitna/agents/engineer/README.md" = "x", "proj/_aitna/agents/review/README.md" = "x", "proj/_aitna/.akmon/guardrails/zz-nope.md" = "<!-- Generated by _aitna/akmon/bin/sync.py. Do not edit this file by hand. -->\n" }
-expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nAlso: read `_aitna{{core:session_start.memory_line#1}}\n⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "permission_decision": null, "permission_reason": null, "system_message": "⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "decision": null, "reason": null}'
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `_aitna{{core:session_start.memory_line#1}}\n⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "permission_decision": null, "permission_reason": null, "system_message": "⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "decision": null, "reason": null}'
 
 [[case]]
 id = "session/operate-and-stale"
 fn = "session_start_result"
 args_json = '[{"$path": "{{dir}}/proj"}]'
 files = { "proj/agents/ops/README.md" = "x", "proj/agents/analyst/README.md" = "x", "proj/_aitna/.akmon/guardrails/zz-nope.md" = "<!-- Generated by _aitna/akmon/bin/sync.py. Do not edit this file by hand. -->\n" }
-expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_generic}}\n{{core:session_start.delegation_line}}\nAlso: read `_aitna{{core:session_start.memory_line#1}}\n⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "permission_decision": null, "permission_reason": null, "system_message": "⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "decision": null, "reason": null}'
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_generic}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `_aitna{{core:session_start.memory_line#1}}\n⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "permission_decision": null, "permission_reason": null, "system_message": "⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "decision": null, "reason": null}'
 
 [[case]]
 id = "session/both-and-stale"
 fn = "session_start_result"
 args_json = '[{"$path": "{{dir}}/proj"}]'
 files = { "proj/_aitna/agents/engineer/README.md" = "x", "proj/_aitna/agents/review/README.md" = "x", "proj/agents/ops/README.md" = "x", "proj/agents/analyst/README.md" = "x", "proj/_aitna/.akmon/guardrails/zz-nope.md" = "<!-- Generated by _aitna/akmon/bin/sync.py. Do not edit this file by hand. -->\n" }
-expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nAlso: read `_aitna{{core:session_start.memory_line#1}}\n⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "permission_decision": null, "permission_reason": null, "system_message": "⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "decision": null, "reason": null}'
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `_aitna{{core:session_start.memory_line#1}}\n⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "permission_decision": null, "permission_reason": null, "system_message": "⚠ akmon: the rules in _aitna{{core:stale_guardrail_notice#1}}guardrails/zz-nope.md{{core:stale_guardrail_notice#2}}", "decision": null, "reason": null}'
 
 [[case]]
 id = "session/custom-root"
 fn = "session_start_result"
 args_json = '[{"$path": "{{dir}}/proj"}]'
 files = { "proj/.aitna-root" = "tools/ai", "proj/tools/ai/agents/engineer/README.md" = "x", "proj/agents/ops/README.md" = "x", "proj/agents/analyst/README.md" = "x" }
-expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nAlso: read `tools/ai{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer\n{{core:session_start.operate_line#0}}analyst — role analyst; ops — role ops\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `tools/ai{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "session/custom-root-agents-in-default"
@@ -1988,7 +2096,7 @@ fn = "session_start_result"
 args_json = '[{"$path": "{{dir}}/proj"}]'
 files = { "proj/_aitna/agents/engineer/README.md" = "x", "proj/_aitna/agents/review/README.md" = "x", "proj/_aitna/.akmon/guardrails/zz-nope.md" = "<!-- Generated by _aitna/akmon/bin/sync.py. Do not edit this file by hand. -->\n" }
 links = { "proj/_aitna/akmon" = "{{tree}}" }
-expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
+expected_json = '{"event_name": "SessionStart", "additional_context": "[akmon] Role declaration\n{{core:session_start.format_line}}\n{{core:session_start.develop_line#0}}engineer — role engineer; review — role review\nNo role is declared yet.\n{{core:session_start.pick_by_operation}}\n{{core:session_start.delegation_line}}\nwork style: delegating (default)\nAlso: read `_aitna{{core:session_start.memory_line#1}}", "permission_decision": null, "permission_reason": null, "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "session/mounted-tree-no-agents"

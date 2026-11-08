@@ -1,12 +1,8 @@
 # Guardrails: common (all languages)
 
-Hard rules that bind **every** agent on **every** project, regardless of language or role.
-Applied automatically (not opt-in). A language's and an environment's rules layer on top, in
-[profiles/](../profiles/) — e.g. [python](../profiles/python.md).
-
-> Guardrails are **constraints**, not guidance: they say what must always / never happen.
-> Pipelines say *how* to work; profiles add *language, environment and domain* rules;
-> guardrails are the floor.
+Hard rules that bind **every** agent on **every** project, regardless of language or role, applied
+automatically. They are **constraints**, the floor: pipelines say *how* to work, and
+[profiles/](../profiles/) layer language, environment and domain rules on top.
 
 ## Language — artifacts English, chat in the user's language
 
@@ -18,14 +14,13 @@ Two distinct surfaces, two **rules** (not a default and a permission):
   agent, so they stay in one canonical language.
 - **Chat replies → match the user's language.** Reply in the language the user wrote their
   message in. User writes Russian → reply in Russian; writes English → reply in English.
+  A prompt the user carries to another session is chat too.
 - **A reply's section headings stay English** — `Findings`, `Options`, `Recommendation` name
   the material the standard's own checks count, so they are structure, not prose. The prose
   under them follows the user's language.
 
-These do **not** conflict, and one must not bleed into the other: you analyze and write files
-in English, then deliver the **chat answer** in the user's language. The English you used for
-analysis and artifacts is **not** a reason to answer in English — pick the reply language from
-the user's last message, not from the language of your own reasoning.
+These do **not** conflict and must not bleed: analyze and write files in English, then reply in
+the language of the user's last message — never in the language of your own reasoning.
 
 ## Secrets
 
@@ -40,8 +35,10 @@ the user's last message, not from the language of your own reasoning.
   unprivileged user by design. Hitting a permission boundary (a root-owned file, a denied
   write) is information, not an obstacle to route around — explain it to the owner and stop;
   do not `sudo`, `chown`, `chmod` the way past it, or otherwise reach for elevated access.
+- **Never write the `env` of a harness settings file** — the launcher sets the run's actor there.
 
-Runtime check: privilege.no-escalation — the whole rule: any Bash command containing `sudo` is denied.
+Runtime check: privilege.no-escalation — the whole rule: a Bash command containing `sudo`, and a write
+to a harness settings file's `env`, are denied.
 
 ## Commits & ownership
 
@@ -50,14 +47,16 @@ Runtime check: privilege.no-escalation — the whole rule: any Bash command cont
 - **No AI `Co-Authored-By` trailer** — the committer is the human.
 - **Tests pass before a commit is offered.** No commit on red (see
   [pre-commit](../pipelines/pre-commit.md)).
-- Branch for non-trivial work; do not commit straight to the default branch unless asked.
+- Branch for non-trivial work, named by its task id after any prefix (`agent/C12-x`) — the default
+  and release branches aside; do not commit straight to the default branch unless asked.
 - **Job-branch carve-out** — the one standing exception to the first bullet. A parallel job runs
   in its own worktree, `.worktrees/<id>-<name>.<n>/`, on the local branch
   `_aitna/<id>-<name>.<n>`. Inside that worktree the agent commits its own work on that branch
-  without asking. It never pushes or tags. Carrying the branch's work into the branch the owner is
-  on is started by the owner only. When the job is ready the agent commits it there and prints the
-  squash — `git merge --squash <branch>` in the owner's checkout and a commit with the message it
-  proposes, so the branch's commits become one commit — and the owner runs it or asks the agent to.
+  without asking. It never pushes or tags — but an `autonomous` run (no developer) pushes its own
+  branch and opens a pull request into the default branch. Carrying the branch's work into the branch the owner is on is
+  started by the owner only. When the job is ready the agent commits it there and prints the squash
+  — `git merge --squash <branch>` in the owner's checkout, then a commit with its proposed message —
+  which the owner runs or asks the agent to run.
   After the carry the agent prints the worktree's removal (`git worktree remove <path>`, which
   git refuses while anything is uncommitted); the branch stays as a backup and the agent deletes it
   later — at a periodic check, on request, or when the task closes — only after the code check that
@@ -65,16 +64,16 @@ Runtime check: privilege.no-escalation — the whole rule: any Bash command cont
   stays as made: the agent does not rewrite it (amend, rebase, reset to an earlier commit) to ease
   the carry unless the owner says so, and brings the owner's branch in by merge. The carve-out covers
   no other branch — the agent moves, renames or deletes no ref but its own `_aitna/` job branches —
-  no other commit and no push.
+  no other commit and no other push.
 
-Runtime check: commits.owner-owned — subset: an AI `Co-Authored-By` trailer is denied; `push` and
-`tag` ask everywhere, a linked worktree included; `commit`, `merge`, `rebase`, `reset` and the other
-history-writing commands pass inside a linked worktree on its own named branch (not `main`/`master`)
-and ask anywhere else — the main checkout, a detached/unresolved HEAD, a scratch repository or a
-directory the command text does not determine. Ref-writing commands — `branch` force/delete/
-rename/copy, a `fetch`/`pull` refspec into a local ref, `checkout -B`, `switch -C`, `symbolic-ref`
-and `update-ref` writes, `replace`, `filter-branch`, `fast-import`, `worktree` removal — ask in any
-directory unless every target ref is an `_aitna/` job branch. Only command words are read, never
+Runtime check: commits.owner-owned — subset, read from the access matrix by actor (`AKMON_ACTOR`;
+unset is `developer`): an AI `Co-Authored-By` trailer is denied; for a developer `push`, `tag`,
+`gh`/`glab` pull-request, merge and release commands ask everywhere, and `commit`, `merge`, `rebase`,
+`reset` and the other history writes pass inside a linked worktree on its own named branch (not
+`main`/`master`) and ask anywhere else; an `autonomous` run's history writes, `push` of its own
+branch and a pull request into the default branch pass; on it or `develop` they are denied. Ref writes (`branch -D`,
+`checkout -B`, `update-ref`, `worktree remove` and the like) ask unless every target ref is an
+`_aitna/` job branch. Only command words are read, never
 heredoc or quoted text, and the repository checked is the one the command acts on (`cd`, `-C`), not the session's.
 An ask is shown when the run is attended and becomes a deny when it is not (the host states
 attendance, else the interactive `default` permission mode attends). "Tests pass before a commit is
@@ -93,7 +92,7 @@ offered" and "branch for non-trivial work" are not machine-checked.
   [design-flow § Decision requests](../pipelines/design-flow.md#decision-requests).
 - **A code in a reply to the owner carries its gist.** A task id (`C138`) or a decision code
   (`D-ORDER`) is followed by 3–5 words saying what it is — up to 10 for a complex task — and a verdict
-  is stated as the action to take, not as a label. A bare code tells the owner nothing.
+  is stated as the action to take, not as a label.
 - **Narrate in the body, collect the asks at the end.** A reply that asks for or leaves pending an
   owner action ends with one `Needed from you` block, grouped by what the owner must do, every line
   carrying its own code, and nothing after it; a heading with the same code precedes the paragraph that argues
@@ -101,7 +100,7 @@ offered" and "branch for non-trivial work" are not machine-checked.
 
 ## Analysis before mutation
 
-Applies to **every role and every agent** (architect and engineer alike).
+Applies to every role and every agent.
 
 - **An analysis-only turn produces words, not edits.** When the owner asks you to **analyze,
   explain, review, compare options, or identify what remains** — typical openers: *why, how,
@@ -111,8 +110,8 @@ Applies to **every role and every agent** (architect and engineer alike).
   or akmon process docs only after explicit confirmation (*write it / record it / add it /
   make the change*), or when the original request was itself an edit command (*write, add,
   update, fix, implement*).
-- A rule that says **where** something is recorded (e.g. `TASKS.md` is the backlog sink) applies
-  only **after** the decision to record it — it is **not** a license to write during analysis.
+- A rule saying **where** something is recorded applies only **after** the decision to record
+  it — never a license to write during analysis.
 
 Runtime check: analysis.before-mutation — subset: the first edit to a planning/design doc in a
 session raises a reminder; whether the turn is analysis-only is not decidable by a hook.
@@ -167,8 +166,7 @@ Not machine-checked; how to carry it beyond prose is open task A52.
 - **Do not burn the orchestrator or reasoner tier on mechanical work; route by task kind,
   not by the whole task's prestige.** Every delegable kind has a named delegate
   ([MODEL.md](../MODEL.md) § Capability tiers); the orchestrator keeps only decomposition,
-  routing, synthesis, and owner dialogue. Name which delegate takes each sub-step **up front**,
-  as part of the plan — delegation is the default, not the fallback.
+  routing, synthesis, and owner dialogue. Name each sub-step's delegate **up front**, in the plan.
 - Escalate on signal, not by default: start at the cheapest adequate rung and move up one
   rung only on failure signals (gates red twice, the delegate flags uncertainty, a
   contested fork emerges mid-task).
@@ -179,9 +177,8 @@ states it, else any mode but the interactive `default`) escalates that ask to a 
 
 ## Code design — the principles every language inherits
 
-The language-independent half of the code standard, drawn from the Google Python Style Guide
-and read for any language. A language's profile in [profiles/](../profiles/) says how each
-reads there, and its checked rules enforce the mechanical half.
+Drawn from the Google Python Style Guide and read for any language; a language's
+[profile](../profiles/) says how each reads there, and its checker enforces the mechanical half.
 
 - **A rule a program can check lives in the checker, not in prose.** Prose holds only what no
   checker can see; where a checker enforces a rule, a document names the rule and never

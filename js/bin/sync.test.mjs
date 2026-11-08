@@ -339,6 +339,29 @@ test("Claude wiring keeps the table's shape: a matcher-less entry has no matcher
   });
 });
 
+test("Codex wiring: a per-turn event takes no matcher, so the work-style entry has none (M65)", () => {
+  withPackageProject((root) => {
+    const prompt = codexHooks(data, root).get("hooks").get("UserPromptSubmit");
+    assert.equal(prompt.length, 1);
+    assert.deepEqual([...prompt[0].keys()], ["hooks"]);
+    const pre = codexHooks(data, root).get("hooks").get("PreToolUse");
+    assert.deepEqual([...pre[0].keys()], ["matcher", "hooks"]);
+  });
+});
+
+test("Claude wiring: the owner's /style switch is captured beside the orchestrator detection", () => {
+  withPackageProject((root) => {
+    const prompt = claudeHooks(data, root).get("hooks").get("UserPromptSubmit");
+    assert.deepEqual(
+      prompt[0].get("hooks").map((/** @type {Map<string, any>} */ hook) => hook.get("command")),
+      [
+        'node "$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/model-routing.mjs"',
+        'node "$CLAUDE_PROJECT_DIR/node_modules/akmon/js/hooks/work-style.mjs"',
+      ],
+    );
+  });
+});
+
 test("Codex wiring: node on codex-hook.mjs from the git toplevel, the advisory appended, a status message", () => {
   /** @type {string[]} */
   const seen = [];
@@ -358,6 +381,7 @@ test("Codex wiring: node on codex-hook.mjs from the git toplevel, the advisory a
     'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" analysis-guard',
     'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" session-start',
     'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" learning-reminder',
+    'node "$(git rev-parse --show-toplevel)/node_modules/akmon/js/hooks/codex-hook.mjs" work-style',
   ]);
 });
 

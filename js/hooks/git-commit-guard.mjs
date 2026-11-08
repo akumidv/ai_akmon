@@ -13,18 +13,25 @@
  * diagnostic costs no additional process on the hottest tool.
  */
 
+import { ACTORS, actorFromEnvironment, runBranchFromEnvironment } from "../common/access_matrix.mjs";
 import { dictGet, truthy } from "../common/pyvalue.mjs";
 import { attendedFromEnvironment, loadPayload, runAsEntryPoint, runGuarded } from "./claude_adapter.mjs";
-import { gitCommitGuardResult, privilegeEscalationGuardResult, reportUnclassifiedShellRoute } from "./hook_core.mjs";
+import {
+  gitCommitGuardResult,
+  guardCrashDenyDocument,
+  privilegeEscalationGuardResult,
+  reportUnclassifiedShellRoute,
+} from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 
 /** @typedef {import("./hook_data.mjs").HookData} HookData */
 
 /**
  * @param {HookData} data
+ * @param {import("../common/access_matrix.mjs").Actor} actor who drives the run (`AKMON_ACTOR`)
  * @returns {import("./hook_core.mjs").HookResult | null}
  */
-function decide(data) {
+function decide(data, actor) {
   const payload = loadPayload();
   if (dictGet(payload, "tool_name") !== "Bash") {
     return null;
@@ -36,12 +43,15 @@ function decide(data) {
   const command = truthy(rawCommand) ? rawCommand : "";
   const permissionMode = dictGet(payload, "permission_mode");
   const cwd = dictGet(payload, "cwd");
+  const directory = typeof cwd === "string" && cwd !== "" ? cwd : null;
   return (
-    privilegeEscalationGuardResult(data, command) ??
+    privilegeEscalationGuardResult(data, command, directory) ??
     gitCommitGuardResult(data, command, {
       permissionMode: typeof permissionMode === "string" ? permissionMode : null,
-      directory: typeof cwd === "string" && cwd !== "" ? cwd : null,
+      directory,
       attended: attendedFromEnvironment(process.env),
+      actor,
+      runBranch: runBranchFromEnvironment(process.env),
     })
   );
 }
@@ -52,8 +62,16 @@ function decide(data) {
  */
 export function main() {
   const data = lazyHookData();
-  // Deny-class, and still crash-open (ADR 0013 F3): a crash lets the command through and says so.
-  return runGuarded("git-commit-guard", data, () => decide(data));
+  // Deny-class, and crash-open for a developer (ADR 0013 F3): a crash lets the command through and says so. An
+  // autonomous run is denied instead (ADR 0031/D07, D-C203-GUARD-CRASH); the actor is read here, before the
+  // matrix or anything else that can crash.
+  const actor = actorFromEnvironment(process.env);
+  return runGuarded(
+    "git-commit-guard",
+    data,
+    () => decide(data, actor),
+    actor === ACTORS.AUTONOMOUS ? () => guardCrashDenyDocument(data) : null,
+  );
 }
 
 if (runAsEntryPoint(import.meta.url)) {

@@ -230,13 +230,16 @@ and an agent run on akmon receives its repertoire from the run-local layer.
 
 Each is decided while its task is implemented, not before it.
 
-- **D-ACTOR-CARRIER** — what carries the actor: an environment value from the launcher, a user-level
-  file, both; may a tracked file narrow it.
+- **D-ACTOR-CARRIER** — decided by [ADR 0031/D07](../adr/0031-work-styles-delegating-and-controlling.md#d07--access-is-a-matrix-of-actor-action-and-place):
+  an environment value the launcher sets, read at the hook's entry point; no value is a `developer`
+  run. Whether a tracked file may narrow it stays with A76.
 - **D-AGENT-TERM** — decided by [ADR 0027](../adr/0027-names-of-agents-actors-roles-and-delegates.md): one word per meaning; the code (declaration and
   charter layout) follows (A72).
 - **D-PIPELINE-SIGNAL** — how a hook learns the agent and pipeline per actor (above).
 - **D-REPERTOIRE-ARTIFACT** — one data file per agent, or the repertoire in pipeline metadata, as the
   single owner the SessionStart block, the nudge and the log all read.
+  The access matrix by actor already has its file, `common/access_matrix.json`
+  ([ADR 0031/D07](../adr/0031-work-styles-delegating-and-controlling.md#d07--access-is-a-matrix-of-actor-action-and-place)).
 - **D-REPERTOIRE-NUDGE** — how loud an exit is; can it become an `ask` for a developer.
 - **D-AUTONOMOUS-FORGE** — GitHub and GitLab; draft or ready pull request; rewriting its own branch.
 - **D-AUTONOMOUS-FORK** — at a design fork with no owner: take the conservative option and list the
@@ -244,7 +247,8 @@ Each is decided while its task is implemented, not before it.
 - **D-GUIDED-PROFILE** — what a non-developer does unasked, which actions need an explanation, which
   surface they use (an `ask` reaches only an attended session, ADR-0025/D06), how much of the process
   (roles, ADR, decision codes) applies.
-- **D-COAUTHOR** — the AI trailer in an autonomous run's commits: forbid, allow or require.
+- **D-COAUTHOR** — decided by [ADR 0031/D07](../adr/0031-work-styles-delegating-and-controlling.md#d07--access-is-a-matrix-of-actor-action-and-place):
+  the AI trailer is prohibited for every actor.
 - **D-MERGE-CONDITIONS** — what the integration agent requires before a merge, and into which branch.
 - **D-ACTOR-PARITY** — Claude first, Codex after its probes.
 

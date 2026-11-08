@@ -25,7 +25,11 @@ is the guardrail's rule; this file only says where the roles live.
 edit, or test run, decompose the work and delegate every independent mechanical sub-step to
 available subagents without waiting for an owner prompt. The orchestrator retains decomposition,
 routing, synthesis, and owner dialogue. Skip only when the task is atomic or the harness exposes
-no subagents; state the reason. This clause is direct rather than imported for the same reason
+no subagents; state the reason. **The work style** sets the rest
+([ADR 0031/D06](docs/adr/0031-work-styles-delegating-and-controlling.md#d06--the-delegation-rule-reads-the-style)):
+*delegating* also hands whole athla and higher-tier calls to delegates; *controlling* leaves
+stages to sessions the developer starts, and where a reasoner, auditor or athlos implementer would
+be called it recommends which, for what and why. This clause is direct rather than imported for the same reason
 the shipped block states it directly: Codex does not expand nested `@` imports in `AGENTS.md`.
 
 ## akmon runs on itself
@@ -92,8 +96,11 @@ the format of a note or a plan line and its place stay with the code.
   content: every path the branch changed holds the same content in the owner's branch (a squash leaves
   the branch unmerged in git's eyes, so `--merged` cannot say it) and no lease is live
   ([ADR 0029/D09](docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree);
-  the guard and the shipped carve-out follow in C190). Everything else in § Commits & ownership
-  stands as written.
+  the guard and the shipped carve-out follow in C190). An `autonomous` run, with no developer,
+  also pushes its own branch and opens a pull request into the default branch, never committing
+  to it or to `develop`
+  ([ADR 0031/D07](docs/adr/0031-work-styles-delegating-and-controlling.md#d07--access-is-a-matrix-of-actor-action-and-place)).
+  Everything else in § Commits & ownership stands as written.
 - **No dates, and never a date as an index.** Git history is the timeline. This applies to the
   text and file names of every tracked document: `meta/` (tasks, ADRs, designs, reviews,
   evidence) and the shipped prose. Name a file by its task id and a short subject

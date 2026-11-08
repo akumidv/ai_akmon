@@ -106,6 +106,16 @@
     "uncommitted": "{{holder}} left uncommitted paths: {{paths}}",
     "unreadable": "the uncommitted paths of {{holder}} could not be read"
   },
+  "block_commit": {
+    "style": "controlling",
+    "heading": "Block commit",
+    "cd": "cd {{path}}",
+    "add": "git add -- {{paths}}",
+    "commit": "git commit -m \"{{message}}\"",
+    "placeholder": "<message>",
+    "propose": "Propose the commit message and put it in place of <message>.",
+    "reminder": "The owner runs these, or asks the agent to; write the hand-off prompt to the next session in chat, in the developer's language, addressed to the receiving session and pointing to {{resume}}."
+  },
   "export": {
     "title": "# akmon ergon bundle: {{ergon}}",
     "file_header": "--- file: {{path}}",

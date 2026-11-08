@@ -22,8 +22,8 @@ import {
   renderResult,
   runGuarded,
 } from "./claude_adapter.mjs";
-import { HookResult, hookFailureNotice } from "./hook_core.mjs";
-import { lazyHookData } from "./hook_data.mjs";
+import { GUARD_CRASH_FALLBACK_REASON, HookResult, guardCrashDenyDocument, hookFailureNotice } from "./hook_core.mjs";
+import { TREE_ROOT, lazyHookData } from "./hook_data.mjs";
 
 const data = lazyHookData();
 const HOOKS = posix.dirname(fileURLToPath(import.meta.url));
@@ -296,7 +296,7 @@ function run(script, payload, env = {}, cwd = process.cwd()) {
     input,
     cwd,
     // CLAUDE_CODE_SESSION_ATTENDED: the session running the suite states its own attendance; a test sets it itself
-    env: { ...process.env, AKMON_DELEGATION_GRACE: "", CLAUDE_CODE_SESSION_ATTENDED: "", ...env },
+    env: { ...process.env, AKMON_DELEGATION_GRACE: "", CLAUDE_CODE_SESSION_ATTENDED: "", AKMON_ACTOR: "", ...env },
     encoding: "utf8",
   });
   return { stdout: result.stdout, stderr: result.stderr, status: result.status };
@@ -432,6 +432,41 @@ test("git-commit-guard reads attendance from the environment at the entry point 
   });
 });
 
+test("git-commit-guard reads the actor from the environment at the entry point (ADR-0031/D07)", () => {
+  withProject((project, tmp) => {
+    // `gh pr create` needs no repository, so the actor alone decides it: a developer asks, an autonomous run passes.
+    /** @type {Array<[string | undefined, string | null]>} */
+    const cells = [
+      [undefined, "ask"],
+      ["developer", "ask"],
+      ["autonomous", null],
+      ["bogus", "ask"],
+      ["Autonomous", "ask"],
+      ["", "ask"],
+    ];
+    for (const [value, decision] of cells) {
+      const payload = {
+        tool_name: "Bash",
+        session_id: `actor-${value}`,
+        cwd: project,
+        permission_mode: "default",
+        tool_input: { command: "gh pr create --fill" },
+      };
+      const env = {
+        TMPDIR: tmp,
+        CLAUDE_CODE_SESSION_ATTENDED: "1",
+        ...(value === undefined ? {} : { AKMON_ACTOR: value }),
+      };
+      const { stdout } = run("git-commit-guard", payload, env);
+      if (decision === null) {
+        assert.equal(stdout, "", String(value));
+      } else {
+        assert.match(stdout, new RegExp(`"permissionDecision": "${decision}"`), String(value));
+      }
+    }
+  });
+});
+
 test("delegation-nudge runs as a process: it counts, nudges once, and a subagent is exempt", () => {
   withProject((project, tmp) => {
     const env = { TMPDIR: tmp };
@@ -477,5 +512,176 @@ test("session-start-agent runs as a process: the roster from the payload's cwd, 
       run("session-start-agent", "not json", { ...env, CLAUDE_PROJECT_DIR: project }).stdout,
       viaPayload.stdout,
     );
+  });
+});
+
+/**
+ * A copy of the tree's hook code and data under a temporary directory, with an access matrix that cannot be
+ * read — the guard's own data failing, end to end (D-C203-GUARD-CRASH). `body` gets the copy's root.
+ * @param {(root: string) => void} body
+ */
+function withBrokenMatrixTree(body) {
+  const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-broken-matrix-"));
+  try {
+    for (const directory of ["js", "hooks", "common", "tools/model_routing", "agents"]) {
+      fs.cpSync(posix.join(TREE_ROOT, directory), posix.join(root, directory), {
+        recursive: true,
+        filter: (source) => !source.includes("__pycache__") && !source.endsWith(".test.mjs"),
+      });
+    }
+    fs.writeFileSync(posix.join(root, "common", "access_matrix.json"), "{ not json");
+    body(root);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// --- D-C203-GUARD-CRASH: an autonomous run's commit guard fails closed, a developer's stays crash-open --------------
+
+test("runGuarded writes the closed document instead of the notice when the entry point passes one", () => {
+  const broken = /** @type {any} */ ({
+    get vocabulary() {
+      throw pyError("DataFileError", "akmon data file missing: vocabulary.json");
+    },
+  });
+  const result = captured(() =>
+    runGuarded(
+      "h",
+      broken,
+      () => new HookResult({ eventName: "PreToolUse" }),
+      () => "DENY-DOCUMENT",
+    ),
+  );
+  assert.equal(result.err, "akmon h hook: DataFileError\n");
+  assert.equal(result.out, "DENY-DOCUMENT\n");
+  assert.equal(result.code, 0);
+});
+
+test("the crash deny names the matrix, and falls back to a reason in code when the texts cannot be read", () => {
+  const document = JSON.parse(guardCrashDenyDocument(data));
+  assert.deepEqual(Object.keys(document), ["hookSpecificOutput"]);
+  const output = document.hookSpecificOutput;
+  assert.equal(output.hookEventName, "PreToolUse");
+  assert.equal(output.permissionDecision, "deny");
+  assert.equal(output.permissionDecisionReason, data.core.git_commit_guard_crash_reason);
+  assert.ok(output.permissionDecisionReason.includes("access matrix could not be read"));
+  assert.ok(output.permissionDecisionReason.includes("autonomous run is denied"));
+  const unreadable = /** @type {any} */ ({
+    get core() {
+      throw pyError("DataFileError", "akmon data file missing: hook_core.json");
+    },
+  });
+  assert.equal(
+    JSON.parse(guardCrashDenyDocument(unreadable)).hookSpecificOutput.permissionDecisionReason,
+    GUARD_CRASH_FALLBACK_REASON,
+  );
+});
+
+test("git-commit-guard: a crash denies an autonomous run and still lets a developer through", () => {
+  withProject((project, tmp) => {
+    // a `tool_input` that is not an object is the AttributeError `.get` raises
+    const payload = { tool_name: "Bash", session_id: "crash", cwd: project, tool_input: [1] };
+    const closed = run("git-commit-guard", payload, { TMPDIR: tmp, AKMON_ACTOR: "autonomous" });
+    assert.equal(closed.status, 0);
+    assert.ok(closed.stderr.endsWith("akmon git-commit-guard hook: AttributeError\n"), closed.stderr);
+    assert.equal(closed.stdout, `${guardCrashDenyDocument(data)}\n`);
+    for (const actor of [undefined, "developer", "guided"]) {
+      const open = run("git-commit-guard", payload, {
+        TMPDIR: tmp,
+        ...(actor === undefined ? {} : { AKMON_ACTOR: actor }),
+      });
+      assert.equal(open.status, 0);
+      assert.deepEqual(Object.keys(JSON.parse(open.stdout)), ["systemMessage"], String(actor));
+    }
+  });
+});
+
+test("git-commit-guard: an access matrix that cannot be read denies an autonomous run, not a developer's", () => {
+  withBrokenMatrixTree((root) => {
+    withProject((project, tmp) => {
+      const payload = {
+        tool_name: "Bash",
+        session_id: "m",
+        cwd: project,
+        tool_input: { command: "gh pr create --fill" },
+      };
+      const script = posix.join(root, "js", "hooks", "git-commit-guard.mjs");
+      const call = (/** @type {Record<string, string>} */ env) =>
+        spawnSync("node", [script], {
+          input: JSON.stringify(payload),
+          cwd: project,
+          env: { ...process.env, CLAUDE_CODE_SESSION_ATTENDED: "1", AKMON_ACTOR: "", TMPDIR: tmp, ...env },
+          encoding: "utf8",
+        });
+      const closed = call({ AKMON_ACTOR: "autonomous" });
+      assert.equal(closed.status, 0, closed.stderr);
+      assert.ok(closed.stderr.endsWith("akmon git-commit-guard hook: DataFileError\n"), closed.stderr);
+      assert.equal(JSON.parse(closed.stdout).hookSpecificOutput.permissionDecision, "deny");
+      assert.match(closed.stdout, /access matrix could not be read/);
+      const open = call({});
+      assert.equal(open.status, 0, open.stderr);
+      assert.deepEqual(Object.keys(JSON.parse(open.stdout)), ["systemMessage"]);
+      // a command that names no git, gh or glab never reads the matrix
+      const quiet = spawnSync("node", [script], {
+        input: JSON.stringify({ ...payload, tool_input: { command: "ls" } }),
+        cwd: project,
+        env: { ...process.env, AKMON_ACTOR: "autonomous", TMPDIR: tmp },
+        encoding: "utf8",
+      });
+      assert.equal(quiet.stdout, "");
+    });
+  });
+});
+
+// --- D-C203-RUN-BRANCH: the entry point reads AKMON_RUN_BRANCH beside AKMON_ACTOR ----------------------------------
+
+test("git-commit-guard reads the run branch from the environment at the entry point (ADR-0031/D07)", () => {
+  withProject((project, tmp) => {
+    const repository = posix.join(project, "clone");
+    fs.mkdirSync(repository);
+    const git = (/** @type {string[]} */ ...args) =>
+      spawnSync("git", ["-C", repository, ...args], { encoding: "utf8" });
+    git("init", "-q", "-b", "feat");
+    /** @type {Array<[string | undefined, string | null]>} */
+    const cells = [
+      [undefined, "deny"], // `feat` is no task-id branch under agent/
+      ["feat", null],
+      ["agent/C203-x", "deny"], // the exact name wins over the pattern
+      ["", "deny"], // an empty value names nothing
+    ];
+    for (const [value, decision] of cells) {
+      const payload = {
+        tool_name: "Bash",
+        session_id: `run-${value}`,
+        cwd: repository,
+        permission_mode: "default",
+        tool_input: { command: "git commit -m x" },
+      };
+      const env = {
+        TMPDIR: tmp,
+        AKMON_ACTOR: "autonomous",
+        CLAUDE_CODE_SESSION_ATTENDED: "1",
+        AKMON_RUN_BRANCH: value ?? "",
+      };
+      const { stdout } = run("git-commit-guard", payload, env);
+      if (decision === null) {
+        assert.equal(stdout, "", String(value));
+      } else {
+        assert.match(stdout, new RegExp(`"permissionDecision": "${decision}"`), String(value));
+      }
+    }
+    // a developer run ignores the variable
+    const developer = run(
+      "git-commit-guard",
+      {
+        tool_name: "Bash",
+        session_id: "run-dev",
+        cwd: repository,
+        permission_mode: "default",
+        tool_input: { command: "git commit -m x" },
+      },
+      { TMPDIR: tmp, CLAUDE_CODE_SESSION_ATTENDED: "1", AKMON_RUN_BRANCH: "feat" },
+    );
+    assert.match(developer.stdout, /"permissionDecision": "ask"/);
   });
 });

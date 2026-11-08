@@ -220,7 +220,9 @@ the branch later — at a periodic check of finished tasks, on request, or when 
 only when every path the branch changed holds the same content in the owner's branch and no lease is
 live. A squash leaves the branch unmerged in git's eyes, so "carried" is read from content, never
 from `--merged`; a branch that is not carried is never deleted. A worktree the harness made stays the
-harness's (D06). Pushing, tagging and publishing stay the owner's everywhere. This
+harness's (D06). Pushing, tagging and publishing stay the owner's everywhere — for a `developer`
+run; an `autonomous` run pushes its own branch and opens a pull request
+([0031/D07](0031-work-styles-delegating-and-controlling.md#d07--access-is-a-matrix-of-actor-action-and-place)). This
 replaces `AGENTS.md`'s "an agent may commit on a local non-default branch" and widens 0028/D11's
 job-branch carve-out from akmon's own `.worktrees/` path to any worktree an athlos is bound to. The
 guard enforces it by the repository a command acts on, not by the session's directory (C190).

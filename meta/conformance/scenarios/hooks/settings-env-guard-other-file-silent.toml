@@ -1,0 +1,23 @@
+# A write to any file that is not a harness settings file passes, whatever it holds.
+id = "hooks/settings-env-guard-other-file-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:settings-env-guard"]
+
+[run]
+script = "settings-env-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Write"
+session_id = "sess-seg-4"
+cwd = "{{root}}"
+
+[run.payload.tool_input]
+file_path = "{{root}}/notes.json"
+content = '{"env": {"A": "1"}}'
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

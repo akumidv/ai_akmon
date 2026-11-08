@@ -43,7 +43,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import pathModule from "node:path";
 
-import { fill } from "../common/jsondata.mjs";
+import { DataFileError, fill } from "../common/jsondata.mjs";
 import { FloatValue, hookForm } from "../common/json_writer.mjs";
 import {
   claimDiagnosticMarker,
@@ -81,9 +81,21 @@ import {
   exceptionClassName,
 } from "../common/pyvalue.mjs";
 import { codePointSort } from "../common/sort.mjs";
+import {
+  ACTORS,
+  AI_TRAILER_CLASS,
+  outcome as accessOutcome,
+  isOwnBranch,
+  isProtectedBranch,
+  OUTCOMES,
+  protectedBranches,
+} from "../common/access_matrix.mjs";
+import { fileFormat, writeReason as settingsWriteReason } from "../common/harness_settings.mjs";
+import { resolve as resolveWorkStyle } from "../common/work_style.mjs";
 import { TREE_ROOT } from "./hook_data.mjs";
 
 /** @typedef {import("./hook_data.mjs").HookData} HookData */
+/** @typedef {import("../common/access_matrix.mjs").Actor} Actor */
 
 export { aitnaRootName, findProjectRoot, locateProjectRoot };
 
@@ -468,7 +480,7 @@ function _subject(text) {
 const _SUDO_RE = /\bsudo\b/;
 
 /**
- * Deny any Bash command that invokes `sudo`, unconditionally.
+ * Deny any Bash command that invokes `sudo`, and one that writes a harness settings file, unconditionally.
  *
  * The agent runs as an unprivileged user by design; a command reaching for `sudo` is either
  * probing for elevated access or trying to route around a permission boundary that exists on
@@ -476,20 +488,36 @@ const _SUDO_RE = /\bsudo\b/;
  * elevated access is genuinely needed, the owner runs it themselves. No ask: the answer does not
  * depend on session attentiveness, so there is nothing to escalate.
  *
+ * The same rule covers the actor's carrier (ADR 0031/D07, D-C203-ACTOR-WRITE): a harness settings
+ * file's `env` reaches the hook process (M239), so a command whose words write one of those files —
+ * an output redirection, `tee`, `sed -i`/`perl -i`, a `cp`/`mv`/`install` destination, `dd of=` —
+ * is denied, for every actor; reading one passes. Only command words are read, never a quoted
+ * argument or a heredoc body. `directory` is where the command starts (default: the process's).
+ * The edit tools' half of the rule is the `settings-env-guard` hook (`common/harness_settings.mjs`).
+ *
  * Policy ID: privilege.no-escalation
  * @param {HookData} data
  * @param {unknown} command
+ * @param {string | null} [directory]
  * @returns {HookResult | null}
  */
-export function privilegeEscalationGuardResult(data, command) {
-  if (!_SUDO_RE.test(_subject(command))) {
+export function privilegeEscalationGuardResult(data, command, directory = null) {
+  if (_SUDO_RE.test(_subject(command))) {
+    return new HookResult({
+      eventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionReason: _core(data, "privilege_escalation_reason"),
+    });
+  }
+  const reason = _settingsWriteReason(
+    data,
+    /** @type {string} */ (command),
+    directory === null ? _workingDirectory() : directory,
+  );
+  if (reason === null) {
     return null;
   }
-  return new HookResult({
-    eventName: "PreToolUse",
-    permissionDecision: "deny",
-    permissionReason: _core(data, "privilege_escalation_reason"),
-  });
+  return new HookResult({ eventName: "PreToolUse", permissionDecision: "deny", permissionReason: reason });
 }
 
 // --------------------------------------------------------------------------------------
@@ -497,18 +525,23 @@ export function privilegeEscalationGuardResult(data, command) {
 // --------------------------------------------------------------------------------------
 
 /**
- * One `git` command found in a shell command: its subcommand, its arguments, and where it runs.
- * `arguments` are the words after the subcommand, quotes removed. `directory` is `null` when the
- * place cannot be told from the text (a `$` expansion, a `GIT_DIR` assignment, `--git-dir`, `cd -`).
+ * One `git`, `gh` or `glab` command found in a shell command: its subcommand, its arguments, and where it
+ * runs. `arguments` are the words after the subcommand, quotes removed. `directory` is `null` when
+ * the place cannot be told from the text (a `$` expansion, a `GIT_DIR` assignment, `--git-dir`,
+ * `cd -`). `program` is `git`, `gh` or `glab`; a forge subcommand is its group and action as one string
+ * (`pr create`); `gh api` and `glab api` keep every word after `api`. `configOverride` is `true` for a
+ * `git` carrying `-c` or `--config-env`: the command runs under configuration the text does not show.
  */
 export class GitInvocation {
   /**
-   * @param {{subcommand: string, directory: string | null, arguments?: string[]}} fields
+   * @param {{subcommand: string, directory: string | null, arguments?: string[], program?: string, configOverride?: boolean}} fields
    */
-  constructor({ subcommand, directory, arguments: words = [] }) {
+  constructor({ subcommand, directory, arguments: words = [], program = "git", configOverride = false }) {
     this.subcommand = subcommand;
     this.directory = directory;
     this.arguments = Object.freeze([...words]);
+    this.program = program;
+    this.configOverride = configOverride;
     Object.freeze(this);
   }
 }
@@ -529,12 +562,15 @@ export class RepositoryFacts {
 }
 
 /**
- * A shell word after quote removal; `operand` is `false` for the target of a redirection.
+ * A shell word after quote removal; `operand` is `false` for the target of a redirection, and
+ * `write` is `true` for the target of an output redirection (`>`, `>>`, `>|`, `&>`), which opens
+ * its file for writing.
  * @typedef {object} ShellWord
  * @property {string} value
  * @property {boolean} expands
  * @property {ShellUnit[][]} substitutions
  * @property {boolean} operand
+ * @property {boolean} write
  */
 
 /**
@@ -612,6 +648,7 @@ class _Parser {
     /** @type {Array<[string, boolean]>} */
     this._heredocs = [];
     this._redirectTargetNext = false;
+    this._redirectWriteNext = false;
   }
 
   /**
@@ -666,8 +703,10 @@ class _Parser {
         expands: builder.expands,
         substitutions: builder.substitutions,
         operand: !this._redirectTargetNext,
+        write: this._redirectTargetNext && this._redirectWriteNext,
       });
       this._redirectTargetNext = false;
+      this._redirectWriteNext = false;
     }
     frame.builder = new _WordBuilder();
   }
@@ -676,6 +715,7 @@ class _Parser {
   _endCommand(frame) {
     this._endWord(frame);
     this._redirectTargetNext = false;
+    this._redirectWriteNext = false;
     if (frame.words.length > 0) {
       frame.units.push({ kind: "command", words: frame.words });
       frame.words = [];
@@ -797,11 +837,13 @@ class _Parser {
     } else if (text.startsWith("<<", this._pos)) {
       this._heredoc(this._pos + 2);
     } else {
+      const start = this._pos;
       this._pos += 1;
       while (this._pos < text.length && "&>|<".includes(text[this._pos])) {
         this._pos += 1;
       }
       this._redirectTargetNext = true;
+      this._redirectWriteNext = text.slice(start, this._pos).includes(">");
     }
   }
 
@@ -920,6 +962,55 @@ function _changedDirectory(operands, directory, home) {
   return _targetDirectory(paths[0], directory, home);
 }
 
+// the forge command lines the guard reads like git's
+const _FORGE_PROGRAMS = ["gh", "glab"];
+// `gh <group> <action>`: `pr create`; `glab mr create`
+const _FORGE_NAME_WORDS = 2;
+// `-B`: a dash and a letter
+const _SHORT_OPTION = 2;
+// `gh api <endpoint> -X POST`: the options after it are its arguments
+const _FORGE_API = "api";
+
+/**
+ * The group and action of a `gh`/`glab` command (`pr create`), its arguments, and where it runs. Options
+ * are skipped (`-R`/`--repo` take the next word); a group with no action (`gh pr`) is the
+ * subcommand alone. `api` takes no action word: its arguments are every word after it, options
+ * included. `null` when no word names a group.
+ * @param {ShellWord[]} operands
+ * @param {string | null} directory
+ * @param {string} program
+ * @returns {GitInvocation | null}
+ */
+function _forgeInvocation(operands, directory, program) {
+  const words = operands.map((word) => word.value);
+  /** @type {string[]} */
+  const names = [];
+  /** @type {string[]} */
+  let rest = [];
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index];
+    if (names.length === _FORGE_NAME_WORDS) {
+      rest = words.slice(index);
+      break;
+    }
+    if (word.startsWith("-")) {
+      index += 1 + (word === "-R" || word === "--repo" ? 1 : 0);
+      continue;
+    }
+    names.push(word);
+    index += 1;
+    if (names.length === 1 && names[0] === _FORGE_API) {
+      rest = words.slice(index);
+      break;
+    }
+  }
+  if (names.length === 0) {
+    return null;
+  }
+  return new GitInvocation({ subcommand: names.join(" "), directory, arguments: rest, program });
+}
+
 /**
  * The subcommand after git's global options, its arguments, and the directory they and `directory` give.
  * @param {ShellWord[]} operands
@@ -930,6 +1021,7 @@ function _changedDirectory(operands, directory, home) {
  */
 function _gitInvocation(operands, directory, repositoryUnknown, home) {
   let unknown = repositoryUnknown;
+  let overridden = false;
   let place = directory;
   let index = 0;
   while (index < operands.length) {
@@ -939,7 +1031,12 @@ function _gitInvocation(operands, directory, repositoryUnknown, home) {
       if (index < operands.length) {
         place = _targetDirectory(operands[index], place, home);
       }
-    } else if (value === "-c" || value === "--namespace") {
+    } else if (value === "-c" || value === "--config-env") {
+      index += 1;
+      overridden = true;
+    } else if (value.startsWith("--config-env=")) {
+      overridden = true;
+    } else if (value === "--namespace") {
       index += 1;
     } else if (value === "--git-dir" || value === "--work-tree") {
       index += 1;
@@ -951,6 +1048,7 @@ function _gitInvocation(operands, directory, repositoryUnknown, home) {
         subcommand: value,
         directory: unknown ? null : place,
         arguments: operands.slice(index + 1).map((word) => word.value),
+        configOverride: overridden,
       });
     }
     index += 1;
@@ -1044,16 +1142,21 @@ function _walkCommand(command, directory, home, found) {
   if (name === "popd") {
     return null;
   }
-  if (name.slice(name.lastIndexOf("/") + 1) === "git") {
-    const invocation = _gitInvocation(operands, directory, repositoryUnknown, home);
-    if (invocation !== null) {
-      found.push(invocation);
-    }
+  const program = name.slice(name.lastIndexOf("/") + 1);
+  /** @type {GitInvocation | null} */
+  let invocation = null;
+  if (program === "git") {
+    invocation = _gitInvocation(operands, directory, repositoryUnknown, home);
+  } else if (_FORGE_PROGRAMS.includes(program)) {
+    invocation = _forgeInvocation(operands, directory, program);
   } else {
     const script = _nestedScript(name, operands);
     if (script !== null) {
       _walkScript(new _Parser(script).script(false), directory, home, found);
     }
+  }
+  if (invocation !== null) {
+    found.push(invocation);
   }
   return directory;
 }
@@ -1077,7 +1180,7 @@ function _walkScript(script, start, home, found) {
 }
 
 /**
- * Every `git` command a shell command runs, in order, with the directory each runs in.
+ * Every `git`, `gh` and `glab` command a shell command runs, in order, with the directory each runs in.
  *
  * Only *command words* count: a heredoc body, a quoted argument (`echo "git push"`,
  * `grep 'git merge' f`) and a comment are text. The scan follows `;`, `&&`, `||`, pipes, newlines,
@@ -1135,6 +1238,185 @@ function _realPath(directory, path) {
 }
 
 /**
+ * The path `cp`/`mv`/`install` writes: the last operand, or the sources' names inside a `-t` directory.
+ * @param {readonly string[]} values
+ * @param {import("../common/harness_settings.mjs").HarnessSettingsData["shell"]} shell
+ * @returns {string[]}
+ */
+function _destination(values, shell) {
+  /** @type {string | null} */
+  let targetDirectory = null;
+  /** @type {string[]} */
+  const operands = [];
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    const equals = value.indexOf("=");
+    const longName = equals < 0 ? value : value.slice(0, equals);
+    const attached = equals < 0 ? "" : value.slice(equals + 1);
+    if (shell.target_directory_options.includes(value)) {
+      targetDirectory = index + 1 < values.length ? values[index + 1] : null;
+      index += 1;
+    } else if (shell.target_directory_options.includes(longName) && attached !== "") {
+      targetDirectory = attached;
+    } else if (value.startsWith("-t") && !value.startsWith("--") && value.length > _SHORT_OPTION) {
+      targetDirectory = value.slice(_SHORT_OPTION);
+    } else if (!(value.startsWith("-") && value.length > 1)) {
+      operands.push(value);
+    }
+  }
+  if (targetDirectory !== null) {
+    const base = targetDirectory.replace(/\/+$/, "");
+    return operands.map((operand) => {
+      const trimmed = operand.replace(/\/+$/, "");
+      return `${base}/${trimmed.slice(trimmed.lastIndexOf("/") + 1)}`;
+    });
+  }
+  return operands.slice(-1);
+}
+
+/**
+ * The paths a program writes among its `operands`: the words, by what `harness_settings.json` says
+ * it does. `tee` and `sponge` write every operand; `sed -i` and `perl -i` (any option cluster
+ * holding the letter, or `--in-place`) write the files they name; `cp`, `mv` and `install` write
+ * their last operand, or, with `-t DIRECTORY`, a file of that name in it; `dd` writes its `of=`
+ * operand.
+ * @param {string} program
+ * @param {readonly ShellWord[]} operands
+ * @param {import("../common/harness_settings.mjs").HarnessSettingsData["shell"]} shell
+ * @returns {string[]}
+ */
+function _writeCandidates(program, operands, shell) {
+  const values = operands.map((word) => word.value);
+  const options = values.filter((value) => value.startsWith("-") && value.length > 1);
+  const paths = () => values.filter((value) => !options.includes(value));
+  if (shell.write_all_operands.includes(program)) {
+    return paths();
+  }
+  const letter = Object.hasOwn(shell.in_place, program) ? shell.in_place[program] : null;
+  if (letter !== null) {
+    const longOption = shell.in_place_long_option;
+    const inPlace = options.some((option) =>
+      option.startsWith("--")
+        ? option === longOption || option.startsWith(`${longOption}=`)
+        : option.slice(1).includes(letter),
+    );
+    return inPlace ? paths() : [];
+  }
+  if (shell.write_last_operand.includes(program)) {
+    return _destination(values, shell);
+  }
+  const prefix = Object.hasOwn(shell.operand_assignments, program) ? shell.operand_assignments[program] : null;
+  if (prefix !== null) {
+    return values.filter((value) => value.startsWith(prefix)).map((value) => value.slice(prefix.length));
+  }
+  return [];
+}
+
+/**
+ * The first of `candidates` that names a harness settings file, spelled as given or read from `directory`.
+ * @param {readonly string[]} candidates
+ * @param {string | null} directory
+ * @param {HookData} data
+ * @returns {string | null}
+ */
+function _settingsFileAmong(candidates, directory, data) {
+  for (const candidate of candidates) {
+    for (const path of [candidate, _joined(directory, candidate)]) {
+      if (path !== null && fileFormat(path, data.harnessSettings) !== null) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The harness settings file `command` writes, if any, and the directory after it (`cd` moves it).
+ * @param {HookData} data
+ * @param {{kind: "command", words: ShellWord[]}} command
+ * @param {string | null} directory
+ * @param {string | null} home
+ * @returns {[string | null, string | null]}
+ */
+function _writtenSettingsFile(data, command, directory, home) {
+  for (const word of command.words) {
+    for (const substitution of word.substitutions) {
+      const path = _writtenSettingsIn(data, substitution, directory, home);
+      if (path !== null) {
+        return [path, directory];
+      }
+    }
+  }
+  const candidates = command.words.filter((word) => word.write).map((word) => word.value);
+  const words = command.words.filter((word) => word.operand);
+  const [index] = _commandStart(words);
+  if (index < words.length) {
+    const name = words[index].value;
+    const operands = words.slice(index + 1);
+    if (name === "cd" || name === "pushd") {
+      return [null, _changedDirectory(operands, directory, home)];
+    }
+    if (name === "popd") {
+      return [null, null];
+    }
+    candidates.push(..._writeCandidates(name.slice(name.lastIndexOf("/") + 1), operands, data.harnessSettings.shell));
+    const script = _nestedScript(name, operands);
+    if (script !== null) {
+      const path = _writtenSettingsIn(data, new _Parser(script).script(false), directory, home);
+      if (path !== null) {
+        return [path, directory];
+      }
+    }
+  }
+  return [_settingsFileAmong(candidates, directory, data), directory];
+}
+
+/**
+ * The first harness settings file a script's commands write, as the command spells it.
+ * @param {HookData} data
+ * @param {ShellUnit[]} script
+ * @param {string | null} start
+ * @param {string | null} home
+ * @returns {string | null}
+ */
+function _writtenSettingsIn(data, script, start, home) {
+  let directory = start;
+  for (const unit of script) {
+    /** @type {string | null} */
+    let path;
+    if (unit.kind === "group") {
+      path = _writtenSettingsIn(data, unit.script, directory, home);
+    } else {
+      [path, directory] = _writtenSettingsFile(data, unit, directory, home);
+    }
+    if (path !== null) {
+      return path;
+    }
+  }
+  return null;
+}
+
+/**
+ * The reason to deny `command` for writing a harness settings file, `null` when no command word does.
+ * The data file names the directories (`.claude`, `.codex`) that a command, or the directory it starts
+ * in, must mention for the command to be parsed at all.
+ * @param {HookData} data
+ * @param {string} command
+ * @param {string | null} directory
+ * @returns {string | null}
+ */
+function _settingsWriteReason(data, command, directory) {
+  const settings = data.harnessSettings;
+  if (
+    !settings.files.some((entry) => pyContains(command, entry.directory) || (directory ?? "").includes(entry.directory))
+  ) {
+    return null;
+  }
+  const path = _writtenSettingsIn(data, new _Parser(command).script(false), directory, _homeDirectory());
+  return path === null ? null : settingsWriteReason(path, settings);
+}
+
+/**
  * Ask git what repository `directory` is in; `null` when it is in none or git cannot say.
  *
  * A worktree is *linked* when its git directory differs from the common one the main checkout
@@ -1156,39 +1438,207 @@ export function repositoryFacts(directory) {
 }
 
 /**
- * @param {string} reason
+ * What one actor may do: the matrix row, and the texts that say so (ADR 0031/D07). Built once per
+ * guard call from `common/access_matrix.json` and `hook_core.json`.
+ */
+/**
+ * The deny for an AI trailer: unconditional, read from no matrix (commits.owner-owned).
+ *
+ * `checkTrailerFloor` already refuses a matrix whose `ai_trailer` cells are not `deny`; the floor does
+ * not depend on them. The reason is the actor's text for the class, as the matrix path gives.
+ * @param {HookData} data
+ * @param {Actor} actor
  * @returns {HookResult}
  */
-function _ask(reason) {
-  return new HookResult({ eventName: "PreToolUse", permissionDecision: "ask", permissionReason: reason });
+function _aiTrailerFloor(data, actor) {
+  const key = dictItem(dictItem(dictItem(data.core, "access_reasons"), actor), AI_TRAILER_CLASS);
+  return new HookResult({
+    eventName: "PreToolUse",
+    permissionDecision: "deny",
+    permissionReason: fill(dictItem(data.core, key), {}),
+  });
 }
 
 /**
- * Why `directory` is not an agent's place to write history, in words; `null` when it is. An agent
- * writes history only in a linked worktree, on a named branch that is not a default one.
+ * The reason a crashed commit guard gives an autonomous run when `hook_core.json` cannot be read
+ * either: the crash path depends on no data file, since a missing or broken one may be the very
+ * failure it answers.
+ */
+export const GUARD_CRASH_FALLBACK_REASON =
+  "Commit guardrail (autonomous run): the access matrix could not be read, so an autonomous run is denied.";
+
+/**
+ * The one-line JSON `PreToolUse` deny a crashed commit guard answers an `autonomous` run with.
+ *
+ * ADR-0031/D07 (D-C203-GUARD-CRASH): when the guard cannot read the access matrix, or raises while
+ * evaluating a command, an autonomous run is denied where a developer run is let through (the
+ * crash-open posture of ADR 0013). The actor is read from the environment before the matrix is, so
+ * this answer depends on neither the matrix nor, if the texts cannot be read, on any data file: it
+ * names its keys literally and falls back to a reason in code. Both vendor adapters write this
+ * document.
+ *
+ * Runtime classification: operational
+ * Rationale: it is the crash posture of the commit guard (`commits.owner-owned`), not a rule of its
+ * own: it answers a failure with the deny the guard's autonomous row would otherwise give, and an
+ * adapter writes it into the vendor's channel from outside the `*_result` join, so ADR-0012/D07
+ * requires the classification to be stated rather than left silent.
  * @param {HookData} data
+ * @returns {string}
+ */
+export function guardCrashDenyDocument(data) {
+  /** @type {string} */
+  let reason;
+  try {
+    reason = dictItem(data.core, "git_commit_guard_crash_reason");
+  } catch {
+    reason = GUARD_CRASH_FALLBACK_REASON;
+  }
+  const output = new Map([
+    ["hookEventName", "PreToolUse"],
+    ["permissionDecision", "deny"],
+    ["permissionDecisionReason", reason],
+  ]);
+  return hookForm(new Map([["hookSpecificOutput", output]]));
+}
+
+class _Access {
+  /**
+   * @param {HookData} data
+   * @param {Actor} actor
+   * @param {string | null} [runBranch] the branch an autonomous run owns (`AKMON_RUN_BRANCH`), if one is named
+   */
+  constructor(data, actor, runBranch = null) {
+    this.actor = actor;
+    this.runBranch = runBranch;
+    this.texts = data.core;
+    this.matrix = data.accessMatrix;
+    // The branches this actor is kept off as it is off the default branch: the default branches and its protected ones.
+    /** @type {readonly string[]} */
+    this.defaultBranchNames = _core(data, "git_default_branches");
+    /** @type {readonly string[]} */
+    this.protectedNames = protectedBranches(this.matrix, actor);
+  }
+
+  /**
+   * Whether `branch` is a default branch or one the actor is kept off like it (`develop`, `release/*`).
+   * @param {string} branch
+   * @returns {boolean}
+   */
+  isDefaultBranch(branch) {
+    return this.defaultBranchNames.includes(branch) || isProtectedBranch(this.protectedNames, branch);
+  }
+
+  /**
+   * Whether `branch` is one the actor may write: for an autonomous run, its own run branch.
+   * @param {string} branch
+   * @returns {boolean}
+   */
+  isOwnBranch(branch) {
+    return isOwnBranch(this.matrix, this.actor, branch, this.runBranch);
+  }
+
+  /**
+   * What the matrix gives the actor for `actionClass`: `null` to pass, else an ask or a deny. The
+   * reason is the actor's text for the class (`access_reasons` in `hook_core.json`) filled with
+   * `values`.
+   * @param {string} actionClass
+   * @param {Record<string, string>} values
+   * @returns {HookResult | null}
+   */
+  result(actionClass, values) {
+    const decision = accessOutcome(this.matrix, this.actor, actionClass);
+    if (decision === "allow") {
+      return null;
+    }
+    const key = dictItem(dictItem(dictItem(this.texts, "access_reasons"), this.actor), actionClass);
+    return new HookResult({
+      eventName: "PreToolUse",
+      permissionDecision: decision,
+      permissionReason: fill(dictItem(this.texts, key), values),
+    });
+  }
+
+  /**
+   * Whether the actor gets one outcome for all of `actionClasses`: telling them apart changes nothing.
+   * @param {readonly string[]} actionClasses
+   * @returns {boolean}
+   */
+  uniform(actionClasses) {
+    return new Set(actionClasses.map((name) => accessOutcome(this.matrix, this.actor, name))).size === 1;
+  }
+
+  /**
+   * The result for `subcommand` writing history at a `place` (a `history_*` class), `facts` naming it.
+   * @param {string} subcommand
+   * @param {string} place
+   * @param {Record<string, string>} facts
+   * @returns {HookResult | null}
+   */
+  historyResult(subcommand, place, facts) {
+    if (accessOutcome(this.matrix, this.actor, place) === "allow") {
+      return null;
+    }
+    const key = dictItem(dictItem(dictItem(this.texts, "access_where"), this.actor), place);
+    return this.result(place, { subcommand, where: fill(dictItem(this.texts, key), facts) });
+  }
+}
+
+/** The rank of each outcome, from the most permissive to the most restrictive. */
+const _OUTCOME_ORDER = new Map(OUTCOMES.map((name, rank) => [name, rank]));
+
+/**
+ * The result with the strictest decision among `results` (an `ask` before a pass, a `deny` before an ask).
+ * @param {(HookResult | null)[]} results
+ * @returns {HookResult | null}
+ */
+function _mostRestrictive(results) {
+  /** @type {HookResult | null} */
+  let strictest = null;
+  for (const result of results) {
+    if (result === null) {
+      continue;
+    }
+    const rank = /** @type {number} */ (_OUTCOME_ORDER.get(result.permissionDecision ?? "allow"));
+    if (
+      strictest === null ||
+      rank > /** @type {number} */ (_OUTCOME_ORDER.get(strictest.permissionDecision ?? "allow"))
+    ) {
+      strictest = result;
+    }
+  }
+  return strictest;
+}
+
+/**
+ * Where `directory` puts a history write: its action class in the matrix, and the values naming it.
+ * `history_unresolved` and `history_not_repository` have no facts; the rest are
+ * `history_{checkout|worktree}_{default|detached|branch}` — a linked worktree or not, on a default
+ * branch, on a detached `HEAD` or on a named branch — and `history_not_run_branch`: a named branch of
+ * a checkout (not a linked worktree) that is not the actor's own run branch. A linked worktree's
+ * branch is its own by the job-branch carve-out, so the run branch does not narrow it (ADR 0031/D07).
  * @param {string | null} directory
  * @param {(directory: string) => {linked: boolean, branch: string} | null} repositoryAt
- * @returns {string | null}
+ * @param {_Access} access
+ * @returns {[string, Record<string, string>]}
  */
-function _ownersPlace(data, directory, repositoryAt) {
+function _historyPlace(directory, repositoryAt, access) {
   if (directory === null) {
-    return _core(data, "git_commit_where_unresolved");
+    return ["history_unresolved", {}];
   }
   const facts = repositoryAt(directory);
   if (facts === null) {
-    return fill(_core(data, "git_commit_where_not_repository"), { directory });
+    return ["history_not_repository", { directory }];
   }
-  if (!facts.linked) {
-    return fill(_core(data, "git_commit_where_checkout"), { directory });
-  }
+  const where = facts.linked ? "worktree" : "checkout";
+  let branch = "branch";
   if (!facts.branch) {
-    return fill(_core(data, "git_commit_where_detached"), { directory });
+    branch = "detached";
+  } else if (access.isDefaultBranch(facts.branch)) {
+    branch = "default";
+  } else if (!facts.linked && !access.isOwnBranch(facts.branch)) {
+    return ["history_not_run_branch", { directory, branch: facts.branch }];
   }
-  if (_core(data, "git_default_branches").includes(facts.branch)) {
-    return fill(_core(data, "git_commit_where_default_branch"), { directory, branch: facts.branch });
-  }
-  return null;
+  return [`history_${where}_${branch}`, { directory, branch: facts.branch }];
 }
 
 /** @typedef {(directory: string) => {linked: boolean, branch: string} | null} RepositoryLookup */
@@ -1451,27 +1901,365 @@ function _refTarget(data, invocation, repositoryAt) {
     .join(", ");
 }
 
+// The classes a push of a branch falls into (a tag is its own class, `tag`).
+const _PUSH_CLASSES = ["push_own_branch", "push_own_branch_forced", "push_default_branch", "push_other_branch"];
+
 /**
+ * The flags of `git push` that decide its class: `f` force, `d` delete, `a` all branches, `t` tags, `T` the tags
+ * that follow the pushed commits.
+ * @param {HookData} data
+ * @param {string[]} options
+ * @returns {Set<string>}
+ */
+function _pushFlags(data, options) {
+  /** @type {Set<string>} */
+  const flags = new Set();
+  const longFlags = _core(data, "git_push_long_flags");
+  for (const word of options) {
+    if (word.startsWith("--")) {
+      const name = word.split("=", 1)[0];
+      for (const letter of Object.hasOwn(longFlags, name) ? longFlags[name] : "") {
+        flags.add(letter);
+      }
+    } else {
+      for (const letter of word.slice(1)) {
+        if (letter === "f" || letter === "d") {
+          flags.add(letter);
+        }
+      }
+    }
+  }
+  return flags;
+}
+
+/**
+ * The matrix class of one pushed refspec and the ref it writes. The destination decides: a tag, a
+ * default branch, the branch the repository is on (`current`; `HEAD` stands for it) when that is the
+ * actor's own branch (an autonomous run's run branch), or another branch. A `+` prefix, a `:destination` with no source and the caller's `forced` (`--force`,
+ * `--delete`) make a push of the own branch the forced one.
+ * @param {string} refspec
+ * @param {boolean} forced
+ * @param {string | null} current
+ * @param {_Access} access
+ * @returns {[string, string]}
+ */
+function _refspecClass(refspec, forced, current, access) {
+  const spec = refspec.startsWith("+") ? refspec.slice(1) : refspec;
+  const colon = spec.indexOf(":");
+  const source = colon < 0 ? spec : spec.slice(0, colon);
+  const destination = colon < 0 ? "" : spec.slice(colon + 1);
+  let target = colon < 0 ? source : destination;
+  if (target.startsWith("refs/tags/")) {
+    return ["tag", target];
+  }
+  if (target.startsWith("refs/heads/")) {
+    target = target.slice("refs/heads/".length);
+  }
+  if (target === "HEAD" && current !== null) {
+    target = current;
+  }
+  if (access.isDefaultBranch(target)) {
+    return ["push_default_branch", target];
+  }
+  if (target !== current || !access.isOwnBranch(target)) {
+    return ["push_other_branch", target];
+  }
+  const forcing = forced || refspec.startsWith("+") || (colon >= 0 && source === "");
+  return [forcing ? "push_own_branch_forced" : "push_own_branch", target];
+}
+
+/**
+ * The strictest decision among the refs `git push` writes: which class each is, the matrix says what it gets.
+ * A push that names no refspec, or runs under `-c` configuration, writes where git's configuration says
+ * (`push.default`, `remote.*.push`): its destination is not the text's, so it is another branch's.
  * @param {HookData} data
  * @param {GitInvocation} invocation
+ * @param {_Access} access
  * @param {RepositoryLookup} repositoryAt
  * @returns {HookResult | null}
  */
-function _invocationAsk(data, invocation, repositoryAt) {
-  if (_core(data, "git_publishing_subcommands").includes(invocation.subcommand)) {
-    return _ask(_core(data, "git_commit_push_tag_merge_reason"));
+function _pushDecision(data, invocation, access, repositoryAt) {
+  const [options, operands] = _splitArguments(invocation.arguments, _core(data, "git_push_valued_options"));
+  const flags = _pushFlags(data, options);
+  const base = { subcommand: invocation.subcommand };
+  if (flags.has("a")) {
+    // --all, --branches and --mirror write the default branch with the rest
+    return access.result("push_default_branch", { ...base, branch: _core(data, "git_push_all_target") });
   }
-  if (_core(data, "git_history_subcommands").includes(invocation.subcommand)) {
-    const place = _ownersPlace(data, invocation.directory, repositoryAt);
-    if (place !== null) {
-      return _ask(fill(_core(data, "git_commit_history_reason"), { subcommand: invocation.subcommand, where: place }));
+  const repoNamed = options.some((word) => word.split("=", 1)[0] === "--repo");
+  const refspecs = repoNamed ? operands : operands.slice(1); // the first operand is the remote
+  // No lookup where the branch cannot change the outcome (a developer's push asks wherever it goes).
+  const current = access.uniform(_PUSH_CLASSES) ? null : _currentBranch(invocation, repositoryAt);
+  const forced = flags.has("f") || flags.has("d");
+  // [matrix class, the ref as the reason names it]
+  /** @type {[string, string][]} */
+  const classes = [];
+  if (flags.has("t") || flags.has("T")) {
+    classes.push(["tag", flags.has("t") ? "'--tags'" : "'--follow-tags'"]);
+  }
+  if (invocation.configOverride) {
+    classes.push(["push_other_branch", _core(data, "git_push_config_target")]);
+  } else if (refspecs.length > 0) {
+    for (const spec of refspecs) {
+      const [name, ref] = _refspecClass(spec, forced, current, access);
+      classes.push([name, `'${ref}'`]);
     }
+  } else if (!flags.has("t")) {
+    classes.push(["push_other_branch", _core(data, "git_push_implicit_target")]);
   }
-  const target = _refTarget(data, invocation, repositoryAt);
-  if (target === null) {
+  return _mostRestrictive(classes.map(([name, ref]) => access.result(name, { ...base, branch: ref })));
+}
+
+/**
+ * What the actor gets for `push` or `tag`: a push by the branch it writes, a tag by its own class.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @param {_Access} access
+ * @param {RepositoryLookup} repositoryAt
+ * @returns {HookResult | null}
+ */
+function _publishingDecision(data, invocation, access, repositoryAt) {
+  if (invocation.subcommand === "push") {
+    return _pushDecision(data, invocation, access, repositoryAt);
+  }
+  return access.result("tag", { subcommand: invocation.subcommand });
+}
+
+/**
+ * The regular expression of a `git_config_push_keys` pattern: `*` is one or more characters.
+ * @param {string} pattern
+ * @returns {RegExp}
+ */
+function _globPattern(pattern) {
+  const escaped = pattern.split("*").map((part) => part.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`));
+  return new RegExp(`^(?:${escaped.join(".+")})$`, "s");
+}
+
+/**
+ * What a `git config` writes: `[name, isSection]`; `["", false]` for an editor; `null` for a read. The old
+ * form (`config [--unset] <key> [<value>]`) and the `set`/`unset` actions of git 2.46 are both read; a
+ * lone key, `--get`, `--list` and the `get`/`list` actions read.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @returns {[string, boolean] | null}
+ */
+function _configWrittenName(data, invocation) {
+  const [options, operands] = _splitArguments(invocation.arguments, _core(data, "git_config_valued_options"));
+  /** @type {Record<string, string[]>} */
+  const actions = _core(data, "git_config_actions");
+  const named = (/** @type {string} */ key) => options.some((word) => _core(data, key).includes(word));
+  if (named("git_config_read_options")) {
     return null;
   }
-  return _ask(fill(_core(data, "git_commit_ref_reason"), { subcommand: _refSubcommand(invocation), target }));
+  if (named("git_config_edit_options")) {
+    return ["", false];
+  }
+  const known = Object.values(actions).flat();
+  const action = operands.length > 0 && known.includes(operands[0]) ? operands[0] : null;
+  if (action !== null && actions.read.includes(action)) {
+    return null;
+  }
+  if (action !== null && actions.edit.includes(action)) {
+    return ["", false];
+  }
+  /** @type {string[]} */
+  let names;
+  let isSection = false;
+  if (action !== null) {
+    names = operands.slice(1, 2);
+    isSection = actions.section_write.includes(action);
+  } else if (named("git_config_section_write_options")) {
+    names = operands.slice(0, 1);
+    isSection = true;
+  } else if (named("git_config_key_write_options") || operands.length >= _WRITE_OPERANDS) {
+    names = operands.slice(0, 1);
+  } else {
+    return null;
+  }
+  return names.length > 0 ? [names[0], isSection] : null;
+}
+
+/**
+ * Whether the key (or section) `name` is one of `git_config_push_keys`; `""` (an editor) is.
+ * @param {HookData} data
+ * @param {string} name
+ * @param {boolean} isSection
+ * @returns {boolean}
+ */
+function _isPushConfig(data, name, isSection) {
+  if (!name) {
+    return true;
+  }
+  const key = name.toLowerCase();
+  for (const pattern of /** @type {string[]} */ (_core(data, "git_config_push_keys"))) {
+    // a section is written whole: test it with the variable its pattern names
+    const candidate = isSection ? `${key}.${pattern.slice(pattern.lastIndexOf(".") + 1).replaceAll("*", "x")}` : key;
+    if (_globPattern(pattern).test(candidate)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * What the actor gets for a `git config` that writes a push-redirecting key; reads and other keys pass.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @param {_Access} access
+ * @returns {HookResult | null}
+ */
+function _configDecision(data, invocation, access) {
+  const written = _configWrittenName(data, invocation);
+  if (written === null || !_isPushConfig(data, written[0], written[1])) {
+    return null;
+  }
+  return access.result("config_push_write", { key: written[0] || _core(data, "git_config_edit_target") });
+}
+
+/**
+ * The base branch a `pr create`/`mr create` names (`--base X`, `--base=X`, `-B X`); `null` if none.
+ *
+ * Only the program's own base options count (`pr_base_options` in `hook_core.json`: `-b` is `gh`'s
+ * body and `glab`'s target branch). An option with no value reads as the empty name. Where the option is
+ * repeated the last value wins, as in `gh` and `glab`.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @returns {string | null}
+ */
+function _pullRequestBase(data, invocation) {
+  /** @type {string[]} */
+  const options = dictItem(_core(data, "pr_base_options"), invocation.program);
+  const words = invocation.arguments;
+  /** @type {string | null} */
+  let base = null;
+  for (const [index, word] of words.entries()) {
+    const equals = word.indexOf("=");
+    const name = equals < 0 ? word : word.slice(0, equals);
+    if (options.includes(name)) {
+      base = equals < 0 ? (words[index + 1] ?? "") : word.slice(equals + 1);
+    } else if (
+      !word.startsWith("--") &&
+      options.some((option) => option.length === _SHORT_OPTION && word.startsWith(option))
+    ) {
+      const attached = word.slice(_SHORT_OPTION); // `-Bdevelop`: the value is attached
+      base = attached.startsWith("=") ? attached.slice(1) : attached;
+    }
+  }
+  return base;
+}
+
+/**
+ * The HTTP method a `gh api`/`glab api` sends: the last one named, else POST when it carries fields.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @returns {string}
+ */
+function _apiMethod(data, invocation) {
+  /** @type {string[]} */
+  const methods = _core(data, "forge_api_method_options");
+  /** @type {string[]} */
+  const fields = _core(data, "forge_api_field_options");
+  const words = invocation.arguments;
+  /** @type {string | null} */
+  let method = null;
+  let carriesFields = false;
+  for (const [index, word] of words.entries()) {
+    const equals = word.indexOf("=");
+    const name = equals < 0 ? word : word.slice(0, equals);
+    if (methods.includes(name)) {
+      method = equals < 0 ? (words[index + 1] ?? "") : word.slice(equals + 1);
+    } else if (!word.startsWith("--") && methods.some((option) => word.startsWith(option))) {
+      method = word.slice(_SHORT_OPTION); // `-XPOST`
+    } else if (fields.includes(name) || (!word.startsWith("--") && fields.some((option) => word.startsWith(option)))) {
+      carriesFields = true;
+    }
+  }
+  return (method || (carriesFields ? "POST" : "GET")).toUpperCase();
+}
+
+/**
+ * The command's group and action with its aliases resolved (`pr new` is `pr create`).
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @returns {string}
+ */
+function _forgeAction(data, invocation) {
+  const space = invocation.subcommand.indexOf(" ");
+  const group = space < 0 ? invocation.subcommand : invocation.subcommand.slice(0, space);
+  const action = space < 0 ? "" : invocation.subcommand.slice(space + 1);
+  /** @type {Record<string, string>} */
+  const groupAliases = dictItem(_core(data, "forge_group_aliases"), invocation.program);
+  /** @type {Record<string, string>} */
+  const actionAliases = dictItem(_core(data, "forge_action_aliases"), invocation.program);
+  const resolved = Object.hasOwn(groupAliases, group) ? groupAliases[group] : group;
+  const name = `${resolved} ${action}`.trimEnd();
+  return Object.hasOwn(actionAliases, name) ? actionAliases[name] : name;
+}
+
+/**
+ * What the actor gets for a `gh`/`glab` command: its class, a pull request by the base it targets.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @param {_Access} access
+ * @returns {HookResult | null}
+ */
+function _forgeDecision(data, invocation, access) {
+  const classes = dictItem(
+    { gh: _core(data, "gh_action_classes"), glab: _core(data, "glab_action_classes") },
+    invocation.program,
+  );
+  const subcommand = _forgeAction(data, invocation);
+  /** @type {string | null} */
+  let actionClass = null;
+  if (subcommand === _FORGE_API) {
+    const writes = _core(data, "forge_api_write_methods").includes(_apiMethod(data, invocation));
+    actionClass = writes ? _core(data, "forge_api_class") : null;
+  } else if (Object.hasOwn(classes, subcommand)) {
+    actionClass = classes[subcommand];
+  }
+  if (actionClass === null) {
+    return null;
+  }
+  const base = actionClass === "pr_create" ? _pullRequestBase(data, invocation) : null;
+  if (base !== null && !_core(data, "git_default_branches").includes(base)) {
+    actionClass = "pr_create_other_base";
+  }
+  return access.result(actionClass, {
+    program: invocation.program,
+    subcommand: invocation.subcommand,
+    base: `'${base}'`,
+  });
+}
+
+/**
+ * What the actor gets for one `git`, `gh` or `glab` command: `null` to pass, else an ask or a deny.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @param {_Access} access
+ * @param {RepositoryLookup} repositoryAt
+ * @returns {HookResult | null}
+ */
+function _invocationDecision(data, invocation, access, repositoryAt) {
+  if (_FORGE_PROGRAMS.includes(invocation.program)) {
+    return _forgeDecision(data, invocation, access);
+  }
+  if (_core(data, "git_publishing_subcommands").includes(invocation.subcommand)) {
+    return _publishingDecision(data, invocation, access, repositoryAt);
+  }
+  if (invocation.subcommand === "config") {
+    return _configDecision(data, invocation, access);
+  }
+  /** @type {HookResult | null} */
+  let decision = null;
+  if (_core(data, "git_history_subcommands").includes(invocation.subcommand)) {
+    const [place, facts] = _historyPlace(invocation.directory, repositoryAt, access);
+    decision = access.historyResult(invocation.subcommand, place, facts);
+  }
+  const target = _refTarget(data, invocation, repositoryAt);
+  if (decision !== null || target === null) {
+    return decision;
+  }
+  return access.result("ref_write", { subcommand: _refSubcommand(invocation), target });
 }
 
 /** @returns {string | null} */
@@ -1493,14 +2281,23 @@ function _workingDirectory() {
 }
 
 /**
- * Guard `git` commands: no AI co-author trailer, publishing and history are the owner's.
+ * Guard `git`, `gh` and `glab` commands by the access matrix: who may write history, publish or open a pull request.
  *
- * The trailer is denied wherever it stands in the text, a heredoc body included. Only command
- * words are read for the rest ({@link gitInvocations}): `push` and `tag` ask everywhere; a
+ * What each command gets is `common/access_matrix.json`'s (ADR 0031/D07), by `actor`: the AI
+ * co-author trailer is denied wherever it stands in the text, a heredoc body included; only command
+ * words are read for the rest ({@link gitInvocations}). For a `developer` — the default, and any
+ * run whose `AKMON_ACTOR` the entry point did not read — `push` and `tag` ask everywhere; a
  * history-writing subcommand (`commit`, `merge`, `rebase`, `reset` and the others in
  * `hook_core.json`) passes when the repository it acts on — not the session's — is a linked
- * worktree on a named branch that is not `main`/`master`, and asks otherwise. The first invocation
- * that does not pass decides.
+ * worktree on a named branch that is not `main`/`master`, and asks otherwise; a ref write asks
+ * unless every target is a job branch. An `autonomous` run writes history on its own run branch (the
+ * `runBranch` the launcher named, else a branch `run_branch_patterns` matches) or in a linked
+ * worktree, pushes that branch by an explicit refspec (a push that names none, or runs under
+ * `git -c`, is another branch's), opens pull requests (merge requests) into the default branch, and
+ * is denied the default branch, the branches `protected_branches` names for it (`develop`,
+ * `release/*`), any other branch of a checkout, any other pull request base and a `git config`
+ * write of a push-redirecting key; `gh`/`glab api` writes ask. The first invocation that does not
+ * pass decides, and an `ask` nobody attends becomes a `deny`.
  *
  * `directory` is where the command starts (default: the process's); `repositoryAt` answers
  * {@link RepositoryFacts} for a directory (default: {@link repositoryFacts}, which asks git).
@@ -1508,34 +2305,42 @@ function _workingDirectory() {
  * Policy ID: commits.owner-owned
  * @param {HookData} data
  * @param {unknown} command
- * @param {{permissionMode?: string | null, attended?: boolean | null, directory?: string | null, repositoryAt?: ((directory: string) => {linked: boolean, branch: string} | null) | null}} [options]
+ * @param {{permissionMode?: string | null, attended?: boolean | null, actor?: Actor, runBranch?: string | null, directory?: string | null, repositoryAt?: ((directory: string) => {linked: boolean, branch: string} | null) | null}} [options]
  * @returns {HookResult | null}
  */
 export function gitCommitGuardResult(
   data,
   command,
-  { permissionMode = null, attended = null, directory = null, repositoryAt = null } = {},
+  {
+    permissionMode = null,
+    attended = null,
+    actor = ACTORS.DEVELOPER,
+    runBranch = null,
+    directory = null,
+    repositoryAt = null,
+  } = {},
 ) {
-  if (!pyContains(command, "git")) {
+  if (!["git", ..._FORGE_PROGRAMS].some((program) => pyContains(command, program))) {
     return null;
   }
 
-  if (/co-authored-by/i.test(_subject(command))) {
-    return new HookResult({
-      eventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionReason: _core(data, "git_commit_no_ai_trailer_reason"),
-    });
+  // The AI trailer is a floor: denied for every actor before, and regardless of, the access matrix.
+  const trailer = /co-authored-by/i.test(_subject(command));
+  if (trailer && pyContains(command, "git")) {
+    return _aiTrailerFloor(data, actor);
   }
 
   const lookup = repositoryAt === null ? repositoryFacts : repositoryAt;
   const start = directory === null ? _workingDirectory() : directory;
-  for (const invocation of gitInvocations(/** @type {string} */ (command), start, {
-    homeDirectory: _homeDirectory(),
-  })) {
-    const ask = _invocationAsk(data, invocation, lookup);
-    if (ask !== null) {
-      return _escalateUnattendedAsk(data, ask, permissionMode, attended);
+  const invocations = gitInvocations(/** @type {string} */ (command), start, { homeDirectory: _homeDirectory() });
+  if (trailer && invocations.some((invocation) => _FORGE_PROGRAMS.includes(invocation.program))) {
+    return _aiTrailerFloor(data, actor);
+  }
+  const access = new _Access(data, actor, runBranch);
+  for (const invocation of invocations) {
+    const decision = _invocationDecision(data, invocation, access, lookup);
+    if (decision !== null) {
+      return _escalateUnattendedAsk(data, decision, permissionMode, attended);
     }
   }
   return null;
@@ -1687,6 +2492,23 @@ export function staleGuardrailNotice(data, root) {
 }
 
 /**
+ * The one SessionStart line naming the work style in force and where it came from (ADR 0031/D03).
+ * @param {HookData} data
+ * @param {string} root
+ * @param {string | null} sessionId
+ * @param {any} start the `session_start` table of `hook_core.json`
+ * @returns {string}
+ */
+function _workStyleLine(data, root, sessionId, start) {
+  const found = resolveWorkStyle(root, sessionId, data.workStyle);
+  const source = fill(dictItem(dictItem(start, "work_style_sources"), found.source), {
+    root_name: aitnaRootName(root),
+    developer_file: data.workStyle.developer_rel,
+  });
+  return fill(dictItem(start, "work_style_line"), { style: found.style, source });
+}
+
+/**
  * SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice.
  *
  * Runtime classification: operational
@@ -1695,11 +2517,14 @@ export function staleGuardrailNotice(data, root) {
  * and on Codex it is the only delivery channel for the delegation rule, because `@`-imports are
  * not expanded there (C39). Delivery is not ownership, so the classification stands; without that
  * second fact "operational" would read as "incidental", which it is not.
+ * One line states the work style in force for `sessionId` and the level that set it (ADR 0031/D03);
+ * when the work-style data cannot be read or has the wrong shape, that line alone is left out.
  * @param {HookData} data
  * @param {string} root
+ * @param {string | null} [sessionId]
  * @returns {HookResult | null}
  */
-export function sessionStartResult(data, root) {
+export function sessionStartResult(data, root, sessionId = null) {
   const stale = staleGuardrailNotice(data, root);
   const dev = agentNames(pyPath(root, aitnaRootName(root), "agents"), agentDefinitions(data));
   const desk = agentNames(pyPath(root, "agents"));
@@ -1735,6 +2560,15 @@ export function sessionStartResult(data, root) {
     lines.push(dictItem(start, "pick_generic"));
   }
   lines.push(dictItem(start, "delegation_line"));
+  // The line is advisory: a work-style file that is missing, not JSON or the wrong shape loses the line,
+  // never the rest of the session's context.
+  try {
+    lines.push(_workStyleLine(data, root, sessionId, start));
+  } catch (error) {
+    if (!(error instanceof DataFileError || ["KeyError", "TypeError"].includes(exceptionClassName(error)))) {
+      throw error;
+    }
+  }
   lines.push(fill(dictItem(start, "memory_line"), { root_name: aitnaRootName(root) }));
   if (stale !== null) {
     lines.push(stale);

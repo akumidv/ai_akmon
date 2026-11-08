@@ -1713,10 +1713,10 @@ def _unusable_wiring(root: Path, kind: str) -> str:
     }[kind]
 
 
-def test_the_generated_population_is_four_command_entries(tmp_path):
+def test_the_generated_population_is_five_command_entries(tmp_path):
     """The carriers below derive their fixture from the real generator; pin its size so a
     shrinking population cannot quietly thin the corpus."""
-    assert len(_generated_entries(tmp_path)) == 4
+    assert len(_generated_entries(tmp_path)) == 5
 
 
 def test_check_codex_host_trust_is_silent_without_generated_wiring(tmp_path, monkeypatch):
@@ -1809,10 +1809,10 @@ def test_check_codex_host_trust_zero_discovered_entries_is_every_one_missing(tmp
     verifier = _live_query_verifier(tmp_path, monkeypatch, _hooks_list_runner([]))
     verifier.check_codex_host_trust()
     assert _levels(verifier.findings) == {"warn"}
-    assert _only_host_trust_message(verifier) == "Codex hook delivery is incomplete: missing (4)"
+    assert _only_host_trust_message(verifier) == "Codex hook delivery is incomplete: missing (5)"
 
 
-@pytest.mark.parametrize("index", range(4))
+@pytest.mark.parametrize("index", range(5))
 def test_check_codex_host_trust_warns_when_any_one_generated_entry_is_missing(tmp_path, monkeypatch, index):
     _write_codex_wiring(tmp_path)
     entries = _generated_entries(tmp_path)
@@ -2702,8 +2702,8 @@ def test_verify_data_pins_its_structure():
         "node",
     }
     assert _VERIFY_DATA["wired_hook_scripts"][0] == "hook_core.py"
-    assert _VERIFY_DATA["wired_hook_scripts"][-1] == "learning-reminder.py"
-    assert len(_VERIFY_DATA["wired_hook_scripts"]) == 13
+    assert _VERIFY_DATA["wired_hook_scripts"][-1] == "work-style.py"
+    assert len(_VERIFY_DATA["wired_hook_scripts"]) == 15
     assert _VERIFY_DATA["task_statuses"] == ["active", "blocked", "deferred", "done"]
     assert _VERIFY_DATA["tasks_max_lines"] == 200
     assert _VERIFY_DATA["skill_name_max"] == 64

@@ -1,0 +1,21 @@
+# privilege.no-escalation: a command whose words write a harness settings file is denied (an output redirection here), for every actor.
+id = "hooks/git-commit-guard-settings-redirect-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-gcm-seg-1"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { command = "echo '{}' > .claude/settings.local.json" }
+
+[expected]
+exit = 0
+stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target\n"
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Privilege guardrail: this command writes .claude/settings.local.json, a harness settings file whose `env` carries the run's actor (AKMON_ACTOR). An agent never writes the `env` of a harness settings file. If the change is genuinely needed, ask the owner to run it themselves.\"}}\n"

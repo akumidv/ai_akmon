@@ -1,0 +1,22 @@
+# A `/style` value that names no style records nothing and names the allowed values; the style in force is unchanged.
+id = "hooks/work-style-invalid-value"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:work-style"]
+
+[fixture]
+attach = "native"
+
+[run]
+script = "work-style"
+
+[run.payload]
+hook_event_name = "UserPromptSubmit"
+cwd = "{{root}}"
+session_id = "sess-ws-2"
+prompt = "/style fast"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"[akmon] 'fast' is not a work style; the allowed values are delegating, controlling. The style in force is unchanged.\"}, \"systemMessage\": \"[akmon] 'fast' is not a work style; the allowed values are delegating, controlling. The style in force is unchanged.\"}\n"

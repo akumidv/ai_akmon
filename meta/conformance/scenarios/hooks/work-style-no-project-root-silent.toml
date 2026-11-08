@@ -1,0 +1,22 @@
+# The hook finds the project from the payload's cwd. A cwd with no project root at or above it writes nothing and says nothing (ADR 0022 D09), although the process itself runs inside a project.
+id = "hooks/work-style-no-project-root-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:work-style"]
+
+[fixture]
+attach = "native"
+
+[run]
+script = "work-style"
+
+[run.payload]
+hook_event_name = "UserPromptSubmit"
+cwd = "{{tmp}}"
+session_id = "sess-ws-4"
+prompt = "/style controlling"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

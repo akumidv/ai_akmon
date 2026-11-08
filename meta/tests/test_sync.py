@@ -721,10 +721,18 @@ def test_sync_data_pins_its_structure():
     assert len(_SYNC_DATA["claude_hooks"]["PreToolUse"]) == 4
     assert _SYNC_DATA["claude_hooks"]["PreToolUse"][0] == {"matcher": "Bash", "commands": ["git-commit-guard"]}
     assert _SYNC_DATA["claude_hooks"]["Stop"][0]["commands"] == ["gate-audit"]
+    # the owner's `/style` switch is captured per turn beside the orchestrator detection (ADR 0031/D03)
+    assert _SYNC_DATA["claude_hooks"]["UserPromptSubmit"] == [
+        {"matcher": None, "commands": ["model-routing", "work-style"]}
+    ]
     assert _SYNC_DATA["codex_hooks"]["PreToolUse"][0]["matcher"] == "Bash|apply_patch"
     assert _SYNC_DATA["codex_hooks"]["SessionStart"][0]["commands"] == [
         ["session-start", "Loading akmon session reminders"],
         ["learning-reminder", "Checking the learning-run reminder"],
+    ]
+    # a per-turn event takes no matcher (M65): the Codex writer leaves a null one out
+    assert _SYNC_DATA["codex_hooks"]["UserPromptSubmit"] == [
+        {"matcher": None, "commands": [["work-style", "Checking for a work-style switch"]]}
     ]
     assert list(_SYNC_DATA["planned_files"]) == [
         ["CLAUDE.md", "claude_md"],

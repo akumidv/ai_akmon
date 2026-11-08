@@ -1,0 +1,27 @@
+id = "tools/park-write-controlling-block-commit"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# In the controlling work style (the developer's `.local/work.json`), a `write` in the main checkout prints
+# the block commit after the ergon path: `git add --` with the ergon's owned paths (each once, quoted when
+# the shell needs it) and `git commit -m` with the `--commit-message` text escaped for double quotes, then
+# the reminder that the owner runs them and that the hand-off prompt is written in chat, pointing to
+# RESUME.md (ADR 0031 D04, D05). The tool prints the commands and never runs them, and writes none of it
+# into PARK.md or RESUME.md.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.local/work.json" = "{\"style\": \"controlling\"}\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS", "--owned-path", "tools/park/park.py", "--owned-path", "docs/a file.md", "--owned-path", "tools/park/park.py", "--commit-message", "C183: park the \"helper\" $now"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/C183-park-helper\n\nBlock commit\ncd {{root}}\ngit add -- tools/park/park.py 'docs/a file.md'\ngit commit -m \"C183: park the \\\"helper\\\" \\$now\"\n\nThe owner runs these, or asks the agent to; write the hand-off prompt to the next session in chat, in the developer's language, addressed to the receiving session and pointing to _aitna/.ergon/C183-park-helper/RESUME.md.\n"

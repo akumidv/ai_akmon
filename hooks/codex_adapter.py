@@ -306,6 +306,15 @@ def cwd(payload: dict[str, Any]) -> str:
     return ""
 
 
+def prompt(payload: dict[str, Any]) -> str:
+    """The typed prompt a ``UserPromptSubmit`` payload carries (M65), across every measured spelling; ``""`` if none."""
+    for key in _payload_key_spellings("prompt"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
 def _document_keys() -> dict[str, str]:
     """The hook document-shape key table (hooks/vocabulary.json, C102)."""
     return _vocabulary()["document_keys"]
@@ -328,6 +337,18 @@ def print_result(result: HookResult | None) -> None:
         # Codex hooks have no documented user-facing channel; pass silently for now.
         pass
     print(json.dumps(top_level))
+
+
+def report_closed_failure(hook_name: str, exc: BaseException, document: str) -> int:
+    """The crash half of a deny-class route that fails closed (ADR-0031/D07, D-C203-GUARD-CRASH): exit 0 with a deny.
+
+    The same one stderr line as :func:`report_failure`, then the one deny ``document`` on stdout — the
+    ``autonomous`` run's commit guard answers a crash with the deny its matrix row would give, not with
+    ``Failed`` while the action goes ahead.
+    """
+    print(hook_failure_diagnostic(hook_name, exc), file=sys.stderr)
+    print(document)
+    return 0
 
 
 def report_failure(hook_name: str, exc: BaseException) -> int:

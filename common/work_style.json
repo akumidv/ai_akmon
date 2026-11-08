@@ -1,0 +1,13 @@
+{
+  "styles": ["delegating", "controlling"],
+  "default": "delegating",
+  "developer_rel": ".local/work.json",
+  "sessions_rel": ".local/work-sessions.json",
+  "sessions_keep": 50,
+  "record_section": "work",
+  "record_key": "style",
+  "command": "/style",
+  "recorded": "[akmon] Work style recorded for this session: {{style}}. A switch inside an athlos takes effect at the next park boundary: park the athlos, then the new style applies.",
+  "invalid": "[akmon] '{{value}}' is not a work style; the allowed values are {{allowed}}. The style in force is unchanged.",
+  "no_session": "[akmon] The prompt payload carried no session id, so the work style '{{style}}' was not recorded; set it in {{developer_file}} under the dev root instead."
+}

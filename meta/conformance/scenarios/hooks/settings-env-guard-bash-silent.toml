@@ -1,0 +1,20 @@
+# The edit-route hook ignores a Bash call: the shell half of the rule is the privilege guard on the Bash hook.
+id = "hooks/settings-env-guard-bash-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:settings-env-guard"]
+
+[run]
+script = "settings-env-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-seg-5"
+cwd = "{{root}}"
+tool_input = { command = "echo x > .claude/settings.local.json" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

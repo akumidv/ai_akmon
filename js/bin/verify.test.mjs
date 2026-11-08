@@ -620,6 +620,8 @@ test("node_wired_hook_scripts: the entry points and every module they import, an
     "delegation-nudge",
     "gate-audit",
     "learning-reminder",
+    "settings-env-guard",
+    "work-style",
   ];
   for (const entry of entries) {
     assert.ok(listed.includes(`${entry}.mjs`), entry);

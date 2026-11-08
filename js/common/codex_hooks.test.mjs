@@ -65,7 +65,11 @@ test("the loader reads exactly codex_hooks.json, which carries the closed tables
     "protocol_failures",
     "trust_statuses",
   ]);
-  assert.deepEqual(data.event_names, { PreToolUse: "preToolUse", SessionStart: "sessionStart" });
+  assert.deepEqual(data.event_names, {
+    PreToolUse: "preToolUse",
+    SessionStart: "sessionStart",
+    UserPromptSubmit: "userPromptSubmit",
+  });
   assert.equal(DEFAULT_TIMEOUT_SECONDS, 5);
 });
 

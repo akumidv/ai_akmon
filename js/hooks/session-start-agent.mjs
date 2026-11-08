@@ -39,7 +39,11 @@ function sessionRoot(payload) {
 export function main() {
   const data = lazyHookData();
   // Never block session start: a crash is reported (stderr + the owner's notice), exit 0.
-  return runGuarded("session-start-agent", data, () => sessionStartResult(data, sessionRoot(loadPayload())));
+  return runGuarded("session-start-agent", data, () => {
+    const payload = loadPayload();
+    const sessionId = dictGet(payload, "session_id");
+    return sessionStartResult(data, sessionRoot(payload), typeof sessionId === "string" ? sessionId : null);
+  });
 }
 
 if (runAsEntryPoint(import.meta.url)) {

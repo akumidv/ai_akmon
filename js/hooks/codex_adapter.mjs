@@ -446,6 +446,23 @@ export function cwd(data, payload) {
   return "";
 }
 
+/**
+ * The typed prompt a `UserPromptSubmit` payload carries (M65), tried across every measured
+ * spelling; `""` if none.
+ * @param {HookData} data
+ * @param {Payload} payload
+ * @returns {string}
+ */
+export function prompt(data, payload) {
+  for (const key of _payloadKeySpellings(data, "prompt")) {
+    const value = dictGet(payload, key);
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return "";
+}
+
 // --------------------------------------------------------------------------------------
 // Output
 // --------------------------------------------------------------------------------------
@@ -489,6 +506,24 @@ export function writeStderr(text) {
     (unit) => `\\u${unit.charCodeAt(0).toString(16)}`,
   );
   process.stderr.write(`${escaped}\n`);
+}
+
+/**
+ * The crash half of a deny-class route that fails closed (ADR-0031/D07, D-C203-GUARD-CRASH): exit 0
+ * with a deny.
+ *
+ * The same one stderr line as {@link reportFailure}, then the one deny `document` on stdout — the
+ * `autonomous` run's commit guard answers a crash with the deny its matrix row would give, not with
+ * `Failed` while the action goes ahead.
+ * @param {string} hookName
+ * @param {unknown} exc
+ * @param {string} document
+ * @returns {number}
+ */
+export function reportClosedFailure(hookName, exc, document) {
+  writeStderr(hookFailureDiagnostic(hookName, exc));
+  process.stdout.write(`${document}\n`);
+  return 0;
 }
 
 /**

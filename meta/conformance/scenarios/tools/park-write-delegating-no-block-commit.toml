@@ -1,0 +1,23 @@
+id = "tools/park-write-delegating-no-block-commit"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# In the delegating style (the default, here named by the developer's `.local/work.json`) a `write` prints
+# the ergon path only, whatever `--commit-message` and `--owned-path` say (ADR 0031 D02, D04).
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.local/work.json" = "{\"style\": \"delegating\"}\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS", "--owned-path", "tools/park/park.py", "--commit-message", "C183: park"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/C183-park-helper\n"

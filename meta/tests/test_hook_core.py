@@ -20,6 +20,7 @@ from hook_core import (
     HookResult,
     agent_names,
     analysis_write_result,
+    commit_guard_decision,
     git_commit_guard_result,
     is_code_path,
     is_planning_doc,
@@ -110,7 +111,7 @@ def _lookup(directory):
 
 def _guard(command, start="/wt", **keywords):
     """The guard run as the session would at ``start``, with the shared table's repositories."""
-    return git_commit_guard_result(command, directory=start, repository_at=_lookup, **keywords)
+    return commit_guard_decision(command, hook_core.RunFacts(directory=start, **keywords), _lookup)
 
 
 def _label(case):
@@ -125,7 +126,14 @@ def test_the_scanner_finds_the_git_commands_the_shared_table_lists(case):
 
 @pytest.mark.parametrize("case", _CASES["guard"], ids=_label)
 def test_the_guard_decides_as_the_shared_table_says(case):
-    result = _guard(case["command"], case["start"], permission_mode=case["mode"], attended=case["attended"])
+    result = _guard(
+        case["command"],
+        case["start"],
+        permission_mode=case["mode"],
+        attended=case["attended"],
+        actor=case.get("actor", "developer"),
+        run_branch=case.get("run_branch"),
+    )
     if case["decision"] == "pass":
         assert result is None
         return
@@ -156,6 +164,24 @@ def test_co_authored_by_is_denied_case_insensitively():
         assert result is not None
         assert result.permission_decision == "deny"
         assert "Co-Authored-By" in result.permission_reason
+
+
+@pytest.mark.parametrize("actor", ["developer", "autonomous"])
+@pytest.mark.parametrize(
+    "command",
+    ['git commit -m "Co-Authored-By: Claude"', "gh pr create --body 'Co-Authored-By: Claude'"],
+)
+def test_the_trailer_floor_is_decided_before_and_without_the_access_matrix(monkeypatch, actor, command):
+    # A matrix that would pass the trailer, or one that cannot be read, does not lift the deny.
+    def unread_matrix(*_args, **_keywords):
+        raise AssertionError("the trailer floor must not read the access matrix")
+
+    monkeypatch.setattr(hook_core, "_Access", unread_matrix)
+    monkeypatch.setattr(hook_core.access_matrix, "read_data", unread_matrix)
+    result = _guard(command, "/main", actor=actor)
+    assert result is not None
+    assert result.permission_decision == "deny"
+    assert "Co-Authored-By" in result.permission_reason
 
 
 def test_co_authored_check_precedes_the_repository_check():
@@ -222,16 +248,20 @@ def test_the_repository_is_asked_per_history_writing_invocation_with_its_directo
         asked.append(directory)
         return _lookup(directory)
 
-    git_commit_guard_result("git status && git push; cd /main && git commit -m y", directory="/s", repository_at=lookup)
+    commit_guard_decision(
+        "git status && git push; cd /main && git commit -m y", hook_core.RunFacts(directory="/s"), lookup
+    )
     assert asked == []  # the push decided before any commit was looked up
-    git_commit_guard_result("cd /wt && git commit -m x && git status; git log", directory="/s", repository_at=lookup)
+    commit_guard_decision(
+        "cd /wt && git commit -m x && git status; git log", hook_core.RunFacts(directory="/s"), lookup
+    )
     assert asked == ["/wt"]
 
 
 def test_an_unresolvable_directory_asks_without_a_lookup():
     asked = []
-    result = git_commit_guard_result(
-        'cd "$HOME/w" && git commit -m x', directory="/wt", repository_at=asked.append, permission_mode="default"
+    result = commit_guard_decision(
+        'cd "$HOME/w" && git commit -m x', hook_core.RunFacts(directory="/wt", permission_mode="default"), asked.append
     )
     assert asked == []
     assert result is not None
@@ -287,6 +317,29 @@ def test_the_live_lookup_passes_a_worktree_and_asks_for_everything_else(reposito
 def test_the_scanner_keeps_the_arguments_after_the_subcommand():
     found = hook_core.git_invocations("git -C /x branch -D 'a b' -- c", "/s")
     assert found == [hook_core.GitInvocation("branch", "/x", ("-D", "a b", "--", "c"))]
+
+
+def test_the_scanner_marks_a_git_run_under_configuration_overrides():
+    for command in (
+        "git -c push.default=current push",
+        "git --config-env push.default=V push",
+        "git --config-env=a=B push",
+    ):
+        (found,) = hook_core.git_invocations(command, "/s")
+        assert (found.subcommand, found.arguments, found.config_override) == ("push", (), True), command
+    (plain,) = hook_core.git_invocations("git -C /x push origin x", "/s")
+    assert plain.config_override is False
+
+
+def test_the_scanner_keeps_every_word_after_api_options_included():
+    (found,) = hook_core.git_invocations("gh -R o/r api -X POST repos/o/r/issues -f a=b", "/s")
+    assert (found.program, found.subcommand, found.arguments) == (
+        "gh",
+        "api",
+        ("-X", "POST", "repos/o/r/issues", "-f", "a=b"),
+    )
+    (action,) = hook_core.git_invocations("gh repo sync o/r", "/s")
+    assert (action.subcommand, action.arguments) == ("repo sync", ("o/r",))
 
 
 @pytest.fixture
@@ -530,6 +583,34 @@ def test_session_start_lists_dev_and_desk_agents(tmp_path):
     assert "agents and the roles they work in: architect — role architect; engineer — role engineer" in ctx
     assert "OPERATE (run/use from outside), agents and the roles they work in: options-analyst — role" in ctx
     assert "_aitna/memory/" in ctx
+
+
+@pytest.mark.parametrize("breakage", ["not json", "missing", '{"styles": null}', "{}"])
+def test_a_broken_work_style_file_loses_the_work_style_line_and_nothing_else(monkeypatch, tmp_path, breakage):
+    _make_agent(tmp_path / "_aitna" / "agents", "architect")
+    whole = session_start_result(tmp_path).additional_context
+    assert "work style: delegating (default)" in whole
+    broken = tmp_path / "work_style.json"
+    if breakage != "missing":
+        broken.write_text(breakage, encoding="utf-8")
+    monkeypatch.setattr(hook_core.work_style, "read_data", lambda: common_jsondata.read(broken))
+    if breakage == "not json":
+        with pytest.raises(common_jsondata.DataFileError):
+            hook_core.work_style.read_data()
+    result = session_start_result(tmp_path)
+    assert result is not None
+    assert result.additional_context == "\n".join(line for line in whole.split("\n") if "work style:" not in line)
+
+
+def test_a_work_style_failure_of_another_kind_is_not_swallowed(monkeypatch, tmp_path):
+    _make_agent(tmp_path / "_aitna" / "agents", "architect")
+
+    def unreadable():
+        raise RuntimeError("not a data-file error")
+
+    monkeypatch.setattr(hook_core.work_style, "read_data", unreadable)
+    with pytest.raises(RuntimeError, match="not a data-file error"):
+        session_start_result(tmp_path)
 
 
 def test_session_start_recommends_only_the_role_declaration_form(tmp_path):
@@ -1419,12 +1500,56 @@ def test_hook_core_json_holds_the_policy_and_texts():
         "git_commit_ref_reason",
         "git_commit_ref_target_current_branch",
         "git_commit_ref_target_stdin",
+        "git_commit_guard_crash_reason",
         "git_commit_where_unresolved",
         "git_commit_where_not_repository",
         "git_commit_where_checkout",
         "git_commit_where_detached",
         "git_commit_where_default_branch",
+        "git_commit_where_branch",
+        "git_commit_where_not_run_branch",
+        "git_commit_history_reason_autonomous",
+        "git_push_own_branch_reason_autonomous",
+        "git_push_own_branch_forced_reason_autonomous",
+        "git_push_default_branch_reason_autonomous",
+        "git_push_other_branch_reason_autonomous",
+        "git_tag_reason_autonomous",
+        "git_config_push_write_reason",
+        "git_config_push_write_reason_autonomous",
+        "gh_forge_write_other_reason",
+        "gh_forge_write_other_reason_autonomous",
+        "gh_pr_create_reason",
+        "gh_pr_merge_reason",
+        "gh_release_create_reason",
+        "gh_pr_create_other_base_reason",
+        "gh_pr_create_reason_autonomous",
+        "gh_pr_create_other_base_reason_autonomous",
+        "gh_publish_reason_autonomous",
+        "access_reasons",
+        "access_where",
         "git_publishing_subcommands",
+        "git_push_valued_options",
+        "git_push_long_flags",
+        "git_push_all_target",
+        "git_push_implicit_target",
+        "git_push_config_target",
+        "git_config_valued_options",
+        "git_config_read_options",
+        "git_config_key_write_options",
+        "git_config_section_write_options",
+        "git_config_edit_options",
+        "git_config_actions",
+        "git_config_push_keys",
+        "git_config_edit_target",
+        "gh_action_classes",
+        "glab_action_classes",
+        "forge_group_aliases",
+        "forge_action_aliases",
+        "forge_api_class",
+        "forge_api_write_methods",
+        "forge_api_method_options",
+        "forge_api_field_options",
+        "pr_base_options",
         "git_history_subcommands",
         "git_job_branch_prefix",
         "git_heads_prefix",

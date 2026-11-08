@@ -1,0 +1,22 @@
+# Any prompt other than `/style <value>` is silent and writes nothing, including one that merely mentions the command.
+id = "hooks/work-style-other-prompt-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:work-style"]
+
+[fixture]
+attach = "native"
+
+[run]
+script = "work-style"
+
+[run.payload]
+hook_event_name = "UserPromptSubmit"
+cwd = "{{root}}"
+session_id = "sess-ws-3"
+prompt = "please explain what /style controlling does"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

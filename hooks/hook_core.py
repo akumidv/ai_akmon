@@ -7,15 +7,16 @@ payload and serialize ``HookResult`` into the shape their runtime expects.
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
 # Where the dev layer is, what it is called, and how the project root is found are not this
 # module's facts — they belong to ``common.project_root``, which is stdlib-only and sits
@@ -29,7 +30,7 @@ from typing import Any
 _TREE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_TREE_ROOT))
 
-from common import jsondata  # noqa: E402
+from common import access_matrix, harness_settings, jsondata, work_style  # noqa: E402
 from common.markers import (  # noqa: E402
     claim_diagnostic_marker,
     delegation_state_name,
@@ -357,8 +358,8 @@ def _escalate_unattended_ask(
 _SUDO_RE = re.compile(r"\bsudo\b", re.ASCII)
 
 
-def privilege_escalation_guard_result(command: str) -> HookResult | None:
-    """Deny any Bash command that invokes ``sudo``, unconditionally.
+def privilege_escalation_guard_result(command: str, directory: str | None = None) -> HookResult | None:
+    """Deny any Bash command that invokes ``sudo``, and one that writes a harness settings file, unconditionally.
 
     The agent runs as an unprivileged user by design; a command reaching for ``sudo`` is
     either probing for elevated access or trying to route around a permission boundary that
@@ -366,15 +367,25 @@ def privilege_escalation_guard_result(command: str) -> HookResult | None:
     itself — if elevated access is genuinely needed, the owner runs it themselves. No ask:
     the answer does not depend on session attentiveness, so there is nothing to escalate.
 
+    The same rule covers the actor's carrier (ADR 0031/D07, D-C203-ACTOR-WRITE): a harness settings
+    file's ``env`` reaches the hook process (M239), so a command whose words write one of those files — an
+    output redirection, ``tee``, ``sed -i``/``perl -i``, a ``cp``/``mv``/``install`` destination, ``dd of=``
+    — is denied, for every actor; reading one passes. Only command words are read, never a quoted
+    argument or a heredoc body. ``directory`` is where the command starts (default: the process's).
+    The edit tools' half of the rule is the ``settings-env-guard`` hook (``common/harness_settings.py``).
+
     Policy ID: privilege.no-escalation
     """
-    if not _SUDO_RE.search(command):
+    if _SUDO_RE.search(command):
+        return HookResult(
+            event_name="PreToolUse",
+            permission_decision="deny",
+            permission_reason=_hook_core_data()["privilege_escalation_reason"],
+        )
+    reason = _settings_write_reason(command, _working_directory() if directory is None else directory)
+    if reason is None:
         return None
-    return HookResult(
-        event_name="PreToolUse",
-        permission_decision="deny",
-        permission_reason=_hook_core_data()["privilege_escalation_reason"],
-    )
+    return HookResult(event_name="PreToolUse", permission_decision="deny", permission_reason=reason)
 
 
 # --------------------------------------------------------------------------------------
@@ -384,16 +395,21 @@ def privilege_escalation_guard_result(command: str) -> HookResult | None:
 
 @dataclass(frozen=True)
 class GitInvocation:
-    """One ``git`` command found in a shell command: its subcommand, its arguments, and where it runs.
+    """One ``git``, ``gh`` or ``glab`` command found in a shell command: its subcommand, arguments and place.
 
     ``arguments`` are the words after the subcommand, quotes removed. ``directory`` is ``None`` when
     the place cannot be told from the text (a ``$`` expansion, a ``GIT_DIR`` assignment,
-    ``--git-dir``, ``cd -``).
+    ``--git-dir``, ``cd -``). ``program`` is ``git``, ``gh`` or ``glab``; a forge
+    subcommand is its group and action as one string (``pr create``, ``mr create``); ``gh api`` and
+    ``glab api`` keep every word after ``api``. ``config_override`` is ``True`` for a ``git`` carrying
+    ``-c`` or ``--config-env``: the command runs under configuration the text does not show.
     """
 
     subcommand: str
     directory: str | None
     arguments: tuple[str, ...] = ()
+    program: str = "git"
+    config_override: bool = False
 
 
 @dataclass(frozen=True)
@@ -409,12 +425,17 @@ class RepositoryFacts:
 
 @dataclass(frozen=True)
 class _Word:
-    """A shell word after quote removal. ``operand`` is ``False`` for the target of a redirection."""
+    """A shell word after quote removal.
+
+    ``operand`` is ``False`` for the target of a redirection, and ``write`` is ``True`` for the target of
+    an output redirection (``>``, ``>>``, ``>|``, ``&>``), which opens its file for writing.
+    """
 
     value: str
     expands: bool
     substitutions: tuple[list[Any], ...]
     operand: bool
+    write: bool = False
 
 
 @dataclass(frozen=True)
@@ -461,8 +482,13 @@ _WRAPPERS = frozenset(
 )
 _SHELLS = frozenset({"bash", "sh", "zsh", "dash"})
 _ENVIRONMENT_REPOSITORY = frozenset({"GIT_DIR", "GIT_WORK_TREE"})
+_SHORT_OPTION = 2  # `-B`: a dash and a letter
 _WRITE_OPERANDS = 2  # `symbolic-ref <name> <ref>` writes; one operand reads
 _LAYOUT_PATHS = 2  # `rev-parse --git-dir --git-common-dir` prints one path per line
+_FORGE_PROGRAMS = ("gh", "glab")  # the forge command lines the guard reads like git's
+_FORGE_NAME_WORDS = 2  # `gh <group> <action>`: `pr create`; `glab mr create`
+_FORGE_API = "api"  # `gh api <endpoint> -X POST`: the options after it are its arguments
+_FORGE_VALUED_OPTIONS = frozenset({"-R", "--repo"})  # `gh -R owner/name pr create`
 
 
 class _Parser:
@@ -478,6 +504,7 @@ class _Parser:
         self._pos = 0
         self._heredocs: list[tuple[str, bool]] = []
         self._redirect_target_next = False
+        self._redirect_write_next = False
 
     def script(self, *, nested: bool) -> list[Any]:
         """Read to the end of the text, or, when ``nested``, to the ``)`` that closes it."""
@@ -523,14 +550,17 @@ class _Parser:
                     builder.expands,
                     tuple(builder.substitutions),
                     not self._redirect_target_next,
+                    self._redirect_target_next and self._redirect_write_next,
                 )
             )
             self._redirect_target_next = False
+            self._redirect_write_next = False
         frame.builder = _WordBuilder()
 
     def _end_command(self, frame: _Frame) -> None:
         self._end_word(frame)
         self._redirect_target_next = False
+        self._redirect_write_next = False
         if frame.words:
             frame.units.append(_Command(tuple(frame.words)))
             frame.words = []
@@ -627,10 +657,12 @@ class _Parser:
         elif text.startswith("<<", self._pos):
             self._heredoc(self._pos + 2)
         else:
+            start = self._pos
             self._pos += 1
             while self._pos < len(text) and text[self._pos] in "&>|<":
                 self._pos += 1
             self._redirect_target_next = True
+            self._redirect_write_next = ">" in text[start : self._pos]
 
     def _heredoc(self, position: int) -> None:
         """Read ``<<WORD`` or ``<<-WORD`` and remember its delimiter; the body is skipped at the newline."""
@@ -710,6 +742,7 @@ def _git_invocation(
 ) -> GitInvocation | None:
     """The subcommand after git's global options, its arguments, and the directory they and ``directory`` give."""
     unknown = repository_unknown
+    overridden = False
     index = 0
     while index < len(operands):
         value = operands[index].value
@@ -717,7 +750,12 @@ def _git_invocation(
             index += 1
             if index < len(operands):
                 directory = _target_directory(operands[index], directory, home)
-        elif value in ("-c", "--namespace"):
+        elif value in ("-c", "--config-env"):
+            index += 1
+            overridden = True
+        elif value.startswith("--config-env="):
+            overridden = True
+        elif value == "--namespace":
             index += 1
         elif value in ("--git-dir", "--work-tree"):
             index += 1
@@ -726,9 +764,38 @@ def _git_invocation(
             unknown = True
         elif not value.startswith("-"):
             arguments = tuple(word.value for word in operands[index + 1 :])
-            return GitInvocation(value, None if unknown else directory, arguments)
+            return GitInvocation(value, None if unknown else directory, arguments, config_override=overridden)
         index += 1
     return None
+
+
+def _forge_invocation(operands: Sequence[_Word], directory: str | None, program: str) -> GitInvocation | None:
+    """The group and action of a ``gh``/``glab`` command (``pr create``), its arguments, and where it runs.
+
+    Options are skipped (``-R``/``--repo`` take the next word); a group with no action (``gh pr``) is
+    the subcommand alone. ``api`` takes no action word: its arguments are every word after it, options
+    included. ``None`` when no word names a group.
+    """
+    words = [word.value for word in operands]
+    names: list[str] = []
+    rest: list[str] = []
+    index = 0
+    while index < len(words):
+        word = words[index]
+        if len(names) == _FORGE_NAME_WORDS:
+            rest = words[index:]
+            break
+        if word.startswith("-"):
+            index += 1 + (word in _FORGE_VALUED_OPTIONS)
+            continue
+        names.append(word)
+        index += 1
+        if names == [_FORGE_API]:
+            rest = words[index:]
+            break
+    if not names:
+        return None
+    return GitInvocation(" ".join(names), directory, tuple(rest), program=program)
 
 
 def _shell_script(operands: Sequence[_Word]) -> str | None:
@@ -788,12 +855,15 @@ def _walk_command(command: _Command, directory: str | None, home: str | None, fo
         return None
     if program == "git":
         invocation = _git_invocation(operands, directory, repository_unknown=repository_unknown, home=home)
-        if invocation is not None:
-            found.append(invocation)
+    elif program in _FORGE_PROGRAMS:
+        invocation = _forge_invocation(operands, directory, program)
     else:
+        invocation = None
         script = _nested_script(name, operands)
         if script is not None:
             _walk_script(_Parser(script).script(nested=False), directory, home, found)
+    if invocation is not None:
+        found.append(invocation)
     return directory
 
 
@@ -808,7 +878,7 @@ def _walk_script(script: Sequence[Any], directory: str | None, home: str | None,
 def git_invocations(
     command: str, start_directory: str | None, *, home_directory: str | None = None
 ) -> list[GitInvocation]:
-    """Every ``git`` command a shell command runs, in order, with the directory each runs in.
+    """Every ``git``, ``gh`` and ``glab`` command a shell command runs, in order, with the directory each runs in.
 
     Only *command words* count: a heredoc body, a quoted argument (``echo "git push"``,
     ``grep 'git merge' f``) and a comment are text. The scan follows ``;``, ``&&``, ``||``, pipes,
@@ -821,6 +891,122 @@ def git_invocations(
     found: list[GitInvocation] = []
     _walk_script(_Parser(command).script(nested=False), start_directory, home_directory, found)
     return found
+
+
+def _destination(values: Sequence[str], shell: Mapping[str, Any]) -> list[str]:
+    """The path ``cp``/``mv``/``install`` writes: the last operand, or the sources' names inside a ``-t`` directory."""
+    target_directory: str | None = None
+    operands: list[str] = []
+    index = 0
+    while index < len(values):
+        value = values[index]
+        long_name, _, attached = value.partition("=")
+        if value in shell["target_directory_options"]:
+            target_directory = values[index + 1] if index + 1 < len(values) else None
+            index += 1
+        elif long_name in shell["target_directory_options"] and attached:
+            target_directory = attached
+        elif value.startswith("-t") and not value.startswith("--") and len(value) > _SHORT_OPTION:
+            target_directory = value[_SHORT_OPTION:]
+        elif not (value.startswith("-") and len(value) > 1):
+            operands.append(value)
+        index += 1
+    if target_directory is not None:
+        return [target_directory.rstrip("/") + "/" + operand.rstrip("/").rsplit("/", 1)[-1] for operand in operands]
+    return operands[-1:]
+
+
+def _write_candidates(program: str, operands: Sequence[_Word], shell: Mapping[str, Any]) -> list[str]:
+    """The paths a program writes among its ``operands``: the words, by what ``harness_settings.json`` says it does.
+
+    ``tee`` and ``sponge`` write every operand; ``sed -i`` and ``perl -i`` (any option cluster holding the
+    letter, or ``--in-place``) write the files they name; ``cp``, ``mv`` and ``install`` write their last
+    operand, or, with ``-t DIRECTORY``, a file of that name in it; ``dd`` writes its ``of=`` operand.
+    """
+    values = [word.value for word in operands]
+    options = [value for value in values if value.startswith("-") and len(value) > 1]
+    if program in shell["write_all_operands"]:
+        return [value for value in values if value not in options]
+    letter = shell["in_place"].get(program)
+    if letter is not None:
+        long_option = shell["in_place_long_option"]
+        in_place = any(
+            option == long_option or option.startswith(long_option + "=")
+            if option.startswith("--")
+            else letter in option[1:]
+            for option in options
+        )
+        return [value for value in values if value not in options] if in_place else []
+    if program in shell["write_last_operand"]:
+        return _destination(values, shell)
+    prefix = shell["operand_assignments"].get(program)
+    if prefix is not None:
+        return [value[len(prefix) :] for value in values if value.startswith(prefix)]
+    return []
+
+
+def _settings_file_among(candidates: Sequence[str], directory: str | None, data: Mapping[str, Any]) -> str | None:
+    """The first of ``candidates`` that names a harness settings file, spelled as given or read from ``directory``."""
+    for candidate in candidates:
+        for path in (candidate, _joined(directory, candidate)):
+            if path is not None and harness_settings.file_format(path, data) is not None:
+                return candidate
+    return None
+
+
+def _written_settings_file(
+    command: _Command, directory: str | None, home: str | None, data: Mapping[str, Any]
+) -> tuple[str | None, str | None]:
+    """The harness settings file ``command`` writes, if any, and the directory after it (``cd`` moves it)."""
+    for word in command.words:
+        for substitution in word.substitutions:
+            path = _written_settings_in(substitution, directory, home, data)
+            if path is not None:
+                return path, directory
+    candidates = [word.value for word in command.words if word.write]
+    words = [word for word in command.words if word.operand]
+    index, _ = _command_start(words)
+    if index < len(words):
+        name = words[index].value
+        operands = words[index + 1 :]
+        if name in ("cd", "pushd"):
+            return None, _changed_directory(operands, directory, home)
+        if name == "popd":
+            return None, None
+        candidates += _write_candidates(name.rsplit("/", 1)[-1], operands, data["shell"])
+        script = _nested_script(name, operands)
+        if script is not None:
+            path = _written_settings_in(_Parser(script).script(nested=False), directory, home, data)
+            if path is not None:
+                return path, directory
+    return _settings_file_among(candidates, directory, data), directory
+
+
+def _written_settings_in(
+    script: Sequence[Any], directory: str | None, home: str | None, data: Mapping[str, Any]
+) -> str | None:
+    """The first harness settings file a script's commands write, as the command spells it."""
+    for unit in script:
+        if isinstance(unit, _Group):
+            path = _written_settings_in(unit.script, directory, home, data)
+        else:
+            path, directory = _written_settings_file(unit, directory, home, data)
+        if path is not None:
+            return path
+    return None
+
+
+def _settings_write_reason(command: str, directory: str | None) -> str | None:
+    """The reason to deny ``command`` for writing a harness settings file, ``None`` when no command word does.
+
+    The data file names the directories (``.claude``, ``.codex``) that a command, or the directory it starts
+    in, must mention for the command to be parsed at all.
+    """
+    data = harness_settings.read_data()
+    if not any(entry["directory"] in command or entry["directory"] in (directory or "") for entry in data["files"]):
+        return None
+    path = _written_settings_in(_Parser(command).script(nested=False), directory, _home_directory(), data)
+    return None if path is None else harness_settings.write_reason(path, data)
 
 
 def _git_output(directory: str, *arguments: str) -> str | None:
@@ -854,28 +1040,95 @@ def repository_facts(directory: str) -> RepositoryFacts | None:
     return RepositoryFacts(linked=git_dir != common_dir, branch=(branch or "").strip())
 
 
-def _ask(reason: str) -> HookResult:
-    return HookResult(event_name="PreToolUse", permission_decision="ask", permission_reason=reason)
+class _Access:
+    """What one actor may do: the matrix row, and the texts that say so (ADR 0031/D07).
 
-
-def _owners_place(directory: str | None, repository_at: Callable[[str], RepositoryFacts | None]) -> str | None:
-    """Why ``directory`` is not an agent's place to write history, in words; ``None`` when it is.
-
-    An agent writes history only in a linked worktree, on a named branch that is not a default one.
+    Built once per guard call from ``common/access_matrix.json`` and ``hook_core.json``.
     """
-    data = _hook_core_data()
+
+    def __init__(self, actor: access_matrix.Actor, run_branch: str | None = None) -> None:
+        self.actor = access_matrix.Actor(actor)  # a plain string is read as the value it spells
+        self.run_branch = run_branch
+        self.texts = _hook_core_data()
+        self._matrix = access_matrix.read_data()
+        # The branches this actor is kept off as it is off the default branch: the default and its protected ones.
+        self._protected = access_matrix.protected_branches(self._matrix, self.actor)
+
+    def is_default_branch(self, branch: str) -> bool:
+        """Whether ``branch`` is a default branch or one the actor is kept off like it (``develop``, ``release/*``)."""
+        return branch in self.texts["git_default_branches"] or access_matrix.is_protected_branch(
+            self._protected, branch
+        )
+
+    def is_own_branch(self, branch: str) -> bool:
+        """Whether ``branch`` is one the actor may write: for an autonomous run, its own run branch."""
+        return access_matrix.is_own_branch(self._matrix, self.actor, branch, self.run_branch)
+
+    def result(self, action_class: str, values: Mapping[str, str]) -> HookResult | None:
+        """What the matrix gives the actor for ``action_class``: ``None`` to pass, else an ask or a deny.
+
+        The reason is the actor's text for the class (``access_reasons`` in ``hook_core.json``) filled
+        with ``values``.
+        """
+        outcome = access_matrix.outcome(self._matrix, self.actor, action_class)
+        if outcome == "allow":
+            return None
+        template = self.texts[self.texts["access_reasons"][self.actor.value][action_class]]
+        return HookResult(
+            event_name="PreToolUse", permission_decision=outcome, permission_reason=jsondata.fill(template, values)
+        )
+
+    def uniform(self, action_classes: Iterable[str]) -> bool:
+        """Whether the actor gets one outcome for all of ``action_classes``: telling them apart changes nothing."""
+        return len({access_matrix.outcome(self._matrix, self.actor, name) for name in action_classes}) == 1
+
+    def history_result(self, subcommand: str, place: str, facts: Mapping[str, str]) -> HookResult | None:
+        """The result for ``subcommand`` writing history at a ``place`` (a ``history_*`` class), ``facts`` naming it."""
+        if access_matrix.outcome(self._matrix, self.actor, place) == "allow":
+            return None
+        where = jsondata.fill(self.texts[self.texts["access_where"][self.actor.value][place]], facts)
+        return self.result(place, {"subcommand": subcommand, "where": where})
+
+
+# The classes a push of a branch falls into (a tag is its own class, ``tag``).
+_PUSH_CLASSES = ("push_own_branch", "push_own_branch_forced", "push_default_branch", "push_other_branch")
+_OUTCOME_ORDER = {outcome: rank for rank, outcome in enumerate(access_matrix.OUTCOMES)}
+
+
+def _most_restrictive(results: Sequence[HookResult | None]) -> HookResult | None:
+    """The result with the strictest decision among ``results`` (an ``ask`` before a pass, a ``deny`` before an ask)."""
+    decided = [result for result in results if result is not None]
+    if not decided:
+        return None
+    return max(decided, key=lambda result: _OUTCOME_ORDER[result.permission_decision or "allow"])
+
+
+def _history_place(
+    directory: str | None, repository_at: Callable[[str], RepositoryFacts | None], access: _Access
+) -> tuple[str, dict[str, str]]:
+    """Where ``directory`` puts a history write: its action class in the matrix, and the values naming it.
+
+    ``history_unresolved`` and ``history_not_repository`` have no facts; the rest are
+    ``history_{checkout|worktree}_{default|detached|branch}`` -- a linked worktree or not, on a default
+    branch, on a detached ``HEAD`` or on a named branch -- and ``history_not_run_branch``: a named branch of
+    a checkout (not a linked worktree) that is not the actor's own run branch. A linked worktree's branch is
+    its own by the job-branch carve-out, so the run branch does not narrow it (ADR 0031/D07).
+    """
     if directory is None:
-        return data["git_commit_where_unresolved"]
+        return "history_unresolved", {}
     facts = repository_at(directory)
     if facts is None:
-        return jsondata.fill(data["git_commit_where_not_repository"], {"directory": directory})
-    if not facts.linked:
-        return jsondata.fill(data["git_commit_where_checkout"], {"directory": directory})
+        return "history_not_repository", {"directory": directory}
+    where = "worktree" if facts.linked else "checkout"
     if not facts.branch:
-        return jsondata.fill(data["git_commit_where_detached"], {"directory": directory})
-    if facts.branch in data["git_default_branches"]:
-        return jsondata.fill(data["git_commit_where_default_branch"], {"directory": directory, "branch": facts.branch})
-    return None
+        branch = "detached"
+    elif access.is_default_branch(facts.branch):
+        branch = "default"
+    elif not facts.linked and not access.is_own_branch(facts.branch):
+        return "history_not_run_branch", {"directory": directory, "branch": facts.branch}
+    else:
+        branch = "branch"
+    return f"history_{where}_{branch}", {"directory": directory, "branch": facts.branch}
 
 
 def _is_job_branch(name: str, data: Mapping[str, Any]) -> bool:
@@ -1052,23 +1305,230 @@ def _ref_target(
     )
 
 
-def _invocation_ask(
-    invocation: GitInvocation, repository_at: Callable[[str], RepositoryFacts | None]
+def _push_flags(options: Sequence[str], data: Mapping[str, Any]) -> set[str]:
+    """The flags of ``git push`` that decide its class.
+
+    ``f`` force, ``d`` delete, ``a`` all branches, ``t`` tags, ``T`` the tags that follow the pushed commits.
+    """
+    flags: set[str] = set()
+    for word in options:
+        if word.startswith("--"):
+            flags.update(data["git_push_long_flags"].get(word.split("=", 1)[0], ""))
+        else:
+            flags.update(letter for letter in word[1:] if letter in "fd")
+    return flags
+
+
+def _refspec_class(refspec: str, *, forced: bool, current: str | None, access: _Access) -> tuple[str, str]:
+    """The matrix class of one pushed refspec and the ref it writes.
+
+    The destination decides: a tag, a default branch, the branch the repository is on (``current``;
+    ``HEAD`` stands for it) when that is the actor's own branch (an autonomous run's run branch), or another
+    branch. A ``+`` prefix, a ``:destination`` with no source and
+    the caller's ``forced`` (``--force``, ``--delete``) make a push of the own branch the forced one.
+    """
+    spec = refspec.removeprefix("+")
+    source, colon, destination = spec.partition(":")
+    target = destination if colon else source
+    if target.startswith("refs/tags/"):
+        return "tag", target
+    target = target.removeprefix("refs/heads/")
+    if target == "HEAD" and current is not None:
+        target = current
+    if access.is_default_branch(target):
+        return "push_default_branch", target
+    if target != current or not access.is_own_branch(target):
+        return "push_other_branch", target
+    forcing = forced or refspec.startswith("+") or (bool(colon) and not source)
+    return ("push_own_branch_forced" if forcing else "push_own_branch"), target
+
+
+def _push_decision(
+    invocation: GitInvocation, access: _Access, repository_at: Callable[[str], RepositoryFacts | None]
 ) -> HookResult | None:
-    data = _hook_core_data()
-    if invocation.subcommand in data["git_publishing_subcommands"]:
-        return _ask(data["git_commit_push_tag_merge_reason"])
-    if invocation.subcommand in data["git_history_subcommands"]:
-        place = _owners_place(invocation.directory, repository_at)
-        if place is not None:
-            return _ask(
-                jsondata.fill(data["git_commit_history_reason"], {"subcommand": invocation.subcommand, "where": place})
-            )
-    target = _ref_target(invocation, data, repository_at)
-    if target is None:
+    """The strictest decision among the refs ``git push`` writes: which class each is, the matrix says what it gets.
+
+    A push that names no refspec, or runs under ``-c`` configuration, writes where git's configuration
+    says (``push.default``, ``remote.*.push``): its destination is not the text's, so it is another branch's.
+    """
+    data = access.texts
+    options, operands = _split_arguments(invocation.arguments, data["git_push_valued_options"])
+    flags = _push_flags(options, data)
+    base = {"subcommand": invocation.subcommand}
+    if "a" in flags:  # --all, --branches and --mirror write the default branch with the rest
+        return access.result("push_default_branch", {**base, "branch": data["git_push_all_target"]})
+    repo_named = any(word.split("=", 1)[0] == "--repo" for word in options)
+    refspecs = operands if repo_named else operands[1:]  # the first operand is the remote
+    # No lookup where the branch cannot change the outcome (a developer's push asks wherever it goes).
+    current = None if access.uniform(_PUSH_CLASSES) else _current_branch(invocation, repository_at)
+    forced = bool(flags & {"f", "d"})
+    classes: list[tuple[str, str]] = []  # (matrix class, the ref as the reason names it)
+    if flags & {"t", "T"}:
+        classes.append(("tag", "'--tags'" if "t" in flags else "'--follow-tags'"))
+    if invocation.config_override:
+        classes.append(("push_other_branch", data["git_push_config_target"]))
+    elif refspecs:
+        for spec in refspecs:
+            name, ref = _refspec_class(spec, forced=forced, current=current, access=access)
+            classes.append((name, f"'{ref}'"))
+    elif "t" not in flags:
+        classes.append(("push_other_branch", data["git_push_implicit_target"]))
+    return _most_restrictive([access.result(name, {**base, "branch": ref}) for name, ref in classes])
+
+
+def _publishing_decision(
+    invocation: GitInvocation, access: _Access, repository_at: Callable[[str], RepositoryFacts | None]
+) -> HookResult | None:
+    """What the actor gets for ``push`` or ``tag``: a push by the branch it writes, a tag by its own class."""
+    if invocation.subcommand == "push":
+        return _push_decision(invocation, access, repository_at)
+    return access.result("tag", {"subcommand": invocation.subcommand})
+
+
+def _glob_pattern(pattern: str) -> re.Pattern[str]:
+    """The regular expression of a ``git_config_push_keys`` pattern: ``*`` is one or more characters."""
+    return re.compile(".+".join(re.escape(part) for part in pattern.split("*")))
+
+
+def _config_written_name(invocation: GitInvocation, data: Mapping[str, Any]) -> tuple[str, bool] | None:
+    """What a ``git config`` writes: ``(name, is_section)``; ``("", False)`` for an editor; ``None`` for a read.
+
+    The old form (``config [--unset] <key> [<value>]``) and the ``set``/``unset`` actions of git 2.46 are
+    both read; a lone key, ``--get``, ``--list`` and the ``get``/``list`` actions read.
+    """
+    options, operands = _split_arguments(invocation.arguments, data["git_config_valued_options"])
+    actions = data["git_config_actions"]
+    if set(options) & set(data["git_config_read_options"]):
         return None
+    if set(options) & set(data["git_config_edit_options"]):
+        return "", False
+    known_actions = {name for names in actions.values() for name in names}
+    action = operands[0] if operands and operands[0] in known_actions else None
+    if action in actions["read"]:
+        return None
+    if action in actions["edit"]:
+        return "", False
+    if action is not None:
+        names = operands[1:2]
+        is_section = action in actions["section_write"]
+    elif set(options) & set(data["git_config_section_write_options"]):
+        names, is_section = operands[:1], True
+    elif set(options) & set(data["git_config_key_write_options"]) or len(operands) >= _WRITE_OPERANDS:
+        names, is_section = operands[:1], False
+    else:
+        return None
+    return (names[0], is_section) if names else None
+
+
+def _is_push_config(name: str, data: Mapping[str, Any], *, is_section: bool) -> bool:
+    """Whether the key (or section) ``name`` is one of ``git_config_push_keys``; ``""`` (an editor) is."""
+    if not name:
+        return True
+    key = name.lower()
+    for pattern in data["git_config_push_keys"]:
+        # a section is written whole: test it with the variable its pattern names
+        candidate = f"{key}.{pattern.rsplit('.', 1)[1].replace('*', 'x')}" if is_section else key
+        if _glob_pattern(pattern).fullmatch(candidate):
+            return True
+    return False
+
+
+def _config_decision(invocation: GitInvocation, access: _Access) -> HookResult | None:
+    """What the actor gets for a ``git config`` that writes a push-redirecting key; reads and other keys pass."""
+    data = access.texts
+    written = _config_written_name(invocation, data)
+    if written is None or not _is_push_config(written[0], data, is_section=written[1]):
+        return None
+    return access.result("config_push_write", {"key": written[0] or data["git_config_edit_target"]})
+
+
+def _pull_request_base(invocation: GitInvocation, data: Mapping[str, Any]) -> str | None:
+    """The base branch a ``pr create``/``mr create`` names (``--base X``, ``--base=X``, ``-B X``); ``None`` if none.
+
+    Only the program's own base options count (``pr_base_options`` in ``hook_core.json``: ``-b`` is
+    ``gh``'s body and ``glab``'s target branch). An option with no value reads as the empty name. Where
+    the option is repeated the last value wins, as in ``gh`` and ``glab``.
+    """
+    options = data["pr_base_options"][invocation.program]
+    arguments = invocation.arguments
+    base = None
+    for index, word in enumerate(arguments):
+        name, equals, value = word.partition("=")
+        if name in options:
+            base = value if equals else "".join(arguments[index + 1 : index + 2])
+        elif not word.startswith("--") and any(
+            len(option) == _SHORT_OPTION and word.startswith(option) for option in options
+        ):
+            base = word[_SHORT_OPTION:].removeprefix("=")  # `-Bdevelop`: the value is attached
+    return base
+
+
+def _api_method(invocation: GitInvocation, data: Mapping[str, Any]) -> str:
+    """The HTTP method a ``gh api``/``glab api`` sends: the last one named, else POST when it carries fields."""
+    methods = data["forge_api_method_options"]
+    fields = data["forge_api_field_options"]
+    arguments = invocation.arguments
+    method = None
+    carries_fields = False
+    for index, word in enumerate(arguments):
+        name, equals, value = word.partition("=")
+        if name in methods:
+            method = value if equals else "".join(arguments[index + 1 : index + 2])
+        elif not word.startswith("--") and any(word.startswith(option) for option in methods):
+            method = word[_SHORT_OPTION:]  # `-XPOST`
+        elif name in fields or (not word.startswith("--") and any(word.startswith(option) for option in fields)):
+            carries_fields = True
+    return (method or ("POST" if carries_fields else "GET")).upper()
+
+
+def _forge_action(invocation: GitInvocation, data: Mapping[str, Any]) -> str:
+    """The command's group and action with its aliases resolved (``pr new`` is ``pr create``)."""
+    group, _, action = invocation.subcommand.partition(" ")
+    group = data["forge_group_aliases"][invocation.program].get(group, group)
+    name = f"{group} {action}".rstrip()
+    return data["forge_action_aliases"][invocation.program].get(name, name)
+
+
+def _forge_decision(invocation: GitInvocation, access: _Access) -> HookResult | None:
+    """What the actor gets for a ``gh``/``glab`` command: its class, a pull request by the base it targets."""
+    data = access.texts
+    classes = {"gh": data["gh_action_classes"], "glab": data["glab_action_classes"]}[invocation.program]
+    subcommand = _forge_action(invocation, data)
+    if subcommand == _FORGE_API:
+        action_class = (
+            data["forge_api_class"] if _api_method(invocation, data) in data["forge_api_write_methods"] else None
+        )
+    else:
+        action_class = classes.get(subcommand)
+    if action_class is None:
+        return None
+    base = _pull_request_base(invocation, data) if action_class == "pr_create" else None
+    if base is not None and base not in data["git_default_branches"]:
+        action_class = "pr_create_other_base"
+    values = {"program": invocation.program, "subcommand": invocation.subcommand, "base": f"'{base}'"}
+    return access.result(action_class, values)
+
+
+def _invocation_decision(
+    invocation: GitInvocation, access: _Access, repository_at: Callable[[str], RepositoryFacts | None]
+) -> HookResult | None:
+    """What the actor gets for one ``git``, ``gh`` or ``glab`` command: ``None`` to pass, else an ask or a deny."""
+    data = access.texts
+    if invocation.program in _FORGE_PROGRAMS:
+        return _forge_decision(invocation, access)
+    if invocation.subcommand in data["git_publishing_subcommands"]:
+        return _publishing_decision(invocation, access, repository_at)
+    if invocation.subcommand == "config":
+        return _config_decision(invocation, access)
+    decision = None
+    if invocation.subcommand in data["git_history_subcommands"]:
+        place, facts = _history_place(invocation.directory, repository_at, access)
+        decision = access.history_result(invocation.subcommand, place, facts)
+    target = _ref_target(invocation, data, repository_at)
+    if decision is not None or target is None:
+        return decision
     subcommand = _ref_subcommand(invocation)
-    return _ask(jsondata.fill(data["git_commit_ref_reason"], {"subcommand": subcommand, "target": target}))
+    return access.result("ref_write", {"subcommand": subcommand, "target": target})
 
 
 def _home_directory() -> str | None:
@@ -1085,45 +1545,135 @@ def _working_directory() -> str | None:
         return None
 
 
-def git_commit_guard_result(
-    command: str,
-    *,
-    permission_mode: str | None = None,
-    attended: bool | None = None,
-    directory: str | None = None,
-    repository_at: Callable[[str], RepositoryFacts | None] | None = None,
-) -> HookResult | None:
-    """Guard ``git`` commands: no AI co-author trailer, publishing and history are the owner's.
+@dataclass(frozen=True)
+class RunFacts:
+    """What a hook's entry point read of the run, for the commit guard.
 
-    The trailer is denied wherever it stands in the text, a heredoc body included. Only command
-    words are read for the rest (:func:`git_invocations`): ``push`` and ``tag`` ask everywhere; a
+    ``actor`` is who drives it (``AKMON_ACTOR``), ``run_branch`` the branch an autonomous run owns
+    (``AKMON_RUN_BRANCH``; ``None``: the matrix's ``run_branch_patterns`` decide), ``permission_mode`` and
+    ``attended`` say whether an ``ask`` reaches anybody (ADR-0025/D06), and ``directory`` is where the command
+    starts (default: the process's).
+    """
+
+    actor: access_matrix.Actor = access_matrix.Actor.DEVELOPER
+    permission_mode: str | None = None
+    attended: bool | None = None
+    directory: str | None = None
+    run_branch: str | None = None
+
+
+class GuardFacts(TypedDict, total=False):
+    """The keyword facts of one run that :func:`git_commit_guard_result` takes: the fields of :class:`RunFacts`."""
+
+    permission_mode: str | None
+    attended: bool | None
+    actor: access_matrix.Actor
+    directory: str | None
+    run_branch: str | None
+
+
+def git_commit_guard_result(command: str, **facts: Unpack[GuardFacts]) -> HookResult | None:
+    """Guard ``git``, ``gh`` and ``glab`` commands by the access matrix: who writes history, publishes, opens a PR.
+
+    What each command gets is ``common/access_matrix.json``'s (ADR 0031/D07), by ``actor``: the AI
+    co-author trailer is denied wherever it stands in the text, a heredoc body included; only command
+    words are read for the rest (:func:`git_invocations`). For a ``developer`` -- the default, and any
+    run whose ``AKMON_ACTOR`` the entry point did not read -- ``push`` and ``tag`` ask everywhere; a
     history-writing subcommand (``commit``, ``merge``, ``rebase``, ``reset`` and the others in
-    ``hook_core.json``) passes when the repository it acts on — not the session's — is a linked
-    worktree on a named branch that is not ``main``/``master``, and asks otherwise. The first
-    invocation that does not pass decides.
+    ``hook_core.json``) passes when the repository it acts on -- not the session's -- is a linked
+    worktree on a named branch that is not ``main``/``master``, and asks otherwise; a ref write asks
+    unless every target is a job branch. An ``autonomous`` run writes history on its own run branch (the
+    ``run_branch`` the launcher named, else a branch ``run_branch_patterns`` matches) or in a linked worktree, pushes
+    that branch by an explicit refspec (a push that names none, or runs under ``git -c``, is another branch's),
+    opens pull requests (merge requests) into the default branch, and is denied the default branch, the branches
+    ``protected_branches`` names for it (``develop``, ``release/*``), any other branch of a checkout, any other
+    pull request base and a ``git config`` write of a push-redirecting key; ``gh``/``glab api`` writes ask.
+    The first invocation that does not pass decides, and an ``ask`` nobody attends becomes a ``deny``.
 
-    ``directory`` is where the command starts (default: the process's); ``repository_at`` answers
-    :class:`RepositoryFacts` for a directory (default: :func:`repository_facts`, which asks git).
+    The ``facts`` are the fields of :class:`RunFacts`; ``directory`` is where the command starts (default: the
+    process's). The repository is asked of git;
+    :func:`commit_guard_decision` takes the lookup as a parameter.
 
     Policy ID: commits.owner-owned
     """
-    if "git" not in command:
+    return commit_guard_decision(command, RunFacts(**facts), repository_facts)
+
+
+def commit_guard_decision(
+    command: str, run: RunFacts, repository_at: Callable[[str], RepositoryFacts | None]
+) -> HookResult | None:
+    """:func:`git_commit_guard_result` with the repository lookup given.
+
+    ``repository_at`` answers :class:`RepositoryFacts` for a directory (:func:`repository_facts` asks git).
+    """
+    if not any(program in command for program in ("git", *_FORGE_PROGRAMS)):
         return None
 
-    if re.search(r"co-authored-by", command, re.IGNORECASE):
-        return HookResult(
-            event_name="PreToolUse",
-            permission_decision="deny",
-            permission_reason=_hook_core_data()["git_commit_no_ai_trailer_reason"],
-        )
+    # The AI trailer is a floor: denied for every actor before, and regardless of, the access matrix.
+    trailer = re.search(r"co-authored-by", command, re.IGNORECASE) is not None
+    if trailer and "git" in command:
+        return _ai_trailer_floor(run.actor)
 
-    lookup = repository_facts if repository_at is None else repository_at
-    start = _working_directory() if directory is None else directory
-    for invocation in git_invocations(command, start, home_directory=_home_directory()):
-        ask = _invocation_ask(invocation, lookup)
-        if ask is not None:
-            return _escalate_unattended_ask(ask, permission_mode, attended=attended)
+    start = _working_directory() if run.directory is None else run.directory
+    invocations = git_invocations(command, start, home_directory=_home_directory())
+    if trailer and any(invocation.program in _FORGE_PROGRAMS for invocation in invocations):
+        return _ai_trailer_floor(run.actor)
+    access = _Access(run.actor, run.run_branch)
+    for invocation in invocations:
+        decision = _invocation_decision(invocation, access, repository_at)
+        if decision is not None:
+            return _escalate_unattended_ask(decision, run.permission_mode, attended=run.attended)
     return None
+
+
+# The reason a crashed commit guard gives an autonomous run when ``hook_core.json`` cannot be read either: the
+# crash path depends on no data file, since a missing or broken one may be the very failure it answers.
+_GUARD_CRASH_FALLBACK_REASON = (
+    "Commit guardrail (autonomous run): the access matrix could not be read, so an autonomous run is denied."
+)
+
+
+def guard_crash_deny_document() -> str:
+    """The one-line JSON ``PreToolUse`` deny a crashed commit guard answers an ``autonomous`` run with.
+
+    ADR-0031/D07 (D-C203-GUARD-CRASH): when the guard cannot read the access matrix, or raises while
+    evaluating a command, an autonomous run is denied where a developer run is let through (the crash-open
+    posture of ADR 0013). The actor is read from the environment before the matrix is, so this answer depends
+    on neither the matrix nor, if the texts cannot be read, on any data file: it names its keys literally and
+    falls back to a reason in code. Both vendor adapters write this document.
+
+    Runtime classification: operational
+    Rationale: it is the crash posture of the commit guard (``commits.owner-owned``), not a rule of its own:
+    it answers a failure with the deny the guard's autonomous row would otherwise give, and an adapter writes
+    it into the vendor's channel from outside the ``*_result`` join, so ADR-0012/D07 requires the
+    classification to be stated rather than left silent.
+    """
+    try:
+        reason = _hook_core_data()["git_commit_guard_crash_reason"]
+    except Exception:  # noqa: BLE001 — the answer to a failure must not fail: the reason in code stands in
+        reason = _GUARD_CRASH_FALLBACK_REASON
+    return json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
+        }
+    )
+
+
+def _ai_trailer_floor(actor: access_matrix.Actor) -> HookResult:
+    """The deny for an AI trailer: unconditional, read from no matrix (commits.owner-owned).
+
+    :func:`access_matrix.read_data` already refuses a matrix whose ``ai_trailer`` cells are not ``deny``;
+    the floor does not depend on them. The reason is the actor's text for the class, as the matrix path gives.
+    """
+    texts = _hook_core_data()
+    template = texts[texts["access_reasons"][access_matrix.Actor(actor).value][access_matrix.AI_TRAILER_CLASS]]
+    return HookResult(
+        event_name="PreToolUse", permission_decision="deny", permission_reason=jsondata.fill(template, {})
+    )
 
 
 def agent_names(directory: Path, known: Mapping[str, Sequence[str]] | None = None) -> list[str]:
@@ -1233,8 +1783,22 @@ def stale_guardrail_notice(root: Path) -> str | None:
     )
 
 
-def session_start_result(root: Path) -> HookResult | None:
+def _work_style_line(root: Path, session_id: str | None, start: Mapping[str, str]) -> str:
+    """The one SessionStart line naming the work style in force and where it came from (ADR 0031/D03)."""
+    data = work_style.read_data()
+    found = work_style.resolve(root, session_id, data)
+    source = jsondata.fill(
+        start["work_style_sources"][found.source],
+        {"root_name": aitna_root_name(root), "developer_file": data["developer_rel"]},
+    )
+    return jsondata.fill(start["work_style_line"], {"style": found.style, "source": source})
+
+
+def session_start_result(root: Path, session_id: str | None = None) -> HookResult | None:
     """SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice.
+
+    One line states the work style in force for ``session_id`` and the level that set it (ADR 0031/D03);
+    when the work-style data cannot be read or has the wrong shape, that line alone is left out.
 
     Runtime classification: operational
     Rationale: it authors no rule. It aggregates the agent roster and re-delivers rules owned
@@ -1274,6 +1838,10 @@ def session_start_result(root: Path) -> HookResult | None:
     else:
         lines.append(start["pick_generic"])
     lines.append(start["delegation_line"])
+    # The line is advisory: a work-style file that is missing, not JSON or the wrong shape loses the line,
+    # never the rest of the session's context.
+    with contextlib.suppress(jsondata.DataFileError, KeyError, TypeError):
+        lines.append(_work_style_line(root, session_id, start))
     lines.append(jsondata.fill(start["memory_line"], {"root_name": aitna_root_name(root)}))
     if stale is not None:
         lines.append(stale)

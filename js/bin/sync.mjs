@@ -101,7 +101,7 @@ import { codePointCompare, codePointSort } from "../common/sort.mjs";
  * @property {string} unsupported_record
  * @property {{no_record: string, ecosystem: string}} unsupported_found
  * @property {Record<string, Array<{matcher: string | null, commands: string[]}>>} claude_hooks
- * @property {Record<string, Array<{matcher: string, commands: Array<[string, string]>}>>} codex_hooks
+ * @property {Record<string, Array<{matcher: string | null, commands: Array<[string, string]>}>>} codex_hooks
  * @property {{claude_md: string, copilot_md: string, gemini_md: string, codex_readme: string}} vendor_pointers
  * @property {Array<[string, string]>} planned_files
  * @property {{no_frontmatter: string, with_frontmatter: string}} skill_stubs
@@ -654,21 +654,22 @@ export function codexHooks(data, root) {
   for (const [event, entries] of Object.entries(data.sync.codex_hooks)) {
     hooks.set(
       event,
-      entries.map((entry) =>
-        _object([
-          ["matcher", entry.matcher],
-          [
-            "hooks",
-            entry.commands.map(([script, status]) =>
-              _object([
-                ["type", "command"],
-                ["command", `${base} ${script}`],
-                ["statusMessage", status],
-              ]),
-            ),
-          ],
-        ]),
-      ),
+      entries.map((entry) => {
+        const commands = entry.commands.map(([script, status]) =>
+          _object([
+            ["type", "command"],
+            ["command", `${base} ${script}`],
+            ["statusMessage", status],
+          ]),
+        );
+        // A per-turn event takes no matcher (M65): a null one is left out, as Claude's are.
+        return entry.matcher === null
+          ? _object([["hooks", commands]])
+          : _object([
+              ["matcher", entry.matcher],
+              ["hooks", commands],
+            ]);
+      }),
     );
   }
   return _object([["hooks", hooks]]);

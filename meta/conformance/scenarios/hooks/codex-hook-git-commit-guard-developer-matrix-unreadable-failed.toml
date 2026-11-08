@@ -1,0 +1,24 @@
+# D-C203-GUARD-CRASH on the Codex route: the same unreadable matrix is `Failed` (exit 1) for a developer run, and the action goes ahead (ADR 0013).
+id = "hooks/codex-hook-git-commit-guard-developer-matrix-unreadable-failed"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook"]
+
+[fixture]
+tree_files = { "common/access_matrix.json" = "{ not json" }
+
+[run]
+script = "codex-hook"
+args = ["git-commit-guard"]
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-cx-crash-2"
+cwd = "{{root}}"
+tool_input = { command = "gh pr create --fill" }
+
+[expected]
+exit = 1
+stderr = "akmon codex-hook git-commit-guard hook: DataFileError\n"
+stdout = ""

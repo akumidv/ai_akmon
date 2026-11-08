@@ -47,12 +47,13 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
-import { dirname, posix } from "node:path";
+import { dirname, posix, relative as relativePath, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { ergonRoot, gitCommonRoot, isRelativeTo, localRoot, resolveProjectRoot } from "../../common/project_root.mjs";
 import { fill, read } from "../../common/jsondata.mjs";
+import { readData as readWorkStyleData, resolve as resolveWorkStyle } from "../../common/work_style.mjs";
 import {
   decodeUtf8,
   encodeUtf8,
@@ -91,6 +92,7 @@ import {
  * @property {{none: string, line: string}} active
  * @property {{columns: string[], separator: string, yes: string, no: string, detached: string, kinds: {main: string, athlos: string, harness: string, branch_only: string}, states: {main: string, harness: string, working: string, ready: string, carried: string, backup: string, not_carried_backup: string}, command_worktree: string, command_branch: string, carry_cd: string, carry_squash: string, carry_commit: string, verdict_carried: string, verdict_not_carried: string, verdict_unreadable: string, verdict_missing: string, verdict_paths: number, verdict_more: string}} worktrees
  * @property {{uncommitted: string, unreadable: string}} takeover
+ * @property {{style: string, heading: string, cd: string, add: string, commit: string, placeholder: string, propose: string, reminder: string}} block_commit
  * @property {{title: string, file_header: string, end: string}} export
  * @property {Record<string, string>} errors
  */
@@ -223,7 +225,7 @@ Park work into an ergon and resume it.
 commands:
   write ID --name N --goal G --next X [--plan ID] [--row ID] [--owned-path P]... [--check C]...
         [--unverified U]... [--decision D]... [--answer A]... [--agent A]... [--readiness R]
-        [--origin O] [--harness H] [--session-id S]
+        [--origin O] [--commit-message M] [--harness H] [--session-id S]
                         Park a piece of work.
   unpark ID [--harness H] [--session-id S]
                         Resume a parked ergon.
@@ -3531,7 +3533,7 @@ const COMMANDS = {
       ...["--owned-path", "--check", "--unverified", "--decision", "--answer", "--agent"].map((flag) =>
         _flag(flag, { kind: "many" }),
       ),
-      ...["--readiness", "--origin"].map((flag) => _flag(flag)),
+      ...["--readiness", "--origin", "--commit-message"].map((flag) => _flag(flag)),
       ...HOLDER_OPTIONS,
     ]),
   },
@@ -4138,6 +4140,119 @@ function _releaseOwnLease(unit, lease, texts) {
 }
 
 /**
+ * Whether `cwd` is in the main checkout of a repository; false in a linked worktree or outside git.
+ *
+ * A worktree is linked when its git directory differs from the common one the main checkout keeps.
+ * @param {string} cwd
+ * @returns {boolean}
+ */
+function _inMainCheckout(cwd) {
+  const layout = _git(["rev-parse", "--git-dir", "--git-common-dir"], cwd);
+  const paths = layout ? layout.split("\n") : [];
+  if (paths.length !== 2) {
+    return false;
+  }
+  return resolvePath(cwd, paths[0]) === resolvePath(cwd, paths[1]);
+}
+
+/**
+ * The paths `git status` reports as changed in `cwd`, once each; a rename or a copy by its new path only.
+ * The origin of a staged rename is no longer in the tree, so `git add -- <origin>` fails; the new path is
+ * what the block stages. None if git cannot say. The paths are relative to the repository root.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function _statusPaths(cwd) {
+  const out = _git(["status", "--porcelain", "-z", "--untracked-files=all"], cwd, false);
+  if (!out) {
+    return [];
+  }
+  /** @type {string[]} */
+  const paths = [];
+  const entries = out.split("\0");
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (entry === "") {
+      continue;
+    }
+    paths.push(entry.slice(3));
+    if ("RC".includes(entry[0]) || "RC".includes(entry[1])) {
+      // a rename or a copy carries its origin as the next entry
+      index += 1;
+    }
+  }
+  return [...new Set(paths.filter((path) => path !== ""))];
+}
+
+/**
+ * `paths` given relative to the project `root`, as paths relative to the repository `toplevel`. The block
+ * `cd`s to the toplevel, so an owned path of a project whose root is a subdirectory of the repository gains
+ * that subdirectory as its prefix. An absolute path stays as it is.
+ * @param {readonly string[]} paths
+ * @param {string} root
+ * @param {string} toplevel
+ * @returns {string[]}
+ */
+function _toplevelPaths(paths, root, toplevel) {
+  const prefix = relativePath(_realPath(toplevel), _realPath(root)) || ".";
+  if (prefix === ".") {
+    return [...paths];
+  }
+  return paths.map((path) => (posix.isAbsolute(path) ? path : posix.normalize(posix.join(prefix, path))));
+}
+
+/**
+ * The block commit as printed text, in paragraphs, or nothing when no path is left to stage.
+ *
+ * The paths are the ergon's owned ones, else the changed ones given. `git status` reports them relative
+ * to the repository root, so the first command enters `toplevel`; the block works from any directory.
+ * The tool prints this and never runs it (ADR 0031 D04); the reminder names where the hand-off prompt
+ * points (D05).
+ * @param {readonly string[]} paths the paths to stage (the caller picks the owned ones, else the changed ones)
+ * @param {string} message
+ * @param {string} toplevel the repository root the paths are relative to
+ * @param {string} resume
+ * @param {ParkData} texts
+ * @returns {string[]}
+ */
+export function blockCommitLines(paths, message, toplevel, resume, texts) {
+  const spec = texts.block_commit;
+  const unique = [...new Set(paths)];
+  if (unique.length === 0) {
+    return [];
+  }
+  const text = pyStrip(message);
+  const commands = [
+    spec.heading,
+    fill(spec.cd, { path: _shellQuote(toplevel) }),
+    fill(spec.add, { paths: unique.map((path) => _shellQuote(path)).join(" ") }),
+    fill(spec.commit, { message: text ? _doubleQuoted(text) : spec.placeholder }),
+  ];
+  const closing = text ? [] : [spec.propose];
+  closing.push(fill(spec.reminder, { resume }));
+  return [commands.join("\n"), closing.join("\n")];
+}
+
+/**
+ * The block commit this write prints: the controlling style, in the main checkout only (ADR 0031 D02).
+ * @param {ParsedArgs} args
+ * @param {string} ergon
+ * @param {Run} run
+ * @returns {string[]}
+ */
+function _blockCommit(args, ergon, run) {
+  const style = resolveWorkStyle(run.root, _text(args, "sessionId") || null, readWorkStyleData());
+  if (style.style !== run.texts.block_commit.style || !_inMainCheckout(run.cwd)) {
+    return [];
+  }
+  const resume = _displayPath(pyPath(ergon, RESUME_FILE), run.root);
+  const toplevel = _git(["rev-parse", "--show-toplevel"], run.cwd) || run.cwd;
+  const owned = _listOf(args, "ownedPath");
+  const paths = owned.length > 0 ? _toplevelPaths(owned, run.root, toplevel) : _statusPaths(run.cwd);
+  return blockCommitLines(paths, _text(args, "commitMessage"), toplevel, resume, run.texts);
+}
+
+/**
  * @param {ParsedArgs} args
  * @param {Run} run
  * @returns {number}
@@ -4165,6 +4280,10 @@ function _cmdWrite(args, run) {
   }
   _releaseOwnLease(ergon, lease, run.texts);
   _print(_displayPath(ergon, run.root));
+  for (const paragraph of _blockCommit(args, ergon, run)) {
+    _print("");
+    _print(paragraph);
+  }
   return 0;
 }
 

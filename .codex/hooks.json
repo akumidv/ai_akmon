@@ -33,6 +33,17 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/hooks/codex-hook.py\" work-style",
+            "statusMessage": "Checking for a work-style switch"
+          }
+        ]
+      }
     ]
   }
 }

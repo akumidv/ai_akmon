@@ -30,6 +30,49 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   your ignore list.
 
 ### Added
+- **The work style: `delegating` or `controlling` (C203, [ADR-0031/D03](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0031-work-styles-delegating-and-controlling.md)).**
+  The first valid of: the owner typing `/style delegating|controlling` (a new `work-style`
+  `UserPromptSubmit` hook, wired by `akmon sync` for Claude and Codex, stores it per session in
+  `<dev root>/.local/work-sessions.json`, the newest 50), `<dev root>/.local/work.json` (`{"style": ...}`),
+  `[work] style` in `<dev root>/.akmon.toml`, then the default `delegating`. SessionStart context gains one
+  line, `work style: <style> (<source>)`. Check: re-run `akmon sync` (the generated wiring gains the
+  hook; the Codex `UserPromptSubmit` entry carries no matcher). Claude Code hands an unregistered `/style` to the hook in headless runs (M238); the interactive
+  TUI and a live Codex run are unmeasured, and the file levels work regardless.
+- **The access matrix by actor: what a `developer` or an `autonomous` run may do (C203, [ADR-0031/D07](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0031-work-styles-delegating-and-controlling.md)).**
+  `common/access_matrix.json` gives, per actor and per action class, `allow`, `ask` or `deny`. The actor is
+  read from `AKMON_ACTOR`; unset or unknown is `developer`, and `autonomous` is the other row. The commit
+  guard reads it for `git push`, `git tag`, history and ref writes, and for `gh pr create`, `gh pr merge`
+  and `gh release create`, and `glab mr create` and `glab mr merge`. `develop` is protected for an
+  autonomous run like the default branch (a `protected_branches` list in the matrix: no history write on it,
+  no push to it). A developer run keeps its `git` outcomes and now asks before `gh pr create|merge`,
+  `gh release create` and `glab mr create|merge` — so a headless run without `AKMON_ACTOR` is denied them. A pull request or merge request is opened into the default
+  branch or the forge's default base; any other base, `develop` included, asks a developer and is denied to
+  an autonomous run (`--base`/`-B` for `gh`, `--target-branch`/`-b` for `glab`). An AI `Co-Authored-By` trailer is denied for
+  every actor by a floor the matrix cannot soften — in `glab` commands too — and a matrix whose `ai_trailer` cell is not `deny`, or whose
+  `protected_branches` is not a list per actor, is refused as a broken data file.
+  Check: set `AKMON_ACTOR` in the environment that launches an autonomous run; a missing or broken row is
+  an error, never a permission.
+  An autonomous run's **own branch** is the one the launcher names in `AKMON_RUN_BRANCH` (exact); with no
+  value, a branch under `agent/` whose next segment starts with a task id (`agent/C203-…`, `agent/_T3-…`),
+  from a new `run_branch_patterns` list per actor in the matrix. A history write on another named branch of
+  a checkout (a new action class, `history_not_run_branch`) and a push whose destination is not that branch
+  are denied; a linked worktree's branch stays its own, and a developer run reads neither. `release/*` is
+  protected like `develop` (a trailing `*` in `protected_branches` is a prefix). When the commit guard
+  cannot read the matrix, or fails while evaluating a command, an autonomous run is **denied** (a developer
+  run still fails open, [ADR 0013](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0013-hook-survivability-and-crash-posture.md)); the actor is read before the matrix, so the deny depends on neither.
+  **An agent never writes the `env` of a harness settings file (every actor).** A new `settings-env-guard`
+  hook denies an `Edit`, `Write` or `MultiEdit` that changes the parsed `env` of `.claude/settings.json` or
+  `.claude/settings.local.json`, or any `env`/`shell_environment_policy` text of a Codex `.codex/config.toml`,
+  and the `Bash` guard denies a command that writes one of them (redirection, `tee`, `sed -i`, `perl -i`,
+  `cp`/`mv`/`install`, `dd of=`); an edit that leaves `env` identical, and a read, pass. Check: re-run
+  `akmon sync` (the generated Claude wiring gains the hook; Codex is not wired for it, see `CAPABILITIES.md`).
+- **`park write` prints a block commit in the controlling style (C203, [ADR-0031/D04](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0031-work-styles-delegating-and-controlling.md)).**
+  In the controlling work style, run from the main checkout, `park write` prints a `Block commit` section:
+  a `cd` into the repository root, `git add --` of the owned paths (or of the paths `git status` reports
+  as changed), and `git commit -m` with the `--commit-message` text escaped for double quotes, or a
+  `<message>` placeholder the agent proposes. The tool prints the section and runs nothing; the owner runs
+  it or asks the agent to. Check: in the controlling style it prints the section from any directory of the
+  checkout; the delegating style, the default, prints the ergon path only.
 - **Agents are listed in the order of the delivery chain, and a learning run is offered before a
   pull request (C180,
   [ADR-0026](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0026-agents-of-the-delivery-chain.md)/D08).**

@@ -14,7 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
-import { read } from "../../common/jsondata.mjs";
+import { fill, read } from "../../common/jsondata.mjs";
 import {
   ParkError,
   acquireLease,
@@ -25,6 +25,7 @@ import {
   exportErgon,
   findClosedErgon,
   findErgon,
+  blockCommitLines,
   branchUnit,
   carryCommands,
   formatAthlos,
@@ -3030,5 +3031,228 @@ test("the commands are quoted for the shell and the message for double quotes", 
   assert.deepEqual(removalCommands([syntheticRow(), syntheticRow({ path: "", branch: "_aitna/it's" })], TEXTS), [
     "git worktree remove '/srv/a b'",
     `git branch -D '_aitna/it'"'"'s'`,
+  ]);
+});
+
+// --------------------------------------------------------------------------------------
+// the block commit: the controlling style prints it in the main checkout, never runs it (ADR 0031 D04, D05)
+// --------------------------------------------------------------------------------------
+
+const BLOCK = TEXTS.block_commit;
+const BLOCK_ERGON = "_aitna/.ergon/C183-park-helper";
+const BLOCK_RESUME = fill(BLOCK.reminder, { resume: `${BLOCK_ERGON}/RESUME.md` });
+
+/**
+ * @param {string} checkout
+ * @param {string} style
+ */
+function setStyle(checkout, style) {
+  fs.mkdirSync(path.join(checkout, "_aitna", ".local"), { recursive: true });
+  fs.writeFileSync(path.join(checkout, "_aitna", ".local", "work.json"), `{"style": "${style}"}\n`);
+}
+
+/**
+ * @param {string} cwd
+ * @param {string[]} args
+ */
+function gitAsTester(cwd, args) {
+  git(cwd, ["-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args]);
+}
+
+/**
+ * A main checkout with one commit, one edited file and a developer work style.
+ * @param {string} style
+ * @returns {string}
+ */
+function styledMain(style) {
+  const main_ = tempDir("park-style-");
+  fs.mkdirSync(path.join(main_, "_aitna"));
+  fs.mkdirSync(path.join(main_, "src"));
+  fs.writeFileSync(path.join(main_, "AGENTS.md"), "# agents\n");
+  fs.writeFileSync(path.join(main_, "_aitna", ".akmon.toml"), "");
+  fs.writeFileSync(path.join(main_, "src", "code.py"), "one\n");
+  setStyle(main_, style);
+  git(main_, ["init", "-q", "-b", "main"]);
+  git(main_, ["add", "-A"]);
+  gitAsTester(main_, ["commit", "-q", "-m", "base"]);
+  fs.writeFileSync(path.join(main_, "src", "code.py"), "two\n");
+  return main_;
+}
+
+/**
+ * @param {string} checkout
+ * @param {string[]} extra
+ * @param {string} [cwd]
+ */
+function writeFrom(checkout, extra, cwd = checkout) {
+  return run(
+    ["write", "C183", "--name", "park-helper", "--goal", "g", "--next", "n", ...extra, "--root", checkout],
+    cwd,
+  );
+}
+
+test("controlling in the main checkout prints the block commit of the owned paths", { skip: !gitAvailable() }, () => {
+  const main_ = styledMain("controlling");
+  const owned = ["--owned-path", "src/code.py", "--owned-path", "docs/a file.md", "--owned-path", "src/code.py"];
+  const done = writeFrom(main_, [...owned, "--commit-message", 'Fix "the" $thing']);
+  assert.equal(done.code, 0);
+  assert.equal(
+    done.stdout,
+    `${BLOCK_ERGON}\n\n${BLOCK.heading}\ncd ${main_}\ngit add -- src/code.py 'docs/a file.md'\n` +
+      `git commit -m "Fix \\"the\\" \\$thing"\n\n${BLOCK_RESUME}\n`,
+  );
+});
+
+test(
+  "controlling without owned paths stages the changed ones, with a placeholder message",
+  { skip: !gitAvailable() },
+  () => {
+    const main_ = styledMain("controlling");
+    const done = writeFrom(main_, []);
+    assert.equal(done.code, 0);
+    assert.equal(
+      done.stdout,
+      `${BLOCK_ERGON}\n\n${BLOCK.heading}\n` +
+        `cd ${main_}\n` +
+        `git add -- src/code.py ${BLOCK_ERGON}/PARK.md ${BLOCK_ERGON}/RESUME.md\n` +
+        `git commit -m "${BLOCK.placeholder}"\n\n${BLOCK.propose}\n${BLOCK_RESUME}\n`,
+    );
+  },
+);
+
+test("the block enters the repository root when written from a subdirectory", { skip: !gitAvailable() }, () => {
+  const main_ = styledMain("controlling");
+  const done = writeFrom(
+    main_,
+    ["--owned-path", "src/code.py", "--commit-message", "Park it"],
+    path.join(main_, "src"),
+  );
+  const lines = done.stdout.split("\n");
+  const heading = lines.indexOf(BLOCK.heading);
+  assert.equal(lines[heading + 1], `cd ${main_}`);
+  assert.equal(lines[heading + 2], "git add -- src/code.py");
+});
+
+test("a rename is staged by its new name only", { skip: !gitAvailable() }, () => {
+  // the origin of a staged rename is gone from the tree: `git add -- <origin>` would fail
+  const main_ = styledMain("controlling");
+  git(main_, ["mv", "src/code.py", "src/moved.py"]);
+  const done = writeFrom(main_, []);
+  assert.ok(done.stdout.includes("git add -- src/moved.py "), done.stdout);
+  assert.ok(!done.stdout.includes("src/code.py"), done.stdout);
+});
+
+test("a staged copy is staged by its new name only", { skip: !gitAvailable() }, () => {
+  const main_ = styledMain("controlling");
+  fs.writeFileSync(path.join(main_, "src", "code.py"), "a\nb\nc\nd\ne\nf\n");
+  git(main_, ["add", "-A"]);
+  gitAsTester(main_, ["commit", "-q", "-m", "more"]);
+  fs.writeFileSync(path.join(main_, "src", "code.py"), "a\nb\nc\nd\ne\nf\ng\n");
+  fs.writeFileSync(path.join(main_, "src", "copy.py"), "a\nb\nc\nd\ne\nf\ng\n");
+  git(main_, ["add", "src"]);
+  git(main_, ["config", "status.renames", "copies"]);
+  const done = writeFrom(main_, []);
+  assert.ok(done.stdout.includes("git add -- src/code.py src/copy.py "), done.stdout);
+});
+
+/**
+ * A repository with the project one directory down (`repo/proj`), under a controlling style.
+ * @returns {{repo: string, proj: string}}
+ */
+function subdirectoryProject() {
+  const repo = tempDir("park-sub-");
+  const proj = path.join(repo, "proj");
+  fs.mkdirSync(path.join(proj, "_aitna"), { recursive: true });
+  fs.writeFileSync(path.join(proj, "AGENTS.md"), "# agents\n");
+  fs.writeFileSync(path.join(proj, "_aitna", ".akmon.toml"), "");
+  fs.writeFileSync(path.join(proj, "code.py"), "one\n");
+  setStyle(proj, "controlling");
+  git(repo, ["init", "-q", "-b", "main"]);
+  git(repo, ["add", "-A"]);
+  gitAsTester(repo, ["commit", "-q", "-m", "base"]);
+  fs.writeFileSync(path.join(proj, "code.py"), "two\n");
+  return { repo, proj };
+}
+
+test(
+  "owned paths are rebased onto the repository root when the project is a subdirectory",
+  { skip: !gitAvailable() },
+  () => {
+    const { repo, proj } = subdirectoryProject();
+    const owned = ["--owned-path", "src/code.py", "--owned-path", "../top level.md", "--owned-path", "/abs/x.md"];
+    const done = writeFrom(proj, [...owned, "--commit-message", "Park it"]);
+    const lines = done.stdout.split("\n");
+    const heading = lines.indexOf(BLOCK.heading);
+    assert.equal(lines[heading + 1], `cd ${fs.realpathSync(repo)}`);
+    assert.equal(lines[heading + 2], "git add -- proj/src/code.py 'top level.md' /abs/x.md");
+  },
+);
+
+test(
+  "the changed paths stay relative to the repository root when the project is a subdirectory",
+  { skip: !gitAvailable() },
+  () => {
+    const { proj } = subdirectoryProject();
+    const done = writeFrom(proj, []);
+    assert.ok(done.stdout.includes("git add -- proj/code.py "), done.stdout);
+  },
+);
+
+test("controlling with nothing to stage prints no block", { skip: !gitAvailable() }, () => {
+  const main_ = styledMain("controlling");
+  fs.writeFileSync(path.join(main_, "src", "code.py"), "one\n");
+  fs.writeFileSync(path.join(main_, ".git", "info", "exclude"), "_aitna/.ergon/\n");
+  assert.equal(writeFrom(main_, []).stdout, `${BLOCK_ERGON}\n`);
+});
+
+test("the delegating style and an unset one print the path only", { skip: !gitAvailable() }, () => {
+  const main_ = styledMain("delegating");
+  assert.equal(writeFrom(main_, ["--owned-path", "src/code.py", "--commit-message", "m"]).stdout, `${BLOCK_ERGON}\n`);
+  fs.rmSync(path.join(main_, "_aitna", ".local", "work.json"));
+  assert.equal(writeFrom(main_, ["--owned-path", "src/code.py"]).stdout, `${BLOCK_ERGON}\n`);
+});
+
+test("the session style decides over the developer one", { skip: !gitAvailable() }, () => {
+  const main_ = styledMain("delegating");
+  fs.writeFileSync(
+    path.join(main_, "_aitna", ".local", "work-sessions.json"),
+    '{"sessions": {"s-9": "controlling"}}\n',
+  );
+  const done = writeFrom(main_, ["--owned-path", "src/code.py", "--session-id", "s-9", "--harness", "claude"]);
+  assert.ok(done.stdout.startsWith(`${BLOCK_ERGON}\n\n${BLOCK.heading}\n`), done.stdout);
+});
+
+test("controlling inside a linked worktree prints the path only", { skip: !gitAvailable() }, () => {
+  const main_ = styledMain("controlling");
+  const linked = path.join(main_, ".worktrees", "C183-park-helper.1");
+  git(main_, ["worktree", "add", "-q", "-b", "athlos-1", linked]);
+  setStyle(linked, "controlling");
+  const done = writeFrom(linked, ["--owned-path", "src/code.py"]);
+  assert.equal(done.code, 0);
+  assert.equal(done.stdout, `${path.join(main_, BLOCK_ERGON)}\n`);
+});
+
+test("controlling outside git prints the path only", () => {
+  const root = project();
+  setStyle(root, "controlling");
+  assert.equal(writeFrom(root, ["--owned-path", "src/code.py"]).stdout, `${BLOCK_ERGON}\n`);
+});
+
+test("the block commit is in no record and the tool stages and commits nothing", { skip: !gitAvailable() }, () => {
+  const main_ = styledMain("controlling");
+  writeFrom(main_, ["--owned-path", "src/code.py", "--commit-message", "Park it"]);
+  for (const name of ["PARK.md", "RESUME.md"]) {
+    const text = fs.readFileSync(path.join(main_, BLOCK_ERGON, name), "utf8");
+    assert.ok(!text.includes(BLOCK.heading) && !text.includes("git commit") && !text.includes("Park it"));
+  }
+  assert.equal(execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: main_ }).toString(), "");
+  assert.equal(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: main_ }).toString().trim(), "1");
+});
+
+test("blockCommitLines names paths, quotes them and leaves a message out as a placeholder", () => {
+  assert.deepEqual(blockCommitLines([], "", "/r", "r", TEXTS), []);
+  assert.deepEqual(blockCommitLines(["a b"], "  ", "/srv/the main", "R.md", TEXTS), [
+    `${BLOCK.heading}\ncd '/srv/the main'\ngit add -- 'a b'\ngit commit -m "${BLOCK.placeholder}"`,
+    `${BLOCK.propose}\n${fill(BLOCK.reminder, { resume: "R.md" })}`,
   ]);
 });

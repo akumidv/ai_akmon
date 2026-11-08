@@ -35,7 +35,28 @@ project-local hook surface.
   asks in any directory before a ref-writing command (`branch` force/delete/rename, a `fetch`/`pull` refspec into a
   local ref, `checkout -B`, `switch -C`, `symbolic-ref` and `update-ref` writes, `replace`, `filter-branch`,
   `fast-import`, `worktree remove|move|prune|lock|unlock|repair`) unless every target ref is an `_aitna/` job branch;
-  only command words are read, and the repository checked is the one the command acts on. That ask reaches the owner when the run is attended and
+  only command words are read, and the repository checked is the one the command acts on. What each
+  command gets is [`../common/access_matrix.json`](../common/access_matrix.json), keyed by the actor and the
+  action class ([ADR 0031 D07](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0031-work-styles-delegating-and-controlling.md)):
+  the entry point reads `AKMON_ACTOR` (`developer` or `autonomous`; absent or unknown is `developer`) and hands it
+  down, and the `developer` column is the behaviour above. An `autonomous` run commits on its own run branch, pushes it by
+  an explicit refspec and opens a pull or merge request (`gh pr create`, `glab mr create`) into the default
+  branch only; it is denied the default branch, `develop` and `release/*` (the matrix's `protected_branches`, a
+  trailing `*` is a prefix), any other branch of a checkout (`history_not_run_branch`), a push to any other
+  branch, another base, and push-config writes; it gets an ask for `tag`, pull-request merges, releases and
+  writing forge API calls. **Its own run branch** is the `AKMON_RUN_BRANCH` the entry point reads beside
+  `AKMON_ACTOR` (the exact name); with none, a branch the matrix's `run_branch_patterns` match for the actor
+  (`agent/C203-…`: under `agent/`, the next segment starting with a task id); a linked worktree's branch is its
+  own (the job-branch carve-out) and a developer has no run branch. **When the guard cannot read the matrix or
+  fails while evaluating a command, an `autonomous` run is denied** (the entry point, which has read the actor
+  already, writes the deny — [`hook_core.guard_crash_deny_document`](hook_core.py), whose reason is in
+  `hook_core.json` with a fallback in code, so the answer depends on no data file — instead of the owner notice);
+  a `developer` run still fails open ([ADR 0013](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0013-hook-survivability-and-crash-posture.md)),
+  and the Codex `git-commit-guard` route does the same (exit 0 with the deny for an autonomous run, exit 1 for a
+  developer). The same hook carries the **harness-settings write guard's shell half**
+  (`privilege_escalation_guard_result`, policy `privilege.no-escalation`, every actor): a command whose words write
+  `.claude/settings*.json` or `.codex/config.toml` (an output redirection, `tee`, `sed -i`, `perl -i`, a
+  `cp`/`mv`/`install` destination, `dd of=`) is denied; a read passes. A `developer` is asked for the forge's pull-request, merge and release commands. That ask reaches the owner when the run is attended and
   becomes a `deny` when it is not: the entry point reads `CLAUDE_CODE_SESSION_ATTENDED` (`1`
   attended, `0` unattended; M199, M200) and hands it down, and where the variable is absent
   the interactive `default` permission mode attends; `bypassPermissions` and `dontAsk` never do
@@ -66,6 +87,17 @@ project-local hook surface.
   `engineer` = realization), then
   silences itself for the session (a per-session marker — no per-edit nagging). Runs as a
   **PreToolUse → Edit|Write|MultiEdit/apply_patch** hook.
+- [`settings-env-guard.py`](settings-env-guard.py) — Claude PreToolUse wrapper that closes the actor's carrier to
+  the agent ([ADR 0031 D07](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0031-work-styles-delegating-and-controlling.md),
+  D-C203-ACTOR-WRITE; policy `privilege.no-escalation`, every actor): a harness settings file's `env` block
+  reaches the hook process (M239), and the launcher sets `AKMON_ACTOR` there. It denies an `Edit`, `Write` or
+  `MultiEdit` that changes the parsed `env` of `.claude/settings.json` or `.claude/settings.local.json` (the project's
+  at any depth and the user's), or any `env`/`shell_environment_policy` text of a Codex `.codex/config.toml`; it
+  computes the file's content after the edit from the file as it is now, and an edit that leaves `env` identical
+  passes. The files, the shell programs the `Bash` half reads and the texts are
+  [`../common/harness_settings.json`](../common/harness_settings.json); the logic is
+  [`../common/harness_settings.py`](../common/harness_settings.py). Runs as a **PreToolUse → Edit|Write|MultiEdit**
+  hook; not wired for Codex (an `apply_patch` payload carries a patch, not the content after it).
 - [`analysis-guard.py`](analysis-guard.py) — Claude PreToolUse wrapper for the neutral
   analysis-before-mutation reminder: on the first edit to a planning/design doc in a session,
   remind the assistant to stop and ask confirmation if the current turn was analysis-only, and
@@ -100,6 +132,18 @@ project-local hook surface.
   `additionalContext` is the one measured Codex channel). The record, the thresholds and the texts are
   [`../common/learning.py`](../common/learning.py) and `learning.json`; `akmon learn` is the command
   line over them.
+- [`work-style.py`](work-style.py) — Claude **UserPromptSubmit** hook for the work style (ADR
+  0031/D03). When the owner types `/style delegating` or `/style controlling` (the whole prompt,
+  trimmed, the value case-insensitive) it records that style for the `session_id` in
+  `<dev root>/.local/work-sessions.json` (the newest 50 sessions stay, written atomically) and answers
+  on both channels: the style is recorded for this session and a switch inside an athlos takes effect at
+  the next park boundary. A value that names no style gets the allowed values and writes nothing; any
+  other prompt is silent and writes nothing. The style in force is the first valid of that session
+  entry, `<dev root>/.local/work.json` (`style`), `[work] style` in `<dev root>/.akmon.toml` and the
+  default `delegating`; the SessionStart context states it and its source. Codex runs the same code as
+  the route `codex-hook.py work-style` (`UserPromptSubmit` carries `prompt`, M65) and shows the model half
+  only. Never blocks. The resolver, the store and the texts are
+  [`../common/work_style.py`](../common/work_style.py) and `work_style.json`.
 - [`gate-audit.py`](gate-audit.py) — Claude **Stop** wrapper for the **gate audit forcing
   function** (C25). The registry's `gate_triggers` count floors (`review_min_findings`,
   `architect_min_options`) were data nothing read: a role could hand off ten findings without the

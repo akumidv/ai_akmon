@@ -31,6 +31,7 @@
       {
         "matcher": "Edit|Write|MultiEdit",
         "commands": [
+          "settings-env-guard",
           "role-on-code",
           "analysis-guard"
         ]
@@ -62,7 +63,8 @@
       {
         "matcher": null,
         "commands": [
-          "model-routing"
+          "model-routing",
+          "work-style"
         ]
       }
     ],
@@ -102,6 +104,17 @@
           [
             "learning-reminder",
             "Checking the learning-run reminder"
+          ]
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": null,
+        "commands": [
+          [
+            "work-style",
+            "Checking for a work-style switch"
           ]
         ]
       }

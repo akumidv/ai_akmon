@@ -29,11 +29,19 @@ not counted in any price below.
 
 **Where the materials are.** This record is the **design**. The materials it is read against ride in
 the C188 kit's `materials/` folder — in the local layer, so they are not tracked by git and are
-copied by hand: `sources.md` (the quoted texts, with `file:line`), `current-implementation.md` (what
-the tree does today for the *ergon* side), `ideas-and-alternatives.md` (the owner's ideas, written
-out to be designed — including the composite athlos and the two readings of *ergon*) and
-`check_links.py` (the link and anchor checker this record's checks were run with). The kit's
-`EVIDENCE.md` holds the measurements; `HANDOFF.md` holds what is verified and what is not.
+copied by hand: `review-brief.md` (**the orientation for a reviewer**: what was decided and where
+each part lives, what the code does today with `file:line` anchors, the vocabulary measured on the
+current tree, what is still open, and the commands), `sources.md` (the quoted texts, with
+`file:line`), `current-implementation.md` (what the tree did for the *ergon* side **before** the
+C189 migration), `ideas-and-alternatives.md` (the owner's ideas, written out to be designed —
+including the composite athlos and the two readings of *ergon*) and `check_links.py` (the link and
+anchor checker this record's checks were run with). The kit's `EVIDENCE.md` holds the
+measurements; `HANDOFF.md` holds what is verified and what is not.
+
+**The tree moved after this record was written.** C189 (the migration) and C190 (the commit guard
+and `park worktrees`) have landed; this record's prices and its §2's "the tree actually has" are
+the ones of the tree at `8ad4287`, and the brief carries the same measurement re-derived on the
+tree as it stands. Where they differ, the tree moved.
 
 ## 1. The premises, as verified
 

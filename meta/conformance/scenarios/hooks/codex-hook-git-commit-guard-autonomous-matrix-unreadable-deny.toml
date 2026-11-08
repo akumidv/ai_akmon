@@ -1,0 +1,27 @@
+# D-C203-GUARD-CRASH on the Codex route: an unreadable access matrix denies an autonomous run (exit 0 with the deny).
+id = "hooks/codex-hook-git-commit-guard-autonomous-matrix-unreadable-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook"]
+
+[fixture]
+tree_files = { "common/access_matrix.json" = "{ not json" }
+
+[env]
+AKMON_ACTOR = "autonomous"
+
+[run]
+script = "codex-hook"
+args = ["git-commit-guard"]
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-cx-crash-1"
+cwd = "{{root}}"
+tool_input = { command = "gh pr create --fill" }
+
+[expected]
+exit = 0
+stderr = "akmon codex-hook git-commit-guard hook: DataFileError\n"
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Commit guardrail (autonomous run): the access matrix could not be read, or the guard failed while evaluating this command, so an autonomous run is denied \\u2014 nothing was run. The owner restores the setup (`akmon verify`); a developer run is let through in the same case.\"}}\n"

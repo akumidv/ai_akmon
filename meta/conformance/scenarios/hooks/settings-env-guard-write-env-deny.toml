@@ -1,0 +1,23 @@
+# A Write that gives a harness settings file an `env` is denied: the file's `env` reaches the hook process, so it is the actor's carrier (ADR 0031/D07, D-C203-ACTOR-WRITE).
+id = "hooks/settings-env-guard-write-env-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:settings-env-guard"]
+
+[run]
+script = "settings-env-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Write"
+session_id = "sess-seg-1"
+cwd = "{{root}}"
+
+[run.payload.tool_input]
+file_path = "{{root}}/.claude/settings.local.json"
+content = '{"env": {"AKMON_ACTOR": "autonomous"}}'
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Privilege guardrail: this edit changes the `env` of {{root}}/.claude/settings.local.json, a harness settings file. The launcher sets the run's actor there (AKMON_ACTOR), so an agent never writes the `env` of a harness settings file. If the change is genuinely needed, ask the owner to make it themselves.\"}}\n"

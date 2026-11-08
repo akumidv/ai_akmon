@@ -11,5 +11,5 @@ argv = ["hook", "no-such-hook"]
 
 [expected]
 exit = 2
-stderr = "akmon hook: unknown hook 'no-such-hook'; available: analysis-guard, claude_adapter, codex-hook, codex_adapter, delegation-log, delegation-nudge, gate-audit, git-commit-guard, hook_core, learning-reminder, model-routing, role-on-code, session-start-agent\n"
+stderr = "akmon hook: unknown hook 'no-such-hook'; available: analysis-guard, claude_adapter, codex-hook, codex_adapter, delegation-log, delegation-nudge, gate-audit, git-commit-guard, hook_core, learning-reminder, model-routing, role-on-code, session-start-agent, settings-env-guard, work-style\n"
 stdout = ""

@@ -1,0 +1,1326 @@
+{
+  "bash": [
+    {
+      "command": "echo '{}' > .claude/settings.json",
+      "start": "/p",
+      "decision": "deny",
+      "contains": [
+        ".claude/settings.json",
+        "harness settings file",
+        "AKMON_ACTOR"
+      ]
+    },
+    {
+      "command": "echo x >> .claude/settings.local.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cat foo > /home/u/.claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x>~/.claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x > $HOME/.claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x >| .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x 2> .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x 2>.claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cmd &> .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cmd >& .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x > /other/proj/.claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x > ../.claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x > .claude/settings.local.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x > .claude/settings-extra.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "jq '.env.AKMON_ACTOR=\"autonomous\"' .claude/settings.json > /tmp/x && cp /tmp/x .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "jq '.a=1' s.json > .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cat <<EOF > .claude/settings.json\n{}\nEOF",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "tee .claude/settings.json < x",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x | tee -a ~/.claude/settings.local.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x | tee /tmp/a .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cmd | sponge .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "sed -i 's/a/b/' .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "sed -i.bak 's/a/b/' .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "sed -ni 's/a/b/p' .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "sed -E -i 's/a/b/' .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "sed --in-place=.b s/a/b/ .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "sed --in-place s/a/b/ .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "perl -pi -e 's/a/b/' .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "perl -i.orig -pe 's/a/b/' .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cp x .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cp -f x .claude/settings.local.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "mv /tmp/x .claude/settings.local.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "install -m 600 x .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cp -t .claude x/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cp -t.claude x/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cp --target-directory=.claude x/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cp --target-directory .claude x/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "mv -t .claude/ /tmp/settings.local.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "dd if=x of=.claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cd .claude && echo x > settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cd .claude; sed -i s/a/b/ settings.local.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "(cd .claude && echo x > settings.json)",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cd /p/.claude && cp /tmp/x settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "bash -c 'echo x > .claude/settings.json'",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "sh -c \"tee .claude/settings.json\"",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "eval \"echo x > .claude/settings.json\"",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "ls && echo $(tee .claude/settings.json)",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo `echo x > .claude/settings.json`",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "VAR=1 env tee .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "/usr/bin/tee .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x > .codex/config.toml",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "sed -i s/a/b/ ~/.codex/config.toml",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cp x .codex/config.toml",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "tee /home/u/.codex/config.toml",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "git status && echo x > .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "echo ok | cat > .claude/settings.json",
+      "start": "/p",
+      "decision": "deny"
+    },
+    {
+      "command": "cat .claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "jq .env .claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "grep env .claude/settings.local.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cat < .claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cat <.claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cp .claude/settings.json /tmp/backup",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cp .claude/settings.json .claude/settings.json.bak",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cp .claude/settings.json .claude/settings.json.bak",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo \"x > .claude/settings.json\"",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo '.claude/settings.json'",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cat <<'EOF'\necho x > .claude/settings.json\nEOF",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cat <<EOF\n sed -i s/a/b/ .claude/settings.json\nEOF",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "grep -r \"sed -i .claude/settings.json\" docs",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "sed 's/a/b/' .claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "sed -n p .claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "sed -e s/a/b/ .claude/settings.json > /tmp/out",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "perl -ne print .claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "ls .claude",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > .claude/notes.md",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > .claude/settings.yaml",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > .claude/settings.json.bak",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > docs/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > .claude/agents/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > .claude-x/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > .codex/hooks.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > .codex/config.yaml",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cp x /tmp/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "mv a b",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "tee /tmp/x",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "git diff .claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "diff .claude/settings.json /tmp/a",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cd .claude && cat settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cd .claude && echo x > notes.md",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cd .claude && cd .. && echo x > settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "cp -t /tmp .claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "mv .claude/settings.json /tmp/old",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "dd if=.claude/settings.json of=/tmp/x",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo $(cat .claude/settings.json)",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > /tmp/a.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "python3 -m json.tool .claude/settings.json",
+      "start": "/p",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > settings.json",
+      "start": "/p/.claude/agents",
+      "decision": "pass"
+    },
+    {
+      "command": "echo x > settings.json",
+      "start": "/p/.claude",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x > settings.local.json",
+      "start": "/home/u/.claude",
+      "decision": "deny"
+    },
+    {
+      "command": "cp /tmp/x settings.json",
+      "start": "/p/.claude",
+      "decision": "deny"
+    },
+    {
+      "command": "echo x > $D/settings.json",
+      "start": "/p/.claude",
+      "decision": "pass"
+    }
+  ],
+  "edit": [
+    {
+      "name": "write adds an env",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"hooks\": {}, \"env\": {\"AKMON_ACTOR\": \"autonomous\"}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write changes an env value",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"9\", \"B\": \"2\"}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write adds an env key",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\", \"B\": \"2\", \"C\": \"3\"}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write removes an env key",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write drops the env block",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "content": "{\"hooks\": {}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write keeps the env, reordered and reformatted",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "content": "{\"x\": 2, \"env\": {\"B\": \"2\", \"A\": \"1\"}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write changes only another key",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "content": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 5\n}\n",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write of an empty env over none",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write of a null env over none",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": null}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write of no env over an empty one",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"env\": {}}",
+      "tool_input": {
+        "content": "{\"x\": 1}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write of a settings file that does not exist yet, with an env",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": null,
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write of a settings file that does not exist yet, without one",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": null,
+      "tool_input": {
+        "content": "{\"permissions\": {}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write of text that is not JSON",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "not json",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write of text that is not an object",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "[1, 2]",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write of text that is not JSON removes an env nothing could read",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{broken",
+      "tool_input": {
+        "content": "{broken",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write of valid JSON with an env over text that is not JSON",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{broken",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write changes an env value's type",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"env\": {\"A\": 1}}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": true}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write changes an env number's spelling only",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"env\": {\"A\": 1}}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": 1.0}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write nests an env change",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"env\": {\"A\": [\"x\", {\"y\": 1}]}}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": [\"x\", {\"y\": 2}]}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write keeps a nested env",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"env\": {\"A\": [\"x\", {\"y\": 1}]}}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": [\"x\", {\"y\": 1}]}, \"z\": 0}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit changes an env value",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "old_string": "\"A\": \"1\"",
+        "new_string": "\"A\": \"9\"",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit changes only another key",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "old_string": "\"x\": 1",
+        "new_string": "\"x\": 2",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit that cannot apply",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "old_string": "\"A\": \"7\"",
+        "new_string": "\"A\": \"9\"",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit inserts an env block",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "old_string": "\"hooks\": {}",
+        "new_string": "\"hooks\": {}, \"env\": {\"Z\": \"1\"}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit changes the first occurrence only",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"a\": 1, \"env\": {\"A\": \"1\"}}",
+      "tool_input": {
+        "old_string": "1",
+        "new_string": "7",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit with replace_all reaches the env",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"a\": 1, \"env\": {\"A\": \"1\"}}",
+      "tool_input": {
+        "old_string": "1",
+        "new_string": "7",
+        "replace_all": true,
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit with replace_all that misses the env",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"a\": 2, \"env\": {\"A\": \"1\"}}",
+      "tool_input": {
+        "old_string": "2",
+        "new_string": "7",
+        "replace_all": true,
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit of a settings file that does not exist",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": null,
+      "tool_input": {
+        "old_string": "x",
+        "new_string": "y",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit that creates the file with an env",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": null,
+      "tool_input": {
+        "old_string": "",
+        "new_string": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit with nothing to replace in a file that has text",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "old_string": "",
+        "new_string": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "edit without strings",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "new_string": "y",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "multiedit whose second edit changes the env",
+      "decision": "deny",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "edits": [
+          {
+            "old_string": "\"x\": 1",
+            "new_string": "\"x\": 2"
+          },
+          {
+            "old_string": "\"B\": \"2\"",
+            "new_string": "\"B\": \"3\""
+          }
+        ],
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "multiedit outside the env",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "edits": [
+          {
+            "old_string": "\"x\": 1",
+            "new_string": "\"x\": 2"
+          },
+          {
+            "old_string": "\"hooks\": {}",
+            "new_string": "\"hooks\": {\"a\": 1}"
+          }
+        ],
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "multiedit that changes the env and puts it back",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "edits": [
+          {
+            "old_string": "\"B\": \"2\"",
+            "new_string": "\"B\": \"3\""
+          },
+          {
+            "old_string": "\"B\": \"3\"",
+            "new_string": "\"B\": \"2\""
+          }
+        ],
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "multiedit whose second edit cannot apply",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "edits": [
+          {
+            "old_string": "\"B\": \"2\"",
+            "new_string": "\"B\": \"3\""
+          },
+          {
+            "old_string": "missing",
+            "new_string": "x"
+          }
+        ],
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "multiedit with edits that are not a list",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "edits": "x",
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "multiedit with an entry that is not an object",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "edits": [
+          "x"
+        ],
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "write with content that is not text",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\n  \"hooks\": {},\n  \"env\": {\"A\": \"1\", \"B\": \"2\"},\n  \"x\": 1\n}\n",
+      "tool_input": {
+        "content": 5,
+        "file_path": "/p/.claude/settings.json"
+      }
+    },
+    {
+      "name": "the guard reads the local settings file",
+      "decision": "deny",
+      "file": "/p/.claude/settings.local.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/settings.local.json"
+      }
+    },
+    {
+      "name": "the guard reads the user's settings file",
+      "decision": "deny",
+      "file": "/home/u/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/home/u/.claude/settings.json"
+      }
+    },
+    {
+      "name": "the guard reads a settings file at any depth",
+      "decision": "deny",
+      "file": "/p/sub/dir/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/sub/dir/.claude/settings.json"
+      }
+    },
+    {
+      "name": "the guard reads a relative path",
+      "decision": "deny",
+      "file": ".claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": ".claude/settings.json"
+      }
+    },
+    {
+      "name": "the guard reads a path with a dot segment",
+      "decision": "deny",
+      "file": "/p/./.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/./.claude/settings.json"
+      }
+    },
+    {
+      "name": "the guard reads a settings file under a differently named directory",
+      "decision": "pass",
+      "file": "/p/claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/claude/settings.json"
+      }
+    },
+    {
+      "name": "the guard reads a file that only starts like a settings file",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json.bak",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/settings.json.bak"
+      }
+    },
+    {
+      "name": "the guard reads another file of the directory",
+      "decision": "pass",
+      "file": "/p/.claude/other.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/other.json"
+      }
+    },
+    {
+      "name": "the guard reads a settings file that is not directly in .claude",
+      "decision": "pass",
+      "file": "/p/.claude/agents/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/agents/settings.json"
+      }
+    },
+    {
+      "name": "the guard reads a bare file name",
+      "decision": "pass",
+      "file": "settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "settings.json"
+      }
+    },
+    {
+      "name": "the guard reads a markdown file of .claude",
+      "decision": "pass",
+      "file": "/p/.claude/agents/x.md",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": "/p/.claude/agents/x.md"
+      }
+    },
+    {
+      "name": "an edit with no file path",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}"
+      }
+    },
+    {
+      "name": "an edit with a file path that is not text",
+      "decision": "pass",
+      "file": "/p/.claude/settings.json",
+      "current": "{\"hooks\": {}, \"x\": 1}",
+      "tool_input": {
+        "content": "{\"env\": {\"A\": \"1\"}}",
+        "file_path": 5
+      }
+    },
+    {
+      "name": "toml: a changed shell_environment_policy value",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "inherit = \"all\"",
+        "new_string": "inherit = \"none\"",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a changed key outside the env tables",
+      "decision": "pass",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "model = \"o3\"",
+        "new_string": "model = \"gpt\"",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a changed key of another table",
+      "decision": "pass",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "model = \"o4\"",
+        "new_string": "model = \"o5\"",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a new env table",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "[profiles.x]",
+        "new_string": "[env]\nA = \"1\"\n\n[profiles.x]",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a new nested env table",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "[profiles.x]",
+        "new_string": "[mcp_servers.s.env]\nA = \"1\"\n\n[profiles.x]",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a new shell_environment_policy sub-table",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "[profiles.x]",
+        "new_string": "[shell_environment_policy.set]\nA = \"1\"\n\n[profiles.x]",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a top-level inline env",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "model = \"o3\"",
+        "new_string": "model = \"o3\"\nenv = { A = \"1\" }",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a dotted shell_environment_policy key",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "model = \"o3\"",
+        "new_string": "model = \"o3\"\nshell_environment_policy.inherit = \"none\"",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: an env key inside another table",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "model = \"o4\"",
+        "new_string": "model = \"o4\"\nenv = { A = \"1\" }",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a comment added to an env table",
+      "decision": "pass",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "inherit = \"all\"",
+        "new_string": "# keep\ninherit = \"all\"",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: blank lines added around an env table",
+      "decision": "pass",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "[shell_environment_policy]",
+        "new_string": "\n\n[shell_environment_policy]\n",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a table that only contains the word",
+      "decision": "pass",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "[profiles.x]",
+        "new_string": "[environment]\nA = \"1\"\n\n[profiles.x]",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a key that only starts like env",
+      "decision": "pass",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "model = \"o3\"",
+        "new_string": "model = \"o3\"\nenvironment = 1",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a multi-line value continues its key",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "set = { A = \"1\" }",
+        "new_string": "set = {\n  A = \"2\"\n}",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: write of the same env, different elsewhere",
+      "decision": "pass",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "content": "# codex\nmodel = \"o9\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: write that drops the env tables",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "content": "model = \"o3\"\n",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: write of a new file with an env",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": null,
+      "tool_input": {
+        "content": "[env]\nA = \"1\"\n",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: write of a new file without one",
+      "decision": "pass",
+      "file": "/home/u/.codex/config.toml",
+      "current": null,
+      "tool_input": {
+        "content": "model = \"o3\"\n",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: a project config at any depth",
+      "decision": "deny",
+      "file": "/p/sub/.codex/config.toml",
+      "current": null,
+      "tool_input": {
+        "content": "[env]\nA = \"1\"\n",
+        "file_path": "/p/sub/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: another file of .codex",
+      "decision": "pass",
+      "file": "/p/.codex/hooks.json",
+      "current": null,
+      "tool_input": {
+        "content": "[env]\nA = \"1\"\n",
+        "file_path": "/p/.codex/hooks.json"
+      }
+    },
+    {
+      "name": "toml: a config.toml elsewhere",
+      "decision": "pass",
+      "file": "/p/config.toml",
+      "current": null,
+      "tool_input": {
+        "content": "[env]\nA = \"1\"\n",
+        "file_path": "/p/config.toml"
+      }
+    },
+    {
+      "name": "toml: a quoted dotted table name",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "[profiles.x]",
+        "new_string": "[mcp_servers.\"a.b\".env]\nA = \"1\"\n\n[profiles.x]",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    },
+    {
+      "name": "toml: an array of tables named env",
+      "decision": "deny",
+      "file": "/home/u/.codex/config.toml",
+      "current": "# codex\nmodel = \"o3\"\n\n[shell_environment_policy]\ninherit = \"all\"\nset = { A = \"1\" }\n\n[profiles.x]\nmodel = \"o4\"\n",
+      "tool_input": {
+        "old_string": "[profiles.x]",
+        "new_string": "[[env]]\nA = \"1\"\n\n[profiles.x]",
+        "file_path": "/home/u/.codex/config.toml"
+      }
+    }
+  ]
+}

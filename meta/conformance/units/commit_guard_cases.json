@@ -35,6 +35,62 @@
     "/scratch-job": {
       "linked": false,
       "branch": "_aitna/s"
+    },
+    "/main-detached": {
+      "linked": false,
+      "branch": ""
+    },
+    "/clone-run": {
+      "linked": false,
+      "branch": "run/x"
+    },
+    "/clone-develop": {
+      "linked": false,
+      "branch": "develop"
+    },
+    "/wt-develop": {
+      "linked": true,
+      "branch": "develop"
+    },
+    "/clone-agent": {
+      "linked": false,
+      "branch": "agent/C203-task"
+    },
+    "/clone-agent-local": {
+      "linked": false,
+      "branch": "agent/_T3-x"
+    },
+    "/clone-agent-bare": {
+      "linked": false,
+      "branch": "agent/C203"
+    },
+    "/clone-agent-noid": {
+      "linked": false,
+      "branch": "agent/fix-thing"
+    },
+    "/clone-agent-lower": {
+      "linked": false,
+      "branch": "agent/c203-x"
+    },
+    "/clone-agent-digits": {
+      "linked": false,
+      "branch": "agent/C203x"
+    },
+    "/clone-feat": {
+      "linked": false,
+      "branch": "feat"
+    },
+    "/clone-release": {
+      "linked": false,
+      "branch": "release/1.0"
+    },
+    "/wt-release": {
+      "linked": true,
+      "branch": "release/1.0"
+    },
+    "/wt-agent": {
+      "linked": true,
+      "branch": "agent/C203-task"
     }
   },
   "scanner": [
@@ -1177,6 +1233,232 @@
         [
           "commit",
           null
+        ]
+      ]
+    },
+    {
+      "command": "gh pr create --title x",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "pr create",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "gh pr merge 3 --squash",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "pr merge",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "cd /w && gh release create v1",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "release create",
+          "/w"
+        ]
+      ]
+    },
+    {
+      "command": "gh -R o/r pr create",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "pr create",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "gh --repo o/r pr list",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "pr list",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "gh pr",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "pr",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "gh",
+      "start": "/s",
+      "home": "/h",
+      "expected": []
+    },
+    {
+      "command": "echo \"gh pr merge 3\"",
+      "start": "/s",
+      "home": "/h",
+      "expected": []
+    },
+    {
+      "command": "grep 'gh pr create' f",
+      "start": "/s",
+      "home": "/h",
+      "expected": []
+    },
+    {
+      "command": "cat <<'EOF'\ngh pr create\nEOF",
+      "start": "/s",
+      "home": "/h",
+      "expected": []
+    },
+    {
+      "command": "git push && gh pr create",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "push",
+          "/s"
+        ],
+        [
+          "pr create",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "env GH_TOKEN=x /usr/bin/gh pr create",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "pr create",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "bash -c 'gh pr merge 1'",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "pr merge",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "gh api -X POST repos/o/r/issues",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "api",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "gh -R o/r api x -f a=b",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "api",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "glab api projects",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "api",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "gh repo sync o/r",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "repo sync",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "git -c push.default=current push origin x",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "push",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "git --config-env push.default=V push",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "push",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "git --config-env=push.default=V push",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "push",
+          "/s"
+        ]
+      ]
+    },
+    {
+      "command": "git -c a=b -C /w config push.default x",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "config",
+          "/w"
+        ]
+      ]
+    },
+    {
+      "command": "glab merge-request accept 3",
+      "start": "/s",
+      "home": "/h",
+      "expected": [
+        [
+          "merge-request accept",
+          "/s"
         ]
       ]
     }
@@ -10856,6 +11138,5180 @@
       "decision": "pass",
       "contains": [],
       "absent": []
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/main-dev",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "dev"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-run",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "run/x"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-job",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "_aitna/x"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/scratch",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "scratch"
+    },
+    {
+      "command": "git merge --squash x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "autonomous run",
+        "/main (on 'main')"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-main",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "autonomous run",
+        "/wt-main (on 'main')"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-master",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "/wt-master (on 'master')"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-detached",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "/wt-detached (a detached HEAD)"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/main-detached",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "/main-detached (a detached HEAD)"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/missing",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "/missing (not a git repository)"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "cd \"$HOME/w\" && git commit -m x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "cannot resolve"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "cd /main && git commit -m x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "cd /wt && git commit -m x",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git -C /main-dev commit -m x",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "dev"
+    },
+    {
+      "command": "git rebase main",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git status",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/main",
+      "mode": "bypassPermissions",
+      "attended": false,
+      "decision": "deny",
+      "contains": [],
+      "absent": [
+        "escalated"
+      ],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/main",
+      "mode": "default",
+      "attended": true,
+      "decision": "deny",
+      "contains": [],
+      "absent": [
+        "escalated"
+      ],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "no refspec names it"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "no refspec names it"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin HEAD",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat:feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin HEAD:feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat:refs/heads/feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin main:feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push -u origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --set-upstream origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push -o ci.skip origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --follow-tags origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push",
+      "start": "/main-dev",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "no refspec names it"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "dev"
+    },
+    {
+      "command": "cd /wt && git push",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "no refspec names it"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin run/x",
+      "start": "/clone-run",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "run/x"
+    },
+    {
+      "command": "git push origin main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "push of the default branch is denied",
+        "'main'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin master",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "'master'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat:main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "'main'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin HEAD:main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin HEAD:refs/heads/main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --force origin main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "push of the default branch is denied"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push -f origin main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin +main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --force-with-lease origin main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin --delete main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin :main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --all",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "every local branch"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --mirror origin",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push",
+      "start": "/wt-main",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "no refspec names it"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin HEAD",
+      "start": "/wt-main",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push",
+      "start": "/wt-detached",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "no refspec names it"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push",
+      "start": "/missing",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "cd \"$HOME/w\" && git push",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin other",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "pushes only the branch it is on",
+        "'other'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin v1",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat other",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat:other",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --repo origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --repo=origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --force origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "force push or a deletion"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push -f origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push -fu origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --force-with-lease origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --force-with-lease=feat:abc origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin +feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin +feat:feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin --delete feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push -d origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin :feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --force origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --force origin feat other",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat --tags",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git tag v1",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "git tag",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --tags",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin refs/tags/v1",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git tag v1",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --tags",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git branch -D old",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "git branch moves, renames or deletes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git worktree remove ../w",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git branch -D _aitna/x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git update-ref refs/heads/main HEAD",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git pull origin main:main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git pull",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git pull",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m \"x\n\nCo-Authored-By: Claude\"",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "Co-Authored-By"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git commit -m 'co-authored-by: x'",
+      "start": "/main-dev",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "dev"
+    },
+    {
+      "command": "gh pr create --title x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "gh pr create",
+        "pull request"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr create --title x",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh pr create --title x",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr create --title x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr create --title x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --title x",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "gh pr create --title x",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": false,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh -R o/r pr create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh -R o/r pr create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --body \"$(cat <<'EOF'\nsummary\nEOF\n)\"",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat && gh pr create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin main && gh pr create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --fill && git push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr merge 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "gh pr merge",
+        "merging is the owner's"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr merge 3 --squash",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "gh pr merge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr merge 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr merge 3",
+      "start": "/wt",
+      "mode": "dontAsk",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh release create v1 --notes x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "gh release create",
+        "publishes a release"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh release create v1 --notes x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh release create v1",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh pr list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr view 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh pr view 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr checks 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh pr checks 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr diff 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh pr diff 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh release list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh release list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh issue create",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh issue create",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh repo view",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh repo view",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh auth status",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh auth status",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "echo \"gh pr merge 3\"",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "grep 'gh pr create' notes.md",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "cat <<'EOF'\ngh pr merge 1\nEOF",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "bash -c 'gh pr merge 1'",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --body 'Co-Authored-By: Claude'",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "Co-Authored-By"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr create --body 'Co-Authored-By: Claude'",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "Co-Authored-By"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --body 'Co-Authored-By: Claude'",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "push and tag"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git push origin main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "push and tag"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git push --force origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "push and tag"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git push --all",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "push and tag"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git push --tags",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "push and tag"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/main-dev",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "/main-dev (not a linked worktree)"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-detached",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "/wt-detached (a detached HEAD)"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-develop",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "/clone-develop (on 'develop')",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-develop",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "/wt-develop (on 'develop')"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git merge --squash x",
+      "start": "/wt-develop",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-develop",
+      "mode": "bypassPermissions",
+      "attended": false,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-develop",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-develop",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "/clone-develop (not a linked worktree)"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git push origin develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "push of the default branch is denied",
+        "'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin HEAD:develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat:refs/heads/develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin +feat:develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --force origin develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin :develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push",
+      "start": "/wt-develop",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "no refspec names it"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin HEAD",
+      "start": "/clone-develop",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin develop",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": false,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "push and tag"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git push origin develop",
+      "start": "/wt-develop",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "push and tag"
+      ],
+      "absent": []
+    },
+    {
+      "command": "git push origin develop-2",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "push of 'develop-2' is denied"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base=master --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create -B main --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --title x -b 'a body' --base main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create -b develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --body develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "gh pr create",
+        "pull request"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr create -B master",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "gh pr create"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr create --base develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "gh pr create",
+        "targets 'develop'",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base=develop --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create -B develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create -Bdevelop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create -B=develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --title x --base release/1",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'release/1'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh -R o/r pr create -B develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets ''"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base develop",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": false,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "bash -c 'gh pr create --base develop'",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat && gh pr create --base develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base develop",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "gh pr create --base develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "gh pr create",
+        "targets 'develop'",
+        "not the default branch"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr create --base=develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr create -B develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh pr create --base develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": []
+    },
+    {
+      "command": "gh pr create --base develop",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": []
+    },
+    {
+      "command": "grep 'gh pr create --base develop' notes.md",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --target-branch main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --target-branch=master",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create -b main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create -s feat --title x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab -R o/r mr create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --target-branch develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "glab mr create",
+        "targets 'develop'",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --target-branch=develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create -b develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create -bdevelop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab -R o/r mr create -b develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create -b develop",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": false,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "bash -c 'glab mr create -b develop'",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "glab mr create",
+        "pull request"
+      ],
+      "absent": []
+    },
+    {
+      "command": "glab mr create -b main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "glab mr create"
+      ],
+      "absent": []
+    },
+    {
+      "command": "glab mr create -b develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "glab mr create",
+        "targets 'develop'"
+      ],
+      "absent": []
+    },
+    {
+      "command": "glab mr create --target-branch develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": []
+    },
+    {
+      "command": "glab mr merge 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "glab mr merge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr merge 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr merge 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "glab mr merge",
+        "merging is the owner's"
+      ],
+      "absent": []
+    },
+    {
+      "command": "glab mr merge 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": []
+    },
+    {
+      "command": "glab mr list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr view 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab issue create",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab auth status",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "grep 'glab mr create' notes.md",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "glab mr create --description 'Co-Authored-By: Claude'",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "Co-Authored-By"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --description 'Co-Authored-By: Claude'",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "Co-Authored-By"
+      ],
+      "absent": []
+    },
+    {
+      "command": "glab mr create --description 'Co-Authored-By: Claude'",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --description 'Co-Authored-By: Claude'",
+      "start": "/wt",
+      "mode": "bypassPermissions",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git push --branches",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "every local branch"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --branches origin",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --follow-tags",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "no refspec names it"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --follow-tags origin HEAD",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat --follow-tags",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --follow-tags origin HEAD",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --follow-tags origin main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "'main'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --tags",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git -c push.default=current push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "`-c` override picks"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git -c push.default=current push",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git -c remote.origin.push=HEAD:main push origin HEAD",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git --config-env=push.default=PUSH_DEFAULT push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git --config-env push.default=PUSH_DEFAULT push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git -c push.default=current -C /wt push origin feat",
+      "start": "/main",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git -c user.name=x commit -m y",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git -c core.pager=cat status",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git -c core.pager=cat log",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "explicit refspec"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin HEAD",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push --branches",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git push --follow-tags",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git push",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git push origin",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git -c push.default=current push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git --config-env push.default=X push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git push --follow-tags origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git config push.default current",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git config --global remote.origin.push HEAD:main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git config --global --unset push.default",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git config --local branch.feat.merge refs/heads/main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git config --edit",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git config set push.default current",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git config push.default current",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --global push.default upstream",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --local remote.origin.push HEAD:main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config remote.origin.pushurl x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config remote.origin.pushURL x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --add remote.origin.push x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --unset-all remote.origin.push",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --unset push.default",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --replace-all remote.origin.push x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config branch.feat.merge refs/heads/main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config branch.feat.remote origin",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config set push.default current",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config unset push.default",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config set --append remote.origin.push x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --rename-section remote.origin remote.up",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --remove-section push",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --remove-section branch.feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --edit",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config -e --global",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config edit",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config -f x.cfg push.default y",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --file x.cfg push.default y",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --global remote.pushDefault x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config branch.feat.pushRemote x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config url.x.pushInsteadOf y",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config url.x.insteadOf y",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config PUSH.Default x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config Remote.origin.PUSH x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config remote.up.stream.push x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --type=bool push.autoSetupRemote true",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git -C /wt config push.default y",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "cd /wt && git config push.default y",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "git config",
+        "where a push goes"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config push.default current",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config push.default",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --get push.default",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --get-all remote.origin.push",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config -l",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --global --list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config get push.default",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config get --all remote.origin.push",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --get-regexp remote.*",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --get push.default x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config user.name x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --global core.editor vim",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config remote.origin.url x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --rename-section core x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --unset user.name",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --unset remote.origin.fetch",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config remote.origin.fetch +refs/heads/*:refs/remotes/origin/*",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config branch.feat.description x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config set user.name x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config unset core.editor",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --get remote.origin.pushurl",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --show-origin --get push.default",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --global alias.st status",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git config --remove-section core",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr new --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr new --base develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "gh pr new",
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr new --base develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh pr new --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "glab mr create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --target-branch main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create --target-branch develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create -b develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr new --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr new --target-branch develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "glab mr new"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr new --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "glab mr merge 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "glab mr merge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr accept 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "glab mr accept",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr accept 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr accept 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "glab mr list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr view 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab merge-request create --fill",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab merge-request create -b develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab merge-request accept 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab merge-request new -b develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab -R o/r mr accept 3",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base develop --base main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base main --base develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "targets 'develop'"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create -B develop --base=main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base=main -B develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create -Bmain -Bdevelop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create -b main -b develop",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab mr create -b develop -b main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh pr create --base develop --base main",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "glab release create v1",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "glab release create",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab release create v1",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab release create v1",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "glab release list",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api -X POST repos/o/r/issues",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r/issues -X POST",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api --method PUT repos/o/r/x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api --method=DELETE repos/o/r/x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api -XPATCH repos/o/r/x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r/issues -f title=x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r/issues -F a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r/issues --field a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r/issues --raw-field a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r/issues --input body.json",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api -fa=b repos/o/r/issues",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r/issues --method post",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh -R o/r api x -f a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api -H \"Accept: x\" -X POST repos/o/r/x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api graphql -f query=q",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api x -X GET -X POST",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh repo sync",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh repo sync o/r",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh -R o/r repo sync",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab api -X POST projects/1/issues",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab api projects/1 -F a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab api projects/1 --method delete",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab api projects/1 --raw-field a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab api projects/1 --input x.json",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab api projects/1 -f a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "writes to the forge",
+        "autonomous run"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api -X POST repos/o/r/issues",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab api -X DELETE projects/1",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh repo sync",
+      "start": "/wt",
+      "mode": "default",
+      "attended": false,
+      "decision": "deny",
+      "contains": [
+        "escalated ask"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r -X GET",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r -X GET -f a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api repos/o/r -X get -F a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api graphql",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api -i repos/o/r",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api -H \"Accept: x\" repos/o/r",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api x -X POST -X GET",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab api projects",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab api projects/1 -X GET",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh repo view",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh repo clone o/r",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "glab repo view",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api --paginate repos/o/r/issues",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "gh api -X POST repos/o/r/issues",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh api repos/o/r -f a=b",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "gh repo sync",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "glab api -X DELETE projects/1",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "glab api x --input y",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-agent-local",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-agent-bare",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-agent-noid",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "not the run's own branch",
+        "writes history"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-agent-lower",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "not the run's own branch",
+        "writes history"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-agent-digits",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "not the run's own branch",
+        "writes history"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "not the run's own branch",
+        "writes history"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/main-dev",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "not the run's own branch",
+        "writes history"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git merge --squash x",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "not the run's own branch"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "not the run's own branch"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "other"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-agent-noid",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "agent/fix-thing"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "not the run's own branch"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat-2"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "other"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-job",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "other"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-release",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-release",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "release/1.0"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-release",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-release",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "release/1.0"
+    },
+    {
+      "command": "git push origin agent/C203-task",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin HEAD",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push -u origin agent/C203-task",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin agent/C203-task",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "agent/C203-task",
+        "denied"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin feat",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "'feat'",
+        "denied"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin HEAD",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "'feat'",
+        "denied"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin feat",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin HEAD",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin agent/C203-task",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "denied"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "other"
+    },
+    {
+      "command": "git push origin agent/fix-thing",
+      "start": "/clone-agent-noid",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "denied"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin agent/fix-thing",
+      "start": "/clone-agent-noid",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "agent/fix-thing"
+    },
+    {
+      "command": "git push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "denied"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin feat",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "feat"
+    },
+    {
+      "command": "git push origin HEAD",
+      "start": "/wt-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push --force origin agent/C203-task",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [
+        "force push"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push --force origin feat",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "denied"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin release/1.0",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0",
+        "default branch"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin agent/C203-task:release/1.0",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin HEAD:release/1.0",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin release/1.0",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0"
+      ],
+      "absent": [],
+      "actor": "autonomous",
+      "run_branch": "release/1.0"
+    },
+    {
+      "command": "git push origin develop",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "develop"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin release",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "denied"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin release/1.0",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin agent/C203-task",
+      "start": "/clone-release",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "denied"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git push origin HEAD",
+      "start": "/clone-release",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "release/1.0"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "gh pr create --fill",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "gh pr create --base release/1.0",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [
+        "'release/1.0'"
+      ],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "glab mr create --target-branch release/1.0",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "deny",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "gh pr create --base main --fill",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "autonomous"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": []
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "developer",
+      "run_branch": "other"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/clone-agent-noid",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "developer"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "developer",
+      "run_branch": "other"
+    },
+    {
+      "command": "git commit -m x",
+      "start": "/wt-release",
+      "mode": "default",
+      "attended": null,
+      "decision": "pass",
+      "contains": [],
+      "absent": [],
+      "actor": "developer"
+    },
+    {
+      "command": "git push origin feat",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "developer"
+    },
+    {
+      "command": "git push origin agent/C203-task",
+      "start": "/clone-feat",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "developer",
+      "run_branch": "other"
+    },
+    {
+      "command": "git push origin release/1.0",
+      "start": "/clone-agent",
+      "mode": "default",
+      "attended": null,
+      "decision": "ask",
+      "contains": [],
+      "absent": [],
+      "actor": "developer"
     }
   ]
 }

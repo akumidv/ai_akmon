@@ -1,0 +1,27 @@
+# D-C203-RUN-BRANCH: with no AKMON_RUN_BRANCH, a branch under agent/ that starts with a task id is the run's own, and the commit passes.
+id = "hooks/git-commit-guard-autonomous-task-branch-commit-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[fixture]
+branch = "agent/C203-x"
+
+[env]
+AKMON_ACTOR = "autonomous"
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-gcm-rb-1"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { command = "git commit -m x" }
+
+[expected]
+exit = 0
+stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target\n"
+stdout = ""

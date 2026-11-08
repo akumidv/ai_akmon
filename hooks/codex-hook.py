@@ -27,6 +27,8 @@ from codex_adapter import (
     load_payload,
     payload_shape,
     print_result,
+    prompt,
+    report_closed_failure,
     report_failure,
     session_id,
     tool_kind,
@@ -39,6 +41,7 @@ from hook_core import (
     analysis_write_result,
     edit_tool,
     find_project_root,
+    guard_crash_deny_document,
     locate_project_root,
     report_unclassified_shell_route,
     role_on_code_result,
@@ -46,7 +49,7 @@ from hook_core import (
     shell_tool,
 )
 
-from common import jsondata, learning  # hook_core put the tree root on sys.path
+from common import access_matrix, jsondata, learning, work_style  # hook_core put the tree root on sys.path
 from common.markers import (
     claim_diagnostic_marker,
     marker_kind,
@@ -159,7 +162,8 @@ def _advisory(payload: dict, decide: Advisory) -> None:
 
 def _session_start(payload: dict) -> None:
     start = Path(cwd(payload)) if cwd(payload) else None
-    print_result(session_start_result(find_project_root(start)))
+    sid = session_id(payload)
+    print_result(session_start_result(find_project_root(start), None if sid == unidentified_identity() else sid))
 
 
 def _learning_reminder(payload: dict) -> None:
@@ -191,6 +195,30 @@ def _learning_reminder(payload: dict) -> None:
         print_result(HookResult(event_name="SessionStart", additional_context=reminder[0]))
 
 
+def _work_style(payload: dict) -> None:
+    """The work-style capture (ADR 0031/D03): record a typed ``/style`` switch for the session.
+
+    Codex's ``UserPromptSubmit`` carries the typed ``prompt`` and ``session_id`` (M65) and reads
+    ``additionalContext`` into the model request; it has no owner channel, so only the model half
+    of the reply is printed. Any other prompt: silent, no write.
+    """
+    start = Path(cwd(payload)) if cwd(payload) else None
+    root = locate_project_root(start)
+    if root is None:
+        # No project root: the record has no local layer to live in, so nothing is written (ADR 0022 D09).
+        return
+    sid = session_id(payload)
+    reply = work_style.record_and_reply(
+        root, None if sid == unidentified_identity() else sid, prompt(payload), work_style.read_data()
+    )
+    if reply is not None:
+        print_result(HookResult(event_name="UserPromptSubmit", additional_context=reply))
+
+
+# The route whose crash an autonomous run answers with a deny (ADR 0031/D07, D-C203-GUARD-CRASH).
+_COMMIT_GUARD_ROUTE = "git-commit-guard"
+
+
 def _routes() -> tuple[str, ...]:
     """The hook routes this wrapper dispatches (hooks/codex_hook.json, C102)."""
     return tuple(_codex_hook_data()["routes"])
@@ -216,7 +244,9 @@ def _dispatch(route: str, payload: dict) -> None:
         _session_start(payload)
     elif route == "learning-reminder":
         _learning_reminder(payload)
-    elif route == "git-commit-guard":
+    elif route == "work-style":
+        _work_style(payload)
+    elif route == _COMMIT_GUARD_ROUTE:
         # Intentionally not wired by sync.py yet; C28(b) owns the exact live-probe,
         # owner verification, then generated-wiring sequence for Bash+git behavior.
         from hook_core import (  # noqa: PLC0415 — unwired route (C28(b))
@@ -225,7 +255,15 @@ def _dispatch(route: str, payload: dict) -> None:
         )
 
         cmd = command(payload)
-        print_result(privilege_escalation_guard_result(cmd) or git_commit_guard_result(cmd))
+        start = cwd(payload) or None
+        print_result(
+            privilege_escalation_guard_result(cmd, start)
+            or git_commit_guard_result(
+                cmd,
+                actor=access_matrix.actor_from_environment(os.environ),
+                run_branch=access_matrix.run_branch_from_environment(os.environ),
+            )
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -235,6 +273,8 @@ def main(argv: list[str] | None = None) -> int:
     partial one behind it (ADR-0013/D01).
     """
     hook = "codex-hook"
+    # The actor is read before anything that can crash: an autonomous run's commit guard fails closed.
+    autonomous = access_matrix.actor_from_environment(os.environ) is access_matrix.Actor.AUTONOMOUS
     try:
         parser = _Parser(description=__doc__)
         parser.add_argument("hook", choices=_routes())
@@ -242,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
         hook = f"codex-hook {route}"
         _dispatch(route, load_payload())
     except Exception as exc:  # noqa: BLE001 — crash-open: every failure is reported, none blocks
+        if autonomous and hook == f"codex-hook {_COMMIT_GUARD_ROUTE}":
+            return report_closed_failure(hook, exc, guard_crash_deny_document())
         return report_failure(hook, exc)
     return 0
 

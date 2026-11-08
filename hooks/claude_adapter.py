@@ -129,7 +129,9 @@ def print_result(result: HookResult | None) -> None:
         print(document)
 
 
-def run_guarded(hook_name: str, decide: Callable[[], HookResult | None]) -> int:
+def run_guarded(
+    hook_name: str, decide: Callable[[], HookResult | None], *, closed_document: Callable[[], str] | None = None
+) -> int:
     """Run one Claude entry point under the crash guard every spawned entry carries.
 
     ADR-0013/D01. ``decide`` computes the entry's whole result and writes
@@ -144,14 +146,23 @@ def run_guarded(hook_name: str, decide: Callable[[], HookResult | None]) -> int:
     a hook that exits 1 on ``PreToolUse`` or ``UserPromptSubmit`` (M70), so a non-zero exit would
     only hide the failure. The action goes ahead either way: crash-open, including the deny-class
     commit guard.
+
+    The one exception is a ``closed_document`` the entry point passes (the commit guard of an
+    ``autonomous`` run, ADR-0031/D07 D-C203-GUARD-CRASH): a crash then writes that document, a deny,
+    instead of the owner notice, and the action does not go ahead. The entry point decides whether to
+    pass it from the actor it reads before anything that can crash; the document is built from no
+    data file the crash may have broken (:func:`hook_core.guard_crash_deny_document`).
     """
     try:
         document = render_result(decide())
     except Exception as exc:  # noqa: BLE001 — crash-open: every failure is reported, none blocks
         print(hook_failure_diagnostic(hook_name, exc), file=sys.stderr)
-        # A literal key, not the vocabulary.json table: the crash path reads no data file, since a
-        # missing or broken one may be the very failure it reports (C102 review F1).
-        document = json.dumps({"systemMessage": hook_failure_notice(hook_name, exc)})
+        if closed_document is not None:
+            document = closed_document()
+        else:
+            # A literal key, not the vocabulary.json table: the crash path reads no data file, since a
+            # missing or broken one may be the very failure it reports (C102 review F1).
+            document = json.dumps({"systemMessage": hook_failure_notice(hook_name, exc)})
     if document is not None:
         print(document)
     return 0

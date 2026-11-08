@@ -13,7 +13,7 @@ A record written before the rename of ADR 0029 is read and translated: the ``job
 ``jobs/<n>-<label>/JOB.md`` layout, the ``job:`` key of a note and the retired local index. An old
 form is never written (ADR 0029 D12).
 
-    akmon tool park/park write C186 --name holders-units --goal "…" --next "…"
+    akmon tool park/park write C186 --name holders-units --goal "…" --next "…" [--commit-message "…"]
     akmon tool park/park hold C186 --number 1 --harness claude --session-id abc
     akmon tool park/park athlos C186 --number 1 --step "…"
     akmon tool park/park unpark C186        # takes the lease, prints RESUME.md and the digest
@@ -40,6 +40,9 @@ note without a lease makes it *parked*, neither makes it *not started*, and an a
 ``ATHLOS.md`` says ``done`` is *done*. The branch and the revisions of a note are read from git
 when the note is written, and the note records when it was written.
 
+In the ``controlling`` work style, in the main checkout, ``write`` also prints the block commit as two
+commands and a reminder (ADR 0031 D04, D05); it never runs them and writes nothing of them into a record.
+
 The helper writes no date into a tracked document, never reads a transcript and never pushes.
 Stdlib-only, and nothing happens at import time: tools run before a virtual environment exists.
 """
@@ -51,6 +54,7 @@ import contextlib
 import dataclasses
 import errno
 import os
+import posixpath
 import re
 import shlex
 import socket
@@ -68,7 +72,7 @@ from typing import Any
 # materialized copy alike (the way ``tasks/archive.py`` reaches it).
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from common import jsondata
+from common import jsondata, work_style
 from common.project_root import ergon_root, git_common_root, local_root, resolve_project_root
 
 _SECONDS_PER_DAY = 86400
@@ -2333,6 +2337,7 @@ def _add_note_commands(commands: Any, common: argparse.ArgumentParser) -> None:
     write.add_argument("--agent", action="append", default=[])
     write.add_argument("--readiness", default="")
     write.add_argument("--origin", default="")
+    write.add_argument("--commit-message", default="")
     _add_holder_flags(write)
 
     unpark = commands.add_parser("unpark", parents=[common], help="Resume a parked ergon.", allow_abbrev=False)
@@ -2602,6 +2607,89 @@ class _Run:
     cwd: Path
 
 
+def _in_main_checkout(cwd: Path) -> bool:
+    """Whether ``cwd`` is in the main checkout of a repository; false in a linked worktree or outside git.
+
+    A worktree is linked when its git directory differs from the common one the main checkout keeps.
+    """
+    layout = _git(["rev-parse", "--git-dir", "--git-common-dir"], cwd)
+    paths = layout.split("\n") if layout else []
+    if len(paths) != 2:  # noqa: PLR2004 — the git directory and the common one
+        return False
+    git_dir, common_dir = (Path(cwd, path).resolve() for path in paths)
+    return git_dir == common_dir
+
+
+def _status_paths(cwd: Path) -> tuple[str, ...]:
+    """The paths ``git status`` reports as changed in ``cwd``, once each; a rename or a copy by its new path only.
+
+    The origin of a staged rename is no longer in the tree, so ``git add -- <origin>`` fails; the new path
+    is what the block stages. None if git cannot say. The paths are relative to the repository root.
+    """
+    out = _git(["status", "--porcelain", "-z", "--untracked-files=all"], cwd, strip=False)
+    if not out:
+        return ()
+    paths: list[str] = []
+    entries = iter(out.split("\0"))
+    for entry in entries:
+        if not entry:
+            continue
+        paths.append(entry[3:])
+        if entry[0] in "RC" or entry[1] in "RC":  # a rename or a copy carries its origin as the next entry
+            next(entries, "")
+    return tuple(dict.fromkeys(path for path in paths if path))
+
+
+def _toplevel_paths(paths: Sequence[str], root: Path, toplevel: str) -> tuple[str, ...]:
+    """``paths`` given relative to the project ``root``, as paths relative to the repository ``toplevel``.
+
+    The block enters the toplevel, so an owned path of a project whose root is a subdirectory of the
+    repository gains that subdirectory as its prefix. An absolute path stays as it is.
+    """
+    prefix = Path(os.path.relpath(root.resolve(), Path(toplevel).resolve())).as_posix()
+    if prefix == ".":
+        return tuple(paths)
+    return tuple(
+        path if Path(path).is_absolute() else posixpath.normpath(posixpath.join(prefix, path)) for path in paths
+    )
+
+
+def block_commit_lines(paths: Sequence[str], message: str, toplevel: str, resume: str, texts: Mapping) -> list[str]:
+    """The block commit as printed text, in paragraphs, or nothing when no path is left to stage.
+
+    ``paths`` are the ones to stage (the caller picks the ergon's owned ones, else the changed ones). ``git
+    status`` reports them relative to the repository root, so the first command enters ``toplevel``; the
+    block works from any directory. The tool prints this and never runs it (ADR 0031 D04); the reminder
+    names where the hand-off prompt points (D05).
+    """
+    spec = texts["block_commit"]
+    paths = tuple(dict.fromkeys(paths))
+    if not paths:
+        return []
+    text = message.strip()
+    commands = [
+        spec["heading"],
+        jsondata.fill(spec["cd"], {"path": shlex.quote(toplevel)}),
+        jsondata.fill(spec["add"], {"paths": " ".join(shlex.quote(path) for path in paths)}),
+        jsondata.fill(spec["commit"], {"message": _double_quoted(text) if text else spec["placeholder"]}),
+    ]
+    closing = [] if text else [spec["propose"]]
+    closing.append(jsondata.fill(spec["reminder"], {"resume": resume}))
+    return ["\n".join(commands), "\n".join(closing)]
+
+
+def _block_commit(args: argparse.Namespace, ergon: Path, run: _Run) -> list[str]:
+    """The block commit this write prints: the controlling style, in the main checkout only (ADR 0031 D02)."""
+    style = work_style.resolve(run.root, args.session_id.strip() or None, work_style.read_data())
+    if style.style != run.texts["block_commit"]["style"] or not _in_main_checkout(run.cwd):
+        return []
+    resume = _display_path(ergon / _RESUME_FILE, run.root)
+    toplevel = _git(["rev-parse", "--show-toplevel"], run.cwd) or str(run.cwd)
+    owned = _stripped(args.owned_path)
+    paths = _toplevel_paths(owned, run.root, toplevel) if owned else _status_paths(run.cwd)
+    return block_commit_lines(paths, args.commit_message, toplevel, resume, run.texts)
+
+
 def _cmd_write(args: argparse.Namespace, run: _Run) -> int:
     fields = _fields_from(args, run.texts)
     body = _body_from(args)
@@ -2623,6 +2711,9 @@ def _cmd_write(args: argparse.Namespace, run: _Run) -> int:
         raise
     _release_own_lease(ergon, lease, run.texts)
     print(_display_path(ergon, run.root))
+    for paragraph in _block_commit(args, ergon, run):
+        print()
+        print(paragraph)
     return 0
 
 

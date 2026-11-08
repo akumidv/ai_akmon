@@ -1,0 +1,26 @@
+# The session store keeps the 50 most recent sessions: the 51st entry drops the oldest.
+id = "hooks/work-style-store-keeps-fifty"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:work-style"]
+
+[fixture]
+attach = "native"
+files = { "_aitna/.local/work-sessions.json" = "{\n  \"sessions\": {\n    \"seed-0\": \"delegating\",\n    \"seed-1\": \"controlling\",\n    \"seed-2\": \"delegating\",\n    \"seed-3\": \"controlling\",\n    \"seed-4\": \"delegating\",\n    \"seed-5\": \"controlling\",\n    \"seed-6\": \"delegating\",\n    \"seed-7\": \"controlling\",\n    \"seed-8\": \"delegating\",\n    \"seed-9\": \"controlling\",\n    \"seed-10\": \"delegating\",\n    \"seed-11\": \"controlling\",\n    \"seed-12\": \"delegating\",\n    \"seed-13\": \"controlling\",\n    \"seed-14\": \"delegating\",\n    \"seed-15\": \"controlling\",\n    \"seed-16\": \"delegating\",\n    \"seed-17\": \"controlling\",\n    \"seed-18\": \"delegating\",\n    \"seed-19\": \"controlling\",\n    \"seed-20\": \"delegating\",\n    \"seed-21\": \"controlling\",\n    \"seed-22\": \"delegating\",\n    \"seed-23\": \"controlling\",\n    \"seed-24\": \"delegating\",\n    \"seed-25\": \"controlling\",\n    \"seed-26\": \"delegating\",\n    \"seed-27\": \"controlling\",\n    \"seed-28\": \"delegating\",\n    \"seed-29\": \"controlling\",\n    \"seed-30\": \"delegating\",\n    \"seed-31\": \"controlling\",\n    \"seed-32\": \"delegating\",\n    \"seed-33\": \"controlling\",\n    \"seed-34\": \"delegating\",\n    \"seed-35\": \"controlling\",\n    \"seed-36\": \"delegating\",\n    \"seed-37\": \"controlling\",\n    \"seed-38\": \"delegating\",\n    \"seed-39\": \"controlling\",\n    \"seed-40\": \"delegating\",\n    \"seed-41\": \"controlling\",\n    \"seed-42\": \"delegating\",\n    \"seed-43\": \"controlling\",\n    \"seed-44\": \"delegating\",\n    \"seed-45\": \"controlling\",\n    \"seed-46\": \"delegating\",\n    \"seed-47\": \"controlling\",\n    \"seed-48\": \"delegating\",\n    \"seed-49\": \"controlling\"\n  }\n}\n" }
+
+[run]
+script = "work-style"
+
+[run.payload]
+hook_event_name = "UserPromptSubmit"
+cwd = "{{root}}"
+session_id = "sess-ws-new"
+prompt = "/style delegating"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"[akmon] Work style recorded for this session: delegating. A switch inside an athlos takes effect at the next park boundary: park the athlos, then the new style applies.\"}, \"systemMessage\": \"[akmon] Work style recorded for this session: delegating. A switch inside an athlos takes effect at the next park boundary: park the athlos, then the new style applies.\"}\n"
+
+[expected.files]
+"_aitna/.local/work-sessions.json" = "{\n  \"sessions\": {\n    \"seed-1\": \"controlling\",\n    \"seed-2\": \"delegating\",\n    \"seed-3\": \"controlling\",\n    \"seed-4\": \"delegating\",\n    \"seed-5\": \"controlling\",\n    \"seed-6\": \"delegating\",\n    \"seed-7\": \"controlling\",\n    \"seed-8\": \"delegating\",\n    \"seed-9\": \"controlling\",\n    \"seed-10\": \"delegating\",\n    \"seed-11\": \"controlling\",\n    \"seed-12\": \"delegating\",\n    \"seed-13\": \"controlling\",\n    \"seed-14\": \"delegating\",\n    \"seed-15\": \"controlling\",\n    \"seed-16\": \"delegating\",\n    \"seed-17\": \"controlling\",\n    \"seed-18\": \"delegating\",\n    \"seed-19\": \"controlling\",\n    \"seed-20\": \"delegating\",\n    \"seed-21\": \"controlling\",\n    \"seed-22\": \"delegating\",\n    \"seed-23\": \"controlling\",\n    \"seed-24\": \"delegating\",\n    \"seed-25\": \"controlling\",\n    \"seed-26\": \"delegating\",\n    \"seed-27\": \"controlling\",\n    \"seed-28\": \"delegating\",\n    \"seed-29\": \"controlling\",\n    \"seed-30\": \"delegating\",\n    \"seed-31\": \"controlling\",\n    \"seed-32\": \"delegating\",\n    \"seed-33\": \"controlling\",\n    \"seed-34\": \"delegating\",\n    \"seed-35\": \"controlling\",\n    \"seed-36\": \"delegating\",\n    \"seed-37\": \"controlling\",\n    \"seed-38\": \"delegating\",\n    \"seed-39\": \"controlling\",\n    \"seed-40\": \"delegating\",\n    \"seed-41\": \"controlling\",\n    \"seed-42\": \"delegating\",\n    \"seed-43\": \"controlling\",\n    \"seed-44\": \"delegating\",\n    \"seed-45\": \"controlling\",\n    \"seed-46\": \"delegating\",\n    \"seed-47\": \"controlling\",\n    \"seed-48\": \"delegating\",\n    \"seed-49\": \"controlling\",\n    \"sess-ws-new\": \"delegating\"\n  }\n}\n"

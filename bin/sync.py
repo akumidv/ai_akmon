@@ -427,16 +427,18 @@ def _codex_hooks(root: Path, data: Mapping[str, Any] | None = None) -> dict:
     # latency and noise on the hottest tool and buys precision nowhere.
     hooks = {}
     for event, entries in data["codex_hooks"].items():
-        hooks[event] = [
-            {
-                "matcher": entry["matcher"],
-                "hooks": [
-                    {"type": "command", "command": f"{base} {script}", "statusMessage": status}
-                    for script, status in entry["commands"]
-                ],
-            }
-            for entry in entries
-        ]
+        built = []
+        for entry in entries:
+            hooks_list = [
+                {"type": "command", "command": f"{base} {script}", "statusMessage": status}
+                for script, status in entry["commands"]
+            ]
+            # A per-turn event takes no matcher (M65): a null one is left out, as Claude's are.
+            if entry["matcher"] is None:
+                built.append({"hooks": hooks_list})
+            else:
+                built.append({"matcher": entry["matcher"], "hooks": hooks_list})
+        hooks[event] = built
     return {"hooks": hooks}
 
 

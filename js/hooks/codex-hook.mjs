@@ -31,8 +31,10 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { ACTORS, actorFromEnvironment, runBranchFromEnvironment } from "../common/access_matrix.mjs";
 import { readThresholds, recordAndRemind, sessionEvent, statePath } from "../common/learning.mjs";
 import { claimDiagnosticMarker, markerKind, unidentifiedIdentity } from "../common/markers.mjs";
+import { recordAndReply } from "../common/work_style.mjs";
 import { dictGet, dictItem, pyIterate, pyPath } from "../common/pyvalue.mjs";
 import { fill } from "../common/jsondata.mjs";
 import {
@@ -42,6 +44,8 @@ import {
   loadPayload,
   payloadShape,
   printResult,
+  prompt,
+  reportClosedFailure,
   reportFailure,
   sessionId,
   toolKind,
@@ -57,6 +61,7 @@ import {
   findProjectRoot,
   locateProjectRoot,
   gitCommitGuardResult,
+  guardCrashDenyDocument,
   HookResult,
   privilegeEscalationGuardResult,
   reportUnclassifiedShellRoute,
@@ -211,7 +216,15 @@ function _advisory(data, payload, decide) {
  * @returns {void}
  */
 function _sessionStart(data, payload) {
-  printResult(data, sessionStartResult(data, findProjectRoot(_startOf(data, payload))));
+  const sid = sessionId(data, payload);
+  printResult(
+    data,
+    sessionStartResult(
+      data,
+      findProjectRoot(_startOf(data, payload)),
+      sid === unidentifiedIdentity(data.markers) ? null : sid,
+    ),
+  );
 }
 
 /**
@@ -250,6 +263,34 @@ function _learningReminder(data, payload) {
   );
   if (reminder !== null) {
     printResult(data, new HookResult({ eventName: "SessionStart", additionalContext: reminder[0] }));
+  }
+}
+
+/**
+ * The work-style capture (ADR 0031/D03): record a typed `/style` switch for the session.
+ *
+ * Codex's `UserPromptSubmit` carries the typed `prompt` and `session_id` (M65) and reads
+ * `additionalContext` into the model request; it has no owner channel, so only the model half of
+ * the reply is printed. Any other prompt: silent, no write.
+ * @param {HookData} data
+ * @param {Payload} payload
+ * @returns {void}
+ */
+function _workStyle(data, payload) {
+  const root = locateProjectRoot(_startOf(data, payload));
+  if (root === null) {
+    // No project root: the record has no local layer to live in, so nothing is written (ADR 0022 D09).
+    return;
+  }
+  const sid = sessionId(data, payload);
+  const reply = recordAndReply(
+    root,
+    sid === unidentifiedIdentity(data.markers) ? null : sid,
+    prompt(data, payload),
+    data.workStyle,
+  );
+  if (reply !== null) {
+    printResult(data, new HookResult({ eventName: "UserPromptSubmit", additionalContext: reply }));
   }
 }
 
@@ -295,6 +336,9 @@ function _parseRoute(argv, routes) {
   return operands[0];
 }
 
+/** The route whose crash an autonomous run answers with a deny (ADR 0031/D07, D-C203-GUARD-CRASH). */
+const COMMIT_GUARD_ROUTE = "git-commit-guard";
+
 /**
  * @param {HookData} data
  * @param {string} route
@@ -310,11 +354,19 @@ function _dispatch(data, route, payload) {
     _sessionStart(data, payload);
   } else if (route === "learning-reminder") {
     _learningReminder(data, payload);
-  } else if (route === "git-commit-guard") {
+  } else if (route === "work-style") {
+    _workStyle(data, payload);
+  } else if (route === COMMIT_GUARD_ROUTE) {
     // Intentionally not wired by sync.py yet; C28(b) owns the exact live-probe,
     // owner verification, then generated-wiring sequence for Bash+git behavior.
     const cmd = command(data, payload);
-    printResult(data, privilegeEscalationGuardResult(data, cmd) ?? gitCommitGuardResult(data, cmd));
+    const actor = actorFromEnvironment(process.env);
+    const runBranch = runBranchFromEnvironment(process.env);
+    const start = cwd(data, payload) || null;
+    printResult(
+      data,
+      privilegeEscalationGuardResult(data, cmd, start) ?? gitCommitGuardResult(data, cmd, { actor, runBranch }),
+    );
   }
 }
 
@@ -328,13 +380,18 @@ function _dispatch(data, route, payload) {
  */
 export function main(argv = null) {
   let hook = "codex-hook";
+  const data = lazyHookData();
+  // The actor is read before anything that can crash: an autonomous run's commit guard fails closed.
+  const autonomous = actorFromEnvironment(process.env) === ACTORS.AUTONOMOUS;
   try {
-    const data = lazyHookData();
     const route = _parseRoute(argv ?? process.argv.slice(2), _routes(data));
     hook = `codex-hook ${route}`;
     _dispatch(data, route, loadPayload());
   } catch (exc) {
-    // crash-open: every failure is reported, none blocks
+    // crash-open: every failure is reported, none blocks — but an autonomous run's commit guard denies
+    if (autonomous && hook === `codex-hook ${COMMIT_GUARD_ROUTE}`) {
+      return reportClosedFailure(hook, exc, guardCrashDenyDocument(data));
+    }
     return reportFailure(hook, exc);
   }
   return 0;

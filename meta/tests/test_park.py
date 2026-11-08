@@ -9,6 +9,7 @@ import dataclasses
 import importlib.util
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -2811,3 +2812,210 @@ def test_the_commands_are_quoted_for_the_shell_and_the_message_for_double_quotes
         "git worktree remove '/srv/a b'",
         "git branch -D '_aitna/it'\"'\"'s'",
     ]
+
+
+# ---------------------------------------------------------------------------------------------
+# the block commit: the controlling style prints it in the main checkout, never runs it (ADR 0031 D04, D05)
+# ---------------------------------------------------------------------------------------------
+
+BLOCK = TEXTS["block_commit"]
+ERGON_PATH = "_aitna/.ergon/C183-park-helper"
+
+
+def _commit_all(folder: Path) -> None:
+    _git(folder, "add", "-A")
+    _git(folder, "commit", "-m", "base")
+
+
+def _set_style(checkout: Path, style: str) -> None:
+    local = checkout / "_aitna" / ".local"
+    local.mkdir(parents=True, exist_ok=True)
+    (local / "work.json").write_text(f'{{"style": "{style}"}}\n', encoding="utf-8")
+
+
+def _styled_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, style: str) -> Path:
+    """A main checkout with one commit, one edited file and a developer work style; it is the cwd."""
+    main = tmp_path / "styled"
+    (main / "_aitna").mkdir(parents=True)
+    (main / "src").mkdir()
+    (main / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+    (main / "_aitna" / ".akmon.toml").write_text("", encoding="utf-8")
+    (main / "src" / "code.py").write_text("one\n", encoding="utf-8")
+    _set_style(main, style)
+    _git(main, "init", "-b", "main")
+    _commit_all(main)
+    (main / "src" / "code.py").write_text("two\n", encoding="utf-8")
+    monkeypatch.chdir(main)
+    return main.resolve()
+
+
+def _resume_reminder() -> str:
+    return jsondata.fill(BLOCK["reminder"], {"resume": f"{ERGON_PATH}/RESUME.md"})
+
+
+def test_controlling_in_the_main_checkout_prints_the_block_commit_of_the_owned_paths(tmp_path, monkeypatch, capsys):
+    main = _styled_main(tmp_path, monkeypatch, "controlling")
+    owned = ["--owned-path", "src/code.py", "--owned-path", "docs/a file.md", "--owned-path", "src/code.py"]
+    assert _write(main, *owned, "--commit-message", 'Fix "the" $thing') == 0
+    assert capsys.readouterr().out == (
+        f"{ERGON_PATH}\n\n"
+        f"{BLOCK['heading']}\n"
+        f"cd {shlex.quote(str(main))}\n"
+        "git add -- src/code.py 'docs/a file.md'\n"
+        'git commit -m "Fix \\"the\\" \\$thing"\n\n'
+        f"{_resume_reminder()}\n"
+    )
+
+
+def test_controlling_without_owned_paths_stages_the_changed_paths_once_each(tmp_path, monkeypatch, capsys):
+    main = _styled_main(tmp_path, monkeypatch, "controlling")
+    assert _write(main) == 0
+    assert capsys.readouterr().out == (
+        f"{ERGON_PATH}\n\n"
+        f"{BLOCK['heading']}\n"
+        f"cd {shlex.quote(str(main))}\n"
+        f"git add -- src/code.py {ERGON_PATH}/PARK.md {ERGON_PATH}/RESUME.md\n"
+        f'git commit -m "{BLOCK["placeholder"]}"\n\n'
+        f"{BLOCK['propose']}\n{_resume_reminder()}\n"
+    )
+
+
+def test_the_block_commit_enters_the_repository_root_from_a_subdirectory(tmp_path, monkeypatch, capsys):
+    # git status reports paths relative to the repository root, so the block works from any directory
+    main = _styled_main(tmp_path, monkeypatch, "controlling")
+    monkeypatch.chdir(main / "src")
+    assert _write(main, "--owned-path", "src/code.py", "--commit-message", "Park it") == 0
+    lines = capsys.readouterr().out.splitlines()
+    heading = lines.index(BLOCK["heading"])
+    assert lines[heading + 1] == f"cd {shlex.quote(str(main))}"
+    assert lines[heading + 2] == "git add -- src/code.py"
+
+
+def test_the_changed_paths_block_enters_the_root_from_a_subdirectory(tmp_path, monkeypatch, capsys):
+    main = _styled_main(tmp_path, monkeypatch, "controlling")
+    monkeypatch.chdir(main / "src")
+    assert _write(main) == 0
+    lines = capsys.readouterr().out.splitlines()
+    heading = lines.index(BLOCK["heading"])
+    assert lines[heading + 1] == f"cd {shlex.quote(str(main))}"
+    assert lines[heading + 2].startswith("git add -- src/code.py ")
+
+
+def test_controlling_with_no_owned_and_no_changed_path_prints_no_block(tmp_path, monkeypatch, capsys):
+    main = _styled_main(tmp_path, monkeypatch, "controlling")
+    (main / "src" / "code.py").write_text("one\n", encoding="utf-8")
+    (main / ".git" / "info" / "exclude").write_text("_aitna/.ergon/\n", encoding="utf-8")
+    assert _write(main) == 0
+    assert capsys.readouterr().out == f"{ERGON_PATH}\n"
+
+
+def test_the_changed_paths_name_the_new_side_of_a_rename_only(tmp_path, monkeypatch, capsys):
+    # the origin of a staged rename is gone from the tree: `git add -- <origin>` would fail
+    main = _styled_main(tmp_path, monkeypatch, "controlling")
+    _git(main, "mv", "src/code.py", "src/moved.py")
+    assert park._status_paths(main) == ("src/moved.py",)
+    assert _write(main) == 0
+    add = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("git add -- "))
+    assert add.startswith("git add -- src/moved.py ")
+    assert "src/code.py" not in add
+
+
+def test_a_staged_copy_is_listed_by_its_new_path_only(tmp_path, monkeypatch):
+    main = _styled_main(tmp_path, monkeypatch, "controlling")
+    (main / "src" / "code.py").write_text("a\nb\nc\nd\ne\nf\n", encoding="utf-8")
+    _commit_all(main)
+    (main / "src" / "code.py").write_text("a\nb\nc\nd\ne\nf\ng\n", encoding="utf-8")
+    (main / "src" / "copy.py").write_text("a\nb\nc\nd\ne\nf\ng\n", encoding="utf-8")
+    _git(main, "add", "src")
+    _git(main, "config", "status.renames", "copies")
+    assert "C  src/code.py -> src/copy.py" in _git(main, "status", "--porcelain")
+    assert park._status_paths(main)[:2] == ("src/code.py", "src/copy.py")
+    assert park._status_paths(main).count("src/code.py") == 1
+
+
+def test_owned_paths_are_rebased_onto_the_repository_root_when_the_project_is_a_subdirectory(
+    tmp_path, monkeypatch, capsys
+):
+    repo = tmp_path / "repo"
+    proj = repo / "proj"
+    (proj / "_aitna").mkdir(parents=True)
+    (proj / "src").mkdir()
+    (proj / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+    (proj / "_aitna" / ".akmon.toml").write_text("", encoding="utf-8")
+    (proj / "src" / "code.py").write_text("one\n", encoding="utf-8")
+    _set_style(proj, "controlling")
+    _git(repo, "init", "-b", "main")
+    _commit_all(repo)
+    monkeypatch.chdir(proj)
+    owned = ["--owned-path", "src/code.py", "--owned-path", "../top level.md", "--owned-path", "/abs/x.md"]
+    assert _write(proj, *owned, "--commit-message", "Park it") == 0
+    lines = capsys.readouterr().out.splitlines()
+    heading = lines.index(BLOCK["heading"])
+    assert lines[heading + 1] == f"cd {shlex.quote(str(repo.resolve()))}"
+    assert lines[heading + 2] == "git add -- proj/src/code.py 'top level.md' /abs/x.md"
+
+
+def test_the_changed_paths_stay_relative_to_the_repository_root_when_the_project_is_a_subdirectory(
+    tmp_path, monkeypatch, capsys
+):
+    repo = tmp_path / "repo2"
+    proj = repo / "proj"
+    (proj / "_aitna").mkdir(parents=True)
+    (proj / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+    (proj / "_aitna" / ".akmon.toml").write_text("", encoding="utf-8")
+    (proj / "code.py").write_text("one\n", encoding="utf-8")
+    _set_style(proj, "controlling")
+    _git(repo, "init", "-b", "main")
+    _commit_all(repo)
+    (proj / "code.py").write_text("two\n", encoding="utf-8")
+    monkeypatch.chdir(proj)
+    assert _write(proj) == 0
+    out = capsys.readouterr().out
+    assert "git add -- proj/code.py " in out
+
+
+def test_the_delegating_style_prints_the_path_only(tmp_path, monkeypatch, capsys):
+    main = _styled_main(tmp_path, monkeypatch, "delegating")
+    assert _write(main, "--owned-path", "src/code.py", "--commit-message", "m") == 0
+    assert capsys.readouterr().out == f"{ERGON_PATH}\n"
+
+
+def test_no_recorded_style_is_the_default_delegating_one(tmp_path, monkeypatch, capsys):
+    main = _styled_main(tmp_path, monkeypatch, "delegating")
+    (main / "_aitna" / ".local" / "work.json").unlink()
+    assert _write(main, "--owned-path", "src/code.py") == 0
+    assert capsys.readouterr().out == f"{ERGON_PATH}\n"
+
+
+def test_the_session_style_decides_over_the_developer_one(tmp_path, monkeypatch, capsys):
+    main = _styled_main(tmp_path, monkeypatch, "delegating")
+    sessions = main / "_aitna" / ".local" / "work-sessions.json"
+    sessions.write_text('{"sessions": {"s-9": "controlling"}}\n', encoding="utf-8")
+    assert _write(main, "--owned-path", "src/code.py", "--session-id", "s-9", "--harness", "claude") == 0
+    assert capsys.readouterr().out.startswith(f"{ERGON_PATH}\n\n{BLOCK['heading']}\n")
+
+
+def test_controlling_inside_a_linked_worktree_prints_the_path_only(tmp_path, monkeypatch, capsys):
+    main = _styled_main(tmp_path, monkeypatch, "controlling")
+    worktree = main / ".worktrees" / "C183-park-helper.1"
+    _git(main, "worktree", "add", "-b", "athlos-1", str(worktree))
+    _set_style(worktree, "controlling")
+    monkeypatch.chdir(worktree)
+    assert _write(worktree, "--owned-path", "src/code.py") == 0
+    assert capsys.readouterr().out == f"{main / ERGON_PATH}\n"
+
+
+def test_controlling_outside_git_prints_the_path_only(project, capsys):
+    _set_style(project, "controlling")
+    assert _write(project, "--owned-path", "src/code.py") == 0
+    assert capsys.readouterr().out == f"{ERGON_PATH}\n"
+
+
+def test_the_block_commit_is_in_no_record_and_the_tool_runs_no_git_add(tmp_path, monkeypatch):
+    main = _styled_main(tmp_path, monkeypatch, "controlling")
+    assert _write(main, "--owned-path", "src/code.py", "--commit-message", "Park it") == 0
+    for name in ("PARK.md", "RESUME.md"):
+        text = (main / ERGON_PATH / name).read_text(encoding="utf-8")
+        assert BLOCK["heading"] not in text and "git commit" not in text and "Park it" not in text
+    assert _git(main, "diff", "--cached", "--name-only") == ""
+    assert _git(main, "rev-list", "--count", "HEAD") == "1"

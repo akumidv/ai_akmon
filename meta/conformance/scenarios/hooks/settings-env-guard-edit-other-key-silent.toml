@@ -1,0 +1,27 @@
+# An Edit that leaves the file's `env` identical passes, so the file stays editable for everything but its `env`.
+id = "hooks/settings-env-guard-edit-other-key-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:settings-env-guard"]
+
+[fixture]
+files = { ".claude/settings.local.json" = '{"env": {"A": "1"}, "x": 1}' }
+
+[run]
+script = "settings-env-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-seg-3"
+cwd = "{{root}}"
+
+[run.payload.tool_input]
+file_path = "{{root}}/.claude/settings.local.json"
+old_string = '"x": 1'
+new_string = '"x": 2'
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

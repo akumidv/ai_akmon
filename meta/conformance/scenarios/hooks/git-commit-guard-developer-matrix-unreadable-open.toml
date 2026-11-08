@@ -1,0 +1,24 @@
+# D-C203-GUARD-CRASH: the same unreadable matrix lets a developer run through with the owner's notice.
+id = "hooks/git-commit-guard-developer-matrix-unreadable-open"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[fixture]
+tree_files = { "common/access_matrix.json" = "{ not json" }
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-gcm-crash-4"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { command = "gh pr create --fill" }
+
+[expected]
+exit = 0
+stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target\nakmon git-commit-guard hook: DataFileError\n"
+stdout = "{\"systemMessage\": \"\\u26a0 akmon: the git-commit-guard hook failed (DataFileError) and was skipped \\u2014 this action went ahead without it. Check the setup: `akmon verify` (a mounted tree: `python3 _aitna/akmon/bin/verify.py`).\"}\n"

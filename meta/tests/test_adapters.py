@@ -596,6 +596,266 @@ def test_the_claude_commit_guard_reads_attendance_from_the_environment(monkeypat
     assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == decision
 
 
+# `gh pr create` needs no repository, so the actor alone decides it (developer asks, autonomous passes).
+_ACTOR_CELLS = [
+    (None, "ask"),
+    ("developer", "ask"),
+    ("autonomous", None),
+    ("bogus", "ask"),
+    ("Autonomous", "ask"),
+    ("", "ask"),
+]
+
+
+@pytest.mark.parametrize(("value", "decision"), _ACTOR_CELLS)
+def test_the_claude_commit_guard_reads_the_actor_from_the_environment(monkeypatch, tmp_path, capsys, value, decision):
+    # ADR-0031/D07: the entry point reads AKMON_ACTOR and hands it down; absent or unknown is a developer.
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ATTENDED", "1")
+    monkeypatch.delenv("AKMON_ACTOR", raising=False)
+    if value is not None:
+        monkeypatch.setenv("AKMON_ACTOR", value)
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "gh pr create --fill"},
+        "session_id": "sess-claude-actor",
+        "permission_mode": "default",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _claude_hook("git-commit-guard.py").main() == 0
+
+    out = capsys.readouterr().out
+    if decision is None:
+        assert out == ""
+    else:
+        assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == decision
+
+
+@pytest.mark.parametrize(("value", "decision"), _ACTOR_CELLS)
+def test_the_codex_commit_guard_route_reads_the_actor_from_the_environment(
+    monkeypatch, tmp_path, capsys, value, decision
+):
+    # The route states no attendance and no permission mode, so a developer's ask reaches it as a deny.
+    decision = "deny" if decision == "ask" else decision
+    monkeypatch.delenv("AKMON_ACTOR", raising=False)
+    if value is not None:
+        monkeypatch.setenv("AKMON_ACTOR", value)
+    payload = {"tool_name": "shell", "tool_input": {"command": "gh pr create --fill"}, "cwd": str(tmp_path)}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _codex_hook().main(["git-commit-guard"]) == 0
+
+    out = capsys.readouterr().out
+    if decision is None:
+        assert out == ""
+    else:
+        assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == decision
+
+
+# --- D-C203-RUN-BRANCH: the entry points read AKMON_RUN_BRANCH beside AKMON_ACTOR ------------------------------------
+
+_RUN_BRANCH_CELLS = [
+    (None, "deny"),  # `feat` is no task-id branch under agent/
+    ("feat", None),
+    ("agent/C203-x", "deny"),  # the exact name wins over the pattern: the run branch is not `feat`
+    ("", "deny"),  # an empty value names nothing
+]
+
+
+def _on_branch(monkeypatch, branch):
+    monkeypatch.setattr(
+        hook_core, "repository_facts", lambda directory: hook_core.RepositoryFacts(linked=False, branch=branch)
+    )
+
+
+@pytest.mark.parametrize(("value", "decision"), _RUN_BRANCH_CELLS)
+def test_the_claude_commit_guard_reads_the_run_branch_from_the_environment(
+    monkeypatch, tmp_path, capsys, value, decision
+):
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    _on_branch(monkeypatch, "feat")
+    monkeypatch.setenv("AKMON_ACTOR", "autonomous")
+    monkeypatch.delenv("AKMON_RUN_BRANCH", raising=False)
+    if value is not None:
+        monkeypatch.setenv("AKMON_RUN_BRANCH", value)
+    payload = {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}, "session_id": "s-run", "cwd": "/"}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _claude_hook("git-commit-guard.py").main() == 0
+
+    out = capsys.readouterr().out
+    if decision is None:
+        assert out == ""
+    else:
+        assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == decision
+
+
+@pytest.mark.parametrize(("value", "decision"), _RUN_BRANCH_CELLS)
+def test_the_codex_commit_guard_route_reads_the_run_branch_from_the_environment(
+    monkeypatch, tmp_path, capsys, value, decision
+):
+    _on_branch(monkeypatch, "feat")
+    monkeypatch.setenv("AKMON_ACTOR", "autonomous")
+    monkeypatch.delenv("AKMON_RUN_BRANCH", raising=False)
+    if value is not None:
+        monkeypatch.setenv("AKMON_RUN_BRANCH", value)
+    payload = {"tool_name": "shell", "tool_input": {"command": "git commit -m x"}, "cwd": str(tmp_path)}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _codex_hook().main(["git-commit-guard"]) == 0
+
+    out = capsys.readouterr().out
+    if decision is None:
+        assert out == ""
+    else:
+        assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == decision
+
+
+def test_a_developer_run_ignores_the_run_branch_variable(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    _on_branch(monkeypatch, "feat")
+    monkeypatch.delenv("AKMON_ACTOR", raising=False)
+    monkeypatch.setenv("AKMON_RUN_BRANCH", "feat")
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ATTENDED", "1")
+    payload = {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}, "session_id": "s-run", "cwd": "/"}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _claude_hook("git-commit-guard.py").main() == 0
+
+    assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+# --- D-C203-GUARD-CRASH: an autonomous run's commit guard fails closed, a developer's stays crash-open ----------
+
+
+def _break_matrix(monkeypatch, error):
+    def unreadable(*_args, **_keywords):
+        raise error
+
+    monkeypatch.setattr(hook_core.access_matrix, "read_data", unreadable)
+
+
+def _break_guard(monkeypatch, error):
+    def crashing(*_args, **_keywords):
+        raise error
+
+    monkeypatch.setattr(hook_core, "commit_guard_decision", crashing)
+
+
+_CRASHES = {
+    "matrix": lambda monkeypatch: _break_matrix(monkeypatch, common_jsondata.DataFileError("access matrix is gone")),
+    "guard": lambda monkeypatch: _break_guard(monkeypatch, RuntimeError("the guard crashed")),
+}
+
+
+def _claude_command(monkeypatch, command, actor):
+    monkeypatch.delenv("AKMON_ACTOR", raising=False)
+    if actor is not None:
+        monkeypatch.setenv("AKMON_ACTOR", actor)
+    payload = {"tool_name": "Bash", "tool_input": {"command": command}, "session_id": "s-crash", "cwd": "/"}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+
+
+@pytest.mark.parametrize("crash", _CRASHES)
+def test_a_crashed_claude_commit_guard_denies_an_autonomous_run(monkeypatch, tmp_path, capsys, crash):
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    _CRASHES[crash](monkeypatch)
+    _claude_command(monkeypatch, "gh pr create --fill", "autonomous")
+    assert _claude_hook("git-commit-guard.py").main() == 0
+
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+    assert set(output) == {"hookSpecificOutput"}
+    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert reason == hook_core._hook_core_data()["git_commit_guard_crash_reason"]
+    assert "access matrix could not be read" in reason and "autonomous run is denied" in reason
+    assert "hook: " in captured.err and "access matrix is gone" not in captured.err  # the class, never the message
+
+
+@pytest.mark.parametrize("crash", _CRASHES)
+@pytest.mark.parametrize("actor", [None, "developer", "guided"])
+def test_a_crashed_claude_commit_guard_still_lets_a_developer_through(monkeypatch, tmp_path, capsys, crash, actor):
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    _CRASHES[crash](monkeypatch)
+    _claude_command(monkeypatch, "gh pr create --fill", actor)
+    assert _claude_hook("git-commit-guard.py").main() == 0
+
+    output = json.loads(capsys.readouterr().out)
+    assert list(output) == ["systemMessage"]  # ADR 0013: the owner is told, the action goes ahead
+
+
+def test_the_autonomous_crash_deny_depends_on_no_data_file(monkeypatch, tmp_path, capsys):
+    # Neither the matrix nor hook_core.json can be read: the deny still goes out, with the reason in code.
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    _break_matrix(monkeypatch, common_jsondata.DataFileError("access matrix is gone"))
+
+    def unreadable(*_args, **_keywords):
+        raise common_jsondata.DataFileError("hook_core.json is gone")
+
+    monkeypatch.setattr(hook_core, "_hook_core_data", unreadable)
+    monkeypatch.setattr(claude_adapter, "render_result", unreadable)
+    monkeypatch.setattr(claude_adapter, "_vocabulary", unreadable)
+    _claude_command(monkeypatch, "gh pr create --fill", "autonomous")
+    assert _claude_hook("git-commit-guard.py").main() == 0
+
+    output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecisionReason"] == hook_core._GUARD_CRASH_FALLBACK_REASON
+
+
+def test_a_non_bash_call_of_an_autonomous_run_is_untouched_by_the_crash_posture(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    _break_matrix(monkeypatch, common_jsondata.DataFileError("access matrix is gone"))
+    monkeypatch.setenv("AKMON_ACTOR", "autonomous")
+    payload = {"tool_name": "Write", "tool_input": {"file_path": "x.txt"}, "session_id": "s-crash"}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _claude_hook("git-commit-guard.py").main() == 0
+
+    assert capsys.readouterr().out == ""  # the matrix is read only for a git/gh/glab command
+
+
+@pytest.mark.parametrize("crash", _CRASHES)
+def test_a_crashed_codex_commit_guard_route_denies_an_autonomous_run(monkeypatch, tmp_path, capsys, crash):
+    _CRASHES[crash](monkeypatch)
+    monkeypatch.setenv("AKMON_ACTOR", "autonomous")
+    payload = {"tool_name": "shell", "tool_input": {"command": "gh pr create --fill"}, "cwd": str(tmp_path)}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _codex_hook().main(["git-commit-guard"]) == 0
+
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert "access matrix could not be read" in output["permissionDecisionReason"]
+    assert "access matrix is gone" not in captured.err
+
+
+@pytest.mark.parametrize("crash", _CRASHES)
+@pytest.mark.parametrize("actor", [None, "developer"])
+def test_a_crashed_codex_commit_guard_route_still_fails_a_developer_run_open(
+    monkeypatch, tmp_path, capsys, crash, actor
+):
+    _CRASHES[crash](monkeypatch)
+    monkeypatch.delenv("AKMON_ACTOR", raising=False)
+    if actor is not None:
+        monkeypatch.setenv("AKMON_ACTOR", actor)
+    payload = {"tool_name": "shell", "tool_input": {"command": "gh pr create --fill"}, "cwd": str(tmp_path)}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _codex_hook().main(["git-commit-guard"]) == 1  # ADR 0013: Codex shows the hook Failed, the action goes ahead
+
+    assert capsys.readouterr().out == ""
+
+
+def test_a_crashed_autonomous_codex_route_other_than_the_commit_guard_stays_crash_open(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("AKMON_ACTOR", "autonomous")
+
+    def crashing(*_args, **_keywords):
+        raise RuntimeError("boom")
+
+    codex = _codex_hook()
+    monkeypatch.setattr(codex, "session_start_result", crashing)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"cwd": str(tmp_path)})))
+    assert codex.main(["session-start"]) == 1
+    assert capsys.readouterr().out == ""
+
+
 def test_a_non_shell_claude_call_gets_no_shell_route_diagnostic(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
     payload = {"tool_name": "Write", "tool_input": {"file_path": "src/x.py"}, "session_id": "sess-claude-edit"}
@@ -1026,7 +1286,7 @@ def test_every_wired_claude_entry_reports_a_crash_to_the_owner_and_exits_zero(tm
     # One stderr line with the hook and the class, the owner's notice as the one stdout document
     # (M69: shown as a notice, never passed to the model), exit 0 (M70: an exit 1 is silent).
     files, _ = _wired_entry_points(tmp_path)
-    assert len(files) == 9
+    assert len(files) == 11
     for filename in files:
         hook = _claude_hook(filename)
         monkeypatch.setattr(hook, "load_payload", _seeded_crash)
@@ -1043,7 +1303,7 @@ def test_every_wired_codex_route_reports_a_crash_as_failed(tmp_path, monkeypatch
     # Exit 1 with nothing on stdout: Codex shows the hook `Failed` and the action goes ahead
     # (M68, M71); an exit 0 would read `Completed` and hide the crash.
     _, routes = _wired_entry_points(tmp_path)
-    assert routes == ["analysis-guard", "learning-reminder", "role-on-code", "session-start"]
+    assert routes == ["analysis-guard", "learning-reminder", "role-on-code", "session-start", "work-style"]
     codex_hook = _codex_hook()
     monkeypatch.setattr(codex_hook, "load_payload", _seeded_crash)
     for route in routes:
@@ -1478,6 +1738,7 @@ def test_vocabulary_json_holds_the_tool_tables_and_document_keys():
         "tool_input",
         "command",
         "cwd",
+        "prompt",
         "unmeasured_string_keys",
         "unmeasured_list_keys",
     }
@@ -1587,6 +1848,7 @@ def test_codex_hook_json_holds_the_routes_and_diagnostic_templates():
         "role-on-code",
         "session-start",
         "learning-reminder",
+        "work-style",
         "git-commit-guard",
     ]
     assert data["payload_shape"] == "tool_input keys: {{inner}}; payload keys: {{top}}"

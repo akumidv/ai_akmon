@@ -13,6 +13,7 @@ import os from "node:os";
 import { posix } from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { DataFileError } from "../common/jsondata.mjs";
 import { pyError } from "../common/pyvalue.mjs";
 import {
   HookResult,
@@ -32,6 +33,7 @@ import {
   editTool,
   formatG,
   gitCommitGuardResult,
+  GitInvocation,
   gitInvocations,
   hookFailureDiagnostic,
   hookFailureNotice,
@@ -333,6 +335,66 @@ test("the privilege guard is ASCII-word-bounded: another script's letter is a bo
   assert.equal(thrown(() => privilegeEscalationGuardResult(data, 5)).name, "TypeError");
 });
 
+// The shared case table of the harness settings guard (also run by meta/tests/test_harness_settings.py): the
+// shell route reads a command's words, and a command that writes a harness settings file is denied for every actor.
+const HARNESS_CASES = JSON.parse(
+  fs.readFileSync(posix.join(TREE_ROOT, "meta", "conformance", "units", "harness_settings_cases.json"), "utf8"),
+);
+
+test("the privilege guard decides the shell route as the shared harness-settings table says", () => {
+  for (const item of HARNESS_CASES.bash) {
+    const label = `${item.start}: ${JSON.stringify(item.command)}`;
+    const result = privilegeEscalationGuardResult(data, item.command, item.start);
+    assert.equal(result === null ? "pass" : result.permissionDecision, item.decision, label);
+    assert.equal(result === null ? "PreToolUse" : result.eventName, "PreToolUse", label);
+    for (const text of item.contains ?? []) {
+      assert.ok(String(result?.permissionReason).includes(text), `${label}: ${result?.permissionReason}`);
+    }
+  }
+});
+
+test("the shell route reads the process directory when none is given", () => {
+  withDir((dir) => {
+    fs.mkdirSync(posix.join(dir, ".claude"));
+    const saved = process.cwd();
+    process.chdir(posix.join(dir, ".claude"));
+    try {
+      assert.notEqual(privilegeEscalationGuardResult(data, "echo x > settings.json"), null);
+      assert.equal(privilegeEscalationGuardResult(data, "echo x > notes.md"), null);
+    } finally {
+      process.chdir(saved);
+    }
+  });
+});
+
+test("the settings reason is its own text, and the elevation deny comes first", () => {
+  const elevated = privilegeEscalationGuardResult(data, "sudo tee .claude/settings.json", "/p");
+  const settings = privilegeEscalationGuardResult(data, "echo x > .claude/settings.json", "/p");
+  assert.equal(elevated?.permissionReason, data.core.privilege_escalation_reason);
+  assert.notEqual(settings?.permissionReason, elevated?.permissionReason);
+});
+
+test("a redirection is read as a write only for an output operator, and the data owns the shell programs", () => {
+  for (const [command, denied] of /** @type {[string, boolean][]} */ ([
+    ["cat < .claude/settings.json", false],
+    ["cat <> .claude/settings.json", true],
+    ["cat <<< x > .claude/settings.json", true],
+    ["tee .claude/settings.json", true],
+  ])) {
+    assert.equal(privilegeEscalationGuardResult(data, command, "/p") !== null, denied, command);
+  }
+  const changed = {
+    ...data,
+    harnessSettings: {
+      ...data.harnessSettings,
+      shell: { ...data.harnessSettings.shell, write_all_operands: [], write_last_operand: ["ln"] },
+    },
+  };
+  assert.equal(privilegeEscalationGuardResult(changed, "tee .claude/settings.json", "/p"), null);
+  assert.notEqual(privilegeEscalationGuardResult(changed, "ln -s x .claude/settings.json", "/p"), null);
+  assert.equal(privilegeEscalationGuardResult(changed, "cp x .claude/settings.json", "/p"), null);
+});
+
 // The shared case table (also run by meta/tests/test_hook_core.py): the scanner's answers and the
 // guard's decisions, with the repositories a lookup stands in for.
 const COMMIT_CASES = JSON.parse(
@@ -347,7 +409,7 @@ const lookup = (directory) => (Object.hasOwn(REPOSITORIES, directory) ? REPOSITO
  * The guard run as the session would at `start`, with the shared table's repositories.
  * @param {string} command
  * @param {string | null} start
- * @param {{permissionMode?: string | null, attended?: boolean | null}} [options]
+ * @param {{permissionMode?: string | null, attended?: boolean | null, actor?: import("../common/access_matrix.mjs").Actor, runBranch?: string | null}} [options]
  */
 const guard = (command, start = "/wt", options = {}) =>
   gitCommitGuardResult(data, command, { directory: start, repositoryAt: lookup, ...options });
@@ -366,7 +428,12 @@ test("the scanner finds the git commands the shared table lists", () => {
 test("the guard decides as the shared table says", () => {
   for (const item of COMMIT_CASES.guard) {
     const label = `${item.start}: ${JSON.stringify(item.command)}`;
-    const result = guard(item.command, item.start, { permissionMode: item.mode, attended: item.attended });
+    const result = guard(item.command, item.start, {
+      permissionMode: item.mode,
+      attended: item.attended,
+      actor: item.actor ?? "developer",
+      runBranch: item.run_branch ?? null,
+    });
     assert.equal(result === null ? "pass" : result.permissionDecision, item.decision, label);
     const reason = String(result?.permissionReason ?? "");
     for (const text of item.contains) {
@@ -376,6 +443,145 @@ test("the guard decides as the shared table says", () => {
       assert.ok(!reason.includes(text), `${label}: ${reason}`);
     }
   }
+});
+
+test("the commit guard reads the outcomes from the matrix data, not from code", () => {
+  // Flip one cell: the autonomous push of its own branch now asks; nothing else changed.
+  const flipped = {
+    ...data,
+    accessMatrix: { ...data.accessMatrix, autonomous: { ...data.accessMatrix.autonomous, push_own_branch: "ask" } },
+  };
+  const result = gitCommitGuardResult(flipped, "git push origin feat", {
+    directory: "/wt",
+    repositoryAt: lookup,
+    actor: "autonomous",
+    runBranch: "feat",
+    permissionMode: "default",
+  });
+  assert.equal(result?.permissionDecision, "ask");
+  assert.ok(String(result?.permissionReason).includes("own branch 'feat'"));
+});
+
+test("the commit guard reads the run branch patterns from the matrix data, not from code", () => {
+  const changed = {
+    ...data,
+    accessMatrix: {
+      ...data.accessMatrix,
+      run_branch_patterns: { developer: [], autonomous: ["^bot/"] },
+    },
+  };
+  /** @type {Record<string, {linked: boolean, branch: string}>} */
+  const repositories = {
+    "/bot": { linked: false, branch: "bot/x" },
+    "/agent": { linked: false, branch: "agent/C203-x" },
+  };
+  /** @param {string} command @param {string} start */
+  const run = (command, start) =>
+    gitCommitGuardResult(changed, command, {
+      directory: start,
+      repositoryAt: (directory) => repositories[directory] ?? null,
+      actor: "autonomous",
+      permissionMode: "default",
+    });
+  assert.equal(run("git commit -m x", "/bot"), null);
+  assert.equal(run("git push origin bot/x", "/bot"), null);
+  assert.equal(run("git commit -m x", "/agent")?.permissionDecision, "deny");
+});
+
+test("a developer never reaches the run branch class", () => {
+  // Soften the class for the developer; its outcome on a checkout branch is the class it had before.
+  const changed = {
+    ...data,
+    accessMatrix: {
+      ...data.accessMatrix,
+      developer: { ...data.accessMatrix.developer, history_not_run_branch: "deny" },
+    },
+  };
+  const result = gitCommitGuardResult(changed, "git commit -m x", {
+    directory: "/clone",
+    repositoryAt: () => ({ linked: false, branch: "feat" }),
+    actor: "developer",
+    permissionMode: "default",
+  });
+  assert.equal(result?.permissionDecision, "ask");
+  assert.ok(!String(result?.permissionReason).includes("not the run's own branch"));
+});
+
+test("a developer's push asks the repository nothing", () => {
+  /** @type {string[]} */
+  const asked = [];
+  gitCommitGuardResult(data, "git push origin feat", {
+    directory: "/wt",
+    repositoryAt: (directory) => {
+      asked.push(directory);
+      return null;
+    },
+  });
+  assert.deepEqual(asked, []);
+});
+
+test("an unknown actor string is refused where the guard is called directly", () => {
+  assert.throws(
+    () =>
+      gitCommitGuardResult(data, "git push", {
+        directory: "/wt",
+        repositoryAt: lookup,
+        actor: /** @type {any} */ ("guided"),
+      }),
+    /no entry for actor 'guided'/,
+  );
+});
+
+test("gh invocations carry their program and group-action", () => {
+  const found = gitInvocations("git push && cd /w && gh -R o/r pr create --fill", "/s");
+  assert.deepEqual(
+    found.map((one) => [one.program, one.subcommand, one.directory]),
+    [
+      ["git", "push", "/s"],
+      ["gh", "pr create", "/w"],
+    ],
+  );
+  assert.deepEqual([...found[1].arguments], ["--fill"]);
+  assert.equal(new GitInvocation({ subcommand: "status", directory: "/s" }).program, "git");
+});
+
+test("glab invocations carry their program and group-action", () => {
+  const found = gitInvocations("glab -R o/r mr create -b develop && /usr/bin/glab mr merge 3", "/s");
+  assert.deepEqual(
+    found.map((one) => [one.program, one.subcommand, [...one.arguments]]),
+    [
+      ["glab", "mr create", ["-b", "develop"]],
+      ["glab", "mr merge", ["3"]],
+    ],
+  );
+});
+
+test("the commit guard reads the protected branches from the matrix data, not from code", () => {
+  const changed = {
+    ...data,
+    accessMatrix: {
+      ...data.accessMatrix,
+      protected_branches: { developer: ["feat"], autonomous: ["release"] },
+    },
+  };
+  /** @type {Record<string, {linked: boolean, branch: string}>} */
+  const repositories = {
+    "/wt": { linked: true, branch: "feat" },
+    "/rel": { linked: true, branch: "release" },
+    "/dev": { linked: true, branch: "develop" },
+  };
+  /** @param {string} command @param {string} start @param {"developer" | "autonomous"} actor */
+  const run = (command, start, actor) =>
+    gitCommitGuardResult(changed, command, {
+      directory: start,
+      repositoryAt: (directory) => repositories[directory] ?? null,
+      actor,
+      permissionMode: "default",
+    });
+  assert.equal(run("git commit -m x", "/rel", "autonomous")?.permissionDecision, "deny");
+  assert.equal(run("git push origin release", "/wt", "autonomous")?.permissionDecision, "deny");
+  assert.equal(run("git commit -m x", "/dev", "autonomous"), null); // develop is no longer protected
+  assert.equal(run("git commit -m x", "/wt", "developer")?.permissionDecision, "ask");
 });
 
 test("the commit guard: the trailer is read in the whole text, a heredoc body included", () => {
@@ -465,6 +671,53 @@ test("a non-string command is the TypeError re.search raises", () => {
   assert.equal(thrown(() => gitCommitGuardResult(data, ["git"])).name, "TypeError");
   assert.equal(gitCommitGuardResult(data, ["x"]), null); // `"git" in ["x"]` is False
   assert.equal(thrown(() => gitCommitGuardResult(data, 5)).name, "TypeError");
+});
+
+test("the trailer floor is decided before and without the access matrix, for every actor", () => {
+  // a bundle whose matrix cannot be read: the floor still denies, because it never reads the matrix
+  const unreadable = /** @type {import("./hook_data.mjs").HookData} */ (
+    /** @type {unknown} */ (
+      Object.defineProperties(
+        {},
+        {
+          core: { enumerable: true, get: () => data.core },
+          accessMatrix: {
+            enumerable: true,
+            get() {
+              throw new Error("the trailer floor must not read the access matrix");
+            },
+          },
+        },
+      )
+    )
+  );
+  for (const actor of /** @type {const} */ (["developer", "autonomous"])) {
+    for (const command of ["git commit -m 'Co-Authored-By: Claude'", "gh pr create --body 'Co-Authored-By: Claude'"]) {
+      const result = gitCommitGuardResult(unreadable, command, {
+        directory: "/main",
+        repositoryAt: lookup,
+        actor,
+      });
+      assert.ok(result !== null, `${actor}: ${command}`);
+      assert.equal(result.permissionDecision, "deny");
+      assert.ok(String(result.permissionReason).includes("Co-Authored-By"), String(result.permissionReason));
+    }
+  }
+});
+
+test("a hook data bundle refuses a matrix that softens the trailer floor, on every access", () => {
+  const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-matrix-"));
+  try {
+    fs.mkdirSync(posix.join(root, "common"), { recursive: true });
+    const softened = JSON.parse(fs.readFileSync(posix.join(TREE_ROOT, "common", "access_matrix.json"), "utf8"));
+    softened.autonomous.ai_trailer = "ask";
+    fs.writeFileSync(posix.join(root, "common", "access_matrix.json"), JSON.stringify(softened));
+    const bundle = lazyHookData(root);
+    assert.throws(() => bundle.accessMatrix, DataFileError);
+    assert.throws(() => bundle.accessMatrix, DataFileError);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("an unattended ask is a deny that spells the permission mode with repr()", () => {
@@ -801,6 +1054,39 @@ test("sessionStartResult: a project's own agents follow the shipped ones, and no
   });
 });
 
+test("sessionStartResult: a broken work-style file loses the work-style line and nothing else", () => {
+  withDir((dir) => {
+    project(dir, { mount: true });
+    const whole = String(sessionStartResult(data, dir)?.additionalContext);
+    assert.match(whole, /\nwork style: delegating \(default\)\n/);
+    const expected = whole
+      .split("\n")
+      .filter((line) => !line.startsWith("work style:"))
+      .join("\n");
+    const breakages = [
+      {
+        get: () => {
+          throw new DataFileError("akmon data file x is not valid JSON");
+        },
+      },
+      { value: {} },
+      { value: { styles: null } },
+    ];
+    for (const breakage of breakages) {
+      const broken = Object.create(data, { workStyle: breakage });
+      assert.equal(sessionStartResult(broken, dir)?.additionalContext, expected);
+    }
+    const other = Object.create(data, {
+      workStyle: {
+        get: () => {
+          throw new RangeError("not a data-file error");
+        },
+      },
+    });
+    assert.throws(() => sessionStartResult(other, dir), RangeError);
+  });
+});
+
 test("sessionStartResult: the roster on a mounted project, no stale notice", () => {
   withDir((dir) => {
     project(dir, { mount: true });
@@ -979,4 +1265,26 @@ test("the scanner keeps the arguments after the subcommand", () => {
     [found.subcommand, found.directory, [...found.arguments]],
     ["branch", "/x", ["-D", "a b", "--", "c"]],
   );
+});
+
+test("the scanner marks a git run under configuration overrides", () => {
+  for (const command of [
+    "git -c push.default=current push",
+    "git --config-env push.default=V push",
+    "git --config-env=a=B push",
+  ]) {
+    const [found] = gitInvocations(command, "/s");
+    assert.deepEqual([found.subcommand, [...found.arguments], found.configOverride], ["push", [], true], command);
+  }
+  assert.equal(gitInvocations("git -C /x push origin x", "/s")[0].configOverride, false);
+});
+
+test("the scanner keeps every word after api, options included", () => {
+  const [found] = gitInvocations("gh -R o/r api -X POST repos/o/r/issues -f a=b", "/s");
+  assert.deepEqual(
+    [found.program, found.subcommand, [...found.arguments]],
+    ["gh", "api", ["-X", "POST", "repos/o/r/issues", "-f", "a=b"]],
+  );
+  const [action] = gitInvocations("gh repo sync o/r", "/s");
+  assert.deepEqual([action.subcommand, [...action.arguments]], ["repo sync", ["o/r"]]);
 });

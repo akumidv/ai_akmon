@@ -1942,6 +1942,30 @@ args_json = '[{"workdir": "v1"}]'
 expected_json = '"v1"'
 
 [[case]]
+id = "prompt/key-prompt"
+fn = "prompt"
+args_json = '[{"prompt": "/style controlling", "turn_id": "t1"}]'
+expected_json = '"/style controlling"'
+
+[[case]]
+id = "prompt/empty-string-is-a-prompt"
+fn = "prompt"
+args_json = '[{"prompt": ""}]'
+expected_json = '""'
+
+[[case]]
+id = "prompt/non-string-is-skipped"
+fn = "prompt"
+args_json = '[{"prompt": 3}]'
+expected_json = '""'
+
+[[case]]
+id = "prompt/missing"
+fn = "prompt"
+args_json = '[{}]'
+expected_json = '""'
+
+[[case]]
 id = "cwd/missing"
 fn = "cwd"
 args_json = '[{}]'

@@ -24,7 +24,8 @@
   },
   "event_names": {
     "PreToolUse": "preToolUse",
-    "SessionStart": "sessionStart"
+    "SessionStart": "sessionStart",
+    "UserPromptSubmit": "userPromptSubmit"
   },
   "trust_statuses": ["managed", "untrusted", "trusted", "modified"],
   "live_trust_statuses": ["trusted", "managed"]

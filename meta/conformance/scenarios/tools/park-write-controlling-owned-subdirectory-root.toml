@@ -1,0 +1,26 @@
+id = "tools/park-write-controlling-owned-subdirectory-root"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The block commit `cd`s to the repository root, while `--owned-path` values are relative to the project root. When the
+# project is a subdirectory of the repository (here `sub/`), each owned path gains that prefix so the printed `git add`
+# is right from the root; an owned path that climbs out of the project (`../top.md`) is normalized, and an absolute one
+# stays as given (ADR 0031 D04).
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"sub/AGENTS.md" = "# agents\n"
+"sub/_aitna/.akmon.toml" = ""
+"sub/_aitna/.local/work.json" = "{\"style\": \"controlling\"}\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS", "--owned-path", "tools/park/park.py", "--owned-path", "../top level.md", "--owned-path", "/abs/x.md", "--commit-message", "C183: park it", "--root", "sub"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/C183-park-helper\n\nBlock commit\ncd {{root}}\ngit add -- sub/tools/park/park.py 'top level.md' /abs/x.md\ngit commit -m \"C183: park it\"\n\nThe owner runs these, or asks the agent to; write the hand-off prompt to the next session in chat, in the developer's language, addressed to the receiving session and pointing to _aitna/.ergon/C183-park-helper/RESUME.md.\n"

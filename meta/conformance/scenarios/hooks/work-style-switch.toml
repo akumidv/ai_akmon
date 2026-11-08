@@ -1,0 +1,25 @@
+# The owner types `/style controlling`: the style is recorded for the session in the local layer's session store, and the model and the owner are told on both channels.
+id = "hooks/work-style-switch"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:work-style"]
+
+[fixture]
+attach = "native"
+
+[run]
+script = "work-style"
+
+[run.payload]
+hook_event_name = "UserPromptSubmit"
+cwd = "{{root}}"
+session_id = "sess-ws-1"
+prompt = "/style Controlling"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"[akmon] Work style recorded for this session: controlling. A switch inside an athlos takes effect at the next park boundary: park the athlos, then the new style applies.\"}, \"systemMessage\": \"[akmon] Work style recorded for this session: controlling. A switch inside an athlos takes effect at the next park boundary: park the athlos, then the new style applies.\"}\n"
+
+[expected.files]
+"_aitna/.local/work-sessions.json" = "{\n  \"sessions\": {\n    \"sess-ws-1\": \"controlling\"\n  }\n}\n"

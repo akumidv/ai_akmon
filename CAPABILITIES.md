@@ -91,6 +91,24 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - crash-posture: fail-open
 - evidence: N2 (parent-only `hookSpecificOutput`; akmon wires no `SubagentStart`, which dispatches on 0.153.4 — M62) + N1/F4 run D — a killed hook is discarded and the action proceeds; delivery is additionally host-gated, see N7; on 0.153.4 nothing produces `clear` — `/new` arrives as `startup` (M66); a hook that exits 1 is fail-open too, and Codex shows it `Failed` (M71)
 
+### Work style reaches the session — Claude Code
+
+- documented: yes
+- delivered: yes
+- route: vendor=claude-code; version=2.1.322; event=UserPromptSubmit; matcher=n/a
+- effect: none
+- crash-posture: unmeasured
+- evidence: M238 — a `/style controlling` prompt reaches `UserPromptSubmit` verbatim in `prompt` (headless `-p` only; the interactive TUI is not measured), and M205 — the payload carries `prompt`; the `work-style` hook records the style per session, and the SessionStart context states the style in force and its source
+
+### Work style reaches the session — Codex CLI
+
+- documented: yes
+- delivered: unmeasured
+- route: vendor=codex-cli; version=unmeasured; event=UserPromptSubmit; matcher=n/a
+- effect: none
+- crash-posture: unmeasured
+- evidence:
+
 ### Commit guard — owner-owned commits at the tool boundary — Claude Code
 
 - documented: yes
@@ -98,7 +116,7 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=claude-code; version=2.1.221; event=PreToolUse; matcher=Bash
 - effect: deny
 - crash-posture: fail-open
-- evidence: `meta/tests/test_hook_core.py` deny contract + [ADR 0006 D02](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0006-orchestrator-detection-corridor-context-pressure.md) e2e wrapper runs; a crash is fail-open on 2.1.270 — the C87 guard answers it with exit 0 and an owner notice and the command runs (M69), and a hook that dies with exit 1 lets it run too (M70)
+- evidence: outcomes come from `common/access_matrix.json`, keyed by the actor in `AKMON_ACTOR` (developer default); the deny measured here is the developer actor's, and the autonomous actor's allowances are not measured. `meta/tests/test_hook_core.py` deny contract + [ADR 0006 D02](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0006-orchestrator-detection-corridor-context-pressure.md) e2e wrapper runs; a crash is fail-open on 2.1.270 — the C87 guard answers it with exit 0 and an owner notice and the command runs (M69), and a hook that dies with exit 1 lets it run too (M70)
 
 ### Commit guard — owner-owned commits at the tool boundary — Codex CLI
 
@@ -107,7 +125,25 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - route: vendor=codex-cli; version=0.146.0; event=n/a; matcher=n/a
 - effect: none
 - crash-posture: unmeasured
-- evidence: akmon wires no D5 entry in `.codex/hooks.json`; the raw-harness deny N2 measured, and M59 again on the Bash route on 0.153.4, is not shipped support
+- evidence: akmon wires no D5 entry in `.codex/hooks.json`, so sync does not wire the guard route on Codex and the actor matrix is prose there; the raw-harness deny N2 measured, and M59 again on the Bash route on 0.153.4, is not shipped support
+
+### Harness settings `env` write guard — the actor's carrier is closed to the agent — Claude Code
+
+- documented: yes
+- delivered: yes
+- route: vendor=claude-code; version=2.1.322; event=PreToolUse; matcher=Bash|Edit|Write|MultiEdit
+- effect: deny
+- crash-posture: fail-open
+- evidence: M239 — the `env` block of a project's `.claude/settings.local.json` reaches the hook process, so a session that can edit a harness settings file can set the actor of the next session (ADR 0031/D07, D-C203-ACTOR-WRITE, policy `privilege.no-escalation`, every actor). The `settings-env-guard` hook denies an `Edit`, `Write` or `MultiEdit` whose content after the edit has a different parsed `env` in `.claude/settings*.json` (the project's at any depth, and the user's), or different `env`/`shell_environment_policy` text in a `.codex/config.toml`; the `Bash` hook denies a command whose words write one of those files (redirection, `tee`, `sed -i`, `perl -i`, a `cp`/`mv`/`install` destination, `dd of=`). Pinned by `meta/tests/test_harness_settings.py`, its JavaScript twins and the shared table `meta/conformance/units/harness_settings_cases.json`; not covered: a write by a program akmon cannot read as a command word (an interpreter's `-c`, `xargs`, `find -exec`), a settings directory named by `CLAUDE_CONFIG_DIR` or an expansion, and `NotebookEdit`. A crash is fail-open: exit 0 with an owner notice on `Bash` (M69, M70) and on `Edit` and `Write` (M77)
+
+### Harness settings `env` write guard — the actor's carrier is closed to the agent — Codex CLI
+
+- documented: yes
+- delivered: no
+- route: vendor=codex-cli; version=0.146.0; event=n/a; matcher=n/a
+- effect: none
+- crash-posture: unmeasured
+- evidence: akmon wires neither half on Codex. The shell half is `privilege_escalation_guard_result`, reached on Codex only through the `git-commit-guard` route of `codex-hook`, which sync does not wire (see the Codex commit guard claim); the edit half has no Codex route at all, because an `apply_patch` payload carries a patch, not the content after it, and the shipped `.codex/hooks.json` matcher `Bash|apply_patch` runs only the two advisories. A Codex `config.toml` is guarded when a Claude session edits it, nowhere else
 
 ### Delegation policy reaches the orchestrator — Claude Code
 

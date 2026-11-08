@@ -41,6 +41,8 @@ const HOOK_STEMS = [
   "model-routing",
   "role-on-code",
   "session-start-agent",
+  "settings-env-guard",
+  "work-style",
 ];
 
 function tmpdir() {

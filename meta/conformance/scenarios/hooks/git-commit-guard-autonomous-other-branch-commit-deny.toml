@@ -1,0 +1,27 @@
+# D-C203-RUN-BRANCH: a commit on a branch that is not the run's own is denied for an autonomous run.
+id = "hooks/git-commit-guard-autonomous-other-branch-commit-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[fixture]
+branch = "feat"
+
+[env]
+AKMON_ACTOR = "autonomous"
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-gcm-rb-2"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { command = "git commit -m x" }
+
+[expected]
+exit = 0
+stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target\n"
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Commit guardrail (autonomous run): git commit writes history in {{root}} (on 'feat', not the run's own branch). An autonomous run writes history only on its own run branch (the one `AKMON_RUN_BRANCH` names, else a branch under `agent/` that starts with a task id) or in a linked worktree, never on the default branch, on `develop` or a `release/*` branch, on another branch of a checkout, on a detached HEAD or in a place the guard cannot resolve.\"}}\n"

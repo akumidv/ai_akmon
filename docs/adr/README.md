@@ -182,3 +182,10 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   margin; a harness is a provider row and a binding is evaluated, measured locally or declared; the
   runner is `tools/model_profile/` with a JavaScript twin over shared configuration, state in the local
   layer, first shipped set `claude` and `codex`. Extends 0004 and 0024/D02.
+- [0031 — Work styles: delegating and controlling, apart from the actor and its access matrix](0031-work-styles-delegating-and-controlling.md)
+  — a style is a developer run's split of the work and never widens a permission; two fixed bundles
+  (delegating by default; controlling: stages in sessions the developer starts, the main checkout, one
+  printed block commit, carried prompts in the developer's language, mechanical delegation kept); set by
+  `/style`, `.local/work.json`, `[work] style`, switched by the owner at a park boundary; access is a
+  matrix of actor × action × place carried by the launcher's environment value, the autonomous actor
+  commits and pushes its own branch. Extends 0025 and 0029.

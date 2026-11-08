@@ -1857,6 +1857,7 @@ const HOOK_DATA_EXPORTS = {
     "filePaths",
     "payloadShape",
     "cwd",
+    "prompt",
   ]),
 };
 

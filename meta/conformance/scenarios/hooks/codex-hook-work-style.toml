@@ -1,0 +1,30 @@
+# The Codex route: the M65 UserPromptSubmit payload (session_id, turn_id, prompt, cwd, transcript_path, model) reaches the same session store; Codex has no owner channel, so the document carries additionalContext only.
+id = "hooks/codex-hook-work-style"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:work-style"]
+
+[fixture]
+attach = "native"
+
+[run]
+script = "codex-hook"
+args = ["work-style"]
+
+[run.payload]
+hook_event_name = "UserPromptSubmit"
+session_id = "019e0000-aaaa-7000-8000-000000000001"
+turn_id = "019e0000-bbbb-7000-8000-000000000002"
+prompt = "/style controlling"
+cwd = "{{root}}"
+transcript_path = "{{root}}/rollout.jsonl"
+model = "gpt-5.5"
+permission_mode = "default"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"[akmon] Work style recorded for this session: controlling. A switch inside an athlos takes effect at the next park boundary: park the athlos, then the new style applies.\"}}\n"
+
+[expected.files]
+"_aitna/.local/work-sessions.json" = "{\n  \"sessions\": {\n    \"019e0000-aaaa-7000-8000-000000000001\": \"controlling\"\n  }\n}\n"

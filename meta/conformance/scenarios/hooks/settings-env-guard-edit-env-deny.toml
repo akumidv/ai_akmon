@@ -1,0 +1,27 @@
+# An Edit that changes one value of the `env` already in the file is denied; the content after the edit is computed from the file as it is.
+id = "hooks/settings-env-guard-edit-env-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:settings-env-guard"]
+
+[fixture]
+files = { ".claude/settings.local.json" = '{"env": {"A": "1"}, "x": 1}' }
+
+[run]
+script = "settings-env-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-seg-2"
+cwd = "{{root}}"
+
+[run.payload.tool_input]
+file_path = "{{root}}/.claude/settings.local.json"
+old_string = '"A": "1"'
+new_string = '"A": "2"'
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Privilege guardrail: this edit changes the `env` of {{root}}/.claude/settings.local.json, a harness settings file. The launcher sets the run's actor there (AKMON_ACTOR), so an agent never writes the `env` of a harness settings file. If the change is genuinely needed, ask the owner to make it themselves.\"}}\n"

@@ -1,0 +1,24 @@
+id = "tools/park-write-controlling-changed-paths"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# With no `--owned-path`, the block commit stages the paths `git status` reports as changed (here the two
+# files the write itself just created, each once), and with no `--commit-message` the commit carries the
+# `<message>` placeholder and a line asks the agent to propose one (ADR 0031 D04).
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.local/work.json" = "{\"style\": \"controlling\"}\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/C183-park-helper\n\nBlock commit\ncd {{root}}\ngit add -- _aitna/.ergon/C183-park-helper/PARK.md _aitna/.ergon/C183-park-helper/RESUME.md\ngit commit -m \"<message>\"\n\nPropose the commit message and put it in place of <message>.\nThe owner runs these, or asks the agent to; write the hand-off prompt to the next session in chat, in the developer's language, addressed to the receiving session and pointing to _aitna/.ergon/C183-park-helper/RESUME.md.\n"
