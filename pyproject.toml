@@ -91,5 +91,8 @@ target-version = "py312"
 allowed-confusables = ["ℹ"]
 
 [tool.pytest.ini_options]
-# `docker` marks a test that needs a running docker daemon; it skips itself when `docker version` fails.
-markers = ["docker: needs a running docker daemon (skipped when `docker version` fails)"]
+# `docker` marks a test that runs a real container. It belongs to the full local suite
+# (`uv run pytest`) and is left out of CI (`-m "not docker"`), which has no docker daemon.
+# Where it does run, it skips itself with the reason when docker is missing, the daemon is down
+# or the user may not reach its socket.
+markers = ["docker: runs a real container; local full suite only, CI deselects it (-m 'not docker')"]

@@ -34,8 +34,11 @@ jobs:
       - name: Format (ruff)
         run: uv run ruff format --check .
 
+      # The `docker` marker is the local-only part of the suite (tests that run a real
+      # container): CI has no usable docker daemon by design, so it deselects them. The full
+      # suite, `uv run pytest`, runs them wherever the user can reach a daemon.
       - name: Tests
-        run: uv run pytest meta/tests
+        run: uv run pytest meta/tests -m "not docker"
 
       - name: Self CI (synthetic consumer fixture)
         run: uv run python meta/self_ci.py

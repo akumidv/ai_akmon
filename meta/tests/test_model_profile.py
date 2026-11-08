@@ -1080,15 +1080,32 @@ def test_extract_python_block_wants_exactly_one_fence() -> None:
     assert sandbox.extract_python_block("none") is None
 
 
-@pytest.fixture
-def docker_daemon() -> None:
-    """Skip unless ``docker version`` answers - the one place a test needs a container runtime."""
+def _docker_unavailable_reason() -> str | None:
+    """Why a real container cannot be run here, or ``None`` when one can.
+
+    Three causes are told apart because each has a different fix: no client, no permission on the
+    daemon's socket (the user is not in group ``docker``), and no daemon answering.
+    """
     binary = shutil.which("docker")
     if binary is None:
-        pytest.skip("docker is not on the PATH")
-    done = subprocess.run([binary, "version"], capture_output=True, timeout=60, check=False)
-    if done.returncode != 0:
-        pytest.skip("docker version failed: no usable daemon")
+        return "docker is not on the PATH (install the docker client)"
+    done = subprocess.run([binary, "version"], capture_output=True, text=True, timeout=60, check=False)
+    if done.returncode == 0:
+        return None
+    if "permission denied" in done.stderr.lower():
+        return "this user may not reach the docker socket (add the user to group docker, then log in again)"
+    return "docker version failed: no daemon is answering"
+
+
+@pytest.fixture
+def docker_daemon() -> None:
+    """Skip, with the cause, unless a container can run - the one place a test needs a runtime.
+
+    These tests are the local full suite's; CI deselects them with ``-m "not docker"``.
+    """
+    reason = _docker_unavailable_reason()
+    if reason is not None:
+        pytest.skip(reason)
 
 
 @pytest.mark.docker
