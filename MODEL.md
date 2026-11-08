@@ -95,7 +95,7 @@ by declaring the root in its `.aitna-root` file (a project-root-relative path, e
 akmon then mounts at `<dev root>/akmon` and the tooling derives every path from it. No
 `.aitna-root` file → `_aitna` ([BOOTSTRAP](BOOTSTRAP.md#a-what-the-agent-does-on-attach)).
 
-The LOCAL layer also holds the working state of a session: the kits under `<DEV>/.ergon/`, gitignored,
+The LOCAL layer also holds the working state of a session: the ergons under `<DEV>/.ergon/`, gitignored,
 each its own record with no index row, and never referenced from a tracked file
 ([tasks](pipelines/tasks.md#the-local-layer)). `<DEV>/.local/` holds machine state (learning state,
 model overlays). `<DEV>` is the dev-layer root, `<dev root>`.
