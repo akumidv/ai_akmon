@@ -58,14 +58,26 @@ Runtime check: privilege.no-escalation — the whole rule: any Bash command cont
   on is started by the owner only. When the job is ready the agent commits it there and prints the
   squash — `git merge --squash <branch>` in the owner's checkout and a commit with the message it
   proposes, so the branch's commits become one commit — and the owner runs it or asks the agent to.
-  The agent may remove its own worktree and branch once the carry is verified by content (nothing
-  uncommitted, every changed path equal in the owner's branch), on the owner's notice or a periodic
-  check. The carve-out covers no other branch, no other commit and no push.
+  After the carry the agent prints the worktree's removal (`git worktree remove <path>`, which
+  git refuses while anything is uncommitted); the branch stays as a backup and the agent deletes it
+  later — at a periodic check, on request, or when the task closes — only after the code check that
+  every path the branch changed holds the same content in the owner's branch. A commit once made
+  stays as made: the agent does not rewrite it (amend, rebase, reset to an earlier commit) to ease
+  the carry unless the owner says so, and brings the owner's branch in by merge. The carve-out covers
+  no other branch — the agent moves, renames or deletes no ref but its own `_aitna/` job branches —
+  no other commit and no push.
 
-Runtime check: commits.owner-owned — subset: an AI `Co-Authored-By` trailer is denied, and
-`push`/`tag`/`merge` or a commit on the default branch or a detached/unresolved HEAD asks when
-the run is attended and denies when it is not (the host states attendance, else the interactive
-`default` permission mode attends). "Tests pass before a commit is
+Runtime check: commits.owner-owned — subset: an AI `Co-Authored-By` trailer is denied; `push` and
+`tag` ask everywhere, a linked worktree included; `commit`, `merge`, `rebase`, `reset` and the other
+history-writing commands pass inside a linked worktree on its own named branch (not `main`/`master`)
+and ask anywhere else — the main checkout, a detached/unresolved HEAD, a scratch repository or a
+directory the command text does not determine. Ref-writing commands — `branch` force/delete/
+rename/copy, a `fetch`/`pull` refspec into a local ref, `checkout -B`, `switch -C`, `symbolic-ref`
+and `update-ref` writes, `replace`, `filter-branch`, `fast-import`, `worktree` removal — ask in any
+directory unless every target ref is an `_aitna/` job branch. Only command words are read, never
+heredoc or quoted text, and the repository checked is the one the command acts on (`cd`, `-C`), not the session's.
+An ask is shown when the run is attended and becomes a deny when it is not (the host states
+attendance, else the interactive `default` permission mode attends). "Tests pass before a commit is
 offered" and "branch for non-trivial work" are not machine-checked.
 
 ## Verify against reality, not memory

@@ -25,8 +25,11 @@ import {
   exportErgon,
   findClosedErgon,
   findErgon,
+  branchUnit,
+  carryCommands,
   formatAthlos,
   formatSummary,
+  formatWorktrees,
   gitBranch,
   gitRevisions,
   gitUncommittedPaths,
@@ -39,6 +42,7 @@ import {
   ergonState,
   leaseIsStale,
   listErgons,
+  listWorktrees,
   main,
   mergeSessions,
   nextLocalId,
@@ -50,11 +54,13 @@ import {
   parseLease,
   parseNote,
   parsePlan,
+  parseWorktreeList,
   readLease,
   readAthlosDoc,
   readNote,
   readPendingSessions,
   releaseLease,
+  removalCommands,
   rememberHolder,
   renderHeader,
   renderAthlosDoc,
@@ -2449,7 +2455,7 @@ test("--project-root is an alias of --root", () => {
 // --------------------------------------------------------------------------------------
 
 const COMMAND_CHOICES =
-  "'write', 'unpark', 'digest', 'list', 'hold', 'release', 'athlos', 'active', 'close', 'export', 'local-id'";
+  "'write', 'unpark', 'digest', 'list', 'hold', 'release', 'athlos', 'active', 'worktrees', 'close', 'export', 'local-id'";
 
 test("a usage error is one line on stderr and exit 2", () => {
   for (const [argv, message] of /** @type {[string[], string][]} */ ([
@@ -2560,4 +2566,469 @@ test("ergon ids sort by code point, not by locale or length", () => {
     .slice(0, -1)
     .map((line) => line.split(" | ")[0]);
   assert.deepEqual(ids, ["A1", "C100", "C20", "_T2"]);
+});
+
+// --------------------------------------------------------------------------------------
+// worktrees: every worktree git knows and every backup branch, by state (C190, D-C190-WORKTREES)
+// --------------------------------------------------------------------------------------
+
+/** @typedef {import("./park.mjs").WorktreeRow} WorktreeRow */
+
+const STATES = TEXTS.worktrees.states;
+const ERGON_ID = "C186";
+const ERGON_NAME = "C186-holders-units";
+const PENDING_SUBJECT = 'pending: add the "pending" file';
+
+/**
+ * @param {number} number
+ * @returns {string}
+ */
+function athlosBranch(number) {
+  return `_aitna/${ERGON_NAME}.${number}`;
+}
+
+/**
+ * @param {string} main_
+ * @param {number} number
+ * @returns {string}
+ */
+function athlosFolderOf(main_, number) {
+  return path.join(main_, ".worktrees", `${ERGON_NAME}.${number}`);
+}
+
+/**
+ * Run git as the test's author and return what it prints.
+ * @param {string} cwd
+ * @param {string[]} args
+ * @returns {string}
+ */
+function gitAs(cwd, args) {
+  const flags = ["-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false"];
+  return execFileSync("git", [...flags, ...args], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  }).trim();
+}
+
+/**
+ * @param {string} folder
+ * @param {Record<string, string>} files
+ * @param {string} message
+ */
+function commitFiles(folder, files, message) {
+  for (const [name, text] of Object.entries(files)) {
+    fs.writeFileSync(path.join(folder, name), text);
+    gitAs(folder, ["add", name]);
+  }
+  gitAs(folder, ["commit", "-m", message]);
+}
+
+/**
+ * @param {string} main_
+ * @param {number} number
+ * @param {Record<string, string>} files
+ * @param {string} message
+ * @returns {string} the worktree's folder
+ */
+function addAthlosWorktree(main_, number, files, message) {
+  const folder = athlosFolderOf(main_, number);
+  gitAs(main_, ["worktree", "add", "-b", athlosBranch(number), folder]);
+  commitFiles(folder, files, message);
+  return folder;
+}
+
+/**
+ * The owner's carry: one squash commit on main; the branch stays unmerged in git's eyes.
+ * @param {string} main_
+ * @param {number} number
+ */
+function carryBySquash(main_, number) {
+  gitAs(main_, ["merge", "--squash", athlosBranch(number)]);
+  gitAs(main_, ["commit", "-m", `carry ${number}`]);
+}
+
+/**
+ * An athlos file written straight from the types, optionally naming a branch.
+ * @param {string} ergon
+ * @param {number} number
+ * @param {string} [branch]
+ * @returns {string} the athlos folder
+ */
+function athlosNote(ergon, number, branch = "") {
+  const folder = path.join(ergon, String(number));
+  const header = parkFields({
+    id: ERGON_ID,
+    name: "holders-units",
+    nextAction: "x",
+    athlos: `${ERGON_ID}.${number}`,
+    branch,
+  });
+  writeAthlosDoc(folder, { header, steps: [], done: false }, TEXTS);
+  return folder;
+}
+
+/**
+ * A main checkout with one worktree or branch of every kind a `worktrees` row can be: 1 carried by a
+ * squash, 2 ready (four paths, a quote in its subject), 3 dirty, 4 carried but held by a live lease,
+ * 5 a backup carried by a squash, 6 a backup not carried (its note names the branch), 7 carried by a
+ * merge commit, and a harness worktree.
+ * @returns {string}
+ */
+function world() {
+  const main_ = tempDir("park-world-");
+  fs.writeFileSync(path.join(main_, "AGENTS.md"), "# agents\n");
+  fs.mkdirSync(path.join(main_, "_aitna"));
+  fs.writeFileSync(path.join(main_, "_aitna", ".akmon.toml"), "");
+  fs.writeFileSync(path.join(main_, ".gitignore"), ".worktrees/\n_aitna/\n.claude/\n");
+  gitAs(main_, ["init", "-b", "main"]);
+  gitAs(main_, ["add", "AGENTS.md", ".gitignore"]);
+  gitAs(main_, ["commit", "-m", "base"]);
+  addAthlosWorktree(main_, 1, { "squashed.txt": "one" }, "one");
+  addAthlosWorktree(main_, 2, { "pending.txt": "two", "p1.txt": "1", "p2.txt": "2", "p3.txt": "3" }, PENDING_SUBJECT);
+  const dirty = addAthlosWorktree(main_, 3, { "dirty.txt": "three" }, "three");
+  fs.writeFileSync(path.join(dirty, "scratch.txt"), "untracked");
+  const held = addAthlosWorktree(main_, 4, { "held.txt": "four" }, "four");
+  const gone = addAthlosWorktree(main_, 5, { "gone.txt": "five" }, "five");
+  gitAs(main_, ["worktree", "remove", gone]);
+  const behind = addAthlosWorktree(main_, 6, { "behind.txt": "six" }, "six");
+  gitAs(main_, ["worktree", "remove", behind]);
+  addAthlosWorktree(main_, 7, { "merged.txt": "seven" }, "seven");
+  const harness = path.join(main_, ".claude", "worktrees", "agent-x");
+  gitAs(main_, ["worktree", "add", "-b", "worktree-agent-x", harness]);
+  commitFiles(harness, { "harness.txt": "h" }, "harness work");
+  for (const number of [1, 4, 5]) {
+    carryBySquash(main_, number);
+  }
+  gitAs(main_, ["merge", "--no-ff", "-m", "merge seven", athlosBranch(7)]);
+  const ergon = path.join(ergonRoot(main_), ERGON_NAME);
+  fs.mkdirSync(ergon, { recursive: true });
+  const folder = athlosNote(ergon, 4);
+  acquireLease(
+    folder,
+    { harness: "claude", sessionId: "s1", machine: "m1", worktree: held },
+    TEXTS,
+    context(Date.now() / 1000, "m1"),
+  );
+  athlosNote(ergon, 6, athlosBranch(6));
+  return main_;
+}
+
+/**
+ * @param {string} main_
+ * @returns {Map<string, WorktreeRow>} the rows by branch
+ */
+function worldRows(main_) {
+  const rows = listWorktrees(main_, TEXTS, context(Date.now() / 1000, "m1"));
+  return new Map(rows.map((row) => [row.branch, row]));
+}
+
+/**
+ * @param {string} main_
+ * @param {string} branch
+ * @returns {WorktreeRow}
+ */
+function rowOf(main_, branch) {
+  const row = worldRows(main_).get(branch);
+  assert.ok(row !== undefined, `no row for ${branch}`);
+  return row;
+}
+
+/**
+ * @param {string} main_
+ * @param {string[]} [target]
+ * @returns {{code: number, stdout: string, stderr: string}}
+ */
+function worktreesOut(main_, target = []) {
+  return run(["worktrees", ...target, ...MACHINE, "--root", main_]);
+}
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+function lastLine(text) {
+  return text.replace(/\n$/, "").split("\n").pop() ?? "";
+}
+
+test("the owner's checkout comes first and backup branches last", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  const rows = listWorktrees(main_, TEXTS, context(Date.now() / 1000, "m1"));
+  assert.equal(rows[0].kind, "main");
+  assert.equal(rows[0].path, main_);
+  assert.equal(rows[0].state, STATES.main);
+  assert.deepEqual(
+    rows.slice(-2).map((row) => [row.branch, row.kind]),
+    [
+      [athlosBranch(5), "branch-only"],
+      [athlosBranch(6), "branch-only"],
+    ],
+  );
+});
+
+test("a branch carried by a squash is carried though git calls it unmerged", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  const row = rowOf(main_, athlosBranch(1));
+  assert.equal(gitAs(main_, ["branch", "--merged", "main", "--list", athlosBranch(1)]), "");
+  assert.deepEqual([row.kind, row.state, row.carried, row.removable], ["athlos", STATES.carried, true, true]);
+  assert.deepEqual([row.clean, row.ahead, row.differing], [true, 1, []]);
+  assert.equal(row.shown, `${ERGON_NAME}.1`);
+});
+
+test("a branch merged by a merge commit is carried with nothing ahead", { skip: !gitAvailable() }, () => {
+  const row = rowOf(world(), athlosBranch(7));
+  assert.deepEqual([row.state, row.carried, row.ahead, row.removable], [STATES.carried, true, 0, true]);
+});
+
+test("a clean branch beyond the owner's and not carried is ready with its subject", { skip: !gitAvailable() }, () => {
+  const row = rowOf(world(), athlosBranch(2));
+  assert.deepEqual([row.state, row.carried, row.ahead, row.removable], [STATES.ready, false, 1, false]);
+  assert.deepEqual(row.differing, ["p1.txt", "p2.txt", "p3.txt", "pending.txt"]);
+  assert.equal(row.subject, PENDING_SUBJECT);
+});
+
+test("a dirty worktree is working and untracked files count", { skip: !gitAvailable() }, () => {
+  const row = rowOf(world(), athlosBranch(3));
+  assert.deepEqual([row.state, row.clean, row.carried, row.removable], [STATES.working, false, false, false]);
+  assert.equal(row.subject, "");
+});
+
+test("a live lease on the worktree holds it whatever its content", { skip: !gitAvailable() }, () => {
+  const row = rowOf(world(), athlosBranch(4));
+  assert.ok(row.carried);
+  assert.deepEqual(
+    [row.state, row.ergon, row.athlos, row.removable],
+    [STATES.working, ERGON_ID, `${ERGON_ID}.4`, false],
+  );
+});
+
+test("a stale lease holds nothing", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  const folder = path.join(ergonRoot(main_), ERGON_NAME, "4");
+  fs.writeFileSync(
+    path.join(folder, "HOLDER"),
+    `---\nharness: claude\nsession: s1\nmachine: m1\nworktree: ${athlosFolderOf(main_, 4)}\nwritten: 2000-01-01T00:00:00Z\n---\n`,
+  );
+  const row = rowOf(main_, athlosBranch(4));
+  assert.deepEqual([row.state, row.removable], [STATES.carried, true]);
+});
+
+test("a harness worktree is never removable", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  const row = rowOf(main_, "worktree-agent-x");
+  assert.deepEqual([row.kind, row.state, row.removable], ["harness", STATES.harness, false]);
+  assert.equal(row.shown, path.join(main_, ".claude", "worktrees", "agent-x"));
+});
+
+test("a branch with no worktree is a backup and its note names its athlos", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  const carried = rowOf(main_, athlosBranch(5));
+  const behind = rowOf(main_, athlosBranch(6));
+  assert.deepEqual(
+    [carried.kind, carried.path, carried.clean, carried.state],
+    ["branch-only", "", null, STATES.backup],
+  );
+  assert.ok(carried.removable);
+  assert.deepEqual([behind.state, behind.removable, behind.carried], [STATES.not_carried_backup, false, false]);
+  assert.deepEqual([behind.ergon, behind.athlos], [ERGON_ID, `${ERGON_ID}.6`]);
+});
+
+test("a backup held by a live lease is working", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  const folder = path.join(ergonRoot(main_), ERGON_NAME, "6");
+  acquireLease(
+    folder,
+    { harness: "claude", sessionId: "s9", machine: "m1", worktree: "/elsewhere" },
+    TEXTS,
+    context(Date.now() / 1000, "m1"),
+  );
+  assert.equal(rowOf(main_, athlosBranch(6)).state, STATES.working);
+});
+
+test("the table and the commands for the ready and the removable", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  const { code, stdout } = worktreesOut(main_);
+  assert.equal(code, 0);
+  const [table, carry, removal] = stdout.replace(/\n$/, "").split("\n\n");
+  const lines = table.split("\n");
+  assert.deepEqual(
+    lines[0].split(" | ").map((cell) => cell.trim()),
+    TEXTS.worktrees.columns,
+  );
+  assert.equal(lines.length, 1 + 9);
+  assert.equal(new Set(lines.map((line) => line.indexOf(" | "))).size, 1); // the columns are aligned
+  assert.deepEqual(carry.split("\n"), [
+    `cd ${main_}`,
+    `git merge --squash ${athlosBranch(2)}`,
+    'git commit -m "pending: add the \\"pending\\" file"',
+  ]);
+  assert.deepEqual(removal.split("\n"), [
+    `git worktree remove ${athlosFolderOf(main_, 1)}`,
+    `git worktree remove ${athlosFolderOf(main_, 7)}`,
+    `git branch -D ${athlosBranch(5)}`,
+  ]);
+});
+
+test("worktrees reads and changes nothing", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  const snapshot = () => [
+    gitAs(main_, ["for-each-ref"]),
+    gitAs(main_, ["worktree", "list"]),
+    gitAs(main_, ["status", "--porcelain"]),
+  ];
+  const before = snapshot();
+  worktreesOut(main_);
+  worktreesOut(main_, [athlosBranch(2)]);
+  assert.deepEqual(snapshot(), before);
+});
+
+test("a branch target prints its row and a carried verdict with exit zero", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  for (const target of [athlosBranch(1), `${ERGON_NAME}.1`]) {
+    const { code, stdout } = worktreesOut(main_, [target]);
+    const lines = stdout.replace(/\n$/, "").split("\n");
+    assert.equal(code, 0);
+    assert.equal(lines.length, 3); // the header, the row and the verdict
+    assert.ok(lines[1].startsWith(`${ERGON_NAME}.1 `));
+    assert.equal(lines[2], `${athlosBranch(1)}: carried`);
+  }
+});
+
+test("an athlos key names the row of its unit", { skip: !gitAvailable() }, () => {
+  const { code, stdout } = worktreesOut(world(), [`${ERGON_ID}.4`]);
+  assert.equal(code, 0);
+  assert.equal(lastLine(stdout), `${athlosBranch(4)}: carried`);
+});
+
+test("a branch not carried names the first three paths that differ and exits one", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  const ready = worktreesOut(main_, [athlosBranch(2)]);
+  assert.equal(ready.code, 1);
+  assert.equal(lastLine(ready.stdout), `${athlosBranch(2)}: not carried — p1.txt, p2.txt, p3.txt, …`);
+  const dirty = worktreesOut(main_, [athlosBranch(3)]);
+  assert.equal(dirty.code, 1);
+  assert.equal(lastLine(dirty.stdout), `${athlosBranch(3)}: not carried — dirty.txt`);
+});
+
+test("a missing branch is said and exits one", { skip: !gitAvailable() }, () => {
+  const { code, stdout } = worktreesOut(world(), ["nope"]);
+  assert.deepEqual([code, stdout], [1, "nope: no such branch\n"]);
+});
+
+test("the verdict follows the content after the owner changes a carried path again", { skip: !gitAvailable() }, () => {
+  const main_ = world();
+  fs.writeFileSync(path.join(main_, "squashed.txt"), "changed again");
+  gitAs(main_, ["commit", "-am", "owner edits it"]);
+  const { code, stdout } = worktreesOut(main_, [athlosBranch(1)]);
+  assert.equal(code, 1);
+  assert.ok(stdout.replace(/\n$/, "").endsWith(`${athlosBranch(1)}: not carried — squashed.txt`));
+});
+
+test("worktrees outside a repository is refused in one line", () => {
+  const root = project();
+  const { code, stderr } = run(["worktrees", "--root", root]);
+  assert.equal(code, 1);
+  assert.equal(stderr, `error: ${root} is not in a git repository, so there are no worktrees to list\n`);
+});
+
+test("a main checkout alone lists one row and no commands", { skip: !gitAvailable() }, () => {
+  const root = project();
+  gitAs(root, ["init", "-b", "main"]);
+  gitAs(root, ["add", "AGENTS.md"]);
+  gitAs(root, ["commit", "-m", "base"]);
+  const { code, stdout } = worktreesOut(root);
+  const lines = stdout.replace(/\n$/, "").split("\n");
+  assert.equal(code, 0);
+  assert.equal(lines.length, 2);
+  assert.equal(lines[1].split(" | ")[0].trim(), root);
+  assert.ok(lines[1].endsWith(` | ${STATES.main}`));
+});
+
+test("the porcelain listing is parsed in git order and a bare entry is marked", () => {
+  const text =
+    "worktree /srv/main\nHEAD aaa\nbranch refs/heads/main\n\n" +
+    "worktree /srv/main/.worktrees/x.1\nHEAD bbb\nbranch refs/heads/_aitna/C1-x.1\nlocked\n\n" +
+    "worktree /srv/detached\nHEAD ccc\ndetached\n\n" +
+    "worktree /srv/bare.git\nbare\n";
+  assert.deepEqual(parseWorktreeList(text), [
+    { path: "/srv/main", head: "aaa", branch: "main", bare: false },
+    { path: "/srv/main/.worktrees/x.1", head: "bbb", branch: "_aitna/C1-x.1", bare: false },
+    { path: "/srv/detached", head: "ccc", branch: "", bare: false },
+    { path: "/srv/bare.git", head: "", branch: "", bare: true },
+  ]);
+});
+
+test("an athlos branch is in the namespace and names its ergon and number", () => {
+  assert.deepEqual(branchUnit("_aitna/C186-holders-units.1"), { ergonId: "C186", number: 1 });
+  assert.deepEqual(branchUnit("_aitna/_T3-local-thing.12"), { ergonId: "_T3", number: 12 });
+  for (const other of [
+    "_aitna/C186-holders-units",
+    "_aitna/C186-holders-units.x",
+    "feature/C186-holders-units.1",
+    "main",
+  ]) {
+    assert.equal(branchUnit(other), null, other);
+  }
+});
+
+/**
+ * A row to build tables and commands from, with `changes` laid over it.
+ * @param {Partial<WorktreeRow>} [changes]
+ * @returns {WorktreeRow}
+ */
+function syntheticRow(changes = {}) {
+  return {
+    path: "/srv/a b",
+    shown: "a b",
+    branch: "_aitna/C1-x.1",
+    kind: "athlos",
+    ergon: "",
+    athlos: "",
+    clean: true,
+    ahead: 2,
+    ageSeconds: 0,
+    carried: true,
+    differing: [],
+    state: STATES.carried,
+    removable: true,
+    subject: "",
+    ...changes,
+  };
+}
+
+test("the table shows short relative ages and the empty cell for what is unknown", () => {
+  const rows = [
+    syntheticRow({ ageSeconds: 59 * 60 + 59 }),
+    syntheticRow({ ageSeconds: 60 * 60 }),
+    syntheticRow({ ageSeconds: 24 * 3600 - 1 }),
+    syntheticRow({ ageSeconds: 24 * 3600 }),
+    syntheticRow({ ageSeconds: null, ahead: null, clean: null, shown: "", path: "", kind: "branch-only" }),
+  ];
+  const lines = formatWorktrees(rows, TEXTS);
+  assert.deepEqual(
+    lines.slice(1).map((line) => line.split(" | ")[7].trim()),
+    ["59m", "1h", "23h", "1d", "-"],
+  );
+  const last = lines[lines.length - 1].split(" | ").map((cell) => cell.trim());
+  assert.deepEqual([last[0], last[5], last[6]], ["-", "-", "-"]);
+});
+
+test("the commands are quoted for the shell and the message for double quotes", () => {
+  const ready = syntheticRow({
+    state: STATES.ready,
+    removable: false,
+    carried: false,
+    subject: 'fix `a` and "b" $HOME \\ done',
+  });
+  assert.deepEqual(carryCommands([ready], "/srv/the main", TEXTS), [
+    [
+      "cd '/srv/the main'",
+      "git merge --squash _aitna/C1-x.1",
+      'git commit -m "fix \\`a\\` and \\"b\\" \\$HOME \\\\ done"',
+    ],
+  ]);
+  assert.deepEqual(removalCommands([syntheticRow(), syntheticRow({ path: "", branch: "_aitna/it's" })], TEXTS), [
+    "git worktree remove '/srv/a b'",
+    `git branch -D '_aitna/it'"'"'s'`,
+  ]);
 });

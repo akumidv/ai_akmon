@@ -20,6 +20,7 @@ form is never written (ADR 0029 D12).
     akmon tool park/park digest C186 [--cap N]
     akmon tool park/park list [--plan ID] [--task ID] [--state S] [--closed]
     akmon tool park/park active             # the unit this session is in, read from the disk
+    akmon tool park/park worktrees [BRANCH|ATHLOS]  # every worktree and backup branch by state; one: is it carried
     akmon tool park/park close C186         # moves the ergon to the closed folder
     akmon tool park/park local-id           # the next free local id, _T<n>
     akmon tool park/park export C186 --out bundle.md
@@ -51,6 +52,7 @@ import dataclasses
 import errno
 import os
 import re
+import shlex
 import socket
 import subprocess
 import sys
@@ -1850,6 +1852,409 @@ def active_unit(root: Path, texts: Mapping) -> tuple[Path, str, int] | None:
 
 
 # --------------------------------------------------------------------------------------
+# the worktree list: every worktree git knows, what carries it, and which one may go (ADR 0029 D06, D09)
+# --------------------------------------------------------------------------------------
+
+_BRANCH_NAMESPACE = "_aitna/"  # ADR 0028 D04: an athlos's branch is ``_aitna/<id>-<name>.<n>``
+_HEADS = "refs/heads/"
+
+
+@dataclass(frozen=True)
+class GitWorktree:
+    """One entry of ``git worktree list --porcelain``: the folder, its commit and its branch."""
+
+    path: str
+    head: str
+    branch: str  # the short name; empty when HEAD is detached
+    bare: bool
+
+
+@dataclass(frozen=True)
+class UnitRecord:
+    """What a unit says of the branch and the folder it works in: read from its lease and its note."""
+
+    ergon: str
+    athlos: str  # empty for the ergon's own unit
+    branch: str  # the branch its note records
+    worktree: str  # the folder its live lease names; empty when the lease is absent, stale or unnamed
+    live: bool  # a live lease holds the unit
+    written: float  # when its note was last written
+
+
+@dataclass(frozen=True)
+class WorktreeRow:
+    """One row of ``worktrees``: a worktree, or a branch whose worktree is gone, and what state its work is in."""
+
+    path: str  # absolute; empty for a branch-only row
+    shown: str  # the path as printed: from the ``.worktrees/`` folder when inside it
+    branch: str
+    kind: str
+    ergon: str
+    athlos: str
+    clean: bool | None  # ``None``: the folder cannot be read, or there is none
+    ahead: int | None
+    age_seconds: int | None
+    carried: bool
+    differing: tuple[str, ...] | None  # the paths the branch changed that the owner's branch does not hold alike
+    state: str  # working, ready, carried, backup, not-carried backup, harness or main
+    removable: bool  # a carried worktree or a carried backup branch
+    subject: str  # the subject of the branch's last commit, read for a ready row only
+
+
+@dataclass(frozen=True)
+class _Listing:
+    """What every row of one ``worktrees`` call is judged against."""
+
+    root: Path  # where git runs
+    main: str  # the owner's checkout
+    owner_tip: str  # the commit its branch stands at
+    units: Sequence[UnitRecord]
+    texts: Mapping
+    now: float
+
+
+def parse_worktree_list(text: str) -> list[GitWorktree]:
+    """The entries of ``git worktree list --porcelain``, in git's order; blocks are split by a blank line."""
+    entries: list[GitWorktree] = []
+    for block in text.split("\n\n"):
+        path = head = branch = ""
+        bare = False
+        for line in block.split("\n"):
+            key, _, value = line.partition(" ")
+            if key == "worktree":
+                path = value
+            elif key == "HEAD":
+                head = value
+            elif key == "branch":
+                branch = value.removeprefix(_HEADS)
+            elif line == "bare":
+                bare = True
+        if path:
+            entries.append(GitWorktree(path, head, branch, bare))
+    return entries
+
+
+def branch_unit(branch: str) -> tuple[str, int] | None:
+    """The ergon id and the athlos number an athlos's branch ``_aitna/<id>-<name>.<n>`` names, or ``None``."""
+    if not branch.startswith(_BRANCH_NAMESPACE):
+        return None
+    base, _, tail = branch[len(_BRANCH_NAMESPACE) :].rpartition(".")
+    match = _ERGON_RE.match(base)
+    if match is None or not tail.isdecimal():
+        return None
+    return match.group(1), int(tail)
+
+
+def _same_path(one: str, other: str) -> bool:
+    return bool(one) and bool(other) and os.path.realpath(one) == os.path.realpath(other)
+
+
+def _live_lease(unit: Path, texts: Mapping, context: LeaseContext) -> Lease | None:
+    """The lease of a unit when it is live; a stale one holds nothing."""
+    lease = read_lease(unit, texts)
+    return lease if lease is not None and not lease_is_stale(lease, context) else None
+
+
+def _unit_record(unit: Path, ergon_id: str, athlos: str, branch: str, lease: Lease | None) -> UnitRecord:
+    """What one unit says: its note's branch, and the folder its live lease names."""
+    note = athlos_file_of(unit) if athlos else unit / _PARK_FILE
+    return UnitRecord(
+        ergon=ergon_id,
+        athlos=athlos,
+        branch=branch,
+        worktree=lease.holder.worktree if lease is not None else "",
+        live=lease is not None,
+        written=note.stat().st_mtime if note.is_file() else 0.0,
+    )
+
+
+def _unit_records(root: Path, texts: Mapping, context: LeaseContext) -> list[UnitRecord]:
+    """The ergon's own unit and each athlos of every ergon, the closed ones too, as the list matches against.
+
+    An ergon whose files do not parse is left out: one bad ergon never stops the list.
+    """
+    records: list[UnitRecord] = []
+    layer = ergon_root(root)
+    folders = [layer / name for name in _ergon_names(root)]
+    folders += [layer / _CLOSED_DIR / name for name in _ergon_names(root, closed=True)]
+    for ergon in folders:
+        ergon_id = _ergon_id(ergon.name)
+        try:
+            note_branch = read_note(ergon, texts)[0].branch if (ergon / _PARK_FILE).is_file() else ""
+            found = [_unit_record(ergon, ergon_id, "", note_branch, _live_lease(ergon, texts, context))]
+            for folder in _athlos_folders(ergon):
+                doc = read_athlos_doc(athlos_file_of(folder), texts)
+                if doc is not None:
+                    athlos = doc.header.athlos or folder.name
+                    found.append(
+                        _unit_record(folder, ergon_id, athlos, doc.header.branch, _live_lease(folder, texts, context))
+                    )
+        except ParkError:
+            continue
+        records.extend(found)
+    return records
+
+
+def _changed_paths(cwd: Path, *revisions: str) -> frozenset[str] | None:
+    """The paths that differ between two revisions, both sides of a rename apart, or ``None`` when git fails."""
+    out = _git(["diff", "--name-only", "--no-renames", "-z", *revisions], cwd, strip=False)
+    if out is None:
+        return None
+    return frozenset(path for path in out.split("\0") if path)
+
+
+def uncarried_paths(root: Path, owner_tip: str, tip: str) -> tuple[str, ...] | None:
+    """The paths of the branch at ``tip`` that the owner's branch does not hold alike; empty when it is carried.
+
+    ``git branch --merged`` cannot say it: a squash leaves the branch unmerged. So it is read from
+    content: every path the branch changed since its merge-base must hold the same blob at ``tip`` and
+    at ``owner_tip`` (absent on both sides is equal); a branch that changed no path, or whose tip the
+    owner's branch contains, has no such path. ``None`` is what git cannot answer (no merge-base, a
+    failing command), and counts as not carried.
+    """
+    base = _git(["merge-base", owner_tip, tip], root)
+    if not base:
+        return None
+    if base == tip:
+        return ()
+    changed = _changed_paths(root, base, tip)
+    differing = _changed_paths(root, tip, owner_tip)
+    if changed is None or differing is None:
+        return None
+    return tuple(sorted(changed & differing))
+
+
+def _relative_age(seconds: int) -> str:
+    """An age in the short relative form: minutes under an hour, hours under a day, days after."""
+    if seconds < _SECONDS_PER_HOUR:
+        return f"{seconds // 60}m"
+    if seconds < _SECONDS_PER_DAY:
+        return f"{seconds // _SECONDS_PER_HOUR}h"
+    return f"{seconds // _SECONDS_PER_DAY}d"
+
+
+def _unit_for(units: Sequence[UnitRecord], path: str, branch: str) -> tuple[UnitRecord | None, bool]:
+    """The unit a row belongs to, and whether a live lease holds it.
+
+    The live lease whose folder is ``path`` wins; else the unit whose latest note names ``branch``.
+    A live lease on any unit that names the branch holds the row too.
+    """
+    by_path = [unit for unit in units if unit.live and _same_path(unit.worktree, path)]
+    by_branch = [unit for unit in units if branch and unit.branch == branch]
+    held = bool(by_path) or any(unit.live for unit in by_branch)
+    if by_path:
+        return max(by_path, key=lambda unit: (unit.athlos != "", unit.written)), held
+    if by_branch:
+        return max(by_branch, key=lambda unit: (unit.written, unit.athlos != "")), held
+    return None, held
+
+
+@dataclass(frozen=True)
+class _RowFacts:
+    """What decides a row's state: a live lease, the content check, the folder's cleanliness, the commits ahead."""
+
+    held: bool
+    carried: bool
+    clean: bool | None
+    ahead: int | None
+
+
+def _row_state(kind: str, texts: Mapping, facts: _RowFacts) -> str:
+    """The state of a row: what the owner may do with it, or why nothing yet.
+
+    An athlos worktree is *working* while it is dirty (or cannot be read) or a live lease holds it,
+    *ready* when it is clean, beyond the owner's branch and not carried, and *carried* when its work is
+    in the owner's branch. A branch without a worktree is a *backup*, carried or not; a held one is
+    still *working*.
+    """
+    kinds = texts["worktrees"]["kinds"]
+    states = texts["worktrees"]["states"]
+    if kind in (kinds["main"], kinds["harness"]):
+        return states[kind]
+    if facts.held:
+        return states["working"]
+    if kind == kinds["branch_only"]:
+        return states["backup"] if facts.carried else states["not_carried_backup"]
+    if facts.clean is not True:
+        return states["working"]
+    if facts.carried:
+        return states["carried"]
+    return states["ready"] if facts.ahead else states["working"]
+
+
+def _worktree_row(listing: _Listing, path: str, branch: str, tip: str, kind: str) -> WorktreeRow:
+    """One row: the facts git gives of ``tip``, the unit that owns it, and its state."""
+    texts = listing.texts
+    unit, held = _unit_for(listing.units, path, branch)
+    differing = uncarried_paths(listing.root, listing.owner_tip, tip)
+    carried = differing == ()
+    uncommitted = git_uncommitted_paths(path) if path else None
+    clean = None if uncommitted is None else not uncommitted
+    behind = _git(["rev-list", "--count", f"{listing.owner_tip}..{tip}"], listing.root)
+    ahead = int(behind) if behind and behind.isdecimal() else None
+    stamp = _git(["log", "-1", "--format=%ct", tip], listing.root)
+    age = max(0, int(listing.now - int(stamp))) if stamp and stamp.isdecimal() else None
+    state = _row_state(kind, texts, _RowFacts(held, carried, clean, ahead))
+    ready = state == texts["worktrees"]["states"]["ready"]
+    shown = _display_path(Path(path), Path(listing.main) / _WORKTREES_DIR) if path else ""
+    return WorktreeRow(
+        path=path,
+        shown=shown,
+        branch=branch or texts["worktrees"]["detached"],
+        kind=kind,
+        ergon=unit.ergon if unit else "",
+        athlos=unit.athlos if unit else "",
+        clean=clean,
+        ahead=ahead,
+        age_seconds=age,
+        carried=carried,
+        differing=differing,
+        state=state,
+        removable=state in (texts["worktrees"]["states"]["carried"], texts["worktrees"]["states"]["backup"]),
+        subject=(_git(["log", "-1", "--format=%s", tip], listing.root) or "") if ready else "",
+    )
+
+
+def _branch_only(root: Path, sheltered: frozenset[str]) -> list[tuple[str, str]]:
+    """The ``_aitna/`` branches with no worktree, as (branch, tip), by branch name."""
+    out = _git(["for-each-ref", "--format=%(objectname) %(refname)", _HEADS + _BRANCH_NAMESPACE], root) or ""
+    found: list[tuple[str, str]] = []
+    for line in out.split("\n"):
+        tip, _, ref = line.partition(" ")
+        branch = ref.removeprefix(_HEADS)
+        if tip and branch and branch not in sheltered:
+            found.append((branch, tip))
+    return sorted(found)
+
+
+def list_worktrees(root: Path, texts: Mapping, context: LeaseContext) -> list[WorktreeRow]:
+    """Every worktree of the repository and every ``_aitna/`` branch that has none, as rows; reads only.
+
+    The owner's checkout is git's first entry and comes first; a linked worktree is an *athlos* when its
+    branch is in the ``_aitna/<id>-<name>.<n>`` namespace and a *harness* one otherwise; a branch whose
+    worktree is gone is a backup. Each row carries a state; one is removable only when it is a carried
+    athlos worktree or a carried backup branch (never one a live lease holds).
+
+    Raises:
+        ParkError: ``root`` is not in a git repository, or the repository has no checkout of its own.
+    """
+    out = _git(["worktree", "list", "--porcelain"], root, strip=False)
+    entries = parse_worktree_list(out) if out else []
+    if not entries:
+        raise _error(texts, "no_repository", path=root)
+    if entries[0].bare:
+        raise _error(texts, "no_main_checkout", path=entries[0].path)
+    main = entries[0]
+    kinds = texts["worktrees"]["kinds"]
+    listing = _Listing(root, main.path, main.head, _unit_records(root, texts, context), texts, context.now)
+    linked = [entry for entry in entries[1:] if not entry.bare]
+    rows = [_worktree_row(listing, main.path, main.branch, main.head, kinds["main"])]
+    for entry in linked:
+        kind = kinds["athlos"] if branch_unit(entry.branch) else kinds["harness"]
+        rows.append(_worktree_row(listing, entry.path, entry.branch, entry.head, kind))
+    rows[1:] = sorted(rows[1:], key=lambda row: row.shown)
+    sheltered = frozenset(entry.branch for entry in entries if entry.branch)
+    for branch, tip in _branch_only(root, sheltered):
+        rows.append(_worktree_row(listing, "", branch, tip, kinds["branch_only"]))
+    return rows
+
+
+def _yes_no(texts: Mapping, *, value: bool | None) -> str:
+    if value is None:
+        return texts["empty_cell"]
+    return texts["worktrees"]["yes"] if value else texts["worktrees"]["no"]
+
+
+def _table_cells(row: WorktreeRow, texts: Mapping) -> list[str]:
+    empty = texts["empty_cell"]
+    return [
+        row.shown or empty,
+        row.branch,
+        row.kind,
+        row.ergon or empty,
+        row.athlos or empty,
+        _yes_no(texts, value=row.clean),
+        empty if row.ahead is None else str(row.ahead),
+        empty if row.age_seconds is None else _relative_age(row.age_seconds),
+        row.state,
+    ]
+
+
+def format_worktrees(rows: Sequence[WorktreeRow], texts: Mapping) -> list[str]:
+    """The table of ``worktrees`` as aligned lines, the header first; an absent value is the empty cell."""
+    spec = texts["worktrees"]
+    table = [list(spec["columns"])]
+    table.extend(_table_cells(row, texts) for row in rows)
+    widths = [max(len(line[column]) for line in table) for column in range(len(table[0]))]
+    lines = []
+    for line in table:
+        padded = [cell.ljust(width) for cell, width in zip(line[:-1], widths[:-1], strict=True)]
+        lines.append(spec["separator"].join([*padded, line[-1]]))
+    return lines
+
+
+def _double_quoted(text: str) -> str:
+    """``text`` made literal inside double quotes: the four characters the shell still reads there are escaped."""
+    return re.sub(r'([\\"$`])', r"\\\1", text)
+
+
+def carry_commands(rows: Sequence[WorktreeRow], main: str, texts: Mapping) -> list[list[str]]:
+    """The squash that carries each ready row into the owner's branch, one block of commands per row.
+
+    The tool prints them and never runs them (ADR 0029 D09): the owner starts every carry. The message
+    is the subject of the branch's last commit, which the agent may rewrite before the owner commits.
+    """
+    spec = texts["worktrees"]
+    ready = spec["states"]["ready"]
+    return [
+        [
+            jsondata.fill(spec["carry_cd"], {"path": shlex.quote(main)}),
+            jsondata.fill(spec["carry_squash"], {"branch": shlex.quote(row.branch)}),
+            jsondata.fill(spec["carry_commit"], {"message": _double_quoted(row.subject)}),
+        ]
+        for row in rows
+        if row.state == ready
+    ]
+
+
+def removal_commands(rows: Sequence[WorktreeRow], texts: Mapping) -> list[str]:
+    """The commands that remove each removable row: the tool prints them and never runs them.
+
+    A worktree goes with ``git worktree remove``, which refuses while anything in it is uncommitted; a
+    backup branch goes with ``-D``, because a squash leaves it unmerged in git's eyes.
+    """
+    spec = texts["worktrees"]
+    commands: list[str] = []
+    for row in rows:
+        if not row.removable:
+            continue
+        if row.path:
+            commands.append(jsondata.fill(spec["command_worktree"], {"path": shlex.quote(row.path)}))
+        else:
+            commands.append(jsondata.fill(spec["command_branch"], {"branch": shlex.quote(row.branch)}))
+    return commands
+
+
+def select_worktrees(rows: Sequence[WorktreeRow], target: str) -> list[WorktreeRow]:
+    """The rows a target names: a branch (with or without ``_aitna/``) or an athlos key such as ``C190.1``."""
+    return [row for row in rows if target in (row.branch, row.athlos) or row.branch == _BRANCH_NAMESPACE + target]
+
+
+def worktree_verdict(row: WorktreeRow, texts: Mapping) -> str:
+    """The one line that says whether the branch of ``row`` is carried and, if not, what differs."""
+    spec = texts["worktrees"]
+    if row.carried:
+        return jsondata.fill(spec["verdict_carried"], {"branch": row.branch})
+    if row.differing is None:
+        paths = spec["verdict_unreadable"]
+    else:
+        shown = row.differing[: spec["verdict_paths"]]
+        more = spec["verdict_more"] if len(row.differing) > len(shown) else ""
+        paths = ", ".join(shown) + more
+    return jsondata.fill(spec["verdict_not_carried"], {"branch": row.branch, "paths": paths})
+
+
+# --------------------------------------------------------------------------------------
 # the export: the ergon's files, its leases left out (ADR 0028 D07, branch B10)
 # --------------------------------------------------------------------------------------
 
@@ -1946,7 +2351,7 @@ def _add_note_commands(commands: Any, common: argparse.ArgumentParser) -> None:
 
 
 def _add_unit_commands(commands: Any, common: argparse.ArgumentParser) -> None:
-    """The commands that act on one unit: hold, release, athlos, active, close, export, local-id."""
+    """The commands that act on one unit: hold, release, athlos, active, worktrees, close, export, local-id."""
     hold = commands.add_parser("hold", parents=[common], help="Take the lease of a unit.", allow_abbrev=False)
     hold.add_argument("id")
     hold.add_argument("--number", type=int, default=None)
@@ -1965,6 +2370,14 @@ def _add_unit_commands(commands: Any, common: argparse.ArgumentParser) -> None:
     _add_holder_flags(athlos)
 
     commands.add_parser("active", parents=[common], help="Print the unit this session is in.", allow_abbrev=False)
+
+    worktrees = commands.add_parser(
+        "worktrees",
+        parents=[common],
+        help="List the worktrees and backup branches by state; with a branch or athlos key, say if it is carried.",
+        allow_abbrev=False,
+    )
+    worktrees.add_argument("target", nargs="?", default="")
 
     close = commands.add_parser(
         "close", parents=[common], help="Close an ergon and move it to the closed folder.", allow_abbrev=False
@@ -2325,6 +2738,31 @@ def _cmd_active(_args: argparse.Namespace, run: _Run) -> int:
     return 0
 
 
+def _cmd_worktrees(args: argparse.Namespace, run: _Run) -> int:
+    rows = list_worktrees(run.root, run.texts, run.lease)
+    target = args.target.strip()
+    if target:
+        return _print_worktree_verdict(select_worktrees(rows, target), target, run)
+    sections = [format_worktrees(rows, run.texts)]
+    sections += carry_commands(rows, rows[0].path, run.texts)
+    removals = removal_commands(rows, run.texts)
+    if removals:
+        sections.append(removals)
+    print("\n\n".join("\n".join(section) for section in sections))
+    return 0
+
+
+def _print_worktree_verdict(rows: Sequence[WorktreeRow], target: str, run: _Run) -> int:
+    """Print the rows a target names and one verdict line each; the exit code is 0 only when all are carried."""
+    if not rows:
+        print(jsondata.fill(run.texts["worktrees"]["verdict_missing"], {"target": target}))
+        return 1
+    lines = format_worktrees(rows, run.texts)
+    lines += [worktree_verdict(row, run.texts) for row in rows]
+    print("\n".join(lines))
+    return 0 if all(row.carried for row in rows) else 1
+
+
 def _cmd_close(args: argparse.Namespace, run: _Run) -> int:
     ergon = find_ergon(run.root, args.id.strip(), run.texts)
     _refuse_live_foreign_lease(ergon, _holder_of(args, run), run)
@@ -2382,6 +2820,7 @@ def _command_handlers() -> Mapping[str, Callable[[argparse.Namespace, _Run], int
         "release": _cmd_release,
         "athlos": _cmd_athlos,
         "active": _cmd_active,
+        "worktrees": _cmd_worktrees,
         "close": _cmd_close,
         "export": _cmd_export,
         "local-id": _cmd_local_id,

@@ -29,7 +29,7 @@ rather than a detail of it:
 | `akmon update`, mode `submodule` | `git` | the release tags cannot be fetched into the mount; the pin does not move |
 | `akmon update`, mode `package` | `uv` | the pin cannot be moved in place; the `uv add` command is printed and nothing changes |
 | `akmon update`, mode `vendored` | `uvx` (uv) | the target release's CLI cannot be fetched; its command is printed and nothing changes |
-| commit guard, branch lookup (`hook_core.current_git_branch`) | `git` | **nothing is weakened**: the call returns `""`, and an empty branch takes the same `ask` branch as `main`, so absence makes the guard *stricter*. It is also Claude-only wiring — `sync` does not emit the commit guard on the Codex route at all |
+| commit guard, repository lookup (`hook_core.repository_facts`) | `git` | **nothing is weakened**: the call returns `None`, and an unknown repository takes the same `ask` branch as the main checkout, so absence makes the guard *stricter*. It is also Claude-only wiring — `sync` does not emit the commit guard on the Codex route at all |
 | `meta/bin/validate.py` | `pytest` | nothing for a consumer, and not a binary dependency for a contributor either: `_pytest_command` prefers an **importable** pytest and only reaches for `uv` when that fails |
 | `meta/bin/validate.py` | `uv` | a *fallback* resolver, reached only when pytest is not importable; absent, the leg skips with a stated reason rather than failing |
 | `meta/self_ci.py` | `uv` | **unconditional** — `uv build`, `uv venv` and `uv pip install` have no alternative path, so the wheel-smoke leg cannot run without it. The one contributor-side hard requirement, and it does not share a modality with the line above |

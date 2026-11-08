@@ -12,7 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -351,21 +351,10 @@ def _escalate_unattended_ask(
 
 # Every pattern of the command guards that uses ``\b`` is ``re.ASCII``: the JavaScript twin's ``\b`` is
 # ASCII-only, while Python's, left alone, also counts other scripts' letters as word characters, so
-# ``ésudo`` or ``βgit push`` would be placed differently by the two. A shell command word is ASCII.
+# ``ésudo`` would be placed differently by the two. A shell command word is ASCII.
 # The ``co-authored-by`` pattern below stays ``IGNORECASE`` only: none of its letters has a
 # non-ASCII case partner (only ``i``, ``s`` and ``k`` do, via U+0131, U+017F and U+212A).
 _SUDO_RE = re.compile(r"\bsudo\b", re.ASCII)
-
-# `git` is a command word only when no name character (letter, digit, `_`, `.`, `-`) touches it:
-# `git-commit-guard.py`, `.git/hooks` and `my_git` are names. A subcommand must not continue a
-# name from the left (`pre-commit`, `.push`, `x_tag`), but may be followed by a hyphen: `git
-# commit-tree` and `git merge-base` are still a commit and a merge command.
-_GIT_WORD = r"(?<![\w.-])git(?![\w.-])"
-
-
-def _subcommand(word: str) -> str:
-    """``word`` as a git subcommand: no name character before it, no letter, digit, ``_`` or ``.`` after."""
-    return r"(?<![\w.-])" + word + r"(?![\w.])"
 
 
 def privilege_escalation_guard_result(command: str) -> HookResult | None:
@@ -388,14 +377,733 @@ def privilege_escalation_guard_result(command: str) -> HookResult | None:
     )
 
 
+# --------------------------------------------------------------------------------------
+# The commit guard: which repository a command acts on (C190, ADR-0029/D09)
+# --------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GitInvocation:
+    """One ``git`` command found in a shell command: its subcommand, its arguments, and where it runs.
+
+    ``arguments`` are the words after the subcommand, quotes removed. ``directory`` is ``None`` when
+    the place cannot be told from the text (a ``$`` expansion, a ``GIT_DIR`` assignment,
+    ``--git-dir``, ``cd -``).
+    """
+
+    subcommand: str
+    directory: str | None
+    arguments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RepositoryFacts:
+    """What the guard needs of the repository at a directory: a linked worktree or not, and its branch.
+
+    ``branch`` is ``""`` on a detached ``HEAD``.
+    """
+
+    linked: bool
+    branch: str
+
+
+@dataclass(frozen=True)
+class _Word:
+    """A shell word after quote removal. ``operand`` is ``False`` for the target of a redirection."""
+
+    value: str
+    expands: bool
+    substitutions: tuple[list[Any], ...]
+    operand: bool
+
+
+@dataclass(frozen=True)
+class _Command:
+    words: tuple[_Word, ...]
+
+
+@dataclass(frozen=True)
+class _Group:
+    """A parenthesized subshell: a directory change inside it does not leave it."""
+
+    script: list[Any]
+
+
+class _WordBuilder:
+    """The word being read: its text so far, whether it was started, whether a ``$`` was met."""
+
+    def __init__(self) -> None:
+        self.parts: list[str] = []
+        self.started = False
+        self.expands = False
+        self.substitutions: list[list[Any]] = []
+
+    def add(self, text: str) -> None:
+        self.parts.append(text)
+        self.started = True
+
+
+class _Frame:
+    """One script being read: the finished units, the command's words, the word under way."""
+
+    def __init__(self) -> None:
+        self.units: list[Any] = []
+        self.words: list[_Word] = []
+        self.builder = _WordBuilder()
+
+
+_DIGITS_RE = re.compile(r"[0-9]+")
+_ASSIGNMENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+# Words a command word may hide behind: a wrapper that runs the next command, and the shell
+# keywords that open a command (`then git commit`).
+_WRAPPERS = frozenset(
+    {"env", "command", "time", "nohup", "exec", "!", "{", "}", "if", "then", "else", "elif", "do", "while", "until"}
+)
+_SHELLS = frozenset({"bash", "sh", "zsh", "dash"})
+_ENVIRONMENT_REPOSITORY = frozenset({"GIT_DIR", "GIT_WORK_TREE"})
+_WRITE_OPERANDS = 2  # `symbolic-ref <name> <ref>` writes; one operand reads
+_LAYOUT_PATHS = 2  # `rev-parse --git-dir --git-common-dir` prints one path per line
+
+
+class _Parser:
+    """Reads shell text into scripts of simple commands, with no filesystem and no execution.
+
+    It splits on unquoted ``; & | newline`` and parentheses, honours quotes and backslashes,
+    skips heredoc bodies, and reads ``$(...)`` and backticks as scripts of their own. It is the
+    reading of a command's *words* — what only a command word may be — not a shell.
+    """
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+        self._pos = 0
+        self._heredocs: list[tuple[str, bool]] = []
+        self._redirect_target_next = False
+
+    def script(self, *, nested: bool) -> list[Any]:
+        """Read to the end of the text, or, when ``nested``, to the ``)`` that closes it."""
+        frame = _Frame()
+        text = self._text
+        while self._pos < len(text):
+            char = text[self._pos]
+            if char in " \t":
+                self._pos += 1
+                self._end_word(frame)
+            elif char == "\n":
+                self._pos += 1
+                self._end_command(frame)
+                self._skip_heredocs()
+            elif char in ";&|":
+                self._pos += 1
+                self._end_command(frame)
+            elif char == "(":
+                self._pos += 1
+                self._end_command(frame)
+                frame.units.append(_Group(self.script(nested=True)))
+            elif char == ")":
+                self._pos += 1
+                self._end_command(frame)
+                if nested:
+                    return frame.units
+            elif char == "#" and not frame.builder.started:
+                end = text.find("\n", self._pos)
+                self._pos = len(text) if end < 0 else end
+            elif char in "<>":
+                self._redirect(frame)
+            else:
+                self._word_character(frame)
+        self._end_command(frame)
+        return frame.units
+
+    def _end_word(self, frame: _Frame) -> None:
+        builder = frame.builder
+        if builder.started:
+            frame.words.append(
+                _Word(
+                    "".join(builder.parts),
+                    builder.expands,
+                    tuple(builder.substitutions),
+                    not self._redirect_target_next,
+                )
+            )
+            self._redirect_target_next = False
+        frame.builder = _WordBuilder()
+
+    def _end_command(self, frame: _Frame) -> None:
+        self._end_word(frame)
+        self._redirect_target_next = False
+        if frame.words:
+            frame.units.append(_Command(tuple(frame.words)))
+            frame.words = []
+
+    def _word_character(self, frame: _Frame) -> None:
+        text = self._text
+        builder = frame.builder
+        char = text[self._pos]
+        if char == "\\":
+            following = text[self._pos + 1 : self._pos + 2]
+            if following not in ("", "\n"):
+                builder.add(following)
+            self._pos += 2 if following else 1
+        elif char == "'":
+            end = text.find("'", self._pos + 1)
+            end = len(text) if end < 0 else end
+            builder.add(text[self._pos + 1 : end])
+            self._pos = end + 1
+        elif char == '"':
+            self._double_quoted(builder)
+        elif char == "$":
+            self._dollar(builder)
+        elif char == "`":
+            self._backtick(builder)
+        else:
+            builder.add(char)
+            self._pos += 1
+
+    def _double_quoted(self, builder: _WordBuilder) -> None:
+        text = self._text
+        builder.add("")
+        self._pos += 1
+        while self._pos < len(text):
+            char = text[self._pos]
+            if char == '"':
+                self._pos += 1
+                return
+            if char == "\\":
+                following = text[self._pos + 1 : self._pos + 2]
+                if following and following in '"\\$`':
+                    builder.add(following)
+                    self._pos += 2
+                elif following == "\n":
+                    self._pos += 2
+                else:
+                    builder.add(char)
+                    self._pos += 1
+            elif char == "$":
+                self._dollar(builder)
+            elif char == "`":
+                self._backtick(builder)
+            else:
+                builder.add(char)
+                self._pos += 1
+
+    def _dollar(self, builder: _WordBuilder) -> None:
+        builder.expands = True
+        if self._text.startswith("$(", self._pos):
+            self._pos += 2
+            builder.started = True
+            builder.substitutions.append(self.script(nested=True))
+        else:
+            builder.add("$")
+            self._pos += 1
+
+    def _backtick(self, builder: _WordBuilder) -> None:
+        text = self._text
+        inner: list[str] = []
+        position = self._pos + 1
+        while position < len(text) and text[position] != "`":
+            if text[position] == "\\" and text[position + 1 : position + 2] and text[position + 1] in "`\\$":
+                inner.append(text[position + 1])
+                position += 2
+            else:
+                inner.append(text[position])
+                position += 1
+        self._pos = position + 1
+        builder.expands = True
+        builder.started = True
+        builder.substitutions.append(_Parser("".join(inner)).script(nested=False))
+
+    def _redirect(self, frame: _Frame) -> None:
+        text = self._text
+        if text.startswith("(", self._pos + 1):  # process substitution: the group follows
+            self._end_word(frame)
+            self._pos += 1
+            return
+        if frame.builder.started and _DIGITS_RE.fullmatch("".join(frame.builder.parts)):
+            frame.builder = _WordBuilder()  # a file descriptor number, not an operand
+        self._end_word(frame)
+        if text.startswith("<<<", self._pos):
+            self._pos += 3
+            self._redirect_target_next = True
+        elif text.startswith("<<", self._pos):
+            self._heredoc(self._pos + 2)
+        else:
+            self._pos += 1
+            while self._pos < len(text) and text[self._pos] in "&>|<":
+                self._pos += 1
+            self._redirect_target_next = True
+
+    def _heredoc(self, position: int) -> None:
+        """Read ``<<WORD`` or ``<<-WORD`` and remember its delimiter; the body is skipped at the newline."""
+        text = self._text
+        strip_tabs = text.startswith("-", position)
+        position += 1 if strip_tabs else 0
+        while position < len(text) and text[position] in " \t":
+            position += 1
+        parts: list[str] = []
+        while position < len(text) and text[position] not in " \t\n;&|()<>":
+            char = text[position]
+            if char == "\\" and position + 1 < len(text):
+                parts.append(text[position + 1])
+                position += 2
+            elif char in "'\"":
+                end = text.find(char, position + 1)
+                end = len(text) if end < 0 else end
+                parts.append(text[position + 1 : end])
+                position = end + 1
+            else:
+                parts.append(char)
+                position += 1
+        self._pos = position
+        self._heredocs.append(("".join(parts), strip_tabs))
+
+    def _skip_heredocs(self) -> None:
+        text = self._text
+        for delimiter, strip_tabs in self._heredocs:
+            while self._pos < len(text):
+                end = text.find("\n", self._pos)
+                line = text[self._pos :] if end < 0 else text[self._pos : end]
+                self._pos = len(text) if end < 0 else end + 1
+                if (line.lstrip("\t") if strip_tabs else line) == delimiter:
+                    break
+        self._heredocs = []
+
+
+def _joined(directory: str | None, path: str) -> str | None:
+    """``path`` read from ``directory``: lexical, so ``..`` is left for the program that opens it."""
+    if path.startswith("/"):
+        return path
+    if directory is None:
+        return None
+    if path == "":
+        return directory
+    return directory + path if directory.endswith("/") else directory + "/" + path
+
+
+def _target_directory(word: _Word, directory: str | None, home: str | None) -> str | None:
+    """Where a ``cd`` or ``-C`` operand leads from ``directory``; ``None`` when the text does not say."""
+    if word.expands:
+        return None
+    value = word.value
+    if value == "~" or value.startswith("~/"):
+        return None if home is None else _joined(directory, home + value[1:])
+    if value.startswith("~"):
+        return None
+    return _joined(directory, value)
+
+
+def _is_option(word: _Word) -> bool:
+    return word.value.startswith("-") and len(word.value) > 1
+
+
+def _changed_directory(operands: Sequence[_Word], directory: str | None, home: str | None) -> str | None:
+    """The directory after ``cd``/``pushd``; ``None`` for no literal path, ``-``, or an expansion."""
+    paths = list(operands)
+    while paths and _is_option(paths[0]):
+        paths.pop(0)
+    if not paths or paths[0].value == "-":
+        return None
+    return _target_directory(paths[0], directory, home)
+
+
+def _git_invocation(
+    operands: Sequence[_Word], directory: str | None, *, repository_unknown: bool, home: str | None
+) -> GitInvocation | None:
+    """The subcommand after git's global options, its arguments, and the directory they and ``directory`` give."""
+    unknown = repository_unknown
+    index = 0
+    while index < len(operands):
+        value = operands[index].value
+        if value == "-C":
+            index += 1
+            if index < len(operands):
+                directory = _target_directory(operands[index], directory, home)
+        elif value in ("-c", "--namespace"):
+            index += 1
+        elif value in ("--git-dir", "--work-tree"):
+            index += 1
+            unknown = True
+        elif value.startswith(("--git-dir=", "--work-tree=")):
+            unknown = True
+        elif not value.startswith("-"):
+            arguments = tuple(word.value for word in operands[index + 1 :])
+            return GitInvocation(value, None if unknown else directory, arguments)
+        index += 1
+    return None
+
+
+def _shell_script(operands: Sequence[_Word]) -> str | None:
+    """The string argument of ``-c`` in the arguments of ``bash``/``sh``/``zsh``/``dash``, if any."""
+    for index, word in enumerate(operands):
+        value = word.value
+        if not value.startswith("-"):
+            return None
+        if not value.startswith("--") and "c" in value[1:]:
+            return operands[index + 1].value if index + 1 < len(operands) else None
+    return None
+
+
+def _nested_script(name: str, operands: Sequence[_Word]) -> str | None:
+    """The shell text a command runs by itself: the ``-c`` string of a shell, or what ``eval`` joins."""
+    if name.rsplit("/", 1)[-1] in _SHELLS:
+        return _shell_script(operands)
+    if name == "eval":
+        return " ".join(word.value for word in operands)
+    return None
+
+
+def _command_start(words: Sequence[_Word]) -> tuple[int, bool]:
+    """Where a command's own word is among ``words``, and whether a leading assignment moved git's repository.
+
+    Leading ``VAR=value`` words and wrappers are skipped; the index is ``len(words)`` when nothing runs.
+    """
+    repository_unknown = False
+    index = 0
+    while index < len(words):
+        value = words[index].value
+        if _ASSIGNMENT_RE.match(value):
+            repository_unknown = repository_unknown or value.split("=", 1)[0] in _ENVIRONMENT_REPOSITORY
+        elif value in _WRAPPERS:
+            while index + 1 < len(words) and _is_option(words[index + 1]):
+                index += 1
+        else:
+            break
+        index += 1
+    return index, repository_unknown
+
+
+def _walk_command(command: _Command, directory: str | None, home: str | None, found: list[GitInvocation]) -> str | None:
+    for word in command.words:
+        for substitution in word.substitutions:
+            _walk_script(substitution, directory, home, found)
+    words = [word for word in command.words if word.operand]
+    index, repository_unknown = _command_start(words)
+    if index >= len(words):
+        return directory
+    name = words[index].value
+    operands = words[index + 1 :]
+    program = name.rsplit("/", 1)[-1]
+    if name in ("cd", "pushd"):
+        return _changed_directory(operands, directory, home)
+    if name == "popd":
+        return None
+    if program == "git":
+        invocation = _git_invocation(operands, directory, repository_unknown=repository_unknown, home=home)
+        if invocation is not None:
+            found.append(invocation)
+    else:
+        script = _nested_script(name, operands)
+        if script is not None:
+            _walk_script(_Parser(script).script(nested=False), directory, home, found)
+    return directory
+
+
+def _walk_script(script: Sequence[Any], directory: str | None, home: str | None, found: list[GitInvocation]) -> None:
+    for unit in script:
+        if isinstance(unit, _Group):
+            _walk_script(unit.script, directory, home, found)
+        else:
+            directory = _walk_command(unit, directory, home, found)
+
+
+def git_invocations(
+    command: str, start_directory: str | None, *, home_directory: str | None = None
+) -> list[GitInvocation]:
+    """Every ``git`` command a shell command runs, in order, with the directory each runs in.
+
+    Only *command words* count: a heredoc body, a quoted argument (``echo "git push"``,
+    ``grep 'git merge' f``) and a comment are text. The scan follows ``;``, ``&&``, ``||``, pipes,
+    newlines, parentheses, ``$(...)``, backticks, ``bash -c '...'`` and ``eval``; it skips leading
+    ``VAR=value`` and the wrappers ``env command time nohup exec``; and it tracks ``cd``/``pushd`` and
+    git's ``-C``. It reads no file: ``start_directory`` is where the command starts, and a directory the
+    text does not determine (a ``$`` expansion, ``GIT_DIR``, ``--git-dir``, ``cd -``) is ``None``.
+    ``~`` is ``home_directory``, or an unknown place when that is ``None``.
+    """
+    found: list[GitInvocation] = []
+    _walk_script(_Parser(command).script(nested=False), start_directory, home_directory, found)
+    return found
+
+
+def _git_output(directory: str, *arguments: str) -> str | None:
+    """Standard output of ``git -C directory <arguments>``; ``None`` on any failure."""
+    try:
+        completed = subprocess.run(
+            ["git", "-C", directory, *arguments],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+            stdin=subprocess.DEVNULL,
+        )
+    except (subprocess.SubprocessError, OSError, ValueError):
+        return None
+    return completed.stdout if completed.returncode == 0 else None
+
+
+def repository_facts(directory: str) -> RepositoryFacts | None:
+    """Ask git what repository ``directory`` is in; ``None`` when it is in none or git cannot say.
+
+    A worktree is *linked* when its git directory differs from the common one the main checkout
+    keeps. A detached ``HEAD`` has the branch ``""``.
+    """
+    layout = _git_output(directory, "rev-parse", "--git-dir", "--git-common-dir")
+    paths = [] if layout is None else layout.rstrip("\n").split("\n")
+    if len(paths) != _LAYOUT_PATHS:
+        return None
+    git_dir, common_dir = (Path(directory, path).resolve() for path in paths)
+    branch = _git_output(directory, "symbolic-ref", "--short", "-q", "HEAD")
+    return RepositoryFacts(linked=git_dir != common_dir, branch=(branch or "").strip())
+
+
+def _ask(reason: str) -> HookResult:
+    return HookResult(event_name="PreToolUse", permission_decision="ask", permission_reason=reason)
+
+
+def _owners_place(directory: str | None, repository_at: Callable[[str], RepositoryFacts | None]) -> str | None:
+    """Why ``directory`` is not an agent's place to write history, in words; ``None`` when it is.
+
+    An agent writes history only in a linked worktree, on a named branch that is not a default one.
+    """
+    data = _hook_core_data()
+    if directory is None:
+        return data["git_commit_where_unresolved"]
+    facts = repository_at(directory)
+    if facts is None:
+        return jsondata.fill(data["git_commit_where_not_repository"], {"directory": directory})
+    if not facts.linked:
+        return jsondata.fill(data["git_commit_where_checkout"], {"directory": directory})
+    if not facts.branch:
+        return jsondata.fill(data["git_commit_where_detached"], {"directory": directory})
+    if facts.branch in data["git_default_branches"]:
+        return jsondata.fill(data["git_commit_where_default_branch"], {"directory": directory, "branch": facts.branch})
+    return None
+
+
+def _is_job_branch(name: str, data: Mapping[str, Any]) -> bool:
+    """Whether ``name`` is a job branch, short (``_aitna/x``) or full (``refs/heads/_aitna/x``)."""
+    prefix = data["git_job_branch_prefix"]
+    return name.startswith((prefix, data["git_heads_prefix"] + prefix))
+
+
+def _split_arguments(arguments: Sequence[str], valued: Collection[str] = ()) -> tuple[list[str], list[str]]:
+    """Git arguments as ``(options, operands)``: ``--`` ends the options, a ``valued`` option takes the next word."""
+    options: list[str] = []
+    operands: list[str] = []
+    index = 0
+    options_ended = False
+    while index < len(arguments):
+        word = arguments[index]
+        if options_ended or not word.startswith("-") or word == "-":
+            operands.append(word)
+        elif word == "--":
+            options_ended = True
+        else:
+            options.append(word)
+            index += word in valued
+        index += 1
+    return options, operands
+
+
+def _option_letters(options: Sequence[str], long_names: Mapping[str, str]) -> set[str]:
+    """The flags among ``options`` as letters: ``long_names`` spell the long ones, a ``u`` ends a cluster."""
+    flags: set[str] = set()
+    for word in options:
+        if word.startswith("--"):
+            flags.update(long_names.get(word.split("=", 1)[0], ""))
+            continue
+        for letter in word[1:]:
+            flags.add(letter)
+            if letter == "u":  # the rest of the cluster is the upstream's name
+                break
+    return flags
+
+
+_BRANCH_LONG_FLAGS = {
+    "--force": "f",
+    "--delete": "d",
+    "--move": "m",
+    "--copy": "c",
+    "--set-upstream-to": "u",
+    "--unset-upstream": "u",
+}
+# subcommand: (letter that forces, letters that take a branch name, long form that forces)
+_FORCE_CREATE = {"checkout": ("B", "bB", ""), "switch": ("C", "cC", "--force-create")}
+
+
+def _current_branch(invocation: GitInvocation, repository_at: Callable[[str], RepositoryFacts | None]) -> str | None:
+    """The branch ``invocation``'s repository is on; ``None`` when the text, git or a detached ``HEAD`` do not say."""
+    if invocation.directory is None:
+        return None
+    facts = repository_at(invocation.directory)
+    return (facts.branch or None) if facts is not None else None
+
+
+def _branch_offenders(
+    invocation: GitInvocation, data: Mapping[str, Any], repository_at: Callable[[str], RepositoryFacts | None]
+) -> list[str | None]:
+    """The branches ``git branch`` writes to that are not job branches; ``None`` is a current branch not named.
+
+    Listing, creating a new branch and the upstream options write no existing branch.
+    """
+    options, operands = _split_arguments(invocation.arguments)
+    flags = {letter.lower() for letter in _option_letters(options, _BRANCH_LONG_FLAGS)}
+    if "u" in flags or not flags & set("dmcf"):
+        return []
+    names: list[str | None]
+    if flags & set("mc"):
+        names = list(operands)
+        if len(operands) == 1:  # one name: the current branch is the other end
+            names.append(_current_branch(invocation, repository_at))
+    else:
+        names = list(operands) if "d" in flags else list(operands[:1])  # force: the first name only
+    return [name for name in names if name is None or not _is_job_branch(name, data)]
+
+
+def _forced_branch_offenders(invocation: GitInvocation, data: Mapping[str, Any]) -> list[str]:
+    """The branch ``checkout -B`` or ``switch -C``/``--force-create`` writes over, unless it is a job branch."""
+    letter, valued_letters, long_name = _FORCE_CREATE[invocation.subcommand]
+    arguments = invocation.arguments
+    names: list[str] = []
+    for index, word in enumerate(arguments):
+        if word == "--":
+            break
+        if long_name and word.split("=", 1)[0] == long_name:
+            names.extend([word.partition("=")[2]] if "=" in word else arguments[index + 1 : index + 2])
+        elif word.startswith("-") and not word.startswith("--"):
+            cluster = word[1:]
+            position = next((at for at, char in enumerate(cluster) if char in valued_letters), None)
+            if position is not None and cluster[position] == letter:  # the rest of the word, or the next, is the name
+                rest = cluster[position + 1 :]
+                names.extend([rest] if rest else arguments[index + 1 : index + 2])
+    return [name for name in names if not _is_job_branch(name, data)]
+
+
+def _fetch_offenders(invocation: GitInvocation, data: Mapping[str, Any]) -> list[str]:
+    """The refspec destinations of ``fetch``/``pull`` that are not remote-tracking refs or job branches."""
+    _, operands = _split_arguments(invocation.arguments, data["git_fetch_valued_options"])
+    destinations = []
+    for refspec in operands[1:]:  # the first operand is the remote
+        destination = refspec.removeprefix("+").partition(":")[2]
+        if (
+            destination
+            and not destination.startswith(data["git_remotes_prefix"])
+            and not _is_job_branch(destination, data)
+        ):
+            destinations.append(destination)
+    return destinations
+
+
+def _symbolic_ref_offenders(invocation: GitInvocation, data: Mapping[str, Any]) -> list[str]:
+    """The refs ``symbolic-ref`` writes or deletes that are not job branches: ``HEAD`` may point at one."""
+    options, operands = _split_arguments(invocation.arguments, ("-m",))
+    deleting = "d" in _option_letters(options, {"--delete": "d"})
+    if deleting:
+        written = operands[:1]
+    elif len(operands) >= _WRITE_OPERANDS:
+        written = [name for name in operands[:1] if name != "HEAD"] + operands[1:2]
+    else:
+        return []
+    return [name for name in written if not _is_job_branch(name, data)]
+
+
+def _update_ref_offenders(invocation: GitInvocation, data: Mapping[str, Any]) -> list[str]:
+    """The ref ``update-ref`` writes when it is not ``refs/heads/_aitna/*``; ``[""]`` for refs read from stdin."""
+    options, operands = _split_arguments(invocation.arguments, ("-m",))
+    if "--stdin" in options:
+        return [""]
+    job_heads = data["git_heads_prefix"] + data["git_job_branch_prefix"]
+    return [name for name in operands[:1] if not name.startswith(job_heads)]
+
+
+def _ref_subcommand(invocation: GitInvocation) -> str:
+    """The command as the ref rules name it: ``worktree`` joins its action (``worktree remove``)."""
+    if invocation.subcommand != "worktree":
+        return invocation.subcommand
+    _, operands = _split_arguments(invocation.arguments)
+    return " ".join(["worktree", *operands[:1]])
+
+
+def _ref_target(
+    invocation: GitInvocation, data: Mapping[str, Any], repository_at: Callable[[str], RepositoryFacts | None]
+) -> str | None:
+    """What a ref-writing ``invocation`` moves, renames or deletes beyond job branches, in words; ``None`` if none."""
+    subcommand = _ref_subcommand(invocation)
+    if subcommand in data["git_ref_unconditional"]:
+        return data["git_ref_unconditional"][subcommand]
+    offenders: Sequence[str | None]
+    if subcommand == "branch":
+        offenders = _branch_offenders(invocation, data, repository_at)
+    elif subcommand in _FORCE_CREATE:
+        offenders = _forced_branch_offenders(invocation, data)
+    elif subcommand in ("fetch", "pull"):
+        offenders = _fetch_offenders(invocation, data)
+    elif subcommand == "symbolic-ref":
+        offenders = _symbolic_ref_offenders(invocation, data)
+    elif subcommand == "update-ref":
+        offenders = _update_ref_offenders(invocation, data)
+    else:
+        return None
+    if not offenders:
+        return None
+    if offenders == [""]:
+        return data["git_commit_ref_target_stdin"]
+    return ", ".join(
+        data["git_commit_ref_target_current_branch"] if name is None else f"'{name}'"
+        for name in dict.fromkeys(offenders)
+    )
+
+
+def _invocation_ask(
+    invocation: GitInvocation, repository_at: Callable[[str], RepositoryFacts | None]
+) -> HookResult | None:
+    data = _hook_core_data()
+    if invocation.subcommand in data["git_publishing_subcommands"]:
+        return _ask(data["git_commit_push_tag_merge_reason"])
+    if invocation.subcommand in data["git_history_subcommands"]:
+        place = _owners_place(invocation.directory, repository_at)
+        if place is not None:
+            return _ask(
+                jsondata.fill(data["git_commit_history_reason"], {"subcommand": invocation.subcommand, "where": place})
+            )
+    target = _ref_target(invocation, data, repository_at)
+    if target is None:
+        return None
+    subcommand = _ref_subcommand(invocation)
+    return _ask(jsondata.fill(data["git_commit_ref_reason"], {"subcommand": subcommand, "target": target}))
+
+
+def _home_directory() -> str | None:
+    try:
+        return str(Path.home())
+    except (RuntimeError, OSError):
+        return None
+
+
+def _working_directory() -> str | None:
+    try:
+        return str(Path.cwd())
+    except OSError:
+        return None
+
+
 def git_commit_guard_result(
     command: str,
-    branch: str | None = None,
     *,
     permission_mode: str | None = None,
     attended: bool | None = None,
+    directory: str | None = None,
+    repository_at: Callable[[str], RepositoryFacts | None] | None = None,
 ) -> HookResult | None:
-    """Guard commit-shaped ``git`` commands: no AI co-author trailer, owner confirms landing history.
+    """Guard ``git`` commands: no AI co-author trailer, publishing and history are the owner's.
+
+    The trailer is denied wherever it stands in the text, a heredoc body included. Only command
+    words are read for the rest (:func:`git_invocations`): ``push`` and ``tag`` ask everywhere; a
+    history-writing subcommand (``commit``, ``merge``, ``rebase``, ``reset`` and the others in
+    ``hook_core.json``) passes when the repository it acts on — not the session's — is a linked
+    worktree on a named branch that is not ``main``/``master``, and asks otherwise. The first
+    invocation that does not pass decides.
+
+    ``directory`` is where the command starts (default: the process's); ``repository_at`` answers
+    :class:`RepositoryFacts` for a directory (default: :func:`repository_facts`, which asks git).
 
     Policy ID: commits.owner-owned
     """
@@ -409,37 +1117,12 @@ def git_commit_guard_result(
             permission_reason=_hook_core_data()["git_commit_no_ai_trailer_reason"],
         )
 
-    def is_git(subcommand: str) -> bool:
-        return re.search(_GIT_WORD + r"[^|&;]*" + _subcommand(subcommand), command, re.ASCII) is not None
-
-    if is_git("push") or is_git("tag") or is_git("merge"):
-        return _escalate_unattended_ask(
-            HookResult(
-                event_name="PreToolUse",
-                permission_decision="ask",
-                permission_reason=_hook_core_data()["git_commit_push_tag_merge_reason"],
-            ),
-            permission_mode,
-            attended=attended,
-        )
-
-    if is_git("commit"):
-        resolved_branch = current_git_branch() if branch is None else branch
-        if resolved_branch in ("main", "master") or not resolved_branch:
-            data = _hook_core_data()
-            return _escalate_unattended_ask(
-                HookResult(
-                    event_name="PreToolUse",
-                    permission_decision="ask",
-                    permission_reason=jsondata.fill(
-                        data["git_commit_landing_reason"],
-                        {"branch": resolved_branch or data["git_commit_detached_head"]},
-                    ),
-                ),
-                permission_mode,
-                attended=attended,
-            )
-
+    lookup = repository_facts if repository_at is None else repository_at
+    start = _working_directory() if directory is None else directory
+    for invocation in git_invocations(command, start, home_directory=_home_directory()):
+        ask = _invocation_ask(invocation, lookup)
+        if ask is not None:
+            return _escalate_unattended_ask(ask, permission_mode, attended=attended)
     return None
 
 

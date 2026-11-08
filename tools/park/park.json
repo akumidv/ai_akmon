@@ -69,6 +69,39 @@
     "none": "no active unit: this session is in the main checkout, and a pick has not been made",
     "line": "{{kind}}: {{id}} | {{name}} | {{state}} | {{holder}} | {{path}}"
   },
+  "worktrees": {
+    "columns": ["path", "branch", "kind", "ergon", "athlos", "clean", "ahead", "age", "state"],
+    "separator": " | ",
+    "yes": "yes",
+    "no": "no",
+    "detached": "(detached)",
+    "kinds": {
+      "main": "main",
+      "athlos": "athlos",
+      "harness": "harness",
+      "branch_only": "branch-only"
+    },
+    "states": {
+      "main": "main",
+      "harness": "harness",
+      "working": "working",
+      "ready": "ready",
+      "carried": "carried",
+      "backup": "backup",
+      "not_carried_backup": "not-carried backup"
+    },
+    "command_worktree": "git worktree remove {{path}}",
+    "command_branch": "git branch -D {{branch}}",
+    "carry_cd": "cd {{path}}",
+    "carry_squash": "git merge --squash {{branch}}",
+    "carry_commit": "git commit -m \"{{message}}\"",
+    "verdict_carried": "{{branch}}: carried",
+    "verdict_not_carried": "{{branch}}: not carried — {{paths}}",
+    "verdict_unreadable": "git could not compare it with the owner's branch",
+    "verdict_missing": "{{target}}: no such branch",
+    "verdict_paths": 3,
+    "verdict_more": ", …"
+  },
   "takeover": {
     "uncommitted": "{{holder}} left uncommitted paths: {{paths}}",
     "unreadable": "the uncommitted paths of {{holder}} could not be read"
@@ -79,6 +112,8 @@
     "end": "--- end"
   },
   "errors": {
+    "no_repository": "{{path}} is not in a git repository, so there are no worktrees to list",
+    "no_main_checkout": "the repository at {{path}} is bare and has no checkout of the owner's to compare the worktrees with",
     "bad_id": "{{label}} {{value}} is not a task id (a capital letter or _T followed by digits, e.g. C183 or _T3)",
     "bad_athlos_id": "{{label}} {{value}} is not an athlos id (a task id and a number, e.g. C186.1)",
     "bad_name": "name {{value}} is not kebab-case (lowercase letters and digits joined by single hyphens)",

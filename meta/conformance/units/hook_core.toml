@@ -26,9 +26,9 @@
 # long prose of hook_core.json, so a reword does not move this table while the placement of the
 # pieces and every filled-in value (the dev-layer name, the branch, the score, the quoted mode) stay
 # pinned. `$path` arguments must be spelled as `str(Path)` spells them (no `//`, no trailing slash):
-# the JS side receives the string as is. A row that passes `kwargs_json` passes the branch of
-# `git_commit_guard_result` explicitly (`null` asks git), because the JS export takes its options
-# object after it. Every row runs in its own scratch directory, which is also TMPDIR (so the marker
+# the JS side receives the string as is. A `kwargs_json` of
+# `git_commit_guard_result` rides in the JS export's options object (`permission_mode` -> `permissionMode`).
+# Every row runs in its own scratch directory, which is also TMPDIR (so the marker
 # and counter files are the row's own); the three AKMON_DELEGATION_* variables are
 # unset unless the row sets them, and a row works in its scratch directory unless `cwd` names a subdirectory of it (the process's own
 # directory is inside akmon's repository, which declares a dev root of its own); a `.aitna-root` entry of `files` relocates the dev layer
@@ -40,8 +40,10 @@
 # the class and never the message; `kind` -- the neutral tool-kind tokens and a miss; `branch` --
 # current_git_branch against a stand-in `git` the row writes onto PATH (arguments, strip, stdout of
 # a failing git, the 5 s timeout, a missing binary); `sudo` and `git` -- the two command guards
-# (word boundaries, the trailer deny, push/tag/merge, a commit on main/master/detached, the
-# unattended ask->deny escalation with `repr(permission_mode)`, a branch asked of git); `agents` --
+# (word boundaries, the trailer deny, push/tag, a history-writing command outside a linked worktree on its own
+# branch, the unattended ask->deny escalation with `repr(permission_mode)`, the repository asked of a stand-in git); `ref` -- the same guard's ref-writing commands (branch force/delete/rename, a fetch into a
+# local ref, checkout/switch force-create, symbolic-ref and update-ref writes, replace, filter-branch, fast-import, worktree removal)
+# against the `_aitna/` job-branch exemption; `agents` --
 # the charter roster; `stale` and `session` -- the package-run freshness notice and the SessionStart
 # result; `classify`, `code`, `planning` -- the path predicates; `message` -- the two reminder texts
 # with the configured root; `role` and `analysis` -- once-per-session claims, as sequences over one
@@ -694,438 +696,453 @@ fn = "privilege_escalation_guard_result"
 args_json = '["x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x sudo"]'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:privilege_escalation_reason}}", "system_message": null, "decision": null, "reason": null}'
 
-# --- guard: git (commits.owner-owned) -- trailer deny, then push/tag/merge ask, then a commit on main/master/detached ----
+# --- guard: git (commits.owner-owned) -- trailer deny, then push/tag ask, then a history-writing command asks outside a linked worktree on its own branch ----
 # An `ask` in an unattended run (ADR-0025/D06: the host's `attended`, else the interactive default mode) is escalated
 # to a `deny` that quotes `repr(permission_mode)` and the attendance value.
-# Rows with kwargs pass the branch explicitly (the JS export takes the options object after it).
+# Every row passes `directory` (the scratch directory, which is no repository) so the answer does not depend on the checkout
+# the run starts in; a `lookup-*` row writes a stand-in `git` onto PATH that answers `rev-parse` and `symbolic-ref`, so the
+# real lookup is pinned on both sides. The injectable `repository_at` has no table spelling: the shared case table
+# `commit_guard_cases.json`, run by both unit suites, pins the decisions and the scanner.
 
 [[case]]
 id = "git/no-git"
 fn = "git_commit_guard_result"
-args_json = '["ls -la", "main"]'
+args_json = '["ls -la"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/empty"
 fn = "git_commit_guard_result"
-args_json = '["", "main"]'
+args_json = '[""]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/git-uppercase"
 fn = "git_commit_guard_result"
-args_json = '["GIT push", "main"]'
+args_json = '["GIT push"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/digit-contains-git"
 fn = "git_commit_guard_result"
-args_json = '["digit push", "main"]'
+args_json = '["digit push"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/log-only"
 fn = "git_commit_guard_result"
-args_json = '["git log --oneline", "main"]'
+args_json = '["git log --oneline"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/status-only"
 fn = "git_commit_guard_result"
-args_json = '["git status", "main"]'
+args_json = '["git status"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/trailer-lower"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m \u0027x\n\nco-authored-by: Claude\u0027", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git commit -m \u0027x\n\nco-authored-by: Claude\u0027"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_no_ai_trailer_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/trailer-title"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m \u0027x\n\nCo-Authored-By: Claude <c@x>\u0027", "feature"]'
+args_json = '["git commit -m \u0027x\n\nCo-Authored-By: Claude <c@x>\u0027"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_no_ai_trailer_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/trailer-upper"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m \u0027CO-AUTHORED-BY: x\u0027", "main"]'
-kwargs_json = '{"permission_mode": "auto"}'
+args_json = '["git commit -m \u0027CO-AUTHORED-BY: x\u0027"]'
+kwargs_json = '{"permission_mode": "auto", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_no_ai_trailer_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/trailer-in-log-grep"
 fn = "git_commit_guard_result"
-args_json = '["git log --grep=co-authored-by", "feature"]'
+args_json = '["git log --grep=co-authored-by"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_no_ai_trailer_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/trailer-without-git"
 fn = "git_commit_guard_result"
-args_json = '["echo co-authored-by", "main"]'
+args_json = '["echo co-authored-by"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/trailer-beats-push"
 fn = "git_commit_guard_result"
-args_json = '["git push && echo Co-Authored-By", "main"]'
+args_json = '["git push && echo Co-Authored-By"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_no_ai_trailer_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/trailer-split-word"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m \u0027co authored by\u0027", "feature"]'
-expected_json = 'null'
+args_json = '["git commit -m \u0027co authored by\u0027"]'
+kwargs_json = '{"directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}} {{core:escalated_ask_suffix#0}}None, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-origin"
 fn = "git_commit_guard_result"
-args_json = '["git push origin main", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git push origin main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-force"
 fn = "git_commit_guard_result"
-args_json = '["git push --force-with-lease", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git push --force-with-lease"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/tag"
 fn = "git_commit_guard_result"
-args_json = '["git tag v1.0", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git tag v1.0"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/tag-list"
 fn = "git_commit_guard_result"
-args_json = '["git tag -l", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git tag -l"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/merge"
 fn = "git_commit_guard_result"
-args_json = '["git merge --no-ff topic", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git merge --no-ff topic"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git merge writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-option-before"
 fn = "git_commit_guard_result"
-args_json = '["git -C sub push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git -C sub push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-after-and"
 fn = "git_commit_guard_result"
-args_json = '["git status && git push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git status && git push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-after-semicolon"
 fn = "git_commit_guard_result"
-args_json = '["git status; git push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git status; git push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-after-or"
 fn = "git_commit_guard_result"
-args_json = '["git fetch || git push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git fetch || git push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-two-spaces"
 fn = "git_commit_guard_result"
-args_json = '["git  push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git  push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-tab"
 fn = "git_commit_guard_result"
-args_json = '["git\tpush", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git\tpush"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-newline"
 fn = "git_commit_guard_result"
-args_json = '["git\npush", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git\npush"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/push-stash"
 fn = "git_commit_guard_result"
-args_json = '["git stash push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git stash push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/push-in-message"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m \u0027push it\u0027", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git commit -m \u0027push it\u0027"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-hyphen-word"
 fn = "git_commit_guard_result"
-args_json = '["git push-all", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git push-all"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/push-longer-word"
 fn = "git_commit_guard_result"
-args_json = '["git pushd", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git pushd"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/push-underscore-word"
 fn = "git_commit_guard_result"
-args_json = '["git push_x", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git push_x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/push-prefix-word"
 fn = "git_commit_guard_result"
-args_json = '["git unpush", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git unpush"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/push-after-pipe"
 fn = "git_commit_guard_result"
-args_json = '["git status | grep push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git status | grep push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/push-across-pipe"
 fn = "git_commit_guard_result"
-args_json = '["git log | git push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git log | git push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-across-ampersand"
 fn = "git_commit_guard_result"
-args_json = '["git a & push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git a & push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/push-across-semicolon"
 fn = "git_commit_guard_result"
-args_json = '["git a ; push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git a ; push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/git-glued"
 fn = "git_commit_guard_result"
-args_json = '["gitpush", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["gitpush"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/git-suffix-word"
 fn = "git_commit_guard_result"
-args_json = '["gitx push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["gitx push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/git-prefix-word"
 fn = "git_commit_guard_result"
-args_json = '["xgit push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["xgit push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/git-underscore-prefix"
 fn = "git_commit_guard_result"
-args_json = '["_git push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["_git push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/latin-letter-before-git"
 fn = "git_commit_guard_result"
-args_json = '["égit push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["égit push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/greek-letter-before-git"
 fn = "git_commit_guard_result"
-args_json = '["βgit push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["βgit push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/latin-letter-after-git"
 fn = "git_commit_guard_result"
-args_json = '["gité push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["gité push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/latin-letter-before-push"
 fn = "git_commit_guard_result"
-args_json = '["git épush", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git épush"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/latin-letter-after-push"
 fn = "git_commit_guard_result"
-args_json = '["git pushé", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git pushé"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/arabic-digit-after-push"
 fn = "git_commit_guard_result"
-args_json = '["git push٣", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git push٣"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/cjk-around-push"
 fn = "git_commit_guard_result"
-args_json = '["git 中push中", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git 中push中"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/nbsp-before-push"
 fn = "git_commit_guard_result"
-args_json = '["git\u00a0push", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/push-uppercase"
 fn = "git_commit_guard_result"
-args_json = '["git PUSH", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git PUSH"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/push-beats-commit-on-main"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m x && git push", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git commit -m x && git push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-before-commit"
 fn = "git_commit_guard_result"
-args_json = '["git push && git commit -m x", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git push && git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-none"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
+args_json = '["git push"]'
+kwargs_json = '{"directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}None, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-empty"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": ""}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-auto"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "auto"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "auto", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027auto\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-plan"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "plan"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "plan", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027plan\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-accept-edits"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "acceptEdits"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "acceptEdits", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027acceptEdits\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-bypass"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "bypassPermissions"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "bypassPermissions", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027bypassPermissions\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-attended-auto"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "auto", "attended": true}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "auto", "attended": true, "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-attended-default"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "default", "attended": true}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "default", "attended": true, "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-unattended-default"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "default", "attended": false}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "default", "attended": false, "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027default\u0027, CLAUDE_CODE_SESSION_ATTENDED=0{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-unattended-auto"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "auto", "attended": false}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "auto", "attended": false, "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027auto\u0027, CLAUDE_CODE_SESSION_ATTENDED=0{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-attended-bypass"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "bypassPermissions", "attended": true}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "bypassPermissions", "attended": true, "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027bypassPermissions\u0027, CLAUDE_CODE_SESSION_ATTENDED=1{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-attended-dont-ask"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "dontAsk", "attended": true}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "dontAsk", "attended": true, "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027dontAsk\u0027, CLAUDE_CODE_SESSION_ATTENDED=1{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
@@ -1194,398 +1211,377 @@ expected_json = 'false'
 [[case]]
 id = "git/push-mode-default-padded"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": " default"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": " default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027 default\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-default-upper"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "Default"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "Default", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027Default\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-single-quote"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "it\u0027s"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "it\u0027s", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\"it\u0027s\", CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-double-quote"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "say \"x\""}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "say \"x\"", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027say \"x\"\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-both-quotes"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "it\u0027s \"x\""}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "it\u0027s \"x\"", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027it\\\u0027s \"x\"\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-backslash"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "a\\b"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "a\\b", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027a\\\\b\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-newline-tab"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "a\nb\tc"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "a\nb\tc", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027a\\nb\\tc\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-unicode"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "é中"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "é中", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027é中\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-astral"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "𝒜"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "𝒜", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027𝒜\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-zero-width"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "a\u200bb"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "a​b", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027a\\u200bb\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-line-separator"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "a\u2028b"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "a\u2028b", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027a\\u2028b\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-nbsp"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "a\u00a0b"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "a b", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027a\\xa0b\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-control"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "a\u0001\u007fb"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "a\u0001\u007fb", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027a\\x01\\x7fb\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-nul"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "a\u0000b"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "a\u0000b", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027a\\x00b\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/push-mode-braces"
 fn = "git_commit_guard_result"
-args_json = '["git push", "feature"]'
-kwargs_json = '{"permission_mode": "{{x}}"}'
+args_json = '["git push"]'
+kwargs_json = '{"permission_mode": "{{x}}", "directory": "{{dir}}"}'
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_push_tag_merge_reason}} {{core:escalated_ask_suffix#0}}\u0027{{x}}\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
-id = "git/commit-main"
+id = "git/commit-not-a-repository"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/commit-master"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "master"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}master{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/commit-feature"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "feature"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = 'null'
-
-[[case]]
-id = "git/commit-Main"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "Main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = 'null'
-
-[[case]]
-id = "git/commit-padded-main"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", " main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = 'null'
-
-[[case]]
-id = "git/commit-main-newline"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "main\n"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = 'null'
-
-[[case]]
-id = "git/commit-main-prefix"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "main-2"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = 'null'
-
-[[case]]
-id = "git/commit-empty-branch"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", ""]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}detached HEAD{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/commit-detached"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "HEAD"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = 'null'
-
-[[case]]
-id = "git/commit-main-no-mode"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "main"]'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}} {{core:escalated_ask_suffix#0}}None, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/commit-main-auto"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "main"]'
-kwargs_json = '{"permission_mode": "auto"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}} {{core:escalated_ask_suffix#0}}\u0027auto\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/commit-main-empty-mode"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "main"]'
-kwargs_json = '{"permission_mode": ""}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}} {{core:escalated_ask_suffix#0}}\u0027\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/commit-empty-no-mode"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", ""]'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_landing_reason#0}}detached HEAD{{core:git_commit_landing_reason#1}} {{core:escalated_ask_suffix#0}}None, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/commit-bare"
 fn = "git_commit_guard_result"
-args_json = '["git commit", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git commit"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/commit-amend"
 fn = "git_commit_guard_result"
-args_json = '["git commit --amend --no-edit", "master"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}master{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git commit --amend --no-edit"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/commit-option-before"
 fn = "git_commit_guard_result"
-args_json = '["git -c a=b commit -m x", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git -c a=b commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/commit-after-add"
 fn = "git_commit_guard_result"
-args_json = '["git add . && git commit -m x", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git add . && git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/commit-tree"
 fn = "git_commit_guard_result"
-args_json = '["git commit-tree abc", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git commit-tree abc"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit-tree writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/commit-hyphen-word"
 fn = "git_commit_guard_result"
-args_json = '["git commit-graph write", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git commit-graph write"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
 
 [[case]]
 id = "git/commit-in-longer-word"
 fn = "git_commit_guard_result"
-args_json = '["git recommit", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git recommit"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/commit-longer-word"
 fn = "git_commit_guard_result"
-args_json = '["git committed", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git committed"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/commit-after-pipe"
 fn = "git_commit_guard_result"
-args_json = '["git log | grep commit", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git log | grep commit"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
-id = "git/commit-unicode-branch"
+id = "git/lookup-linked-worktree-passes"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "é"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = 'null'
-
-[[case]]
-id = "git/commit-branch-with-braces"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "{{branch}}"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = 'null'
-
-[[case]]
-id = "git/commit-branch-quote"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", "it\u0027s"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = 'null'
-
-[[case]]
-id = "git/branch-asked-main"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "default"}'
-files = { "bin/git" = "#!/bin/sh\necho main\n" }
-modes = { "bin/git" = "755" }
-env = { "PATH" = "{{dir}}/bin" }
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/branch-asked-master"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "default"}'
-files = { "bin/git" = "#!/bin/sh\necho master\n" }
-modes = { "bin/git" = "755" }
-env = { "PATH" = "{{dir}}/bin" }
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}master{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/branch-asked-feature"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "default"}'
-files = { "bin/git" = "#!/bin/sh\necho feature\n" }
+args_json = '["git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
 modes = { "bin/git" = "755" }
 env = { "PATH" = "{{dir}}/bin" }
 expected_json = 'null'
 
 [[case]]
-id = "git/branch-asked-padded-main"
+id = "git/lookup-main-checkout-asks"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "default"}'
-files = { "bin/git" = "#!/bin/sh\nprintf '  main\\n\\n'\n" }
+args_json = '["git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo main ;;\nesac\n" }
 modes = { "bin/git" = "755" }
 env = { "PATH" = "{{dir}}/bin" }
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a linked worktree){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
-id = "git/branch-asked-empty-output"
+id = "git/lookup-detached-worktree-asks"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "default"}'
-files = { "bin/git" = "#!/bin/sh\nexit 0\n" }
+args_json = '["git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) exit 1 ;;\nesac\n" }
 modes = { "bin/git" = "755" }
 env = { "PATH" = "{{dir}}/bin" }
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}detached HEAD{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (a detached HEAD){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
-id = "git/branch-asked-failure"
+id = "git/lookup-default-branch-in-worktree-asks"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "default"}'
-files = { "bin/git" = "#!/bin/sh\necho fatal >&2\nexit 128\n" }
+args_json = '["git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo main ;;\nesac\n" }
 modes = { "bin/git" = "755" }
 env = { "PATH" = "{{dir}}/bin" }
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}detached HEAD{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (on \u0027main\u0027){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
-id = "git/branch-asked-detached"
+id = "git/lookup-failing-git-asks"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "default"}'
-files = { "bin/git" = "#!/bin/sh\necho HEAD\n" }
+args_json = '["git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\nexit 128\n" }
 modes = { "bin/git" = "755" }
 env = { "PATH" = "{{dir}}/bin" }
-expected_json = 'null'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
-id = "git/branch-asked-push-needs-no-git"
+id = "git/lookup-push-in-worktree-asks"
 fn = "git_commit_guard_result"
-args_json = '["git push", null]'
-kwargs_json = '{"permission_mode": "default"}'
-files = { "bin/git" = "#!/bin/sh\necho main\n" }
+args_json = '["git push origin x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
 modes = { "bin/git" = "755" }
 env = { "PATH" = "{{dir}}/bin" }
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
-id = "git/branch-asked-trailer-needs-no-git"
+id = "git/lookup-tag-in-worktree-asks"
 fn = "git_commit_guard_result"
-args_json = '["git commit -m \u0027Co-Authored-By: x\u0027", null]'
-kwargs_json = '{"permission_mode": "default"}'
-files = { "bin/git" = "#!/bin/sh\necho main\n" }
+args_json = '["git tag v1"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_push_tag_merge_reason}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/lookup-rebase-in-worktree-passes"
+fn = "git_commit_guard_result"
+args_json = '["git rebase main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-heredoc-commit-in-worktree-passes"
+fn = "git_commit_guard_result"
+args_json = '["git commit -m \"$(cat <<\u0027EOF\u0027\nsubject\n\nbody ) text\nEOF\n)\""]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-heredoc-commit-in-main-asks"
+fn = "git_commit_guard_result"
+args_json = '["git commit -m \"$(cat <<\u0027EOF\u0027\nsubject\nEOF\n)\""]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo main ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a linked worktree){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/lookup-bash-c-merge-in-main-asks"
+fn = "git_commit_guard_result"
+args_json = '["bash -c \u0027git merge x\u0027"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo main ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git merge writes history in {{dir}} (not a linked worktree){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/lookup-cd-into-worktree-passes"
+fn = "git_commit_guard_result"
+args_json = '["cd {{dir}}/w && git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-git-dir-is-unresolvable"
+fn = "git_commit_guard_result"
+args_json = '["git --git-dir=/x commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{core:git_commit_where_unresolved}}{{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/lookup-cd-expansion-is-unresolvable"
+fn = "git_commit_guard_result"
+args_json = '["cd \"$X\" && git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{core:git_commit_where_unresolved}}{{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/lookup-merge-base-is-not-history"
+fn = "git_commit_guard_result"
+args_json = '["git merge-base a b"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo main ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-heredoc-body-merge-is-text"
+fn = "git_commit_guard_result"
+args_json = '["cat <<\u0027EOF\u0027\nRun `git merge --squash topic` in the owner\u0027s checkout.\nEOF"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo main ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-quoted-merge-is-text"
+fn = "git_commit_guard_result"
+args_json = '["grep \u0027git merge\u0027 notes.md"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo main ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-echo-push-is-text"
+fn = "git_commit_guard_result"
+args_json = '["echo \"git push\""]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo main ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = 'null'
+
+[[case]]
+id = "git/lookup-unattended-commit-in-main-denies"
+fn = "git_commit_guard_result"
+args_json = '["git commit -m x"]'
+kwargs_json = '{"permission_mode": "auto", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '.git\\n.git\\n' ;;\n*symbolic-ref*) echo main ;;\nesac\n" }
+modes = { "bin/git" = "755" }
+env = { "PATH" = "{{dir}}/bin" }
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a linked worktree){{core:git_commit_history_reason#2}} {{core:escalated_ask_suffix#0}}\u0027auto\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "git/lookup-trailer-in-heredoc-denies"
+fn = "git_commit_guard_result"
+args_json = '["git commit -F - <<\u0027EOF\u0027\nx\n\nCo-Authored-By: Claude\nEOF"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+files = { "bin/git" = "#!/bin/sh\ncase \"$*\" in\n*rev-parse*) printf '/r/.git/worktrees/w\\n/r/.git\\n' ;;\n*symbolic-ref*) echo feat ;;\nesac\n" }
 modes = { "bin/git" = "755" }
 env = { "PATH" = "{{dir}}/bin" }
 expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_no_ai_trailer_reason}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/branch-asked-main-mode-auto"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "auto"}'
-files = { "bin/git" = "#!/bin/sh\necho main\n" }
-modes = { "bin/git" = "755" }
-env = { "PATH" = "{{dir}}/bin" }
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}} {{core:escalated_ask_suffix#0}}\u0027auto\u0027, CLAUDE_CODE_SESSION_ATTENDED=unset{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/branch-asked-no-git"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "default"}'
-env = { "PATH" = "{{dir}}/bin" }
-dirs = ["bin"]
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}detached HEAD{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
-
-[[case]]
-id = "git/branch-asked-outside-work-tree"
-fn = "git_commit_guard_result"
-args_json = '["git commit -m x", null]'
-kwargs_json = '{"permission_mode": "default"}'
-cwd = "."
-env = { "GIT_DIR" = "{{dir}}/no-such-git-dir" }
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}detached HEAD{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
 
 # --- guard: git, whole words (a name is not a command) ---
 
@@ -1595,65 +1591,65 @@ expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permi
 [[case]]
 id = "git/name-hook-echo"
 fn = "git_commit_guard_result"
-args_json = '["echo git-commit-guard", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["echo git-commit-guard"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/name-hook-script"
 fn = "git_commit_guard_result"
-args_json = '["python3 hooks/git-commit-guard.py --x", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["python3 hooks/git-commit-guard.py --x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/name-dot-git-dir"
 fn = "git_commit_guard_result"
-args_json = '["cat .git/hooks/pre-push", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["cat .git/hooks/pre-push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/name-pre-commit-file"
 fn = "git_commit_guard_result"
-args_json = '["git add pre-commit-config.yaml", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git add pre-commit-config.yaml"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/name-underscore-git"
 fn = "git_commit_guard_result"
-args_json = '["my_git push", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["my_git push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/name-git-dot"
 fn = "git_commit_guard_result"
-args_json = '["git.exe push", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git.exe push"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/name-dotted-subcommand"
 fn = "git_commit_guard_result"
-args_json = '["git log commit.md", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
+args_json = '["git log commit.md"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
 expected_json = 'null'
 
 [[case]]
 id = "git/word-commit-tree"
 fn = "git_commit_guard_result"
-args_json = '["git commit-tree HEAD", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["git commit-tree HEAD"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit-tree writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 [[case]]
 id = "git/word-absolute-path"
 fn = "git_commit_guard_result"
-args_json = '["/usr/bin/git commit -m x", "main"]'
-kwargs_json = '{"permission_mode": "default"}'
-expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "{{core:git_commit_landing_reason#0}}main{{core:git_commit_landing_reason#1}}", "system_message": null, "decision": null, "reason": null}'
+args_json = '["/usr/bin/git commit -m x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git commit writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'
 
 # --- agents: agent_names(directory) -- charters are subdirectories with a README.md ------------------
 # Sorted by code point, hidden names skipped; a link to a directory counts.
@@ -5834,3 +5830,260 @@ fn = "find_project_root"
 args_json = '[{"$path": "{{dir}}/proj/sub"}]'
 files = { "proj/AGENTS.md" = "", "proj/_aitna/.akmon.toml/x" = "", "proj/sub/x" = "" }
 expected_json = '"{{dir}}/proj/sub"'
+
+# --- guard: git refs (commits.owner-owned) -- a ref-writing command asks unless every target is an `_aitna/` job branch ----
+# The same scratch directory as the `git/` rows: the answer is the one a scratch repository gets. A branch deleted or
+# moved, a fetch into a local ref, a forced checkout/switch, `symbolic-ref` and `update-ref` writes, `replace`,
+# `filter-branch`, `fast-import` and a worktree removal ask in every directory; the job-branch forms pass in every one.
+
+[[case]]
+id = "ref/branch-delete-other"
+fn = "git_commit_guard_result"
+args_json = '["git branch -D main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git branch moves, renames or deletes \u0027main\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/branch-delete-job-passes"
+fn = "git_commit_guard_result"
+args_json = '["git branch -D _aitna/a _aitna/b"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/branch-delete-mixed"
+fn = "git_commit_guard_result"
+args_json = '["git branch -d _aitna/a other _aitna/b"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git branch moves, renames or deletes \u0027other\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/branch-force-other"
+fn = "git_commit_guard_result"
+args_json = '["git branch -f other HEAD"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git branch moves, renames or deletes \u0027other\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/branch-rename-two"
+fn = "git_commit_guard_result"
+args_json = '["git branch -m old new"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git branch moves, renames or deletes \u0027old\u0027, \u0027new\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/branch-rename-job-passes"
+fn = "git_commit_guard_result"
+args_json = '["git branch -m _aitna/a _aitna/b"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/branch-rename-one-name-unresolved"
+fn = "git_commit_guard_result"
+args_json = '["git branch -m _aitna/b"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git branch moves, renames or deletes the current branch{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/branch-create-passes"
+fn = "git_commit_guard_result"
+args_json = '["git branch brand-new main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/branch-upstream-passes"
+fn = "git_commit_guard_result"
+args_json = '["git branch -u origin/main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/fetch-into-branch"
+fn = "git_commit_guard_result"
+args_json = '["git fetch . HEAD:main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git fetch moves, renames or deletes \u0027main\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/fetch-force-into-heads"
+fn = "git_commit_guard_result"
+args_json = '["git fetch origin +refs/heads/*:refs/heads/*"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git fetch moves, renames or deletes \u0027refs/heads/*\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/fetch-remote-tracking-passes"
+fn = "git_commit_guard_result"
+args_json = '["git fetch origin +refs/heads/*:refs/remotes/origin/*"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/fetch-job-branch-passes"
+fn = "git_commit_guard_result"
+args_json = '["git fetch . HEAD:_aitna/x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/fetch-plain-passes"
+fn = "git_commit_guard_result"
+args_json = '["git fetch --all"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/checkout-force-create"
+fn = "git_commit_guard_result"
+args_json = '["git checkout -B main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git checkout moves, renames or deletes \u0027main\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/checkout-create-passes"
+fn = "git_commit_guard_result"
+args_json = '["git checkout -b main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/switch-force-create"
+fn = "git_commit_guard_result"
+args_json = '["git switch --force-create main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git switch moves, renames or deletes \u0027main\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/switch-force-create-job-passes"
+fn = "git_commit_guard_result"
+args_json = '["git switch -C _aitna/x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/symbolic-ref-write"
+fn = "git_commit_guard_result"
+args_json = '["git symbolic-ref HEAD refs/heads/main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git symbolic-ref moves, renames or deletes \u0027refs/heads/main\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/symbolic-ref-read-passes"
+fn = "git_commit_guard_result"
+args_json = '["git symbolic-ref HEAD"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/update-ref-other"
+fn = "git_commit_guard_result"
+args_json = '["git update-ref refs/heads/main abc"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git update-ref moves, renames or deletes \u0027refs/heads/main\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/update-ref-job-passes"
+fn = "git_commit_guard_result"
+args_json = '["git update-ref -d refs/heads/_aitna/x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/update-ref-stdin"
+fn = "git_commit_guard_result"
+args_json = '["git update-ref --stdin"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git update-ref moves, renames or deletes the refs named on its standard input{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/replace"
+fn = "git_commit_guard_result"
+args_json = '["git replace a b"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git replace moves, renames or deletes the refs it writes under refs/replace/{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/filter-branch"
+fn = "git_commit_guard_result"
+args_json = '["git filter-branch --all"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git filter-branch moves, renames or deletes every ref it rewrites{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/fast-import"
+fn = "git_commit_guard_result"
+args_json = '["git fast-import"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git fast-import moves, renames or deletes the refs its stream writes{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/worktree-remove"
+fn = "git_commit_guard_result"
+args_json = '["git worktree remove ../w"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git worktree remove moves, renames or deletes a worktree{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/worktree-prune"
+fn = "git_commit_guard_result"
+args_json = '["git worktree prune"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git worktree prune moves, renames or deletes the worktrees it prunes{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/worktree-add-passes"
+fn = "git_commit_guard_result"
+args_json = '["git worktree add -b _aitna/x ../x"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/worktree-list-passes"
+fn = "git_commit_guard_result"
+args_json = '["git worktree list"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/in-quoted-text-passes"
+fn = "git_commit_guard_result"
+args_json = '["echo \u0027git branch -D main; git worktree remove x\u0027"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/in-heredoc-passes"
+fn = "git_commit_guard_result"
+args_json = '["cat <<\u0027EOF\u0027\ngit branch -D main\nEOF"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = 'null'
+
+[[case]]
+id = "ref/behind-cd"
+fn = "git_commit_guard_result"
+args_json = '["cd /nonexistent-akmon-dir && git branch -D main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git branch moves, renames or deletes \u0027main\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/behind-dash-c"
+fn = "git_commit_guard_result"
+args_json = '["git -C /nonexistent-akmon-dir branch -D main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git branch moves, renames or deletes \u0027main\u0027{{core:git_commit_ref_reason#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/branch-delete-unattended"
+fn = "git_commit_guard_result"
+args_json = '["git branch -D main"]'
+kwargs_json = '{"permission_mode": "default", "attended": false, "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "deny", "permission_reason": "Commit guardrail: git branch moves, renames or deletes \u0027main\u0027{{core:git_commit_ref_reason#2}} {{core:escalated_ask_suffix#0}}\u0027default\u0027, CLAUDE_CODE_SESSION_ATTENDED=0{{core:escalated_ask_suffix#2}}", "system_message": null, "decision": null, "reason": null}'
+
+[[case]]
+id = "ref/pull-history-rule-first"
+fn = "git_commit_guard_result"
+args_json = '["git pull origin a:main"]'
+kwargs_json = '{"permission_mode": "default", "directory": "{{dir}}"}'
+expected_json = '{"event_name": "PreToolUse", "additional_context": null, "permission_decision": "ask", "permission_reason": "Commit guardrail: git pull writes history in {{dir}} (not a git repository){{core:git_commit_history_reason#2}}", "system_message": null, "decision": null, "reason": null}'

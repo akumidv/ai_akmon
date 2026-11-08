@@ -494,12 +494,21 @@ in git (ADR 0028 D10).
   every worktree; the worktree's folder is only a checkout of it. Removing the folder loses only what
   is uncommitted (`git worktree remove` refuses while there is any); deleting the branch is what loses
   commits, so it waits until the carry is verified.
-- **Removal.** The worktree and its branch stay after the carry. The agent may remove a worktree it
-  made, and its branch, on the owner's notice or at a periodic check of finished tasks — only when
-  nothing in it is uncommitted and the work is carried **by content**: every path the branch changed
-  since its merge-base holds the same content in the owner's branch (a squash leaves the branch
-  unmerged in git's eyes, so `--merged` cannot say it). A branch not carried is never deleted
-  ([A63](../../meta/TASKS.md); the list that marks a worktree *removable* is C190's).
+- **Removal takes two steps.** After the carry the agent prints `git worktree remove <path>`; git
+  refuses while anything in the worktree is uncommitted, and the commits stay in the branch. A worktree
+  gone with its branch kept says the work is finished and the branch is only a backup. The agent
+  deletes the branch later — at a periodic check of finished tasks, on request, or when its task
+  closes — only when the work is carried **by content**: every path the branch changed since its
+  merge-base holds the same content in the owner's branch (a squash leaves the branch unmerged in
+  git's eyes, so `--merged` cannot say it) and no lease is live. A branch not carried is never
+  deleted ([A63](../../meta/TASKS.md); `park worktrees` is the list that marks a worktree or a
+  backup branch *removable*, and C190 builds it).
+  **`park worktrees`** is that list (C190, D-C190-WORKTREES; output and states in
+  [`tools/README.md`](../../tools/README.md)): one row per worktree and per `_aitna/` branch without one,
+  each in one state — *working*, *ready* (the carry printed for the owner), *carried* or *backup* (the
+  removal printed), *not-carried backup*, *harness*, *main*. `park worktrees <branch>` answers for one
+  branch alone and exits 0 only when it is carried, so the agent confirms the owner's carry by code, never
+  by the owner's word or by `git log`. The tool prints commands and runs none.
 - **The ergons stay in the main checkout.** `.ergon/` is ignored and does not follow a worktree, so the
   accessor resolves it through the repository's common directory (`git rev-parse --git-common-dir`),
   and every session of the project sees one set of ergons. A session in a worktree writes only its own

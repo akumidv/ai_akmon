@@ -6,6 +6,9 @@
  * same exit codes; its docstring carries the full account of the ergon, its units (the plan and its
  * athlos), the note's header format and the derived states.
  *
+ * The read-only command `worktrees` lists the git worktrees and the `_aitna/` branches with none, and
+ * prints the commands that remove the removable ones; it removes nothing itself.
+ *
  * The read-only command `local-id` prints the next free local id (`_T<n>`), counted over the live
  * ergons and the closed ones and never reused.
  *
@@ -86,6 +89,7 @@ import {
  * @property {Record<string, string>} digest
  * @property {{line: string, unreadable: string, athlos_line: string, empty: string, no_match: string, warning_shared_paths: string}} list
  * @property {{none: string, line: string}} active
+ * @property {{columns: string[], separator: string, yes: string, no: string, detached: string, kinds: {main: string, athlos: string, harness: string, branch_only: string}, states: {main: string, harness: string, working: string, ready: string, carried: string, backup: string, not_carried_backup: string}, command_worktree: string, command_branch: string, carry_cd: string, carry_squash: string, carry_commit: string, verdict_carried: string, verdict_not_carried: string, verdict_unreadable: string, verdict_missing: string, verdict_paths: number, verdict_more: string}} worktrees
  * @property {{uncommitted: string, unreadable: string}} takeover
  * @property {{title: string, file_header: string, end: string}} export
  * @property {Record<string, string>} errors
@@ -212,7 +216,7 @@ import {
 
 const PROG = "park.mjs";
 
-const USAGE = `usage: ${PROG} [-h] {write,unpark,digest,list,hold,release,athlos,active,close,export,local-id} ...
+const USAGE = `usage: ${PROG} [-h] {write,unpark,digest,list,hold,release,athlos,active,worktrees,close,export,local-id} ...
 
 Park work into an ergon and resume it.
 
@@ -233,6 +237,7 @@ commands:
   athlos ID --number N [--step S]... [--done] [--harness H] [--session-id S]
                         Write an athlos's own file.
   active                Print the unit this session is in.
+  worktrees [TARGET]    List the worktrees and backup branches by state; with a branch or athlos key, say if it is carried.
   close ID [--harness H] [--session-id S]
                         Close an ergon and move it to the closed folder.
   export ID --out FILE  Write the ergon to one bundle file.
@@ -264,6 +269,8 @@ const STEP_UNDONE = "- [ ] ";
 const STEP_DONE = "- [x] ";
 const CLOSED_DIR = ".closed";
 const WORKTREES_DIR = ".worktrees";
+const BRANCH_NAMESPACE = "_aitna/"; // ADR 0028 D04: an athlos's branch is `_aitna/<id>-<name>.<n>`
+const HEADS = "refs/heads/";
 const TASK_SEPARATOR = "·";
 const FIELD_SEPARATOR = ",";
 const PATH_SEPARATOR = "/";
@@ -2719,6 +2726,632 @@ export function activeUnit(root, texts) {
 }
 
 // --------------------------------------------------------------------------------------
+// the worktree list: every worktree git knows, what carries it, and which one may go (ADR 0029 D06, D09)
+// --------------------------------------------------------------------------------------
+
+/**
+ * One entry of `git worktree list --porcelain`: the folder, its commit and its branch (the short
+ * name; empty when HEAD is detached).
+ * @typedef {{readonly path: string, readonly head: string, readonly branch: string, readonly bare: boolean}} GitWorktree
+ */
+
+/**
+ * What a unit says of the branch and the folder it works in: read from its lease and its note.
+ * `athlos` is empty for the ergon's own unit; `worktree` is the folder its live lease names, empty
+ * when the lease is absent, stale or unnamed; `live` says a live lease holds the unit; `written` is
+ * when its note was last written (epoch seconds).
+ * @typedef {{readonly ergon: string, readonly athlos: string, readonly branch: string, readonly worktree: string, readonly live: boolean, readonly written: number}} UnitRecord
+ */
+
+/**
+ * One row of `worktrees`: a worktree, or a branch whose worktree is gone, and what state its work is in. `path` is absolute (empty for a branch-only row), `shown` is the path as printed: from the
+ * `.worktrees/` folder when inside it. `clean`, `ahead` and `ageSeconds` are `null` when git cannot
+ * say; `differing` lists the paths the branch changed that the owner's branch does not hold alike
+ * (`null` when git cannot compare); `state` is working, ready, carried, backup, not-carried backup,
+ * harness or main; `removable` is a carried worktree or a carried backup branch; `subject` is the
+ * subject of the branch's last commit, read for a ready row only.
+ * @typedef {object} WorktreeRow
+ * @property {string} path
+ * @property {string} shown
+ * @property {string} branch
+ * @property {string} kind
+ * @property {string} ergon
+ * @property {string} athlos
+ * @property {boolean | null} clean
+ * @property {number | null} ahead
+ * @property {number | null} ageSeconds
+ * @property {boolean} carried
+ * @property {readonly string[] | null} differing
+ * @property {string} state
+ * @property {boolean} removable
+ * @property {string} subject
+ */
+
+/**
+ * What every row of one `worktrees` call is judged against: where git runs, the owner's checkout, the
+ * commit its branch stands at, the units to match, the texts and the clock.
+ * @typedef {{readonly root: string, readonly main: string, readonly ownerTip: string, readonly units: readonly UnitRecord[], readonly texts: ParkData, readonly now: number}} Listing
+ */
+
+/**
+ * The entries of `git worktree list --porcelain`, in git's order; blocks are split by a blank line.
+ * @param {string} text
+ * @returns {GitWorktree[]}
+ */
+export function parseWorktreeList(text) {
+  return text
+    .split("\n\n")
+    .map(_worktreeBlock)
+    .filter((entry) => entry.path !== "");
+}
+
+/**
+ * One block of the porcelain listing: its `key value` lines, and the bare marker.
+ * @param {string} block
+ * @returns {GitWorktree}
+ */
+function _worktreeBlock(block) {
+  const lines = block.split("\n");
+  /** @param {string} key */
+  const value = (key) => {
+    const line = lines.find((entry) => entry.startsWith(`${key} `));
+    return line === undefined ? "" : line.slice(key.length + 1);
+  };
+  const ref = value("branch");
+  return {
+    path: value("worktree"),
+    head: value("HEAD"),
+    branch: ref.startsWith(HEADS) ? ref.slice(HEADS.length) : ref,
+    bare: lines.includes("bare"),
+  };
+}
+
+/**
+ * The ergon id and the athlos number an athlos's branch `_aitna/<id>-<name>.<n>` names, or `null`.
+ * @param {string} branch
+ * @returns {{ergonId: string, number: number} | null}
+ */
+export function branchUnit(branch) {
+  if (!branch.startsWith(BRANCH_NAMESPACE)) {
+    return null;
+  }
+  const rest = branch.slice(BRANCH_NAMESPACE.length);
+  const dot = rest.lastIndexOf(".");
+  const base = rest.slice(0, Math.max(dot, 0));
+  const tail = dot < 0 ? "" : rest.slice(dot + 1);
+  const match = ERGON_RE.exec(base);
+  if (match === null || !DIGITS_RE.test(tail)) {
+    return null;
+  }
+  return { ergonId: match[1], number: pyInt(tail) };
+}
+
+/**
+ * `path` with its links resolved, or as it is when it does not exist.
+ * @param {string} path
+ * @returns {string}
+ */
+function _realPath(path) {
+  try {
+    return fs.realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+/**
+ * @param {string} one
+ * @param {string} other
+ * @returns {boolean}
+ */
+function _samePath(one, other) {
+  return one !== "" && other !== "" && _realPath(one) === _realPath(other);
+}
+
+/**
+ * The lease of a unit when it is live; a stale one holds nothing.
+ * @param {string} unit
+ * @param {ParkData} texts
+ * @param {LeaseContext} context
+ * @returns {Lease | null}
+ */
+function _liveLease(unit, texts, context) {
+  const lease = readLease(unit, texts);
+  return lease !== null && !leaseIsStale(lease, context) ? lease : null;
+}
+
+/**
+ * What one unit says: its note's branch, and the folder its live lease names.
+ * @param {string} unit
+ * @param {string} ergonId
+ * @param {string} athlos
+ * @param {string} branch
+ * @param {Lease | null} lease
+ * @returns {UnitRecord}
+ */
+function _unitRecord(unit, ergonId, athlos, branch, lease) {
+  const note = athlos !== "" ? athlosFileOf(unit) : pyPath(unit, PARK_FILE);
+  const stat = pyStat(note);
+  return {
+    ergon: ergonId,
+    athlos,
+    branch,
+    worktree: lease !== null ? lease.holder.worktree : "",
+    live: lease !== null,
+    written: stat !== null && stat.isFile() ? stat.mtimeMs / 1000 : 0,
+  };
+}
+
+/**
+ * The ergon's own unit and each athlos of every ergon, the closed ones too, as the list matches against.
+ *
+ * An ergon whose files do not parse is left out: one bad ergon never stops the list.
+ * @param {string} root
+ * @param {ParkData} texts
+ * @param {LeaseContext} context
+ * @returns {UnitRecord[]}
+ */
+function _unitRecords(root, texts, context) {
+  /** @type {UnitRecord[]} */
+  const records = [];
+  const layer = ergonRoot(root);
+  const folders = [
+    ..._ergonNames(root).map((name) => pyPath(layer, name)),
+    ..._ergonNames(root, { closed: true }).map((name) => pyPath(layer, CLOSED_DIR, name)),
+  ];
+  for (const ergon of folders) {
+    const ergonId = _ergonId(posix.basename(ergon));
+    /** @type {UnitRecord[]} */
+    const found = [];
+    try {
+      const noteBranch = isFile(pyPath(ergon, PARK_FILE)) ? readNote(ergon, texts).fields.branch : "";
+      found.push(_unitRecord(ergon, ergonId, "", noteBranch, _liveLease(ergon, texts, context)));
+      for (const folder of _athlosFolders(ergon)) {
+        const doc = readAthlosDoc(athlosFileOf(folder), texts);
+        if (doc !== null) {
+          const athlos = doc.header.athlos || posix.basename(folder);
+          found.push(_unitRecord(folder, ergonId, athlos, doc.header.branch, _liveLease(folder, texts, context)));
+        }
+      }
+    } catch (exc) {
+      if (!(exc instanceof ParkError)) {
+        throw exc;
+      }
+      continue;
+    }
+    records.push(...found);
+  }
+  return records;
+}
+
+/**
+ * The paths that differ between two revisions, both sides of a rename apart, or `null` when git fails.
+ * @param {string} cwd
+ * @param {...string} revisions
+ * @returns {Set<string> | null}
+ */
+function _changedPaths(cwd, ...revisions) {
+  const out = _git(["diff", "--name-only", "--no-renames", "-z", ...revisions], cwd, false);
+  if (out === null) {
+    return null;
+  }
+  return new Set(out.split("\0").filter((path) => path !== ""));
+}
+
+/**
+ * The paths of the branch at `tip` that the owner's branch does not hold alike; empty when it is carried.
+ *
+ * `git branch --merged` cannot say it: a squash leaves the branch unmerged. So it is read from content:
+ * every path the branch changed since its merge-base must hold the same blob at `tip` and at
+ * `ownerTip` (absent on both sides is equal); a branch that changed no path, or whose tip the owner's
+ * branch contains, has no such path. `null` is what git cannot answer (no merge-base, a failing
+ * command), and counts as not carried.
+ * @param {string} root
+ * @param {string} ownerTip
+ * @param {string} tip
+ * @returns {string[] | null}
+ */
+export function uncarriedPaths(root, ownerTip, tip) {
+  const base = _git(["merge-base", ownerTip, tip], root);
+  if (!base) {
+    return null;
+  }
+  if (base === tip) {
+    return [];
+  }
+  const changed = _changedPaths(root, base, tip);
+  const differing = _changedPaths(root, tip, ownerTip);
+  if (changed === null || differing === null) {
+    return null;
+  }
+  return [...changed].filter((path) => differing.has(path)).sort(_compareCodePoints);
+}
+
+/**
+ * An age in the short relative form: minutes under an hour, hours under a day, days after.
+ * @param {number} seconds
+ * @returns {string}
+ */
+function _relativeAge(seconds) {
+  if (seconds < SECONDS_PER_HOUR) {
+    return `${Math.floor(seconds / 60)}m`;
+  }
+  if (seconds < SECONDS_PER_DAY) {
+    return `${Math.floor(seconds / SECONDS_PER_HOUR)}h`;
+  }
+  return `${Math.floor(seconds / SECONDS_PER_DAY)}d`;
+}
+
+/**
+ * The unit a row belongs to, and whether a live lease holds it.
+ *
+ * The live lease whose folder is `path` wins; else the unit whose latest note names `branch`. A live
+ * lease on any unit that names the branch holds the row too.
+ * @param {readonly UnitRecord[]} units
+ * @param {string} path
+ * @param {string} branch
+ * @returns {{unit: UnitRecord | null, held: boolean}}
+ */
+function _unitFor(units, path, branch) {
+  const byPath = units.filter((unit) => unit.live && _samePath(unit.worktree, path));
+  const byBranch = units.filter((unit) => branch !== "" && unit.branch === branch);
+  const held = byPath.length > 0 || byBranch.some((unit) => unit.live);
+  // the first of the best: Python's `max` keeps the first of equals
+  if (byPath.length > 0) {
+    const best = byPath.reduce((one, other) =>
+      Number(other.athlos !== "") - Number(one.athlos !== "") || other.written - one.written > 0 ? other : one,
+    );
+    return { unit: best, held };
+  }
+  if (byBranch.length > 0) {
+    const best = byBranch.reduce((one, other) =>
+      other.written - one.written || Number(other.athlos !== "") - Number(one.athlos !== "") > 0 ? other : one,
+    );
+    return { unit: best, held };
+  }
+  return { unit: null, held };
+}
+
+/**
+ * What decides a row's state: a live lease, the content check, the folder's cleanliness, the commits ahead.
+ * @typedef {{readonly held: boolean, readonly carried: boolean, readonly clean: boolean | null, readonly ahead: number | null}} RowFacts
+ */
+
+/**
+ * The state of a row: what the owner may do with it, or why nothing yet.
+ *
+ * An athlos worktree is *working* while it is dirty (or cannot be read) or a live lease holds it,
+ * *ready* when it is clean, beyond the owner's branch and not carried, and *carried* when its work is
+ * in the owner's branch. A branch without a worktree is a *backup*, carried or not; a held one is
+ * still *working*.
+ * @param {string} kind
+ * @param {ParkData} texts
+ * @param {RowFacts} facts
+ * @returns {string}
+ */
+function _rowState(kind, texts, facts) {
+  const { kinds, states } = texts.worktrees;
+  if (kind === kinds.main || kind === kinds.harness) {
+    return kind === kinds.main ? states.main : states.harness;
+  }
+  if (facts.held) {
+    return states.working;
+  }
+  if (kind === kinds.branch_only) {
+    return facts.carried ? states.backup : states.not_carried_backup;
+  }
+  if (facts.clean !== true) {
+    return states.working;
+  }
+  if (facts.carried) {
+    return states.carried;
+  }
+  return facts.ahead ? states.ready : states.working;
+}
+
+/**
+ * The whole number one git command prints, or `null` when it fails or prints something else.
+ * @param {readonly string[]} args
+ * @param {string} cwd
+ * @returns {number | null}
+ */
+function _gitNumber(args, cwd) {
+  const out = _git(args, cwd);
+  return out && DIGITS_RE.test(out) ? pyInt(out) : null;
+}
+
+/**
+ * The commits of `tip` beyond the owner's branch, and the age of its last commit in seconds.
+ * @param {Listing} listing
+ * @param {string} tip
+ * @returns {{ahead: number | null, ageSeconds: number | null}}
+ */
+function _commitFacts(listing, tip) {
+  const ahead = _gitNumber(["rev-list", "--count", `${listing.ownerTip}..${tip}`], listing.root);
+  const stamp = _gitNumber(["log", "-1", "--format=%ct", tip], listing.root);
+  return { ahead, ageSeconds: stamp === null ? null : Math.max(0, Math.floor(listing.now - stamp)) };
+}
+
+/**
+ * The subject of the last commit of `tip`, for a ready row only: the message the carry proposes.
+ * @param {Listing} listing
+ * @param {string} tip
+ * @param {string} state
+ * @returns {string}
+ */
+function _readySubject(listing, tip, state) {
+  if (state !== listing.texts.worktrees.states.ready) {
+    return "";
+  }
+  return _git(["log", "-1", "--format=%s", tip], listing.root) ?? "";
+}
+
+/**
+ * Whether a worktree's folder has nothing uncommitted; `null` when there is no folder or git cannot say.
+ * @param {string} path
+ * @returns {boolean | null}
+ */
+function _folderClean(path) {
+  const uncommitted = path !== "" ? gitUncommittedPaths(path) : null;
+  return uncommitted === null ? null : uncommitted.length === 0;
+}
+
+/**
+ * One row: the facts git gives of `tip`, the unit that owns it, and its state.
+ * @param {Listing} listing
+ * @param {string} path
+ * @param {string} branch
+ * @param {string} tip
+ * @param {string} kind
+ * @returns {WorktreeRow}
+ */
+function _worktreeRow(listing, path, branch, tip, kind) {
+  const { texts } = listing;
+  const { states } = texts.worktrees;
+  const { unit, held } = _unitFor(listing.units, path, branch);
+  const differing = uncarriedPaths(listing.root, listing.ownerTip, tip);
+  const carried = differing !== null && differing.length === 0;
+  const clean = _folderClean(path);
+  const { ahead, ageSeconds } = _commitFacts(listing, tip);
+  const state = _rowState(kind, texts, { held, carried, clean, ahead });
+  return {
+    path,
+    shown: path !== "" ? _displayPath(path, pyPath(listing.main, WORKTREES_DIR)) : "",
+    branch: branch || texts.worktrees.detached,
+    kind,
+    ergon: unit?.ergon ?? "",
+    athlos: unit?.athlos ?? "",
+    clean,
+    ahead,
+    ageSeconds,
+    carried,
+    differing,
+    state,
+    removable: state === states.carried || state === states.backup,
+    subject: _readySubject(listing, tip, state),
+  };
+}
+
+/**
+ * The `_aitna/` branches with no worktree, as `{branch, tip}`, by branch name.
+ * @param {string} root
+ * @param {ReadonlySet<string>} sheltered the branches a worktree has checked out
+ * @returns {{branch: string, tip: string}[]}
+ */
+function _branchOnly(root, sheltered) {
+  const out = _git(["for-each-ref", "--format=%(objectname) %(refname)", HEADS + BRANCH_NAMESPACE], root) ?? "";
+  /** @type {{branch: string, tip: string}[]} */
+  const found = [];
+  for (const line of out.split("\n")) {
+    const space = line.indexOf(" ");
+    const tip = space < 0 ? line : line.slice(0, space);
+    const ref = space < 0 ? "" : line.slice(space + 1);
+    const branch = ref.startsWith(HEADS) ? ref.slice(HEADS.length) : ref;
+    if (tip !== "" && branch !== "" && !sheltered.has(branch)) {
+      found.push({ branch, tip });
+    }
+  }
+  return found.sort((one, other) => _compareCodePoints(one.branch, other.branch));
+}
+
+/**
+ * Every worktree of the repository and every `_aitna/` branch that has none, as rows; reads only.
+ *
+ * The owner's checkout is git's first entry and comes first; a linked worktree is an *athlos* when its
+ * branch is in the `_aitna/<id>-<name>.<n>` namespace and a *harness* one otherwise; a branch whose
+ * worktree is gone is a backup. Each row carries a state; one is removable only when it is a carried
+ * athlos worktree or a carried backup branch (never one a live lease holds).
+ * @param {string} root
+ * @param {ParkData} texts
+ * @param {LeaseContext} context
+ * @returns {WorktreeRow[]}
+ * @throws {ParkError} `root` is not in a git repository, or the repository has no checkout of its own
+ */
+export function listWorktrees(root, texts, context) {
+  const out = _git(["worktree", "list", "--porcelain"], root, false);
+  const entries = out ? parseWorktreeList(out) : [];
+  if (entries.length === 0) {
+    throw _error(texts, "no_repository", { path: root });
+  }
+  const main = entries[0];
+  if (main.bare) {
+    throw _error(texts, "no_main_checkout", { path: main.path });
+  }
+  const { kinds } = texts.worktrees;
+  /** @type {Listing} */
+  const listing = {
+    root,
+    main: main.path,
+    ownerTip: main.head,
+    units: _unitRecords(root, texts, context),
+    texts,
+    now: context.now,
+  };
+  const linked = entries.slice(1).filter((entry) => !entry.bare);
+  const rows = linked
+    .map((entry) =>
+      _worktreeRow(
+        listing,
+        entry.path,
+        entry.branch,
+        entry.head,
+        branchUnit(entry.branch) ? kinds.athlos : kinds.harness,
+      ),
+    )
+    .sort((one, other) => _compareCodePoints(one.shown, other.shown));
+  rows.unshift(_worktreeRow(listing, main.path, main.branch, main.head, kinds.main));
+  const sheltered = new Set(entries.map((entry) => entry.branch).filter((branch) => branch !== ""));
+  for (const { branch, tip } of _branchOnly(root, sheltered)) {
+    rows.push(_worktreeRow(listing, "", branch, tip, kinds.branch_only));
+  }
+  return rows;
+}
+
+/**
+ * @param {ParkData} texts
+ * @param {boolean | null} value
+ * @returns {string}
+ */
+function _yesNo(texts, value) {
+  if (value === null) {
+    return texts.empty_cell;
+  }
+  return value ? texts.worktrees.yes : texts.worktrees.no;
+}
+
+/**
+ * @param {WorktreeRow} row
+ * @param {ParkData} texts
+ * @returns {string[]}
+ */
+function _tableCells(row, texts) {
+  const empty = texts.empty_cell;
+  return [
+    row.shown || empty,
+    row.branch,
+    row.kind,
+    row.ergon || empty,
+    row.athlos || empty,
+    _yesNo(texts, row.clean),
+    row.ahead === null ? empty : String(row.ahead),
+    row.ageSeconds === null ? empty : _relativeAge(row.ageSeconds),
+    row.state,
+  ];
+}
+
+/**
+ * The table of `worktrees` as aligned lines, the header first; an absent value is the empty cell.
+ * @param {readonly WorktreeRow[]} rows
+ * @param {ParkData} texts
+ * @returns {string[]}
+ */
+export function formatWorktrees(rows, texts) {
+  const spec = texts.worktrees;
+  const table = [[...spec.columns], ...rows.map((row) => _tableCells(row, texts))];
+  const widths = table[0].map((_cell, column) => Math.max(...table.map((line) => Array.from(line[column]).length)));
+  return table.map((line) => {
+    const padded = line.slice(0, -1).map((cell, column) => cell + " ".repeat(widths[column] - Array.from(cell).length));
+    return [...padded, line[line.length - 1]].join(spec.separator);
+  });
+}
+
+/**
+ * A word as the shell takes it literally: the word itself when it is plain, else in single quotes.
+ * @param {string} word
+ * @returns {string}
+ */
+function _shellQuote(word) {
+  if (word === "") {
+    return "''";
+  }
+  if (!/[^A-Za-z0-9_@%+=:,./-]/.test(word)) {
+    return word;
+  }
+  return `'${word.replaceAll("'", `'"'"'`)}'`;
+}
+
+/**
+ * `text` made literal inside double quotes: the four characters the shell still reads there are escaped.
+ * @param {string} text
+ * @returns {string}
+ */
+function _doubleQuoted(text) {
+  return text.replace(/([\\"$`])/g, "\\$1");
+}
+
+/**
+ * The squash that carries each ready row into the owner's branch, one block of commands per row.
+ *
+ * The tool prints them and never runs them (ADR 0029 D09): the owner starts every carry. The message
+ * is the subject of the branch's last commit, which the agent may rewrite before the owner commits.
+ * @param {readonly WorktreeRow[]} rows
+ * @param {string} main the owner's checkout
+ * @param {ParkData} texts
+ * @returns {string[][]}
+ */
+export function carryCommands(rows, main, texts) {
+  const spec = texts.worktrees;
+  return rows
+    .filter((row) => row.state === spec.states.ready)
+    .map((row) => [
+      fill(spec.carry_cd, { path: _shellQuote(main) }),
+      fill(spec.carry_squash, { branch: _shellQuote(row.branch) }),
+      fill(spec.carry_commit, { message: _doubleQuoted(row.subject) }),
+    ]);
+}
+
+/**
+ * The commands that remove each removable row: the tool prints them and never runs them.
+ *
+ * A worktree goes with `git worktree remove`, which refuses while anything in it is uncommitted; a
+ * backup branch goes with `-D`, because a squash leaves it unmerged in git's eyes.
+ * @param {readonly WorktreeRow[]} rows
+ * @param {ParkData} texts
+ * @returns {string[]}
+ */
+export function removalCommands(rows, texts) {
+  const spec = texts.worktrees;
+  return rows
+    .filter((row) => row.removable)
+    .map((row) =>
+      row.path !== ""
+        ? fill(spec.command_worktree, { path: _shellQuote(row.path) })
+        : fill(spec.command_branch, { branch: _shellQuote(row.branch) }),
+    );
+}
+
+/**
+ * The rows a target names: a branch (with or without `_aitna/`) or an athlos key such as `C190.1`.
+ * @param {readonly WorktreeRow[]} rows
+ * @param {string} target
+ * @returns {WorktreeRow[]}
+ */
+export function selectWorktrees(rows, target) {
+  return rows.filter(
+    (row) => row.branch === target || row.athlos === target || row.branch === BRANCH_NAMESPACE + target,
+  );
+}
+
+/**
+ * The one line that says whether the branch of `row` is carried and, if not, what differs.
+ * @param {WorktreeRow} row
+ * @param {ParkData} texts
+ * @returns {string}
+ */
+export function worktreeVerdict(row, texts) {
+  const spec = texts.worktrees;
+  if (row.carried) {
+    return fill(spec.verdict_carried, { branch: row.branch });
+  }
+  let paths = spec.verdict_unreadable;
+  if (row.differing !== null) {
+    const shown = row.differing.slice(0, spec.verdict_paths);
+    paths = shown.join(", ") + (row.differing.length > shown.length ? spec.verdict_more : "");
+  }
+  return fill(spec.verdict_not_carried, { branch: row.branch, paths });
+}
+
+// --------------------------------------------------------------------------------------
 // the export: the ergon's files, its leases left out (ADR 0028 D07, branch B10)
 // --------------------------------------------------------------------------------------
 
@@ -2927,6 +3560,7 @@ const COMMANDS = {
     ]),
   },
   active: { id: false, options: _withCommon([]) },
+  worktrees: { id: "optional", options: _withCommon([]) },
   close: { id: true, options: _withCommon(HOLDER_OPTIONS) },
   export: { id: true, options: _withCommon([_flag("--out", { required: true })]) },
   "local-id": { id: false, options: _withCommon([]) },
@@ -3083,7 +3717,7 @@ function _scan(command, tokens) {
 function _finish(command, scan) {
   const spec = COMMANDS[/** @type {keyof typeof COMMANDS} */ (command)];
   const missing = [
-    ...(spec.id && scan.positionals.length === 0 ? ["id"] : []),
+    ...(spec.id === true && scan.positionals.length === 0 ? ["id"] : []),
     ...spec.options
       .filter((option) => option.required && !scan.values.has(option.dest))
       .map((option) => option.flags[0]),
@@ -3101,7 +3735,7 @@ function _finish(command, scan) {
   if (surplus.length > 0) {
     throw new UsageError(`unrecognized arguments: ${surplus.join(" ")}`);
   }
-  return { command, id: spec.id ? scan.positionals[0] : "", values: scan.values };
+  return { command, id: spec.id ? (scan.positionals[0] ?? "") : "", values: scan.values };
 }
 
 /**
@@ -3675,6 +4309,43 @@ function _cmdActive(_args, run) {
  * @param {Run} run
  * @returns {number}
  */
+function _cmdWorktrees(args, run) {
+  const rows = listWorktrees(run.root, run.texts, run.lease);
+  const target = pyStrip(args.id);
+  if (target !== "") {
+    return _printWorktreeVerdict(selectWorktrees(rows, target), target, run);
+  }
+  const sections = [formatWorktrees(rows, run.texts), ...carryCommands(rows, rows[0].path, run.texts)];
+  const removals = removalCommands(rows, run.texts);
+  if (removals.length > 0) {
+    sections.push(removals);
+  }
+  _print(sections.map((section) => section.join("\n")).join("\n\n"));
+  return 0;
+}
+
+/**
+ * Print the rows a target names and one verdict line each; the exit code is 0 only when all are carried.
+ * @param {readonly WorktreeRow[]} rows
+ * @param {string} target
+ * @param {Run} run
+ * @returns {number}
+ */
+function _printWorktreeVerdict(rows, target, run) {
+  if (rows.length === 0) {
+    _print(fill(run.texts.worktrees.verdict_missing, { target }));
+    return 1;
+  }
+  const lines = [...formatWorktrees(rows, run.texts), ...rows.map((row) => worktreeVerdict(row, run.texts))];
+  _print(lines.join("\n"));
+  return rows.every((row) => row.carried) ? 0 : 1;
+}
+
+/**
+ * @param {ParsedArgs} args
+ * @param {Run} run
+ * @returns {number}
+ */
 function _cmdClose(args, run) {
   const ergon = findErgon(run.root, pyStrip(args.id), run.texts);
   _refuseLiveForeignLease(ergon, _holderOf(args, run), run);
@@ -3757,6 +4428,7 @@ function _commandHandlers() {
     release: _cmdRelease,
     athlos: _cmdAthlos,
     active: _cmdActive,
+    worktrees: _cmdWorktrees,
     close: _cmdClose,
     export: _cmdExport,
     "local-id": _cmdLocalId,

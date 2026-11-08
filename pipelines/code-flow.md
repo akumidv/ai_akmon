@@ -65,6 +65,15 @@ does not decide architecture or process contracts.
    due before the pull request and offer the [`learning`](../skills/learning/SKILL.md) skill; do not
    start it yourself, and continue only after the owner chooses. What the owner confirms lands in the
    same pull request.
+8. **Carry** *(when the work was done in a worktree)* — commit it there, on the worktree's own
+   branch, after the pre-commit gate is green, and print for the owner only `cd <the owner's
+   checkout>`, `git merge --squash <branch>` and `git commit -m "<message>"` with the message you
+   propose, so the branch's commits become one commit on the owner's branch. When the owner says the
+   carry is done, confirm it with `park worktrees <branch>` (carried by content) — never from the
+   owner's words or from `git log` — and say which command is missing when it is not. After a
+   verified carry, print `git worktree remove <path>`; keep the branch as a backup until a later check shows every
+   path it changed holds the same content in the owner's branch, then delete it — at a periodic
+   check, on request, or when the task closes.
 
 ## Gates (must hold to advance)
 

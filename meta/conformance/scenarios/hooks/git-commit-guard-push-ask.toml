@@ -1,4 +1,4 @@
-# commits.owner-owned: push/tag/merge land history, so the decision is an ask (the interactive
+# commits.owner-owned: push and tag are the owner's, so the decision is an ask (the interactive
 # default permission mode trusts a live owner to answer it).
 id = "hooks/git-commit-guard-push-ask"
 ecosystem = "shared"
@@ -23,4 +23,4 @@ stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed
 [expected.stdout_json.hookSpecificOutput]
 hookEventName = "PreToolUse"
 permissionDecision = "ask"
-permissionDecisionReason = "Commit guardrail: the owner owns commits. push/tag/merge land history — confirm this is explicitly requested."
+permissionDecisionReason = "Commit guardrail: the owner owns publishing. push and tag are the owner's everywhere, a linked worktree's own branch included — confirm this is explicitly requested."

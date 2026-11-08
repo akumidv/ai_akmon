@@ -1,5 +1,5 @@
-# A commit on the default branch resolves the live git branch (the fixture repo is on main):
-# a landing commit is an ask, not a deny.
+# A commit in the main checkout (the fixture repo, not a linked worktree) resolves the live repository:
+# history written outside a worktree is an ask, not a deny.
 id = "hooks/git-commit-guard-main-commit-ask"
 ecosystem = "shared"
 kind = "hook"
@@ -23,4 +23,4 @@ stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed
 [expected.stdout_json.hookSpecificOutput]
 hookEventName = "PreToolUse"
 permissionDecision = "ask"
-permissionDecisionReason = "Commit guardrail: the owner owns commits. A commit on 'main' is a landing commit — confirm explicitly, or branch to backup/* first."
+permissionDecisionReason = "Commit guardrail: git commit writes history in {{root}} (not a linked worktree). The agent writes history only inside a linked worktree, on that worktree's own branch; anywhere else it is the owner's — confirm explicitly, or run it in a worktree."

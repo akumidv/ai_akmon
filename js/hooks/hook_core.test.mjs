@@ -32,6 +32,7 @@ import {
   editTool,
   formatG,
   gitCommitGuardResult,
+  gitInvocations,
   hookFailureDiagnostic,
   hookFailureNotice,
   isCodePath,
@@ -40,6 +41,7 @@ import {
   normpath,
   privilegeEscalationGuardResult,
   readTool,
+  repositoryFacts,
   reportUnclassifiedShellRoute,
   roleOnCodeResult,
   runtimeRootDisplay,
@@ -331,48 +333,143 @@ test("the privilege guard is ASCII-word-bounded: another script's letter is a bo
   assert.equal(thrown(() => privilegeEscalationGuardResult(data, 5)).name, "TypeError");
 });
 
-test("the commit guard: trailer deny, push/tag/merge ask, a commit on main/master/detached asks", () => {
-  /** @param {string} command @param {string | null} branch @param {string | null} [permissionMode] */
-  const decide = (command, branch, permissionMode = "default") => {
-    const result = gitCommitGuardResult(data, command, branch, { permissionMode });
-    return result === null ? null : result.permissionDecision;
+// The shared case table (also run by meta/tests/test_hook_core.py): the scanner's answers and the
+// guard's decisions, with the repositories a lookup stands in for.
+const COMMIT_CASES = JSON.parse(
+  fs.readFileSync(posix.join(TREE_ROOT, "meta", "conformance", "units", "commit_guard_cases.json"), "utf8"),
+);
+/** @type {Record<string, {linked: boolean, branch: string}>} */
+const REPOSITORIES = COMMIT_CASES.repositories;
+/** @param {string} directory */
+const lookup = (directory) => (Object.hasOwn(REPOSITORIES, directory) ? REPOSITORIES[directory] : null);
+
+/**
+ * The guard run as the session would at `start`, with the shared table's repositories.
+ * @param {string} command
+ * @param {string | null} start
+ * @param {{permissionMode?: string | null, attended?: boolean | null}} [options]
+ */
+const guard = (command, start = "/wt", options = {}) =>
+  gitCommitGuardResult(data, command, { directory: start, repositoryAt: lookup, ...options });
+
+test("the scanner finds the git commands the shared table lists", () => {
+  for (const item of COMMIT_CASES.scanner) {
+    const found = gitInvocations(item.command, item.start, { homeDirectory: item.home });
+    assert.deepEqual(
+      found.map((one) => [one.subcommand, one.directory]),
+      item.expected,
+      `${item.start}: ${JSON.stringify(item.command)}`,
+    );
+  }
+});
+
+test("the guard decides as the shared table says", () => {
+  for (const item of COMMIT_CASES.guard) {
+    const label = `${item.start}: ${JSON.stringify(item.command)}`;
+    const result = guard(item.command, item.start, { permissionMode: item.mode, attended: item.attended });
+    assert.equal(result === null ? "pass" : result.permissionDecision, item.decision, label);
+    const reason = String(result?.permissionReason ?? "");
+    for (const text of item.contains) {
+      assert.ok(reason.includes(text), `${label}: ${reason}`);
+    }
+    for (const text of item.absent) {
+      assert.ok(!reason.includes(text), `${label}: ${reason}`);
+    }
+  }
+});
+
+test("the commit guard: the trailer is read in the whole text, a heredoc body included", () => {
+  const command = "git commit -F - <<'EOF'\nsubject\n\nCo-Authored-By: Claude\nEOF";
+  assert.deepEqual(
+    gitInvocations(command, "/wt").map((one) => [one.subcommand, one.directory]),
+    [["commit", "/wt"]],
+  );
+  assert.equal(guard(command)?.permissionDecision, "deny");
+  assert.equal(guard("git co‑authored-by"), null); // a non-breaking hyphen is not a hyphen
+});
+
+test("the commit guard: a heredoc body or a quoted argument that names a git command is text", () => {
+  assert.equal(guard("cat <<'EOF'\n`git merge --squash x`\nEOF", "/main", { permissionMode: "default" }), null);
+  assert.equal(guard("grep 'git merge' f", "/main", { permissionMode: "default" }), null);
+});
+
+test("the commit guard: a worktree commit passes, a main-checkout commit asks, push asks in both", () => {
+  const heredoc = "git commit -m \"$(cat <<'EOF'\nsubject\nEOF\n)\"";
+  assert.equal(guard(heredoc, "/wt", { permissionMode: "default" }), null);
+  assert.equal(guard(heredoc, "/main", { permissionMode: "default" })?.permissionDecision, "ask");
+  assert.equal(guard("cd /wt && git commit -m x", "/main", { permissionMode: "default" }), null);
+  assert.equal(guard("git -C /main commit -m x", "/wt", { permissionMode: "default" })?.permissionDecision, "ask");
+  assert.equal(guard("bash -c 'git merge x'", "/main", { permissionMode: "default" })?.permissionDecision, "ask");
+  assert.equal(guard("git push", "/wt", { permissionMode: "default" })?.permissionDecision, "ask");
+  assert.equal(guard("git push", "/wt", { permissionMode: "auto" })?.permissionDecision, "deny");
+  const landing = guard("git commit -m x", "/wt-detached", { permissionMode: "default" });
+  assert.match(String(landing?.permissionReason), /git commit writes history in \/wt-detached \(a detached HEAD\)/);
+});
+
+test("the commit guard asks the repository only for a history-writing invocation, with its directory", () => {
+  /** @type {string[]} */
+  const asked = [];
+  /** @param {string} directory */
+  const spy = (directory) => {
+    asked.push(directory);
+    return lookup(directory);
   };
-  assert.equal(decide("git push", "feat"), "ask");
-  assert.equal(decide("git tag v1", "feat"), "ask");
-  assert.equal(decide("git merge x", "feat"), "ask");
-  assert.equal(decide("git commit -m x", "main"), "ask");
-  assert.equal(decide("git commit -m x", "master"), "ask");
-  assert.equal(decide("git commit -m x", ""), "ask");
-  assert.equal(decide("git commit -m x", "feat"), null);
-  assert.equal(decide("git commit -m x", "Main"), null);
-  assert.equal(decide("git status", "main"), null);
-  assert.equal(decide("ls", "main"), null);
-  assert.equal(decide("git commit -m 'Co-Authored-By: x'", "feat"), "deny");
-  assert.equal(decide("git CO-AUTHORED-BY", "feat"), "deny");
-  assert.equal(decide("git co\u2011authored-by", "feat"), null); // a non-breaking hyphen is not a hyphen
-  // `\b` is ASCII: another script's letter next to git/push is a boundary, as `git; push` is not one
-  assert.equal(decide("βgit push", "feat"), "ask");
-  assert.equal(decide("git pushé", "feat"), "ask");
-  assert.equal(decide("git\u00a0push", "feat"), "ask");
-  assert.equal(decide("git; push", "feat"), null);
-  assert.equal(decide("git a | push", "feat"), null);
-  assert.equal(decide("echo git\npush", "feat"), "ask"); // [^|&;] crosses a newline
-  assert.equal(decide("git x &&\npush", "feat"), null);
-  assert.equal(decide("git\u2028push", "feat"), "ask"); // and U+2028
-  assert.equal(decide("gitpush", "feat"), null);
-  const landing = gitCommitGuardResult(data, "git commit -m x", "", { permissionMode: "default" });
-  assert.match(String(landing?.permissionReason), /A commit on 'detached HEAD' is a landing commit/);
+  gitCommitGuardResult(data, "git status && git push; cd /main && git commit -m y", {
+    directory: "/s",
+    repositoryAt: spy,
+  });
+  assert.deepEqual(asked, []);
+  gitCommitGuardResult(data, "cd /wt && git commit -m x && git status; git log", {
+    directory: "/s",
+    repositoryAt: spy,
+  });
+  assert.deepEqual(asked, ["/wt"]);
+  const unresolved = gitCommitGuardResult(data, 'cd "$HOME/w" && git commit -m x', {
+    directory: "/wt",
+    repositoryAt: spy,
+    permissionMode: "default",
+  });
+  assert.deepEqual(asked, ["/wt"]);
+  assert.match(String(unresolved?.permissionReason), /cannot resolve/);
+});
+
+test("the live lookup reads git: a linked worktree passes, the main checkout and a non-repository ask", () => {
+  withDir((dir) => {
+    /** @param {string[]} args @param {string} cwd */
+    const git = (args, cwd) =>
+      spawnSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], {
+        stdio: "ignore",
+      });
+    const main = posix.join(dir, "main");
+    fs.mkdirSync(main);
+    git(["init", "-q", "-b", "main"], main);
+    git(["commit", "-q", "--allow-empty", "-m", "first"], main);
+    git(["worktree", "add", "-q", "-b", "feat", posix.join(dir, "wt")], main);
+    git(["worktree", "add", "-q", "--detach", posix.join(dir, "detached")], main);
+    fs.mkdirSync(posix.join(dir, "plain"));
+    assert.deepEqual({ ...repositoryFacts(main) }, { linked: false, branch: "main" });
+    assert.deepEqual({ ...repositoryFacts(posix.join(dir, "wt")) }, { linked: true, branch: "feat" });
+    assert.deepEqual({ ...repositoryFacts(posix.join(dir, "detached")) }, { linked: true, branch: "" });
+    assert.equal(repositoryFacts(posix.join(dir, "plain")), null);
+    assert.equal(repositoryFacts(posix.join(dir, "missing")), null);
+    /** @param {string} directory */
+    const run = (directory) => gitCommitGuardResult(data, "git commit -m x", { directory, permissionMode: "default" });
+    assert.equal(run(posix.join(dir, "wt")), null);
+    assert.equal(run(main)?.permissionDecision, "ask");
+    assert.equal(run(posix.join(dir, "detached"))?.permissionDecision, "ask");
+    assert.match(String(run(posix.join(dir, "plain"))?.permissionReason), /not a git repository/);
+  });
 });
 
 test("a non-string command is the TypeError re.search raises", () => {
-  assert.equal(thrown(() => gitCommitGuardResult(data, ["git"], "main")).name, "TypeError");
-  assert.equal(gitCommitGuardResult(data, ["x"], "main"), null); // `"git" in ["x"]` is False
-  assert.equal(thrown(() => gitCommitGuardResult(data, 5, "main")).name, "TypeError");
+  assert.equal(thrown(() => gitCommitGuardResult(data, ["git"])).name, "TypeError");
+  assert.equal(gitCommitGuardResult(data, ["x"]), null); // `"git" in ["x"]` is False
+  assert.equal(thrown(() => gitCommitGuardResult(data, 5)).name, "TypeError");
 });
 
 test("an unattended ask is a deny that spells the permission mode with repr()", () => {
   const reasonTail = (/** @type {string | null} */ mode) => {
-    const result = gitCommitGuardResult(data, "git push", "feat", { permissionMode: mode });
+    const result = guard("git push", "/wt", { permissionMode: mode });
     return [
       result?.permissionDecision,
       String(result?.permissionReason).match(/permission_mode=(.*?), CLAUDE_CODE_SESSION_ATTENDED=/)?.[1],
@@ -411,7 +508,7 @@ test("an ask is attended by the host's statement, then by the mode (ADR-0025/D06
 
 test("the commit guard's ask follows attendance and names both values when it escalates", () => {
   for (const [mode, attended, passes] of ATTENDANCE_CELLS) {
-    const result = gitCommitGuardResult(data, "git push", "feat", { permissionMode: mode, attended });
+    const result = guard("git push", "/wt", { permissionMode: mode, attended });
     assert.equal(result?.permissionDecision, passes ? "ask" : "deny", `${mode} ${attended}`);
     const reason = String(result?.permissionReason);
     assert.equal(reason.includes("escalated ask"), !passes);
@@ -874,4 +971,12 @@ test("currentGitBranch: the branch in a repository, empty outside one", () => {
       process.chdir(here);
     }
   });
+});
+
+test("the scanner keeps the arguments after the subcommand", () => {
+  const [found] = gitInvocations("git -C /x branch -D 'a b' -- c", "/s");
+  assert.deepEqual(
+    [found.subcommand, found.directory, [...found.arguments]],
+    ["branch", "/x", ["-D", "a b", "--", "c"]],
+  );
 });

@@ -2473,3 +2473,341 @@ def test_the_project_root_is_found_by_walking_up(project, monkeypatch, capsys):
 def test_project_root_flag_is_an_alias_of_root(project, capsys):
     assert park.main(["list", "--project-root", str(project)]) == 0
     assert capsys.readouterr().out == "no ergons in _aitna/.ergon\n"
+
+
+# --------------------------------------------------------------------------------------
+# worktrees: every worktree git knows and every backup branch, by state (C190, D-C190-WORKTREES)
+# --------------------------------------------------------------------------------------
+
+STATES = TEXTS["worktrees"]["states"]
+PENDING_SUBJECT = 'pending: add the "pending" file'
+
+
+def _athlos_branch(number: int) -> str:
+    return f"_aitna/{ERGON_NAME}.{number}"
+
+
+def _athlos_folder(main: Path, number: int) -> Path:
+    return main / ".worktrees" / f"{ERGON_NAME}.{number}"
+
+
+def _commit_files(folder: Path, files: dict[str, str], message: str) -> None:
+    for name, text in files.items():
+        (folder / name).write_text(text, encoding="utf-8")
+        _git(folder, "add", name)
+    _git(folder, "commit", "-m", message)
+
+
+def _add_athlos_worktree(main: Path, number: int, files: dict[str, str], message: str) -> Path:
+    folder = _athlos_folder(main, number)
+    _git(main, "worktree", "add", "-b", _athlos_branch(number), str(folder))
+    _commit_files(folder, files, message)
+    return folder
+
+
+def _carry_by_squash(main: Path, number: int) -> None:
+    """The owner's carry: one squash commit on main; the branch stays unmerged in git's eyes."""
+    _git(main, "merge", "--squash", _athlos_branch(number))
+    _git(main, "commit", "-m", f"carry {number}")
+
+
+@pytest.fixture
+def world(tmp_path: Path) -> Path:
+    """A main checkout with one worktree or branch of every kind a ``worktrees`` row can be.
+
+    1 carried by a squash, 2 ready (four paths, a quote in its subject), 3 dirty, 4 carried but held by a
+    live lease, 5 a backup carried by a squash, 6 a backup not carried (its note names the branch), 7 carried
+    by a merge commit, and a harness worktree.
+    """
+    main = tmp_path / "world"
+    main.mkdir()
+    (main / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+    (main / "_aitna").mkdir()
+    (main / "_aitna" / ".akmon.toml").write_text("", encoding="utf-8")
+    (main / ".gitignore").write_text(".worktrees/\n_aitna/\n.claude/\n", encoding="utf-8")
+    _git(main, "init", "-b", "main")
+    _git(main, "add", "AGENTS.md", ".gitignore")
+    _git(main, "commit", "-m", "base")
+    _add_athlos_worktree(main, 1, {"squashed.txt": "one"}, "one")
+    _add_athlos_worktree(
+        main,
+        2,
+        {"pending.txt": "two", "p1.txt": "1", "p2.txt": "2", "p3.txt": "3"},
+        PENDING_SUBJECT,
+    )
+    dirty = _add_athlos_worktree(main, 3, {"dirty.txt": "three"}, "three")
+    (dirty / "scratch.txt").write_text("untracked", encoding="utf-8")
+    held = _add_athlos_worktree(main, 4, {"held.txt": "four"}, "four")
+    gone = _add_athlos_worktree(main, 5, {"gone.txt": "five"}, "five")
+    _git(main, "worktree", "remove", str(gone))
+    behind = _add_athlos_worktree(main, 6, {"behind.txt": "six"}, "six")
+    _git(main, "worktree", "remove", str(behind))
+    _add_athlos_worktree(main, 7, {"merged.txt": "seven"}, "seven")
+    harness = main / ".claude" / "worktrees" / "agent-x"
+    _git(main, "worktree", "add", "-b", "worktree-agent-x", str(harness))
+    _commit_files(harness, {"harness.txt": "h"}, "harness work")
+    for number in (1, 4, 5):
+        _carry_by_squash(main, number)
+    _git(main, "merge", "--no-ff", "-m", "merge seven", _athlos_branch(7))
+    ergon = _ergon(main, ERGON_NAME)
+    ergon.mkdir(parents=True)
+    folder = _make_athlos(ergon, 4, "held")
+    park.acquire_lease(folder, park.Holder("claude", "s1", LAPTOP, str(held)), TEXTS, _live_context())
+    park.write_athlos_doc(
+        _make_athlos(ergon, 6, "behind"),
+        park.AthlosDoc(
+            park.ParkFields(
+                id=ERGON_ID, name="holders-units", next_action="x", athlos=f"{ERGON_ID}.6", branch=_athlos_branch(6)
+            ),
+            (),
+            done=False,
+        ),
+        TEXTS,
+    )
+    return main
+
+
+def _world_rows(main: Path) -> dict[str, park.WorktreeRow]:
+    return {row.branch: row for row in park.list_worktrees(main, TEXTS, _live_context())}
+
+
+def _worktrees_out(main: Path, capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, str]:
+    capsys.readouterr()
+    code = _run(main, "worktrees", *argv, "--machine", LAPTOP)
+    return code, capsys.readouterr().out
+
+
+def test_the_owners_checkout_comes_first_and_backup_branches_last(world):
+    rows = park.list_worktrees(world, TEXTS, _live_context())
+    assert rows[0].kind == "main"
+    assert rows[0].path == str(world.resolve())
+    assert rows[0].state == STATES["main"]
+    assert [row.branch for row in rows[-2:]] == [_athlos_branch(5), _athlos_branch(6)]
+    assert [row.kind for row in rows[-2:]] == ["branch-only", "branch-only"]
+
+
+def test_a_branch_carried_by_a_squash_is_carried_though_git_calls_it_unmerged(world):
+    row = _world_rows(world)[_athlos_branch(1)]
+    assert _git(world, "branch", "--merged", "main", "--list", _athlos_branch(1)) == ""
+    assert (row.kind, row.state, row.carried, row.removable) == ("athlos", STATES["carried"], True, True)
+    assert (row.clean, row.ahead, row.differing) == (True, 1, ())
+    assert row.shown == f"{ERGON_NAME}.1"
+
+
+def test_a_branch_merged_by_a_merge_commit_is_carried_with_nothing_ahead(world):
+    row = _world_rows(world)[_athlos_branch(7)]
+    assert (row.state, row.carried, row.ahead, row.removable) == (STATES["carried"], True, 0, True)
+
+
+def test_a_clean_branch_beyond_the_owners_and_not_carried_is_ready_with_its_subject(world):
+    row = _world_rows(world)[_athlos_branch(2)]
+    assert (row.state, row.carried, row.ahead, row.removable) == (STATES["ready"], False, 1, False)
+    assert row.differing == ("p1.txt", "p2.txt", "p3.txt", "pending.txt")
+    assert row.subject == PENDING_SUBJECT
+
+
+def test_a_dirty_worktree_is_working_and_untracked_files_count(world):
+    row = _world_rows(world)[_athlos_branch(3)]
+    assert (row.state, row.clean, row.carried, row.removable) == (STATES["working"], False, False, False)
+    assert row.subject == ""
+
+
+def test_a_live_lease_on_the_worktree_holds_it_whatever_its_content(world):
+    row = _world_rows(world)[_athlos_branch(4)]
+    assert row.carried
+    assert (row.state, row.ergon, row.athlos, row.removable) == (STATES["working"], ERGON_ID, f"{ERGON_ID}.4", False)
+
+
+def test_a_stale_lease_holds_nothing(world):
+    folder = _ergon(world, ERGON_NAME) / "4"
+    (folder / "HOLDER").write_text(
+        f"---\nharness: claude\nsession: s1\nmachine: {LAPTOP}\nworktree: {_athlos_folder(world, 4)}\n"
+        "written: 2000-01-01T00:00:00Z\n---\n",
+        encoding="utf-8",
+    )
+    row = _world_rows(world)[_athlos_branch(4)]
+    assert (row.state, row.removable) == (STATES["carried"], True)
+
+
+def test_a_harness_worktree_is_never_removable(world):
+    row = _world_rows(world)["worktree-agent-x"]
+    assert (row.kind, row.state, row.removable) == ("harness", STATES["harness"], False)
+    assert row.shown == str(world.resolve() / ".claude" / "worktrees" / "agent-x")
+
+
+def test_a_branch_with_no_worktree_is_a_backup_and_its_note_names_its_athlos(world):
+    rows = _world_rows(world)
+    carried, behind = rows[_athlos_branch(5)], rows[_athlos_branch(6)]
+    assert (carried.kind, carried.path, carried.clean, carried.state) == ("branch-only", "", None, STATES["backup"])
+    assert carried.removable
+    assert (behind.state, behind.removable, behind.carried) == (STATES["not_carried_backup"], False, False)
+    assert (behind.ergon, behind.athlos) == (ERGON_ID, f"{ERGON_ID}.6")
+
+
+def test_a_backup_held_by_a_live_lease_is_working(world):
+    folder = _ergon(world, ERGON_NAME) / "6"
+    park.acquire_lease(folder, park.Holder("claude", "s9", LAPTOP, "/elsewhere"), TEXTS, _live_context())
+    assert _world_rows(world)[_athlos_branch(6)].state == STATES["working"]
+
+
+def test_the_table_and_the_commands_for_the_ready_and_the_removable(world, capsys):
+    code, out = _worktrees_out(world, capsys)
+    assert code == 0
+    table, carry, removal = out.rstrip("\n").split("\n\n")
+    lines = table.split("\n")
+    assert [cell.strip() for cell in lines[0].split(" | ")] == TEXTS["worktrees"]["columns"]
+    assert len(lines) == 1 + 9
+    assert len({line.index(" | ") for line in lines}) == 1  # the columns are aligned
+    assert carry.split("\n") == [
+        f"cd {world.resolve()}",
+        f"git merge --squash {_athlos_branch(2)}",
+        'git commit -m "pending: add the \\"pending\\" file"',
+    ]
+    assert removal.split("\n") == [
+        f"git worktree remove {_athlos_folder(world.resolve(), 1)}",
+        f"git worktree remove {_athlos_folder(world.resolve(), 7)}",
+        f"git branch -D {_athlos_branch(5)}",
+    ]
+
+
+def test_worktrees_reads_and_changes_nothing(world, capsys):
+    before = (_git(world, "for-each-ref"), _git(world, "worktree", "list"), _git(world, "status", "--porcelain"))
+    _worktrees_out(world, capsys)
+    _worktrees_out(world, capsys, _athlos_branch(2))
+    after = (_git(world, "for-each-ref"), _git(world, "worktree", "list"), _git(world, "status", "--porcelain"))
+    assert after == before
+
+
+def test_a_branch_target_prints_its_row_and_a_carried_verdict_with_exit_zero(world, capsys):
+    for target in (_athlos_branch(1), f"{ERGON_NAME}.1"):
+        code, out = _worktrees_out(world, capsys, target)
+        lines = out.rstrip("\n").split("\n")
+        assert code == 0
+        assert len(lines) == 3  # the header, the row and the verdict
+        assert lines[1].startswith(f"{ERGON_NAME}.1 ")
+        assert lines[2] == f"{_athlos_branch(1)}: carried"
+
+
+def test_an_athlos_key_names_the_row_of_its_unit(world, capsys):
+    code, out = _worktrees_out(world, capsys, f"{ERGON_ID}.4")
+    assert code == 0
+    assert out.rstrip("\n").split("\n")[-1] == f"{_athlos_branch(4)}: carried"
+
+
+def test_a_branch_not_carried_names_the_first_three_paths_that_differ_and_exits_one(world, capsys):
+    code, out = _worktrees_out(world, capsys, _athlos_branch(2))
+    assert code == 1
+    assert out.rstrip("\n").split("\n")[-1] == f"{_athlos_branch(2)}: not carried — p1.txt, p2.txt, p3.txt, …"
+    code, out = _worktrees_out(world, capsys, _athlos_branch(3))
+    assert code == 1
+    assert out.rstrip("\n").split("\n")[-1] == f"{_athlos_branch(3)}: not carried — dirty.txt"
+
+
+def test_a_missing_branch_is_said_and_exits_one(world, capsys):
+    code, out = _worktrees_out(world, capsys, "nope")
+    assert (code, out) == (1, "nope: no such branch\n")
+
+
+def test_the_verdict_follows_the_content_after_the_owner_changes_a_carried_path_again(world, capsys):
+    (world / "squashed.txt").write_text("changed again", encoding="utf-8")
+    _git(world, "commit", "-am", "owner edits it")
+    code, out = _worktrees_out(world, capsys, _athlos_branch(1))
+    assert code == 1
+    assert out.rstrip("\n").endswith(f"{_athlos_branch(1)}: not carried — squashed.txt")
+
+
+def test_worktrees_outside_a_repository_is_refused_in_one_line(project, capsys):
+    assert _run(project, "worktrees") == 1
+    assert (
+        capsys.readouterr().err == f"error: {project} is not in a git repository, so there are no worktrees to list\n"
+    )
+
+
+def test_a_main_checkout_alone_lists_one_row_and_no_commands(project, capsys):
+    _git(project, "init", "-b", "main")
+    _git(project, "add", "AGENTS.md")
+    _git(project, "commit", "-m", "base")
+    capsys.readouterr()
+    assert _run(project, "worktrees", "--machine", LAPTOP) == 0
+    lines = capsys.readouterr().out.rstrip("\n").split("\n")
+    assert len(lines) == 2
+    assert lines[1].split(" | ")[0].strip() == str(project.resolve())
+    assert lines[1].endswith(f" | {STATES['main']}")
+
+
+def test_the_porcelain_listing_is_parsed_in_git_order_and_a_bare_entry_is_marked():
+    text = (
+        "worktree /srv/main\nHEAD aaa\nbranch refs/heads/main\n\n"
+        "worktree /srv/main/.worktrees/x.1\nHEAD bbb\nbranch refs/heads/_aitna/C1-x.1\nlocked\n\n"
+        "worktree /srv/detached\nHEAD ccc\ndetached\n\n"
+        "worktree /srv/bare.git\nbare\n"
+    )
+    assert park.parse_worktree_list(text) == [
+        park.GitWorktree("/srv/main", "aaa", "main", bare=False),
+        park.GitWorktree("/srv/main/.worktrees/x.1", "bbb", "_aitna/C1-x.1", bare=False),
+        park.GitWorktree("/srv/detached", "ccc", "", bare=False),
+        park.GitWorktree("/srv/bare.git", "", "", bare=True),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("branch", "unit"),
+    [
+        ("_aitna/C186-holders-units.1", ("C186", 1)),
+        ("_aitna/_T3-local-thing.12", ("_T3", 12)),
+        ("_aitna/C186-holders-units", None),
+        ("_aitna/C186-holders-units.x", None),
+        ("feature/C186-holders-units.1", None),
+        ("main", None),
+    ],
+)
+def test_an_athlos_branch_is_in_the_namespace_and_names_its_ergon_and_number(branch, unit):
+    assert park.branch_unit(branch) == unit
+
+
+def _row(**changes: object) -> park.WorktreeRow:
+    base = park.WorktreeRow(
+        path="/srv/a b",
+        shown="a b",
+        branch="_aitna/C1-x.1",
+        kind="athlos",
+        ergon="",
+        athlos="",
+        clean=True,
+        ahead=2,
+        age_seconds=0,
+        carried=True,
+        differing=(),
+        state=STATES["carried"],
+        removable=True,
+        subject="",
+    )
+    return dataclasses.replace(base, **changes)
+
+
+def test_the_table_shows_short_relative_ages_and_the_empty_cell_for_what_is_unknown():
+    rows = [
+        _row(age_seconds=59 * 60 + 59),
+        _row(age_seconds=60 * 60),
+        _row(age_seconds=24 * 3600 - 1),
+        _row(age_seconds=24 * 3600),
+        _row(age_seconds=None, ahead=None, clean=None, shown="", path="", kind="branch-only"),
+    ]
+    lines = park.format_worktrees(rows, TEXTS)
+    assert [line.split(" | ")[7].strip() for line in lines[1:]] == ["59m", "1h", "23h", "1d", "-"]
+    last = [cell.strip() for cell in lines[-1].split(" | ")]
+    assert (last[0], last[5], last[6]) == ("-", "-", "-")
+
+
+def test_the_commands_are_quoted_for_the_shell_and_the_message_for_double_quotes():
+    ready = _row(state=STATES["ready"], removable=False, carried=False, subject='fix `a` and "b" $HOME \\ done')
+    [block] = park.carry_commands([ready], "/srv/the main", TEXTS)
+    assert block == [
+        "cd '/srv/the main'",
+        "git merge --squash _aitna/C1-x.1",
+        'git commit -m "fix \\`a\\` and \\"b\\" \\$HOME \\\\ done"',
+    ]
+    assert park.removal_commands([_row(), _row(path="", branch="_aitna/it's")], TEXTS) == [
+        "git worktree remove '/srv/a b'",
+        "git branch -D '_aitna/it'\"'\"'s'",
+    ]

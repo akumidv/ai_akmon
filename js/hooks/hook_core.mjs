@@ -40,6 +40,8 @@
 
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
+import pathModule from "node:path";
 
 import { fill } from "../common/jsondata.mjs";
 import { FloatValue, hookForm } from "../common/json_writer.mjs";
@@ -465,21 +467,6 @@ function _subject(text) {
 // ``re.ASCII`` on the Python side: ``\b`` here is ASCII-only.
 const _SUDO_RE = /\bsudo\b/;
 
-// `git` is a command word only when no name character (letter, digit, `_`, `.`, `-`) touches it:
-// `git-commit-guard.py`, `.git/hooks` and `my_git` are names. A subcommand must not continue a
-// name from the left (`pre-commit`, `.push`, `x_tag`), but may be followed by a hyphen: `git
-// commit-tree` and `git merge-base` are still a commit and a merge command.
-const _GIT_WORD = "(?<![\\w.-])git(?![\\w.-])";
-
-/**
- * `word` as a git subcommand: no name character before it, no letter, digit, `_` or `.` after.
- * @param {string} word
- * @returns {string}
- */
-function _subcommand(word) {
-  return `(?<![\\w.-])${word}(?![\\w.])`;
-}
-
 /**
  * Deny any Bash command that invokes `sudo`, unconditionally.
  *
@@ -505,17 +492,1030 @@ export function privilegeEscalationGuardResult(data, command) {
   });
 }
 
+// --------------------------------------------------------------------------------------
+// The commit guard: which repository a command acts on (C190, ADR-0029/D09)
+// --------------------------------------------------------------------------------------
+
 /**
- * Guard commit-shaped `git` commands: no AI co-author trailer, owner confirms landing history.
+ * One `git` command found in a shell command: its subcommand, its arguments, and where it runs.
+ * `arguments` are the words after the subcommand, quotes removed. `directory` is `null` when the
+ * place cannot be told from the text (a `$` expansion, a `GIT_DIR` assignment, `--git-dir`, `cd -`).
+ */
+export class GitInvocation {
+  /**
+   * @param {{subcommand: string, directory: string | null, arguments?: string[]}} fields
+   */
+  constructor({ subcommand, directory, arguments: words = [] }) {
+    this.subcommand = subcommand;
+    this.directory = directory;
+    this.arguments = Object.freeze([...words]);
+    Object.freeze(this);
+  }
+}
+
+/**
+ * What the guard needs of the repository at a directory: a linked worktree or not, and its
+ * branch (`""` on a detached `HEAD`).
+ */
+export class RepositoryFacts {
+  /**
+   * @param {{linked: boolean, branch: string}} fields
+   */
+  constructor({ linked, branch }) {
+    this.linked = linked;
+    this.branch = branch;
+    Object.freeze(this);
+  }
+}
+
+/**
+ * A shell word after quote removal; `operand` is `false` for the target of a redirection.
+ * @typedef {object} ShellWord
+ * @property {string} value
+ * @property {boolean} expands
+ * @property {ShellUnit[][]} substitutions
+ * @property {boolean} operand
+ */
+
+/**
+ * A simple command, or a parenthesized subshell (a directory change inside it does not leave it).
+ * @typedef {{kind: "command", words: ShellWord[]} | {kind: "group", script: ShellUnit[]}} ShellUnit
+ */
+
+/**
+ * The word being read: its text so far, whether it was started, whether a `$` was met.
+ */
+class _WordBuilder {
+  constructor() {
+    /** @type {string[]} */
+    this.parts = [];
+    this.started = false;
+    this.expands = false;
+    /** @type {ShellUnit[][]} */
+    this.substitutions = [];
+  }
+
+  /** @param {string} text */
+  add(text) {
+    this.parts.push(text);
+    this.started = true;
+  }
+}
+
+/** One script being read: the finished units, the command's words, the word under way. */
+class _Frame {
+  constructor() {
+    /** @type {ShellUnit[]} */
+    this.units = [];
+    /** @type {ShellWord[]} */
+    this.words = [];
+    this.builder = new _WordBuilder();
+  }
+}
+
+const _DIGITS_RE = /^[0-9]+$/;
+const _ASSIGNMENT_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
+// Words a command word may hide behind: a wrapper that runs the next command, and the shell
+// keywords that open a command (`then git commit`).
+const _WRAPPERS = new Set([
+  "env",
+  "command",
+  "time",
+  "nohup",
+  "exec",
+  "!",
+  "{",
+  "}",
+  "if",
+  "then",
+  "else",
+  "elif",
+  "do",
+  "while",
+  "until",
+]);
+const _SHELLS = new Set(["bash", "sh", "zsh", "dash"]);
+const _ENVIRONMENT_REPOSITORY = new Set(["GIT_DIR", "GIT_WORK_TREE"]);
+
+/**
+ * Reads shell text into scripts of simple commands, with no filesystem and no execution.
+ *
+ * It splits on unquoted `; & | newline` and parentheses, honours quotes and backslashes, skips
+ * heredoc bodies, and reads `$(...)` and backticks as scripts of their own. It is the reading of a
+ * command's *words* — what only a command word may be — not a shell.
+ */
+class _Parser {
+  /** @param {string} text */
+  constructor(text) {
+    this._text = text;
+    this._pos = 0;
+    /** @type {Array<[string, boolean]>} */
+    this._heredocs = [];
+    this._redirectTargetNext = false;
+  }
+
+  /**
+   * Read to the end of the text, or, when `nested`, to the `)` that closes it.
+   * @param {boolean} nested
+   * @returns {ShellUnit[]}
+   */
+  script(nested) {
+    const frame = new _Frame();
+    const text = this._text;
+    while (this._pos < text.length) {
+      const char = text[this._pos];
+      if (char === " " || char === "\t") {
+        this._pos += 1;
+        this._endWord(frame);
+      } else if (char === "\n") {
+        this._pos += 1;
+        this._endCommand(frame);
+        this._skipHeredocs();
+      } else if (char === ";" || char === "&" || char === "|") {
+        this._pos += 1;
+        this._endCommand(frame);
+      } else if (char === "(") {
+        this._pos += 1;
+        this._endCommand(frame);
+        frame.units.push({ kind: "group", script: this.script(true) });
+      } else if (char === ")") {
+        this._pos += 1;
+        this._endCommand(frame);
+        if (nested) {
+          return frame.units;
+        }
+      } else if (char === "#" && !frame.builder.started) {
+        const end = text.indexOf("\n", this._pos);
+        this._pos = end < 0 ? text.length : end;
+      } else if (char === "<" || char === ">") {
+        this._redirect(frame);
+      } else {
+        this._wordCharacter(frame);
+      }
+    }
+    this._endCommand(frame);
+    return frame.units;
+  }
+
+  /** @param {_Frame} frame */
+  _endWord(frame) {
+    const builder = frame.builder;
+    if (builder.started) {
+      frame.words.push({
+        value: builder.parts.join(""),
+        expands: builder.expands,
+        substitutions: builder.substitutions,
+        operand: !this._redirectTargetNext,
+      });
+      this._redirectTargetNext = false;
+    }
+    frame.builder = new _WordBuilder();
+  }
+
+  /** @param {_Frame} frame */
+  _endCommand(frame) {
+    this._endWord(frame);
+    this._redirectTargetNext = false;
+    if (frame.words.length > 0) {
+      frame.units.push({ kind: "command", words: frame.words });
+      frame.words = [];
+    }
+  }
+
+  /** @param {_Frame} frame */
+  _wordCharacter(frame) {
+    const text = this._text;
+    const builder = frame.builder;
+    const char = text[this._pos];
+    if (char === "\\") {
+      const following = text.slice(this._pos + 1, this._pos + 2);
+      if (following !== "" && following !== "\n") {
+        builder.add(following);
+      }
+      this._pos += following === "" ? 1 : 2;
+    } else if (char === "'") {
+      let end = text.indexOf("'", this._pos + 1);
+      end = end < 0 ? text.length : end;
+      builder.add(text.slice(this._pos + 1, end));
+      this._pos = end + 1;
+    } else if (char === '"') {
+      this._doubleQuoted(builder);
+    } else if (char === "$") {
+      this._dollar(builder);
+    } else if (char === "`") {
+      this._backtick(builder);
+    } else {
+      builder.add(char);
+      this._pos += 1;
+    }
+  }
+
+  /** @param {_WordBuilder} builder */
+  _doubleQuoted(builder) {
+    const text = this._text;
+    builder.add("");
+    this._pos += 1;
+    while (this._pos < text.length) {
+      const char = text[this._pos];
+      if (char === '"') {
+        this._pos += 1;
+        return;
+      }
+      if (char === "\\") {
+        const following = text.slice(this._pos + 1, this._pos + 2);
+        if (following !== "" && '"\\$`'.includes(following)) {
+          builder.add(following);
+          this._pos += 2;
+        } else if (following === "\n") {
+          this._pos += 2;
+        } else {
+          builder.add(char);
+          this._pos += 1;
+        }
+      } else if (char === "$") {
+        this._dollar(builder);
+      } else if (char === "`") {
+        this._backtick(builder);
+      } else {
+        builder.add(char);
+        this._pos += 1;
+      }
+    }
+  }
+
+  /** @param {_WordBuilder} builder */
+  _dollar(builder) {
+    builder.expands = true;
+    if (this._text.startsWith("$(", this._pos)) {
+      this._pos += 2;
+      builder.started = true;
+      builder.substitutions.push(this.script(true));
+    } else {
+      builder.add("$");
+      this._pos += 1;
+    }
+  }
+
+  /** @param {_WordBuilder} builder */
+  _backtick(builder) {
+    const text = this._text;
+    /** @type {string[]} */
+    const inner = [];
+    let position = this._pos + 1;
+    while (position < text.length && text[position] !== "`") {
+      const following = text.slice(position + 1, position + 2);
+      if (text[position] === "\\" && following !== "" && "`\\$".includes(following)) {
+        inner.push(following);
+        position += 2;
+      } else {
+        inner.push(text[position]);
+        position += 1;
+      }
+    }
+    this._pos = position + 1;
+    builder.expands = true;
+    builder.started = true;
+    builder.substitutions.push(new _Parser(inner.join("")).script(false));
+  }
+
+  /** @param {_Frame} frame */
+  _redirect(frame) {
+    const text = this._text;
+    if (text.startsWith("(", this._pos + 1)) {
+      // process substitution: the group follows
+      this._endWord(frame);
+      this._pos += 1;
+      return;
+    }
+    if (frame.builder.started && _DIGITS_RE.test(frame.builder.parts.join(""))) {
+      frame.builder = new _WordBuilder(); // a file descriptor number, not an operand
+    }
+    this._endWord(frame);
+    if (text.startsWith("<<<", this._pos)) {
+      this._pos += 3;
+      this._redirectTargetNext = true;
+    } else if (text.startsWith("<<", this._pos)) {
+      this._heredoc(this._pos + 2);
+    } else {
+      this._pos += 1;
+      while (this._pos < text.length && "&>|<".includes(text[this._pos])) {
+        this._pos += 1;
+      }
+      this._redirectTargetNext = true;
+    }
+  }
+
+  /**
+   * Read `<<WORD` or `<<-WORD` and remember its delimiter; the body is skipped at the newline.
+   * @param {number} start
+   */
+  _heredoc(start) {
+    const text = this._text;
+    let position = start;
+    const stripTabs = text.startsWith("-", position);
+    position += stripTabs ? 1 : 0;
+    while (position < text.length && (text[position] === " " || text[position] === "\t")) {
+      position += 1;
+    }
+    /** @type {string[]} */
+    const parts = [];
+    while (position < text.length && !" \t\n;&|()<>".includes(text[position])) {
+      const char = text[position];
+      if (char === "\\" && position + 1 < text.length) {
+        parts.push(text[position + 1]);
+        position += 2;
+      } else if (char === "'" || char === '"') {
+        let end = text.indexOf(char, position + 1);
+        end = end < 0 ? text.length : end;
+        parts.push(text.slice(position + 1, end));
+        position = end + 1;
+      } else {
+        parts.push(char);
+        position += 1;
+      }
+    }
+    this._pos = position;
+    this._heredocs.push([parts.join(""), stripTabs]);
+  }
+
+  _skipHeredocs() {
+    const text = this._text;
+    for (const [delimiter, stripTabs] of this._heredocs) {
+      while (this._pos < text.length) {
+        const end = text.indexOf("\n", this._pos);
+        const line = end < 0 ? text.slice(this._pos) : text.slice(this._pos, end);
+        this._pos = end < 0 ? text.length : end + 1;
+        if ((stripTabs ? line.replace(/^\t+/, "") : line) === delimiter) {
+          break;
+        }
+      }
+    }
+    this._heredocs = [];
+  }
+}
+
+/**
+ * `path` read from `directory`: lexical, so `..` is left for the program that opens it.
+ * @param {string | null} directory
+ * @param {string} path
+ * @returns {string | null}
+ */
+function _joined(directory, path) {
+  if (path.startsWith("/")) {
+    return path;
+  }
+  if (directory === null) {
+    return null;
+  }
+  if (path === "") {
+    return directory;
+  }
+  return directory.endsWith("/") ? directory + path : `${directory}/${path}`;
+}
+
+/**
+ * Where a `cd` or `-C` operand leads from `directory`; `null` when the text does not say.
+ * @param {ShellWord} word
+ * @param {string | null} directory
+ * @param {string | null} home
+ * @returns {string | null}
+ */
+function _targetDirectory(word, directory, home) {
+  if (word.expands) {
+    return null;
+  }
+  const value = word.value;
+  if (value === "~" || value.startsWith("~/")) {
+    return home === null ? null : _joined(directory, home + value.slice(1));
+  }
+  if (value.startsWith("~")) {
+    return null;
+  }
+  return _joined(directory, value);
+}
+
+/**
+ * @param {ShellWord} word
+ * @returns {boolean}
+ */
+function _isOption(word) {
+  return word.value.startsWith("-") && word.value.length > 1;
+}
+
+/**
+ * The directory after `cd`/`pushd`; `null` for no literal path, `-`, or an expansion.
+ * @param {ShellWord[]} operands
+ * @param {string | null} directory
+ * @param {string | null} home
+ * @returns {string | null}
+ */
+function _changedDirectory(operands, directory, home) {
+  const paths = [...operands];
+  while (paths.length > 0 && _isOption(paths[0])) {
+    paths.shift();
+  }
+  if (paths.length === 0 || paths[0].value === "-") {
+    return null;
+  }
+  return _targetDirectory(paths[0], directory, home);
+}
+
+/**
+ * The subcommand after git's global options, its arguments, and the directory they and `directory` give.
+ * @param {ShellWord[]} operands
+ * @param {string | null} directory
+ * @param {boolean} repositoryUnknown
+ * @param {string | null} home
+ * @returns {GitInvocation | null}
+ */
+function _gitInvocation(operands, directory, repositoryUnknown, home) {
+  let unknown = repositoryUnknown;
+  let place = directory;
+  let index = 0;
+  while (index < operands.length) {
+    const value = operands[index].value;
+    if (value === "-C") {
+      index += 1;
+      if (index < operands.length) {
+        place = _targetDirectory(operands[index], place, home);
+      }
+    } else if (value === "-c" || value === "--namespace") {
+      index += 1;
+    } else if (value === "--git-dir" || value === "--work-tree") {
+      index += 1;
+      unknown = true;
+    } else if (value.startsWith("--git-dir=") || value.startsWith("--work-tree=")) {
+      unknown = true;
+    } else if (!value.startsWith("-")) {
+      return new GitInvocation({
+        subcommand: value,
+        directory: unknown ? null : place,
+        arguments: operands.slice(index + 1).map((word) => word.value),
+      });
+    }
+    index += 1;
+  }
+  return null;
+}
+
+/**
+ * The string argument of `-c` in the arguments of `bash`/`sh`/`zsh`/`dash`, if any.
+ * @param {ShellWord[]} operands
+ * @returns {string | null}
+ */
+function _shellScript(operands) {
+  for (const [index, word] of operands.entries()) {
+    const value = word.value;
+    if (!value.startsWith("-")) {
+      return null;
+    }
+    if (!value.startsWith("--") && value.slice(1).includes("c")) {
+      return index + 1 < operands.length ? operands[index + 1].value : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * The shell text a command runs by itself: the `-c` string of a shell, or what `eval` joins.
+ * @param {string} name
+ * @param {ShellWord[]} operands
+ * @returns {string | null}
+ */
+function _nestedScript(name, operands) {
+  if (_SHELLS.has(name.slice(name.lastIndexOf("/") + 1))) {
+    return _shellScript(operands);
+  }
+  if (name === "eval") {
+    return operands.map((word) => word.value).join(" ");
+  }
+  return null;
+}
+
+/**
+ * Where a command's own word is among `words`, and whether a leading assignment moved git's
+ * repository. Leading `VAR=value` words and wrappers are skipped; the index is `words.length` when
+ * nothing runs.
+ * @param {ShellWord[]} words
+ * @returns {[number, boolean]}
+ */
+function _commandStart(words) {
+  let repositoryUnknown = false;
+  let index = 0;
+  while (index < words.length) {
+    const value = words[index].value;
+    if (_ASSIGNMENT_RE.test(value)) {
+      repositoryUnknown = repositoryUnknown || _ENVIRONMENT_REPOSITORY.has(value.slice(0, value.indexOf("=")));
+    } else if (_WRAPPERS.has(value)) {
+      while (index + 1 < words.length && _isOption(words[index + 1])) {
+        index += 1;
+      }
+    } else {
+      break;
+    }
+    index += 1;
+  }
+  return [index, repositoryUnknown];
+}
+
+/**
+ * @param {{kind: "command", words: ShellWord[]}} command
+ * @param {string | null} directory
+ * @param {string | null} home
+ * @param {GitInvocation[]} found
+ * @returns {string | null}
+ */
+function _walkCommand(command, directory, home, found) {
+  for (const word of command.words) {
+    for (const substitution of word.substitutions) {
+      _walkScript(substitution, directory, home, found);
+    }
+  }
+  const words = command.words.filter((word) => word.operand);
+  const [index, repositoryUnknown] = _commandStart(words);
+  if (index >= words.length) {
+    return directory;
+  }
+  const name = words[index].value;
+  const operands = words.slice(index + 1);
+  if (name === "cd" || name === "pushd") {
+    return _changedDirectory(operands, directory, home);
+  }
+  if (name === "popd") {
+    return null;
+  }
+  if (name.slice(name.lastIndexOf("/") + 1) === "git") {
+    const invocation = _gitInvocation(operands, directory, repositoryUnknown, home);
+    if (invocation !== null) {
+      found.push(invocation);
+    }
+  } else {
+    const script = _nestedScript(name, operands);
+    if (script !== null) {
+      _walkScript(new _Parser(script).script(false), directory, home, found);
+    }
+  }
+  return directory;
+}
+
+/**
+ * @param {ShellUnit[]} script
+ * @param {string | null} start
+ * @param {string | null} home
+ * @param {GitInvocation[]} found
+ * @returns {void}
+ */
+function _walkScript(script, start, home, found) {
+  let directory = start;
+  for (const unit of script) {
+    if (unit.kind === "group") {
+      _walkScript(unit.script, directory, home, found);
+    } else {
+      directory = _walkCommand(unit, directory, home, found);
+    }
+  }
+}
+
+/**
+ * Every `git` command a shell command runs, in order, with the directory each runs in.
+ *
+ * Only *command words* count: a heredoc body, a quoted argument (`echo "git push"`,
+ * `grep 'git merge' f`) and a comment are text. The scan follows `;`, `&&`, `||`, pipes, newlines,
+ * parentheses, `$(...)`, backticks, `bash -c '...'` and `eval`; it skips leading `VAR=value` and the
+ * wrappers `env command time nohup exec`; and it tracks `cd`/`pushd` and git's `-C`. It reads no
+ * file: `startDirectory` is where the command starts, and a directory the text does not determine
+ * (a `$` expansion, `GIT_DIR`, `--git-dir`, `cd -`) is `null`. `~` is `homeDirectory`, or an
+ * unknown place when that is `null`.
+ * @param {string} command
+ * @param {string | null} startDirectory
+ * @param {{homeDirectory?: string | null}} [options]
+ * @returns {GitInvocation[]}
+ */
+export function gitInvocations(command, startDirectory, { homeDirectory = null } = {}) {
+  /** @type {GitInvocation[]} */
+  const found = [];
+  _walkScript(new _Parser(command).script(false), startDirectory, homeDirectory, found);
+  return found;
+}
+
+/**
+ * Standard output of `git -C directory <arguments>`; `null` on any failure.
+ * @param {string} directory
+ * @param {string[]} gitArguments
+ * @returns {string | null}
+ */
+function _gitOutput(directory, gitArguments) {
+  const { spawnSync } = /** @type {typeof import("node:child_process")} */ (
+    createRequire(import.meta.url)("node:child_process")
+  );
+  try {
+    const result = spawnSync("git", ["-C", directory, ...gitArguments], {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 5000,
+    });
+    return result.error === undefined && result.status === 0 ? decodeUtf8(result.stdout) : null;
+  } catch {
+    return null; // an argument node refuses (a NUL): the ValueError of the twin
+  }
+}
+
+/**
+ * `path` resolved against `directory` through links where it exists.
+ * @param {string} directory
+ * @param {string} path
+ * @returns {string}
+ */
+function _realPath(directory, path) {
+  const absolute = pathModule.resolve(directory, path);
+  try {
+    return fs.realpathSync(absolute);
+  } catch {
+    return absolute;
+  }
+}
+
+/**
+ * Ask git what repository `directory` is in; `null` when it is in none or git cannot say.
+ *
+ * A worktree is *linked* when its git directory differs from the common one the main checkout
+ * keeps. A detached `HEAD` has the branch `""`.
+ * @param {string} directory
+ * @returns {RepositoryFacts | null}
+ */
+export function repositoryFacts(directory) {
+  const layout = _gitOutput(directory, ["rev-parse", "--git-dir", "--git-common-dir"]);
+  const paths = layout === null ? [] : layout.replace(/\n+$/, "").split("\n");
+  if (paths.length !== 2) {
+    return null;
+  }
+  const branch = _gitOutput(directory, ["symbolic-ref", "--short", "-q", "HEAD"]);
+  return new RepositoryFacts({
+    linked: _realPath(directory, paths[0]) !== _realPath(directory, paths[1]),
+    branch: pyStrip(branch ?? ""),
+  });
+}
+
+/**
+ * @param {string} reason
+ * @returns {HookResult}
+ */
+function _ask(reason) {
+  return new HookResult({ eventName: "PreToolUse", permissionDecision: "ask", permissionReason: reason });
+}
+
+/**
+ * Why `directory` is not an agent's place to write history, in words; `null` when it is. An agent
+ * writes history only in a linked worktree, on a named branch that is not a default one.
+ * @param {HookData} data
+ * @param {string | null} directory
+ * @param {(directory: string) => {linked: boolean, branch: string} | null} repositoryAt
+ * @returns {string | null}
+ */
+function _ownersPlace(data, directory, repositoryAt) {
+  if (directory === null) {
+    return _core(data, "git_commit_where_unresolved");
+  }
+  const facts = repositoryAt(directory);
+  if (facts === null) {
+    return fill(_core(data, "git_commit_where_not_repository"), { directory });
+  }
+  if (!facts.linked) {
+    return fill(_core(data, "git_commit_where_checkout"), { directory });
+  }
+  if (!facts.branch) {
+    return fill(_core(data, "git_commit_where_detached"), { directory });
+  }
+  if (_core(data, "git_default_branches").includes(facts.branch)) {
+    return fill(_core(data, "git_commit_where_default_branch"), { directory, branch: facts.branch });
+  }
+  return null;
+}
+
+/** @typedef {(directory: string) => {linked: boolean, branch: string} | null} RepositoryLookup */
+
+/**
+ * Whether `name` is a job branch, short (`_aitna/x`) or full (`refs/heads/_aitna/x`).
+ * @param {HookData} data
+ * @param {string} name
+ * @returns {boolean}
+ */
+function _isJobBranch(data, name) {
+  const prefix = /** @type {string} */ (_core(data, "git_job_branch_prefix"));
+  return name.startsWith(prefix) || name.startsWith(`${_core(data, "git_heads_prefix")}${prefix}`);
+}
+
+/**
+ * Git arguments as `[options, operands]`: `--` ends the options, a `valued` option takes the next word.
+ * @param {readonly string[]} args
+ * @param {readonly string[]} [valued]
+ * @returns {[string[], string[]]}
+ */
+function _splitArguments(args, valued = []) {
+  /** @type {string[]} */
+  const options = [];
+  /** @type {string[]} */
+  const operands = [];
+  let optionsEnded = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const word = args[index];
+    if (optionsEnded || !word.startsWith("-") || word === "-") {
+      operands.push(word);
+    } else if (word === "--") {
+      optionsEnded = true;
+    } else {
+      options.push(word);
+      index += valued.includes(word) ? 1 : 0;
+    }
+  }
+  return [options, operands];
+}
+
+/**
+ * The flags among `options` as letters: `longNames` spell the long ones, a `u` ends a cluster.
+ * @param {readonly string[]} options
+ * @param {Record<string, string>} longNames
+ * @returns {Set<string>}
+ */
+function _optionLetters(options, longNames) {
+  /** @type {Set<string>} */
+  const flags = new Set();
+  for (const word of options) {
+    if (word.startsWith("--")) {
+      const name = word.split("=", 1)[0];
+      for (const letter of Object.hasOwn(longNames, name) ? longNames[name] : "") {
+        flags.add(letter);
+      }
+      continue;
+    }
+    for (const letter of word.slice(1)) {
+      flags.add(letter);
+      if (letter === "u") {
+        break; // the rest of the cluster is the upstream's name
+      }
+    }
+  }
+  return flags;
+}
+
+const _BRANCH_LONG_FLAGS = {
+  "--force": "f",
+  "--delete": "d",
+  "--move": "m",
+  "--copy": "c",
+  "--set-upstream-to": "u",
+  "--unset-upstream": "u",
+};
+// subcommand: [letter that forces, letters that take a branch name, long form that forces]
+/** @type {Record<string, [string, string, string]>} */
+const _FORCE_CREATE = { checkout: ["B", "bB", ""], switch: ["C", "cC", "--force-create"] };
+
+/**
+ * The branch `invocation`'s repository is on; `null` when the text, git or a detached `HEAD` do not say.
+ * @param {GitInvocation} invocation
+ * @param {RepositoryLookup} repositoryAt
+ * @returns {string | null}
+ */
+function _currentBranch(invocation, repositoryAt) {
+  if (invocation.directory === null) {
+    return null;
+  }
+  const facts = repositoryAt(invocation.directory);
+  return facts === null || !facts.branch ? null : facts.branch;
+}
+
+/**
+ * The branches `git branch` writes to that are not job branches; `null` is a current branch not
+ * named. Listing, creating a new branch and the upstream options write no existing branch.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @param {RepositoryLookup} repositoryAt
+ * @returns {(string | null)[]}
+ */
+function _branchOffenders(data, invocation, repositoryAt) {
+  const [options, operands] = _splitArguments(invocation.arguments);
+  const flags = new Set([..._optionLetters(options, _BRANCH_LONG_FLAGS)].map((letter) => letter.toLowerCase()));
+  const has = (/** @type {string} */ letters) => [...letters].some((letter) => flags.has(letter));
+  if (has("u") || !has("dmcf")) {
+    return [];
+  }
+  /** @type {(string | null)[]} */
+  let names;
+  if (has("mc")) {
+    names = [...operands];
+    if (operands.length === 1) {
+      names.push(_currentBranch(invocation, repositoryAt)); // one name: the current branch is the other end
+    }
+  } else {
+    names = has("d") ? [...operands] : operands.slice(0, 1); // force: the first name only
+  }
+  return names.filter((name) => name === null || !_isJobBranch(data, name));
+}
+
+/**
+ * The branch `checkout -B` or `switch -C`/`--force-create` writes over, unless it is a job branch.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @returns {string[]}
+ */
+function _forcedBranchOffenders(data, invocation) {
+  const [letter, valuedLetters, longName] = _FORCE_CREATE[invocation.subcommand];
+  const args = invocation.arguments;
+  /** @type {string[]} */
+  const names = [];
+  for (const [index, word] of args.entries()) {
+    if (word === "--") {
+      break;
+    }
+    if (longName && word.split("=", 1)[0] === longName) {
+      names.push(...(word.includes("=") ? [word.slice(word.indexOf("=") + 1)] : args.slice(index + 1, index + 2)));
+    } else if (word.startsWith("-") && !word.startsWith("--")) {
+      const cluster = word.slice(1);
+      const position = [...cluster].findIndex((char) => valuedLetters.includes(char));
+      if (position >= 0 && cluster[position] === letter) {
+        const rest = cluster.slice(position + 1); // the rest of the word, or the next, is the name
+        names.push(...(rest ? [rest] : args.slice(index + 1, index + 2)));
+      }
+    }
+  }
+  return names.filter((name) => !_isJobBranch(data, name));
+}
+
+/**
+ * The refspec destinations of `fetch`/`pull` that are not remote-tracking refs or job branches.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @returns {string[]}
+ */
+function _fetchOffenders(data, invocation) {
+  const [, operands] = _splitArguments(invocation.arguments, _core(data, "git_fetch_valued_options"));
+  /** @type {string[]} */
+  const destinations = [];
+  for (const refspec of operands.slice(1)) {
+    // the first operand is the remote
+    const spec = refspec.startsWith("+") ? refspec.slice(1) : refspec;
+    const destination = spec.includes(":") ? spec.slice(spec.indexOf(":") + 1) : "";
+    if (destination && !destination.startsWith(_core(data, "git_remotes_prefix")) && !_isJobBranch(data, destination)) {
+      destinations.push(destination);
+    }
+  }
+  return destinations;
+}
+
+// `symbolic-ref <name> <ref>` writes; one operand reads
+const _WRITE_OPERANDS = 2;
+
+/**
+ * The refs `symbolic-ref` writes or deletes that are not job branches: `HEAD` may point at one.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @returns {string[]}
+ */
+function _symbolicRefOffenders(data, invocation) {
+  const [options, operands] = _splitArguments(invocation.arguments, ["-m"]);
+  /** @type {string[]} */
+  let written;
+  if (_optionLetters(options, { "--delete": "d" }).has("d")) {
+    written = operands.slice(0, 1);
+  } else if (operands.length >= _WRITE_OPERANDS) {
+    written = [...operands.slice(0, 1).filter((name) => name !== "HEAD"), ...operands.slice(1, 2)];
+  } else {
+    return [];
+  }
+  return written.filter((name) => !_isJobBranch(data, name));
+}
+
+/**
+ * The ref `update-ref` writes when it is not `refs/heads/_aitna/*`; `[""]` for refs read from stdin.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @returns {string[]}
+ */
+function _updateRefOffenders(data, invocation) {
+  const [options, operands] = _splitArguments(invocation.arguments, ["-m"]);
+  if (options.includes("--stdin")) {
+    return [""];
+  }
+  const jobHeads = `${_core(data, "git_heads_prefix")}${_core(data, "git_job_branch_prefix")}`;
+  return operands.slice(0, 1).filter((name) => !name.startsWith(jobHeads));
+}
+
+/**
+ * The command as the ref rules name it: `worktree` joins its action (`worktree remove`).
+ * @param {GitInvocation} invocation
+ * @returns {string}
+ */
+function _refSubcommand(invocation) {
+  if (invocation.subcommand !== "worktree") {
+    return invocation.subcommand;
+  }
+  const [, operands] = _splitArguments(invocation.arguments);
+  return ["worktree", ...operands.slice(0, 1)].join(" ");
+}
+
+/**
+ * What a ref-writing `invocation` moves, renames or deletes beyond job branches, in words; `null` if none.
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @param {RepositoryLookup} repositoryAt
+ * @returns {string | null}
+ */
+function _refTarget(data, invocation, repositoryAt) {
+  const subcommand = _refSubcommand(invocation);
+  const unconditional = _core(data, "git_ref_unconditional");
+  if (Object.hasOwn(unconditional, subcommand)) {
+    return unconditional[subcommand];
+  }
+  /** @type {(string | null)[]} */
+  let offenders;
+  if (subcommand === "branch") {
+    offenders = _branchOffenders(data, invocation, repositoryAt);
+  } else if (Object.hasOwn(_FORCE_CREATE, subcommand)) {
+    offenders = _forcedBranchOffenders(data, invocation);
+  } else if (subcommand === "fetch" || subcommand === "pull") {
+    offenders = _fetchOffenders(data, invocation);
+  } else if (subcommand === "symbolic-ref") {
+    offenders = _symbolicRefOffenders(data, invocation);
+  } else if (subcommand === "update-ref") {
+    offenders = _updateRefOffenders(data, invocation);
+  } else {
+    return null;
+  }
+  if (offenders.length === 0) {
+    return null;
+  }
+  if (offenders.length === 1 && offenders[0] === "") {
+    return _core(data, "git_commit_ref_target_stdin");
+  }
+  return [...new Set(offenders)]
+    .map((name) => (name === null ? _core(data, "git_commit_ref_target_current_branch") : `'${name}'`))
+    .join(", ");
+}
+
+/**
+ * @param {HookData} data
+ * @param {GitInvocation} invocation
+ * @param {RepositoryLookup} repositoryAt
+ * @returns {HookResult | null}
+ */
+function _invocationAsk(data, invocation, repositoryAt) {
+  if (_core(data, "git_publishing_subcommands").includes(invocation.subcommand)) {
+    return _ask(_core(data, "git_commit_push_tag_merge_reason"));
+  }
+  if (_core(data, "git_history_subcommands").includes(invocation.subcommand)) {
+    const place = _ownersPlace(data, invocation.directory, repositoryAt);
+    if (place !== null) {
+      return _ask(fill(_core(data, "git_commit_history_reason"), { subcommand: invocation.subcommand, where: place }));
+    }
+  }
+  const target = _refTarget(data, invocation, repositoryAt);
+  if (target === null) {
+    return null;
+  }
+  return _ask(fill(_core(data, "git_commit_ref_reason"), { subcommand: _refSubcommand(invocation), target }));
+}
+
+/** @returns {string | null} */
+function _homeDirectory() {
+  try {
+    return os.homedir() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** @returns {string | null} */
+function _workingDirectory() {
+  try {
+    return process.cwd();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Guard `git` commands: no AI co-author trailer, publishing and history are the owner's.
+ *
+ * The trailer is denied wherever it stands in the text, a heredoc body included. Only command
+ * words are read for the rest ({@link gitInvocations}): `push` and `tag` ask everywhere; a
+ * history-writing subcommand (`commit`, `merge`, `rebase`, `reset` and the others in
+ * `hook_core.json`) passes when the repository it acts on — not the session's — is a linked
+ * worktree on a named branch that is not `main`/`master`, and asks otherwise. The first invocation
+ * that does not pass decides.
+ *
+ * `directory` is where the command starts (default: the process's); `repositoryAt` answers
+ * {@link RepositoryFacts} for a directory (default: {@link repositoryFacts}, which asks git).
  *
  * Policy ID: commits.owner-owned
  * @param {HookData} data
  * @param {unknown} command
- * @param {string | null} [branch] the current branch (default: asked of git)
- * @param {{permissionMode?: string | null, attended?: boolean | null}} [options]
+ * @param {{permissionMode?: string | null, attended?: boolean | null, directory?: string | null, repositoryAt?: ((directory: string) => {linked: boolean, branch: string} | null) | null}} [options]
  * @returns {HookResult | null}
  */
-export function gitCommitGuardResult(data, command, branch = null, { permissionMode = null, attended = null } = {}) {
+export function gitCommitGuardResult(
+  data,
+  command,
+  { permissionMode = null, attended = null, directory = null, repositoryAt = null } = {},
+) {
   if (!pyContains(command, "git")) {
     return null;
   }
@@ -528,40 +1528,16 @@ export function gitCommitGuardResult(data, command, branch = null, { permissionM
     });
   }
 
-  const isGit = (/** @type {string} */ subcommand) =>
-    new RegExp(`${_GIT_WORD}[^|&;]*${_subcommand(subcommand)}`).test(_subject(command));
-
-  if (isGit("push") || isGit("tag") || isGit("merge")) {
-    return _escalateUnattendedAsk(
-      data,
-      new HookResult({
-        eventName: "PreToolUse",
-        permissionDecision: "ask",
-        permissionReason: _core(data, "git_commit_push_tag_merge_reason"),
-      }),
-      permissionMode,
-      attended,
-    );
-  }
-
-  if (isGit("commit")) {
-    const resolvedBranch = branch === null ? currentGitBranch() : branch;
-    if (resolvedBranch === "main" || resolvedBranch === "master" || !resolvedBranch) {
-      return _escalateUnattendedAsk(
-        data,
-        new HookResult({
-          eventName: "PreToolUse",
-          permissionDecision: "ask",
-          permissionReason: fill(_core(data, "git_commit_landing_reason"), {
-            branch: resolvedBranch || _core(data, "git_commit_detached_head"),
-          }),
-        }),
-        permissionMode,
-        attended,
-      );
+  const lookup = repositoryAt === null ? repositoryFacts : repositoryAt;
+  const start = directory === null ? _workingDirectory() : directory;
+  for (const invocation of gitInvocations(/** @type {string} */ (command), start, {
+    homeDirectory: _homeDirectory(),
+  })) {
+    const ask = _invocationAsk(data, invocation, lookup);
+    if (ask !== null) {
+      return _escalateUnattendedAsk(data, ask, permissionMode, attended);
     }
   }
-
   return null;
 }
 

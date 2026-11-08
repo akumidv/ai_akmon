@@ -10,6 +10,8 @@ Run from the akmon root::
 
 from __future__ import annotations
 
+import json
+import subprocess
 from pathlib import Path
 
 import hook_core
@@ -28,6 +30,8 @@ from hook_core import (
 
 import common.jsondata as common_jsondata
 from common.materialization import materialized_markdown
+
+_AKMON = Path(__file__).resolve().parents[2]
 
 # --------------------------------------------------------------------------------------
 # privilege_escalation_guard_result
@@ -58,11 +62,10 @@ def test_command_word_boundaries_are_ascii():
     assert privilege_escalation_guard_result("ésudo ls") is not None
     assert privilege_escalation_guard_result("sudoé ls") is not None
     assert privilege_escalation_guard_result("sudo_x") is None
-    ask = git_commit_guard_result("βgit push", "feat", permission_mode="default")
-    assert ask is not None and ask.permission_decision == "ask"
-    ask = git_commit_guard_result("git pushé", "feat", permission_mode="default")
-    assert ask is not None and ask.permission_decision == "ask"
-    assert git_commit_guard_result("gitpush", "feat", permission_mode="default") is None
+    # The same boundary for the commit guard: `βgit` is another word, so no git command is there.
+    assert _guard("βgit push") is None
+    assert _guard("git pushé") is None
+    assert _guard("gitpush") is None
 
 
 @pytest.mark.parametrize(
@@ -80,17 +83,58 @@ def test_command_word_boundaries_are_ascii():
 def test_a_name_that_holds_git_or_a_subcommand_is_not_a_command(command):
     # `git` and a subcommand are command words, not pieces of a file or hook name: a shell command that
     # only mentions `git-commit-guard` (an echo, a grep, the hook's own path) is not a commit.
-    assert git_commit_guard_result(command, "main", permission_mode="default") is None
+    assert _guard(command, "/main") is None
 
 
-@pytest.mark.parametrize("command", ["git commit-tree HEAD", "git merge-base a b", "/usr/bin/git commit -m x"])
+@pytest.mark.parametrize("command", ["git commit-tree HEAD", "/usr/bin/git commit -m x"])
 def test_a_subcommand_family_and_an_absolute_git_stay_guarded(command):
-    assert git_commit_guard_result(command, "main", permission_mode="default") is not None
+    assert _guard(command, "/main") is not None
+
+
+def test_merge_base_is_not_a_merge():
+    # It used to match as `merge` (the pattern allowed a hyphen after a subcommand); the subcommand is compared whole.
+    assert _guard("git merge-base a b", "/main") is None
 
 
 # --------------------------------------------------------------------------------------
-# git_commit_guard_result
+# git_commit_guard_result (C190, ADR-0029/D09)
 # --------------------------------------------------------------------------------------
+
+_CASES = json.loads((_AKMON / "meta" / "conformance" / "units" / "commit_guard_cases.json").read_text(encoding="utf-8"))
+_REPOSITORIES = {directory: hook_core.RepositoryFacts(**facts) for directory, facts in _CASES["repositories"].items()}
+
+
+def _lookup(directory):
+    return _REPOSITORIES.get(directory)
+
+
+def _guard(command, start="/wt", **keywords):
+    """The guard run as the session would at ``start``, with the shared table's repositories."""
+    return git_commit_guard_result(command, directory=start, repository_at=_lookup, **keywords)
+
+
+def _label(case):
+    return f"{case['start']}: {case['command']!r}"
+
+
+@pytest.mark.parametrize("case", _CASES["scanner"], ids=_label)
+def test_the_scanner_finds_the_git_commands_the_shared_table_lists(case):
+    found = hook_core.git_invocations(case["command"], case["start"], home_directory=case["home"])
+    assert [[item.subcommand, item.directory] for item in found] == case["expected"]
+
+
+@pytest.mark.parametrize("case", _CASES["guard"], ids=_label)
+def test_the_guard_decides_as_the_shared_table_says(case):
+    result = _guard(case["command"], case["start"], permission_mode=case["mode"], attended=case["attended"])
+    if case["decision"] == "pass":
+        assert result is None
+        return
+    assert result is not None
+    assert result.permission_decision == case["decision"]
+    for text in case["contains"]:
+        assert text in result.permission_reason
+    for text in case["absent"]:
+        assert text not in result.permission_reason
 
 
 def test_non_git_command_is_ignored():
@@ -99,9 +143,8 @@ def test_non_git_command_is_ignored():
 
 
 def test_command_mentioning_git_without_a_guarded_subcommand_passes():
-    # 'git' substring is present but no push/tag/merge/commit/co-author → no decision.
-    assert git_commit_guard_result("git status") is None
-    assert git_commit_guard_result("git diff --stat") is None
+    assert _guard("git status", "/main") is None
+    assert _guard("git diff --stat", "/main") is None
 
 
 def test_co_authored_by_is_denied_case_insensitively():
@@ -109,75 +152,233 @@ def test_co_authored_by_is_denied_case_insensitively():
         'git commit -m "x\n\nCo-Authored-By: Claude <noreply@anthropic.com>"',
         'git commit -m "co-authored-by: someone"',
     ):
-        result = git_commit_guard_result(command, branch="feature/x")
+        result = _guard(command)
         assert result is not None
         assert result.permission_decision == "deny"
         assert "Co-Authored-By" in result.permission_reason
 
 
-def test_co_authored_check_precedes_branch_check():
-    # Even on a feature branch (commit would otherwise pass) the trailer is denied.
-    result = git_commit_guard_result('git commit -m "Co-authored-by: x" ', branch="feature/safe")
+def test_co_authored_check_precedes_the_repository_check():
+    # Even in a linked worktree (a commit would otherwise pass) the trailer is denied.
+    result = _guard('git commit -m "Co-authored-by: x" ', "/wt")
     assert result is not None
     assert result.permission_decision == "deny"
 
 
-def test_push_tag_merge_ask_for_confirmation():
-    for sub in ("push", "tag", "merge"):
-        result = git_commit_guard_result(f"git {sub} origin main", branch="feature/x", permission_mode="default")
+def test_the_trailer_is_denied_in_a_heredoc_body_the_command_scan_skips():
+    command = "git commit -F - <<'EOF'\nsubject\n\nCo-Authored-By: Claude\nEOF"
+    assert hook_core.git_invocations(command, "/wt") == [hook_core.GitInvocation("commit", "/wt", ("-F", "-"))]
+    result = _guard(command)
+    assert result is not None
+    assert result.permission_decision == "deny"
+
+
+def test_a_heredoc_body_that_mentions_a_git_command_is_not_one():
+    command = "cat <<'EOF'\nRun `git merge --squash feature` in the owner's checkout.\nEOF"
+    assert _guard(command, "/main", permission_mode="default") is None
+
+
+def test_a_quoted_argument_that_mentions_a_git_command_is_not_one():
+    assert _guard("grep 'git merge' notes.md", "/main", permission_mode="default") is None
+    assert _guard('echo "git push"', "/main", permission_mode="default") is None
+
+
+def test_push_and_tag_ask_even_in_a_linked_worktree():
+    for sub in ("push origin main", "tag v1"):
+        result = _guard(f"git {sub}", "/wt", permission_mode="default")
         assert result is not None, sub
         assert result.permission_decision == "ask", sub
-        assert "owner owns commits" in result.permission_reason
+        assert "push and tag" in result.permission_reason
 
 
-def test_push_with_inline_config_is_still_caught():
+def test_a_commit_in_a_linked_worktree_passes_and_in_the_main_checkout_asks():
+    heredoc = "git commit -m \"$(cat <<'EOF'\nsubject\n\nbody\nEOF\n)\""
+    assert _guard(heredoc, "/wt", permission_mode="default") is None
+    result = _guard(heredoc, "/main", permission_mode="default")
+    assert result is not None
+    assert result.permission_decision == "ask"
+    assert "/main (not a linked worktree)" in result.permission_reason
+
+
+def test_the_directory_the_command_acts_on_decides_not_the_session_directory():
+    assert _guard("cd /wt && git commit -m x", "/main", permission_mode="default") is None
+    assert _guard("git -C /wt commit -m x", "/main", permission_mode="default") is None
+    assert _guard("git -C /main commit -m x", "/wt", permission_mode="default") is not None
+    assert _guard("bash -c 'git merge x'", "/main", permission_mode="default") is not None
+
+
+def test_a_commit_on_a_default_branch_or_a_detached_head_asks_in_a_worktree_too():
+    for start, wording in (("/wt-main", "on 'main'"), ("/wt-master", "on 'master'"), ("/wt-detached", "detached HEAD")):
+        result = _guard("git commit -m x", start, permission_mode="default")
+        assert result is not None, start
+        assert result.permission_decision == "ask"
+        assert wording in result.permission_reason
+
+
+def test_the_repository_is_asked_per_history_writing_invocation_with_its_directory():
+    asked = []
+
+    def lookup(directory):
+        asked.append(directory)
+        return _lookup(directory)
+
+    git_commit_guard_result("git status && git push; cd /main && git commit -m y", directory="/s", repository_at=lookup)
+    assert asked == []  # the push decided before any commit was looked up
+    git_commit_guard_result("cd /wt && git commit -m x && git status; git log", directory="/s", repository_at=lookup)
+    assert asked == ["/wt"]
+
+
+def test_an_unresolvable_directory_asks_without_a_lookup():
+    asked = []
     result = git_commit_guard_result(
-        "git -c user.name=x push origin main", branch="feature/x", permission_mode="default"
+        'cd "$HOME/w" && git commit -m x', directory="/wt", repository_at=asked.append, permission_mode="default"
+    )
+    assert asked == []
+    assert result is not None
+    assert result.permission_decision == "ask"
+    assert "cannot resolve" in result.permission_reason
+
+
+def _git(cwd, *arguments):
+    subprocess.run(
+        ["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@example.invalid", *arguments],
+        check=True,
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
+    )
+
+
+@pytest.fixture
+def repositories(tmp_path):
+    """A main checkout on ``main`` with a commit, a linked worktree on ``feat`` and a detached one."""
+    main = tmp_path / "main"
+    main.mkdir()
+    _git(main, "init", "-q", "-b", "main")
+    _git(main, "commit", "-q", "--allow-empty", "-m", "first")
+    _git(main, "worktree", "add", "-q", "-b", "feat", str(tmp_path / "wt"))
+    _git(main, "worktree", "add", "-q", "--detach", str(tmp_path / "detached"))
+    (tmp_path / "plain").mkdir()
+    return tmp_path
+
+
+def test_repository_facts_reads_git_for_the_directory_it_is_given(repositories):
+    facts = hook_core.RepositoryFacts
+    assert hook_core.repository_facts(str(repositories / "main")) == facts(linked=False, branch="main")
+    assert hook_core.repository_facts(str(repositories / "wt")) == facts(linked=True, branch="feat")
+    assert hook_core.repository_facts(str(repositories / "detached")) == facts(linked=True, branch="")
+    assert hook_core.repository_facts(str(repositories / "plain")) is None
+    assert hook_core.repository_facts(str(repositories / "missing")) is None
+
+
+def test_the_live_lookup_passes_a_worktree_and_asks_for_everything_else(repositories):
+    def run(directory, command="git commit -m x"):
+        return git_commit_guard_result(command, directory=str(directory), permission_mode="default")
+
+    assert run(repositories / "wt") is None
+    assert run(repositories / "wt", f"cd {repositories / 'main'} && git commit -m x") is not None
+    assert run(repositories / "main") is not None
+    assert run(repositories / "detached") is not None
+    result = run(repositories / "plain")
+    assert result is not None
+    assert "not a git repository" in result.permission_reason
+    assert run(repositories / "wt", "git -C . commit -m x") is None
+
+
+def test_the_scanner_keeps_the_arguments_after_the_subcommand():
+    found = hook_core.git_invocations("git -C /x branch -D 'a b' -- c", "/s")
+    assert found == [hook_core.GitInvocation("branch", "/x", ("-D", "a b", "--", "c"))]
+
+
+@pytest.fixture
+def job_repositories(repositories):
+    """The ``repositories`` with job branches, a branch ``other`` to try to move, and a worktree on a job branch."""
+    main = repositories / "main"
+    for branch in ("_aitna/a", "_aitna/b", "other"):
+        _git(main, "branch", branch)
+    _git(main, "worktree", "add", "-q", "-b", "_aitna/job", str(repositories / "job"))
+    return repositories
+
+
+_LIVE_ASKS = [
+    "git branch -D other",
+    "git branch -d other",
+    "git branch -D _aitna/a other",
+    "git branch -fD feat",
+    "git branch --force other HEAD",
+    "git branch -m other renamed",
+    "git branch -M _aitna/a renamed",
+    "git branch -m renamed",
+    "git branch --copy other _aitna/c",
+    "git fetch . HEAD:other",
+    "git fetch . +HEAD:refs/heads/other",
+    "git checkout -B other",
+    "git switch -C other",
+    "git switch --force-create other",
+    "git symbolic-ref HEAD refs/heads/other",
+    "git symbolic-ref -d refs/heads/other",
+    "git update-ref refs/heads/other HEAD",
+    "git update-ref -d refs/heads/other",
+    "git replace HEAD HEAD~0",
+    "git filter-branch --all",
+    "git fast-import",
+    "git worktree remove ../wt",
+    "git worktree move ../wt ../elsewhere",
+    "git worktree prune",
+    "git worktree lock ../wt",
+    "git worktree unlock ../wt",
+    "git worktree repair",
+]
+_LIVE_PASSES = [
+    "git branch -D _aitna/a",
+    "git branch -d _aitna/a _aitna/b",
+    "git branch -fD _aitna/a",
+    "git branch -m _aitna/a _aitna/renamed",
+    "git branch --copy _aitna/a _aitna/c",
+    "git branch -m _aitna/renamed",
+    "git branch brand-new HEAD",
+    "git branch -u origin/main",
+    "git fetch . HEAD:_aitna/a",
+    "git fetch . HEAD:refs/remotes/origin/x",
+    "git checkout -B _aitna/a",
+    "git switch -C _aitna/a",
+    "git checkout -b other-new",
+    "git symbolic-ref HEAD",
+    "git symbolic-ref HEAD refs/heads/_aitna/a",
+    "git update-ref refs/heads/_aitna/a HEAD",
+    "git update-ref -d refs/heads/_aitna/b",
+    "git worktree list",
+    'echo "git branch -D other"',
+]
+
+
+@pytest.mark.parametrize("directory", ["wt", "main", "job"])
+@pytest.mark.parametrize("command", _LIVE_ASKS)
+def test_ref_writing_commands_ask_in_a_real_repository_in_any_directory(job_repositories, directory, command):
+    start = str(job_repositories / directory)
+    result = git_commit_guard_result(command, directory=start, permission_mode="default")
+    assert result is not None, command
+    assert result.permission_decision == "ask"
+    assert "_aitna/" in result.permission_reason
+
+
+@pytest.mark.parametrize("directory", ["wt", "main", "job"])
+@pytest.mark.parametrize("command", _LIVE_PASSES)
+def test_job_branch_ref_commands_pass_in_a_real_repository_in_any_directory(job_repositories, directory, command):
+    start = str(job_repositories / directory)
+    if command == "git branch -m _aitna/renamed" and directory != "job":
+        # the one-name rename acts on the current branch, which only the job worktree has as a job branch
+        assert git_commit_guard_result(command, directory=start, permission_mode="default") is not None
+        return
+    assert git_commit_guard_result(command, directory=start, permission_mode="default") is None, command
+
+
+def test_a_git_refusal_that_depends_on_the_checkout_is_not_what_the_guard_relies_on(job_repositories):
+    """``other`` is checked out nowhere, so git itself would delete it; the guard asks all the same."""
+    result = git_commit_guard_result(
+        "git branch -D other", directory=str(job_repositories / "job"), permission_mode="default"
     )
     assert result is not None
-    assert result.permission_decision == "ask"
-
-
-def test_commit_on_main_asks():
-    result = git_commit_guard_result('git commit -m "x"', branch="main", permission_mode="default")
-    assert result is not None
-    assert result.permission_decision == "ask"
-    assert "main" in result.permission_reason
-
-
-def test_commit_on_master_asks():
-    result = git_commit_guard_result('git commit -m "x"', branch="master", permission_mode="default")
-    assert result is not None
-    assert result.permission_decision == "ask"
-
-
-def test_commit_on_empty_branch_asks_with_detached_head_wording():
-    result = git_commit_guard_result('git commit -m "x"', branch="", permission_mode="default")
-    assert result is not None
-    assert result.permission_decision == "ask"
-    assert "detached HEAD" in result.permission_reason
-
-
-def test_commit_on_feature_branch_passes():
-    assert git_commit_guard_result('git commit -m "x"', branch="feature/work") is None
-    assert git_commit_guard_result("git -c user.name=x commit --amend", branch="dev") is None
-
-
-def test_pipe_boundary_prevents_false_positive():
-    # 'push' appears only after a pipe, so [^|&;]* should not bridge to it.
-    assert git_commit_guard_result("echo git | grep push", branch="feature/x") is None
-
-
-def test_word_boundary_avoids_substring_match():
-    # 'legitimate' contains 'git' but no standalone guarded subcommand.
-    assert git_commit_guard_result("legitimate_tool run", branch="feature/x") is None
-
-
-def test_resolved_branch_uses_live_git_when_branch_is_none(monkeypatch):
-    monkeypatch.setattr(hook_core, "current_git_branch", lambda: "main")
-    result = git_commit_guard_result('git commit -m "x"', permission_mode="default")  # branch defaults to live lookup
-    assert result is not None
-    assert result.permission_decision == "ask"
+    assert "'other'" in result.permission_reason
 
 
 # --------------------------------------------------------------------------------------
@@ -187,11 +388,11 @@ def test_resolved_branch_uses_live_git_when_branch_is_none(monkeypatch):
 
 def test_ask_escalates_to_deny_outside_interactive_default():
     for mode in (None, "acceptEdits", "plan", "dontAsk", "bypassPermissions", "somethingUnknown"):
-        result = git_commit_guard_result("git commit -m 'x'", branch="main", permission_mode=mode)
+        result = _guard("git commit -m 'x'", "/main", permission_mode=mode)
         assert result is not None, mode
         assert result.permission_decision == "deny", mode
         assert "escalated ask" in result.permission_reason, mode
-        assert "main" in result.permission_reason, mode  # original reason text preserved
+        assert "/main" in result.permission_reason, mode  # original reason text preserved
 
 
 # ADR-0025/D06: the host's attendance statement decides; the permission mode decides only where the
@@ -214,7 +415,7 @@ def test_ask_is_attended_by_the_host_statement_then_the_mode(mode, attended, pas
 
 @pytest.mark.parametrize(("mode", "attended", "passes"), _ATTENDANCE_CELLS)
 def test_commit_guard_ask_follows_attendance(mode, attended, passes):
-    result = git_commit_guard_result("git push origin x", "feature", permission_mode=mode, attended=attended)
+    result = _guard("git push origin x", permission_mode=mode, attended=attended)
     assert result is not None
     assert result.permission_decision == ("ask" if passes else "deny")
     assert ("escalated ask" in result.permission_reason) is not passes
@@ -239,13 +440,13 @@ def test_delegation_ask_follows_attendance(monkeypatch, tmp_path, mode, attended
 def test_the_core_never_reads_the_environment_for_attendance(monkeypatch):
     # Configuration is read at the entry point (ADR-0025/D06): the variable alone changes nothing here.
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ATTENDED", "1")
-    result = git_commit_guard_result("git push", "feature", permission_mode="auto")
+    result = _guard("git push", permission_mode="auto")
     assert result is not None
     assert result.permission_decision == "deny"
 
 
 def test_ask_stays_ask_in_interactive_default_mode():
-    result = git_commit_guard_result('git commit -m "x"', branch="main", permission_mode="default")
+    result = _guard('git commit -m "x"', "/main", permission_mode="default")
     assert result is not None
     assert result.permission_decision == "ask"
     assert "escalated" not in result.permission_reason
@@ -254,9 +455,7 @@ def test_ask_stays_ask_in_interactive_default_mode():
 def test_escalation_does_not_touch_deny_decisions():
     # The co-authored-by guard is already a `deny` — escalation logic should leave it alone
     # (no double-escalation wording) regardless of permission_mode.
-    result = git_commit_guard_result(
-        'git commit -m "Co-authored-by: x"', branch="feature/x", permission_mode="acceptEdits"
-    )
+    result = _guard('git commit -m "Co-authored-by: x"', permission_mode="acceptEdits")
     assert result is not None
     assert result.permission_decision == "deny"
     assert "escalated" not in result.permission_reason
@@ -1216,8 +1415,23 @@ def test_hook_core_json_holds_the_policy_and_texts():
         "privilege_escalation_reason",
         "git_commit_no_ai_trailer_reason",
         "git_commit_push_tag_merge_reason",
-        "git_commit_landing_reason",
-        "git_commit_detached_head",
+        "git_commit_history_reason",
+        "git_commit_ref_reason",
+        "git_commit_ref_target_current_branch",
+        "git_commit_ref_target_stdin",
+        "git_commit_where_unresolved",
+        "git_commit_where_not_repository",
+        "git_commit_where_checkout",
+        "git_commit_where_detached",
+        "git_commit_where_default_branch",
+        "git_publishing_subcommands",
+        "git_history_subcommands",
+        "git_job_branch_prefix",
+        "git_heads_prefix",
+        "git_remotes_prefix",
+        "git_ref_unconditional",
+        "git_fetch_valued_options",
+        "git_default_branches",
         "escalated_ask_suffix",
         "stale_guardrail_notice",
     }
@@ -1234,7 +1448,10 @@ def test_hook_core_json_holds_the_policy_and_texts():
     }
     assert data["interactive_default_permission_mode"] == "default"
     assert data["unattended_permission_modes"] == ["bypassPermissions", "dontAsk"]
-    assert data["git_commit_detached_head"] == "detached HEAD"
+    assert data["git_publishing_subcommands"] == ["push", "tag"]
+    assert "commit" in data["git_history_subcommands"]
+    assert "merge-base" not in data["git_history_subcommands"]
+    assert data["git_default_branches"] == ["main", "master"]
     assert "🧭" in data["session_start"]["format_line"]
     assert "½" in data["drift_score_text"]
 

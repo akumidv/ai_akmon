@@ -1,0 +1,22 @@
+id = "tools/park-worktrees-no-repository"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# Outside a git repository there are no worktrees to list: one line naming the project root, exit 1, nothing written.
+
+[fixture]
+attach = "none"
+git = false
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+
+[run]
+tool = "park/park"
+argv = ["worktrees", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stderr = "error: {{root}} is not in a git repository, so there are no worktrees to list\n"
+stdout = ""

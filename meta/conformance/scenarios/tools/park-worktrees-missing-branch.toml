@@ -1,0 +1,24 @@
+id = "tools/park-worktrees-missing-branch"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `worktrees` with a target that is no branch of the repository and no athlos key of a unit says so in one line
+# and exits 1: only a carried branch exits 0, so the agent cannot take "no such branch" for done. The full table
+# is not pinned here: its first column is padded to the longest absolute path, which differs per run.
+
+[fixture]
+attach = "none"
+branch = "main"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+
+[run]
+tool = "park/park"
+argv = ["worktrees", "_aitna/C999-nothing.1", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stderr = ""
+stdout = "_aitna/C999-nothing.1: no such branch\n"

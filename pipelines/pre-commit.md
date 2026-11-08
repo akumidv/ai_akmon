@@ -39,7 +39,9 @@ on every project regardless of role.
 
 - **Tests are mandatory and must pass.** This is the non-negotiable gate.
 - **Never `git add` / `commit` on the owner's behalf** unless explicitly told — the owner
-  stages and commits.
+  stages and commits. The one exception is a worktree's own branch: the agent commits there itself
+  once this cycle is green (the guardrail's job-branch carve-out), and the owner carries the branch
+  as one squash commit.
 - **Owner-verify** math / DataFrame / architecture changes (per the role's Verify step) —
   this gate is in addition to that, not a replacement.
 

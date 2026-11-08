@@ -83,11 +83,15 @@ the format of a note or a plan line and its place stay with the code.
   the agent commits it there, on the branch, and prints the carry as commands, always a squash:**
   `cd <the owner's checkout>`, `git merge --squash <branch>`, then `git commit -m "<message>"` with the
   message the agent proposes, so every commit of the worktree becomes one commit on the owner's
-  branch. The owner runs them, or asks the agent to. **The worktree and its branch stay until the
-  carry is verified**; then the agent may remove a worktree it made, and its branch, on the owner's
-  notice or at a periodic check of finished tasks — only with nothing uncommitted in it and every
-  path the branch changed holding the same content in the owner's branch (a squash leaves the branch
-  unmerged in git's eyes, so it is checked by content) ([ADR 0029/D09](docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree);
+  branch. The owner runs them, or asks the agent to. **The agent confirms a carry by code** —
+  `park worktrees <branch>` reads it by content — when the owner says it is done, never from the
+  owner's words or the log. **Removal takes two steps.** After the verified carry the agent prints `git worktree remove <path>` (git refuses while anything in the worktree is
+  uncommitted, and the commits stay in the branch); a worktree gone with its branch kept says the work
+  is finished and the branch is only a backup. The agent deletes the branch later — at a periodic
+  check, on request, or when its task closes — only after the code check that the work is carried by
+  content: every path the branch changed holds the same content in the owner's branch (a squash leaves
+  the branch unmerged in git's eyes, so `--merged` cannot say it) and no lease is live
+  ([ADR 0029/D09](docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree);
   the guard and the shipped carve-out follow in C190). Everything else in § Commits & ownership
   stands as written.
 - **No dates, and never a date as an index.** Git history is the timeline. This applies to the

@@ -294,6 +294,7 @@ def _tail(policy_id: str) -> str:
 def test_marker_tails_state_the_subset_each_callable_actually_covers():
     assert "the whole rule" in _tail("privilege.no-escalation")
     commits = _tail("commits.owner-owned")
+    assert "linked worktree" in commits
     assert "detached/unresolved HEAD" in commits
     assert "not machine-checked" in commits
     assert "not decidable by a hook" in _tail("analysis.before-mutation")

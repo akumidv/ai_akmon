@@ -30,8 +30,12 @@ project-local hook surface.
 - [`git-commit-guard.py`](git-commit-guard.py) — Claude PreToolUse wrapper for the neutral
   commit guard; enforces
   [`../guardrails/_common.md`](../guardrails/_common.md) "Commits & ownership": denies an AI
-  `Co-Authored-By` trailer; asks the owner before `push`/`tag`/`merge` and before a `commit`
-  on the default branch (landing history). That ask reaches the owner when the run is attended and
+  `Co-Authored-By` trailer; asks the owner before `push` and `tag` everywhere, and before a history-writing command
+  (`commit`, `merge`, `rebase`, `reset` and the like) anywhere but a linked worktree on its own named branch;
+  asks in any directory before a ref-writing command (`branch` force/delete/rename, a `fetch`/`pull` refspec into a
+  local ref, `checkout -B`, `switch -C`, `symbolic-ref` and `update-ref` writes, `replace`, `filter-branch`,
+  `fast-import`, `worktree remove|move|prune|lock|unlock|repair`) unless every target ref is an `_aitna/` job branch;
+  only command words are read, and the repository checked is the one the command acts on. That ask reaches the owner when the run is attended and
   becomes a `deny` when it is not: the entry point reads `CLAUDE_CODE_SESSION_ATTENDED` (`1`
   attended, `0` unattended; M199, M200) and hands it down, and where the variable is absent
   the interactive `default` permission mode attends; `bypassPermissions` and `dontAsk` never do

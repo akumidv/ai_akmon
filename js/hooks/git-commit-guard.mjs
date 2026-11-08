@@ -35,10 +35,12 @@ function decide(data) {
   const rawCommand = dictGet(truthy(rawInput) ? rawInput : {}, "command", "");
   const command = truthy(rawCommand) ? rawCommand : "";
   const permissionMode = dictGet(payload, "permission_mode");
+  const cwd = dictGet(payload, "cwd");
   return (
     privilegeEscalationGuardResult(data, command) ??
-    gitCommitGuardResult(data, command, null, {
+    gitCommitGuardResult(data, command, {
       permissionMode: typeof permissionMode === "string" ? permissionMode : null,
+      directory: typeof cwd === "string" && cwd !== "" ? cwd : null,
       attended: attendedFromEnvironment(process.env),
     })
   );

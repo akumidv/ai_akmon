@@ -33,9 +33,11 @@ def _decide() -> HookResult | None:
     report_unclassified_shell_route(session_id if isinstance(session_id, str) else None)
     command = (payload.get("tool_input") or {}).get("command", "") or ""
     permission_mode = payload.get("permission_mode")
+    cwd = payload.get("cwd")
     return privilege_escalation_guard_result(command) or git_commit_guard_result(
         command,
         permission_mode=permission_mode if isinstance(permission_mode, str) else None,
+        directory=cwd if isinstance(cwd, str) and cwd else None,
         attended=attended_from_environment(os.environ),
     )
 

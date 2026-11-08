@@ -213,10 +213,12 @@ how to carry it into the branch the owner is on: always a squash — `cd` to the
 proposes — so that every commit of the worktree becomes one commit on the owner's branch. The owner
 runs the commands, or asks the agent to run them; the agent never starts the carry unasked.
 
-The worktree and its branch stay after the carry. The agent may then remove a worktree it made, and
-its branch, on the owner's notice or at a periodic check of finished tasks — and only when nothing in
-the worktree is uncommitted and every path the branch changed holds the same content in the owner's
-branch. A squash leaves the branch unmerged in git's eyes, so "carried" is read from content, never
+Removal takes two steps. After the carry the agent prints `git worktree remove <path>`; git refuses
+while anything in the worktree is uncommitted, and the commits stay in the branch. A worktree gone
+with its branch kept says the work is finished and the branch is only a backup. The agent deletes
+the branch later — at a periodic check of finished tasks, on request, or when the task closes — and
+only when every path the branch changed holds the same content in the owner's branch and no lease is
+live. A squash leaves the branch unmerged in git's eyes, so "carried" is read from content, never
 from `--merged`; a branch that is not carried is never deleted. A worktree the harness made stays the
 harness's (D06). Pushing, tagging and publishing stay the owner's everywhere. This
 replaces `AGENTS.md`'s "an agent may commit on a local non-default branch" and widens 0028/D11's
