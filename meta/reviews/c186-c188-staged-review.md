@@ -1,5 +1,7 @@
 # Review — the staged C186 and C188 work, before the owner's commit
 
+> **Disposition.** The majors and the prose findings were fixed before the owner's commit. The minors still present in the tree are tracked in C189 (park code, tests and scenarios), C191 (export leftovers) and C196 (fuzz entry and measurement rows) in [`TASKS.md`](../TASKS.md); the verdict and gate tables below describe the staged tree as reviewed.
+
 Scope: the owner's staged tree on `main` over `8ad4287` (100 files): C186's holder lease, jobs, the
 active unit, worktrees and the retired local index in `tools/park/park.py`, `common/project_root.py`
 and their JavaScript twins; their tests and conformance scenarios; C188's ADR 0029, the merge record
