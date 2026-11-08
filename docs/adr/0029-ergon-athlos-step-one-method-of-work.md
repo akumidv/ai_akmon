@@ -207,8 +207,12 @@ The main checkout is the owner's: an agent changes no history there, on any bran
 git object or ref outside a worktree — no plumbing write, no scratch repository. Inside a worktree —
 one it made (D06's fallback) or one the harness made for its athlos — the agent commits on that
 worktree's branch, and may bring other branches or worktrees into it; it never carries the
-worktree's branch out. It may propose carrying the worktree into the branch the owner is on; the
-owner does it, or asks for it. Pushing, tagging and publishing stay the owner's everywhere. This
+worktree's branch out. When the work in the worktree is ready, the agent prints how to carry it into
+the branch the owner is on: always a squash — `git merge --squash <branch>` run in the owner's
+checkout, then one `git commit -m "<message>"` with the message the agent proposes — so that every
+commit of the worktree becomes one commit on the owner's branch, followed by the cleanup of the
+worktree and its branch. The owner runs the commands, or asks the agent to run them; the agent never
+starts the carry unasked. Pushing, tagging and publishing stay the owner's everywhere. This
 replaces `AGENTS.md`'s "an agent may commit on a local non-default branch" and widens 0028/D11's
 job-branch carve-out from akmon's own `.worktrees/` path to any worktree an athlos is bound to. The
 guard enforces it by the repository a command acts on, not by the session's directory (C190).

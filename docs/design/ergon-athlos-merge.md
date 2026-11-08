@@ -799,7 +799,8 @@ design's names win over both alternatives. The beauty of the words neither helps
   (D-C194-GLOSS): the GL fixture's sentence, widened by the owner with the words a user may say
   instead (epic, kit, work package, job, handoff, checkpoint, check off) and with *task* named as
   ambiguous, goes into the block C189 ships and into akmon's own, beside the pointer to the method.
-  The widened sentence is not measured yet; C189 re-runs the GL arm with it.
+  The widened sentence was measured in C189's re-run of the GL arm ([M237](../../meta/MEASUREMENTS.md)):
+  fully right on Claude and Codex, at the cost of the one-sentence arm; Qwen was not run.
 - **Format and placement stay in code** (D08): the park tool writes the note's sections and its
   place, and `park` adds the plan line with its id. The measurement shows what an agent left to
   the prose gets wrong — exactly those two.

@@ -55,8 +55,9 @@ Runtime check: privilege.no-escalation — the whole rule: any Bash command cont
   in its own worktree, `.worktrees/<id>-<name>.<n>/`, on the local branch
   `_aitna/<id>-<name>.<n>`. Inside that worktree the agent commits its own work on that branch
   without asking. It never pushes or tags. Carrying the branch's work into the branch the owner is
-  on is started by the owner only: the owner asks the agent to merge or squash it, or runs the
-  printed commands. The carve-out covers no other branch, no other commit and no push.
+  on is started by the owner only. When the job is ready the agent prints the squash —
+  `git merge --squash <branch>` in the owner's checkout and a commit with the message it proposes,
+  so the branch's commits become one commit — and the owner runs it or asks the agent to. The carve-out covers no other branch, no other commit and no push.
 
 Runtime check: commits.owner-owned — subset: an AI `Co-Authored-By` trailer is denied, and
 `push`/`tag`/`merge` or a commit on the default branch or a detached/unresolved HEAD asks when

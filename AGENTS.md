@@ -79,8 +79,11 @@ the format of a note or a plan line and its place stay with the code.
   checkout is the owner's:** an agent changes no history there, on any branch. An agent commits
   only inside a worktree — its own or the one the harness made for its athlos — on that worktree's
   branch, and may bring other branches into it, never carry it out; carrying a worktree's branch
-  into the branch the owner is on is started by the owner only — the owner asks the agent to merge
-  or squash it, or runs the printed commands ([ADR 0029/D09](docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree);
+  into the branch the owner is on is started by the owner only. **When the work in a worktree is ready
+  the agent prints the carry as commands, always a squash:** `git merge --squash <branch>` in the
+  owner's checkout, then `git commit -m "<message>"` with the message the agent proposes, so every
+  commit of the worktree becomes one commit on the owner's branch; the cleanup (`git worktree remove`,
+  `git branch -D`) follows. The owner runs them, or asks the agent to run them ([ADR 0029/D09](docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree);
   the guard and the shipped carve-out follow in C190). Everything else in § Commits & ownership
   stands as written.
 - **No dates, and never a date as an index.** Git history is the timeline. This applies to the

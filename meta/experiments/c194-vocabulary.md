@@ -118,6 +118,18 @@ separates *correct* from *functional* in the 0 arms and in GL.
 fewest tool calls of any arm on Claude and with the series-1 cost on Codex; T6 took 0.3–1 tool
 calls and 17–57k tokens on Claude and Codex. Its strict misses are format, as above.
 
+## Follow-up — the gloss as C189 ships it
+
+The owner widened the GL sentence into the gloss that `AGENTS.md` and the shipped block carry
+([ADR 0029/D10](../../docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d10--the-words-are-glossed-in-the-entry-file-with-the-words-a-user-may-say)):
+the readings of the everyday words, and *task* named as ambiguous. Fixture `GL2` (series 4) is GL
+with that text and nothing else changed; the same six tasks, 3 runs a cell, the same modes and
+versions (Claude Code 2.1.319, codex-cli 0.164.0), Qwen not run on the owner's word. Result
+([M237](../MEASUREMENTS.md)): functional 18/18 on Claude and 18/18 on Codex, strict 10/18 and 12/18
+(GL: 10/18 and 11/18), mean tool calls 5.1 and 5.1 (GL: 4.4 and 4.7); no ask-back. The wider gloss
+costs no measurable work, and its misses are the format ones the gloss does not carry. The prompts
+still speak the design's words; the readings of the everyday words are not exercised by them.
+
 ## Limits
 
 - n = 3 per cell; differences of one tool call are inside the noise.

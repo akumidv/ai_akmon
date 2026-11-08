@@ -482,9 +482,11 @@ in git (ADR 0028 D10).
   shipped guardrail's § Commits & ownership states this permission, and the harness's approval settings for the worktree are what A79 measures so that nothing there asks either. *Current code, superseded by [ADR 0029/D06](../adr/0029-ergon-athlos-step-one-method-of-work.md#d06--worktrees-follow-the-harness) (the harness makes the worktree where it has one) and [D09](../adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree) (the agent commits only inside one); the guard follows in C190.*
 - **Carrying a result is the owner's call.** When a job — or a step worth carrying on its own — is
   finished, the agent says so and stops there. Its result enters the current branch only when the
-  owner starts the carry, in the way the owner picks: the agent carries it on that word, by a merge
-  or a squash into one commit, or the agent prints the commands and the owner runs them. The carry
-  is never started by the agent and never folded into other work.
+  owner starts the carry: the agent prints it as a squash — `git merge --squash <branch>` in the
+  owner's checkout and one `git commit -m "<message>"` with the message it proposes, so all the
+  worktree's commits become one commit on the owner's branch, then the cleanup — and the owner runs
+  the commands or asks the agent to. The carry is never started by the agent unasked and never
+  folded into other work ([ADR 0029/D09](../adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree)).
 - **Removal.** On the owner's word, or after the result is carried; never while the worktree has
   uncommitted paths ([A63](../../meta/TASKS.md)).
 - **The kits stay in the main checkout.** `.ergon/` is ignored and does not follow a worktree, so the
