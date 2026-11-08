@@ -685,12 +685,15 @@ def test_embedded_tree_root_resolves_this_checkout():
 
 
 def test_cli_tools_list_is_every_runnable_tool():
-    """``cli.json`` ``tools`` names exactly the ``tools/`` scripts with an entry point: a library
-    module (``routing``) is not runnable, and a new tool nobody listed would be unreachable."""
+    """``cli.json`` ``tools`` names exactly the ``tools/`` scripts with an entry point and a JS twin: a
+    library module (``routing``) is not runnable, and a new tool nobody listed would be unreachable.
+    ``akmon tool`` runs both implementations with one command set, so a Python-only tool is not listed;
+    the pairing gate (``pairing.toml``) is what keeps such a tool visible as outstanding."""
     runnable = sorted(
         str(path.relative_to(_AKMON / "tools").with_suffix(""))
         for path in (_AKMON / "tools").rglob("*.py")
         if 'if __name__ == "__main__":' in path.read_text(encoding="utf-8")
+        and (_AKMON / "js" / "tools" / path.relative_to(_AKMON / "tools").with_suffix(".mjs")).is_file()
     )
     assert _CLI_DATA["tools"] == runnable
 

@@ -1,0 +1,23 @@
+id = "tools/model-profile-plan"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_profile/cli"]
+
+# `plan` sends nothing and needs no container: it loads the item set, validates it, and prints what a run would
+# ask. The item set is a fixture, so the two hashes in the first line pin that both implementations hash the
+# same bytes to the same names (the cases hash over the file and every embedded source, the envelope hash over
+# the pinned knobs and the system prompts), and the pair count, the call count and the estimate pin the cost
+# model: two models over the three (case, family) pairs, two of them sandboxed.
+
+[fixture.files]
+"items.json" = '''
+{"version":"scn-1","cases":[{"id":"scn-hunt","families":["hunt"],"bug":{"file":"pkg/mod.py","function":"compute","kind":"off-by-one"},"files":{"pkg/mod.py":"def compute(x):\n    return x + 1\n","pkg/decoy.py":"def other():\n    return 0  # caf\u00e9\n"},"fixed_files":{"pkg/mod.py":"def compute(x):\n    return x\n"},"hidden_test":{"path":"tests/test_mod.py","content":"from pkg.mod import compute\n\ndef test_compute():\n    assert compute(1) == 1\n"},"asks":{"hunt":{"system":"Name the defect as file.py:function.","user":"Where is the defect? \u2014 one line."}}},{"id":"scn-fix","families":["fix-traceback","fix-symptom"],"bug":{"file":"pkg/mod.py","function":"compute","kind":"off-by-one"},"files":{"pkg/mod.py":"def compute(x):\n    return x + 1\n","pkg/decoy.py":"def other():\n    return 0  # caf\u00e9\n"},"fixed_files":{"pkg/mod.py":"def compute(x):\n    return x\n"},"hidden_test":{"path":"tests/test_mod.py","content":"from pkg.mod import compute\n\ndef test_compute():\n    assert compute(1) == 1\n"},"asks":{"fix-traceback":{"system":"Repair the file.","user":"A traceback."},"fix-symptom":{"system":"Repair the file, symptom only.","user":"compute(1) is 2."}}}]}'''
+
+[run]
+tool = "model_profile/cli"
+argv = ["plan", "--models", "a", "b", "--items", "items.json"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "item set     scn-1  cases_sha bdf1225e64a2  envelope_sha e53cab819efb\nmodels       a, b\nitems        3 (case, family) pairs x 2 models = 6 calls\nestimate     ~4 min wall-clock, ~72 input tokens, ~5,400 output tokens\n"

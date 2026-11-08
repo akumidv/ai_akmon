@@ -89,3 +89,7 @@ target-version = "py312"
 [tool.ruff.lint]
 # ℹ is the notice glyph akmon's hooks print — meant, not a mistyped `i`.
 allowed-confusables = ["ℹ"]
+
+[tool.pytest.ini_options]
+# `docker` marks a test that needs a running docker daemon; it skips itself when `docker version` fails.
+markers = ["docker: needs a running docker daemon (skipped when `docker version` fails)"]

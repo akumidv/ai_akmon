@@ -1,0 +1,110 @@
+{
+  "hash_length": 12,
+  "families": {
+    "known": ["hunt", "fix-traceback", "fix-symptom"],
+    "hunt": "hunt",
+    "fix": ["fix-traceback", "fix-symptom"]
+  },
+  "case_keys": {
+    "case": ["id", "families", "bug", "files", "fixed_files", "hidden_test", "asks"],
+    "bug": ["file", "function", "kind"],
+    "ask": ["system", "user"],
+    "hidden_test": ["path", "content"]
+  },
+  "envelope": {
+    "temperature": 0.0,
+    "max_output_tokens": 4096,
+    "timeout_s": 180,
+    "response_format": "text"
+  },
+  "run": {
+    "verdicts": ["pass", "fail", "deferred", "malformed"],
+    "budget_reason": "budget",
+    "ledger_file": "ledger.jsonl",
+    "detail_dir": "detail"
+  },
+  "estimate": {
+    "call_seconds": 30.0,
+    "sandbox_seconds": 10.0,
+    "chars_per_token": 4,
+    "output_tokens": 900
+  },
+  "gates": [
+    {
+      "name": "items_scored",
+      "family": null,
+      "metric": "scored",
+      "operator": ">=",
+      "threshold": 30.0,
+      "meaning": "the family holds too few scored items for its rate to mean anything"
+    },
+    {
+      "name": "hunt.location_hit",
+      "family": "hunt",
+      "metric": "location_hit_rate",
+      "operator": ">=",
+      "threshold": 0.5,
+      "meaning": "the model cannot name the file and the function that hold the defect"
+    },
+    {
+      "name": "hunt.file_localization",
+      "family": "hunt",
+      "metric": "file_localization_rate",
+      "operator": ">=",
+      "threshold": 0.5,
+      "meaning": "the model cannot even name the file that holds the defect"
+    },
+    {
+      "name": "fix-traceback.pass_rate",
+      "family": "fix-traceback",
+      "metric": "pass_rate",
+      "operator": ">=",
+      "threshold": 0.5,
+      "meaning": "given the traceback, the model cannot repair the defect"
+    },
+    {
+      "name": "fix-symptom.pass_rate",
+      "family": "fix-symptom",
+      "metric": "pass_rate",
+      "operator": ">=",
+      "threshold": 0.5,
+      "meaning": "given only the symptom, the model cannot repair the defect"
+    }
+  ],
+  "item_band": {
+    "name": "item_pass_band",
+    "low": 0.3,
+    "high": 0.7,
+    "min_scored": 3,
+    "meaning": "the item does not separate the models: nearly all pass it or nearly all fail it"
+  },
+  "transport": {
+    "completions_path": "/v1/chat/completions",
+    "models_path": "/v1/models",
+    "done_sentinel": "[DONE]",
+    "direct_scaffold": "direct",
+    "models_timeout_s": 60,
+    "error_detail_chars": 400
+  },
+  "sandbox": {
+    "image": "python:3.13-slim",
+    "default_timeout_s": 120,
+    "memory_limit": "256m",
+    "pids_limit": "128",
+    "workspace_size": "64m",
+    "container_user": "65534:65534",
+    "work_dir": "/work",
+    "result_prefix": "__MODEL_PROFILE_RESULT__",
+    "runner_file": "_probe_runner.py",
+    "nonce_file": "_probe_nonce",
+    "runner_source_file": "container_runner.py.txt",
+    "docker_failure_codes": [125, 126, 127],
+    "docker_command_timeout_s": 30,
+    "detail_chars": 400
+  },
+  "cli": {
+    "default_token_env": "AKMON_MODEL_TOKEN",
+    "out_subdir": "model_profile",
+    "default_items": "items/seed_cases.json"
+  }
+}

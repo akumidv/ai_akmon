@@ -1,0 +1,16 @@
+id = "tools/model-profile-plan-needs-endpoint"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_profile/cli"]
+
+# Without `--models` the plan has to ask an endpoint which models it serves, so a missing `--endpoint` is
+# refused before anything is read or sent: one line on stderr, exit 1, no output.
+
+[run]
+tool = "model_profile/cli"
+argv = ["plan"]
+
+[expected]
+exit = 1
+stderr = "--endpoint URL is required: the base URL of an OpenAI-compatible endpoint\n"
+stdout = ""
