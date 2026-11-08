@@ -154,7 +154,8 @@ def cases_sha(raw: bytes, cases: Sequence[Case]) -> str:
 def envelope_sha(envelope: Envelope, system_prompts: Sequence[str]) -> str:
     """The hash of the request envelope: its knobs and the system prompts used."""
     payload = {
-        "temperature": envelope.temperature,
+        # float() so an integer 1 hashes as 1.0, which is how the JavaScript twin writes it
+        "temperature": float(envelope.temperature),
         "max_output_tokens": envelope.max_output_tokens,
         "timeout_s": envelope.timeout_s,
         "response_format": envelope.response_format,

@@ -242,8 +242,9 @@ class _StreamReader:
         choice = choices[0] if choices and isinstance(choices[0], dict) else None
         if choice is not None:
             delta = choice.get("delta") or {}
-            if delta.get("content"):
-                self.parts.append(delta["content"])
+            content = delta.get("content")
+            if isinstance(content, str) and content:
+                self.parts.append(content)
             if choice.get("finish_reason"):
                 self.finish_reason = choice["finish_reason"]
         if chunk.get("usage"):

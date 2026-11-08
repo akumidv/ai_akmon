@@ -155,6 +155,7 @@ test("an HTTP error is a deferral naming the status but never the token", async 
 const BROKEN_STREAMS = [
   ["no chunk", [], "no chunk"],
   ["an empty answer", [sse({ choices: [{ delta: { content: "  " }, finish_reason: "stop" }] })], "empty answer"],
+  ["a non-text content only", [sse({ choices: [{ delta: { content: 7 }, finish_reason: "stop" }] })], "empty answer"],
   ["a malformed chunk", ["data: {not json\n"], "malformed chunk"],
   ["an error chunk", [sse({ error: { message: "overloaded" } })], "returned an error"],
 ];

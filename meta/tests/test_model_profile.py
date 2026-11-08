@@ -1147,6 +1147,34 @@ def test_the_envelope_hash_follows_the_knobs() -> None:
     )
 
 
+def test_the_envelope_hash_does_not_depend_on_an_integer_or_a_float_temperature() -> None:
+    """``1`` and ``1.0`` are one envelope, and the JavaScript twin cannot tell them apart."""
+    path = _PROFILE / "items" / "seed_cases.json"
+
+    as_int = cases.load_item_set(path, cases.Envelope(temperature=1)).envelope_sha  # type: ignore[arg-type]
+    as_float = cases.load_item_set(path, cases.Envelope(temperature=1.0)).envelope_sha
+
+    assert as_int == as_float
+
+
+@pytest.mark.parametrize("content", [None, 7, ["a"], {"text": "a"}])
+def test_a_stream_chunk_with_a_non_text_content_is_ignored_not_a_crash(content: object) -> None:
+    """An odd endpoint must end in a deferral (empty answer), never a TypeError out of the run."""
+    reader = transport._StreamReader()
+    reader.feed({"choices": [{"delta": {"content": content}}]})
+    reader.feed({"choices": [{"delta": {"content": "kept"}, "finish_reason": "stop"}]})
+
+    assert reader.text(4096) == "kept"
+
+
+def test_a_stream_of_only_non_text_content_is_an_empty_answer() -> None:
+    reader = transport._StreamReader()
+    reader.feed({"choices": [{"delta": {"content": 7}, "finish_reason": "stop"}]})
+
+    with pytest.raises(transport.TransportError, match="empty answer"):
+        reader.text(4096)
+
+
 @pytest.mark.parametrize(
     ("mutate", "message"),
     [
