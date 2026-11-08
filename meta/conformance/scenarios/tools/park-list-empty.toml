@@ -18,4 +18,4 @@ argv = ["list"]
 [expected]
 exit = 0
 stderr = ""
-stdout = "no kits in _aitna/.ergon\n"
+stdout = "no ergons in _aitna/.ergon\n"

@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# A lease written on another machine is stale at once, whatever its age: a copied kit carries the
+# A lease written on another machine is stale at once, whatever its age: a copied ergon carries the
 # lease of a session that ran elsewhere. It is refused with the holder named and `stale` in the
 # message; only `--takeover` replaces it. The lease here was written just now, so only the machine
 # makes it stale.

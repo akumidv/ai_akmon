@@ -2387,10 +2387,17 @@ export class Verifier {
       local: localRoot(this.root),
       ergon: ergonRoot(this.root),
     };
+    // A linked worktree keeps its ergons in the main checkout, outside this root: that folder is named
+    // by its full path and left to the main checkout's own ignore list.
+    const inside = (/** @type {string} */ folder) => {
+      const relative = posix.relative(root, folder);
+      return relative !== ".." && !relative.startsWith("../") && !posix.isAbsolute(relative);
+    };
+    const nameOf = (/** @type {string} */ folder) => (inside(folder) ? posix.relative(root, folder) : folder);
     const names = {
-      legacy: posix.relative(root, folders.legacy),
-      local: posix.relative(root, folders.local),
-      ergon: posix.relative(root, folders.ergon),
+      legacy: nameOf(folders.legacy),
+      local: nameOf(folders.local),
+      ergon: nameOf(folders.ergon),
     };
     if (isDir(folders.legacy)) {
       this.warn("layout.local-legacy", fill(this.data.local_layer_legacy, names), {
@@ -2401,7 +2408,7 @@ export class Verifier {
     const gitignore = pyPath(this.root, ".gitignore");
     const text = isFile(gitignore) ? readText(gitignore) : "";
     for (const key of /** @type {const} */ (["local", "ergon"])) {
-      if (isDir(folders[key]) && !_gitignoreCovers(text, names[key])) {
+      if (inside(folders[key]) && isDir(folders[key]) && !_gitignoreCovers(text, names[key])) {
         this.warn("gitignore.local-layer", fill(this.data.local_layer_unignored, { path: names[key] }), {
           target: ".gitignore",
           fix: fill(this.data.local_layer_unignored_fix, { path: names[key] }),

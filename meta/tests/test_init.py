@@ -426,6 +426,19 @@ def test_package_block_imports_profiles_under_the_materialized_prefix():
     assert "`@_aitna/.akmon/profiles/<name>.md`" in block
 
 
+def test_the_block_glosses_the_method_words_with_their_readings_and_cites_no_akmon_artifact():
+    block = " ".join(
+        _init._agents_block("_aitna", "v0.1.0", _init._Classification("backend", "python"), package_mode=True).split()
+    )
+    assert "*ergon* is a piece of work" in block and "*athlos* is a bounded unit" in block
+    for reading in ("epic", "kit", "work package", "(a job)", "handoff", "checkpoint"):
+        assert reading in block, reading
+    assert 'a user who says "task" may mean an ergon or an athlos' in block
+    assert (
+        "ADR" not in block.split("The method's words", 1)[1].split("**Memory:**", 1)[0]
+    )  # a shipped file cites no dev artifact
+
+
 def test_init_appends_the_block_and_preserves_existing_content(tmp_path):
     _write(tmp_path / "AGENTS.md", "# AGENTS.md\n\nProject-specific rules nobody may lose.\n")
     assert _init_vendored(tmp_path) == 0

@@ -1,0 +1,38 @@
+id = "tools/park-athlos-from-worktree-path"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The path rule for a linked worktree: the ergon lives in the main checkout, outside the session's root
+# (the worktree folder `.worktrees/C186-holders-units.1/`), so `athlos` prints the athlos folder by its absolute
+# path, not as a relative `../..` chain. The athlos file is written into the main checkout's ergon.
+#
+# The worktree is a real linked one: the fixture lays out by hand what `git worktree add` writes (the `.git`
+# link file in the worktree folder, `HEAD` and `commondir` in the repository's `worktrees/` folder), and
+# ignores the folder, so git answers the repository's common directory. A plain subfolder would be a
+# project of its own (a repository subfolder keeps its own dev root).
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C186-holders-units/PLAN.md" = "---\nid: C186\nname: holders-units\ntitle: Holders and units\ntasks: C186\n---\n\n# C186-holders-units\n\n## Athlos\n\n- C186.1 · write the lease · tasks C186 · result: the lease is created exclusively\n- C186.2 · athlos file · tasks C186 · after C186.1 · result: the athlos file is written\n"
+".gitignore" = ".worktrees/\n"
+".git/worktrees/C186-holders-units.1/HEAD" = "ref: refs/heads/_aitna/C186-holders-units.1\n"
+".git/worktrees/C186-holders-units.1/commondir" = "../..\n"
+".worktrees/C186-holders-units.1/.git" = "gitdir: ../../.git/worktrees/C186-holders-units.1\n"
+".worktrees/C186-holders-units.1/README.md" = "a linked worktree folder\n"
+
+[run]
+tool = "park/park"
+argv = ["athlos", "C186", "--number", "2", "--step", "write it", "--root", ".worktrees/C186-holders-units.1", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{{root}}/_aitna/.ergon/C186-holders-units/2\n"
+
+[expected.files]
+"_aitna/.ergon/C186-holders-units/2/ATHLOS.md" = "---\nid: C186\nname: holders-units\nplan: C186\nathlos: C186.2\nrow:\nbranch: main\nrevisions:\nowned_paths:\ntasks:\n  - C186\nnext: the athlos file is written\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n## Steps\n\n- [ ] write it\n"
+"_aitna/.ergon/C186-holders-units/2/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree: {{root}}\nwritten: {{ts}}\n---\n"

@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# The status flag is gone: the state of a kit is derived (`--state` filters on it), so `--status` is
+# The status flag is gone: the state of an ergon is derived (`--state` filters on it), so `--status` is
 # an unknown argument. The usage error is the parser's own: exit 2, nothing on stdout, and the stderr
 # line names the argument.
 

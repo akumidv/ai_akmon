@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
-"""The park helper: hold, write, resume, digest and list the kits of parked work.
+"""The park helper: hold, write, resume, digest and list the ergons of parked work.
 
-A *kit* is the folder ``<dev root>/.ergon/<id>-<name>/`` of one piece of work. Its plan is
-``PLAN.md``; its units are the plan itself (the kit root) and its jobs (``jobs/<n>-<name>/``).
+An *ergon* is the folder ``<dev root>/.ergon/<id>-<name>/`` of one piece of work. Its plan is
+``PLAN.md``; its units are the plan itself (the ergon root) and its athlos, each in the folder of
+its own number, ``<dev root>/.ergon/<id>-<name>/<n>/ATHLOS.md`` (ADR 0029 D11).
 Parking a unit writes two files into it, atomically: ``PARK.md``, the park note — a small
 machine-readable header between two ``---`` lines and a Markdown body of facts — and
 ``RESUME.md``, the harness-neutral prompt a successor starts from. There is no local index
-anymore: a kit is its own record, and ``park list`` is the index (ADR 0028 D12).
+anymore: an ergon is its own record, and ``park list`` is the index (ADR 0028 D12).
 
-    akmon tool park/park write C186 --name holders-jobs --goal "…" --next "…"
+A record written before the rename of ADR 0029 is read and translated: the ``job`` word, the
+``jobs/<n>-<label>/JOB.md`` layout, the ``job:`` key of a note and the retired local index. An old
+form is never written (ADR 0029 D12).
+
+    akmon tool park/park write C186 --name holders-units --goal "…" --next "…"
     akmon tool park/park hold C186 --number 1 --harness claude --session-id abc
-    akmon tool park/park job C186 --number 1 --step "…"
+    akmon tool park/park athlos C186 --number 1 --step "…"
     akmon tool park/park unpark C186        # takes the lease, prints RESUME.md and the digest
     akmon tool park/park digest C186 [--cap N]
     akmon tool park/park list [--plan ID] [--task ID] [--state S] [--closed]
     akmon tool park/park active             # the unit this session is in, read from the disk
-    akmon tool park/park close C186         # moves the kit to the closed folder
+    akmon tool park/park close C186         # moves the ergon to the closed folder
     akmon tool park/park local-id           # the next free local id, _T<n>
     akmon tool park/park export C186 --out bundle.md
 
@@ -30,8 +35,8 @@ fixed, flat one so any language reads it without a YAML library:
     ---
 
 The state of a unit is derived, never typed (ADR 0028 D09): a live lease makes it *active*, a
-note without a lease makes it *parked*, neither makes it *not started*, and a job whose
-``JOB.md`` says ``done`` is *done*. The branch and the revisions of a note are read from git
+note without a lease makes it *parked*, neither makes it *not started*, and an athlos whose
+``ATHLOS.md`` says ``done`` is *done*. The branch and the revisions of a note are read from git
 when the note is written, and the note records when it was written.
 
 The helper writes no date into a tracked document, never reads a transcript and never pushes.
@@ -70,34 +75,34 @@ _PARK_FILE = "PARK.md"
 _RESUME_FILE = "RESUME.md"
 _PLAN_FILE = "PLAN.md"
 _HOLDER_FILE = "HOLDER"
-_JOB_FILE = "JOB.md"
+_ATHLOS_FILE = "ATHLOS.md"
 _SESSIONS_FILE = "SESSIONS"
 _HEADER_FENCE = "---"
 _ID_RE = re.compile(r"^(?:[A-Z]\d+|_T\d+)$")  # ADR 0002 typed id, and a local id's _T<n> (ADR 0028 D12)
-_JOB_ID_RE = re.compile(r"^((?:[A-Z]\d+|_T\d+))\.(\d+)$")
+_ATHLOS_ID_RE = re.compile(r"^((?:[A-Z]\d+|_T\d+))\.(\d+)$")
 _NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-_KIT_RE = re.compile(r"^((?:[A-Z]\d+|_T\d+))-([a-z0-9]+(?:-[a-z0-9]+)*)$")
+_ERGON_RE = re.compile(r"^((?:[A-Z]\d+|_T\d+))-([a-z0-9]+(?:-[a-z0-9]+)*)$")
 _KEY_RE = re.compile(r"^([a-z_]+):(?: (.*))?$")
 _PURPOSE_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
-_SLUG_RE = re.compile(r"[^a-z0-9]+")
-_SLUG_MAX = 40
 _LOCAL_ID_RE = re.compile(r"^_T(\d+)$")
 _LEGACY_INDEX_FILE = "TASKS.md"  # the retired local index, in ``<dev root>/.local/``
 _LEGACY_ROW_RE = re.compile(r"^- _T([0-9]+)(?:[ \t]|$)")  # one of its rows: ``- _T6 · ...``
+_LEGACY_ATHLOS_DIR = "jobs"  # the folder of an ergon's athlos before ADR 0029 D11
+_LEGACY_ATHLOS_FILE = "JOB.md"  # an athlos's own file before ADR 0029 D11
 _GIT_TIMEOUT_SECONDS = 10
 _GIT_REVISIONS = 5
 _STEPS_HEADING = "## Steps"
 _DONE_MARKER = "done"
 _STEP_UNDONE = "- [ ] "
 _STEP_DONE = "- [x] "
-_JOBS_DIR = "jobs"
 _CLOSED_DIR = ".closed"
 _WORKTREES_DIR = ".worktrees"
 _TASK_SEPARATOR = "·"
 _FIELD_SEPARATOR = ","
 _PATH_SEPARATOR = "/"
-_JOBS_HEADING = "Jobs"
-_JOB_SOURCE_PARTS = 4  # kit folder, ``jobs``, job folder, ``JOB.md``
+_ATHLOS_HEADING = "Athlos"
+_LEGACY_ATHLOS_HEADING = "Jobs"  # the plan's section heading before ADR 0029 D02
+_ATHLOS_SOURCE_PARTS = 3  # ergon folder, athlos folder, ``ATHLOS.md``
 _LINE_BREAKS_RE = re.compile(r"[\r\n]+")
 
 
@@ -175,7 +180,7 @@ class ParkFields:
     name: str
     next_action: str
     plan: str = ""
-    job: str = ""
+    athlos: str = ""
     row: str = ""
     branch: str = ""
     revisions: tuple[str, ...] = ()
@@ -201,8 +206,12 @@ class ParkBody:
 
 
 @dataclass(frozen=True)
-class JobLine:
-    """One job line of ``PLAN.md``: the structure of a job, never its state (ADR 0028 D08)."""
+class AthlosLine:
+    """One athlos line of ``PLAN.md``: the structure of an athlos, never its state (ADR 0028 D08).
+
+    The line carries the zone beside the tasks (ADR 0029 D03): the pair (task id, zone) is the
+    athlos's content, its id is its place in the plan.
+    """
 
     id: str
     number: int
@@ -212,11 +221,12 @@ class JobLine:
     paths: tuple[str, ...] = ()
     harness: str = ""
     result: str = ""
+    zone: str = ""
 
 
 @dataclass(frozen=True)
 class PlanHeader:
-    """The header of ``PLAN.md``: the kit's id, name, title and the tasks it carries."""
+    """The header of ``PLAN.md``: the ergon's id, name, title and the tasks it carries."""
 
     id: str = ""
     name: str = ""
@@ -226,15 +236,15 @@ class PlanHeader:
 
 @dataclass(frozen=True)
 class Plan:
-    """A plan: its header and its job lines."""
+    """A plan: its header and its athlos lines."""
 
     header: PlanHeader = PlanHeader()
-    jobs: tuple[JobLine, ...] = ()
+    athlos: tuple[AthlosLine, ...] = ()
 
 
 @dataclass(frozen=True)
-class JobDoc:
-    """A job's own file ``JOB.md``: its steps with their done marks, and whether it is done."""
+class AthlosDoc:
+    """An athlos's own file ``ATHLOS.md``: its steps with their done marks, and whether it is done."""
 
     header: ParkFields
     steps: tuple[tuple[str, bool], ...] = ()
@@ -249,8 +259,8 @@ class JobDoc:
 
 
 @dataclass(frozen=True)
-class KitSummary:
-    """One line of ``list``: what a kit says of itself, read from its folder."""
+class ErgonSummary:
+    """One line of ``list``: what an ergon says of itself, read from its folder."""
 
     id: str
     name: str
@@ -260,12 +270,12 @@ class KitSummary:
     decisions: int
     branch: str
     age_days: int | None
-    unreadable: str = ""  # why the kit's files could not be read; the other fields are then empty
+    unreadable: str = ""  # why the ergon's files could not be read; the other fields are then empty
 
 
 @dataclass(frozen=True)
-class JobSummary:
-    """One job line of ``list``: what a job says of itself, read from its folder."""
+class AthlosSummary:
+    """One athlos line of ``list``: what an athlos says of itself, read from its folder."""
 
     id: str
     name: str
@@ -278,7 +288,7 @@ class JobSummary:
 
 @dataclass(frozen=True)
 class ListQuery:
-    """The filters of ``list``; an empty one matches every kit."""
+    """The filters of ``list``; an empty one matches every ergon."""
 
     plan: str = ""
     task: str = ""
@@ -288,13 +298,13 @@ class ListQuery:
 
 # Header keys in their written order, and which of them hold a list: the one table the renderer and
 # the parser share. ``next_action`` is written as ``next``.
-_SCALAR_KEYS = ("id", "name", "plan", "job", "row", "branch", "next", "origin", "readiness", "written")
+_SCALAR_KEYS = ("id", "name", "plan", "athlos", "row", "branch", "next", "origin", "readiness", "written")
 _LIST_KEYS = ("revisions", "owned_paths", "tasks", "sessions")
 _HEADER_ORDER = (
     "id",
     "name",
     "plan",
-    "job",
+    "athlos",
     "row",
     "branch",
     "revisions",
@@ -308,21 +318,35 @@ _HEADER_ORDER = (
 )
 # The keys of a note written before ADR 0028 D09: read and ignored, never written again.
 _LEGACY_KEYS = ("state", "peers")
+# A key renamed by ADR 0029 D02, as ``(old, new)``: read and translated, never written again.
+_RENAMED_KEYS = (("job", "athlos"),)
 # The keys of the lease file ``HOLDER``, in their written order.
 _LEASE_KEYS = ("harness", "session", "machine", "worktree", "written")
 
 
 @dataclass(frozen=True)
 class HeaderSpec:
-    """The keys of one flat header: their order, which hold a list, and which are read and ignored."""
+    """The keys of one flat header: their order, which hold a list, which are read and ignored.
+
+    ``renamed`` carries ``(old, new)`` pairs of a key that ADR 0029 renamed: the old spelling is read
+    under the new key, so a note written before the release still parses (ADR 0029 D12).
+    """
 
     order: tuple[str, ...]
     list_keys: tuple[str, ...] = ()
     legacy: tuple[str, ...] = ()
+    renamed: tuple[tuple[str, str], ...] = ()
+
+    def key_of(self, key: str) -> str:
+        """The key ``key`` is read under: itself, or the new spelling of a renamed one."""
+        for old, new in self.renamed:
+            if old == key:
+                return new
+        return key
 
 
 # The header of a park note and the header of a lease: the two flat formats the helper reads.
-NOTE_HEADER = HeaderSpec(order=_HEADER_ORDER, list_keys=_LIST_KEYS, legacy=_LEGACY_KEYS)
+NOTE_HEADER = HeaderSpec(order=_HEADER_ORDER, list_keys=_LIST_KEYS, legacy=_LEGACY_KEYS, renamed=_RENAMED_KEYS)
 LEASE_HEADER = HeaderSpec(order=_LEASE_KEYS)
 
 
@@ -344,7 +368,7 @@ def _states(texts: Mapping) -> Mapping[str, str]:
 def _display_path(path: Path, root: Path) -> str:
     """``path`` as the helper prints it: from ``root`` when it lies inside, as it is when it does not.
 
-    The kits of a linked worktree live in the main checkout (ADR 0028 D12), outside the session's
+    The ergons of a linked worktree live in the main checkout (ADR 0028 D12), outside the session's
     root, so a path there is printed absolute rather than refused.
     """
     return path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
@@ -366,9 +390,9 @@ def _check_id(value: str, label: str, texts: Mapping) -> None:
         raise _error(texts, "bad_id", label=label, value=value)
 
 
-def _check_job_id(value: str, label: str, texts: Mapping) -> None:
-    if not _JOB_ID_RE.match(value):
-        raise _error(texts, "bad_job_id", label=label, value=value)
+def _check_athlos_id(value: str, label: str, texts: Mapping) -> None:
+    if not _ATHLOS_ID_RE.match(value):
+        raise _error(texts, "bad_athlos_id", label=label, value=value)
 
 
 def _check_items(items: Sequence[str], label: str, texts: Mapping) -> None:
@@ -390,8 +414,8 @@ def check_fields(fields: ParkFields, texts: Mapping) -> None:
     for label, value in (("plan", fields.plan), ("row", fields.row)):
         if value:
             _check_id(value, label, texts)
-    if fields.job:
-        _check_job_id(fields.job, "job", texts)
+    if fields.athlos:
+        _check_athlos_id(fields.athlos, "athlos", texts)
     for label, value in (
         ("branch", fields.branch),
         ("next", fields.next_action),
@@ -463,7 +487,7 @@ def render_header(fields: ParkFields) -> str:
         "id": fields.id,
         "name": fields.name,
         "plan": fields.plan,
-        "job": fields.job,
+        "athlos": fields.athlos,
         "row": fields.row,
         "branch": fields.branch,
         "next": fields.next_action,
@@ -536,15 +560,17 @@ def _header_values(
             legacy_list = not value
             continue
         legacy_list = False
-        if key not in spec.order or key in values:
+        # A key the release renamed is read under its new spelling, never written in the old one.
+        named = spec.key_of(key)
+        if named not in spec.order or named in values:
             raise _error(texts, "header_key", path=source, key=key)
-        if key in spec.list_keys:
+        if named in spec.list_keys:
             if value:
                 raise _error(texts, "header_scalar_list", path=source, key=key)
-            values[key] = []
-            current = key
+            values[named] = []
+            current = named
         else:
-            values[key] = value
+            values[named] = value
             current = None
     return values
 
@@ -576,7 +602,7 @@ def parse_header(text: str, source: str, texts: Mapping) -> ParkFields:
         name=scalar("name"),
         next_action=scalar("next"),
         plan=scalar("plan"),
-        job=scalar("job"),
+        athlos=scalar("athlos"),
         row=scalar("row"),
         branch=scalar("branch"),
         revisions=listed("revisions"),
@@ -605,7 +631,7 @@ def _bullets(items: Sequence[str], texts: Mapping) -> list[str]:
 def render_body(fields: ParkFields, body: ParkBody, texts: Mapping) -> str:
     """The Markdown body of a note: the sections of ADR 0021 D01 and 0028 D03, then the purpose block."""
     headings = texts["headings"]
-    lines = [jsondata.fill(texts["note"]["title"], {"kit": f"{fields.id}-{fields.name}"}), ""]
+    lines = [jsondata.fill(texts["note"]["title"], {"ergon": f"{fields.id}-{fields.name}"}), ""]
     lines += _section(headings["goal"], body.goal.split("\n"))
     lines += _section(headings["decisions"], _bullets(body.decisions, texts))
     lines += _section(headings["answers"], _bullets(body.answers, texts))
@@ -681,7 +707,7 @@ def render_resume(fields: ParkFields, body: ParkBody, park_path: str, texts: Map
     """
     resume = texts["resume"]
     values = {
-        "kit": f"{fields.id}-{fields.name}",
+        "ergon": f"{fields.id}-{fields.name}",
         "id": fields.id,
         "park_path": park_path,
         "command": texts["invocation"],
@@ -710,10 +736,10 @@ def render_resume(fields: ParkFields, body: ParkBody, park_path: str, texts: Map
 def digest_lines(fields: ParkFields, body: ParkBody, state: str, texts: Mapping) -> list[str]:
     """The digest before the cap: the summary, the goal, the next action, the decisions and the answers."""
     spec = texts["digest"]
-    lines = [jsondata.fill(spec["title"], {"kit": f"{fields.id}-{fields.name}", "state": state})]
+    lines = [jsondata.fill(spec["title"], {"ergon": f"{fields.id}-{fields.name}", "state": state})]
     for key, value in (
         ("plan", fields.plan),
-        ("job", fields.job),
+        ("athlos", fields.athlos),
         ("row", fields.row),
         ("branch", fields.branch),
         ("readiness", fields.readiness),
@@ -736,32 +762,40 @@ def digest_lines(fields: ParkFields, body: ParkBody, state: str, texts: Mapping)
     return lines
 
 
-def read_note(kit: Path, texts: Mapping) -> tuple[ParkFields, ParkBody]:
-    """The fields and the body of a kit's ``PARK.md``; a kit without one was never parked.
+def read_note(ergon: Path, texts: Mapping) -> tuple[ParkFields, ParkBody]:
+    """The fields and the body of an ergon's ``PARK.md``; an ergon without one was never parked.
 
     Raises:
-        ParkError: the kit has no ``PARK.md``, or its note does not parse.
+        ParkError: the ergon has no ``PARK.md``, or its note does not parse.
     """
-    note = kit / _PARK_FILE
+    note = ergon / _PARK_FILE
     if not note.is_file():
-        raise _error(texts, "never_parked", kit=kit.name)
-    return parse_note(note.read_text(encoding="utf-8"), f"{kit.name}/{_PARK_FILE}", texts)
+        raise _error(texts, "never_parked", ergon=ergon.name)
+    return parse_note(note.read_text(encoding="utf-8"), f"{ergon.name}/{_PARK_FILE}", texts)
 
 
-def digest(kit: Path, cap: int, root: Path | None = None, data: Mapping | None = None) -> str:
-    """The capped digest of a kit's note: whole lines up to ``cap`` characters, then the overflow line.
+def digest(
+    ergon: Path,
+    cap: int,
+    root: Path | None = None,
+    data: Mapping | None = None,
+    machine: str = "",
+) -> str:
+    """The capped digest of an ergon's note: whole lines up to ``cap`` characters, then the overflow line.
 
     ``cap`` counts the characters of the lines kept, newline included; the overflow line
     (``… N more lines in <path>``) is appended after them and is not counted. With ``root`` the
-    path is the note's path from the project root, otherwise ``<kit name>/PARK.md``.
+    path is the note's path from the project root, otherwise ``<ergon name>/PARK.md``. ``machine``
+    is the one the caller judges a lease against, so the digest reads a copied lease stale exactly
+    as ``list`` does.
 
     Raises:
-        ParkError: the kit was never parked or its note does not parse.
+        ParkError: the ergon was never parked or its note does not parse.
     """
     texts = data if data is not None else _texts()
-    fields, body = read_note(kit, texts)
-    context = LeaseContext(now=time.time(), stale_hours=texts["stale_after_hours"], machine="")
-    lines = digest_lines(fields, body, kit_state(kit, texts, context), texts)
+    fields, body = read_note(ergon, texts)
+    context = LeaseContext(now=time.time(), stale_hours=texts["stale_after_hours"], machine=machine)
+    lines = digest_lines(fields, body, ergon_state(ergon, texts, context), texts)
     kept: list[str] = []
     used = 0
     for line in lines:
@@ -770,7 +804,7 @@ def digest(kit: Path, cap: int, root: Path | None = None, data: Mapping | None =
         kept.append(line)
         used += len(line) + 1
     if len(kept) < len(lines):
-        where = _display_path(kit / _PARK_FILE, root) if root is not None else f"{kit.name}/{_PARK_FILE}"
+        where = _display_path(ergon / _PARK_FILE, root) if root is not None else f"{ergon.name}/{_PARK_FILE}"
         kept.append(jsondata.fill(texts["digest"]["overflow"], {"count": len(lines) - len(kept), "path": where}))
     return "\n".join(kept)
 
@@ -858,19 +892,23 @@ def render_lease(lease: Lease) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _parse_stamp(value: str) -> float:
-    """The epoch seconds of an ISO stamp, or ``0.0`` when it is not one."""
+def _parse_stamp(value: str, source: str, texts: Mapping) -> float:
+    """The epoch seconds of an ISO stamp.
+
+    A stamp that is not one is refused, never read as the epoch: ``0.0`` would make a corrupt lease
+    older than any threshold, so a live holder's unit would read as free.
+    """
     try:
         return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC).timestamp()
     except ValueError:
-        return 0.0
+        raise _error(texts, "bad_stamp", path=source, key="written", value=value) from None
 
 
 def parse_lease(text: str, source: str, texts: Mapping) -> Lease:
     """The lease a ``HOLDER`` file declares.
 
     Raises:
-        ParkError: the file has no header, or a line is malformed.
+        ParkError: the file has no header, a line is malformed, or its stamp is not one.
     """
     lines, _body = _split_note(text, source, texts)
     values = _header_values(lines, source, texts, LEASE_HEADER)
@@ -880,7 +918,7 @@ def parse_lease(text: str, source: str, texts: Mapping) -> Lease:
         machine=str(values.get("machine", "")),
         worktree=str(values.get("worktree", "")),
     )
-    return Lease(holder=holder, written=_parse_stamp(str(values.get("written", ""))))
+    return Lease(holder=holder, written=_parse_stamp(str(values.get("written", "")), source, texts))
 
 
 def read_lease(unit: Path, texts: Mapping) -> Lease | None:
@@ -894,7 +932,7 @@ def read_lease(unit: Path, texts: Mapping) -> Lease | None:
 def lease_is_stale(lease: Lease, context: LeaseContext) -> bool:
     """Whether a lease is stale: written on another machine, or older than the threshold.
 
-    A lease that came with a copied kit names another machine, and is stale at once.
+    A lease that came with a copied ergon names another machine, and is stale at once.
     """
     if context.machine and lease.holder.machine and lease.holder.machine != context.machine:
         return True
@@ -977,16 +1015,16 @@ def release_lease(unit: Path) -> None:
     _lease_path(unit).unlink(missing_ok=True)
 
 
-def release_leases(kit: Path) -> None:
-    """Release every lease of a kit: the plan's and its jobs'."""
-    release_lease(kit)
-    for folder in _job_folders(kit):
+def release_leases(ergon: Path) -> None:
+    """Release every lease of an ergon: the plan's and its athlos'."""
+    release_lease(ergon)
+    for folder in _athlos_folders(ergon):
         release_lease(folder)
 
 
 def _unit_note(unit: Path) -> Path | None:
-    """The file that carries a unit's sessions: ``PARK.md`` for a kit, ``JOB.md`` for a job, or ``None``."""
-    for name in (_PARK_FILE, _JOB_FILE):
+    """The file that carries a unit's sessions: ``PARK.md`` for an ergon, an athlos's file, or ``None``."""
+    for name in (_PARK_FILE, _ATHLOS_FILE, _LEGACY_ATHLOS_FILE):
         if (unit / name).is_file():
             return unit / name
     return None
@@ -1016,8 +1054,8 @@ def merge_sessions(*groups: Sequence[SessionRef]) -> tuple[SessionRef, ...]:
 def remember_holder(unit: Path, holder: Holder, texts: Mapping) -> None:
     """Keep a replaced holder in the unit's record, among the sessions.
 
-    The header of a unit's note carries the sessions the work was done in (``PARK.md`` for a kit,
-    ``JOB.md`` for a job); a holder that is taken over stays among them, so the note says who held
+    The header of a unit's note carries the sessions the work was done in (``PARK.md`` for an ergon,
+    ``ATHLOS.md`` for an athlos); a holder that is taken over stays among them, so the note says who held
     the unit before. A unit with no note yet keeps it in ``SESSIONS`` beside the lease, and the next
     ``write`` merges that file into the note and removes it. The note is read first, so a note that
     does not parse stops the takeover before anything changes, and the file is replaced atomically.
@@ -1035,7 +1073,7 @@ def remember_holder(unit: Path, holder: Holder, texts: Mapping) -> None:
         fields, _body = parse_note(text, source, texts)
         known = fields.sessions
     elif note is not None:
-        doc = parse_job_doc(text, source, texts)
+        doc = parse_athlos_doc(text, source, texts)
         known = doc.header.sessions
     else:
         known = pending
@@ -1052,11 +1090,11 @@ def remember_holder(unit: Path, holder: Holder, texts: Mapping) -> None:
         _write_atomically(note, render_header(updated) + body)
     else:
         header = dataclasses.replace(doc.header, sessions=(*known, session))
-        _write_atomically(note, render_job_doc(dataclasses.replace(doc, header=header), texts))
+        _write_atomically(note, render_athlos_doc(dataclasses.replace(doc, header=header), texts))
 
 
 # --------------------------------------------------------------------------------------
-# the plan: its header and its job lines, read from ``PLAN.md``
+# the plan: its header and its athlos lines, read from ``PLAN.md``
 # --------------------------------------------------------------------------------------
 
 
@@ -1081,39 +1119,51 @@ def _split_values(value: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in value.split(_FIELD_SEPARATOR) if part.strip())
 
 
-def _job_field(cell: str) -> tuple[str, str]:
-    """One job line cell as ``key, value``: ``tasks C186`` and ``result: text`` both parse."""
+def _athlos_field(cell: str) -> tuple[str, str]:
+    """One athlos line cell as ``key, value``: ``tasks C186`` and ``result: text`` both parse.
+
+    A cell that carries its colon and no value (`result:`) is the key with an empty value, not a key
+    named `result:` — the empty value is what the caller refuses.
+    """
     if ": " in cell:
         key, _, value = cell.partition(": ")
         return key.strip(), value.strip()
     key, _, value = cell.partition(" ")
-    return key.strip(), value.strip()
+    return key.strip().rstrip(":"), value.strip()
 
 
-def parse_job_line(line: str) -> JobLine | None:
-    """One job line of a plan as a ``JobLine``; a line that is not a job line is skipped."""
+def parse_athlos_line(line: str, texts: Mapping) -> AthlosLine | None:
+    """One athlos line of a plan as an ``AthlosLine``; a line that is not one is skipped.
+
+    A cell whose key the format does not carry is refused, not dropped: a plan line is structure,
+    and a field the reader cannot see is a field the plan silently loses (ADR 0029 D03).
+
+    Raises:
+        ParkError: a cell names an unknown field.
+    """
     if not line.startswith("- "):
         return None
     cells = tuple(cell.strip() for cell in line[2:].split(_TASK_SEPARATOR))
     if len(cells) < 2:  # noqa: PLR2004 — an id and a label are the minimum
         return None
-    match = _JOB_ID_RE.match(cells[0])
+    match = _ATHLOS_ID_RE.match(cells[0])
     if match is None:
         return None
-    fields: dict[str, object] = {"tasks": (), "after": (), "paths": (), "harness": "", "result": ""}
+    listed_fields = ("tasks", "after", "paths")
+    fields: dict[str, object] = {
+        "tasks": (),
+        "after": (),
+        "paths": (),
+        "harness": "",
+        "result": "",
+        "zone": "",
+    }
     for cell in cells[2:]:
-        key, value = _job_field(cell)
-        if key == "tasks":
-            fields["tasks"] = _split_values(value)
-        elif key == "after":
-            fields["after"] = _split_values(value)
-        elif key == "paths":
-            fields["paths"] = _split_values(value)
-        elif key == "harness":
-            fields["harness"] = value
-        elif key == "result":
-            fields["result"] = value
-    return JobLine(
+        key, value = _athlos_field(cell)
+        if key not in fields:
+            raise _error(texts, "unknown_field", id=cells[0], key=key)
+        fields[key] = _split_values(value) if key in listed_fields else value
+    return AthlosLine(
         id=cells[0],
         number=int(match.group(2)),
         label=cells[1],
@@ -1122,11 +1172,19 @@ def parse_job_line(line: str) -> JobLine | None:
         paths=tuple(fields["paths"]),  # type: ignore[arg-type]
         harness=str(fields["harness"]),
         result=str(fields["result"]),
+        zone=str(fields["zone"]),
     )
 
 
-def parse_plan(text: str) -> Plan:
-    """A plan file as its header and its job lines."""
+def parse_plan(text: str, texts: Mapping) -> Plan:
+    """A plan file as its header and its athlos lines.
+
+    The section heading of the lines is read under its new name and the one a plan written before
+    ADR 0029 D02 carries; only the new one is ever written.
+
+    Raises:
+        ParkError: an athlos line carries a field the format does not know.
+    """
     values = _plan_values(text)
     header = PlanHeader(
         id=values.get("id", ""),
@@ -1135,51 +1193,50 @@ def parse_plan(text: str) -> Plan:
         tasks=_split_values(values.get("tasks", "")),
     )
     sections = _sections(text)
-    job_lines = [line for line in sections.get(_JOBS_HEADING, []) if line.strip()]
-    jobs = [job for job in (parse_job_line(line) for line in job_lines) if job is not None]
-    return Plan(header=header, jobs=tuple(jobs))
+    lines = sections.get(_ATHLOS_HEADING) or sections.get(_LEGACY_ATHLOS_HEADING) or []
+    athlos_lines = [line for line in lines if line.strip()]
+    athlos = [line for line in (parse_athlos_line(text_line, texts) for text_line in athlos_lines) if line is not None]
+    return Plan(header=header, athlos=tuple(athlos))
 
 
-def read_plan(kit: Path) -> Plan | None:
-    """The plan of a kit, or ``None`` when it has none."""
-    path = kit / _PLAN_FILE
+def read_plan(ergon: Path, texts: Mapping) -> Plan | None:
+    """The plan of an ergon, or ``None`` when it has none.
+
+    Raises:
+        ParkError: an athlos line of the plan carries an unknown field.
+    """
+    path = ergon / _PLAN_FILE
     if not path.is_file():
         return None
-    return parse_plan(path.read_text(encoding="utf-8"))
-
-
-def job_slug(label: str) -> str:
-    """A kebab-case name for a job, taken from its label."""
-    slug = _SLUG_RE.sub("-", label.lower()).strip("-")
-    return slug[:_SLUG_MAX].strip("-")
+    return parse_plan(path.read_text(encoding="utf-8"), texts)
 
 
 def _paths_overlap(one: str, other: str) -> bool:
-    """Whether two forecast paths of two jobs may touch the same file."""
+    """Whether two forecast paths of two athlos may touch the same file."""
     left = one.rstrip(_PATH_SEPARATOR)
     right = other.rstrip(_PATH_SEPARATOR)
     return left == right or left.startswith(right + _PATH_SEPARATOR) or right.startswith(left + _PATH_SEPARATOR)
 
 
-def _job_orders(one: JobLine, other: JobLine, plan: Plan) -> bool:
-    """Whether one of the two jobs waits for the other, directly or through a chain of them.
+def _athlos_orders(one: AthlosLine, other: AthlosLine, plan: Plan) -> bool:
+    """Whether one of the two athlos waits for the other, directly or through a chain of them.
 
-    The chain matters: a job that waits for a job that waits for another cannot run at once
-    with it, so the pair shares no warning. Only job ids of this plan order jobs; an
+    The chain matters: an athlos that waits for an athlos that waits for another cannot run at once
+    with it, so the pair shares no warning. Only athlos ids of this plan order athlos; an
     ``after`` that names a task id orders nothing here.
     """
-    jobs = {job.id: job for job in plan.jobs}
-    waiting = _jobs_waiting_for(jobs, one.id)
-    return other.id in waiting or one.id in _jobs_waiting_for(jobs, other.id)
+    athlos = {line.id: line for line in plan.athlos}
+    waiting = _athlos_waiting_for(athlos, one.id)
+    return other.id in waiting or one.id in _athlos_waiting_for(athlos, other.id)
 
 
-def _jobs_waiting_for(jobs: Mapping[str, JobLine], job_id: str) -> set[str]:
-    """The job ids that wait, directly or through a chain, for ``job_id``."""
+def _athlos_waiting_for(athlos: Mapping[str, AthlosLine], athlos_id: str) -> set[str]:
+    """The athlos ids that wait, directly or through a chain, for ``athlos_id``."""
     reached: set[str] = set()
-    pending = [job_id]
+    pending = [athlos_id]
     while pending:
         current = pending.pop()
-        for other in jobs.values():
+        for other in athlos.values():
             if current in other.after and other.id not in reached:
                 reached.add(other.id)
                 pending.append(other.id)
@@ -1187,14 +1244,14 @@ def _jobs_waiting_for(jobs: Mapping[str, JobLine], job_id: str) -> set[str]:
 
 
 def shared_path_warnings(plan: Plan, texts: Mapping) -> list[str]:
-    """The warnings of a plan: two jobs that may run at once and forecast the same path.
+    """The warnings of a plan: two athlos that may run at once and forecast the same path.
 
     The forecast is advice, not a fact; the owned uncommitted paths of each note are the fact.
     """
     warnings: list[str] = []
-    for index, one in enumerate(plan.jobs):
-        for other in plan.jobs[index + 1 :]:
-            if _job_orders(one, other, plan):
+    for index, one in enumerate(plan.athlos):
+        for other in plan.athlos[index + 1 :]:
+            if _athlos_orders(one, other, plan):
                 continue
             shared = sorted(
                 {path for path in one.paths for other_path in other.paths if _paths_overlap(path, other_path)}
@@ -1202,7 +1259,7 @@ def shared_path_warnings(plan: Plan, texts: Mapping) -> list[str]:
             warnings.extend(
                 jsondata.fill(
                     texts["list"]["warning_shared_paths"],
-                    {"jobs": f"{one.id} {other.id}", "path": path},
+                    {"athlos": f"{one.id} {other.id}", "path": path},
                 )
                 for path in shared
             )
@@ -1210,12 +1267,12 @@ def shared_path_warnings(plan: Plan, texts: Mapping) -> list[str]:
 
 
 # --------------------------------------------------------------------------------------
-# a job's own file: its steps with their done marks, and whether it is done
+# an athlos's own file: its steps with their done marks, and whether it is done
 # --------------------------------------------------------------------------------------
 
 
-def render_job_doc(doc: JobDoc, texts: Mapping) -> str:
-    """The whole ``JOB.md``: its header, its steps and, once the result is met, the done mark."""
+def render_athlos_doc(doc: AthlosDoc, texts: Mapping) -> str:
+    """The whole ``ATHLOS.md``: its header, its steps and, once the result is met, the done mark."""
     lines = [render_header(doc.header).rstrip("\n"), "", _STEPS_HEADING, ""]
     for text, is_done in doc.steps:
         lines.append((_STEP_DONE if is_done else _STEP_UNDONE) + text)
@@ -1228,8 +1285,8 @@ def render_job_doc(doc: JobDoc, texts: Mapping) -> str:
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def parse_job_doc(text: str, source: str, texts: Mapping) -> JobDoc:
-    """The ``JobDoc`` a ``JOB.md`` declares: its header, its steps and its done mark.
+def parse_athlos_doc(text: str, source: str, texts: Mapping) -> AthlosDoc:
+    """The ``AthlosDoc`` a ``ATHLOS.md`` declares: its header, its steps and its done mark.
 
     Raises:
         ParkError: the file has no header, or a line is malformed.
@@ -1246,15 +1303,15 @@ def parse_job_doc(text: str, source: str, texts: Mapping) -> JobDoc:
             steps.append((stripped[len(_STEP_UNDONE) :], False))
         elif stripped == _DONE_MARKER:
             done = True
-    return JobDoc(header=header, steps=tuple(steps), done=done)
+    return AthlosDoc(header=header, steps=tuple(steps), done=done)
 
 
-def read_job_doc(path: Path, texts: Mapping) -> JobDoc | None:
-    """The job file of a job folder, or ``None`` when it has none."""
+def read_athlos_doc(path: Path, texts: Mapping) -> AthlosDoc | None:
+    """The athlos file of an athlos folder, or ``None`` when it has none."""
     if not path.is_file():
         return None
-    source = "/".join(path.parts[-_JOB_SOURCE_PARTS:])  # <kit>/jobs/<job>/JOB.md: the kit is named
-    return parse_job_doc(path.read_text(encoding="utf-8"), source, texts)
+    source = "/".join(path.parts[-_ATHLOS_SOURCE_PARTS:])  # <ergon>/<n>/ATHLOS.md: the ergon is named
+    return parse_athlos_doc(path.read_text(encoding="utf-8"), source, texts)
 
 
 # --------------------------------------------------------------------------------------
@@ -1295,88 +1352,167 @@ def _remove_if_empty(folder: Path) -> None:
 
 
 # --------------------------------------------------------------------------------------
-# the kits of a project
+# the ergons of a project
 # --------------------------------------------------------------------------------------
 
 
-def _kit_names(root: Path, *, closed: bool = False) -> list[str]:
-    """The names of the kit folders under ``.ergon/`` (``<id>-<name>`` only), sorted."""
+def _ergon_names(root: Path, *, closed: bool = False) -> list[str]:
+    """The names of the ergon folders under ``.ergon/`` (``<id>-<name>`` only), sorted."""
     ergon = ergon_root(root)
     if closed:
         ergon = ergon / _CLOSED_DIR
     if not ergon.is_dir():
         return []
-    return sorted(entry.name for entry in ergon.iterdir() if entry.is_dir() and _KIT_RE.match(entry.name))
+    return sorted(entry.name for entry in ergon.iterdir() if entry.is_dir() and _ERGON_RE.match(entry.name))
 
 
-def _kit_id(kit_name: str) -> str:
-    match = _KIT_RE.match(kit_name)
-    assert match is not None  # noqa: S101 — callers pass names _kit_names accepted
+def _ergon_id(ergon_name: str) -> str:
+    match = _ERGON_RE.match(ergon_name)
+    assert match is not None  # noqa: S101 — callers pass names _ergon_names accepted
     return match.group(1)
 
 
-def _find_kit_in(root: Path, kit_id: str, texts: Mapping, *, closed: bool) -> Path:
-    names = _kit_names(root, closed=closed)
-    found = [name for name in names if _kit_id(name) == kit_id]
+def _find_ergon_in(root: Path, ergon_id: str, texts: Mapping, *, closed: bool) -> Path:
+    names = _ergon_names(root, closed=closed)
+    found = [name for name in names if _ergon_id(name) == ergon_id]
     ergon = _display_path(ergon_root(root), root)
     if not found:
-        raise _error(texts, "no_kit", id=kit_id, ergon=ergon, kits=", ".join(names) or "none")
+        raise _error(texts, "no_ergon", id=ergon_id, ergon=ergon, ergons=", ".join(names) or "none")
     if len(found) > 1:
-        raise _error(texts, "several_kits", id=kit_id, ergon=ergon, kits=", ".join(found))
+        raise _error(texts, "several_ergons", id=ergon_id, ergon=ergon, ergons=", ".join(found))
     base = ergon_root(root) / _CLOSED_DIR if closed else ergon_root(root)
     return base / found[0]
 
 
-def find_kit(root: Path, kit_id: str, texts: Mapping) -> Path:
-    """The kit folder whose name leads with ``kit_id``.
+def find_ergon(root: Path, ergon_id: str, texts: Mapping) -> Path:
+    """The ergon folder whose name leads with ``ergon_id``.
 
     Raises:
-        ParkError: no kit or several kits carry the id; the message names the candidates.
+        ParkError: no ergon or several ergons carry the id; the message names the candidates.
     """
-    return _find_kit_in(root, kit_id, texts, closed=False)
+    return _find_ergon_in(root, ergon_id, texts, closed=False)
 
 
-def find_closed_kit(root: Path, kit_id: str, texts: Mapping) -> Path | None:
-    """The closed kit folder whose name leads with ``kit_id``, or ``None``."""
+def find_closed_ergon(root: Path, ergon_id: str, texts: Mapping) -> Path | None:
+    """The closed ergon folder whose name leads with ``ergon_id``, or ``None``."""
     try:
-        return _find_kit_in(root, kit_id, texts, closed=True)
+        return _find_ergon_in(root, ergon_id, texts, closed=True)
     except ParkError:
         return None
 
 
-def _jobs_dir(kit: Path) -> Path:
-    return kit / _JOBS_DIR
+def athlos_file_of(folder: Path) -> Path:
+    """The athlos file of a folder: ``ATHLOS.md``, or the ``JOB.md`` of a record written before the rename.
+
+    The answer is a path whether or not either exists, so a writer gets the new name and a reader
+    still finds the old one (ADR 0029 D11, D12).
+    """
+    fresh = folder / _ATHLOS_FILE
+    if fresh.is_file():
+        return fresh
+    legacy = folder / _LEGACY_ATHLOS_FILE
+    return legacy if legacy.is_file() else fresh
 
 
-def _job_folders(kit: Path) -> list[Path]:
-    """The job folders of a kit, sorted by name."""
-    folder = _jobs_dir(kit)
-    if not folder.is_dir():
-        return []
-    return sorted(entry for entry in folder.iterdir() if entry.is_dir())
+def _athlos_number(folder: Path) -> int | None:
+    """The number an athlos folder carries: its whole name, or the lead of a legacy ``<n>-<label>``."""
+    name = folder.name
+    if name.isdecimal():
+        return int(name)
+    head, _, _tail = name.partition("-")
+    return int(head) if head.isdecimal() else None
 
 
-def find_job_folder(kit: Path, job_id: str, texts: Mapping) -> Path | None:
-    """The folder of the job whose ``JOB.md`` names ``job_id``, or ``None``."""
-    for folder in _job_folders(kit):
-        doc = read_job_doc(folder / "JOB.md", texts)
-        if doc is not None and doc.header.job == job_id:
+def athlos_folder(ergon: Path, number: int) -> Path | None:
+    """The folder of the athlos of this number, in either layout, or ``None`` when the ergon has none.
+
+    The new layout names the folder by the number alone (ADR 0029 D11); the ``jobs/<n>-<label>/`` of
+    a record written before it is read and translated (ADR 0029 D12).
+    """
+    fresh = ergon / str(number)
+    if fresh.is_dir():
+        return fresh
+    legacy = ergon / _LEGACY_ATHLOS_DIR
+    if not legacy.is_dir():
+        return None
+    for entry in sorted(legacy.iterdir()):
+        if entry.is_dir() and _athlos_number(entry) == number:
+            return entry
+    return None
+
+
+def _athlos_folders(ergon: Path) -> list[Path]:
+    """The athlos folders of an ergon, by number: the new layout, plus the ``jobs/`` of an old record.
+
+    One number has one folder in the listing: where both layouts hold it, the new one is the record.
+    """
+    found: dict[int, Path] = {}
+    if ergon.is_dir():
+        for entry in sorted(ergon.iterdir()):
+            if entry.is_dir() and entry.name.isdecimal():
+                found[int(entry.name)] = entry
+    legacy = ergon / _LEGACY_ATHLOS_DIR
+    if legacy.is_dir():
+        for entry in sorted(legacy.iterdir()):
+            if not entry.is_dir():
+                continue
+            number = _athlos_number(entry)
+            if number is not None and number not in found:
+                found[number] = entry
+    return [found[number] for number in sorted(found)]
+
+
+def find_athlos_folder(ergon: Path, athlos_id: str, texts: Mapping) -> Path | None:
+    """The folder of the athlos named by ``athlos_id`` (``<ergon-id>.<n>``), in either layout.
+
+    The number of the id is the folder's name; a folder a hand made under another name is still
+    found by the id its athlos file carries.
+    """
+    match = _ATHLOS_ID_RE.match(athlos_id)
+    if match is not None:
+        folder = athlos_folder(ergon, int(match.group(2)))
+        if folder is not None:
+            return folder
+    for folder in _athlos_folders(ergon):
+        doc = read_athlos_doc(athlos_file_of(folder), texts)
+        if doc is not None and doc.header.athlos == athlos_id:
             return folder
     return None
 
 
-def job_id_of(kit_id: str, number: int) -> str:
-    """The id of a job of a kit: the kit's id and the job's number."""
-    return f"{kit_id}.{number}"
+def move_athlos_folder(ergon: Path, number: int, current: Path | None) -> Path:
+    """The folder an athlos's file is written into: ``<ergon>/<n>/``, the old record moved there once.
+
+    An old form is never written (ADR 0029 D12), so the write that meets a record in the retired
+    layout carries the whole folder — its file, its lease and its notes — to the folder of the
+    athlos's number, once. Where the new folder already stands the old one is left for the owner's
+    one rewrite of the records this release did not touch.
+    """
+    fresh = ergon / str(number)
+    if current is None or current == fresh:
+        return fresh
+    if fresh.exists():
+        return fresh
+    current.rename(fresh)
+    legacy_file = fresh / _LEGACY_ATHLOS_FILE
+    if legacy_file.is_file() and not (fresh / _ATHLOS_FILE).is_file():
+        legacy_file.rename(fresh / _ATHLOS_FILE)
+    _remove_if_empty(ergon / _LEGACY_ATHLOS_DIR)
+    return fresh
 
 
-def unit_state(unit: Path, texts: Mapping, context: LeaseContext, *, job_done: bool = False) -> str:
+def athlos_id_of(ergon_id: str, number: int) -> str:
+    """The id of an athlos of an ergon: the ergon's id and the athlos's number."""
+    return f"{ergon_id}.{number}"
+
+
+def unit_state(unit: Path, texts: Mapping, context: LeaseContext, *, athlos_done: bool = False) -> str:
     """The derived state of a unit (ADR 0028 D09): active, parked, not started or done.
 
     A stale lease holds nothing: the unit is free, and the lease is offered to the owner.
     """
     states = _states(texts)
-    if job_done:
+    if athlos_done:
         return states["done"]
     lease = read_lease(unit, texts)
     if lease is not None and not lease_is_stale(lease, context):
@@ -1386,35 +1522,35 @@ def unit_state(unit: Path, texts: Mapping, context: LeaseContext, *, job_done: b
     return states["not_started"]
 
 
-def kit_state(kit: Path, texts: Mapping, context: LeaseContext) -> str:
-    """The state of a kit, joined from its jobs and its own lease and note (ADR 0028 D08, D09).
+def ergon_state(ergon: Path, texts: Mapping, context: LeaseContext) -> str:
+    """The state of an ergon, joined from its athlos and its own lease and note (ADR 0028 D08, D09).
 
-    A kit is **active** when it or any of its jobs is held, else **done** when every job is done,
-    else **parked** when it or any of its jobs is parked, else **not started**. With a plan that
-    lists jobs, "every job" is every listed job: it has a folder whose ``JOB.md`` is done, and a
-    job with no folder has not started. With no plan, or a plan that lists no jobs, the job
-    folders that exist decide. A kit whose jobs are all done is done even when its own note is
-    still there; only a live lease on the kit itself outranks that.
+    An ergon is **active** when it or any of its athlos is held, else **done** when every athlos is done,
+    else **parked** when it or any of its athlos is parked, else **not started**. With a plan that
+    lists athlos, "every athlos" is every listed athlos: it has a folder whose ``ATHLOS.md`` is done, and a
+    athlos with no folder has not started. With no plan, or a plan that lists no athlos, the athlos
+    folders that exist decide. An ergon whose athlos are all done is done even when its own note is
+    still there; only a live lease on the ergon itself outranks that.
     """
     states = _states(texts)
-    folders = _job_folders(kit)
-    docs = [read_job_doc(folder / "JOB.md", texts) for folder in folders]
-    job_states = [
-        unit_state(folder, texts, context, job_done=doc.done)
+    folders = _athlos_folders(ergon)
+    docs = [read_athlos_doc(athlos_file_of(folder), texts) for folder in folders]
+    athlos_states = [
+        unit_state(folder, texts, context, athlos_done=doc.done)
         for folder, doc in zip(folders, docs, strict=True)
         if doc is not None
     ]
-    own = unit_state(kit, texts, context)
-    if states["active"] in (own, *job_states):
+    own = unit_state(ergon, texts, context)
+    if states["active"] in (own, *athlos_states):
         return states["active"]
-    plan = read_plan(kit)
-    if plan is not None and plan.jobs:
-        done_ids = {doc.header.job for doc in docs if doc is not None and doc.done}
-        if all(job.id in done_ids for job in plan.jobs):
+    plan = read_plan(ergon, texts)
+    if plan is not None and plan.athlos:
+        done_ids = {doc.header.athlos for doc in docs if doc is not None and doc.done}
+        if all(line.id in done_ids for line in plan.athlos):
             return states["done"]
     elif docs and all(doc is not None and doc.done for doc in docs):
         return states["done"]
-    if states["parked"] in (own, *job_states):
+    if states["parked"] in (own, *athlos_states):
         return states["parked"]
     return states["not_started"]
 
@@ -1427,131 +1563,131 @@ def _age_days(path: Path, now: float) -> int | None:
 
 
 # --------------------------------------------------------------------------------------
-# writing a kit and a job
+# writing an ergon and an athlos
 # --------------------------------------------------------------------------------------
 
 
-def write_kit(fields: ParkFields, body: ParkBody, root: Path, texts: Mapping, cwd: Path) -> Path:
-    """Park the work: write ``RESUME.md`` and ``PARK.md`` into the kit folder.
+def write_ergon(fields: ParkFields, body: ParkBody, root: Path, texts: Mapping, cwd: Path) -> Path:
+    """Park the work: write ``RESUME.md`` and ``PARK.md`` into the ergon folder.
 
-    The kit folder is created when missing. Everything that can be refused is checked before
+    The ergon folder is created when missing. Everything that can be refused is checked before
     any file is touched; the files then land together (``write_files``), ``PARK.md`` last among
-    the kit's, and a failure removes the folder it created when that folder is still empty.
+    the ergon's, and a failure removes the folder it created when that folder is still empty.
 
     The sessions of the note are kept, not rebuilt: the sessions an earlier write recorded, the holder
-    a takeover kept (``SESSIONS`` when the kit had no note yet), and then the ones on this command line.
+    a takeover kept (``SESSIONS`` when the ergon had no note yet), and then the ones on this command line.
 
     The branch and the revisions come from git, and the note records the time it was written.
 
     Returns:
-        The kit folder.
+        The ergon folder.
 
     Raises:
-        ParkError: a field fails its check, a kit with this id has another name, a closed kit has this
+        ParkError: a field fails its check, an ergon with this id has another name, a closed ergon has this
             id and name, or the note already there does not parse.
     """
     check_fields(fields, texts)
     check_body(body, texts)
-    refuse_kit_conflict(fields, root, texts)
-    kit = ergon_root(root) / f"{fields.id}-{fields.name}"
-    park_path = _display_path(kit / _PARK_FILE, root)
-    sessions = merge_sessions(_note_sessions(kit, texts), read_pending_sessions(kit, texts), fields.sessions)
+    refuse_ergon_conflict(fields, root, texts)
+    ergon = ergon_root(root) / f"{fields.id}-{fields.name}"
+    park_path = _display_path(ergon / _PARK_FILE, root)
+    sessions = merge_sessions(_note_sessions(ergon, texts), read_pending_sessions(ergon, texts), fields.sessions)
     stamped = dataclasses.replace(
         fields, sessions=sessions, branch=git_branch(cwd), revisions=git_revisions(cwd), written=now_stamp()
     )
     files = [
-        (kit / _RESUME_FILE, render_resume(stamped, body, park_path, texts)),
-        (kit / _PARK_FILE, render_note(stamped, body, texts)),
+        (ergon / _RESUME_FILE, render_resume(stamped, body, park_path, texts)),
+        (ergon / _PARK_FILE, render_note(stamped, body, texts)),
     ]
-    created = not kit.is_dir()
+    created = not ergon.is_dir()
     try:
-        kit.mkdir(parents=True, exist_ok=True)
+        ergon.mkdir(parents=True, exist_ok=True)
         write_files(files)
     except BaseException:
         if created:
-            _remove_if_empty(kit)
+            _remove_if_empty(ergon)
         raise
-    (kit / _SESSIONS_FILE).unlink(missing_ok=True)  # merged into the note just written
-    return kit
+    (ergon / _SESSIONS_FILE).unlink(missing_ok=True)  # merged into the note just written
+    return ergon
 
 
-def _note_sessions(kit: Path, texts: Mapping) -> tuple[SessionRef, ...]:
-    """The sessions the kit's note already carries; none when the kit has no note yet."""
-    if not (kit / _PARK_FILE).is_file():
+def _note_sessions(ergon: Path, texts: Mapping) -> tuple[SessionRef, ...]:
+    """The sessions the ergon's note already carries; none when the ergon has no note yet."""
+    if not (ergon / _PARK_FILE).is_file():
         return ()
-    return read_note(kit, texts)[0].sessions
+    return read_note(ergon, texts)[0].sessions
 
 
-def refuse_kit_conflict(fields: ParkFields, root: Path, texts: Mapping) -> None:
-    """Refuse a kit whose id is taken by another name, or whose id and name belong to a closed kit.
+def refuse_ergon_conflict(fields: ParkFields, root: Path, texts: Mapping) -> None:
+    """Refuse an ergon whose id is taken by another name, or whose id and name belong to a closed ergon.
 
-    A closed kit keeps its id and name for good, so a write never reuses them; ``local-id`` counts
-    the closed kits for the same reason.
+    A closed ergon keeps its id and name for good, so a write never reuses them; ``local-id`` counts
+    the closed ergons for the same reason.
 
     Raises:
-        ParkError: a live or closed kit carries the id under another name, or a closed kit has both.
+        ParkError: a live or closed ergon carries the id under another name, or a closed ergon has both.
     """
-    kit_name = f"{fields.id}-{fields.name}"
-    other = [name for name in _kit_names(root) if _kit_id(name) == fields.id and name != kit_name]
-    other += [name for name in _kit_names(root, closed=True) if _kit_id(name) == fields.id and name != kit_name]
+    ergon_name = f"{fields.id}-{fields.name}"
+    other = [name for name in _ergon_names(root) if _ergon_id(name) == fields.id and name != ergon_name]
+    other += [name for name in _ergon_names(root, closed=True) if _ergon_id(name) == fields.id and name != ergon_name]
     if other:
-        raise _error(texts, "kit_other_name", existing=other[0], id=fields.id, name=fields.name)
-    if kit_name in _kit_names(root, closed=True):
-        raise _error(texts, "kit_closed", kit=kit_name)
+        raise _error(texts, "ergon_other_name", existing=other[0], id=fields.id, name=fields.name)
+    if ergon_name in _ergon_names(root, closed=True):
+        raise _error(texts, "ergon_closed", ergon=ergon_name)
 
 
-def write_job_doc(folder: Path, doc: JobDoc, texts: Mapping) -> None:
-    """Write a job's own file, creating its folder when missing; a reader sees the old file or the new one."""
+def write_athlos_doc(folder: Path, doc: AthlosDoc, texts: Mapping) -> None:
+    """Write an athlos's own file, creating its folder when missing; a reader sees the old file or the new one."""
     folder.mkdir(parents=True, exist_ok=True)
-    _write_atomically(folder / "JOB.md", render_job_doc(doc, texts))
+    _write_atomically(folder / _ATHLOS_FILE, render_athlos_doc(doc, texts))
 
 
-def _check_job_doc(doc: JobDoc, kit_name: str, texts: Mapping) -> None:
-    """Refuse a job file whose header would not read back, naming the kit and the offending value.
+def _check_athlos_doc(doc: AthlosDoc, ergon_name: str, texts: Mapping) -> None:
+    """Refuse an athlos file whose header would not read back, naming the ergon and the offending value.
 
-    The header is built from the plan's header and job line, so the plan is what is at fault: a
-    plan ``id`` that is no task id, say, would make a ``JOB.md`` that ``park list`` cannot parse.
+    The header is built from the plan's header and athlos line, so the plan is what is at fault: a
+    plan ``id`` that is no task id, say, would make a ``ATHLOS.md`` that ``park list`` cannot parse.
 
     Raises:
-        ParkError: the plan's header or job line breaks the header's contract.
+        ParkError: the plan's header or athlos line breaks the header's contract.
     """
     try:
         check_fields(doc.header, texts)
     except ParkError as exc:
-        raise _error(texts, "bad_plan", kit=kit_name, reason=exc) from exc
+        raise _error(texts, "bad_plan", ergon=ergon_name, reason=exc) from exc
 
 
-def job_doc_for(job: JobLine, kit_id: str, kit_name: str, plan: Plan | None) -> JobDoc:
-    """The job file a job starts with: its header from the plan's job line, no steps yet."""
+def athlos_doc_for(athlos: AthlosLine, ergon_id: str, ergon_name: str, plan: Plan | None, cwd: Path) -> AthlosDoc:
+    """The athlos file an athlos starts with: its header from the plan's athlos line, no steps yet."""
     header = ParkFields(
-        id=kit_id,
-        name=kit_name,
-        next_action=job.result,
+        id=ergon_id,
+        name=ergon_name,
+        next_action=athlos.result,
         plan=plan.header.id if plan is not None else "",
-        job=job.id,
-        tasks=job.tasks,
-        branch=git_branch(Path.cwd()),
+        athlos=athlos.id,
+        tasks=athlos.tasks,
+        branch=git_branch(cwd),
     )
-    return JobDoc(header=header)
+    return AthlosDoc(header=header)
 
 
 # --------------------------------------------------------------------------------------
-# the listing: the kits, their jobs, and the states derived from the folders
+# the listing: the ergons, their athlos, and the states derived from the folders
 # --------------------------------------------------------------------------------------
 
 
-def summarize_kit(kit: Path, texts: Mapping, context: LeaseContext) -> KitSummary:
-    """What ``list`` says of one kit; a kit with no ``PARK.md`` has no age and no next action."""
-    kit_id = _kit_id(kit.name)
-    name = kit.name[len(kit_id) + 1 :]
-    note = kit / _PARK_FILE
+def summarize_ergon(ergon: Path, texts: Mapping, context: LeaseContext) -> ErgonSummary:
+    """What ``list`` says of one ergon; an ergon with no ``PARK.md`` has no age and no next action."""
+    ergon_id = _ergon_id(ergon.name)
+    name = ergon.name[len(ergon_id) + 1 :]
+    note = ergon / _PARK_FILE
     if not note.is_file():
-        return KitSummary(kit_id, name, kit_state(kit, texts, context), "", "", 0, "", None)
-    fields, body = read_note(kit, texts)
-    return KitSummary(
-        kit_id,
+        return ErgonSummary(ergon_id, name, ergon_state(ergon, texts, context), "", "", 0, "", None)
+    fields, body = read_note(ergon, texts)
+    return ErgonSummary(
+        ergon_id,
         name,
-        kit_state(kit, texts, context),
+        ergon_state(ergon, texts, context),
         fields.plan,
         fields.next_action,
         len(body.decisions),
@@ -1560,74 +1696,76 @@ def summarize_kit(kit: Path, texts: Mapping, context: LeaseContext) -> KitSummar
     )
 
 
-def summarize_job(folder: Path, texts: Mapping, context: LeaseContext) -> JobSummary | None:
-    """What ``list`` says of one job, or ``None`` when the folder carries no job file."""
-    doc = read_job_doc(folder / "JOB.md", texts)
+def summarize_athlos(folder: Path, texts: Mapping, context: LeaseContext) -> AthlosSummary | None:
+    """What ``list`` says of one athlos, or ``None`` when the folder carries no athlos file."""
+    doc = read_athlos_doc(athlos_file_of(folder), texts)
     if doc is None:
         return None
-    state = unit_state(folder, texts, context, job_done=doc.done)
-    return JobSummary(
-        id=doc.header.job or folder.name,
+    state = unit_state(folder, texts, context, athlos_done=doc.done)
+    return AthlosSummary(
+        id=doc.header.athlos or folder.name,
         name=folder.name,
         state=state,
         tasks=doc.header.tasks,
         next_action=doc.next_step(),
         branch=doc.header.branch,
-        age_days=_age_days(folder / "JOB.md", context.now),
+        age_days=_age_days(athlos_file_of(folder), context.now),
     )
 
 
-def _kit_tasks(kit: Path, jobs: Sequence[JobSummary]) -> tuple[str, ...]:
-    """The task ids a kit carries: from its plan header, its job lines and its jobs' files."""
+def _ergon_tasks(ergon: Path, summaries: Sequence[AthlosSummary], texts: Mapping) -> tuple[str, ...]:
+    """The task ids an ergon carries: from its plan header, its athlos lines and its athlos files."""
     tasks: list[str] = []
-    plan = read_plan(kit)
+    plan = read_plan(ergon, texts)
     if plan is not None:
         tasks.extend(plan.header.tasks)
-        for job in plan.jobs:
-            tasks.extend(job.tasks)
-    for job in jobs:
-        tasks.extend(job.tasks)
+        for line in plan.athlos:
+            tasks.extend(line.tasks)
+    for summary in summaries:
+        tasks.extend(summary.tasks)
     return tuple(tasks)
 
 
-def _matches(summary: KitSummary, jobs: Sequence[JobSummary], kit: Path, query: ListQuery) -> bool:
-    """Whether a kit passes the filters of ``list``."""
+def _matches(
+    summary: ErgonSummary, athlos: Sequence[AthlosSummary], ergon: Path, query: ListQuery, texts: Mapping
+) -> bool:
+    """Whether an ergon passes the filters of ``list``."""
     if query.plan and summary.plan != query.plan:
         return False
     if query.state and summary.state != query.state:
         return False
-    return not query.task or query.task in _kit_tasks(kit, jobs)
+    return not query.task or query.task in _ergon_tasks(ergon, athlos, texts)
 
 
-def list_kits(
+def list_ergons(
     root: Path, query: ListQuery, texts: Mapping, context: LeaseContext
-) -> tuple[list[KitSummary], list[JobSummary]]:
-    """The kits under ``.ergon/`` that match ``query``, and the jobs of those kits.
+) -> tuple[list[ErgonSummary], list[AthlosSummary]]:
+    """The ergons under ``.ergon/`` that match ``query``, and the athlos of those ergons.
 
-    Reads only: the local index is retired, so the folders are the whole record. A kit whose files
+    Reads only: the local index is retired, so the folders are the whole record. An ergon whose files
     do not parse is listed with its ``unreadable`` reason, whatever the filters, and the other
-    kits are listed as usual.
+    ergons are listed as usual.
     """
-    summaries: list[KitSummary] = []
-    jobs: list[JobSummary] = []
-    entries: list[Path] = [ergon_root(root) / name for name in _kit_names(root)]
+    summaries: list[ErgonSummary] = []
+    units: list[AthlosSummary] = []
+    entries: list[Path] = [ergon_root(root) / name for name in _ergon_names(root)]
     if query.closed:
-        entries += [ergon_root(root) / _CLOSED_DIR / name for name in _kit_names(root, closed=True)]
-    for kit in entries:
+        entries += [ergon_root(root) / _CLOSED_DIR / name for name in _ergon_names(root, closed=True)]
+    for ergon in entries:
         try:
-            summary = summarize_kit(kit, texts, context)
-            kit_jobs = [summarize_job(folder, texts, context) for folder in _job_folders(kit)]
-        except ParkError as exc:  # one bad kit is reported on its own line, never stops the others
-            kit_id = _kit_id(kit.name)
+            summary = summarize_ergon(ergon, texts, context)
+            ergon_athlos = [summarize_athlos(folder, texts, context) for folder in _athlos_folders(ergon)]
+        except ParkError as exc:  # one bad ergon is reported on its own line, never stops the others
+            ergon_id = _ergon_id(ergon.name)
             reason = _LINE_BREAKS_RE.sub(" ", str(exc))
-            summaries.append(KitSummary(kit_id, kit.name[len(kit_id) + 1 :], "", "", "", 0, "", None, reason))
+            summaries.append(ErgonSummary(ergon_id, ergon.name[len(ergon_id) + 1 :], "", "", "", 0, "", None, reason))
             continue
-        kit_jobs = [job for job in kit_jobs if job is not None]
-        if not _matches(summary, kit_jobs, kit, query):
+        ergon_athlos = [item for item in ergon_athlos if item is not None]
+        if not _matches(summary, ergon_athlos, ergon, query, texts):
             continue
         summaries.append(summary)
-        jobs.extend(kit_jobs)
-    return sorted(summaries, key=lambda item: item.id), jobs
+        units.extend(ergon_athlos)
+    return sorted(summaries, key=lambda item: item.id), units
 
 
 def _truncate(text: str, width: int, texts: Mapping) -> str:
@@ -1635,7 +1773,7 @@ def _truncate(text: str, width: int, texts: Mapping) -> str:
     return text if len(text) <= width else text[: width - 1] + texts["ellipsis"]
 
 
-def format_summary(item: KitSummary, texts: Mapping) -> str:
+def format_summary(item: ErgonSummary, texts: Mapping) -> str:
     """One ``list`` line; an absent value is the empty cell and the age is whole days (``3d``)."""
     empty = texts["empty_cell"]
     if item.unreadable:
@@ -1655,11 +1793,11 @@ def format_summary(item: KitSummary, texts: Mapping) -> str:
     )
 
 
-def format_job(item: JobSummary, texts: Mapping) -> str:
-    """One job line of ``list``."""
+def format_athlos(item: AthlosSummary, texts: Mapping) -> str:
+    """One athlos line of ``list``."""
     empty = texts["empty_cell"]
     return jsondata.fill(
-        texts["list"]["job_line"],
+        texts["list"]["athlos_line"],
         {
             "id": item.id,
             "name": item.name,
@@ -1678,53 +1816,54 @@ def format_job(item: JobSummary, texts: Mapping) -> str:
 
 
 def worktree_unit(folder: Path) -> tuple[str, int] | None:
-    """The kit id and the job number a worktree's folder names, or ``None``.
+    """The ergon id and the athlos number a worktree's folder names, or ``None``.
 
-    The folder is ``<id>-<name>.<n>``: the kit's own folder name and the job's number.
+    The folder is ``<id>-<name>.<n>``: the ergon's own folder name and the athlos's number.
     """
     name = folder.name
     base, _, tail = name.rpartition(".")
-    if not base or not tail.isdigit() or not _KIT_RE.match(base):
+    # isdecimal, not isdigit: a superscript digit passes isdigit and then fails in int().
+    if not base or not tail.isdecimal() or not _ERGON_RE.match(base):
         return None
-    match = _KIT_RE.match(base)
+    match = _ERGON_RE.match(base)
     assert match is not None  # noqa: S101 — the guard above checked it
     return match.group(1), int(tail)
 
 
 def active_unit(root: Path, texts: Mapping) -> tuple[Path, str, int] | None:
-    """The kit and the job this session is in, read from the folder it works in.
+    """The ergon and the athlos this session is in, read from the folder it works in.
 
-    A session in the main checkout has no active unit until it picks one; a session in a job's
-    worktree is in that job, named by the worktree's own folder.
+    A session in the main checkout has no active unit until it picks one; a session in an athlos's
+    worktree is in that athlos, named by the worktree's own folder.
     """
     if root.parent.name != _WORKTREES_DIR:
         return None
     unit = worktree_unit(root)
     if unit is None:
         return None
-    kit_id, number = unit
+    ergon_id, number = unit
     try:
-        kit = find_kit(root, kit_id, texts)
+        ergon = find_ergon(root, ergon_id, texts)
     except ParkError:
         return None
-    return kit, kit_id, number
+    return ergon, ergon_id, number
 
 
 # --------------------------------------------------------------------------------------
-# the export: the kit's files, its leases left out (ADR 0028 D07, branch B10)
+# the export: the ergon's files, its leases left out (ADR 0028 D07, branch B10)
 # --------------------------------------------------------------------------------------
 
 
-def export_kit(kit: Path, out: Path, texts: Mapping) -> Path:
-    """Write the kit's files to one bundle file, its leases left out.
+def export_ergon(ergon: Path, out: Path, texts: Mapping) -> Path:
+    """Write the ergon's files to one bundle file, its leases left out.
 
     The bundle is plain text: the file's path, then its content, so any language reads it.
     """
-    lines = [jsondata.fill(texts["export"]["title"], {"kit": kit.name}), ""]
-    for path in sorted(item for item in kit.rglob("*") if item.is_file()):
+    lines = [jsondata.fill(texts["export"]["title"], {"ergon": ergon.name}), ""]
+    for path in sorted(item for item in ergon.rglob("*") if item.is_file()):
         if path.name == _HOLDER_FILE:
             continue
-        lines.append(jsondata.fill(texts["export"]["file_header"], {"path": path.relative_to(kit).as_posix()}))
+        lines.append(jsondata.fill(texts["export"]["file_header"], {"path": path.relative_to(ergon).as_posix()}))
         lines.append(path.read_text(encoding="utf-8").rstrip("\n"))
         lines.append(texts["export"]["end"])
         lines.append("")
@@ -1734,14 +1873,14 @@ def export_kit(kit: Path, out: Path, texts: Mapping) -> Path:
 
 
 # --------------------------------------------------------------------------------------
-# the local ids: ``_T<n>`` counted over the kits, live and closed, never reused
+# the local ids: ``_T<n>`` counted over the ergons, live and closed, never reused
 # --------------------------------------------------------------------------------------
 
 
 def _legacy_local_ids(root: Path) -> list[int]:
     """The ``_T<n>`` numbers the retired local index ``<DEV>/.local/TASKS.md`` still holds.
 
-    Read as legacy input and never written (ADR 0028 D12). The index sits with the kits in the
+    Read as legacy input and never written (ADR 0028 D12). The index sits with the ergons in the
     main checkout, so a linked worktree reads that one. No such file holds no number.
     """
     index = local_root(git_common_root(root)) / _LEGACY_INDEX_FILE
@@ -1752,10 +1891,10 @@ def _legacy_local_ids(root: Path) -> list[int]:
 
 
 def next_local_id(root: Path) -> str:
-    """The next free local id: ``_T<n>`` counted over every kit, live and closed, and the legacy index."""
+    """The next free local id: ``_T<n>`` counted over every ergon, live and closed, and the legacy index."""
     numbers = [0, *_legacy_local_ids(root)]
-    for name in _kit_names(root) + _kit_names(root, closed=True):
-        match = _LOCAL_ID_RE.match(_kit_id(name))
+    for name in _ergon_names(root) + _ergon_names(root, closed=True):
+        match = _LOCAL_ID_RE.match(_ergon_id(name))
         if match is not None:
             numbers.append(int(match.group(1)))
     return f"_T{max(numbers) + 1}"
@@ -1773,7 +1912,7 @@ def _add_holder_flags(command: argparse.ArgumentParser) -> None:
 
 
 def _add_note_commands(commands: Any, common: argparse.ArgumentParser) -> None:
-    """The commands that write or read a kit's own note: write, unpark, digest, list."""
+    """The commands that write or read an ergon's own note: write, unpark, digest, list."""
     write = commands.add_parser("write", parents=[common], help="Park a piece of work.", allow_abbrev=False)
     write.add_argument("id")
     write.add_argument("--name", required=True)
@@ -1791,7 +1930,7 @@ def _add_note_commands(commands: Any, common: argparse.ArgumentParser) -> None:
     write.add_argument("--origin", default="")
     _add_holder_flags(write)
 
-    unpark = commands.add_parser("unpark", parents=[common], help="Resume a parked kit.", allow_abbrev=False)
+    unpark = commands.add_parser("unpark", parents=[common], help="Resume a parked ergon.", allow_abbrev=False)
     unpark.add_argument("id")
     _add_holder_flags(unpark)
 
@@ -1799,7 +1938,7 @@ def _add_note_commands(commands: Any, common: argparse.ArgumentParser) -> None:
     digest_cmd.add_argument("id")
     digest_cmd.add_argument("--cap", type=int, default=None)
 
-    listing = commands.add_parser("list", parents=[common], help="List the kits.", allow_abbrev=False)
+    listing = commands.add_parser("list", parents=[common], help="List the ergons.", allow_abbrev=False)
     listing.add_argument("--plan", default="")
     listing.add_argument("--task", default="")
     listing.add_argument("--state", default="")
@@ -1807,7 +1946,7 @@ def _add_note_commands(commands: Any, common: argparse.ArgumentParser) -> None:
 
 
 def _add_unit_commands(commands: Any, common: argparse.ArgumentParser) -> None:
-    """The commands that act on one unit: hold, release, job, active, close, export, local-id."""
+    """The commands that act on one unit: hold, release, athlos, active, close, export, local-id."""
     hold = commands.add_parser("hold", parents=[common], help="Take the lease of a unit.", allow_abbrev=False)
     hold.add_argument("id")
     hold.add_argument("--number", type=int, default=None)
@@ -1818,23 +1957,23 @@ def _add_unit_commands(commands: Any, common: argparse.ArgumentParser) -> None:
     release.add_argument("id")
     release.add_argument("--number", type=int, default=None)
 
-    job = commands.add_parser("job", parents=[common], help="Write a job's own file.", allow_abbrev=False)
-    job.add_argument("id")
-    job.add_argument("--number", type=int, required=True)
-    job.add_argument("--step", action="append", default=[])
-    job.add_argument("--done", action="store_true")
-    _add_holder_flags(job)
+    athlos = commands.add_parser("athlos", parents=[common], help="Write an athlos's own file.", allow_abbrev=False)
+    athlos.add_argument("id")
+    athlos.add_argument("--number", type=int, required=True)
+    athlos.add_argument("--step", action="append", default=[])
+    athlos.add_argument("--done", action="store_true")
+    _add_holder_flags(athlos)
 
     commands.add_parser("active", parents=[common], help="Print the unit this session is in.", allow_abbrev=False)
 
     close = commands.add_parser(
-        "close", parents=[common], help="Close a kit and move it to the closed folder.", allow_abbrev=False
+        "close", parents=[common], help="Close an ergon and move it to the closed folder.", allow_abbrev=False
     )
     close.add_argument("id")
     _add_holder_flags(close)
 
     export = commands.add_parser(
-        "export", parents=[common], help="Write the kit to one bundle file.", allow_abbrev=False
+        "export", parents=[common], help="Write the ergon to one bundle file.", allow_abbrev=False
     )
     export.add_argument("id")
     export.add_argument("--out", required=True)
@@ -1856,7 +1995,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="",
         help="The machine this session acts as. Defaults to the host's name.",
     )
-    parser = argparse.ArgumentParser(description="Park work into a kit and resume it.", allow_abbrev=False)
+    parser = argparse.ArgumentParser(description="Park work into an ergon and resume it.", allow_abbrev=False)
     commands = parser.add_subparsers(dest="command", required=True)
     _add_note_commands(commands, common)
     _add_unit_commands(commands, common)
@@ -1910,24 +2049,28 @@ def _project_root(explicit: Path | None, texts: Mapping) -> Path:
     return root
 
 
-def _holder_of(args: argparse.Namespace, machine: str) -> Holder:
-    """The holder a command acts as: the flags, or the machine it runs on."""
+def _holder_of(args: argparse.Namespace, run: _Run) -> Holder:
+    """The holder a command acts as: the flags, or the machine it runs on, and the folder it works in.
+
+    The worktree is the folder the process started in, read once at the entry (``_run``) and carried
+    on the run — a command never asks the file system where it is from inside the logic.
+    """
     return Holder(
         harness=args.harness.strip(),
         session_id=args.session_id.strip(),
-        machine=args.machine.strip() or machine,
-        worktree=str(Path.cwd()),
+        machine=args.machine.strip() or run.machine,
+        worktree=str(run.cwd),
     )
 
 
-def _unit_of(kit: Path, number: int | None, texts: Mapping) -> Path:
-    """The folder of the unit a command acts on: the kit root, or one of its jobs."""
+def _unit_of(ergon: Path, number: int | None, texts: Mapping) -> Path:
+    """The folder of the unit a command acts on: the ergon root, or one of its athlos."""
     if number is None:
-        return kit
-    job_id = job_id_of(_kit_id(kit.name), number)
-    folder = find_job_folder(kit, job_id, texts)
+        return ergon
+    athlos_id = athlos_id_of(_ergon_id(ergon.name), number)
+    folder = athlos_folder(ergon, number)
     if folder is None:
-        raise _error(texts, "no_job", kit=kit.name, job=job_id)
+        raise _error(texts, "no_athlos", ergon=ergon.name, athlos=athlos_id)
     return folder
 
 
@@ -1938,82 +2081,85 @@ def _machine_label() -> str:
     return ""
 
 
-def _read_resume(kit: Path, texts: Mapping) -> str:
-    """The resume prompt of a kit, and the proof that its note reads: nothing is held yet.
+def _read_resume(ergon: Path, texts: Mapping) -> str:
+    """The resume prompt of an ergon, and the proof that its note reads: nothing is held yet.
 
     Raises:
-        ParkError: the kit has no ``RESUME.md``, was never parked, or its note does not parse.
+        ParkError: the ergon has no ``RESUME.md``, was never parked, or its note does not parse.
     """
-    resume = kit / _RESUME_FILE
+    resume = ergon / _RESUME_FILE
     if not resume.is_file():
-        raise _error(texts, "no_resume", kit=kit.name)
-    read_note(kit, texts)
+        raise _error(texts, "no_resume", ergon=ergon.name)
+    read_note(ergon, texts)
     return resume.read_text(encoding="utf-8").rstrip("\n")
 
 
-def _resume_text(prompt: str, kit: Path, root: Path, texts: Mapping) -> str:
-    """The resume prompt of a kit, followed by a blank line and its capped digest."""
-    return prompt + "\n\n" + digest(kit, texts["default_cap"], root, texts)
+def _resume_text(prompt: str, ergon: Path, root: Path, texts: Mapping, machine: str) -> str:
+    """The resume prompt of an ergon, followed by a blank line and its capped digest."""
+    return prompt + "\n\n" + digest(ergon, texts["default_cap"], root, texts, machine)
 
 
-def _planned_job(kit: Path, plan: Plan, job_id: str, texts: Mapping) -> JobLine:
-    """The usable job line of a plan for ``job_id``: it names a folder and a result for ``JOB.md``.
+def _planned_athlos(ergon: Path, plan: Plan, athlos_id: str, texts: Mapping) -> AthlosLine:
+    """The usable athlos line of a plan for ``athlos_id``: it names a label and a result for ``ATHLOS.md``.
 
     Raises:
-        ParkError: the plan has no such job, or the line has no label or no result.
+        ParkError: the plan has no such athlos, or the line has no label or no result.
     """
-    line = next((job for job in plan.jobs if job.id == job_id), None)
+    line = next((item for item in plan.athlos if item.id == athlos_id), None)
     if line is None:
-        raise _error(texts, "no_job", kit=kit.name, job=job_id)
+        raise _error(texts, "no_athlos", ergon=ergon.name, athlos=athlos_id)
     if not line.label:
-        raise _error(texts, "job_label", id=job_id)
+        raise _error(texts, "athlos_label", id=athlos_id)
     if not line.result:
-        raise _error(texts, "bad_plan", kit=kit.name, reason=f"job {job_id} has no result")
+        raise _error(texts, "bad_plan", ergon=ergon.name, reason=f"athlos {athlos_id} has no result")
     return line
 
 
-def _write_job(root: Path, args: argparse.Namespace, texts: Mapping, context: LeaseContext) -> None:
-    """Write a job's own file: create it from the plan's job line, then add its steps.
+def _write_athlos(run: _Run, args: argparse.Namespace) -> None:
+    """Write an athlos's own file: create it from the plan's athlos line, then add its steps.
 
     Everything that can be refused is checked before the lease is taken or a file is touched. The
-    first write into a job's folder takes its lease, so two sessions never write one file. The
-    plan's shared-path warnings go to stderr.
+    first write into an athlos's folder takes its lease, so two sessions never write one file. The
+    file lands in the folder of the athlos's number; a record written in the retired ``jobs/``
+    layout is carried there by this write (ADR 0029 D11, D12). The plan's shared-path warnings go
+    to stderr.
 
     Raises:
-        ParkError: the kit has no plan, the plan has no usable line for the job, or the job is held.
+        ParkError: the ergon has no plan, the plan has no usable line for the athlos, or the athlos
+            is held.
     """
-    kit = find_kit(root, args.id.strip(), texts)
-    kit_id = _kit_id(kit.name)
-    job_id = job_id_of(kit_id, args.number)
-    plan = read_plan(kit)
+    root, texts, context = run.root, run.texts, run.lease
+    ergon = find_ergon(root, args.id.strip(), texts)
+    ergon_id = _ergon_id(ergon.name)
+    athlos_id = athlos_id_of(ergon_id, args.number)
+    plan = read_plan(ergon, texts)
     if plan is None:
-        raise _error(texts, "no_plan", kit=kit.name)
-    folder = find_job_folder(kit, job_id, texts)
-    doc = read_job_doc(folder / "JOB.md", texts) if folder is not None else None
+        raise _error(texts, "no_plan", ergon=ergon.name)
+    folder = athlos_folder(ergon, args.number)
+    doc = read_athlos_doc(athlos_file_of(folder), texts) if folder is not None else None
     if doc is None:
-        line = _planned_job(kit, plan, job_id, texts)
-        doc = job_doc_for(line, kit_id, kit.name[len(kit_id) + 1 :], plan)
-        _check_job_doc(doc, kit.name, texts)
-        if folder is None:
-            folder = _jobs_dir(kit) / f"{args.number}-{job_slug(line.label)}"
-    acquire_lease(folder, _holder_of(args, context.machine), texts, context)
+        line = _planned_athlos(ergon, plan, athlos_id, texts)
+        doc = athlos_doc_for(line, ergon_id, ergon.name[len(ergon_id) + 1 :], plan, run.cwd)
+        _check_athlos_doc(doc, ergon.name, texts)
+    folder = move_athlos_folder(ergon, args.number, folder)
+    acquire_lease(folder, _holder_of(args, run), texts, context)
     steps = doc.steps + tuple((text, False) for text in _stripped(args.step))
-    write_job_doc(folder, JobDoc(header=doc.header, steps=steps, done=doc.done or args.done), texts)
+    write_athlos_doc(folder, AthlosDoc(header=doc.header, steps=steps, done=doc.done or args.done), texts)
     print(_display_path(folder, root))
     for warning in shared_path_warnings(plan, texts):
         print(warning, file=sys.stderr)
 
 
 def _print_active(root: Path, texts: Mapping, context: LeaseContext) -> None:
-    """Print the unit this session is in: the job of the worktree it works in."""
+    """Print the unit this session is in: the athlos of the worktree it works in."""
     found = active_unit(root, texts)
     if found is None:
         print(texts["active"]["none"])
         return
-    kit, kit_id, number = found
-    job_id = job_id_of(kit_id, number)
-    folder = find_job_folder(kit, job_id, texts)
-    unit = folder if folder is not None else kit
+    ergon, ergon_id, number = found
+    athlos_id = athlos_id_of(ergon_id, number)
+    folder = find_athlos_folder(ergon, athlos_id, texts)
+    unit = folder if folder is not None else ergon
     lease = read_lease(unit, texts)
     state = unit_state(unit, texts, context)
     path = _display_path(unit, root)
@@ -2021,8 +2167,8 @@ def _print_active(root: Path, texts: Mapping, context: LeaseContext) -> None:
         jsondata.fill(
             texts["active"]["line"],
             {
-                "kind": "job" if folder is not None else "kit",
-                "id": job_id if folder is not None else kit_id,
+                "kind": "athlos" if folder is not None else "ergon",
+                "id": athlos_id if folder is not None else ergon_id,
                 "name": unit.name,
                 "state": state,
                 "holder": lease.holder.label() if lease is not None else texts["empty_cell"],
@@ -2034,35 +2180,36 @@ def _print_active(root: Path, texts: Mapping, context: LeaseContext) -> None:
 
 @dataclass(frozen=True)
 class _Run:
-    """What every command of one invocation shares: the root, the texts, the lease clock, the machine."""
+    """What every command of one invocation shares: the root, the texts, the lease clock, the machine, the folder."""
 
     root: Path
     texts: Mapping
     lease: LeaseContext
     machine: str
+    cwd: Path
 
 
 def _cmd_write(args: argparse.Namespace, run: _Run) -> int:
     fields = _fields_from(args, run.texts)
     body = _body_from(args)
-    kit = _kit_folder(run.root, fields)
-    holder = _holder_of(args, run.machine)
+    ergon = _ergon_folder(run.root, fields)
+    holder = _holder_of(args, run)
     check_fields(fields, run.texts)
     check_body(body, run.texts)
-    refuse_kit_conflict(fields, run.root, run.texts)
-    _refuse_foreign_lease(kit, holder, run)
-    free = read_lease(kit, run.texts) is None
-    # The write holds the kit while it writes: a lease taken since the check is refused, not overwritten.
-    lease = acquire_lease(kit, holder, run.texts, run.lease)
+    refuse_ergon_conflict(fields, run.root, run.texts)
+    _refuse_foreign_lease(ergon, holder, run)
+    free = read_lease(ergon, run.texts) is None
+    # The write holds the ergon while it writes: a lease taken since the check is refused, not overwritten.
+    lease = acquire_lease(ergon, holder, run.texts, run.lease)
     try:
-        write_kit(fields, body, run.root, run.texts, Path.cwd())
+        write_ergon(fields, body, run.root, run.texts, run.cwd)
     except BaseException:
         if free:
-            _release_own_lease(kit, lease, run.texts)
-            _remove_if_empty(kit)
+            _release_own_lease(ergon, lease, run.texts)
+            _remove_if_empty(ergon)
         raise
-    _release_own_lease(kit, lease, run.texts)
-    print(_display_path(kit, run.root))
+    _release_own_lease(ergon, lease, run.texts)
+    print(_display_path(ergon, run.root))
     return 0
 
 
@@ -2073,8 +2220,8 @@ def _release_own_lease(unit: Path, lease: Lease, run_texts: Mapping) -> None:
         release_lease(unit)
 
 
-def _kit_folder(root: Path, fields: ParkFields) -> Path:
-    """The folder a kit has, or the one it would have; the name conflict is the writer's to refuse."""
+def _ergon_folder(root: Path, fields: ParkFields) -> Path:
+    """The folder an ergon has, or the one it would have; the name conflict is the writer's to refuse."""
     return ergon_root(root) / f"{fields.id}-{fields.name}"
 
 
@@ -2097,10 +2244,10 @@ def _refuse_foreign_lease(unit: Path, holder: Holder, run: _Run) -> None:
 
 
 def _cmd_unpark(args: argparse.Namespace, run: _Run) -> int:
-    kit = find_kit(run.root, args.id.strip(), run.texts)
-    prompt = _read_resume(kit, run.texts)  # everything that can be refused, before a lease is taken
-    acquire_lease(kit, _holder_of(args, run.machine), run.texts, run.lease)
-    print(_resume_text(prompt, kit, run.root, run.texts))
+    ergon = find_ergon(run.root, args.id.strip(), run.texts)
+    prompt = _read_resume(ergon, run.texts)  # everything that can be refused, before a lease is taken
+    acquire_lease(ergon, _holder_of(args, run), run.texts, run.lease)
+    print(_resume_text(prompt, ergon, run.root, run.texts, run.machine))
     return 0
 
 
@@ -2108,20 +2255,20 @@ def _cmd_digest(args: argparse.Namespace, run: _Run) -> int:
     cap = run.texts["default_cap"] if args.cap is None else args.cap
     if cap < 0:
         raise _error(run.texts, "bad_cap", value=cap)
-    print(digest(find_kit(run.root, args.id.strip(), run.texts), cap, run.root, run.texts))
+    print(digest(find_ergon(run.root, args.id.strip(), run.texts), cap, run.root, run.texts, run.machine))
     return 0
 
 
 def _cmd_list(args: argparse.Namespace, run: _Run) -> int:
     query = ListQuery(args.plan.strip(), args.task.strip(), args.state.strip(), args.closed)
-    kits, jobs = list_kits(run.root, query, run.texts, run.lease)
-    if kits:
+    ergons, units = list_ergons(run.root, query, run.texts, run.lease)
+    if ergons:
         lines: list[str] = []
-        for summary in kits:
+        for summary in ergons:
             lines.append(format_summary(summary, run.texts))
-            lines.extend(format_job(job, run.texts) for job in jobs if job.id.startswith(f"{summary.id}."))
+            lines.extend(format_athlos(item, run.texts) for item in units if item.id.startswith(f"{summary.id}."))
         print("\n".join(lines))
-    elif not _kit_names(run.root):
+    elif not _ergon_names(run.root):
         folder = _display_path(ergon_root(run.root), run.root)
         print(jsondata.fill(run.texts["list"]["empty"], {"path": folder}))
     else:
@@ -2130,9 +2277,9 @@ def _cmd_list(args: argparse.Namespace, run: _Run) -> int:
 
 
 def _cmd_hold(args: argparse.Namespace, run: _Run) -> int:
-    kit = find_kit(run.root, args.id.strip(), run.texts)
-    unit = _unit_of(kit, args.number, run.texts)
-    holder = _holder_of(args, run.machine)
+    ergon = find_ergon(run.root, args.id.strip(), run.texts)
+    unit = _unit_of(ergon, args.number, run.texts)
+    holder = _holder_of(args, run)
     if args.takeover:
         _print_replaced_paths(unit, holder, run)
     lease = acquire_lease(unit, holder, run.texts, run.lease, takeover=args.takeover)
@@ -2159,8 +2306,8 @@ def _print_replaced_paths(unit: Path, holder: Holder, run: _Run) -> None:
 
 
 def _cmd_release(args: argparse.Namespace, run: _Run) -> int:
-    kit = find_kit(run.root, args.id.strip(), run.texts)
-    unit = _unit_of(kit, args.number, run.texts)
+    ergon = find_ergon(run.root, args.id.strip(), run.texts)
+    unit = _unit_of(ergon, args.number, run.texts)
     if read_lease(unit, run.texts) is None:
         raise _error(run.texts, "no_holder", unit=unit.name)
     release_lease(unit)
@@ -2168,8 +2315,8 @@ def _cmd_release(args: argparse.Namespace, run: _Run) -> int:
     return 0
 
 
-def _cmd_job(args: argparse.Namespace, run: _Run) -> int:
-    _write_job(run.root, args, run.texts, run.lease)
+def _cmd_athlos(args: argparse.Namespace, run: _Run) -> int:
+    _write_athlos(run, args)
     return 0
 
 
@@ -2179,33 +2326,33 @@ def _cmd_active(_args: argparse.Namespace, run: _Run) -> int:
 
 
 def _cmd_close(args: argparse.Namespace, run: _Run) -> int:
-    kit = find_kit(run.root, args.id.strip(), run.texts)
-    _refuse_live_foreign_lease(kit, _holder_of(args, run.machine), run)
+    ergon = find_ergon(run.root, args.id.strip(), run.texts)
+    _refuse_live_foreign_lease(ergon, _holder_of(args, run), run)
     closed = ergon_root(run.root) / _CLOSED_DIR
-    target = closed / kit.name
+    target = closed / ergon.name
     if target.exists():
-        raise _error(run.texts, "close_exists", kit=kit.name, target=_display_path(target, run.root))
+        raise _error(run.texts, "close_exists", ergon=ergon.name, target=_display_path(target, run.root))
     closed.mkdir(parents=True, exist_ok=True)
     try:
-        kit.rename(target)
+        ergon.rename(target)
     except OSError as exc:
         raise _error(
-            run.texts, "close_failed", kit=kit.name, reason=errno.errorcode.get(exc.errno or 0, "OSError")
+            run.texts, "close_failed", ergon=ergon.name, reason=errno.errorcode.get(exc.errno or 0, "OSError")
         ) from exc
     release_leases(target)  # after the move, so a close that is refused or fails changes nothing
     print(_display_path(target, run.root))
     return 0
 
 
-def _refuse_live_foreign_lease(kit: Path, holder: Holder, run: _Run) -> None:
-    """Refuse to close a kit while a live lease of another session is in it, the plan's or a job's.
+def _refuse_live_foreign_lease(ergon: Path, holder: Holder, run: _Run) -> None:
+    """Refuse to close an ergon while a live lease of another session is in it, the plan's or an athlos's.
 
     A stale lease holds nothing, and the closing session's own leases are its to release.
 
     Raises:
-        ParkError: another session holds a unit of the kit; the message names the unit and the holder.
+        ParkError: another session holds a unit of the ergon; the message names the unit and the holder.
     """
-    for unit in (kit, *_job_folders(kit)):
+    for unit in (ergon, *_athlos_folders(ergon)):
         lease = read_lease(unit, run.texts)
         if lease is None or lease_is_stale(lease, run.lease) or lease.holder.same_as(holder):
             continue
@@ -2213,8 +2360,8 @@ def _refuse_live_foreign_lease(kit: Path, holder: Holder, run: _Run) -> None:
 
 
 def _cmd_export(args: argparse.Namespace, run: _Run) -> int:
-    kit = find_kit(run.root, args.id.strip(), run.texts)
-    export_kit(kit, Path(args.out), run.texts)
+    ergon = find_ergon(run.root, args.id.strip(), run.texts)
+    export_ergon(ergon, Path(args.out), run.texts)
     print(Path(args.out).as_posix())
     return 0
 
@@ -2233,7 +2380,7 @@ def _command_handlers() -> Mapping[str, Callable[[argparse.Namespace, _Run], int
         "list": _cmd_list,
         "hold": _cmd_hold,
         "release": _cmd_release,
-        "job": _cmd_job,
+        "athlos": _cmd_athlos,
         "active": _cmd_active,
         "close": _cmd_close,
         "export": _cmd_export,
@@ -2259,6 +2406,7 @@ def _run(args: argparse.Namespace, texts: Mapping) -> int:
         texts=texts,
         lease=LeaseContext(now=time.time(), stale_hours=texts["stale_after_hours"], machine=machine),
         machine=machine,
+        cwd=Path.cwd(),  # read once here; a command below never asks the file system where it is
     )
     return _command_handlers()[args.command](args, run)
 

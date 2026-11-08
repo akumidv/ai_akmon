@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# A takeover of a kit that has no `PARK.md` yet still keeps the replaced holder: `SESSIONS` beside the lease holds it for
+# A takeover of an ergon that has no `PARK.md` yet still keeps the replaced holder: `SESSIONS` beside the lease holds it for
 # the next `write` to merge into the note. The replaced holder's worktree is not readable here, and the output says so first.
 
 [fixture]

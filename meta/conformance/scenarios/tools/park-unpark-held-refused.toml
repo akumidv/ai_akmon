@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# A parked kit whose lease a live session holds is not resumed by a second session: the refusal names
+# A parked ergon whose lease a live session holds is not resumed by a second session: the refusal names
 # the holder, the stderr is one `error:` line, and the holder's lease file is left as it was.
 
 [fixture]

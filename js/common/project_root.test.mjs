@@ -145,7 +145,7 @@ test("a linked worktree of a subfolder project uses the main checkout's subfolde
   }
 });
 
-test("the answer for a root is kept: a repository's common directory does not move", { skip: !gitAvailable() }, () => {
+test("the common directory is probed on every call and remembered by nobody", { skip: !gitAvailable() }, () => {
   const main = tmpdir();
   try {
     fs.writeFileSync(posix.join(main, "AGENTS.md"), "# agents\n");
@@ -153,9 +153,10 @@ test("the answer for a root is kept: a repository's common directory does not mo
     const linked = posix.join(main, ".worktrees", "C1-demo.1");
     git(main, ["worktree", "add", "-q", "--orphan", "-b", "feat", linked]);
     assert.equal(gitCommonRoot(linked), main);
-    // without the link file git would answer the worktree itself; the kept answer is still the main checkout
+    // no module-level memo: once the link file is gone the folder is no longer a worktree, and the
+    // answer of this call is the folder itself (ADR 0029: a caller that asks repeatedly passes it down)
     fs.rmSync(posix.join(linked, ".git"));
-    assert.equal(gitCommonRoot(linked), main);
+    assert.equal(gitCommonRoot(linked), linked);
   } finally {
     fs.rmSync(main, { recursive: true, force: true });
   }

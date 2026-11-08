@@ -915,6 +915,27 @@ def test_a_dotted_folder_without_any_gitignore_is_unignored(tmp_path):
     assert len(_local_layer(verifier.findings, "gitignore.local-layer")) == 1
 
 
+def test_a_linked_worktree_names_the_main_checkouts_ergon_folder_by_its_full_path(tmp_path):
+    """The ergons of a linked worktree live in the main checkout, outside its root: the check names that folder
+    and leaves its ignore list to the main checkout, instead of failing on a path it cannot make relative."""
+    import subprocess
+
+    main = tmp_path / "main"
+    main.mkdir()
+    git = ["git", "-C", str(main), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    subprocess.run([*git, "init", "-q", "-b", "main"], check=True)
+    (main / "AGENTS.md").write_text("main\n", encoding="utf-8")  # what marks the main checkout as a project
+    subprocess.run([*git, "add", "AGENTS.md"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "init"], check=True)
+    linked = tmp_path / "linked"
+    subprocess.run([*git, "worktree", "add", "-q", "-b", "side", str(linked)], check=True)
+    root = _make_project(linked)
+    (main / "_aitna" / ".ergon").mkdir(parents=True)
+    verifier = verify.Verifier(root)
+    verifier.run()  # does not raise
+    assert _local_layer(verifier.findings, "gitignore.local-layer") == []
+
+
 def test_the_local_layer_warnings_fail_only_under_strict(tmp_path, capsys):
     root = _make_project(tmp_path)
     (root / "_aitna" / "local").mkdir()

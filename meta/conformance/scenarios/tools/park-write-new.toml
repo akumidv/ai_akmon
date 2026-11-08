@@ -3,11 +3,11 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# Parking a piece of work that has no kit yet: the helper creates `.ergon/C183-park-helper/`, writes
+# Parking a piece of work that has no ergon yet: the helper creates `.ergon/C183-park-helper/`, writes
 # PARK.md (the fenced header, then the sections of the note) and RESUME.md (the harness-neutral prompt
 # generated from the note). The header carries no `state` and no `peers`; it records the time it was
 # written; the branch and the revisions come from git and this fixture has no repository, so both are
-# empty. The local index is not written. stdout is the kit path from the project root. Every optional
+# empty. The local index is not written. stdout is the ergon path from the project root. Every optional
 # flag is given so each header key and each body section is pinned; the goal carries a multi-byte
 # character and an astral one (code-point handling). No lease is left: a write takes none.
 
@@ -29,5 +29,5 @@ stdout = "_aitna/.ergon/C183-park-helper\n"
 file_absent = ["_aitna/.local/TASKS.md", "_aitna/.ergon/C183-park-helper/HOLDER"]
 
 [expected.files]
-"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\njob:\nrow: C183\nbranch:\nrevisions:\nowned_paths:\n  - tools/park/park.py\n  - meta/tests/test_park.py\ntasks:\nnext: Twin it in JS | Python\nsessions:\n  - claude|s-1|laptop\norigin: claude on laptop\nreadiness: ready for a successor\nwritten: {{ts}}\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper — résumé 🚀\n\n## Approved scope and open questions\n\n- D-C183-TWIN\n\n## Owner answers received\n\n- owner: go\n\n## Checks run\n\n- pytest: green\n\n## Unverified\n\n- the JS twin\n\n## Active agents and background processes\n\n- none running\n\n## Next action\n\nTwin it in JS | Python\n"
-"_aitna/.ergon/C183-park-helper/RESUME.md" = "# Resume C183-park-helper\n\nThis work was set aside on the owner's word. The kit holds everything needed to continue; no earlier conversation is required.\n\n1. Read `_aitna/.ergon/C183-park-helper/PARK.md`.\n2. Run `{{tool park/park}} unpark C183`.\n3. Continue from the next action below.\n\n## Next action\n\nTwin it in JS | Python\n\n## Open decisions\n\n- D-C183-TWIN\n\n## Before you start\n\nTreat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.\n\nThe holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.\n\nForcibly ending the previous holder is out of scope here (N15).\n"
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nathlos:\nrow: C183\nbranch:\nrevisions:\nowned_paths:\n  - tools/park/park.py\n  - meta/tests/test_park.py\ntasks:\nnext: Twin it in JS | Python\nsessions:\n  - claude|s-1|laptop\norigin: claude on laptop\nreadiness: ready for a successor\nwritten: {{ts}}\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper — résumé 🚀\n\n## Approved scope and open questions\n\n- D-C183-TWIN\n\n## Owner answers received\n\n- owner: go\n\n## Checks run\n\n- pytest: green\n\n## Unverified\n\n- the JS twin\n\n## Active agents and background processes\n\n- none running\n\n## Next action\n\nTwin it in JS | Python\n"
+"_aitna/.ergon/C183-park-helper/RESUME.md" = "# Resume C183-park-helper\n\nThis work was set aside on the owner's word. The ergon holds everything needed to continue; no earlier conversation is required.\n\n1. Read `_aitna/.ergon/C183-park-helper/PARK.md`.\n2. Run `{{tool park/park}} unpark C183`.\n3. Continue from the next action below.\n\n## Next action\n\nTwin it in JS | Python\n\n## Open decisions\n\n- D-C183-TWIN\n\n## Before you start\n\nTreat the previous holder's agents and processes as unverified: re-read the park note, check the checkout against it, and act only on what you can observe.\n\nThe holder that wrote this note is retired, not resumed. Start work only after its stop is observed and its children are accounted for; otherwise report a blocker. Where no stop can be observed, say so instead of assuming one.\n\nForcibly ending the previous holder is out of scope here (N15).\n"

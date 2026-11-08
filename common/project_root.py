@@ -37,7 +37,7 @@ AITNA_ROOT_DEFAULT = "_aitna"
 DEV_ROOT_FILE = ".aitna-root"
 
 # The two dotted folders under the dev root (ADR 0028 D01): ``.local`` holds what only this
-# machine needs (learning state, model overlays), ``.ergon`` holds one kit per piece of work.
+# machine needs (learning state, model overlays), ``.ergon`` holds one ergon per piece of work.
 # Both are gitignored. The local index retired with ADR 0028 D12, so no row is written anywhere.
 LOCAL_DIR_NAME = ".local"
 ERGON_DIR_NAME = ".ergon"
@@ -59,10 +59,6 @@ _REFUSED_PREFIX_CHARS = 40
 
 # How long the git probe that resolves a worktree's main checkout may take.
 _GIT_TIMEOUT_SECONDS = 10
-
-# The resolved main checkout per project root: a repository's common directory does not move
-# while a session runs, and the probe costs a process.
-_GIT_COMMON_CACHE: dict[str, Path] = {}
 
 
 def resolve_path(path: Path) -> Path:
@@ -178,21 +174,20 @@ def git_common_root(project_root: Path | None) -> Path | None:
     """The main checkout of the repository that holds ``project_root``, or ``project_root`` itself.
 
     A linked worktree keeps its own working tree but shares the repository, so
-    ``git rev-parse --git-common-dir`` answers where the repository really is. The kits live in
+    ``git rev-parse --git-common-dir`` answers where the repository really is. The ergons live in
     the main checkout (ADR 0028 D11), so the accessor resolves them through it: a session in a
-    worktree writes into the main checkout's kits, and one kit is one folder for the project.
+    worktree writes into the main checkout's ergons, and one ergon is one folder for the project.
+
+    The probe runs on every call and its answer is not kept: a cached root is module state a later
+    call cannot see the end of — a worktree added or removed while a process lives would keep
+    answering the old one. A caller that asks repeatedly passes the resolved root down.
 
     Outside a repository, or when git is absent, the answer is the project root unchanged. With
     no project root at all, the answer is ``None``, as everywhere else in this module.
     """
     if project_root is None:
         return None
-    cached = _GIT_COMMON_CACHE.get(str(project_root))
-    if cached is not None:
-        return cached
-    resolved = _resolve_git_common_root(project_root)
-    _GIT_COMMON_CACHE[str(project_root)] = resolved
-    return resolved
+    return _resolve_git_common_root(project_root)
 
 
 def _git_answer(project_root: Path) -> tuple[Path, str] | None:
@@ -232,7 +227,7 @@ def _resolve_git_common_root(project_root: Path) -> Path:
 
     One git call answers two things: the repository's common directory (its parent is the main
     checkout) and the project root's own prefix inside its working tree. A project in a repository
-    subfolder (``mono/proj``) keeps that subfolder in the main checkout, so its kits stay its own
+    subfolder (``mono/proj``) keeps that subfolder in the main checkout, so its ergons stay its own
     and do not land in the repository top's dev root (ADR 0028 D11).
     """
     answer = _git_answer(project_root)
@@ -246,11 +241,11 @@ def _resolve_git_common_root(project_root: Path) -> Path:
 
 
 def ergon_root(project_root: Path | None) -> Path:
-    """The kit folder ``<dev root>/.ergon`` of ``project_root`` (ADR 0028 D01, D11).
+    """The ergon layer ``<dev root>/.ergon`` of ``project_root`` (ADR 0028 D01, D11; ADR 0029 D02).
 
     The path, computed — not a claim that it exists. With no project root it is the default-name
     relative path (``_aitna/.ergon``), usable for reading only, as ``aitna_root`` is. In a linked
-    worktree it is the main checkout's folder: the kits are shared, the working tree is not.
+    worktree it is the main checkout's folder: the ergons are shared, the working tree is not.
     """
     return dev_root(git_common_root(project_root)).path / ERGON_DIR_NAME
 

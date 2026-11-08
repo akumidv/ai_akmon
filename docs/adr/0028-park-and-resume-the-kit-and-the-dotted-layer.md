@@ -13,6 +13,13 @@
   worktree); worktrees for parallel jobs, where the agent works and commits on its own and a result
   is carried into the current branch only when the owner starts it (**D11**, amending D04); the local index retired, the kit being its own record (**D12**, superseding 0022/D03
   and the index clauses of D01 and D02).
+- **Renamed by [0029](0029-ergon-athlos-step-one-method-of-work.md) (C189):** the words of this record
+  are the method's retired ones. *Kit* is now the **ergon** and *job* the **athlos** (**0029/D02**);
+  an athlos's folder is the number alone, `<id>-<name>/<n>/ATHLOS.md`, with no folder for the plural
+  (**0029/D11**); and a record written in the layout named here is read and translated, never written
+  again (**0029/D12**). The decided text is left as the owner wrote it, and this note is the
+  amendment. The file keeps its name: an ADR's path is cited, and renaming it would break every
+  link that carries it.
 - **Owner:** akuminov@gmail.com
 - **Supersedes, in part:** [0022/D01](0022-local-layer-index-and-plans.md#d01--the-local-layer-and-the-raw-material-home)
   for the path of the local layer and for the three places under it (`handoff/`, `plans/`);

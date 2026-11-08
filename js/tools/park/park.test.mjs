@@ -1,11 +1,11 @@
 /**
- * node:test for `js/tools/park/park.mjs` — the twin of `meta/tests/test_park.py`: the note, the kit, the
- * lease, the jobs and the derived states, the commands. The byte-level spec shared by both
+ * node:test for `js/tools/park/park.mjs` — the twin of `meta/tests/test_park.py`: the note, the ergon, the
+ * lease, the athlos and the derived states, the commands. The byte-level spec shared by both
  * implementations is the `tools/park-*` scenarios of `meta/conformance/scenarios`, run by
  * `runner.py --impl node --area tools`.
  */
 
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -22,10 +22,10 @@ import {
   checkBody,
   checkFields,
   digest,
-  exportKit,
-  findClosedKit,
-  findKit,
-  formatJob,
+  exportErgon,
+  findClosedErgon,
+  findErgon,
+  formatAthlos,
   formatSummary,
   gitBranch,
   gitRevisions,
@@ -33,36 +33,38 @@ import {
   holderIdentified,
   holderLabel,
   holderSameAs,
-  jobSlug,
-  kitState,
+  athlosFolder,
+  athlosFileOf,
+  moveAthlosFolder,
+  ergonState,
   leaseIsStale,
-  listKits,
+  listErgons,
   main,
   mergeSessions,
   nextLocalId,
   parkBody,
   parkFields,
   parseHeader,
-  parseJobDoc,
-  parseJobLine,
+  parseAthlosDoc,
+  parseAthlosLine,
   parseLease,
   parseNote,
   parsePlan,
   readLease,
-  readJobDoc,
+  readAthlosDoc,
   readNote,
   readPendingSessions,
   releaseLease,
   rememberHolder,
   renderHeader,
-  renderJobDoc,
+  renderAthlosDoc,
   renderLease,
   renderNote,
   sharedPathWarnings,
   unitState,
   worktreeUnit,
-  writeJobDoc,
-  writeKit,
+  writeAthlosDoc,
+  writeErgon,
 } from "./park.mjs";
 import { ergonRoot, gitCommonRoot } from "../../common/project_root.mjs";
 
@@ -76,6 +78,9 @@ const TEXTS = /** @type {ParkData} */ (read(path.join(embeddedTreeRoot(), "tools
 
 const NO_QUERY = { plan: "", task: "", state: "", closed: false };
 const HOUR = 3600;
+// The staleness threshold is park.json's, never restated here: a test that spells out 24 would pass
+// while the shipped value said something else.
+const STALE_HOURS = TEXTS.stale_after_hours;
 const MACHINE = ["--machine", "m1"];
 const CLAUDE = ["--harness", "claude", "--session-id", "s1", ...MACHINE];
 const CODEX = ["--harness", "codex", "--session-id", "s2", ...MACHINE];
@@ -88,7 +93,7 @@ tasks: C1, C2
 ---
 # Demo
 
-## Jobs
+## Athlos
 
 - C1.1 · Build core · tasks C1 · paths src/a, docs · result: core built
 - C1.2 · Write docs · after C1.1 · paths docs/x · result: docs done
@@ -100,7 +105,7 @@ const FULL_FIELDS = parkFields({
   name: "park-helper",
   nextAction: "Twin it: JS | Python",
   plan: "A59",
-  job: "C183.2",
+  athlos: "C183.2",
   row: "C183",
   branch: "_aitna/C183-park-helper",
   revisions: ["abc123", "def456"],
@@ -127,8 +132,27 @@ const FULL_BODY = parkBody({
   ],
 });
 
+/**
+ * A fresh temporary folder, registered for removal when this file's tests end: a suite that leaves
+ * its scratch on disk charges the machine for every run.
+ * @param {string} prefix
+ * @returns {string}
+ */
+function tempDir(prefix) {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  _tempDirs.push(dir);
+  return dir;
+}
+/** @type {string[]} */
+const _tempDirs = [];
+after(() => {
+  for (const dir of _tempDirs) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // A directory that is no git repository and holds no project: the working directory the commands run in.
-const NEUTRAL = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "park-neutral-")));
+const NEUTRAL = tempDir("park-neutral-");
 
 /**
  * Run `main` with the process streams captured, from the working directory `cwd`.
@@ -166,7 +190,7 @@ function run(argv, cwd = NEUTRAL) {
  * @returns {string}
  */
 function project() {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "park-test-")));
+  const root = tempDir("park-test-");
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# agents\n");
   fs.mkdirSync(path.join(root, "_aitna"));
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), "");
@@ -178,7 +202,7 @@ function project() {
  * @param {string} [name]
  * @returns {string}
  */
-function kitPath(root, name = "C183-park-helper") {
+function ergonPath(root, name = "C183-park-helper") {
   return path.join(root, "_aitna", ".ergon", name);
 }
 
@@ -194,11 +218,11 @@ function readUtf8(file) {
  * `park write` with the fixed goal and next action; `extra` flags follow.
  * @param {string} root
  * @param {string[]} [extra]
- * @param {{kitId?: string, name?: string}} [who]
+ * @param {{ergonId?: string, name?: string}} [who]
  * @returns {{code: number, stdout: string, stderr: string}}
  */
-function write(root, extra = [], { kitId = "C183", name = "park-helper" } = {}) {
-  const argv = ["write", kitId, "--name", name, "--goal", "Build the helper", "--next", "Twin it"];
+function write(root, extra = [], { ergonId = "C183", name = "park-helper" } = {}) {
+  const argv = ["write", ergonId, "--name", name, "--goal", "Build the helper", "--next", "Twin it"];
   return run([...argv, ...extra, "--root", root]);
 }
 
@@ -223,15 +247,15 @@ function parkError(message) {
 }
 
 /**
- * A kit with a plan of three jobs (`PLAN_TEXT`), written through `write`.
+ * An ergon with a plan of three athlos (`PLAN_TEXT`), written through `write`.
  * @param {string} root
- * @returns {string} the kit folder
+ * @returns {string} the ergon folder
  */
-function kitWithPlan(root) {
-  const kit = kitPath(root, "C1-demo");
-  fs.mkdirSync(kit, { recursive: true });
-  fs.writeFileSync(path.join(kit, "PLAN.md"), PLAN_TEXT);
-  return kit;
+function ergonWithPlan(root) {
+  const ergon = ergonPath(root, "C1-demo");
+  fs.mkdirSync(ergon, { recursive: true });
+  fs.writeFileSync(path.join(ergon, "PLAN.md"), PLAN_TEXT);
+  return ergon;
 }
 
 /**
@@ -239,13 +263,13 @@ function kitWithPlan(root) {
  * @param {number} count
  * @returns {string}
  */
-function kitWithAnswers(root, count) {
+function ergonWithAnswers(root, count) {
   const body = parkBody({
     goal: "Goal line",
     answers: Array.from({ length: count }, (_value, number) => `answer ${String(number).padStart(2, "0")}`),
   });
   const fields = parkFields({ id: "C9", name: "long", nextAction: "Next" });
-  return writeKit(fields, body, root, TEXTS, root);
+  return writeErgon(fields, body, root, TEXTS, root);
 }
 
 /**
@@ -311,7 +335,7 @@ test("header text is flat and ordered, with no state and no peers", () => {
     "id",
     "name",
     "plan",
-    "job",
+    "athlos",
     "row",
     "branch",
     "revisions",
@@ -338,7 +362,7 @@ test("a note written before the state and the peers were dropped still parses", 
   assert.ok(!renderHeader(fields).includes("state:") && !renderHeader(fields).includes("peers:"));
 });
 
-test("a retired peers list with items is ignored too, and the kit is listed", () => {
+test("a retired peers list with items is ignored too, and the ergon is listed", () => {
   // A retired list key takes its items with it: they are skipped, not read as the list above.
   const old =
     "---\nstate: parked\nid: C1\nname: old\nnext: x\nsessions:\n  - claude|s-1|laptop\n" +
@@ -346,9 +370,9 @@ test("a retired peers list with items is ignored too, and the kit is listed", ()
   const fields = parseHeader(old, "PARK.md", TEXTS);
   assert.deepEqual(fields.sessions, [{ harness: "claude", sessionId: "s-1", machine: "laptop" }]);
   const root = project();
-  const kit = kitPath(root, "C1-old");
-  fs.mkdirSync(kit, { recursive: true });
-  fs.writeFileSync(path.join(kit, "PARK.md"), old);
+  const ergon = ergonPath(root, "C1-old");
+  fs.mkdirSync(ergon, { recursive: true });
+  fs.writeFileSync(path.join(ergon, "PARK.md"), old);
   const result = run(["list", ...MACHINE, "--root", root]);
   assert.equal(result.code, 0, result.stderr);
   assert.ok(result.stdout.startsWith("C1 | old | "), result.stdout);
@@ -372,8 +396,8 @@ const REFUSED_FIELDS = [
   [{ id: "c1" }, "id c1 is not a task id"],
   [{ id: "C" }, "id C is not a task id"],
   [{ plan: "plan" }, "plan plan is not a task id"],
-  [{ job: "C183" }, "job C183 is not a job id"],
-  [{ job: "C183.x" }, "job C183.x is not a job id"],
+  [{ athlos: "C183" }, "athlos C183 is not an athlos id"],
+  [{ athlos: "C183.x" }, "athlos C183.x is not an athlos id"],
   [{ name: "Park Helper" }, "name Park Helper is not kebab-case"],
   [{ name: "park--helper" }, "is not kebab-case"],
   [{ nextAction: "two\nlines" }, "next must be a single line"],
@@ -423,7 +447,7 @@ const MALFORMED_HEADERS = [
   ["---\nSTATE parked\n---\n", "is neither 'key: value' nor an indented '- item'"],
   ["---\nstate: parked\nid: C1\nname: n\n---\n", "no value for next"],
   ["---\nid: c1\nname: n\nnext: x\n---\n", "id c1 is not a task id"],
-  ["---\nid: C1\nname: n\nnext: x\njob: C1\n---\n", "job C1 is not a job id"],
+  ["---\nid: C1\nname: n\nnext: x\nathlos: C1\n---\n", "athlos C1 is not an athlos id"],
 ];
 
 for (const [text, message] of MALFORMED_HEADERS) {
@@ -465,37 +489,37 @@ test("inside a repository the branch and the last revisions are what git says", 
 });
 
 // --------------------------------------------------------------------------------------
-// write: the kit, the resume prompt, no index
+// write: the ergon, the resume prompt, no index
 // --------------------------------------------------------------------------------------
 
-test("write creates the kit with both files and a note that says when it was written", () => {
+test("write creates the ergon with both files and a note that says when it was written", () => {
   const root = project();
   const result = write(root, ["--plan", "A59", "--decision", "D-X"]);
   assert.equal(result.code, 0);
   assert.equal(result.stdout, "_aitna/.ergon/C183-park-helper\n");
-  const kit = kitPath(root);
-  const { fields, body } = parseNote(readUtf8(path.join(kit, "PARK.md")), "PARK.md", TEXTS);
+  const ergon = ergonPath(root);
+  const { fields, body } = parseNote(readUtf8(path.join(ergon, "PARK.md")), "PARK.md", TEXTS);
   assert.deepEqual([fields.id, fields.name, fields.plan], ["C183", "park-helper", "A59"]);
   assert.match(fields.written, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
   assert.equal(body.goal, "Build the helper");
   assert.deepEqual(body.decisions, ["D-X"]);
-  assert.ok(fs.statSync(path.join(kit, "RESUME.md")).isFile());
-  assert.deepEqual(fs.readdirSync(kit).sort(), ["PARK.md", "RESUME.md"]);
+  assert.ok(fs.statSync(path.join(ergon, "RESUME.md")).isFile());
+  assert.deepEqual(fs.readdirSync(ergon).sort(), ["PARK.md", "RESUME.md"]);
 });
 
 test("write reads the branch and the revisions from git in the working directory", () => {
   const root = project();
-  const kit = writeKit(
+  const ergon = writeErgon(
     parkFields({ id: "C9", name: "git", nextAction: "x" }),
     parkBody({ goal: "g" }),
     root,
     TEXTS,
     NEUTRAL,
   );
-  const { fields } = readNote(kit, TEXTS);
+  const { fields } = readNote(ergon, TEXTS);
   assert.deepEqual([fields.branch, fields.revisions], ["", []]);
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const inRepo = writeKit(
+  const inRepo = writeErgon(
     parkFields({ id: "C8", name: "git", nextAction: "x" }),
     parkBody({ goal: "g" }),
     root,
@@ -523,7 +547,7 @@ test("write flags fill the header fields the command line owns", () => {
     ["--agent", "none"],
   ].flat();
   assert.equal(write(root, flags).code, 0);
-  const { fields, body } = readNote(kitPath(root), TEXTS);
+  const { fields, body } = readNote(ergonPath(root), TEXTS);
   assert.deepEqual(
     { ...fields, written: "" },
     parkFields({
@@ -560,13 +584,13 @@ test("session flags without a harness are refused", () => {
     assert.equal(result.code, 1);
     assert.equal(result.stderr, "error: --session-id and --machine need --harness\n");
   }
-  assert.ok(!fs.existsSync(kitPath(root)));
+  assert.ok(!fs.existsSync(ergonPath(root)));
 });
 
 test("the resume prompt is harness-neutral and dateless", () => {
   const root = project();
   write(root, ["--decision", "D-X", "--plan", "A59"]);
-  const resume = readUtf8(path.join(kitPath(root), "RESUME.md"));
+  const resume = readUtf8(path.join(ergonPath(root), "RESUME.md"));
   assert.ok(resume.includes("`_aitna/.ergon/C183-park-helper/PARK.md`"));
   assert.ok(resume.includes("`akmon tool park/park unpark C183`"));
   assert.ok(resume.includes("Twin it") && resume.includes("- D-X"));
@@ -592,8 +616,8 @@ test("write and unpark create no local index and no local folder (ADR 0028 D12)"
   );
 });
 
-test("a dev-root pointer moves the kit", () => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "park-test-")));
+test("a dev-root pointer moves the ergon", () => {
+  const root = tempDir("park-test-");
   fs.writeFileSync(path.join(root, "AGENTS.md"), "");
   fs.writeFileSync(path.join(root, ".aitna-root"), "tools/ai\n");
   assert.equal(write(root).code, 0);
@@ -612,19 +636,19 @@ test("a failure while landing the files leaves nothing behind", (t) => {
     throw new Error("disk says no");
   });
   assert.throws(() => write(root), /disk says no/);
-  assert.ok(!fs.existsSync(kitPath(root)));
+  assert.ok(!fs.existsSync(ergonPath(root)));
   assert.deepEqual(
     walk(root).filter((file) => file.endsWith(".tmp")),
     [],
   );
 });
 
-test("a failure keeps an existing kit and removes only the temp files", (t) => {
+test("a failure keeps an existing ergon and removes only the temp files", (t) => {
   const root = project();
   write(root);
-  const kit = kitPath(root);
+  const ergon = ergonPath(root);
   /** @returns {Map<string, string>} */
-  const snapshot = () => new Map(fs.readdirSync(kit).map((name) => [name, readUtf8(path.join(kit, name))]));
+  const snapshot = () => new Map(fs.readdirSync(ergon).map((name) => [name, readUtf8(path.join(ergon, name))]));
   const before = snapshot();
   t.mock.method(fs, "renameSync", () => {
     throw new Error("disk says no");
@@ -633,25 +657,25 @@ test("a failure keeps an existing kit and removes only the temp files", (t) => {
   assert.deepEqual(snapshot(), before);
 });
 
-test("a kit with the id and another name is refused, live or closed", () => {
+test("an ergon with the id and another name is refused, live or closed", () => {
   const root = project();
   write(root);
   const result = write(root, [], { name: "renamed" });
   assert.equal(result.code, 1);
   assert.equal(
     result.stderr,
-    "error: kit C183-park-helper already carries id C183; keep its name or retire it before writing renamed\n",
+    "error: ergon C183-park-helper already carries id C183; keep its name or retire it before writing renamed\n",
   );
-  assert.ok(!fs.existsSync(kitPath(root, "C183-renamed")));
+  assert.ok(!fs.existsSync(ergonPath(root, "C183-renamed")));
   run(["close", "C183", "--root", root]);
   const closed = write(root, [], { name: "renamed" });
   assert.equal(closed.code, 1);
-  assert.ok(closed.stderr.includes("kit C183-park-helper already carries id C183"));
+  assert.ok(closed.stderr.includes("ergon C183-park-helper already carries id C183"));
 });
 
 test("write refuses a bad id and a bad name before any file", () => {
   const root = project();
-  const first = write(root, [], { kitId: "c183" });
+  const first = write(root, [], { ergonId: "c183" });
   const second = write(root, [], { name: "Bad_Name" });
   assert.equal(first.code, 1);
   assert.equal(second.code, 1);
@@ -667,16 +691,16 @@ test("write refuses a newline in a scalar", () => {
   assert.equal(result.stderr, "error: next must be a single line with no surrounding whitespace\n");
 });
 
-test("local ids are accepted, and the next one is counted over the kits, live and closed", () => {
+test("local ids are accepted, and the next one is counted over the ergons, live and closed", () => {
   const root = project();
   assert.equal(nextLocalId(root), "_T1");
-  assert.equal(write(root, [], { kitId: "_T7", name: "scratch" }).code, 0);
-  assert.ok(fs.statSync(kitPath(root, "_T7-scratch")).isDirectory());
+  assert.equal(write(root, [], { ergonId: "_T7", name: "scratch" }).code, 0);
+  assert.ok(fs.statSync(ergonPath(root, "_T7-scratch")).isDirectory());
   assert.equal(nextLocalId(root), "_T8");
   run(["close", "_T7", "--root", root]);
   assert.equal(nextLocalId(root), "_T8");
-  write(root, [], { kitId: "C5", name: "typed" });
-  write(root, [], { kitId: "_T2", name: "low" });
+  write(root, [], { ergonId: "C5", name: "typed" });
+  write(root, [], { ergonId: "_T2", name: "low" });
   assert.equal(nextLocalId(root), "_T8");
 });
 
@@ -690,9 +714,9 @@ test("the next local id skips every number the legacy index holds, and the index
     "# TASKS\n\n- _T6 \u00b7 plan: a \u00b7 active\n- C9 \u00b7 not local\n- _T12 \u00b7 b\n  - _T40 \u00b7 nested\n_T30 \u00b7 no bullet\n",
   );
   const before = fs.readFileSync(legacy);
-  fs.mkdirSync(kitPath(root, "_T2-a"), { recursive: true });
+  fs.mkdirSync(ergonPath(root, "_T2-a"), { recursive: true });
   assert.equal(nextLocalId(root), "_T13");
-  fs.mkdirSync(kitPath(root, ".closed/_T20-gone"), { recursive: true });
+  fs.mkdirSync(ergonPath(root, ".closed/_T20-gone"), { recursive: true });
   assert.equal(nextLocalId(root), "_T21");
   assert.deepEqual(fs.readFileSync(legacy), before);
 });
@@ -702,8 +726,8 @@ test("the local-id command prints the next free id on one line and writes nothin
   const first = run(["local-id", "--root", root]);
   assert.deepEqual([first.code, first.stdout, first.stderr], [0, "_T1\n", ""]);
   assert.ok(!fs.existsSync(path.join(root, "_aitna", ".ergon")));
-  fs.mkdirSync(kitPath(root, "_T2-a"), { recursive: true });
-  fs.mkdirSync(kitPath(root, ".closed/_T5-gone"), { recursive: true });
+  fs.mkdirSync(ergonPath(root, "_T2-a"), { recursive: true });
+  fs.mkdirSync(ergonPath(root, ".closed/_T5-gone"), { recursive: true });
   assert.equal(run(["local-id", "--root", root]).stdout, "_T6\n");
   assert.equal(run(["local-id", "--project-root", root, ...MACHINE]).stdout, "_T6\n");
 });
@@ -717,17 +741,17 @@ test("unpark takes the lease and prints resume then digest", () => {
   write(root, ["--decision", "D-X", "--answer", "owner: go", "--plan", "A59"]);
   const result = run(["unpark", "C183", ...CLAUDE, "--root", root]);
   assert.equal(result.code, 0);
-  const resume = readUtf8(path.join(kitPath(root), "RESUME.md"));
+  const resume = readUtf8(path.join(ergonPath(root), "RESUME.md"));
   assert.ok(result.stdout.startsWith(`${resume.replace(/\n+$/, "")}\n\npark C183-park-helper · active\n`));
   assert.ok(result.stdout.endsWith("Owner answers:\n- owner: go\n"));
-  const lease = readLease(kitPath(root), TEXTS);
+  const lease = readLease(ergonPath(root), TEXTS);
   assert.ok(lease !== null && holderSameAs(lease.holder, { ...CLAUDE_HOLDER, worktree: "" }));
   assert.equal(lease.holder.worktree, NEUTRAL);
   // the note itself carries no state: it is what write left
-  assert.equal(readNote(kitPath(root), TEXTS).fields.plan, "A59");
+  assert.equal(readNote(ergonPath(root), TEXTS).fields.plan, "A59");
 });
 
-test("unpark is refused while another session holds the kit, and renewed for the same one", () => {
+test("unpark is refused while another session holds the ergon, and renewed for the same one", () => {
   const root = project();
   write(root);
   assert.equal(run(["unpark", "C183", ...CLAUDE, "--root", root]).code, 0);
@@ -738,44 +762,44 @@ test("unpark is refused while another session holds the kit, and renewed for the
   assert.ok(refused.stderr.includes("a stale lease is taken over only on the owner's word (--takeover)"));
 });
 
-test("unpark names the candidates when no kit matches", () => {
+test("unpark names the candidates when no ergon matches", () => {
   const root = project();
   write(root);
   const result = run(["unpark", "C999", "--root", root]);
   assert.equal(result.code, 1);
-  assert.equal(result.stderr, "error: no kit with id C999 under _aitna/.ergon; kits: C183-park-helper\n");
+  assert.equal(result.stderr, "error: no ergon with id C999 under _aitna/.ergon; ergons: C183-park-helper\n");
 });
 
-test("unpark with no kits at all says none", () => {
+test("unpark with no ergons at all says none", () => {
   const root = project();
   const result = run(["unpark", "C1", "--root", root]);
   assert.equal(result.code, 1);
-  assert.equal(result.stderr, "error: no kit with id C1 under _aitna/.ergon; kits: none\n");
+  assert.equal(result.stderr, "error: no ergon with id C1 under _aitna/.ergon; ergons: none\n");
 });
 
-test("unpark names the kits when several carry the id", () => {
+test("unpark names the ergons when several carry the id", () => {
   const root = project();
   for (const name of ["C5-a", "C5-b", "C50-c"]) {
-    fs.mkdirSync(kitPath(root, name), { recursive: true });
+    fs.mkdirSync(ergonPath(root, name), { recursive: true });
   }
   const result = run(["unpark", "C5", "--root", root]);
   assert.equal(result.code, 1);
-  assert.equal(result.stderr, "error: several kits carry id C5 under _aitna/.ergon: C5-a, C5-b\n");
+  assert.equal(result.stderr, "error: several ergons carry id C5 under _aitna/.ergon: C5-a, C5-b\n");
 });
 
 test("a refused unpark leaves no lease behind: the checks come before the lease", () => {
   const root = project();
-  const bare = kitPath(root, "C5-a");
+  const bare = ergonPath(root, "C5-a");
   fs.mkdirSync(bare, { recursive: true });
   const noResume = run(["unpark", "C5", ...CLAUDE, "--root", root]);
   assert.equal(noResume.code, 1);
-  assert.equal(noResume.stderr, "error: kit C5-a has no RESUME.md; write it again to regenerate it\n");
+  assert.equal(noResume.stderr, "error: ergon C5-a has no RESUME.md; write it again to regenerate it\n");
   assert.equal(readLease(bare, TEXTS), null);
   assert.ok(!fs.existsSync(path.join(bare, "HOLDER")));
   fs.writeFileSync(path.join(bare, "RESUME.md"), "# Resume C5-a\n");
   const noNote = run(["unpark", "C5", ...CLAUDE, "--root", root]);
   assert.equal(noNote.code, 1);
-  assert.equal(noNote.stderr, "error: kit C5-a was never parked: it has no PARK.md\n");
+  assert.equal(noNote.stderr, "error: ergon C5-a was never parked: it has no PARK.md\n");
   assert.ok(!fs.existsSync(path.join(bare, "HOLDER")));
   fs.writeFileSync(path.join(bare, "PARK.md"), "no header\n");
   assert.equal(run(["unpark", "C5", ...CLAUDE, "--root", root]).code, 1); // a note that does not parse
@@ -792,80 +816,88 @@ test("the digest of an unpark reads the unit as active, because the lease is hel
 
 test("a digest within the cap is whole and has no overflow line", () => {
   const root = project();
-  const kit = kitWithAnswers(root, 2);
+  const ergon = ergonWithAnswers(root, 2);
   assert.equal(
-    digest(kit, 3000, root, TEXTS),
+    digest(ergon, 3000, root, TEXTS),
     "park C9-long · parked\nGoal: Goal line\nNext action: Next\nOpen decisions: none\n" +
       "Owner answers:\n- answer 00\n- answer 01",
   );
 });
 
-test("a digest names the state of the kit and the job of the note", () => {
+test("a digest judges a copied lease on the machine it is given", () => {
   const root = project();
-  const kit = kitWithAnswers(root, 0);
-  acquireLease(kit, CLAUDE_HOLDER, TEXTS, context(Date.now() / 1000));
-  assert.ok(digest(kit, 3000, root, TEXTS).startsWith("park C9-long · active\n"));
-  const jobbed = parkFields({ id: "C9", name: "long", nextAction: "Next", plan: "A59", job: "C9.1" });
-  const text = renderNote(jobbed, parkBody({ goal: "g" }), TEXTS);
-  fs.writeFileSync(path.join(kit, "PARK.md"), text);
-  assert.deepEqual(digest(kit, 3000, root, TEXTS).split("\n").slice(0, 3), [
+  const ergon = ergonWithAnswers(root, 0);
+  acquireLease(ergon, CLAUDE_HOLDER, TEXTS, context(Date.now() / 1000));
+  assert.ok(digest(ergon, 3000, root, TEXTS, "m1").startsWith("park C9-long · active\n"));
+  assert.ok(digest(ergon, 3000, root, TEXTS, "m1-copy").startsWith("park C9-long · parked\n"));
+});
+
+test("a digest names the state of the ergon and the athlos of the note", () => {
+  const root = project();
+  const ergon = ergonWithAnswers(root, 0);
+  acquireLease(ergon, CLAUDE_HOLDER, TEXTS, context(Date.now() / 1000));
+  assert.ok(digest(ergon, 3000, root, TEXTS).startsWith("park C9-long · active\n"));
+  const withAthlos = parkFields({ id: "C9", name: "long", nextAction: "Next", plan: "A59", athlos: "C9.1" });
+  const text = renderNote(withAthlos, parkBody({ goal: "g" }), TEXTS);
+  fs.writeFileSync(path.join(ergon, "PARK.md"), text);
+  assert.deepEqual(digest(ergon, 3000, root, TEXTS).split("\n").slice(0, 3), [
     "park C9-long · active",
     "plan: A59",
-    "job: C9.1",
+    "athlos: C9.1",
   ]);
 });
 
 test("a digest is cut at a whole line and names the overflow", () => {
   const root = project();
-  const kit = kitWithAnswers(root, 10);
-  const full = digest(kit, 3000, root, TEXTS).split("\n");
+  const ergon = ergonWithAnswers(root, 10);
+  const full = digest(ergon, 3000, root, TEXTS).split("\n");
   // keep the title, goal, next, decisions-none and the answers heading, plus 2 answers
   const kept = full.slice(0, 7);
   const cap = kept.reduce((sum, line) => sum + line.length + 1, 0);
-  const lines = digest(kit, cap, root, TEXTS).split("\n");
+  const lines = digest(ergon, cap, root, TEXTS).split("\n");
   assert.deepEqual(lines.slice(0, -1), kept);
   assert.equal(lines[lines.length - 1], "… 8 more lines in _aitna/.ergon/C9-long/PARK.md");
   // one character short of the next line: it is dropped whole, never cut; with room for it, it is kept
-  const short = digest(kit, cap + "- answer 02".length, root, TEXTS).split("\n");
+  const short = digest(ergon, cap + "- answer 02".length, root, TEXTS).split("\n");
   assert.ok(short[short.length - 1].startsWith("… 8 more"));
-  const room = digest(kit, cap + "- answer 02".length + 1, root, TEXTS).split("\n");
+  const room = digest(ergon, cap + "- answer 02".length + 1, root, TEXTS).split("\n");
   assert.ok(room[room.length - 1].startsWith("… 7 more"));
 });
 
 test("a digest with a tiny cap is only the overflow line", () => {
   const root = project();
-  const kit = kitWithAnswers(root, 1);
-  assert.equal(digest(kit, 0, root, TEXTS), "… 6 more lines in _aitna/.ergon/C9-long/PARK.md");
+  const ergon = ergonWithAnswers(root, 1);
+  assert.equal(digest(ergon, 0, root, TEXTS), "… 6 more lines in _aitna/.ergon/C9-long/PARK.md");
 });
 
-test("a digest without a root names the note by kit", () => {
+test("a digest without a root names the note by ergon", () => {
   const root = project();
-  const kit = kitWithAnswers(root, 1);
-  assert.ok(digest(kit, 0, null, TEXTS).endsWith("lines in C9-long/PARK.md"));
+  const ergon = ergonWithAnswers(root, 1);
+  assert.ok(digest(ergon, 0, null, TEXTS).endsWith("lines in C9-long/PARK.md"));
 });
 
 test("a digest reads its own texts when called alone", () => {
   const root = project();
-  const kit = kitWithAnswers(root, 1);
-  assert.ok(digest(kit, 3000).startsWith("park C9-long · parked"));
+  const ergon = ergonWithAnswers(root, 1);
+  assert.ok(digest(ergon, 3000).startsWith("park C9-long · parked"));
 });
 
 test("a digest counts code points, not UTF-16 units", () => {
   const root = project();
   const fields = parkFields({ id: "C9", name: "long", nextAction: "Next" });
-  const kit = writeKit(fields, parkBody({ goal: "𝒳𝒴" }), root, TEXTS, root);
+  const ergon = writeErgon(fields, parkBody({ goal: "𝒳𝒴" }), root, TEXTS, root);
   // "Goal: 𝒳𝒴" is 8 code points (10 UTF-16 units); the title line is 21 + 1, then this line + 1
   const title = "park C9-long · parked";
   const cap = title.length + 1 + "Goal: 𝒳𝒴".length + 1;
-  const lines = digest(kit, cap, root, TEXTS).split("\n");
+  const lines = digest(ergon, cap, root, TEXTS).split("\n");
   assert.deepEqual(lines.slice(0, 2), [title, "Goal: 𝒳𝒴"]);
 });
 
 test("a digest indents the continuation of a multiline goal", () => {
   const root = project();
   const fields = parkFields({ id: "C9", name: "long", nextAction: "Next", plan: "A59", readiness: "ready" });
-  const kit = writeKit(fields, parkBody({ goal: "one\ntwo" }), root, TEXTS, root);
-  assert.deepEqual(digest(kit, 3000, root, TEXTS).split("\n").slice(0, 6), [
+  const ergon = writeErgon(fields, parkBody({ goal: "one\ntwo" }), root, TEXTS, root);
+  assert.deepEqual(digest(ergon, 3000, root, TEXTS).split("\n").slice(0, 6), [
     "park C9-long · parked",
     "plan: A59",
     "readiness: ready",
@@ -891,12 +923,12 @@ test("the digest command prints the digest and refuses a negative cap", () => {
 
 test("the digest command's default cap is 3000", () => {
   const root = project();
-  const kit = kitWithAnswers(root, 400);
+  const ergon = ergonWithAnswers(root, 400);
   const lines = run(["digest", "C9", "--root", root]).stdout.split("\n").slice(0, -1);
   const last = lines[lines.length - 1];
   assert.ok(last.startsWith("… ") && last.includes("more lines in _aitna/.ergon/C9-long/PARK.md"));
   assert.ok(lines.slice(0, -1).reduce((sum, line) => sum + line.length + 1, 0) <= 3000);
-  assert.ok(fs.statSync(kit).isDirectory());
+  assert.ok(fs.statSync(ergon).isDirectory());
 });
 
 // --------------------------------------------------------------------------------------
@@ -915,7 +947,7 @@ test("a lease renders flat and round-trips, its time to the second", () => {
   assert.ok(bare.includes("harness:\n") && bare.includes("worktree:\n"));
 });
 
-test("a malformed lease is refused, and a bad stamp reads as time zero", () => {
+test("a malformed lease is refused, and so is a stamp that is not one", () => {
   assert.throws(() => parseLease("not a header\n", "HOLDER", TEXTS), parkError("no header between two '---' lines"));
   assert.throws(() => parseLease("---\nbogus: x\n---\n", "HOLDER", TEXTS), parkError("header key bogus is unknown"));
   assert.throws(
@@ -930,7 +962,11 @@ test("a malformed lease is refused, and a bad stamp reads as time zero", () => {
     "2026-01-01T00:00:60Z",
     "2026-01-01 00:00:00",
   ]) {
-    assert.equal(parseLease(`---\nwritten: ${stamp}\n---\n`, "HOLDER", TEXTS).written, 0, stamp);
+    assert.throws(
+      () => parseLease(`---\nwritten: ${stamp}\n---\n`, "HOLDER", TEXTS),
+      parkError("is not a UTC stamp"),
+      stamp,
+    ); // a corrupt stamp is refused, never read as the epoch: 0 would call a live holder's unit free
   }
   // `strptime` takes the unpadded forms
   assert.equal(
@@ -948,9 +984,11 @@ test("holders compare by harness, session and machine, and read as one line", ()
 
 test("a lease is stale past the threshold, or at once on another machine", () => {
   const now = 1_000_000;
-  const fresh = { holder: CLAUDE_HOLDER, written: now - 23 * HOUR };
-  const old = { holder: CLAUDE_HOLDER, written: now - 25 * HOUR };
+  const fresh = { holder: CLAUDE_HOLDER, written: now - (STALE_HOURS - 1) * HOUR };
+  const exact = { holder: CLAUDE_HOLDER, written: now - STALE_HOURS * HOUR };
+  const old = { holder: CLAUDE_HOLDER, written: now - (STALE_HOURS + 1) * HOUR };
   assert.equal(leaseIsStale(fresh, context(now, "m1")), false);
+  assert.equal(leaseIsStale(exact, context(now, "m1")), false); // exactly the threshold is not past it
   assert.equal(leaseIsStale(old, context(now, "m1")), true);
   assert.equal(leaseIsStale(fresh, context(now, "elsewhere")), true);
   assert.equal(leaseIsStale(fresh, context(now, "")), false); // no machine named: nothing to compare
@@ -963,7 +1001,7 @@ test("a lease is stale past the threshold, or at once on another machine", () =>
 
 test("a free unit is taken, created exclusively", (t) => {
   const root = project();
-  const unit = kitPath(root, "C1-a");
+  const unit = ergonPath(root, "C1-a");
   /** @type {unknown[]} */
   const flags = [];
   const open = fs.openSync;
@@ -983,7 +1021,7 @@ test("a free unit is taken, created exclusively", (t) => {
 
 test("a lease file that appears between the read and the create is never overwritten", () => {
   const root = project();
-  const unit = kitPath(root, "C1-a");
+  const unit = ergonPath(root, "C1-a");
   fs.mkdirSync(unit, { recursive: true });
   // `acquireLease` found no lease; the file now exists, and the exclusive create refuses it
   const text = renderLease({ holder: CODEX_HOLDER, written: 1_000_000 });
@@ -994,7 +1032,7 @@ test("a lease file that appears between the read and the create is never overwri
 
 test("the same session renews its lease, another is refused with the holder named", () => {
   const root = project();
-  const unit = kitPath(root, "C1-a");
+  const unit = ergonPath(root, "C1-a");
   acquireLease(unit, CLAUDE_HOLDER, TEXTS, context(1_000_000));
   const renewed = acquireLease(unit, { ...CLAUDE_HOLDER, worktree: "/w9" }, TEXTS, context(1_000_100));
   assert.equal(renewed.written, 1_000_100);
@@ -1007,7 +1045,7 @@ test("the same session renews its lease, another is refused with the holder name
 
 test("a stale lease is refused as stale, and taken over only on the owner's word", () => {
   const root = project();
-  const unit = kitPath(root, "C1-a");
+  const unit = ergonPath(root, "C1-a");
   acquireLease(unit, CLAUDE_HOLDER, TEXTS, context(1_000_000));
   const later = context(1_000_000 + 25 * HOUR, "m1");
   assert.throws(
@@ -1025,20 +1063,20 @@ test("a stale lease is refused as stale, and taken over only on the owner's word
 test("another machine's lease is stale at once, and a takeover leaves a trace in the note", () => {
   const root = project();
   write(root, ["--harness", "claude", "--session-id", "s1", "--machine", "laptop"]);
-  const kit = kitPath(root);
+  const ergon = ergonPath(root);
   const away = { harness: "claude", sessionId: "s1", machine: "laptop", worktree: "/w1" };
-  acquireLease(kit, away, TEXTS, context(Date.now() / 1000, "laptop"));
+  acquireLease(ergon, away, TEXTS, context(Date.now() / 1000, "laptop"));
   const here = context(Date.now() / 1000, "desktop");
   const mine = { harness: "codex", sessionId: "s2", machine: "desktop", worktree: "/w2" };
-  assert.equal(unitState(kit, TEXTS, here), "parked");
-  assert.throws(() => acquireLease(kit, mine, TEXTS, here), parkError("whose lease is stale"));
-  acquireLease(kit, mine, TEXTS, here, { takeover: true });
-  const { fields } = readNote(kit, TEXTS);
+  assert.equal(unitState(ergon, TEXTS, here), "parked");
+  assert.throws(() => acquireLease(ergon, mine, TEXTS, here), parkError("whose lease is stale"));
+  acquireLease(ergon, mine, TEXTS, here, { takeover: true });
+  const { fields } = readNote(ergon, TEXTS);
   assert.deepEqual(fields.sessions, [{ harness: "claude", sessionId: "s1", machine: "laptop" }]);
   // the same holder replaced twice is remembered once
-  acquireLease(kit, away, TEXTS, context(Date.now() / 1000, "laptop"), { takeover: true });
-  acquireLease(kit, mine, TEXTS, here, { takeover: true });
-  assert.equal(readNote(kit, TEXTS).fields.sessions.length, 2);
+  acquireLease(ergon, away, TEXTS, context(Date.now() / 1000, "laptop"), { takeover: true });
+  acquireLease(ergon, mine, TEXTS, here, { takeover: true });
+  assert.equal(readNote(ergon, TEXTS).fields.sessions.length, 2);
 });
 
 /**
@@ -1047,7 +1085,7 @@ test("another machine's lease is stale at once, and a takeover leaves a trace in
  * @returns {{unit: string, note: string}}
  */
 function noteUnit(root) {
-  const unit = kitPath(root, "C9-long");
+  const unit = ergonPath(root, "C9-long");
   fs.mkdirSync(unit, { recursive: true });
   const note = renderNote(parkFields({ id: "C9", name: "long", nextAction: "Next" }), parkBody({ goal: "g" }), TEXTS);
   fs.writeFileSync(path.join(unit, "PARK.md"), note);
@@ -1084,7 +1122,7 @@ test("a holder with no harness or no session is not recorded among the sessions"
 
 test("a takeover of a unit with no note keeps the replaced holder in a pending record", () => {
   const root = project();
-  const unit = kitPath(root, "C1-a");
+  const unit = ergonPath(root, "C1-a");
   acquireLease(unit, CLAUDE_HOLDER, TEXTS, context(1_000_000));
   acquireLease(unit, CODEX_HOLDER, TEXTS, context(1_000_100), { takeover: true });
   assert.deepEqual(fs.readdirSync(unit).sort(), ["HOLDER", "SESSIONS"]);
@@ -1096,21 +1134,24 @@ test("a takeover of a unit with no note keeps the replaced holder in a pending r
   ]);
 });
 
-test("a takeover of a job keeps the replaced holder in the job file", () => {
-  const unit = kitPath(project(), "C1-a");
+test("a takeover of an athlos keeps the replaced holder in the athlos file", () => {
+  const unit = ergonPath(project(), "C1-a");
   fs.mkdirSync(unit, { recursive: true });
-  const header = parkFields({ id: "C1", name: "a", nextAction: "r", job: "C1.1" });
-  fs.writeFileSync(path.join(unit, "JOB.md"), renderJobDoc({ header, steps: [["first", false]], done: false }, TEXTS));
+  const header = parkFields({ id: "C1", name: "a", nextAction: "r", athlos: "C1.1" });
+  fs.writeFileSync(
+    path.join(unit, "ATHLOS.md"),
+    renderAthlosDoc({ header, steps: [["first", false]], done: false }, TEXTS),
+  );
   acquireLease(unit, CLAUDE_HOLDER, TEXTS, context(1_000_000));
   acquireLease(unit, CODEX_HOLDER, TEXTS, context(1_000_100), { takeover: true });
-  const kept = parseJobDoc(readUtf8(path.join(unit, "JOB.md")), "JOB.md", TEXTS);
+  const kept = parseAthlosDoc(readUtf8(path.join(unit, "ATHLOS.md")), "ATHLOS.md", TEXTS);
   assert.deepEqual(kept.header.sessions, [{ harness: "claude", sessionId: "s1", machine: "m1" }]);
   assert.deepEqual(kept.steps, [["first", false]]);
-  assert.deepEqual(fs.readdirSync(unit).sort(), ["HOLDER", "JOB.md"]);
+  assert.deepEqual(fs.readdirSync(unit).sort(), ["ATHLOS.md", "HOLDER"]);
 });
 
 test("a takeover stops before the lease changes when the note does not parse", () => {
-  const unit = kitPath(project(), "C1-a");
+  const unit = ergonPath(project(), "C1-a");
   fs.mkdirSync(unit, { recursive: true });
   fs.writeFileSync(path.join(unit, "PARK.md"), "not a note\n");
   acquireLease(unit, CLAUDE_HOLDER, TEXTS, context(1_000_000));
@@ -1137,7 +1178,7 @@ test("two anonymous holders are not the same session", () => {
   assert.equal(holderSameAs(anonymous, anonymous), false);
   assert.equal(holderSameAs({ ...anonymous, harness: "claude" }, { ...anonymous, harness: "claude" }), false);
   assert.equal(holderSameAs(CLAUDE_HOLDER, { ...CLAUDE_HOLDER, worktree: "/elsewhere" }), true);
-  const unit = kitPath(project(), "C1-a");
+  const unit = ergonPath(project(), "C1-a");
   acquireLease(unit, anonymous, TEXTS, context(1_000_000));
   assert.throws(() => acquireLease(unit, anonymous, TEXTS, context(1_000_000)), parkError("is held by ? ? m1 /w"));
 });
@@ -1174,7 +1215,7 @@ function staleLease(unit, worktree = "/work/tree") {
  * @returns {string}
  */
 function repoWithCommits() {
-  const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "park-repo-")));
+  const repo = tempDir("park-repo-");
   git(repo, ["init", "-b", "main"]);
   for (const name of ["one", "two"]) {
     fs.writeFileSync(path.join(repo, `${name}.txt`), name);
@@ -1215,7 +1256,7 @@ test("a takeover names the replaced holder's uncommitted paths before anything e
   const repo = repoWithCommits();
   fs.writeFileSync(path.join(repo, "scratch.txt"), "x");
   fs.writeFileSync(path.join(repo, "one.txt"), "changed");
-  staleLease(kitPath(root), repo);
+  staleLease(ergonPath(root), repo);
   const taken = run(["hold", "C183", ...CODEX, "--takeover", "--root", root]);
   assert.equal(taken.code, 0);
   assert.deepEqual(taken.stdout.split("\n"), [
@@ -1232,13 +1273,13 @@ test(
     const root = project();
     write(root);
     const repo = repoWithCommits();
-    staleLease(kitPath(root), repo);
+    staleLease(ergonPath(root), repo);
     assert.equal(
       run(["hold", "C183", ...CODEX, "--takeover", "--root", root]).stdout,
       `C183-park-helper: codex s2 m1 ${NEUTRAL}\n`,
     );
     const gone = path.join(NEUTRAL, "gone");
-    staleLease(kitPath(root), gone);
+    staleLease(ergonPath(root), gone);
     assert.equal(
       run(["hold", "C183", ...CODEX, "--takeover", "--root", root]).stdout,
       `the uncommitted paths of claude s1 m1 ${gone} could not be read\nC183-park-helper: codex s2 m1 ${NEUTRAL}\n`,
@@ -1258,12 +1299,12 @@ test("a takeover of a free unit or of one's own lease names nothing", () => {
 test("a released lease frees the unit; the note stays", () => {
   const root = project();
   write(root);
-  const kit = kitPath(root);
-  acquireLease(kit, CLAUDE_HOLDER, TEXTS, context(1_000_000));
-  releaseLease(kit);
-  assert.equal(readLease(kit, TEXTS), null);
-  assert.ok(fs.existsSync(path.join(kit, "PARK.md")));
-  releaseLease(kit); // a missing lease is no error
+  const ergon = ergonPath(root);
+  acquireLease(ergon, CLAUDE_HOLDER, TEXTS, context(1_000_000));
+  releaseLease(ergon);
+  assert.equal(readLease(ergon, TEXTS), null);
+  assert.ok(fs.existsSync(path.join(ergon, "PARK.md")));
+  releaseLease(ergon); // a missing lease is no error
 });
 
 test("the hold and release commands take and free a unit", () => {
@@ -1293,7 +1334,7 @@ test("hold --takeover replaces a holder of this machine too, on the owner's word
   );
 });
 
-test("write is refused into a kit another live session holds, and releases the lease it parks", () => {
+test("write is refused into an ergon another live session holds, and releases the lease it parks", () => {
   const root = project();
   write(root);
   run(["hold", "C183", ...CLAUDE, "--root", root]);
@@ -1302,16 +1343,16 @@ test("write is refused into a kit another live session holds, and releases the l
   assert.ok(refused.stderr.includes("C183-park-helper is held by claude s1 m1"));
   assert.ok(refused.stderr.includes("read the note, hold another unit, or ask the owner"));
   assert.equal(write(root, CLAUDE).code, 0);
-  assert.equal(readLease(kitPath(root), TEXTS), null);
+  assert.equal(readLease(ergonPath(root), TEXTS), null);
 });
 
 test("write over a stale lease is refused in one line and changes nothing", () => {
   const root = project();
   write(root);
-  const kit = kitPath(root);
-  staleLease(kit);
-  const lease = readUtf8(path.join(kit, "HOLDER"));
-  const note = readUtf8(path.join(kit, "PARK.md"));
+  const ergon = ergonPath(root);
+  staleLease(ergon);
+  const lease = readUtf8(path.join(ergon, "HOLDER"));
+  const note = readUtf8(path.join(ergon, "PARK.md"));
   const refused = write(root, [...CODEX, "--decision", "D-NEW"]);
   assert.equal(refused.code, 1);
   assert.ok(
@@ -1320,18 +1361,18 @@ test("write over a stale lease is refused in one line and changes nothing", () =
   assert.ok(refused.stderr.includes("hold --takeover"));
   assert.ok(refused.stderr.includes("the owner's word"));
   assert.equal(refused.stderr.split("\n").length, 2);
-  assert.equal(readUtf8(path.join(kit, "HOLDER")), lease);
-  assert.equal(readUtf8(path.join(kit, "PARK.md")), note);
+  assert.equal(readUtf8(path.join(ergon, "HOLDER")), lease);
+  assert.equal(readUtf8(path.join(ergon, "PARK.md")), note);
 });
 
 test("write after a takeover goes through and keeps the replaced holder", () => {
   const root = project();
   write(root);
-  staleLease(kitPath(root));
+  staleLease(ergonPath(root));
   assert.equal(run(["hold", "C183", ...CODEX, "--takeover", "--root", root]).code, 0);
   assert.equal(write(root, CODEX).code, 0);
-  assert.equal(readLease(kitPath(root), TEXTS), null);
-  assert.deepEqual(readNote(kitPath(root), TEXTS).fields.sessions, [
+  assert.equal(readLease(ergonPath(root), TEXTS), null);
+  assert.deepEqual(readNote(ergonPath(root), TEXTS).fields.sessions, [
     { harness: "claude", sessionId: "s1", machine: "m1" },
     { harness: "codex", sessionId: "s2", machine: "m1" },
   ]);
@@ -1346,50 +1387,56 @@ test("write keeps the sessions of the note and adds the new ones once", () => {
     { harness: "claude", sessionId: "s1", machine: "m1" },
     { harness: "codex", sessionId: "s2", machine: "m1" },
   ];
-  assert.deepEqual(readNote(kitPath(root), TEXTS).fields.sessions, sessions);
+  assert.deepEqual(readNote(ergonPath(root), TEXTS).fields.sessions, sessions);
   assert.equal(write(root).code, 0); // a write that names no session keeps the ones the note has
-  assert.deepEqual(readNote(kitPath(root), TEXTS).fields.sessions, sessions);
+  assert.deepEqual(readNote(ergonPath(root), TEXTS).fields.sessions, sessions);
 });
 
-test("write merges the holder a takeover kept before the kit had a note", () => {
+test("write merges the holder a takeover kept before the ergon had a note", () => {
   const root = project();
-  const kit = kitPath(root);
-  fs.mkdirSync(kit, { recursive: true });
+  const ergon = ergonPath(root);
+  fs.mkdirSync(ergon, { recursive: true });
   assert.equal(run(["hold", "C183", ...CLAUDE, "--root", root]).code, 0);
-  staleLease(kit);
+  staleLease(ergon);
   assert.equal(run(["hold", "C183", ...CODEX, "--takeover", "--root", root]).code, 0);
-  assert.ok(fs.existsSync(path.join(kit, "SESSIONS")));
+  assert.ok(fs.existsSync(path.join(ergon, "SESSIONS")));
   assert.equal(write(root, CODEX).code, 0);
-  assert.deepEqual(readNote(kit, TEXTS).fields.sessions, [
+  assert.deepEqual(readNote(ergon, TEXTS).fields.sessions, [
     { harness: "claude", sessionId: "s1", machine: "m1" },
     { harness: "codex", sessionId: "s2", machine: "m1" },
   ]);
-  assert.deepEqual(fs.readdirSync(kit).sort(), ["PARK.md", "RESUME.md"]);
+  assert.deepEqual(fs.readdirSync(ergon).sort(), ["PARK.md", "RESUME.md"]);
 });
 
-test("a takeover of a job is kept in the job file through the command line", () => {
+test("a takeover of an athlos is kept in the athlos file through the command line", () => {
   const root = project();
-  const kit = kitWithPlan(root);
-  assert.equal(run(["job", "C1", "--number", "1", "--step", "first", ...CLAUDE, "--root", root]).code, 0);
-  const folder = path.join(kit, "jobs", "1-build-core");
+  const ergon = ergonWithPlan(root);
+  assert.equal(run(["athlos", "C1", "--number", "1", "--step", "first", ...CLAUDE, "--root", root]).code, 0);
+  const folder = path.join(ergon, "1");
   staleLease(folder);
   assert.equal(run(["hold", "C1", "--number", "1", ...CODEX, "--takeover", "--root", root]).code, 0);
   const sessions = [{ harness: "claude", sessionId: "s1", machine: "m1" }];
-  assert.deepEqual(parseJobDoc(readUtf8(path.join(folder, "JOB.md")), "JOB.md", TEXTS).header.sessions, sessions);
-  assert.equal(run(["job", "C1", "--number", "1", "--step", "second", ...CODEX, "--root", root]).code, 0);
-  assert.deepEqual(parseJobDoc(readUtf8(path.join(folder, "JOB.md")), "JOB.md", TEXTS).header.sessions, sessions);
+  assert.deepEqual(
+    parseAthlosDoc(readUtf8(path.join(folder, "ATHLOS.md")), "ATHLOS.md", TEXTS).header.sessions,
+    sessions,
+  );
+  assert.equal(run(["athlos", "C1", "--number", "1", "--step", "second", ...CODEX, "--root", root]).code, 0);
+  assert.deepEqual(
+    parseAthlosDoc(readUtf8(path.join(folder, "ATHLOS.md")), "ATHLOS.md", TEXTS).header.sessions,
+    sessions,
+  );
 });
 
 test("a write that fails leaves no lease and no folder behind", () => {
   const root = project();
   write(root);
   assert.equal(write(root, [], { name: "other-name" }).code, 1); // the id is taken under another name
-  assert.ok(!fs.existsSync(kitPath(root, "C183-other-name")));
-  assert.equal(write(root, ["--origin", "two\nlines"], { kitId: "C184", name: "new-kit" }).code, 1);
-  assert.ok(!fs.existsSync(kitPath(root, "C184-new-kit")));
+  assert.ok(!fs.existsSync(ergonPath(root, "C183-other-name")));
+  assert.equal(write(root, ["--origin", "two\nlines"], { ergonId: "C184", name: "new-ergon" }).code, 1);
+  assert.ok(!fs.existsSync(ergonPath(root, "C184-new-ergon")));
 });
 
-test("write refuses to reuse the id and name of a closed kit", () => {
+test("write refuses to reuse the id and name of a closed ergon", () => {
   const root = project();
   write(root);
   assert.equal(run(["close", "C183", "--root", root]).code, 0);
@@ -1397,16 +1444,16 @@ test("write refuses to reuse the id and name of a closed kit", () => {
   assert.equal(refused.code, 1);
   assert.equal(
     refused.stderr,
-    "error: kit C183-park-helper is closed and keeps its id and name; write under another id or name\n",
+    "error: ergon C183-park-helper is closed and keeps its id and name; write under another id or name\n",
   );
-  assert.ok(!fs.existsSync(kitPath(root)));
+  assert.ok(!fs.existsSync(ergonPath(root)));
 });
 
 test("write by an anonymous session over an anonymous lease is refused", () => {
   const root = project();
   write(root);
   fs.writeFileSync(
-    path.join(kitPath(root), "HOLDER"),
+    path.join(ergonPath(root), "HOLDER"),
     renderLease({ holder: { harness: "", sessionId: "", machine: "", worktree: "" }, written: Date.now() / 1000 }),
   );
   const refused = write(root);
@@ -1414,23 +1461,23 @@ test("write by an anonymous session over an anonymous lease is refused", () => {
   assert.ok(refused.stderr.includes("C183-park-helper is held by ? ? ?"));
 });
 
-test("a hold on a job that does not exist is refused", () => {
+test("a hold on an athlos that does not exist is refused", () => {
   const root = project();
   write(root);
   const result = run(["hold", "C183", "--number", "4", "--root", root]);
   assert.equal(result.code, 1);
-  assert.equal(result.stderr, "error: kit C183-park-helper has no job C183.4\n");
+  assert.equal(result.stderr, "error: ergon C183-park-helper has no athlos C183.4\n");
   assert.equal(run(["release", "C183", "--number", "4", "--root", root]).stderr, result.stderr);
 });
 
 // --------------------------------------------------------------------------------------
-// the plan and its jobs
+// the plan and its athlos
 // --------------------------------------------------------------------------------------
 
-test("a plan's header and job lines are parsed", () => {
-  const plan = parsePlan(PLAN_TEXT);
+test("a plan's header and athlos lines are parsed", () => {
+  const plan = parsePlan(PLAN_TEXT, TEXTS);
   assert.deepEqual(plan.header, { id: "C1", name: "demo", title: "Demo plan", tasks: ["C1", "C2"] });
-  assert.deepEqual(plan.jobs, [
+  assert.deepEqual(plan.athlos, [
     {
       id: "C1.1",
       number: 1,
@@ -1440,6 +1487,7 @@ test("a plan's header and job lines are parsed", () => {
       paths: ["src/a", "docs"],
       harness: "",
       result: "core built",
+      zone: "",
     },
     {
       id: "C1.2",
@@ -1450,57 +1498,110 @@ test("a plan's header and job lines are parsed", () => {
       paths: ["docs/x"],
       harness: "",
       result: "docs done",
+      zone: "",
     },
-    { id: "C1.3", number: 3, label: "Extra", tasks: [], after: [], paths: ["other"], harness: "claude", result: "" },
+    {
+      id: "C1.3",
+      number: 3,
+      label: "Extra",
+      tasks: [],
+      after: [],
+      paths: ["other"],
+      harness: "claude",
+      result: "",
+      zone: "",
+    },
   ]);
 });
 
-test("a plan without a header or a Jobs section has no jobs", () => {
-  assert.deepEqual(parsePlan("# just prose\n").jobs, []);
-  assert.deepEqual(parsePlan("# just prose\n").header, { id: "", name: "", title: "", tasks: [] });
-  assert.deepEqual(parsePlan("---\nid: C1\n---\n## Notes\n\n- C1.1 · a\n").jobs, []);
-  assert.deepEqual(parsePlan("---\nid: C1\nno closing fence\n").header.id, "");
+test("a plan without a header or a Athlos section has no athlos", () => {
+  assert.deepEqual(parsePlan("# just prose\n", TEXTS).athlos, []);
+  assert.deepEqual(parsePlan("# just prose\n", TEXTS).header, { id: "", name: "", title: "", tasks: [] });
+  assert.deepEqual(parsePlan("---\nid: C1\n---\n## Notes\n\n- C1.1 · a\n", TEXTS).athlos, []);
+  assert.deepEqual(parsePlan("---\nid: C1\nno closing fence\n", TEXTS).header.id, "");
 });
 
-test("a job line that is not one is skipped", () => {
+test("an athlos line that is not one is skipped", () => {
   for (const line of ["C1.1 · a", "- C1.1", "- C1 · a", "- C1.x · a", "- plain text", "* C1.1 · a"]) {
-    assert.equal(parseJobLine(line), null, line);
+    assert.equal(parseAthlosLine(line, TEXTS), null, line);
   }
-  assert.equal(parseJobLine("- _T3.2 · local job")?.number, 2);
-  assert.deepEqual(parseJobLine("- C1.1 · a · tasks C1, C2 · after C1.0")?.tasks, ["C1", "C2"]);
+  assert.equal(parseAthlosLine("- _T3.2 · local athlos", TEXTS)?.number, 2);
+  assert.deepEqual(parseAthlosLine("- C1.1 · a · tasks C1, C2 · after C1.0", TEXTS)?.tasks, ["C1", "C2"]);
 });
 
-test("a job's folder name is its label as a slug", () => {
-  assert.equal(jobSlug("Build the Core!"), "build-the-core");
-  assert.equal(jobSlug("  --odd  "), "odd");
-  assert.equal(jobSlug("x".repeat(60)), "x".repeat(40));
-  assert.equal(jobSlug(`${"a".repeat(39)} b`), "a".repeat(39));
+test("the zone of an athlos line sits beside its tasks and is empty when absent", () => {
+  assert.equal(parseAthlosLine("- C1.1 · a · tasks C1 · zone: docs · result: r", TEXTS)?.zone, "docs");
+  assert.equal(parseAthlosLine("- C1.1 · a · tasks C1 · result: r", TEXTS)?.zone, "");
 });
 
-test("two jobs that may run at once and share a path are warned of", () => {
+test("a plan line with a field the format does not carry is refused", () => {
+  assert.throws(
+    () => parsePlan("---\nid: C1\n---\n## Athlos\n\n- C1.1 · a · colour red\n", TEXTS),
+    parkError("C1.1: a plan line carries no field colour"),
+  );
+});
+
+test("a plan written before the rename is read and translated", () => {
+  const legacy = parsePlan(PLAN_TEXT.replace("## Athlos", "## Jobs"), TEXTS);
+  assert.equal(legacy.athlos.length, 3);
+});
+
+test("an athlos folder is named by its number alone", () => {
+  const root = project();
+  const ergon = ergonWithPlan(root);
+  assert.equal(athlosFolder(ergon, 1), null);
+  const folder = path.join(ergon, "1");
+  fs.mkdirSync(folder, { recursive: true });
+  assert.equal(athlosFolder(ergon, 1), folder);
+  assert.equal(athlosFileOf(folder), path.join(folder, "ATHLOS.md"));
+  // the write target of a number that already sits in the new layout is that folder, unchanged
+  assert.equal(moveAthlosFolder(ergon, 1, folder), folder);
+});
+
+test("a record in the old jobs layout is read, and the next write moves it to the new one", () => {
+  const root = project();
+  const ergon = ergonWithPlan(root);
+  const legacy = path.join(ergon, "jobs", "1");
+  fs.mkdirSync(legacy, { recursive: true });
+  const header = parkFields({ id: "C1", name: "demo", nextAction: "r", athlos: "C1.1" });
+  const text = renderAthlosDoc({ header, steps: [], done: false }, TEXTS).replace("\nathlos:", "\njob:");
+  fs.writeFileSync(path.join(legacy, "JOB.md"), text);
+  assert.equal(athlosFolder(ergon, 1), legacy);
+  const read = parseAthlosDoc(readUtf8(athlosFileOf(legacy)), "jobs/1/JOB.md", TEXTS);
+  assert.equal(read.header.athlos, "C1.1"); // the old `job:` key reads under its new name
+  assert.equal(run(["athlos", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]).code, 0);
+  assert.ok(!fs.existsSync(path.join(ergon, "jobs")));
+  assert.ok(fs.existsSync(path.join(ergon, "1", "ATHLOS.md")));
+});
+
+test("two athlos that may run at once and share a path are warned of", () => {
   const plan = parsePlan(
-    "---\nid: C1\n---\n## Jobs\n\n- C1.1 · a · paths src/a, docs\n- C1.2 · b · paths src/a/deep.py\n- C1.3 · c · paths docs/\n- C1.4 · d · paths other\n",
+    "---\nid: C1\n---\n## Athlos\n\n- C1.1 · a · paths src/a, docs\n- C1.2 · b · paths src/a/deep.py\n- C1.3 · c · paths docs/\n- C1.4 · d · paths other\n",
+    TEXTS,
   );
   assert.deepEqual(sharedPathWarnings(plan, TEXTS), [
-    "warning: jobs C1.1 C1.2 may run at once and share path src/a",
-    "warning: jobs C1.1 C1.3 may run at once and share path docs",
+    "warning: athlos C1.1 C1.2 may run at once and share path src/a",
+    "warning: athlos C1.1 C1.3 may run at once and share path docs",
   ]);
   assert.deepEqual(
-    sharedPathWarnings(parsePlan("---\nid: C1\n---\n## Jobs\n\n- C1.1 · a · paths x\n- C1.2 · b · paths y\n"), TEXTS),
+    sharedPathWarnings(
+      parsePlan("---\nid: C1\n---\n## Athlos\n\n- C1.1 · a · paths x\n- C1.2 · b · paths y\n", TEXTS),
+      TEXTS,
+    ),
     [],
   );
 });
 
-test("a job file renders its steps and the done mark, and parses back", () => {
+test("an athlos file renders its steps and the done mark, and parses back", () => {
   const header = parkFields({
     id: "C1",
     name: "demo",
     nextAction: "core built",
     plan: "C1",
-    job: "C1.1",
+    athlos: "C1.1",
     tasks: ["C1"],
   });
-  /** @type {import("./park.mjs").JobDoc} */
+  /** @type {import("./park.mjs").AthlosDoc} */
   const doc = {
     header,
     steps: [
@@ -1509,39 +1610,53 @@ test("a job file renders its steps and the done mark, and parses back", () => {
     ],
     done: true,
   };
-  const text = renderJobDoc(doc, TEXTS);
+  const text = renderAthlosDoc(doc, TEXTS);
   assert.ok(text.endsWith("## Steps\n\n- [x] one\n- [ ] two\n\ndone\n"));
-  assert.deepEqual(parseJobDoc(text, "JOB.md", TEXTS), doc);
-  assert.ok(renderJobDoc({ header, steps: [], done: false }, TEXTS).endsWith("## Steps\n\n_none_\n"));
-  assert.throws(() => parseJobDoc("no header\n", "JOB.md", TEXTS), parkError("JOB.md: no header"));
+  assert.deepEqual(parseAthlosDoc(text, "ATHLOS.md", TEXTS), doc);
+  assert.ok(renderAthlosDoc({ header, steps: [], done: false }, TEXTS).endsWith("## Steps\n\n_none_\n"));
+  assert.throws(() => parseAthlosDoc("no header\n", "ATHLOS.md", TEXTS), parkError("ATHLOS.md: no header"));
 });
 
-test("the job command creates a job's file from the plan's line and holds the job", () => {
+test("a label in another script names no folder, so the athlos is still written", () => {
   const root = project();
-  const kit = kitWithPlan(root);
-  const result = run(["job", "C1", "--number", "1", "--step", "one", "--step", "two", ...CLAUDE, "--root", root]);
+  const ergon = ergonPath(root, "C1-demo");
+  fs.mkdirSync(ergon, { recursive: true });
+  fs.writeFileSync(
+    path.join(ergon, "PLAN.md"),
+    "---\nid: C1\nname: demo\n---\n\n## Athlos\n\n- C1.1 · Écrire le bail 租约 · tasks C1 · result: le bail existe\n",
+  );
+  const result = run(["athlos", "C1", "--number", "1", "--step", "écrire", ...CLAUDE, "--root", root]);
   assert.equal(result.code, 0);
-  assert.equal(result.stdout, "_aitna/.ergon/C1-demo/jobs/1-build-core\n");
-  const folder = path.join(kit, "jobs", "1-build-core");
-  const doc = parseJobDoc(readUtf8(path.join(folder, "JOB.md")), "JOB.md", TEXTS);
+  assert.equal(result.stdout, "_aitna/.ergon/C1-demo/1\n");
+  assert.ok(fs.existsSync(path.join(ergon, "1", "ATHLOS.md"))); // the folder is the number; the label stays on the plan line
+});
+
+test("the athlos command creates an athlos's file from the plan's line and holds the athlos", () => {
+  const root = project();
+  const ergon = ergonWithPlan(root);
+  const result = run(["athlos", "C1", "--number", "1", "--step", "one", "--step", "two", ...CLAUDE, "--root", root]);
+  assert.equal(result.code, 0);
+  assert.equal(result.stdout, "_aitna/.ergon/C1-demo/1\n");
+  const folder = path.join(ergon, "1");
+  const doc = parseAthlosDoc(readUtf8(path.join(folder, "ATHLOS.md")), "ATHLOS.md", TEXTS);
   assert.deepEqual(
     {
-      job: doc.header.job,
+      athlos: doc.header.athlos,
       plan: doc.header.plan,
       tasks: doc.header.tasks,
       next: doc.header.nextAction,
       id: doc.header.id,
     },
-    { job: "C1.1", plan: "C1", tasks: ["C1"], next: "core built", id: "C1" },
+    { athlos: "C1.1", plan: "C1", tasks: ["C1"], next: "core built", id: "C1" },
   );
   assert.deepEqual(doc.steps, [
     ["one", false],
     ["two", false],
   ]);
   assert.equal(readLease(folder, TEXTS)?.holder.sessionId, "s1");
-  // a second write adds steps and keeps the first; --done marks the job done
-  run(["job", "C1", "--number", "1", "--step", "three", "--done", ...CLAUDE, "--root", root]);
-  const again = parseJobDoc(readUtf8(path.join(folder, "JOB.md")), "JOB.md", TEXTS);
+  // a second write adds steps and keeps the first; --done marks the athlos done
+  run(["athlos", "C1", "--number", "1", "--step", "three", "--done", ...CLAUDE, "--root", root]);
+  const again = parseAthlosDoc(readUtf8(path.join(folder, "ATHLOS.md")), "ATHLOS.md", TEXTS);
   assert.deepEqual(
     again.steps.map(([text]) => text),
     ["one", "two", "three"],
@@ -1549,82 +1664,82 @@ test("the job command creates a job's file from the plan's line and holds the jo
   assert.equal(again.done, true);
 });
 
-test("the job command is refused into a job another session holds, and for a job the plan lacks", () => {
+test("the athlos command is refused into an athlos another session holds, and for an athlos the plan lacks", () => {
   const root = project();
-  kitWithPlan(root);
-  run(["job", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
-  const refused = run(["job", "C1", "--number", "1", "--step", "two", ...CODEX, "--root", root]);
+  ergonWithPlan(root);
+  run(["athlos", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
+  const refused = run(["athlos", "C1", "--number", "1", "--step", "two", ...CODEX, "--root", root]);
   assert.equal(refused.code, 1);
-  assert.ok(refused.stderr.startsWith("error: 1-build-core is held by claude s1 m1 "));
-  const missing = run(["job", "C1", "--number", "9", ...CLAUDE, "--root", root]);
+  assert.ok(refused.stderr.startsWith("error: 1 is held by claude s1 m1 "));
+  const missing = run(["athlos", "C1", "--number", "9", ...CLAUDE, "--root", root]);
   assert.equal(missing.code, 1);
-  assert.equal(missing.stderr, "error: kit C1-demo has no job C1.9\n");
+  assert.equal(missing.stderr, "error: ergon C1-demo has no athlos C1.9\n");
 });
 
-test("a job in a kit without a plan is refused, and nothing is written", () => {
+test("an athlos in an ergon without a plan is refused, and nothing is written", () => {
   const root = project();
   write(root);
-  const result = run(["job", "C183", "--number", "1", "--step", "x", ...CLAUDE, "--root", root]);
+  const result = run(["athlos", "C183", "--number", "1", "--step", "x", ...CLAUDE, "--root", root]);
   assert.equal(result.code, 1);
-  assert.equal(result.stderr, "error: kit C183-park-helper has no PLAN.md, so it has no jobs\n");
-  assert.ok(!fs.existsSync(path.join(kitPath(root), "jobs")));
+  assert.equal(result.stderr, "error: ergon C183-park-helper has no PLAN.md, so it has no athlos\n");
+  assert.ok(!fs.existsSync(path.join(ergonPath(root), "athlos")));
   assert.deepEqual(
-    walk(kitPath(root)).filter((file) => path.basename(file) === "HOLDER"),
+    walk(ergonPath(root)).filter((file) => path.basename(file) === "HOLDER"),
     [],
   );
 });
 
 /**
- * A kit `C186-holders-jobs` whose plan is `text`.
+ * An ergon `C186-holders-units` whose plan is `text`.
  * @param {string} root
  * @param {string} text
- * @returns {string} the kit folder
+ * @returns {string} the ergon folder
  */
-function planKit(root, text) {
-  const kit = kitPath(root, "C186-holders-jobs");
-  fs.mkdirSync(kit, { recursive: true });
-  fs.writeFileSync(path.join(kit, "PLAN.md"), text);
-  return kit;
+function planErgon(root, text) {
+  const ergon = ergonPath(root, "C186-holders-units");
+  fs.mkdirSync(ergon, { recursive: true });
+  fs.writeFileSync(path.join(ergon, "PLAN.md"), text);
+  return ergon;
 }
 
-test("a job line the helper cannot write from is refused before anything is written", () => {
+test("an athlos line the helper cannot write from is refused before anything is written", () => {
   for (const [line, message] of [
-    ["- C186.1 ·  · result: r", "error: job C186.1 has no label, so its folder has no name\n"],
-    ["- C186.1 · Lease module · tasks C186", "error: kit C186-holders-jobs: job C186.1 has no result\n"],
-    ["- C186.1 · Lease module · result:", "error: kit C186-holders-jobs: job C186.1 has no result\n"],
+    ["- C186.1 ·  · result: r", "error: athlos C186.1 has no label on its plan line\n"],
+    ["- C186.1 · Lease module · tasks C186", "error: ergon C186-holders-units: athlos C186.1 has no result\n"],
+    ["- C186.1 · Lease module · result:", "error: ergon C186-holders-units: athlos C186.1 has no result\n"],
   ]) {
     const root = project();
-    const kit = planKit(root, `---\nid: C186\nname: holders-jobs\n---\n\n## Jobs\n\n${line}\n`);
-    const result = run(["job", "C186", "--number", "1", "--step", "x", ...CLAUDE, "--root", root]);
+    const ergon = planErgon(root, `---\nid: C186\nname: holders-units\n---\n\n## Athlos\n\n${line}\n`);
+    const result = run(["athlos", "C186", "--number", "1", "--step", "x", ...CLAUDE, "--root", root]);
     assert.equal(result.code, 1, line);
     assert.equal(result.stderr, message);
     assert.equal(result.stdout, "");
-    assert.ok(!fs.existsSync(path.join(kit, "jobs")));
+    assert.ok(!fs.existsSync(path.join(ergon, "1")));
     assert.deepEqual(
-      walk(kit).filter((file) => path.basename(file) === "HOLDER"),
+      walk(ergon).filter((file) => path.basename(file) === "HOLDER"),
       [],
     );
   }
 });
 
-test("the job command prints the plan's shared-path warnings on stderr, one line each, stdout unchanged", () => {
+test("the athlos command prints the plan's shared-path warnings on stderr, one line each, stdout unchanged", () => {
   const root = project();
-  planKit(
+  planErgon(
     root,
-    "---\nid: C186\nname: holders-jobs\n---\n\n## Jobs\n\n" +
+    "---\nid: C186\nname: holders-units\n---\n\n## Athlos\n\n" +
       "- C186.1 · Lease module · paths tools/park · result: r\n" +
-      "- C186.2 · Job file · paths tools/park/park.py · result: r\n",
+      "- C186.2 · Athlos file · paths tools/park/park.py · result: r\n",
   );
-  const result = run(["job", "C186", "--number", "1", "--step", "x", ...CLAUDE, "--root", root]);
+  const result = run(["athlos", "C186", "--number", "1", "--step", "x", ...CLAUDE, "--root", root]);
   assert.equal(result.code, 0);
-  assert.equal(result.stdout, "_aitna/.ergon/C186-holders-jobs/jobs/1-lease-module\n");
-  assert.equal(result.stderr, "warning: jobs C186.1 C186.2 may run at once and share path tools/park\n");
+  assert.equal(result.stdout, "_aitna/.ergon/C186-holders-units/1\n");
+  assert.equal(result.stderr, "warning: athlos C186.1 C186.2 may run at once and share path tools/park\n");
   const quiet = project();
-  kitWithPlan(quiet);
-  assert.equal(run(["job", "C1", "--number", "1", "--step", "x", ...CLAUDE, "--root", quiet]).stderr, "");
+  ergonWithPlan(quiet);
+  assert.equal(run(["athlos", "C1", "--number", "1", "--step", "x", ...CLAUDE, "--root", quiet]).stderr, "");
 });
 
-test("jobs that wait for each other, directly or through a chain, share no warning", () => {
+test("athlos that wait for each other, directly or through a chain, share no warning", () => {
   for (const lines of [
     ["- C1.1 · A · paths x · result: r", "- C1.2 · B · after C1.1 · paths x · result: r"],
     [
@@ -1633,7 +1748,7 @@ test("jobs that wait for each other, directly or through a chain, share no warni
       "- C1.3 · C · after C1.2 · paths x · result: r",
     ],
   ]) {
-    const plan = parsePlan(`---\nid: C1\nname: k\n---\n\n## Jobs\n\n${lines.join("\n")}\n`);
+    const plan = parsePlan(`---\nid: C1\nname: k\n---\n\n## Athlos\n\n${lines.join("\n")}\n`, TEXTS);
     assert.deepEqual(sharedPathWarnings(plan, TEXTS), []);
   }
 });
@@ -1645,74 +1760,75 @@ test("jobs that wait for each other, directly or through a chain, share no warni
 test("the state of a unit is derived: active, parked, not started, done", () => {
   const root = project();
   const now = Date.now() / 1000;
-  const kit = kitPath(root, "C1-a");
-  fs.mkdirSync(kit, { recursive: true });
-  assert.equal(unitState(kit, TEXTS, context(now)), "not started");
-  fs.writeFileSync(path.join(kit, "PARK.md"), "x");
-  assert.equal(unitState(kit, TEXTS, context(now)), "parked");
-  acquireLease(kit, CLAUDE_HOLDER, TEXTS, context(now, "m1"));
-  assert.equal(unitState(kit, TEXTS, context(now, "m1")), "active");
-  assert.equal(unitState(kit, TEXTS, context(now + 25 * HOUR, "m1")), "parked"); // a stale lease holds nothing
-  assert.equal(unitState(kit, TEXTS, context(now, "m1"), { jobDone: true }), "done");
-  fs.rmSync(path.join(kit, "PARK.md"));
-  assert.equal(unitState(kit, TEXTS, context(now + 25 * HOUR, "m1")), "not started");
+  const ergon = ergonPath(root, "C1-a");
+  fs.mkdirSync(ergon, { recursive: true });
+  assert.equal(unitState(ergon, TEXTS, context(now)), "not started");
+  fs.writeFileSync(path.join(ergon, "PARK.md"), "x");
+  assert.equal(unitState(ergon, TEXTS, context(now)), "parked");
+  acquireLease(ergon, CLAUDE_HOLDER, TEXTS, context(now, "m1"));
+  assert.equal(unitState(ergon, TEXTS, context(now, "m1")), "active");
+  // a stale lease holds nothing
+  assert.equal(unitState(ergon, TEXTS, context(now + (STALE_HOURS + 1) * HOUR, "m1")), "parked");
+  assert.equal(unitState(ergon, TEXTS, context(now, "m1"), { athlosDone: true }), "done");
+  fs.rmSync(path.join(ergon, "PARK.md"));
+  assert.equal(unitState(ergon, TEXTS, context(now + (STALE_HOURS + 1) * HOUR, "m1")), "not started");
 });
 
-test("a kit is done when every job its plan lists is done, and a planned job with no folder blocks it", () => {
+test("an ergon is done when every athlos its plan lists is done, and a planned athlos with no folder blocks it", () => {
   const root = project();
-  const kit = kitWithPlan(root);
+  const ergon = ergonWithPlan(root);
   const now = context(Date.now() / 1000);
-  assert.equal(kitState(kit, TEXTS, now), "not started"); // no job folder yet
-  run(["job", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
-  assert.equal(kitState(kit, TEXTS, now), "active"); // a job is held, so the kit is active though it is free itself
-  run(["job", "C1", "--number", "1", "--done", ...CLAUDE, "--root", root]);
-  run(["job", "C1", "--number", "2", "--step", "two", ...CLAUDE, "--root", root]);
-  run(["job", "C1", "--number", "2", "--done", ...CLAUDE, "--root", root]);
-  // the plan's third job has no folder: it has not started (ADR 0028 D08)
-  assert.equal(kitState(kit, TEXTS, now), "not started");
-  doneJob(kit, 3);
-  assert.equal(kitState(kit, TEXTS, now), "done");
-  fs.rmSync(path.join(kit, "jobs", "3-extra", "JOB.md"));
-  assert.equal(kitState(kit, TEXTS, now), "not started"); // a folder with no job file is not a done job
-  fs.rmSync(path.join(kit, "jobs", "2-write-docs", "JOB.md"));
-  fs.writeFileSync(path.join(kit, "PARK.md"), "note");
-  assert.equal(kitState(kit, TEXTS, now), "parked");
+  assert.equal(ergonState(ergon, TEXTS, now), "not started"); // no athlos folder yet
+  run(["athlos", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
+  assert.equal(ergonState(ergon, TEXTS, now), "active"); // an athlos is held, so the ergon is active though it is free itself
+  run(["athlos", "C1", "--number", "1", "--done", ...CLAUDE, "--root", root]);
+  run(["athlos", "C1", "--number", "2", "--step", "two", ...CLAUDE, "--root", root]);
+  run(["athlos", "C1", "--number", "2", "--done", ...CLAUDE, "--root", root]);
+  // the plan's third athlos has no folder: it has not started (ADR 0028 D08)
+  assert.equal(ergonState(ergon, TEXTS, now), "not started");
+  doneAthlos(ergon, 3);
+  assert.equal(ergonState(ergon, TEXTS, now), "done");
+  fs.rmSync(path.join(ergon, "3", "ATHLOS.md"));
+  assert.equal(ergonState(ergon, TEXTS, now), "not started"); // a folder with no athlos file is not a done athlos
+  fs.rmSync(path.join(ergon, "2", "ATHLOS.md"));
+  fs.writeFileSync(path.join(ergon, "PARK.md"), "note");
+  assert.equal(ergonState(ergon, TEXTS, now), "parked");
 });
 
 /**
- * A done `JOB.md` for the plan's job `number` of kit `C1-demo`, written by hand.
- * @param {string} kit
+ * A done `ATHLOS.md` for the plan's athlos `number` of ergon `C1-demo`, written by hand.
+ * @param {string} ergon
  * @param {number} number
  */
-function doneJob(kit, number) {
-  const folder = path.join(kit, "jobs", `${number}-extra`);
+function doneAthlos(ergon, number) {
+  const folder = path.join(ergon, `${number}`);
   fs.mkdirSync(folder, { recursive: true });
-  const header = parkFields({ id: "C1", name: "demo", nextAction: "r", job: `C1.${number}` });
-  fs.writeFileSync(path.join(folder, "JOB.md"), renderJobDoc({ header, steps: [], done: true }, TEXTS));
+  const header = parkFields({ id: "C1", name: "demo", nextAction: "r", athlos: `C1.${number}` });
+  fs.writeFileSync(path.join(folder, "ATHLOS.md"), renderAthlosDoc({ header, steps: [], done: true }, TEXTS));
 }
 
-test("a kit with no plan, or a plan with no jobs, is done by the job folders that exist", () => {
+test("an ergon with no plan, or a plan with no athlos, is done by the athlos folders that exist", () => {
   const root = project();
-  const bare = kitPath(root, "C5-bare");
+  const bare = ergonPath(root, "C5-bare");
   fs.mkdirSync(bare, { recursive: true });
   const now = context(Date.now() / 1000);
-  assert.equal(kitState(bare, TEXTS, now), "not started"); // no folder, nothing done
-  const empty = planKit(root, "---\nid: C6\nname: empty\n---\n\n## Jobs\n\n");
-  for (const kit of [bare, empty]) {
-    const folder = path.join(kit, "jobs", "1-only");
+  assert.equal(ergonState(bare, TEXTS, now), "not started"); // no folder, nothing done
+  const empty = planErgon(root, "---\nid: C6\nname: empty\n---\n\n## Athlos\n\n");
+  for (const ergon of [bare, empty]) {
+    const folder = path.join(ergon, "1");
     fs.mkdirSync(folder, { recursive: true });
-    const header = parkFields({ id: "C5", name: "x", nextAction: "r", job: "C5.1" });
-    fs.writeFileSync(path.join(folder, "JOB.md"), renderJobDoc({ header, steps: [], done: true }, TEXTS));
-    assert.equal(kitState(kit, TEXTS, now), "done");
+    const header = parkFields({ id: "C5", name: "x", nextAction: "r", athlos: "C5.1" });
+    fs.writeFileSync(path.join(folder, "ATHLOS.md"), renderAthlosDoc({ header, steps: [], done: true }, TEXTS));
+    assert.equal(ergonState(ergon, TEXTS, now), "done");
   }
 });
 
 test("a list of an empty ergon says so", () => {
   const root = project();
   assert.equal(run(["list", "--root", root]).code, 0);
-  assert.equal(run(["list", "--root", root]).stdout, "no kits in _aitna/.ergon\n");
+  assert.equal(run(["list", "--root", root]).stdout, "no ergons in _aitna/.ergon\n");
   fs.mkdirSync(path.join(root, "_aitna", ".ergon"), { recursive: true });
-  assert.equal(run(["list", "--root", root]).stdout, "no kits in _aitna/.ergon\n");
+  assert.equal(run(["list", "--root", root]).stdout, "no ergons in _aitna/.ergon\n");
 });
 
 /**
@@ -1720,13 +1836,13 @@ test("a list of an empty ergon says so", () => {
  */
 function populate(root) {
   write(root, ["--plan", "A59", "--decision", "D-X", "--decision", "D-Y"]);
-  write(root, ["--plan", "A60"], { kitId: "A5", name: "second" });
-  fs.mkdirSync(kitPath(root, "C7-never"));
-  write(root, [], { kitId: "C20", name: "third" });
+  write(root, ["--plan", "A60"], { ergonId: "A5", name: "second" });
+  fs.mkdirSync(ergonPath(root, "C7-never"));
+  write(root, [], { ergonId: "C20", name: "third" });
   run(["hold", "C20", ...CLAUDE, "--root", root]);
 }
 
-test("list prints one line per kit, sorted by id, with the derived state", () => {
+test("list prints one line per ergon, sorted by id, with the derived state", () => {
   const root = project();
   populate(root);
   const result = run(["list", ...MACHINE, "--root", root]);
@@ -1755,28 +1871,28 @@ test("list filters by plan, state and task", () => {
   assert.deepEqual(listed("--state", "parked"), ["A5", "C183"]);
   assert.deepEqual(listed("--state", "not started"), ["C7"]);
   assert.deepEqual(listed("--state", "active"), ["C20"]);
-  assert.deepEqual(listed("--state", "done"), ["no kit matches the filters"]);
-  assert.deepEqual(listed("--plan", "A59", "--state", "active"), ["no kit matches the filters"]);
+  assert.deepEqual(listed("--state", "done"), ["no ergon matches the filters"]);
+  assert.deepEqual(listed("--plan", "A59", "--state", "active"), ["no ergon matches the filters"]);
   // the local index is retired, so its `--status` filter is gone with it
   assert.equal(run(["list", "--status", "parked", "--root", root]).code, 2);
 });
 
-test("list shows the jobs of a kit under it and filters by task", () => {
+test("list shows the athlos of an ergon under it and filters by task", () => {
   const root = project();
-  const kit = kitWithPlan(root);
+  const ergon = ergonWithPlan(root);
   write(root);
-  run(["job", "C1", "--number", "1", "--step", "one", "--step", "two", ...CLAUDE, "--root", root]);
-  run(["job", "C1", "--number", "2", "--done", ...CLAUDE, "--root", root]);
+  run(["athlos", "C1", "--number", "1", "--step", "one", "--step", "two", ...CLAUDE, "--root", root]);
+  run(["athlos", "C1", "--number", "2", "--done", ...CLAUDE, "--root", root]);
   run(["release", "C1", "--number", "1", "--root", root]);
   fs.writeFileSync(
-    path.join(kit, "PARK.md"),
+    path.join(ergon, "PARK.md"),
     renderNote(parkFields({ id: "C1", name: "demo", nextAction: "next", plan: "A1" }), parkBody({ goal: "g" }), TEXTS),
   );
   const result = run(["list", ...MACHINE, "--root", root]);
   assert.deepEqual(result.stdout.split("\n").slice(0, -1), [
     "C1 | demo | parked | A1 | next | 0 | - | 0d",
-    "  C1.1 | 1-build-core | not started | C1 | one | - | 0d",
-    "  C1.2 | 2-write-docs | done | - | - | - | 0d",
+    "  C1.1 | 1 | not started | C1 | one | - | 0d",
+    "  C1.2 | 2 | done | - | - | - | 0d",
     "C183 | park-helper | parked | - | Twin it | 0 | - | 0d",
   ]);
   /**
@@ -1789,14 +1905,14 @@ test("list shows the jobs of a kit under it and filters by task", () => {
       .slice(0, -1)
       .filter((line) => !line.startsWith(" "))
       .map((line) => line.split(" | ")[0]);
-  assert.deepEqual(withTask("C1"), ["C1"]); // the plan's tasks, a job line's, a job file's
+  assert.deepEqual(withTask("C1"), ["C1"]); // the plan's tasks, an athlos line's, an athlos file's
   assert.deepEqual(withTask("C2"), ["C1"]); // named in the plan header only
-  assert.deepEqual(withTask("C9"), ["no kit matches the filters"]);
+  assert.deepEqual(withTask("C9"), ["no ergon matches the filters"]);
 });
 
-test("a job line formats with its tasks, its next step and its age", () => {
+test("an athlos line formats with its tasks, its next step and its age", () => {
   assert.equal(
-    formatJob(
+    formatAthlos(
       {
         id: "C1.1",
         name: "1-a",
@@ -1811,7 +1927,10 @@ test("a job line formats with its tasks, its next step and its age", () => {
     `  C1.1 | 1-a | active | C1, C2 | ${"x".repeat(59)}… | - | 2d`,
   );
   assert.equal(
-    formatJob({ id: "C1.1", name: "1-a", state: "done", tasks: [], nextAction: "", branch: "b", ageDays: null }, TEXTS),
+    formatAthlos(
+      { id: "C1.1", name: "1-a", state: "done", tasks: [], nextAction: "", branch: "b", ageDays: null },
+      TEXTS,
+    ),
     "  C1.1 | 1-a | done | - | - | b | -",
   );
 });
@@ -1836,21 +1955,21 @@ test("list cuts the next action by code points", () => {
 test("list age is whole days from the note mtime", () => {
   const root = project();
   write(root);
-  const note = path.join(kitPath(root), "PARK.md");
+  const note = path.join(ergonPath(root), "PARK.md");
   const now = Date.now() / 1000;
   const old = now - 3 * 86400 - 100;
   fs.utimesSync(note, old, old);
-  const [item] = listKits(root, NO_QUERY, TEXTS, context(now)).kits;
+  const [item] = listErgons(root, NO_QUERY, TEXTS, context(now)).ergons;
   assert.equal(item.ageDays, 3);
   assert.ok(formatSummary(item, TEXTS).endsWith("| 3d"));
   fs.utimesSync(note, now + 500, now + 500); // a clock behind the file never gives a negative age
-  assert.equal(listKits(root, NO_QUERY, TEXTS, context(now)).kits[0].ageDays, 0);
+  assert.equal(listErgons(root, NO_QUERY, TEXTS, context(now)).ergons[0].ageDays, 0);
 });
 
 test("list reads and writes nothing", () => {
   const root = project();
   populate(root);
-  kitWithPlan(root);
+  ergonWithPlan(root);
   /** @returns {Map<string, {bytes: string, mtime: number}>} */
   const snapshot = () =>
     new Map(
@@ -1866,19 +1985,19 @@ test("list reads and writes nothing", () => {
   assert.deepEqual(snapshot(), before);
 });
 
-test("list ignores folders that are not kits", () => {
+test("list ignores folders that are not ergons", () => {
   const root = project();
   write(root);
-  fs.mkdirSync(path.join(path.dirname(kitPath(root)), "notes"));
-  fs.writeFileSync(path.join(path.dirname(kitPath(root)), "stray.txt"), "x");
+  fs.mkdirSync(path.join(path.dirname(ergonPath(root)), "notes"));
+  fs.writeFileSync(path.join(path.dirname(ergonPath(root)), "stray.txt"), "x");
   assert.equal(run(["list", "--root", root]).stdout.split("\n").length - 1, 1);
 });
 
-test("list reports a kit whose note does not parse on its own line and lists the others", () => {
+test("list reports an ergon whose note does not parse on its own line and lists the others", () => {
   const root = project();
   write(root);
-  write(root, [], { kitId: "C184", name: "other" });
-  fs.writeFileSync(path.join(kitPath(root), "PARK.md"), "broken\n");
+  write(root, [], { ergonId: "C184", name: "other" });
+  fs.writeFileSync(path.join(ergonPath(root), "PARK.md"), "broken\n");
   const result = run(["list", "--root", root]);
   assert.equal(result.code, 0);
   assert.equal(result.stderr, "");
@@ -1890,127 +2009,124 @@ test("list reports a kit whose note does not parse on its own line and lists the
   assert.ok(lines[1].startsWith("C184 | other | parked | "));
 });
 
-test("list names the kit and the file of a job file that does not parse, and lists the other kits", () => {
+test("list names the ergon and the file of an athlos file that does not parse, and lists the other ergons", () => {
   const root = project();
-  const kit = planKit(root, PLAN_TEXT);
-  doneJob(kit, 1);
-  fs.writeFileSync(path.join(kit, "jobs", "1-extra", "JOB.md"), "no header\n");
+  const ergon = planErgon(root, PLAN_TEXT);
+  doneAthlos(ergon, 1);
+  fs.writeFileSync(path.join(ergon, "1", "ATHLOS.md"), "no header\n");
   write(root);
   const lines = run(["list", "--root", root]).stdout.split("\n");
   assert.ok(lines[0].startsWith("C183 | park-helper | parked | "));
   assert.equal(
     lines[1],
-    "C186 | holders-jobs | unreadable | C186-holders-jobs/jobs/1-extra/JOB.md: no header between two '---' lines at the top of the note",
+    "C186 | holders-units | unreadable | C186-holders-units/1/ATHLOS.md: no header between two '---' lines at the top of the note",
   );
 });
 
-test("an unreadable kit is listed whatever the filters say", () => {
+test("an unreadable ergon is listed whatever the filters say", () => {
   const root = project();
   write(root);
-  fs.writeFileSync(path.join(kitPath(root), "PARK.md"), "broken\n");
+  fs.writeFileSync(path.join(ergonPath(root), "PARK.md"), "broken\n");
   const lines = run(["list", "--state", "active", "--root", root]).stdout.split("\n");
   assert.equal(lines.length, 2);
   assert.ok(lines[0].startsWith("C183 | park-helper | unreadable | "));
 });
 
-test("a plan whose id is no task id is refused before the job file or the lease exists", () => {
+test("a plan whose id is no task id is refused before the athlos file or the lease exists", () => {
   const root = project();
-  const kit = planKit(
+  const ergon = planErgon(
     root,
-    "---\nid: c3\nname: holders-jobs\n---\n\n## Jobs\n\n- C186.1 · Lease module · tasks C186 · result: r\n",
+    "---\nid: c3\nname: holders-units\n---\n\n## Athlos\n\n- C186.1 · Lease module · tasks C186 · result: r\n",
   );
-  const result = run(["job", "C186", "--number", "1", "--step", "x", ...CLAUDE, "--root", root]);
+  const result = run(["athlos", "C186", "--number", "1", "--step", "x", ...CLAUDE, "--root", root]);
   assert.equal(result.code, 1);
   assert.equal(result.stdout, "");
   assert.equal(
     result.stderr,
-    "error: kit C186-holders-jobs: plan c3 is not a task id (a capital letter or _T followed by digits, e.g. C183 or _T3)\n",
+    "error: ergon C186-holders-units: plan c3 is not a task id (a capital letter or _T followed by digits, e.g. C183 or _T3)\n",
   );
-  assert.ok(!fs.existsSync(path.join(kit, "jobs")));
+  assert.ok(!fs.existsSync(path.join(ergon, "1")));
 });
 
-test("a job file is replaced atomically and leaves no temporary file", (t) => {
+test("an athlos file is replaced atomically and leaves no temporary file", (t) => {
   const root = project();
-  const kit = kitWithPlan(root);
-  run(["job", "C1", "--number", "1", "--step", "first", ...CLAUDE, "--root", root]);
-  const folder = path.join(kit, "jobs", "1-build-core");
-  const file = path.join(folder, "JOB.md");
+  const ergon = ergonWithPlan(root);
+  run(["athlos", "C1", "--number", "1", "--step", "first", ...CLAUDE, "--root", root]);
+  const folder = path.join(ergon, "1");
+  const file = path.join(folder, "ATHLOS.md");
   const before = fs.readFileSync(file);
-  const doc = readJobDoc(file, TEXTS);
+  const doc = readAthlosDoc(file, TEXTS);
   assert.ok(doc !== null);
   const mock = t.mock.method(fs, "renameSync", () => {
     throw new Error("disk says no");
   });
-  assert.throws(() => writeJobDoc(folder, { ...doc, steps: [["second", false]] }, TEXTS), /disk says no/);
+  assert.throws(() => writeAthlosDoc(folder, { ...doc, steps: [["second", false]] }, TEXTS), /disk says no/);
   mock.mock.restore();
   assert.deepEqual(fs.readFileSync(file), before);
-  assert.deepEqual(fs.readdirSync(folder).sort(), ["HOLDER", "JOB.md"]);
-  writeJobDoc(folder, { ...doc, steps: [["second", false]] }, TEXTS);
-  assert.deepEqual(readJobDoc(file, TEXTS)?.steps, [["second", false]]);
-  assert.deepEqual(fs.readdirSync(folder).sort(), ["HOLDER", "JOB.md"]);
+  assert.deepEqual(fs.readdirSync(folder).sort(), ["ATHLOS.md", "HOLDER"]);
+  writeAthlosDoc(folder, { ...doc, steps: [["second", false]] }, TEXTS);
+  assert.deepEqual(readAthlosDoc(file, TEXTS)?.steps, [["second", false]]);
+  assert.deepEqual(fs.readdirSync(folder).sort(), ["ATHLOS.md", "HOLDER"]);
 });
 
-test("a kit is parked when any of its jobs is parked, and active beats parked", () => {
+test("an ergon is parked when any of its athlos is parked, and active beats parked", () => {
   const root = project();
-  const kit = kitWithPlan(root);
+  const ergon = ergonWithPlan(root);
   const now = context(Date.now() / 1000);
-  doneJob(kit, 1);
-  fs.rmSync(path.join(kit, "jobs", "1-extra", "JOB.md"));
-  const header = parkFields({ id: "C1", name: "demo", nextAction: "r", job: "C1.1" });
+  doneAthlos(ergon, 1);
+  fs.rmSync(path.join(ergon, "1", "ATHLOS.md"));
+  const header = parkFields({ id: "C1", name: "demo", nextAction: "r", athlos: "C1.1" });
+  fs.writeFileSync(path.join(ergon, "1", "ATHLOS.md"), renderAthlosDoc({ header, steps: [], done: false }, TEXTS));
   fs.writeFileSync(
-    path.join(kit, "jobs", "1-extra", "JOB.md"),
-    renderJobDoc({ header, steps: [], done: false }, TEXTS),
-  );
-  fs.writeFileSync(
-    path.join(kit, "jobs", "1-extra", "PARK.md"),
+    path.join(ergon, "1", "PARK.md"),
     renderNote(parkFields({ id: "C1", name: "demo", nextAction: "n" }), parkBody({ goal: "g" }), TEXTS),
   );
-  assert.equal(kitState(kit, TEXTS, now), "parked");
-  run(["job", "C1", "--number", "2", "--step", "two", ...CLAUDE, "--root", root]);
-  assert.equal(kitState(kit, TEXTS, now), "active");
+  assert.equal(ergonState(ergon, TEXTS, now), "parked");
+  run(["athlos", "C1", "--number", "2", "--step", "two", ...CLAUDE, "--root", root]);
+  assert.equal(ergonState(ergon, TEXTS, now), "active");
 });
 
-test("a kit with every job done is done unless the kit itself is held", () => {
+test("an ergon with every athlos done is done unless the ergon itself is held", () => {
   const root = project();
-  const kit = kitWithPlan(root);
+  const ergon = ergonWithPlan(root);
   const now = context(Date.now() / 1000);
   for (const number of [1, 2, 3]) {
-    const folder = path.join(kit, "jobs", `${number}-job`);
+    const folder = path.join(ergon, `${number}`);
     fs.mkdirSync(folder, { recursive: true });
-    const header = parkFields({ id: "C1", name: "demo", nextAction: "r", job: `C1.${number}` });
-    fs.writeFileSync(path.join(folder, "JOB.md"), renderJobDoc({ header, steps: [], done: true }, TEXTS));
+    const header = parkFields({ id: "C1", name: "demo", nextAction: "r", athlos: `C1.${number}` });
+    fs.writeFileSync(path.join(folder, "ATHLOS.md"), renderAthlosDoc({ header, steps: [], done: true }, TEXTS));
   }
-  fs.writeFileSync(path.join(kit, "PARK.md"), "note"); // a stale note of the plan does not undo done
-  assert.equal(kitState(kit, TEXTS, now), "done");
-  acquireLease(kit, CLAUDE_HOLDER, TEXTS, now);
-  assert.equal(kitState(kit, TEXTS, now), "active");
+  fs.writeFileSync(path.join(ergon, "PARK.md"), "note"); // a stale note of the plan does not undo done
+  assert.equal(ergonState(ergon, TEXTS, now), "done");
+  acquireLease(ergon, CLAUDE_HOLDER, TEXTS, now);
+  assert.equal(ergonState(ergon, TEXTS, now), "active");
 });
 
 // --------------------------------------------------------------------------------------
 // close and export
 // --------------------------------------------------------------------------------------
 
-test("close moves the kit to the closed folder and frees its leases", () => {
+test("close moves the ergon to the closed folder and frees its leases", () => {
   const root = project();
-  kitWithPlan(root);
-  run(["job", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
+  ergonWithPlan(root);
+  run(["athlos", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
   run(["hold", "C1", ...CLAUDE, "--root", root]);
   const result = run(["close", "C1", "--root", root]);
   assert.equal(result.code, 0);
   assert.equal(result.stdout, "_aitna/.ergon/.closed/C1-demo\n");
-  assert.ok(!fs.existsSync(kitPath(root, "C1-demo")));
-  const closed = path.join(kitPath(root, ".closed"), "C1-demo");
+  assert.ok(!fs.existsSync(ergonPath(root, "C1-demo")));
+  const closed = path.join(ergonPath(root, ".closed"), "C1-demo");
   assert.ok(fs.statSync(path.join(closed, "PLAN.md")).isFile());
   assert.deepEqual(
     walk(closed).filter((file) => path.basename(file) === "HOLDER"),
     [],
   );
-  assert.equal(findClosedKit(root, "C1", TEXTS), closed);
-  assert.equal(findClosedKit(root, "C2", TEXTS), null);
-  assert.throws(() => findKit(root, "C1", TEXTS), parkError("no kit with id C1"));
+  assert.equal(findClosedErgon(root, "C1", TEXTS), closed);
+  assert.equal(findClosedErgon(root, "C2", TEXTS), null);
+  assert.throws(() => findErgon(root, "C1", TEXTS), parkError("no ergon with id C1"));
 });
 
-test("close refuses a kit a live session holds, naming the holder, and changes nothing", () => {
+test("close refuses an ergon a live session holds, naming the holder, and changes nothing", () => {
   const root = project();
   write(root);
   run(["hold", "C183", ...CLAUDE, "--root", root]);
@@ -2018,18 +2134,18 @@ test("close refuses a kit a live session holds, naming the holder, and changes n
   assert.equal(refused.code, 1);
   assert.ok(refused.stderr.startsWith("error: C183-park-helper is held by claude s1 m1 "));
   assert.equal(refused.stderr.split("\n").length, 2);
-  assert.ok(fs.existsSync(path.join(kitPath(root), "HOLDER")));
-  assert.ok(!fs.existsSync(path.join(kitPath(root, ".closed"), "C183-park-helper")));
+  assert.ok(fs.existsSync(path.join(ergonPath(root), "HOLDER")));
+  assert.ok(!fs.existsSync(path.join(ergonPath(root, ".closed"), "C183-park-helper")));
 });
 
-test("close refuses a kit whose job a live session holds", () => {
+test("close refuses an ergon whose athlos a live session holds", () => {
   const root = project();
-  const kit = kitWithPlan(root);
-  run(["job", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
+  const ergon = ergonWithPlan(root);
+  run(["athlos", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
   const refused = run(["close", "C1", ...CODEX, "--root", root]);
   assert.equal(refused.code, 1);
-  assert.ok(refused.stderr.startsWith("error: 1-build-core is held by claude s1 m1 "));
-  assert.ok(fs.existsSync(path.join(kit, "jobs", "1-build-core", "HOLDER")));
+  assert.ok(refused.stderr.startsWith("error: 1 is held by claude s1 m1 "));
+  assert.ok(fs.existsSync(path.join(ergon, "1", "HOLDER")));
 });
 
 test("close by the holder frees its leases, and a stale lease does not block it", () => {
@@ -2038,18 +2154,18 @@ test("close by the holder frees its leases, and a stale lease does not block it"
   run(["hold", "C183", ...CLAUDE, "--root", root]);
   assert.equal(run(["close", "C183", ...CLAUDE, "--root", root]).code, 0);
   assert.deepEqual(
-    walk(path.join(kitPath(root, ".closed"), "C183-park-helper")).filter((file) => path.basename(file) === "HOLDER"),
+    walk(path.join(ergonPath(root, ".closed"), "C183-park-helper")).filter((file) => path.basename(file) === "HOLDER"),
     [],
   );
-  write(root, [], { kitId: "C184", name: "second" });
-  staleLease(kitPath(root, "C184-second"));
+  write(root, [], { ergonId: "C184", name: "second" });
+  staleLease(ergonPath(root, "C184-second"));
   assert.equal(run(["close", "C184", ...CODEX, "--root", root]).code, 0);
 });
 
-test("close over an existing closed kit is one line and changes nothing", () => {
+test("close over an existing closed ergon is one line and changes nothing", () => {
   const root = project();
   write(root);
-  const target = path.join(kitPath(root, ".closed"), "C183-park-helper");
+  const target = path.join(ergonPath(root, ".closed"), "C183-park-helper");
   fs.mkdirSync(target, { recursive: true });
   fs.writeFileSync(path.join(target, "mark"), "old");
   run(["hold", "C183", ...CLAUDE, "--root", root]);
@@ -2057,17 +2173,17 @@ test("close over an existing closed kit is one line and changes nothing", () => 
   assert.equal(refused.code, 1);
   assert.equal(
     refused.stderr,
-    "error: kit C183-park-helper was not closed: _aitna/.ergon/.closed/C183-park-helper already exists\n",
+    "error: ergon C183-park-helper was not closed: _aitna/.ergon/.closed/C183-park-helper already exists\n",
   );
-  assert.ok(fs.existsSync(path.join(kitPath(root), "HOLDER")));
-  assert.ok(fs.existsSync(path.join(kitPath(root), "PARK.md")));
+  assert.ok(fs.existsSync(path.join(ergonPath(root), "HOLDER")));
+  assert.ok(fs.existsSync(path.join(ergonPath(root), "PARK.md")));
   assert.deepEqual(fs.readdirSync(target), ["mark"]);
 });
 
-test("list leaves a closed kit out, and --closed brings it back", () => {
+test("list leaves a closed ergon out, and --closed brings it back", () => {
   const root = project();
   write(root);
-  write(root, [], { kitId: "C2", name: "other" });
+  write(root, [], { ergonId: "C2", name: "other" });
   run(["close", "C183", "--root", root]);
   assert.deepEqual(
     run(["list", "--root", root])
@@ -2084,45 +2200,45 @@ test("list leaves a closed kit out, and --closed brings it back", () => {
     ["C183", "C2"],
   );
   run(["close", "C2", "--root", root]);
-  assert.equal(run(["list", "--root", root]).stdout, "no kits in _aitna/.ergon\n");
+  assert.equal(run(["list", "--root", root]).stdout, "no ergons in _aitna/.ergon\n");
 });
 
-test("close of an unknown kit is refused", () => {
+test("close of an unknown ergon is refused", () => {
   const root = project();
   const result = run(["close", "C9", "--root", root]);
   assert.equal(result.code, 1);
-  assert.equal(result.stderr, "error: no kit with id C9 under _aitna/.ergon; kits: none\n");
+  assert.equal(result.stderr, "error: no ergon with id C9 under _aitna/.ergon; ergons: none\n");
 });
 
-test("export writes the kit's files in path order and leaves the leases out", () => {
+test("export writes the ergon's files in path order and leaves the leases out", () => {
   const root = project();
-  const kit = kitWithPlan(root);
-  write(root, [], { kitId: "C1", name: "demo" });
-  run(["job", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
+  const ergon = ergonWithPlan(root);
+  write(root, [], { ergonId: "C1", name: "demo" });
+  run(["athlos", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
   run(["hold", "C1", ...CLAUDE, "--root", root]);
-  assert.ok(fs.existsSync(path.join(kit, "HOLDER")));
+  assert.ok(fs.existsSync(path.join(ergon, "HOLDER")));
   const out = path.join(root, "out", "bundle.md");
   const result = run(["export", "C1", "--out", out, "--root", root]);
   assert.equal(result.code, 0);
   assert.equal(result.stdout, `${out}\n`);
   const bundle = readUtf8(out);
-  assert.ok(bundle.startsWith("# akmon kit bundle: C1-demo\n\n--- file: PARK.md\n"));
+  assert.ok(bundle.startsWith("# akmon ergon bundle: C1-demo\n\n--- file: 1/ATHLOS.md\n"));
   const files = [...bundle.matchAll(/^--- file: (.*)$/gm)].map((match) => match[1]);
-  assert.deepEqual(files, ["PARK.md", "PLAN.md", "RESUME.md", "jobs/1-build-core/JOB.md"]);
+  assert.deepEqual(files, ["1/ATHLOS.md", "PARK.md", "PLAN.md", "RESUME.md"]);
   assert.ok(!bundle.includes("HOLDER") && !bundle.includes("harness: claude\nsession"));
-  assert.ok(bundle.endsWith("- [ ] one\n--- end\n"));
-  assert.equal(exportKit(kit, path.join(root, "again.md"), TEXTS), path.join(root, "again.md"));
+  assert.ok(bundle.includes("- [ ] one\n") && bundle.endsWith("--- end\n"));
+  assert.equal(exportErgon(ergon, path.join(root, "again.md"), TEXTS), path.join(root, "again.md"));
   assert.equal(readUtf8(path.join(root, "again.md")), bundle);
 });
 
 test("an export sorts a file by its path components, not by the string", () => {
   const root = project();
-  const kit = kitPath(root, "C1-demo");
-  fs.mkdirSync(path.join(kit, "a-b"), { recursive: true });
-  fs.mkdirSync(path.join(kit, "a"), { recursive: true });
-  fs.writeFileSync(path.join(kit, "a-b", "x"), "1\n");
-  fs.writeFileSync(path.join(kit, "a", "x"), "2\n");
-  exportKit(kit, path.join(root, "bundle.md"), TEXTS);
+  const ergon = ergonPath(root, "C1-demo");
+  fs.mkdirSync(path.join(ergon, "a-b"), { recursive: true });
+  fs.mkdirSync(path.join(ergon, "a"), { recursive: true });
+  fs.writeFileSync(path.join(ergon, "a-b", "x"), "1\n");
+  fs.writeFileSync(path.join(ergon, "a", "x"), "2\n");
+  exportErgon(ergon, path.join(root, "bundle.md"), TEXTS);
   const files = [...readUtf8(path.join(root, "bundle.md")).matchAll(/^--- file: (.*)$/gm)].map((match) => match[1]);
   assert.deepEqual(files, ["a/x", "a-b/x"]);
 });
@@ -2131,47 +2247,46 @@ test("an export sorts a file by its path components, not by the string", () => {
 // the active unit and the worktrees
 // --------------------------------------------------------------------------------------
 
-test("a worktree's folder names its kit and its job", () => {
-  assert.deepEqual(worktreeUnit("/p/.worktrees/C186-holders-jobs.2"), { kitId: "C186", number: 2 });
-  assert.deepEqual(worktreeUnit("/p/.worktrees/_T3-scratch.10"), { kitId: "_T3", number: 10 });
+test("a worktree's folder names its ergon and its athlos", () => {
+  assert.deepEqual(worktreeUnit("/p/.worktrees/C186-holders-units.2"), { ergonId: "C186", number: 2 });
+  assert.deepEqual(worktreeUnit("/p/.worktrees/_T3-scratch.10"), { ergonId: "_T3", number: 10 });
+  assert.deepEqual(worktreeUnit("/p/.worktrees/C186-holders-units.\u0663"), { ergonId: "C186", number: 3 }); // a decimal digit
   for (const folder of [
-    "/p/.worktrees/C186-holders-jobs",
+    "/p/.worktrees/C186-holders-units",
     "/p/.worktrees/C186.2",
     "/p/.worktrees/main.x",
     "/p/.worktrees/-x.1",
     "/p/.worktrees/x.1.",
+    "/p/.worktrees/C186-holders-units.\u00b2", // a superscript digit is not a decimal one
   ]) {
     assert.equal(worktreeUnit(folder), null, folder);
   }
 });
 
 /**
- * A project whose root is a worktree folder `<outer>/.worktrees/C1-demo.1`, with the kit in it.
+ * A project whose root is a worktree folder `<outer>/.worktrees/C1-demo.1`, with the ergon in it.
  * @returns {string} the worktree root
  */
 function worktreeProject() {
-  const outer = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "park-test-")));
+  const outer = tempDir("park-test-");
   const root = path.join(outer, ".worktrees", "C1-demo.1");
   fs.mkdirSync(path.join(root, "_aitna"), { recursive: true });
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# agents\n");
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), "");
-  kitWithPlan(root);
+  ergonWithPlan(root);
   return root;
 }
 
 test("the active unit is read from the worktree folder", () => {
   const root = worktreeProject();
-  const kit = kitPath(root, "C1-demo");
-  assert.deepEqual(activeUnit(root, TEXTS), { kit, kitId: "C1", number: 1 });
+  const ergon = ergonPath(root, "C1-demo");
+  assert.deepEqual(activeUnit(root, TEXTS), { ergon, ergonId: "C1", number: 1 });
   const before = run(["active", "--root", root]);
   assert.equal(before.code, 0);
-  assert.equal(before.stdout, "kit: C1 | C1-demo | not started | - | _aitna/.ergon/C1-demo\n");
-  run(["job", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
-  const job = run(["active", ...MACHINE, "--root", root]);
-  assert.equal(
-    job.stdout,
-    `job: C1.1 | 1-build-core | active | claude s1 m1 ${NEUTRAL} | _aitna/.ergon/C1-demo/jobs/1-build-core\n`,
-  );
+  assert.equal(before.stdout, "ergon: C1 | C1-demo | not started | - | _aitna/.ergon/C1-demo\n");
+  run(["athlos", "C1", "--number", "1", "--step", "one", ...CLAUDE, "--root", root]);
+  const athlos = run(["active", ...MACHINE, "--root", root]);
+  assert.equal(athlos.stdout, `athlos: C1.1 | 1 | active | claude s1 m1 ${NEUTRAL} | _aitna/.ergon/C1-demo/1\n`);
 });
 
 test("a session in the main checkout has no active unit", () => {
@@ -2182,15 +2297,15 @@ test("a session in the main checkout has no active unit", () => {
   const named = path.join(root, ".worktrees", "C999-other.1");
   fs.mkdirSync(path.join(named, "_aitna"), { recursive: true });
   fs.writeFileSync(path.join(named, "AGENTS.md"), "");
-  assert.equal(activeUnit(named, TEXTS), null); // its kit does not exist
+  assert.equal(activeUnit(named, TEXTS), null); // its ergon does not exist
 });
 
 // --------------------------------------------------------------------------------------
-// a linked worktree sees the main checkout's kits (ADR 0028 D11)
+// a linked worktree sees the main checkout's ergons (ADR 0028 D11)
 // --------------------------------------------------------------------------------------
 
 test("a repository's common directory leads a worktree to the main checkout", { skip: !gitAvailable() }, () => {
-  const main_ = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "park-test-")));
+  const main_ = tempDir("park-test-");
   fs.writeFileSync(path.join(main_, "AGENTS.md"), "# agents\n");
   fs.mkdirSync(path.join(main_, "_aitna"));
   fs.writeFileSync(path.join(main_, "_aitna", ".akmon.toml"), "");
@@ -2200,7 +2315,7 @@ test("a repository's common directory leads a worktree to the main checkout", { 
   assert.equal(gitCommonRoot(main_), main_);
   assert.equal(gitCommonRoot(linked), main_);
   assert.equal(ergonRoot(linked), path.join(main_, "_aitna", ".ergon"));
-  // a kit written from the worktree lands in the main checkout, and both see it
+  // an ergon written from the worktree lands in the main checkout, and both see it
   const wrote = run(["write", "C2", "--name", "x", "--goal", "g", "--next", "n", "--root", linked]);
   assert.equal(wrote.code, 0);
   assert.ok(fs.statSync(path.join(main_, "_aitna", ".ergon", "C2-x", "PARK.md")).isFile());
@@ -2211,11 +2326,11 @@ test("a repository's common directory leads a worktree to the main checkout", { 
 });
 
 /**
- * A repository with a linked worktree `<main>/.worktrees/C1-demo.1`: the kits stay in the main checkout.
+ * A repository with a linked worktree `<main>/.worktrees/C1-demo.1`: the ergons stay in the main checkout.
  * @returns {{main: string, linked: string, ergon: string}}
  */
 function linkedCheckout() {
-  const main_ = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "park-test-")));
+  const main_ = tempDir("park-test-");
   fs.writeFileSync(path.join(main_, "AGENTS.md"), "# agents\n");
   fs.mkdirSync(path.join(main_, "_aitna"));
   fs.writeFileSync(path.join(main_, "_aitna", ".akmon.toml"), "");
@@ -2226,36 +2341,36 @@ function linkedCheckout() {
 }
 
 test(
-  "a path inside the root is printed from it; every command of a linked worktree prints the kits as they are",
+  "a path inside the root is printed from it; every command of a linked worktree prints the ergons as they are",
   { skip: !gitAvailable() },
   () => {
-    const { linked, ergon } = linkedCheckout();
+    const { linked, ergon: layer } = linkedCheckout();
     const empty = run(["list", "--root", linked]);
-    assert.equal(empty.stdout, `no kits in ${ergon}\n`);
+    assert.equal(empty.stdout, `no ergons in ${layer}\n`);
     const missing = run(["unpark", "C9", "--root", linked]);
-    assert.equal(missing.stderr, `error: no kit with id C9 under ${ergon}; kits: none\n`);
+    assert.equal(missing.stderr, `error: no ergon with id C9 under ${layer}; ergons: none\n`);
     const wrote = run(["write", "C183", "--name", "park-helper", "--goal", "g", "--next", "n", "--root", linked]);
-    const kit = path.join(ergon, "C183-park-helper");
-    assert.equal(wrote.stdout, `${kit}\n`);
-    assert.ok(readUtf8(path.join(kit, "RESUME.md")).includes(`1. Read \`${path.join(kit, "PARK.md")}\`.`));
+    const ergon = path.join(layer, "C183-park-helper");
+    assert.equal(wrote.stdout, `${ergon}\n`);
+    assert.ok(readUtf8(path.join(ergon, "RESUME.md")).includes(`1. Read \`${path.join(ergon, "PARK.md")}\`.`));
     const again = run(["unpark", "C9", "--root", linked]);
-    assert.equal(again.stderr, `error: no kit with id C9 under ${ergon}; kits: C183-park-helper\n`);
+    assert.equal(again.stderr, `error: no ergon with id C9 under ${layer}; ergons: C183-park-helper\n`);
     const cut = run(["digest", "C183", "--cap", "40", "--root", linked]);
-    assert.ok(cut.stdout.endsWith(`more lines in ${path.join(kit, "PARK.md")}\n`), cut.stdout);
+    assert.ok(cut.stdout.endsWith(`more lines in ${path.join(ergon, "PARK.md")}\n`), cut.stdout);
     const closed = run(["close", "C183", "--root", linked]);
-    assert.equal(closed.stdout, `${path.join(ergon, ".closed", "C183-park-helper")}\n`);
+    assert.equal(closed.stdout, `${path.join(layer, ".closed", "C183-park-helper")}\n`);
   },
 );
 
-test("the job and active commands of a linked worktree print the folder as it is", { skip: !gitAvailable() }, () => {
+test("the athlos and active commands of a linked worktree print the folder as it is", { skip: !gitAvailable() }, () => {
   const { main: main_, linked, ergon } = linkedCheckout();
-  kitWithPlan(main_);
-  const job = run(["job", "C1", "--number", "1", "--step", "first", ...CLAUDE, "--root", linked]);
-  const folder = path.join(ergon, "C1-demo", "jobs", "1-build-core");
-  assert.equal(job.code, 0);
-  assert.equal(job.stdout, `${folder}\n`);
+  ergonWithPlan(main_);
+  const athlos = run(["athlos", "C1", "--number", "1", "--step", "first", ...CLAUDE, "--root", linked]);
+  const folder = path.join(ergon, "C1-demo", "1");
+  assert.equal(athlos.code, 0);
+  assert.equal(athlos.stdout, `${folder}\n`);
   const active = run(["active", ...MACHINE, "--root", linked]);
-  assert.equal(active.stdout, `job: C1.1 | 1-build-core | active | claude s1 m1 ${NEUTRAL} | ${folder}\n`);
+  assert.equal(active.stdout, `athlos: C1.1 | 1 | active | claude s1 m1 ${NEUTRAL} | ${folder}\n`);
 });
 
 test("a path inside the root is printed from it, with no dots", () => {
@@ -2292,7 +2407,7 @@ for (const argv of [
   ["active"],
 ]) {
   test(`no project root is refused and nothing is written: ${argv[0]}`, () => {
-    const work = path.join(fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "park-test-"))), "work");
+    const work = path.join(tempDir("park-test-"), "work");
     fs.mkdirSync(work);
     inDirectory(work, () => {
       const result = run(argv, work);
@@ -2305,7 +2420,7 @@ for (const argv of [
 }
 
 test("an explicit root that is not a directory is refused", () => {
-  const missing = path.join(fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "park-test-"))), "missing");
+  const missing = path.join(tempDir("park-test-"), "missing");
   const result = run(["list", "--root", missing]);
   assert.equal(result.code, 1);
   assert.equal(result.stderr, `error: --root ${missing} is not a directory\n`);
@@ -2326,7 +2441,7 @@ test("--project-root is an alias of --root", () => {
   const root = project();
   const result = run(["list", "--project-root", root]);
   assert.equal(result.code, 0);
-  assert.equal(result.stdout, "no kits in _aitna/.ergon\n");
+  assert.equal(result.stdout, "no ergons in _aitna/.ergon\n");
 });
 
 // --------------------------------------------------------------------------------------
@@ -2334,7 +2449,7 @@ test("--project-root is an alias of --root", () => {
 // --------------------------------------------------------------------------------------
 
 const COMMAND_CHOICES =
-  "'write', 'unpark', 'digest', 'list', 'hold', 'release', 'job', 'active', 'close', 'export', 'local-id'";
+  "'write', 'unpark', 'digest', 'list', 'hold', 'release', 'athlos', 'active', 'close', 'export', 'local-id'";
 
 test("a usage error is one line on stderr and exit 2", () => {
   for (const [argv, message] of /** @type {[string[], string][]} */ ([
@@ -2353,8 +2468,8 @@ test("a usage error is one line on stderr and exit 2", () => {
     [["hold"], "the following arguments are required: id"],
     [["hold", "C1", "--number", "abc"], "argument --number: invalid int value: 'abc'"],
     [["release"], "the following arguments are required: id"],
-    [["job", "C1"], "the following arguments are required: --number"],
-    [["job"], "the following arguments are required: id, --number"],
+    [["athlos", "C1"], "the following arguments are required: --number"],
+    [["athlos"], "the following arguments are required: id, --number"],
     [["active", "C1"], "unrecognized arguments: C1"],
     [["close"], "the following arguments are required: id"],
     [["export", "C1"], "the following arguments are required: --out"],
@@ -2399,7 +2514,7 @@ test("a value that looks like an option is taken as argparse takes it", () => {
   // `-1` (a negative number) and `- two words` (a space) are values; `-x` is an option.
   const ok = run(["write", "C1", "--name", "n", "--goal", "- two words", "--next", "-1", "--root", root]);
   assert.equal(ok.code, 0);
-  const { fields, body } = readNote(kitPath(root, "C1-n"), TEXTS);
+  const { fields, body } = readNote(ergonPath(root, "C1-n"), TEXTS);
   assert.equal(fields.nextAction, "-1");
   assert.equal(body.goal, "- two words");
   const bad = run(["write", "C2", "--name", "n", "--goal", "g", "--next", "-x", "--root", root]);
@@ -2411,7 +2526,7 @@ test("a repeated option appends in order, a repeated scalar keeps the last", () 
   const root = project();
   const flags = ["--owned-path", "b", "--owned-path", "a", "--plan", "A1", "--plan", "A2"];
   assert.equal(write(root, flags).code, 0);
-  const { fields } = readNote(kitPath(root), TEXTS);
+  const { fields } = readNote(ergonPath(root), TEXTS);
   assert.deepEqual(fields.ownedPaths, ["b", "a"]);
   assert.equal(fields.plan, "A2");
 });
@@ -2420,9 +2535,9 @@ test("--machine names the machine the session acts as, for the holder and for th
   const root = project();
   write(root);
   run(["hold", "C183", "--harness", "claude", "--session-id", "s1", "--machine", "laptop", "--root", root]);
-  const lease = readLease(kitPath(root), TEXTS);
+  const lease = readLease(ergonPath(root), TEXTS);
   assert.equal(lease?.holder.machine, "laptop");
-  // the same machine name: the live lease is this session's, so the kit is active
+  // the same machine name: the live lease is this session's, so the ergon is active
   assert.ok(run(["list", "--machine", "laptop", "--root", root]).stdout.includes("| active |"));
   // another machine's view of the same lease: stale at once
   assert.ok(run(["list", "--machine", "desktop", "--root", root]).stdout.includes("| parked |"));
@@ -2430,15 +2545,15 @@ test("--machine names the machine the session acts as, for the holder and for th
   assert.ok(stale.stderr.includes("whose lease is stale"));
 });
 
-test("kit ids sort by code point, not by locale or length", () => {
+test("ergon ids sort by code point, not by locale or length", () => {
   const root = project();
-  for (const [kitId, name] of [
+  for (const [ergonId, name] of [
     ["C100", "a"],
     ["C20", "b"],
     ["A1", "c"],
     ["_T2", "d"],
   ]) {
-    assert.equal(write(root, [], { kitId, name }).code, 0);
+    assert.equal(write(root, [], { ergonId, name }).code, 0);
   }
   const ids = run(["list", "--root", root])
     .stdout.split("\n")

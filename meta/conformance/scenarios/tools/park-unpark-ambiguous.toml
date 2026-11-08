@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# Two kit folders carry the same id: the helper refuses to guess (exit 1, the error lists both) and
+# Two ergon folders carry the same id: the helper refuses to guess (exit 1, the error lists both) and
 # takes no lease on either.
 
 [fixture]
@@ -20,6 +20,6 @@ argv = ["unpark", "C183", "--harness", "claude", "--session-id", "s1", "--machin
 
 [expected]
 exit = 1
-stderr = "error: several kits carry id C183 under _aitna/.ergon: C183-one, C183-two\n"
+stderr = "error: several ergons carry id C183 under _aitna/.ergon: C183-one, C183-two\n"
 stdout = ""
 file_absent = ["_aitna/.ergon/C183-one/HOLDER", "_aitna/.ergon/C183-two/HOLDER"]

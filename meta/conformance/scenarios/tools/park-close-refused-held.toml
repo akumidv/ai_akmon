@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `close` refuses a kit while a live lease of another session is in it: one line, the holder named. Nothing is moved and
+# `close` refuses an ergon while a live lease of another session is in it: one line, the holder named. Nothing is moved and
 # no lease is released.
 
 [fixture]

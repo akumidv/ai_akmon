@@ -4,8 +4,8 @@ kind = "tool"
 covers = ["tool:park/park"]
 
 # A project that sits in a repository subfolder (`proj/` in a repository whose top is a project too)
-# keeps its own dev root: its kits are `proj/_aitna/.ergon/`, not the top's `_aitna/.ergon/` (ADR 0028
-# D11, "the kits of the project"). The repository's common directory is read for the main checkout and
+# keeps its own dev root: its ergons are `proj/_aitna/.ergon/`, not the top's `_aitna/.ergon/` (ADR 0028
+# D11, "the ergons of the project"). The repository's common directory is read for the main checkout and
 # the project's prefix in it is kept.
 
 [fixture]

@@ -40,6 +40,16 @@ the shipped block states it directly: Codex does not expand nested `@` imports i
   [code-flow](pipelines/code-flow.md) — over [pre-commit](pipelines/pre-commit.md), with
   [tasks](pipelines/tasks.md) for the backlog format.
 
+## The method's words
+
+Work is tracked in `meta/.ergon/` (`<DEV>/.ergon/`): an *ergon* is a piece of work (what a user may
+call an epic, a kit or a work package); an *athlos* is a bounded unit of it (a job); a *step* is one
+line of an athlos, checked off when done; to *park* an athlos is to stop it for another session (a
+handoff, a checkpoint). A *task* is a backlog row an ergon serves; a user who says "task" may mean an
+ergon or an athlos, so read which from the id. The gloss and its readings are
+[ADR 0029/D10](docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d10--the-words-are-glossed-in-the-entry-file-with-the-words-a-user-may-say);
+the format of a note or a plan line and its place stay with the code.
+
 ## Project contract
 
 - Start with `README.md`, `MODEL.md`, and `meta/TASKS.md`; architecture decisions live in

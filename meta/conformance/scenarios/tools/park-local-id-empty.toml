@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# With no kit at all, neither live nor closed, the first free local id is `_T1`: the count starts at
+# With no ergon at all, neither live nor closed, the first free local id is `_T1`: the count starts at
 # zero, so the folder `.ergon/` need not exist yet.
 
 [fixture]

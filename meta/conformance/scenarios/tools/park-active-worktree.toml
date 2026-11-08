@@ -4,10 +4,10 @@ kind = "tool"
 covers = ["tool:park/park"]
 
 # The active unit of a session is read from the folder it works in: a linked worktree named
-# `.worktrees/<id>-<name>.<n>/` is the job `<n>` of kit `<id>-<name>`. The kit is read through the
-# repository's common directory, so the kit lives in the main checkout (here the fixture's root) and
-# the worktree folder holds no kit of its own. The line names the job, its derived state (a live lease
-# on the job folder) and its holder; the path is the job folder.
+# `.worktrees/<id>-<name>.<n>/` is the athlos `<n>` of ergon `<id>-<name>`. The ergon is read through the
+# repository's common directory, so the ergon lives in the main checkout (here the fixture's root) and
+# the worktree folder holds no ergon of its own. The line names the athlos, its derived state (a live lease
+# on the athlos folder) and its holder; the path is the athlos folder.
 #
 # The worktree is a real linked one: the fixture lays out by hand what `git worktree add` writes (the `.git`
 # link file in the worktree folder, `HEAD` and `commondir` in the repository's `worktrees/` folder), and
@@ -19,20 +19,20 @@ attach = "none"
 
 [fixture.files]
 "_aitna/.akmon.toml" = ""
-"_aitna/.ergon/C186-holders-jobs/PLAN.md" = "---\nid: C186\nname: holders-jobs\ntitle: Holders and jobs\ntasks: C186\n---\n\n# C186-holders-jobs\n\n## Jobs\n\n- C186.1 · write the lease · tasks C186 · result: the lease is created exclusively\n"
-"_aitna/.ergon/C186-holders-jobs/jobs/1-write-the-lease/JOB.md" = "---\nid: C186\nname: holders-jobs\nplan: C186\njob: C186.1\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\n  - C186\nnext: the lease is created exclusively\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n## Steps\n\n- [ ] create the file\n"
-"_aitna/.ergon/C186-holders-jobs/jobs/1-write-the-lease/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree:\nwritten: 2099-01-01T00:00:00Z\n---\n"
+"_aitna/.ergon/C186-holders-units/PLAN.md" = "---\nid: C186\nname: holders-units\ntitle: Holders and units\ntasks: C186\n---\n\n# C186-holders-units\n\n## Athlos\n\n- C186.1 · write the lease · tasks C186 · result: the lease is created exclusively\n"
+"_aitna/.ergon/C186-holders-units/1/ATHLOS.md" = "---\nid: C186\nname: holders-units\nplan: C186\nathlos: C186.1\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\n  - C186\nnext: the lease is created exclusively\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n## Steps\n\n- [ ] create the file\n"
+"_aitna/.ergon/C186-holders-units/1/HOLDER" = "---\nharness: claude\nsession: s1\nmachine: laptop\nworktree:\nwritten: 2099-01-01T00:00:00Z\n---\n"
 ".gitignore" = ".worktrees/\n"
-".git/worktrees/C186-holders-jobs.1/HEAD" = "ref: refs/heads/_aitna/C186-holders-jobs.1\n"
-".git/worktrees/C186-holders-jobs.1/commondir" = "../..\n"
-".worktrees/C186-holders-jobs.1/.git" = "gitdir: ../../.git/worktrees/C186-holders-jobs.1\n"
-".worktrees/C186-holders-jobs.1/README.md" = "a linked worktree folder\n"
+".git/worktrees/C186-holders-units.1/HEAD" = "ref: refs/heads/_aitna/C186-holders-units.1\n"
+".git/worktrees/C186-holders-units.1/commondir" = "../..\n"
+".worktrees/C186-holders-units.1/.git" = "gitdir: ../../.git/worktrees/C186-holders-units.1\n"
+".worktrees/C186-holders-units.1/README.md" = "a linked worktree folder\n"
 
 [run]
 tool = "park/park"
-argv = ["active", "--root", ".worktrees/C186-holders-jobs.1", "--machine", "laptop"]
+argv = ["active", "--root", ".worktrees/C186-holders-units.1", "--machine", "laptop"]
 
 [expected]
 exit = 0
 stderr = ""
-stdout = "job: C186.1 | 1-write-the-lease | active | claude s1 laptop | {{root}}/_aitna/.ergon/C186-holders-jobs/jobs/1-write-the-lease\n"
+stdout = "athlos: C186.1 | 1 | active | claude s1 laptop | {{root}}/_aitna/.ergon/C186-holders-units/1\n"

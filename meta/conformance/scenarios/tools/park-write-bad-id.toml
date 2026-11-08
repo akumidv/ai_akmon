@@ -4,7 +4,7 @@ kind = "tool"
 covers = ["tool:park/park"]
 
 # An id that is not a typed task id (`c183`: lowercase) is refused before anything is written:
-# exit 1, one `error:` line on stderr naming the value, no kit and no index.
+# exit 1, one `error:` line on stderr naming the value, no ergon and no index.
 
 [fixture]
 attach = "none"

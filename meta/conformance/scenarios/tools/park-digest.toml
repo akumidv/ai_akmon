@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# The digest of a note: the summary line (kit and its derived state: no lease, a note: parked), the
+# The digest of a note: the summary line (ergon and its derived state: no lease, a note: parked), the
 # non-empty header facts, the goal (continuation lines indented), the next action, the open decisions
 # and the owner answers. The note's header carries no `state` and no `peers`; `written` is not printed.
 # Under the default cap of 3000 characters nothing is cut and no overflow line is added.

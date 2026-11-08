@@ -1,0 +1,25 @@
+id = "tools/park-list-ergon-done"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# An ergon is `done` when every one of its athlos is done (each ATHLOS.md carries the done marker): the ergon
+# line says so, and each athlos line says so too. The ergon has no note of its own here.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C186-holders-units/PLAN.md" = "---\nid: C186\nname: holders-units\ntitle: Holders and units\ntasks: C186\n---\n\n# C186-holders-units\n\n## Athlos\n\n- C186.1 · write the lease · tasks C186 · result: the lease is created exclusively\n- C186.2 · athlos file · tasks C186 · result: the athlos file is written\n"
+"_aitna/.ergon/C186-holders-units/1/ATHLOS.md" = "---\nid: C186\nname: holders-units\nplan: C186\nathlos: C186.1\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\n  - C186\nnext: the lease is created exclusively\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n## Steps\n\n- [x] create the file\n- [x] test a second session\n\ndone\n"
+"_aitna/.ergon/C186-holders-units/2/ATHLOS.md" = "---\nid: C186\nname: holders-units\nplan: C186\nathlos: C186.2\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\n  - C186\nnext: the athlos file is written\nsessions:\norigin:\nreadiness:\nwritten:\n---\n\n## Steps\n\n- [x] write it\n\ndone\n"
+
+[run]
+tool = "park/park"
+argv = ["list"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "C186 | holders-units | done | - | - | 0 | - | -\n  C186.1 | 1 | done | C186 | - | - | 0d\n  C186.2 | 2 | done | C186 | - | - | 0d\n"

@@ -120,11 +120,11 @@ several tasks. It holds, in order:
 2. **Target state** — the change to the project the plan heads for, in one paragraph.
 3. **Criteria** — the target stated as S.M.A.R.T.: specific, measurable, achievable, relevant and
    time-bound (a milestone, not a date).
-4. **Graph** — the tasks the plan carries, one of them primary, and its **jobs** with their
+4. **Graph** — the tasks the plan carries, one of them primary, and its **athlos** with their
    dependencies: a trunk first (the smallest set that meets the criteria), then refinements that
-   return to it ([MODEL.md](../MODEL.md) § Mission and priorities). A job is a unit one session holds
-   in isolation toward its own result, done in steps; what can run in parallel is read from the
-   graph.
+   return to it ([MODEL.md](../MODEL.md) § Mission and priorities). An athlos is a unit one session
+   holds in isolation toward its own result, done in steps; what can run in parallel is read from
+   the graph.
 5. **Decisions and open questions** — each with its code ([Decision requests](#decision-requests)).
 
 Tasks run one after another with no target are not a plan; that is a handoff. A set of backlog

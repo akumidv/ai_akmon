@@ -6,6 +6,7 @@
  * the corpus and the differential run of C105.
  */
 
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -2148,6 +2149,26 @@ test("local layer: an unignored .local or .ergon is a warning on .gitignore, an 
     const verifier = new Verifier(root);
     verifier.checkLocalLayer();
     assert.equal(of(verifier, "gitignore.local-layer").length, 2);
+  });
+});
+
+test("local layer: a linked worktree names the main checkout's ergon folder by its full path", async () => {
+  await withScratch((scratch) => {
+    const main = posix.join(scratch, "main");
+    put(main, "AGENTS.md", "main\n"); // what marks the main checkout as a project
+    const git = (/** @type {string[]} */ ...args) =>
+      execFileSync("git", ["-C", main, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], {
+        stdio: "ignore",
+      });
+    git("init", "-q", "-b", "main");
+    git("add", "AGENTS.md");
+    git("commit", "-q", "-m", "init");
+    const linked = posix.join(scratch, "linked");
+    git("worktree", "add", "-q", "-b", "side", linked);
+    fs.mkdirSync(posix.join(main, "_aitna/.ergon"), { recursive: true });
+    const verifier = new Verifier(linked);
+    verifier.checkLocalLayer(); // does not throw, and does not judge the main checkout's ignore list
+    assert.equal(of(verifier, "gitignore.local-layer").length, 0);
   });
 });
 

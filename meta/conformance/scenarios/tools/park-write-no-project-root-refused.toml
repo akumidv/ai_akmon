@@ -5,7 +5,7 @@ covers = ["tool:park/park"]
 
 # A writer of the local layer stops where no project root is found (ADR 0022 D09): with no project
 # root at or above the working directory and no --root, `write` reports the notice as its one
-# `error:` line, exits 1 and writes neither a kit nor an index.
+# `error:` line, exits 1 and writes neither an ergon nor an index.
 
 [fixture]
 attach = "none"

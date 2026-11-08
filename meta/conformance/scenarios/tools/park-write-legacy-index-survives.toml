@@ -1,0 +1,26 @@
+id = "tools/park-write-legacy-index-survives"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# The retired local index `<DEV>/.local/TASKS.md` is legacy input, never output (ADR 0028 D12): `write` parks the
+# ergon and leaves that file byte for byte as it was, rows and all. `local-id` reads it; nothing writes it.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.local/TASKS.md" = "# TASKS\n\n- _T6 · plan: ported candidates · active\n- C183 · Park helper · active · engineer\n"
+
+[run]
+tool = "park/park"
+argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park helper", "--next", "Twin it in JS"]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "_aitna/.ergon/C183-park-helper\n"
+
+[expected.files]
+"_aitna/.local/TASKS.md" = "# TASKS\n\n- _T6 · plan: ported candidates · active\n- C183 · Park helper · active · engineer\n"

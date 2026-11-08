@@ -347,7 +347,7 @@ development and is read only at attach/verify/bump time.
 # dev-layer venv (provisioned only when the project has no Python environment)
 _aitna/.venv/
 
-# local layer (machine state), kits, worktrees and scratch — never committed
+# local layer (machine state), ergons, worktrees and scratch — never committed
 _aitna/.local/
 _aitna/.ergon/
 .worktrees/
@@ -373,9 +373,9 @@ rewrites it — so tracking it would churn.
 `_aitna/memory/` is **committed** (shared project memory). `_aitna/akmon/` is the
 submodule. `_aitna/.venv/` (if provisioned) is **local-only** — a per-checkout dev tool
 environment, never committed. `_aitna/.local/` and `_aitna/.ergon/` are **local-only** for the same
-reason: machine state lives in the first, and each piece of work's kit (its plan, park note, resume
-prompt, briefs, evidence and probes) in one folder of the second, and no tracked file links into
-either. `.worktrees/` holds the linked worktrees of parallel jobs, and `.tmp/` holds raw material
+reason: machine state lives in the first, and each piece of work (its plan, park note, resume prompt,
+briefs, evidence and probes) in one ergon folder of the second, and no tracked file links into
+either. `.worktrees/` holds the linked worktrees of parallel athlos, and `.tmp/` holds raw material
 read once. Anything meant to *stay* is not local material — a decision goes to an ADR block,
 a design to `design/`, remaining work to `TASKS.md`.
 

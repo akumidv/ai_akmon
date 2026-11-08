@@ -1,0 +1,24 @@
+id = "tools/park-athlos-no-ergon"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# `athlos` of an id no ergon carries is refused before it reads a plan: exit 1, the error line names the id, the folder
+# it looked in and the ergons that exist. No athlos folder and no lease are made.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n"
+
+[run]
+tool = "park/park"
+argv = ["athlos", "C999", "--number", "1", "--step", "one", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stderr = "error: no ergon with id C999 under _aitna/.ergon; ergons: C183-park-helper\n"
+stdout = ""
+file_absent = ["_aitna/.ergon/C183-park-helper/HOLDER"]

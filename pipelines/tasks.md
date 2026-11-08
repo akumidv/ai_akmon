@@ -38,7 +38,7 @@ One task = **one line**:
   `[#…]` is provenance, not the id. Distinct from the trailing `[detail](link)`.
 - **status** — exactly one of `active | blocked | deferred | done`. `blocked` = waiting on an
   external dependency; `deferred` = a deliberate not-now (still a real intent, just parked).
-  Work set aside on the owner's word is parked in its kit; its state is read from the kit, never
+  Work set aside on the owner's word is parked in its ergon; its state is read from the ergon, never
   a status.
 - **a status must be checkable.** "complete in the tree", "done locally" and their variants are not
   statuses: they describe an uncommitted working copy nobody else can verify, and they outlive the
@@ -57,7 +57,7 @@ One task = **one line**:
   description does not fit one — how to reproduce it, data, a longer statement — is one file,
   `<DEV>/tasks/<id>-<name>.md`, linked as its detail. It holds the task's own description, not a
   decision (an ADR block) or an open design question (a design doc). Local work that outgrows a
-  paragraph is a kit (§ The local layer).
+  paragraph is an ergon (§ The local layer).
 
 A short multi-line note under an entry is allowed **only** for a genuine loose end that has no
 other home yet — and that is a signal to write the design doc, not to grow the entry.
@@ -77,8 +77,8 @@ scheme applies to the live backlog and every new task. Don't renumber history.
 - **Detail** — lives in `docs/design/` docs, thematic `docs/adr/` ADR blocks, or task/evidence
   records. `TASKS.md` links; it does not duplicate.
 - **`<DEV>/.local/`** — the ignored local layer: what only this machine needs (learning state,
-  model overlays). Local work lives in kits under `<DEV>/.ergon/`, owned by
-  [The local layer](#the-local-layer) below. A kit is input, not a record: what local work
+  model overlays). Local work lives in ergons under `<DEV>/.ergon/`, owned by
+  [The local layer](#the-local-layer) below. An ergon is input, not a record: what local work
   concludes still becomes a design doc, an ADR block or a `TASKS.md` row.
 - An optional **Status** block at the top of `TASKS.md` is fine: ≤5 lines, current focus only.
 
@@ -95,38 +95,40 @@ task or a plan needs is kept there.
 <DEV>/TASKS.md  TASKS_ARCHIVE.md        tracked project index
 <DEV>/tasks/<id>-<name>.md              a project task's description, when it does not fit a paragraph
 <DEV>/.local/                           machine state and overlays (learning state, model overlays)
-<DEV>/.ergon/<id>-<name>/PLAN.md        a plan: one working document, inside its kit, made of jobs
-<DEV>/.ergon/<id>-<name>/                a kit: one folder per piece of work, named for its primary task — PLAN,
-                                        HOLDER, PARK, RESUME, jobs/, and the evidence, probes and reports it needs
-<DEV>/.ergon/.closed/<id>-<name>/       a closed kit, moved there on the owner's word
-.worktrees/<id>-<name>.<n>/             at the project root: a parallel job's worktree (ignored)
+<DEV>/.ergon/<id>-<name>/PLAN.md        a plan: one working document, inside its ergon, made of athlos
+<DEV>/.ergon/<id>-<name>/               an ergon: one folder per piece of work, named for its primary
+                                        task — PLAN, HOLDER, PARK, RESUME, and one folder per athlos
+                                        named by its number alone, `<n>/ATHLOS.md`
+<DEV>/.ergon/.closed/<id>-<name>/       a closed ergon, moved there on the owner's word
+.worktrees/<id>-<name>.<n>/             at the project root: the worktree of a parallel athlos (ignored)
 <DEV>/skills/                           development skills, apart from the shipped root `skills/`
 ```
 
-- **Id.** There are no local rows. A kit is named `<id>-<name>` for its plan's primary task; work
-  with no backlog task takes `_T<n>`: `_T` marks it local, and `<n>` is counted over the kits, live
+- **Id.** There are no local rows. An ergon is named `<id>-<name>` for its plan's primary task; work
+  with no backlog task takes `_T<n>`: `_T` marks it local, and `<n>` is counted over the ergons, live
   and closed, and never reused; `akmon tool park/park local-id` prints the next free one. A slug is
   not an id; `<name>` is a short kebab name of its subject.
-  The kit's `PLAN.md` header (id, name, title, tasks) is its local record, and `park list` is the
-  local index. The plan names its tasks; a task row never names its plan. A transfer to another machine is an explicit export: a directory with the kit's
-  folder, the git bundles of its unpushed commits, a patch of its uncommitted changes and a manifest.
+  The ergon's `PLAN.md` header (id, name, title, tasks) is its local record, and `park list` is the
+  local index. The plan names its tasks; a task row never names its plan. A transfer to another
+  machine is an explicit export: a directory with the ergon's folder, the git bundles of its unpushed
+  commits, a patch of its uncommitted changes and a manifest.
 - **Direction.** A local record may reference project material. A tracked file never references a
   path under `.local/` or `.ergon/`: a tracked reference is dead on every other machine. Promoting a local record
   is refused while a local reference remains in it. Once `verify` carries the check, a tracked file that
   links or names a path under `.local/` or `.ergon/` is an error; a local slug written in prose cannot be
   checked and is a rule only.
 - **No per-task folder in the project tree.** A task's requirements are its row, a paragraph, or
-  one description file linked from the row; its working materials are local. A closed kit moves to
+  one description file linked from the row; its working materials are local. A closed ergon moves to
   `<DEV>/.ergon/.closed/` on the owner's word and stays until the owner prunes it.
-- **Parked.** Work set aside on the owner's word is parked in its kit: its state is read from the
-  kit's lease and park note, never typed, and no row changes.
-- **A task is not a job.** A task is what a backlog records; a plan names its tasks, and its own
-  units — jobs, and the steps inside them — never become rows. What a plan's work discovers is
+- **Parked.** Work set aside on the owner's word is parked in its ergon: its state is read from the
+  ergon's lease and park note, never typed, and no row changes.
+- **A task is not an athlos.** A task is what a backlog records; a plan names its tasks, and its own
+  units — athlos, and the steps inside them — never become rows. What a plan's work discovers is
   refined in the plan when it falls within the plan's target and its tasks: a finer or new step goes
-  into its job's `JOB.md`, a new job or a refinement branch into `PLAN.md`. What lies beyond the
-  target and the plan's tasks becomes a task here, on the owner's word.
+  into its athlos's `ATHLOS.md`, a new athlos or a refinement branch into `PLAN.md`. What lies beyond
+  the target and the plan's tasks becomes a task here, on the owner's word.
 - **Resume prompts** name a path from the project root when the file lies inside it, and by its
-  absolute path when it lies outside it (a kit in the main checkout, read from a linked worktree).
+  absolute path when it lies outside it (an ergon in the main checkout, read from a linked worktree).
 - **A plan** is a local working document, not a record: [design-flow § Plans](design-flow.md#plans).
 
 ## When to write

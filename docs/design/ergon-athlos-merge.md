@@ -327,6 +327,31 @@ python3 <the C188 kit>/materials/check_links.py \
   docs/design/ergon-athlos-merge.md docs/design/park-and-resume.md meta/TASKS.md meta/conformance/README.md
 ```
 
+### 9.1 The counts, re-run at the migration (C189)
+
+Command 4 and command 7, run on the tree before the migration (the base commit) and on the tree with
+it (tracked files plus the files the change adds). The first block is the price the record quoted;
+the second is what the rename left. The words that remain are the readings of the gloss
+([ADR 0029/D10](../adr/0029-ergon-athlos-step-one-method-of-work.md#d10--the-words-are-glossed-in-the-entry-file-with-the-words-a-user-may-say)),
+the legacy forms the helper translates on read ([D12](../adr/0029-ergon-athlos-step-one-method-of-work.md#d12--the-old-layout-is-translated-on-read)),
+the design documents and decision records that keep their history, and unrelated senses (a CI job,
+`archetype: job`, "does its job").
+
+| word | before: all / md / code / shipped md | after: all / md / code / shipped md |
+|---|---|---|
+| ergon | 988 / 553 / 435 / 16 | 2091 / 588 / 1503 / 49 |
+| athlos | 370 / 370 / 0 / 2 | 1218 / 399 / 819 / 27 |
+| job | 913 / 273 / 640 / 25 | 312 / 265 / 47 / 16 |
+| kit | 1301 / 350 / 951 / 26 | 331 / 327 / 4 / 2 |
+| step | 844 / 482 / 362 / 82 | 856 / 485 / 371 / 84 |
+| zone | 666 / 202 / 464 / 24 | 694 / 203 / 491 / 25 |
+
+Command 8 (the athlos in code) counts 0 before and 819 after. Command 6 finds no scenario name that
+carries *job* or *kit*; 24 carry *athlos* or *ergon*. The *job* and *kit* left in the shipped prose
+are the gloss itself, `archetype: job`, the guardrail's job-branch carve-out (C190) and unrelated
+senses. The *kit* and *job* left in `md` are the design documents, the decision records and the
+backlog, which keep the words of their time.
+
 ## 10. What this record does not settle
 
 - Whether the athlos's *outliving* clause (0021/D04) becomes a property of the unit or stays a

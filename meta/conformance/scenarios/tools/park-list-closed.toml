@@ -3,8 +3,8 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `--closed` adds the kits in the closed folder `.ergon/.closed/` to the listing, sorted by id with
-# the live ones; a closed kit reads its own note exactly as a live one does. Without the flag they
+# `--closed` adds the ergons in the closed folder `.ergon/.closed/` to the listing, sorted by id with
+# the live ones; a closed ergon reads its own note exactly as a live one does. Without the flag they
 # are hidden (tools/park-list-hides-closed).
 
 [fixture]

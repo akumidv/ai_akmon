@@ -3,8 +3,8 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `--state active` keeps the kits whose derived state is `active`: a live lease, whatever the note.
-# C7 holds a live lease and has no note; C101's stale lease and the parked kits are not active.
+# `--state active` keeps the ergons whose derived state is `active`: a live lease, whatever the note.
+# C7 holds a live lease and has no note; C101's stale lease and the parked ergons are not active.
 
 [fixture]
 attach = "none"

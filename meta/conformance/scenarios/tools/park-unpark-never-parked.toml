@@ -3,8 +3,8 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# A kit folder with no PARK.md and no RESUME.md was never parked: `unpark` refuses it at the resume
-# prompt (exit 1, the error names the kit) and leaves no lease behind, so the folder holds only what
+# An ergon folder with no PARK.md and no RESUME.md was never parked: `unpark` refuses it at the resume
+# prompt (exit 1, the error names the ergon) and leaves no lease behind, so the folder holds only what
 # was there before.
 
 [fixture]
@@ -20,6 +20,6 @@ argv = ["unpark", "C183", "--harness", "claude", "--session-id", "s1", "--machin
 
 [expected]
 exit = 1
-stderr = "error: kit C183-park-helper has no RESUME.md; write it again to regenerate it\n"
+stderr = "error: ergon C183-park-helper has no RESUME.md; write it again to regenerate it\n"
 stdout = ""
 file_absent = ["_aitna/.ergon/C183-park-helper/PARK.md", "_aitna/.ergon/C183-park-helper/HOLDER"]

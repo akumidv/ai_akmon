@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `write` writes the kit and nothing else: no local index is written (ADR 0028 D12 retired it, so
+# `write` writes the ergon and nothing else: no local index is written (ADR 0028 D12 retired it, so
 # `_aitna/.local/TASKS.md` never appears), and a project index (`_aitna/TASKS.md`) that carries a row
 # for the same id is left byte for byte as it was. `park list` is the index.
 

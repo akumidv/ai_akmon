@@ -1,0 +1,25 @@
+id = "tools/park-athlos-refused-unknown-field"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A plan line is structure, so a cell whose field the format does not carry is refused, not dropped: the fields are
+# `tasks`, `after`, `paths`, `harness`, `result` and `zone`. `athlos` stops (exit 1, one `error:` line naming the
+# athlos and the field) before it creates the athlos folder.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C186-holders-units/PLAN.md" = "---\nid: C186\nname: holders-units\ntitle: Holders and units\ntasks: C186\n---\n\n# C186-holders-units\n\n## Athlos\n\n- C186.1 · write the lease · tasks C186 · colour red · result: the lease is created\n"
+
+[run]
+tool = "park/park"
+argv = ["athlos", "C186", "--number", "1", "--step", "create the file", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stdout = ""
+stderr = "error: C186.1: a plan line carries no field colour (the fields are tasks, after, paths, harness, result, zone)\n"
+file_absent = ["_aitna/.ergon/C186-holders-units/1"]

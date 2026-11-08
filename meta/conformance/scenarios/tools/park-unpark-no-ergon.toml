@@ -1,10 +1,10 @@
-id = "tools/park-unpark-no-kit"
+id = "tools/park-unpark-no-ergon"
 ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# An id no kit carries is refused: exit 1, the error line names the id, the kit folder it looked
-# in and the kits that exist. No lease is taken on the kit that does exist.
+# An id no ergon carries is refused: exit 1, the error line names the id, the ergon folder it looked
+# in and the ergons that exist. No lease is taken on the ergon that does exist.
 
 [fixture]
 attach = "none"
@@ -19,6 +19,6 @@ argv = ["unpark", "C999", "--harness", "claude", "--session-id", "s1", "--machin
 
 [expected]
 exit = 1
-stderr = "error: no kit with id C999 under _aitna/.ergon; kits: C183-park-helper\n"
+stderr = "error: no ergon with id C999 under _aitna/.ergon; ergons: C183-park-helper\n"
 stdout = ""
 file_absent = ["_aitna/.ergon/C183-park-helper/HOLDER"]

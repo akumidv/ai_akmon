@@ -4,7 +4,7 @@ kind = "tool"
 covers = ["tool:park/park"]
 
 # A name that is not kebab-case is refused before anything is written: exit 1, the error line
-# names the value, and neither the kit nor the local index appears.
+# names the value, and neither the ergon nor the local index appears.
 
 [fixture]
 attach = "none"

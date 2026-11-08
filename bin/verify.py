@@ -382,6 +382,11 @@ def _ignore_spellings(relative: str) -> frozenset[str]:
     return frozenset(spellings)
 
 
+def _root_relative(folder: Path, root: Path) -> str:
+    """``folder`` relative to ``root`` in POSIX form, or its full path when it lies outside ``root``."""
+    return folder.relative_to(root).as_posix() if folder.is_relative_to(root) else folder.as_posix()
+
+
 def _gitignore_covers(text: str, relative: str) -> bool:
     """Whether the ``.gitignore`` ``text`` ignores ``relative``, a project-root-relative POSIX path.
 
@@ -1717,7 +1722,9 @@ class Verifier:
             "local": local_root(self.root),
             "ergon": ergon_root(self.root),
         }
-        names = {key: folder.relative_to(self.root).as_posix() for key, folder in folders.items()}
+        # A linked worktree keeps its ergons in the main checkout, outside this root: that folder is
+        # named by its full path and left to the main checkout's own ignore list.
+        names = {key: _root_relative(folder, self.root) for key, folder in folders.items()}
         if folders["legacy"].is_dir():
             self.warn(
                 "layout.local-legacy",
@@ -1728,7 +1735,8 @@ class Verifier:
         gitignore = self.root / ".gitignore"
         text = gitignore.read_text(encoding="utf-8") if gitignore.is_file() else ""
         for key in ("local", "ergon"):
-            if folders[key].is_dir() and not _gitignore_covers(text, names[key]):
+            inside_root = folders[key].is_relative_to(self.root)
+            if inside_root and folders[key].is_dir() and not _gitignore_covers(text, names[key]):
                 self.warn(
                     "gitignore.local-layer",
                     jsondata.fill(self.data["local_layer_unignored"], {"path": names[key]}),

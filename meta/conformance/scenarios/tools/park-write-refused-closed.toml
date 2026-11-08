@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# A closed kit keeps its id and name: `write` of the same id and name is refused in one line, and no kit is created.
+# A closed ergon keeps its id and name: `write` of the same id and name is refused in one line, and no ergon is created.
 
 [fixture]
 attach = "none"
@@ -19,7 +19,7 @@ argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park help
 
 [expected]
 exit = 1
-stderr = "error: kit C183-park-helper is closed and keeps its id and name; write under another id or name\n"
+stderr = "error: ergon C183-park-helper is closed and keeps its id and name; write under another id or name\n"
 stdout = ""
 file_absent = ["_aitna/.ergon/C183-park-helper"]
 

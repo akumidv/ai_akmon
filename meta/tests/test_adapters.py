@@ -535,6 +535,8 @@ def test_the_shell_route_diagnostic_is_reported_on_claude_too(monkeypatch, tmp_p
 def test_the_claude_shell_diagnostic_leaves_the_guard_decision_intact(monkeypatch, tmp_path, capsys):
     # The diagnostic is stderr-only and additive: a denied commit is still denied on stdout.
     monkeypatch.setattr(hook_core.tempfile, "gettempdir", lambda: str(tmp_path))
+    # The branch is fixed so the answer does not depend on the checkout the suite runs in.
+    monkeypatch.setattr(hook_core, "current_git_branch", lambda: "main")
     payload = {
         "tool_name": "Bash",
         "tool_input": {"command": "git commit -m 'wip'"},

@@ -1,10 +1,10 @@
-id = "tools/park-close-moves-kit"
+id = "tools/park-close-moves-ergon"
 ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `close` moves the kit to the closed folder `.ergon/.closed/<kit name>/` and releases its leases first:
-# the kit's HOLDER is not carried along. Its note moves with it, unchanged. No local index is written.
+# `close` moves the ergon to the closed folder `.ergon/.closed/<ergon name>/` and releases its leases first:
+# the ergon's HOLDER is not carried along. Its note moves with it, unchanged. No local index is written.
 
 [fixture]
 attach = "none"

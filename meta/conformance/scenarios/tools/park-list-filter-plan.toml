@@ -3,8 +3,8 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `--plan A59` keeps the kits whose note names that plan (a kit with no note, or a note with no plan,
-# has none). The same kits as `tools/park-list`: B8 and C183 name A59; _T3 names no plan.
+# `--plan A59` keeps the ergons whose note names that plan (an ergon with no note, or a note with no plan,
+# has none). The same ergons as `tools/park-list`: B8 and C183 name A59; _T3 names no plan.
 
 [fixture]
 attach = "none"

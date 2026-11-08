@@ -3,11 +3,11 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `list` prints one line per kit, sorted by id: id | name | state | plan | next | decisions | branch
-# | age. The state is derived, never typed: a live lease is `active` (C7, a kit with no note at
+# `list` prints one line per ergon, sorted by id: id | name | state | plan | next | decisions | branch
+# | age. The state is derived, never typed: a live lease is `active` (C7, an ergon with no note at
 # all), a note without a live lease is `parked` (B8, C183), a stale lease holds nothing (C101 is
 # `not started` with its stale lease and no note; _T3 is `parked` with its stale lease and a note).
-# A kit with no note shows the empty cell `-` for the rest; the next action is cut at 60 characters
+# An ergon with no note shows the empty cell `-` for the rest; the next action is cut at 60 characters
 # with the ellipsis as the 60th (code points, the astral character before the cut counts as one); the
 # decisions column is a count; age is whole days (`0d`: the fixture's files were just written). A
 # folder whose name is no `<id>-<name>` is ignored. The lease's machine is named (`--machine`), so
@@ -25,7 +25,7 @@ attach = "none"
 "_aitna/.ergon/C183-park-helper/PARK.md" = "---\nid: C183\nname: park-helper\nplan: A59\nrow: C183\nbranch: _aitna/C183-park-helper\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness: ready for a successor\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\nso a successor can resume\n\n## Approved scope and open questions\n\n- D-C183-TWIN\n- D-C183-NAME\n\n## Owner answers received\n\n- owner: go\n- owner: keep the name\n\n## Checks run\n\n_none_\n\n## Unverified\n\n_none_\n\n## Active agents and background processes\n\n_none_\n\n## Next action\n\nTwin it in JS\n"
 "_aitna/.ergon/_T3-local-task/PARK.md" = "---\nid: _T3\nname: local-task\nplan:\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Continue\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# _T3-local-task\n\n## Goal\n\nA local task\n\n## Next action\n\nContinue\n"
 "_aitna/.ergon/_T3-local-task/HOLDER" = "---\nharness: claude\nsession: s0\nmachine: laptop\nworktree:\nwritten: 2000-01-01T00:00:00Z\n---\n"
-"_aitna/.ergon/not-a-kit/NOTES.md" = "ignored: the folder name carries no id\n"
+"_aitna/.ergon/not-a-ergon/NOTES.md" = "ignored: the folder name carries no id\n"
 
 [run]
 tool = "park/park"

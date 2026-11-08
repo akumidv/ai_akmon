@@ -3,9 +3,9 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `local-id` prints the next free local id, `_T<n>`: one more than the largest number any kit carries,
-# counted over the live kits and the closed ones together (ADR 0028 D12). The closed `_T7` is counted,
-# so `_T7` is not handed out again; a kit named by a task id (C183) carries no local number and is not
+# `local-id` prints the next free local id, `_T<n>`: one more than the largest number any ergon carries,
+# counted over the live ergons and the closed ones together (ADR 0028 D12). The closed `_T7` is counted,
+# so `_T7` is not handed out again; an ergon named by a task id (C183) carries no local number and is not
 # counted.
 
 [fixture]

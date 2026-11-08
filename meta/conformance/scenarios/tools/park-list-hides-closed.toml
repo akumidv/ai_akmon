@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# Without `--closed` the listing holds the live kits only: the closed kit C101 is not shown.
+# Without `--closed` the listing holds the live ergons only: the closed ergon C101 is not shown.
 
 [fixture]
 attach = "none"

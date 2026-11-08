@@ -1,0 +1,25 @@
+id = "tools/park-athlos-refused-bad-plan-id"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:park/park"]
+
+# A plan whose header `id` is not a task id (`c3`) would put that value in the `plan:` field of the
+# athlos's `ATHLOS.md`, a file that does not read back. `athlos` refuses it before the athlos folder or the lease
+# exists: exit 1, one `error:` line naming the ergon and the value.
+
+[fixture]
+attach = "none"
+
+[fixture.files]
+"_aitna/.akmon.toml" = ""
+"_aitna/.ergon/C186-holders-units/PLAN.md" = "---\nid: c3\nname: holders-units\ntitle: Holders and units\ntasks: C186\n---\n\n# C186-holders-units\n\n## Athlos\n\n- C186.1 \u00b7 write the lease \u00b7 tasks C186 \u00b7 result: the lease is created exclusively\n"
+
+[run]
+tool = "park/park"
+argv = ["athlos", "C186", "--number", "1", "--step", "create the file", "--harness", "claude", "--session-id", "s1", "--machine", "laptop"]
+
+[expected]
+exit = 1
+stdout = ""
+stderr = "error: ergon C186-holders-units: plan c3 is not a task id (a capital letter or _T followed by digits, e.g. C183 or _T3)\n"
+file_absent = ["_aitna/.ergon/C186-holders-units/1"]

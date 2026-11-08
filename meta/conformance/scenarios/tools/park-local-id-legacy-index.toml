@@ -4,7 +4,7 @@ kind = "tool"
 covers = ["tool:park/park"]
 
 # The retired local index `<DEV>/.local/TASKS.md` is read as legacy input (ADR 0028 D12): a `_T<n>` row
-# in it is a number already handed out, so `local-id` skips it. The kits hold `_T3`, the index holds
+# in it is a number already handed out, so `local-id` skips it. The ergons hold `_T3`, the index holds
 # `_T6`, so the next id is `_T7`. The index is read only: it is left as it was.
 
 [fixture]

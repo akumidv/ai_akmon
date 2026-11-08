@@ -1,19 +1,24 @@
 #!/usr/bin/env node
 /**
- * The park helper: hold, write, resume, digest and list the kits of parked work — the JavaScript
+ * The park helper: hold, write, resume, digest and list the ergons of parked work — the JavaScript
  * twin of `tools/park/park.py` (ADR 0020 D01, ADR 0028 D02, D03, D06, D08–D12). The Python module is
  * the spec: the same files in the same bytes, the same stdout lines, the same `error:` lines, the
- * same exit codes; its docstring carries the full account of the kit, its units (the plan and its
- * jobs), the note's header format and the derived states.
+ * same exit codes; its docstring carries the full account of the ergon, its units (the plan and its
+ * athlos), the note's header format and the derived states.
  *
  * The read-only command `local-id` prints the next free local id (`_T<n>`), counted over the live
- * kits and the closed ones and never reused.
+ * ergons and the closed ones and never reused.
  *
- * A *kit* is the folder `<dev root>/.ergon/<id>-<name>/` of one piece of work. Its plan is `PLAN.md`;
- * its units are the plan itself (the kit root) and its jobs (`jobs/<n>-<name>/`). Parking a unit
- * writes `PARK.md` and `RESUME.md` into it atomically. A unit is held by a lease, the file `HOLDER`,
- * created exclusively and judged stale on read. There is no local index anymore: a kit is its own
+ * An *ergon* is the folder `<dev root>/.ergon/<id>-<name>/` of one piece of work. Its plan is
+ * `PLAN.md`; its units are the plan itself (the ergon root) and its athlos, each in the folder of its
+ * own number (`<dev root>/.ergon/<id>-<name>/<n>/ATHLOS.md`, ADR 0029 D11). Parking a unit writes
+ * `PARK.md` and `RESUME.md` into it atomically. A unit is held by a lease, the file `HOLDER`,
+ * created exclusively and judged stale on read. There is no local index anymore: an ergon is its own
  * record, and `park list` is the index (ADR 0028 D12).
+ *
+ * A record written before the rename of ADR 0029 is read and translated: the `job` word, the
+ * `jobs/<n>-<label>/JOB.md` layout, the `job:` key of a note and the retired local index. An old form
+ * is never written (ADR 0029 D12).
  *
  * Data (the C102 convention): the tool's texts are `tools/park/park.json`, read once by `main` (and
  * by `digest` when it is called alone) and passed down as `texts`.
@@ -22,15 +27,15 @@
  * - the dataclasses are frozen plain objects with camelCase keys (`nextAction`, `ownedPaths`,
  *   `sessionId`, `ageDays`, `staleHours`); `parkFields` and `parkBody` fill the defaults the
  *   dataclasses carry; a dataclass method is a function that takes the object first
- *   (`holderSameAs`, `holderLabel`, `leaseAgeSeconds`, `jobDocNextStep`);
+ *   (`holderSameAs`, `holderLabel`, `leaseAgeSeconds`, `athlosDocNextStep`);
  * - the arguments are parsed by a small `argparse`-shaped scanner (DV12): a usage error is the one
  *   line `park.mjs: error: …` on stderr and exit 2, `-h`/`--help` prints a short usage and exits 0.
  *   Options are accepted before and after the subcommand's positional, `--root` and `--project-root`
  *   are one option, and a value such as `-1` or `- two words` is a value, as `argparse` takes it;
- * - character counts (the digest cap, the 60-character cut of `next`) count code points, and kit ids
+ * - character counts (the digest cap, the 60-character cut of `next`) count code points, and ergon ids
  *   and file paths sort by code point (a path by its components), as Python's `len` and `sorted` do;
  * - a path the helper prints follows the one rule of `_displayPath`, as in Python: from the session's
- *   project root when it lies inside, absolute when it does not (the kits of a linked worktree stay
+ *   project root when it lies inside, absolute when it does not (the ergons of a linked worktree stay
  *   in the main checkout);
  * - an I/O failure (DV16) is the runtime's own error, never caught: Node's stack trace and exit 1.
  */
@@ -79,7 +84,7 @@ import {
  * @property {{title: string, intro: string, steps: string[], next_heading: string, decisions_heading: string, decisions_none: string, retirement_heading: string, retirement: string[]}} resume
  * @property {{title: string}} note
  * @property {Record<string, string>} digest
- * @property {{line: string, unreadable: string, job_line: string, empty: string, no_match: string, warning_shared_paths: string}} list
+ * @property {{line: string, unreadable: string, athlos_line: string, empty: string, no_match: string, warning_shared_paths: string}} list
  * @property {{none: string, line: string}} active
  * @property {{uncommitted: string, unreadable: string}} takeover
  * @property {{title: string, file_header: string, end: string}} export
@@ -113,7 +118,7 @@ import {
  * @property {string} name
  * @property {string} nextAction
  * @property {string} plan
- * @property {string} job
+ * @property {string} athlos
  * @property {string} row
  * @property {string} branch
  * @property {readonly string[]} revisions
@@ -138,8 +143,11 @@ import {
  */
 
 /**
- * One job line of `PLAN.md`: the structure of a job, never its state (ADR 0028 D08).
- * @typedef {object} JobLine
+ * One athlos line of `PLAN.md`: the structure of an athlos, never its state (ADR 0028 D08).
+ *
+ * The line carries the zone beside the tasks (ADR 0029 D03): the pair (task id, zone) is the athlos's
+ * content, its id is its place in the plan.
+ * @typedef {object} AthlosLine
  * @property {string} id
  * @property {number} number
  * @property {string} label
@@ -148,26 +156,27 @@ import {
  * @property {readonly string[]} paths
  * @property {string} harness
  * @property {string} result
+ * @property {string} [zone]
  */
 
 /**
- * The header of `PLAN.md`: the kit's id, name, title and the tasks it carries.
+ * The header of `PLAN.md`: the ergon's id, name, title and the tasks it carries.
  * @typedef {{readonly id: string, readonly name: string, readonly title: string, readonly tasks: readonly string[]}} PlanHeader
  */
 
 /**
- * A plan: its header and its job lines.
- * @typedef {{readonly header: PlanHeader, readonly jobs: readonly JobLine[]}} Plan
+ * A plan: its header and its athlos lines.
+ * @typedef {{readonly header: PlanHeader, readonly athlos: readonly AthlosLine[]}} Plan
  */
 
 /**
- * A job's own file `JOB.md`: its steps with their done marks, and whether it is done.
- * @typedef {{readonly header: ParkFields, readonly steps: readonly (readonly [string, boolean])[], readonly done: boolean}} JobDoc
+ * An athlos's own file `ATHLOS.md`: its steps with their done marks, and whether it is done.
+ * @typedef {{readonly header: ParkFields, readonly steps: readonly (readonly [string, boolean])[], readonly done: boolean}} AthlosDoc
  */
 
 /**
- * One line of `list`: what a kit says of itself, read from its folder.
- * @typedef {object} KitSummary
+ * One line of `list`: what an ergon says of itself, read from its folder.
+ * @typedef {object} ErgonSummary
  * @property {string} id
  * @property {string} name
  * @property {string} state
@@ -176,12 +185,12 @@ import {
  * @property {number} decisions
  * @property {string} branch
  * @property {number | null} ageDays
- * @property {string} [unreadable] why the kit's files could not be read; the other fields are then empty
+ * @property {string} [unreadable] why the ergon's files could not be read; the other fields are then empty
  */
 
 /**
- * One job line of `list`: what a job says of itself, read from its folder.
- * @typedef {object} JobSummary
+ * One athlos line of `list`: what an athlos says of itself, read from its folder.
+ * @typedef {object} AthlosSummary
  * @property {string} id
  * @property {string} name
  * @property {string} state
@@ -192,20 +201,20 @@ import {
  */
 
 /**
- * The filters of `list`; an empty one matches every kit.
+ * The filters of `list`; an empty one matches every ergon.
  * @typedef {{readonly plan: string, readonly task: string, readonly state: string, readonly closed: boolean}} ListQuery
  */
 
 /**
  * The keys of one flat header: their order, which hold a list, and which are read and ignored.
- * @typedef {{readonly order: readonly string[], readonly listKeys: readonly string[], readonly legacy: readonly string[]}} HeaderSpec
+ * @typedef {{readonly order: readonly string[], readonly listKeys: readonly string[], readonly legacy: readonly string[], readonly renamed: readonly (readonly [string, string])[]}} HeaderSpec
  */
 
 const PROG = "park.mjs";
 
-const USAGE = `usage: ${PROG} [-h] {write,unpark,digest,list,hold,release,job,active,close,export,local-id} ...
+const USAGE = `usage: ${PROG} [-h] {write,unpark,digest,list,hold,release,athlos,active,close,export,local-id} ...
 
-Park work into a kit and resume it.
+Park work into an ergon and resume it.
 
 commands:
   write ID --name N --goal G --next X [--plan ID] [--row ID] [--owned-path P]... [--check C]...
@@ -213,20 +222,20 @@ commands:
         [--origin O] [--harness H] [--session-id S]
                         Park a piece of work.
   unpark ID [--harness H] [--session-id S]
-                        Resume a parked kit.
+                        Resume a parked ergon.
   digest ID [--cap N]   Print the capped digest.
   list [--plan ID] [--task ID] [--state S] [--closed]
-                        List the kits.
+                        List the ergons.
   hold ID [--number N] [--takeover] [--harness H] [--session-id S]
                         Take the lease of a unit.
   release ID [--number N]
                         Release the lease of a unit.
-  job ID --number N [--step S]... [--done] [--harness H] [--session-id S]
-                        Write a job's own file.
+  athlos ID --number N [--step S]... [--done] [--harness H] [--session-id S]
+                        Write an athlos's own file.
   active                Print the unit this session is in.
   close ID [--harness H] [--session-id S]
-                        Close a kit and move it to the closed folder.
-  export ID --out FILE  Write the kit to one bundle file.
+                        Close an ergon and move it to the closed folder.
+  export ID --out FILE  Write the ergon to one bundle file.
   local-id              Print the next free local id, _T<n>.
 
 Every command takes --root DIR (or --project-root DIR): the project root. Defaults to the nearest
@@ -242,55 +251,58 @@ const SECONDS_PER_HOUR = 3600;
 const PARK_FILE = "PARK.md";
 const RESUME_FILE = "RESUME.md";
 const PLAN_FILE = "PLAN.md";
-const JOB_FILE = "JOB.md";
+const ATHLOS_FILE = "ATHLOS.md";
 const HOLDER_FILE = "HOLDER";
 const SESSIONS_FILE = "SESSIONS";
 const HEADER_FENCE = "---";
 const SESSION_PARTS = 3; // harness|session_id|machine
-const SLUG_MAX = 40;
 const GIT_TIMEOUT_MS = 10_000;
 const GIT_REVISIONS = 5;
 const STEPS_HEADING = "## Steps";
 const DONE_MARKER = "done";
 const STEP_UNDONE = "- [ ] ";
 const STEP_DONE = "- [x] ";
-const JOBS_DIR = "jobs";
 const CLOSED_DIR = ".closed";
 const WORKTREES_DIR = ".worktrees";
 const TASK_SEPARATOR = "·";
 const FIELD_SEPARATOR = ",";
 const PATH_SEPARATOR = "/";
-const JOBS_HEADING = "Jobs";
+const ATHLOS_HEADING = "Athlos";
 const LINE_BREAKS_RE = /[\r\n]+/g;
-const JOB_SOURCE_PARTS = 4; // kit folder, `jobs`, job folder, `JOB.md`
+const ATHLOS_SOURCE_PARTS = 3; // ergon folder, athlos folder, `ATHLOS.md`
 
 // Python's `$` also matches before a final newline, so `\n?$` keeps the twin's answer for a value
 // that ends in one; `\p{Nd}` is Python's `\d`; `.` is `[^\n]` because Python's `.` takes `\r`.
 const ID_RE = /^(?:[A-Z]\p{Nd}+|_T\p{Nd}+)\n?$/u; // ADR 0002 typed id, and a local id's _T<n> (ADR 0028 D12)
-const JOB_ID_RE = /^((?:[A-Z]\p{Nd}+|_T\p{Nd}+))\.(\p{Nd}+)\n?$/u;
+const ATHLOS_ID_RE = /^((?:[A-Z]\p{Nd}+|_T\p{Nd}+))\.(\p{Nd}+)\n?$/u;
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*\n?$/;
-const KIT_RE = /^([A-Z]\p{Nd}+|_T\p{Nd}+)-([a-z0-9]+(?:-[a-z0-9]+)*)\n?$/u;
+const ERGON_RE = /^([A-Z]\p{Nd}+|_T\p{Nd}+)-([a-z0-9]+(?:-[a-z0-9]+)*)\n?$/u;
 const KEY_RE = /^([a-z_]+):(?: ([^\n]*))?$/;
 const PURPOSE_KEY_RE = /^[a-z][a-z0-9_]*\n?$/;
-const SLUG_RE = /[^a-z0-9]+/g;
 const LOCAL_ID_RE = /^_T(\p{Nd}+)\n?$/u;
 // The retired local index, in `<dev root>/.local/`, and one of its rows: `- _T6 · ...`.
 const LEGACY_INDEX_FILE = "TASKS.md";
 const LEGACY_ROW_RE = /^- _T([0-9]+)(?:[ \t]|$)/;
-const WORKTREE_TAIL_RE = /^\p{Nd}+$/u;
+// The athlos layout a record written before ADR 0029 D11 carries: `jobs/<n>-<label>/JOB.md`, and the
+// plan's section heading before ADR 0029 D02. Read and translated, never written.
+const LEGACY_ATHLOS_DIR = "jobs";
+const LEGACY_ATHLOS_FILE = "JOB.md";
+const LEGACY_ATHLOS_HEADING = "Jobs";
+// Python's `str.isdecimal()`: a run of Unicode decimal digits, which `int()` then reads.
+const DIGITS_RE = /^\p{Nd}+$/u;
 // `datetime.strptime("%Y-%m-%dT%H:%M:%SZ")`: the widths and ranges its directives accept.
 const STAMP_RE =
   /^(\d{4})-(1[0-2]|0[1-9]|[1-9])-(3[01]|[12]\d|0[1-9]|[1-9]| [1-9])T(2[0-3]|[01]\d|\d):([0-5]\d|\d):(6[01]|[0-5]\d|\d)Z$/;
 
 // Header keys in their written order, and which of them hold a list: the one table the renderer and
 // the parser share. `nextAction` is written as `next`.
-const SCALAR_KEYS = ["id", "name", "plan", "job", "row", "branch", "next", "origin", "readiness", "written"];
+const SCALAR_KEYS = ["id", "name", "plan", "athlos", "row", "branch", "next", "origin", "readiness", "written"];
 const LIST_KEYS = ["revisions", "owned_paths", "tasks", "sessions"];
 const HEADER_ORDER = [
   "id",
   "name",
   "plan",
-  "job",
+  "athlos",
   "row",
   "branch",
   "revisions",
@@ -304,6 +316,9 @@ const HEADER_ORDER = [
 ];
 // The keys of a note written before ADR 0028 D09: read and ignored, never written again.
 const LEGACY_KEYS = ["state", "peers"];
+// A key renamed by ADR 0029 D02, as `[old, new]`: read under the new spelling, never written again.
+/** @type {readonly (readonly [string, string])[]} */
+const RENAMED_KEYS = [["job", "athlos"]];
 // The keys of the lease file `HOLDER`, in their written order.
 const LEASE_KEYS = ["harness", "session", "machine", "worktree", "written"];
 
@@ -311,9 +326,14 @@ const LEASE_KEYS = ["harness", "session", "machine", "worktree", "written"];
  * The header of a park note and the header of a lease: the two flat formats the helper reads.
  * @type {HeaderSpec}
  */
-export const NOTE_HEADER = Object.freeze({ order: HEADER_ORDER, listKeys: LIST_KEYS, legacy: LEGACY_KEYS });
+export const NOTE_HEADER = Object.freeze({
+  order: HEADER_ORDER,
+  listKeys: LIST_KEYS,
+  legacy: LEGACY_KEYS,
+  renamed: RENAMED_KEYS,
+});
 /** @type {HeaderSpec} */
-export const LEASE_HEADER = Object.freeze({ order: LEASE_KEYS, listKeys: [], legacy: [] });
+export const LEASE_HEADER = Object.freeze({ order: LEASE_KEYS, listKeys: [], legacy: [], renamed: [] });
 
 /** A failure the command line reports as one line on stderr with exit 1. */
 export class ParkError extends Error {
@@ -334,7 +354,7 @@ export class ParkError extends Error {
 export function parkFields(init) {
   return Object.freeze({
     plan: "",
-    job: "",
+    athlos: "",
     row: "",
     branch: "",
     revisions: Object.freeze([]),
@@ -397,7 +417,7 @@ function _states(texts) {
 /**
  * `path` as the helper prints it: from `root` when it lies inside, as it is when it does not.
  *
- * The kits of a linked worktree live in the main checkout (ADR 0028 D12), outside the session's
+ * The ergons of a linked worktree live in the main checkout (ADR 0028 D12), outside the session's
  * root, so a path there is printed absolute rather than refused.
  * @param {string} path
  * @param {string} root
@@ -478,9 +498,9 @@ function _checkId(value, label, texts) {
  * @param {string} label
  * @param {ParkData} texts
  */
-function _checkJobId(value, label, texts) {
-  if (!JOB_ID_RE.test(value)) {
-    throw _error(texts, "bad_job_id", { label, value });
+function _checkAthlosId(value, label, texts) {
+  if (!ATHLOS_ID_RE.test(value)) {
+    throw _error(texts, "bad_athlos_id", { label, value });
   }
 }
 
@@ -530,8 +550,8 @@ function _checkScalars(fields, texts) {
       _checkId(value, label, texts);
     }
   }
-  if (fields.job !== "") {
-    _checkJobId(fields.job, "job", texts);
+  if (fields.athlos !== "") {
+    _checkAthlosId(fields.athlos, "athlos", texts);
   }
   for (const [label, value] of [
     ["branch", fields.branch],
@@ -633,7 +653,7 @@ export function renderHeader(fields) {
     id: fields.id,
     name: fields.name,
     plan: fields.plan,
-    job: fields.job,
+    athlos: fields.athlos,
     row: fields.row,
     branch: fields.branch,
     next: fields.nextAction,
@@ -713,17 +733,19 @@ function _headerEntry(values, line, number, site) {
   if (spec.legacy.includes(key)) {
     return { opened: null, legacyList: value === "" };
   }
-  if (!spec.order.includes(key) || values.has(key)) {
+  // A key the release renamed is read under its new spelling, never written in the old one.
+  const named = spec.renamed.find(([previous]) => previous === key)?.[1] ?? key;
+  if (!spec.order.includes(named) || values.has(named)) {
     throw _error(texts, "header_key", { path: source, key });
   }
-  if (spec.listKeys.includes(key)) {
+  if (spec.listKeys.includes(named)) {
     if (value !== "") {
       throw _error(texts, "header_scalar_list", { path: source, key });
     }
-    values.set(key, []);
-    return { opened: key, legacyList: false };
+    values.set(named, []);
+    return { opened: named, legacyList: false };
   }
-  values.set(key, value);
+  values.set(named, value);
   return { opened: null, legacyList: false };
 }
 
@@ -803,7 +825,7 @@ export function parseHeader(text, source, texts) {
     name: _scalar(values, "name"),
     nextAction: _scalar(values, "next"),
     plan: _scalar(values, "plan"),
-    job: _scalar(values, "job"),
+    athlos: _scalar(values, "athlos"),
     row: _scalar(values, "row"),
     branch: _scalar(values, "branch"),
     revisions: _listed(values, "revisions"),
@@ -852,7 +874,7 @@ function _bullets(items, texts) {
  */
 function _renderBody(fields, body, texts) {
   const headings = texts.headings;
-  const lines = [fill(texts.note.title, { kit: `${fields.id}-${fields.name}` }), ""];
+  const lines = [fill(texts.note.title, { ergon: `${fields.id}-${fields.name}` }), ""];
   lines.push(..._section(headings.goal, body.goal.split("\n")));
   lines.push(..._section(headings.decisions, _bullets(body.decisions, texts)));
   lines.push(..._section(headings.answers, _bullets(body.answers, texts)));
@@ -972,7 +994,7 @@ export function parseNote(text, source, texts) {
 export function renderResume(fields, body, parkPath, texts) {
   const resume = texts.resume;
   const values = {
-    kit: `${fields.id}-${fields.name}`,
+    ergon: `${fields.id}-${fields.name}`,
     id: fields.id,
     park_path: parkPath,
     command: texts.invocation,
@@ -1008,10 +1030,10 @@ export function renderResume(fields, body, parkPath, texts) {
  */
 export function digestLines(fields, body, state, texts) {
   const spec = texts.digest;
-  const lines = [fill(spec.title, { kit: `${fields.id}-${fields.name}`, state })];
+  const lines = [fill(spec.title, { ergon: `${fields.id}-${fields.name}`, state })];
   for (const [key, value] of [
     ["plan", fields.plan],
-    ["job", fields.job],
+    ["athlos", fields.athlos],
     ["row", fields.row],
     ["branch", fields.branch],
     ["readiness", fields.readiness],
@@ -1039,39 +1061,42 @@ export function digestLines(fields, body, state, texts) {
 }
 
 /**
- * The fields and the body of the kit's `PARK.md`; a kit without one was never parked.
- * @param {string} kit
+ * The fields and the body of the ergon's `PARK.md`; an ergon without one was never parked.
+ * @param {string} ergon
  * @param {ParkData} texts
  * @returns {{fields: ParkFields, body: ParkBody}}
- * @throws {ParkError} the kit has no `PARK.md`, or its note does not parse
+ * @throws {ParkError} the ergon has no `PARK.md`, or its note does not parse
  */
-export function readNote(kit, texts) {
-  const note = pyPath(kit, PARK_FILE);
-  const name = posix.basename(kit);
+export function readNote(ergon, texts) {
+  const note = pyPath(ergon, PARK_FILE);
+  const name = posix.basename(ergon);
   if (!isFile(note)) {
-    throw _error(texts, "never_parked", { kit: name });
+    throw _error(texts, "never_parked", { ergon: name });
   }
   return parseNote(readText(note), `${name}/${PARK_FILE}`, texts);
 }
 
 /**
- * The capped digest of a kit's note: whole lines up to `cap` characters, then the overflow line.
+ * The capped digest of an ergon's note: whole lines up to `cap` characters, then the overflow line.
  *
  * `cap` counts the code points of the lines kept, newline included; the overflow line
  * (`… N more lines in <path>`) is appended after them and is not counted. With `root` the
- * path is the note's path from the project root, otherwise `<kit name>/PARK.md`.
- * @param {string} kit
+ * path is the note's path from the project root, otherwise `<ergon name>/PARK.md`. `machine` is
+ * the one the caller judges a lease against, so the digest reads a copied lease stale exactly as
+ * `list` does.
+ * @param {string} ergon
  * @param {number} cap
  * @param {string | null} [root]
  * @param {ParkData | null} [data] the tool's texts; read from `park.json` when omitted
+ * @param {string} [machine]
  * @returns {string}
- * @throws {ParkError} the kit was never parked or its note does not parse
+ * @throws {ParkError} the ergon was never parked or its note does not parse
  */
-export function digest(kit, cap, root = null, data = null) {
+export function digest(ergon, cap, root = null, data = null, machine = "") {
   const texts = data ?? _texts();
-  const { fields, body } = readNote(kit, texts);
-  const context = { now: Date.now() / 1000, staleHours: texts.stale_after_hours, machine: "" };
-  const lines = digestLines(fields, body, kitState(kit, texts, context), texts);
+  const { fields, body } = readNote(ergon, texts);
+  const context = { now: Date.now() / 1000, staleHours: texts.stale_after_hours, machine };
+  const lines = digestLines(fields, body, ergonState(ergon, texts, context), texts);
   /** @type {string[]} */
   const kept = [];
   let used = 0;
@@ -1084,7 +1109,8 @@ export function digest(kit, cap, root = null, data = null) {
     used += size;
   }
   if (kept.length < lines.length) {
-    const where = root === null ? `${posix.basename(kit)}/${PARK_FILE}` : _displayPath(pyPath(kit, PARK_FILE), root);
+    const where =
+      root === null ? `${posix.basename(ergon)}/${PARK_FILE}` : _displayPath(pyPath(ergon, PARK_FILE), root);
     kept.push(fill(texts.digest.overflow, { count: String(lines.length - kept.length), path: where }));
   }
   return kept.join("\n");
@@ -1257,14 +1283,20 @@ export function renderLease(lease) {
 }
 
 /**
- * The epoch seconds of an ISO stamp, or `0` when it is not one.
+ * The epoch seconds of an ISO stamp.
+ *
+ * A stamp that is not one is refused, never read as the epoch: `0` would make a corrupt lease older
+ * than any threshold, so a live holder's unit would read as free.
  * @param {string} value
+ * @param {string} source the file the stamp was read from, named in the error
+ * @param {ParkData} texts
  * @returns {number}
+ * @throws {ParkError} the value is not a UTC stamp
  */
-function _parseStamp(value) {
+function _parseStamp(value, source, texts) {
   const match = STAMP_RE.exec(value);
   if (match === null) {
-    return 0;
+    throw _error(texts, "bad_stamp", { path: source, key: "written", value });
   }
   const [year, month, day, hour, minute, second] = [
     match[1],
@@ -1286,7 +1318,10 @@ function _parseStamp(value) {
     moment.getUTCHours() === hour &&
     moment.getUTCMinutes() === minute &&
     moment.getUTCSeconds() === second;
-  return valid ? moment.getTime() / 1000 : 0;
+  if (!valid) {
+    throw _error(texts, "bad_stamp", { path: source, key: "written", value });
+  }
+  return moment.getTime() / 1000;
 }
 
 /**
@@ -1295,7 +1330,7 @@ function _parseStamp(value) {
  * @param {string} source
  * @param {ParkData} texts
  * @returns {Lease}
- * @throws {ParkError} the file has no header, or a line is malformed
+ * @throws {ParkError} the file has no header, a line is malformed, or its stamp is not one
  */
 export function parseLease(text, source, texts) {
   const { header } = _splitNote(text, source, texts);
@@ -1306,7 +1341,7 @@ export function parseLease(text, source, texts) {
     machine: String(values.get("machine") ?? ""),
     worktree: String(values.get("worktree") ?? ""),
   };
-  return { holder, written: _parseStamp(String(values.get("written") ?? "")) };
+  return { holder, written: _parseStamp(String(values.get("written") ?? ""), source, texts) };
 }
 
 /**
@@ -1326,7 +1361,7 @@ export function readLease(unit, texts) {
 /**
  * Whether a lease is stale: written on another machine, or older than the threshold.
  *
- * A lease that came with a copied kit names another machine, and is stale at once.
+ * A lease that came with a copied ergon names another machine, and is stale at once.
  * @param {Lease} lease
  * @param {LeaseContext} context
  * @returns {boolean}
@@ -1398,12 +1433,12 @@ export function releaseLease(unit) {
 }
 
 /**
- * Release every lease of a kit: the plan's and its jobs'.
- * @param {string} kit
+ * Release every lease of an ergon: the plan's and its athlos'.
+ * @param {string} ergon
  */
-export function releaseLeases(kit) {
-  releaseLease(kit);
-  for (const folder of _jobFolders(kit)) {
+export function releaseLeases(ergon) {
+  releaseLease(ergon);
+  for (const folder of _athlosFolders(ergon)) {
     releaseLease(folder);
   }
 }
@@ -1457,12 +1492,12 @@ export function acquireLease(unit, holder, texts, context, { takeover = false } 
 }
 
 /**
- * The file that carries a unit's sessions: `PARK.md` for a kit, `JOB.md` for a job, or `null`.
+ * The file that carries a unit's sessions: `PARK.md` for an ergon, an athlos's file, or `null`.
  * @param {string} unit
  * @returns {string | null}
  */
 function _unitNote(unit) {
-  for (const name of [PARK_FILE, JOB_FILE]) {
+  for (const name of [PARK_FILE, ATHLOS_FILE, LEGACY_ATHLOS_FILE]) {
     if (isFile(pyPath(unit, name))) {
       return pyPath(unit, name);
     }
@@ -1519,8 +1554,8 @@ export function mergeSessions(...groups) {
 /**
  * Keep a replaced holder in the unit's record, among the sessions.
  *
- * The header of a unit's note carries the sessions the work was done in (`PARK.md` for a kit,
- * `JOB.md` for a job); a holder that is taken over stays among them, so the note says who held the
+ * The header of a unit's note carries the sessions the work was done in (`PARK.md` for an ergon,
+ * `ATHLOS.md` for an athlos); a holder that is taken over stays among them, so the note says who held the
  * unit before. A unit with no note yet keeps it in `SESSIONS` beside the lease, and the next `write`
  * merges that file into the note and removes it. The note is read first, so a note that does not
  * parse stops the takeover before anything changes, and the file is replaced atomically. A holder
@@ -1555,7 +1590,7 @@ export function rememberHolder(unit, holder, texts) {
 /**
  * A unit's note read for its sessions: the sessions it carries, and the note's text with others in
  * their place (the body or the steps untouched).
- * @param {string} note the `PARK.md` or `JOB.md` path
+ * @param {string} note the `PARK.md` or `ATHLOS.md` path
  * @param {string} unit
  * @param {ParkData} texts
  * @returns {{sessions: readonly SessionRef[], render: (sessions: readonly SessionRef[]) => string}}
@@ -1570,15 +1605,15 @@ function _readRecord(note, unit, texts) {
     const { rest } = _splitNote(text, source, texts);
     return { sessions: fields.sessions, render: (sessions) => `${renderHeader({ ...fields, sessions })}${rest}` };
   }
-  const doc = parseJobDoc(text, source, texts);
+  const doc = parseAthlosDoc(text, source, texts);
   return {
     sessions: doc.header.sessions,
-    render: (sessions) => renderJobDoc({ ...doc, header: { ...doc.header, sessions } }, texts),
+    render: (sessions) => renderAthlosDoc({ ...doc, header: { ...doc.header, sessions } }, texts),
   };
 }
 
 // --------------------------------------------------------------------------------------
-// the plan: its header and its job lines, read from `PLAN.md`
+// the plan: its header and its athlos lines, read from `PLAN.md`
 // --------------------------------------------------------------------------------------
 
 /**
@@ -1620,25 +1655,35 @@ function _splitValues(value) {
 }
 
 /**
- * One job line cell as `[key, value]`: `tasks C186` and `result: text` both parse.
+ * One athlos line cell as `[key, value]`: `tasks C186` and `result: text` both parse.
+ *
+ * A cell that carries its colon and no value (`result:`) is the key with an empty value, not a key
+ * named `result:` — the empty value is what the caller refuses (ADR 0029 D03).
  * @param {string} cell
  * @returns {[string, string]}
  */
-function _jobField(cell) {
+function _athlosField(cell) {
   const colon = cell.indexOf(": ");
   if (colon >= 0) {
     return [pyStrip(cell.slice(0, colon)), pyStrip(cell.slice(colon + 2))];
   }
   const space = cell.indexOf(" ");
-  return space < 0 ? [pyStrip(cell), ""] : [pyStrip(cell.slice(0, space)), pyStrip(cell.slice(space + 1))];
+  const key = pyStrip(space < 0 ? cell : cell.slice(0, space)).replace(/:+$/, "");
+  const value = space < 0 ? "" : pyStrip(cell.slice(space + 1));
+  return [key, value];
 }
 
 /**
- * One job line of a plan as a `JobLine`; a line that is not a job line is skipped (`null`).
+ * One athlos line of a plan as an `AthlosLine`; a line that is not one is skipped (`null`).
+ *
+ * A cell whose key the format does not carry is refused, not dropped: a plan line is structure, and
+ * a field the reader cannot see is a field the plan silently loses (ADR 0029 D03).
  * @param {string} line
- * @returns {JobLine | null}
+ * @param {ParkData} texts
+ * @returns {AthlosLine | null}
+ * @throws {ParkError} a cell names an unknown field
  */
-export function parseJobLine(line) {
+export function parseAthlosLine(line, texts) {
   if (!line.startsWith("- ")) {
     return null;
   }
@@ -1649,38 +1694,44 @@ export function parseJobLine(line) {
   if (cells.length < 2) {
     return null;
   }
-  const match = JOB_ID_RE.exec(cells[0]);
+  const match = ATHLOS_ID_RE.exec(cells[0]);
   if (match === null) {
     return null;
   }
-  let tasks = /** @type {string[]} */ ([]);
-  let after = /** @type {string[]} */ ([]);
-  let paths = /** @type {string[]} */ ([]);
-  let harness = "";
-  let result = "";
+  const listedFields = ["tasks", "after", "paths"];
+  /** @type {Record<string, string | string[]>} */
+  const fields = { tasks: [], after: [], paths: [], harness: "", result: "", zone: "" };
   for (const cell of cells.slice(2)) {
-    const [key, value] = _jobField(cell);
-    if (key === "tasks") {
-      tasks = _splitValues(value);
-    } else if (key === "after") {
-      after = _splitValues(value);
-    } else if (key === "paths") {
-      paths = _splitValues(value);
-    } else if (key === "harness") {
-      harness = value;
-    } else if (key === "result") {
-      result = value;
+    const [key, value] = _athlosField(cell);
+    if (!Object.hasOwn(fields, key)) {
+      throw _error(texts, "unknown_field", { id: cells[0], key });
     }
+    fields[key] = listedFields.includes(key) ? _splitValues(value) : value;
   }
-  return { id: cells[0], number: pyInt(match[2]), label: cells[1], tasks, after, paths, harness, result };
+  return {
+    id: cells[0],
+    number: pyInt(match[2]),
+    label: cells[1],
+    tasks: /** @type {string[]} */ (fields.tasks),
+    after: /** @type {string[]} */ (fields.after),
+    paths: /** @type {string[]} */ (fields.paths),
+    harness: /** @type {string} */ (fields.harness),
+    result: /** @type {string} */ (fields.result),
+    zone: /** @type {string} */ (fields.zone),
+  };
 }
 
 /**
- * A plan file as its header and its job lines.
+ * A plan file as its header and its athlos lines.
+ *
+ * The section heading of the lines is read under its new name and the one a plan written before
+ * ADR 0029 D02 carries; only the new one is ever written.
  * @param {string} text
+ * @param {ParkData} texts
  * @returns {Plan}
+ * @throws {ParkError} an athlos line carries a field the format does not know
  */
-export function parsePlan(text) {
+export function parsePlan(text, texts) {
   const values = _planValues(text);
   const header = {
     id: values.get("id") ?? "",
@@ -1688,36 +1739,27 @@ export function parsePlan(text) {
     title: values.get("title") ?? "",
     tasks: _splitValues(values.get("tasks") ?? ""),
   };
-  const jobLines = (_sections(text).get(JOBS_HEADING) ?? []).filter((line) => pyStrip(line) !== "");
-  const jobs = jobLines.map(parseJobLine).filter((job) => job !== null);
-  return { header, jobs };
+  const sections = _sections(text);
+  const lines = sections.get(ATHLOS_HEADING) ?? sections.get(LEGACY_ATHLOS_HEADING) ?? [];
+  const athlosLines = lines.filter((line) => pyStrip(line) !== "");
+  const athlos = athlosLines.map((line) => parseAthlosLine(line, texts)).filter((line) => line !== null);
+  return { header, athlos };
 }
 
 /**
- * The plan of a kit, or `null` when it has none.
- * @param {string} kit
+ * The plan of an ergon, or `null` when it has none.
+ * @param {string} ergon
+ * @param {ParkData} texts
  * @returns {Plan | null}
+ * @throws {ParkError} an athlos line of the plan carries an unknown field
  */
-export function readPlan(kit) {
-  const path = pyPath(kit, PLAN_FILE);
-  return isFile(path) ? parsePlan(readText(path)) : null;
+export function readPlan(ergon, texts) {
+  const path = pyPath(ergon, PLAN_FILE);
+  return isFile(path) ? parsePlan(readText(path), texts) : null;
 }
 
 /**
- * A kebab-case name for a job, taken from its label.
- * @param {string} label
- * @returns {string}
- */
-export function jobSlug(label) {
-  const slug = label
-    .toLowerCase()
-    .replace(SLUG_RE, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug.slice(0, SLUG_MAX).replace(/^-+|-+$/g, "");
-}
-
-/**
- * Whether two forecast paths of two jobs may touch the same file.
+ * Whether two forecast paths of two athlos may touch the same file.
  * @param {string} one
  * @param {string} other
  * @returns {boolean}
@@ -1729,18 +1771,18 @@ function _pathsOverlap(one, other) {
 }
 
 /**
- * The job ids that wait, directly or through a chain of jobs, for `jobId`.
- * @param {ReadonlyMap<string, JobLine>} jobs
- * @param {string} jobId
+ * The athlos ids that wait, directly or through a chain of athlos, for `athlosId`.
+ * @param {ReadonlyMap<string, AthlosLine>} athlos
+ * @param {string} athlosId
  * @returns {Set<string>}
  */
-function _jobsWaitingFor(jobs, jobId) {
+function _athlosWaitingFor(athlos, athlosId) {
   /** @type {Set<string>} */
   const reached = new Set();
-  const pending = [jobId];
+  const pending = [athlosId];
   while (pending.length > 0) {
     const current = /** @type {string} */ (pending.pop());
-    for (const other of jobs.values()) {
+    for (const other of athlos.values()) {
       if (other.after.includes(current) && !reached.has(other.id)) {
         reached.add(other.id);
         pending.push(other.id);
@@ -1751,22 +1793,22 @@ function _jobsWaitingFor(jobs, jobId) {
 }
 
 /**
- * Whether one of the two jobs waits for the other, directly or through a chain of them.
+ * Whether one of the two athlos waits for the other, directly or through a chain of them.
  *
- * The chain matters: a job that waits for a job that waits for another cannot run at once with it,
- * so the pair shares no warning. Only job ids of this plan order jobs; an `after` that names a task id orders nothing here.
- * @param {JobLine} one
- * @param {JobLine} other
+ * The chain matters: an athlos that waits for an athlos that waits for another cannot run at once with it,
+ * so the pair shares no warning. Only athlos ids of this plan order athlos; an `after` that names a task id orders nothing here.
+ * @param {AthlosLine} one
+ * @param {AthlosLine} other
  * @param {Plan} plan
  * @returns {boolean}
  */
-function _jobOrders(one, other, plan) {
-  const jobs = new Map(plan.jobs.map((job) => [job.id, job]));
-  return _jobsWaitingFor(jobs, one.id).has(other.id) || _jobsWaitingFor(jobs, other.id).has(one.id);
+function _athlosOrders(one, other, plan) {
+  const athlos = new Map(plan.athlos.map((athlos) => [athlos.id, athlos]));
+  return _athlosWaitingFor(athlos, one.id).has(other.id) || _athlosWaitingFor(athlos, other.id).has(one.id);
 }
 
 /**
- * The warnings of a plan: two jobs that may run at once and forecast the same path.
+ * The warnings of a plan: two athlos that may run at once and forecast the same path.
  *
  * The forecast is advice, not a fact; the owned uncommitted paths of each note are the fact.
  * @param {Plan} plan
@@ -1776,16 +1818,16 @@ function _jobOrders(one, other, plan) {
 export function sharedPathWarnings(plan, texts) {
   /** @type {string[]} */
   const warnings = [];
-  for (const [index, one] of plan.jobs.entries()) {
-    for (const other of plan.jobs.slice(index + 1)) {
-      if (_jobOrders(one, other, plan)) {
+  for (const [index, one] of plan.athlos.entries()) {
+    for (const other of plan.athlos.slice(index + 1)) {
+      if (_athlosOrders(one, other, plan)) {
         continue;
       }
       const shared = new Set(
         one.paths.flatMap((path) => other.paths.filter((otherPath) => _pathsOverlap(path, otherPath)).map(() => path)),
       );
       for (const path of [...shared].sort(_compareCodePoints)) {
-        warnings.push(fill(texts.list.warning_shared_paths, { jobs: `${one.id} ${other.id}`, path }));
+        warnings.push(fill(texts.list.warning_shared_paths, { athlos: `${one.id} ${other.id}`, path }));
       }
     }
   }
@@ -1793,15 +1835,15 @@ export function sharedPathWarnings(plan, texts) {
 }
 
 // --------------------------------------------------------------------------------------
-// a job's own file: its steps with their done marks, and whether it is done
+// an athlos's own file: its steps with their done marks, and whether it is done
 // --------------------------------------------------------------------------------------
 
 /**
- * The first step of a job that is not done, or the empty string when every step is done.
- * @param {JobDoc} doc
+ * The first step of an athlos that is not done, or the empty string when every step is done.
+ * @param {AthlosDoc} doc
  * @returns {string}
  */
-export function jobDocNextStep(doc) {
+export function athlosDocNextStep(doc) {
   for (const [text, isDone] of doc.steps) {
     if (!isDone) {
       return text;
@@ -1811,12 +1853,12 @@ export function jobDocNextStep(doc) {
 }
 
 /**
- * The whole `JOB.md`: its header, its steps and, once the result is met, the done mark.
- * @param {JobDoc} doc
+ * The whole `ATHLOS.md`: its header, its steps and, once the result is met, the done mark.
+ * @param {AthlosDoc} doc
  * @param {ParkData} texts
  * @returns {string}
  */
-export function renderJobDoc(doc, texts) {
+export function renderAthlosDoc(doc, texts) {
   const lines = [rstripChars(renderHeader(doc.header), "\n"), "", STEPS_HEADING, ""];
   for (const [text, isDone] of doc.steps) {
     lines.push((isDone ? STEP_DONE : STEP_UNDONE) + text);
@@ -1832,14 +1874,14 @@ export function renderJobDoc(doc, texts) {
 }
 
 /**
- * The `JobDoc` a `JOB.md` declares: its header, its steps and its done mark.
+ * The `AthlosDoc` a `ATHLOS.md` declares: its header, its steps and its done mark.
  * @param {string} text
  * @param {string} source
  * @param {ParkData} texts
- * @returns {JobDoc}
+ * @returns {AthlosDoc}
  * @throws {ParkError} the file has no header, or a line is malformed
  */
-export function parseJobDoc(text, source, texts) {
+export function parseAthlosDoc(text, source, texts) {
   const header = parseHeader(text, source, texts);
   const { rest } = _splitNote(text, source, texts);
   /** @type {[string, boolean][]} */
@@ -1859,17 +1901,17 @@ export function parseJobDoc(text, source, texts) {
 }
 
 /**
- * The job file of a job folder, or `null` when it has none.
- * @param {string} path the `JOB.md` path
+ * The athlos file of an athlos folder, or `null` when it has none.
+ * @param {string} path the `ATHLOS.md` path
  * @param {ParkData} texts
- * @returns {JobDoc | null}
+ * @returns {AthlosDoc | null}
  */
-export function readJobDoc(path, texts) {
+export function readAthlosDoc(path, texts) {
   if (!isFile(path)) {
     return null;
   }
-  const source = path.split("/").slice(-JOB_SOURCE_PARTS).join("/"); // <kit>/jobs/<job>/JOB.md: the kit is named
-  return parseJobDoc(readText(path), source, texts);
+  const source = path.split("/").slice(-ATHLOS_SOURCE_PARTS).join("/"); // <ergon>/<n>/ATHLOS.md: the ergon is named
+  return parseAthlosDoc(readText(path), source, texts);
 }
 
 // --------------------------------------------------------------------------------------
@@ -1931,16 +1973,16 @@ function _removeIfEmpty(folder) {
 }
 
 // --------------------------------------------------------------------------------------
-// the kits of a project
+// the ergons of a project
 // --------------------------------------------------------------------------------------
 
 /**
- * The names of the kit folders under `.ergon/` (`<id>-<name>` only), sorted.
+ * The names of the ergon folders under `.ergon/` (`<id>-<name>` only), sorted.
  * @param {string} root
  * @param {{closed?: boolean}} [options] `closed` reads `.ergon/.closed/` instead
  * @returns {string[]}
  */
-function _kitNames(root, { closed = false } = {}) {
+function _ergonNames(root, { closed = false } = {}) {
   let ergon = ergonRoot(root);
   if (closed) {
     ergon = pyPath(ergon, CLOSED_DIR);
@@ -1950,65 +1992,65 @@ function _kitNames(root, { closed = false } = {}) {
   }
   return fs
     .readdirSync(ergon)
-    .filter((name) => isDir(pyPath(ergon, name)) && KIT_RE.test(name))
+    .filter((name) => isDir(pyPath(ergon, name)) && ERGON_RE.test(name))
     .sort(_compareCodePoints);
 }
 
 /**
- * @param {string} kitName
+ * @param {string} ergonName
  * @returns {string}
  */
-function _kitId(kitName) {
-  const match = KIT_RE.exec(kitName);
+function _ergonId(ergonName) {
+  const match = ERGON_RE.exec(ergonName);
   if (match === null) {
-    throw new Error(`not a kit name: ${kitName}`);
+    throw new Error(`not an ergon name: ${ergonName}`);
   }
   return match[1];
 }
 
 /**
  * @param {string} root
- * @param {string} kitId
+ * @param {string} ergonId
  * @param {ParkData} texts
  * @param {boolean} closed
  * @returns {string}
  */
-function _findKitIn(root, kitId, texts, closed) {
-  const names = _kitNames(root, { closed });
-  const found = names.filter((name) => _kitId(name) === kitId);
+function _findErgonIn(root, ergonId, texts, closed) {
+  const names = _ergonNames(root, { closed });
+  const found = names.filter((name) => _ergonId(name) === ergonId);
   const ergon = _displayPath(ergonRoot(root), root);
   if (found.length === 0) {
-    throw _error(texts, "no_kit", { id: kitId, ergon, kits: names.join(", ") || "none" });
+    throw _error(texts, "no_ergon", { id: ergonId, ergon, ergons: names.join(", ") || "none" });
   }
   if (found.length > 1) {
-    throw _error(texts, "several_kits", { id: kitId, ergon, kits: found.join(", ") });
+    throw _error(texts, "several_ergons", { id: ergonId, ergon, ergons: found.join(", ") });
   }
   const base = closed ? pyPath(ergonRoot(root), CLOSED_DIR) : ergonRoot(root);
   return pyPath(base, found[0]);
 }
 
 /**
- * The kit folder whose name leads with `kitId`.
+ * The ergon folder whose name leads with `ergonId`.
  * @param {string} root
- * @param {string} kitId
+ * @param {string} ergonId
  * @param {ParkData} texts
  * @returns {string}
- * @throws {ParkError} no kit or several kits carry the id; the message names the candidates
+ * @throws {ParkError} no ergon or several ergons carry the id; the message names the candidates
  */
-export function findKit(root, kitId, texts) {
-  return _findKitIn(root, kitId, texts, false);
+export function findErgon(root, ergonId, texts) {
+  return _findErgonIn(root, ergonId, texts, false);
 }
 
 /**
- * The closed kit folder whose name leads with `kitId`, or `null`.
+ * The closed ergon folder whose name leads with `ergonId`, or `null`.
  * @param {string} root
- * @param {string} kitId
+ * @param {string} ergonId
  * @param {ParkData} texts
  * @returns {string | null}
  */
-export function findClosedKit(root, kitId, texts) {
+export function findClosedErgon(root, ergonId, texts) {
   try {
-    return _findKitIn(root, kitId, texts, true);
+    return _findErgonIn(root, ergonId, texts, true);
   } catch (exc) {
     if (!(exc instanceof ParkError)) {
       throw exc;
@@ -2018,41 +2060,56 @@ export function findClosedKit(root, kitId, texts) {
 }
 
 /**
- * @param {string} kit
+ * The athlos file of a folder: `ATHLOS.md`, or the `JOB.md` a record written before ADR 0029 D11
+ * carries. The answer is a path whether or not either exists, so a writer gets the new name and a
+ * reader still finds the old one.
+ * @param {string} folder
  * @returns {string}
  */
-function _jobsDir(kit) {
-  return pyPath(kit, JOBS_DIR);
-}
-
-/**
- * The job folders of a kit, sorted by name.
- * @param {string} kit
- * @returns {string[]}
- */
-function _jobFolders(kit) {
-  const folder = _jobsDir(kit);
-  if (!isDir(folder)) {
-    return [];
+export function athlosFileOf(folder) {
+  const fresh = pyPath(folder, ATHLOS_FILE);
+  if (isFile(fresh)) {
+    return fresh;
   }
-  return fs
-    .readdirSync(folder)
-    .filter((name) => isDir(pyPath(folder, name)))
-    .sort(_compareCodePoints)
-    .map((name) => pyPath(folder, name));
+  const legacy = pyPath(folder, LEGACY_ATHLOS_FILE);
+  return isFile(legacy) ? legacy : fresh;
 }
 
 /**
- * The folder of the job whose `JOB.md` names `jobId`, or `null`.
- * @param {string} kit
- * @param {string} jobId
- * @param {ParkData} texts
+ * The number an athlos folder carries: its whole name, or the lead of a legacy `<n>-<label>`.
+ * @param {string} folder
+ * @returns {number | null}
+ */
+function _athlosNumber(folder) {
+  const name = posix.basename(folder);
+  if (DIGITS_RE.test(name)) {
+    return pyInt(name);
+  }
+  const head = name.split("-")[0];
+  return DIGITS_RE.test(head) ? pyInt(head) : null;
+}
+
+/**
+ * The folder of the athlos of this number, in either layout, or `null` when the ergon has none.
+ *
+ * The new layout names the folder by the number alone (ADR 0029 D11); the `jobs/<n>-<label>/` of a
+ * record written before it is read and translated (ADR 0029 D12).
+ * @param {string} ergon
+ * @param {number} number
  * @returns {string | null}
  */
-export function findJobFolder(kit, jobId, texts) {
-  for (const folder of _jobFolders(kit)) {
-    const doc = readJobDoc(pyPath(folder, JOB_FILE), texts);
-    if (doc !== null && doc.header.job === jobId) {
+export function athlosFolder(ergon, number) {
+  const fresh = pyPath(ergon, String(number));
+  if (isDir(fresh)) {
+    return fresh;
+  }
+  const legacy = pyPath(ergon, LEGACY_ATHLOS_DIR);
+  if (!isDir(legacy)) {
+    return null;
+  }
+  for (const name of fs.readdirSync(legacy).sort(_compareCodePoints)) {
+    const folder = pyPath(legacy, name);
+    if (isDir(folder) && _athlosNumber(folder) === number) {
       return folder;
     }
   }
@@ -2060,13 +2117,98 @@ export function findJobFolder(kit, jobId, texts) {
 }
 
 /**
- * The id of a job of a kit: the kit's id and the job's number.
- * @param {string} kitId
+ * The athlos folders of an ergon, by number: the new layout, plus the `jobs/` of an old record.
+ *
+ * One number has one folder in the listing: where both layouts hold it, the new one is the record.
+ * @param {string} ergon
+ * @returns {string[]}
+ */
+function _athlosFolders(ergon) {
+  /** @type {Map<number, string>} */
+  const found = new Map();
+  if (isDir(ergon)) {
+    for (const name of fs.readdirSync(ergon).sort(_compareCodePoints)) {
+      if (DIGITS_RE.test(name) && isDir(pyPath(ergon, name))) {
+        found.set(pyInt(name), pyPath(ergon, name));
+      }
+    }
+  }
+  const legacy = pyPath(ergon, LEGACY_ATHLOS_DIR);
+  if (isDir(legacy)) {
+    for (const name of fs.readdirSync(legacy).sort(_compareCodePoints)) {
+      const folder = pyPath(legacy, name);
+      const number = isDir(folder) ? _athlosNumber(folder) : null;
+      if (number !== null && !found.has(number)) {
+        found.set(number, folder);
+      }
+    }
+  }
+  const numbers = [...found.keys()].sort((one, other) => one - other);
+  return numbers.map((number) => /** @type {string} */ (found.get(number)));
+}
+
+/**
+ * The folder of the athlos named by `athlosId` (`<ergon-id>.<n>`), in either layout.
+ *
+ * The number of the id is the folder's name; a folder a hand made under another name is still found
+ * by the id its athlos file carries.
+ * @param {string} ergon
+ * @param {string} athlosId
+ * @param {ParkData} texts
+ * @returns {string | null}
+ */
+export function findAthlosFolder(ergon, athlosId, texts) {
+  const match = ATHLOS_ID_RE.exec(athlosId);
+  if (match !== null) {
+    const byNumber = athlosFolder(ergon, pyInt(match[2]));
+    if (byNumber !== null) {
+      return byNumber;
+    }
+  }
+  for (const folder of _athlosFolders(ergon)) {
+    const doc = readAthlosDoc(athlosFileOf(folder), texts);
+    if (doc !== null && doc.header.athlos === athlosId) {
+      return folder;
+    }
+  }
+  return null;
+}
+
+/**
+ * The folder an athlos's file is written into: `<ergon>/<n>/`, the old record moved there when it
+ * sits in `jobs/`.
+ *
+ * An old form is never written (ADR 0029 D12), so the write that meets a record in the retired layout
+ * carries the whole folder — its file, its lease and its notes — to the folder of the athlos's number,
+ * once. Where the new folder already stands the old one is left for the owner's one rewrite of the
+ * records this release did not touch.
+ * @param {string} ergon
+ * @param {number} number
+ * @param {string | null} current the folder the record lives in now, or `null` for a new athlos
+ * @returns {string}
+ */
+export function moveAthlosFolder(ergon, number, current) {
+  const fresh = pyPath(ergon, String(number));
+  if (current === null || current === fresh || fs.existsSync(fresh)) {
+    return fresh;
+  }
+  fs.renameSync(current, fresh);
+  const legacyFile = pyPath(fresh, LEGACY_ATHLOS_FILE);
+  if (isFile(legacyFile) && !isFile(pyPath(fresh, ATHLOS_FILE))) {
+    fs.renameSync(legacyFile, pyPath(fresh, ATHLOS_FILE));
+  }
+  _removeIfEmpty(pyPath(ergon, LEGACY_ATHLOS_DIR));
+  return fresh;
+}
+
+/**
+ * The id of an athlos of an ergon: the ergon's id and the athlos's number.
+ * @param {string} ergonId
  * @param {number} number
  * @returns {string}
  */
-export function jobIdOf(kitId, number) {
-  return `${kitId}.${number}`;
+export function athlosIdOf(ergonId, number) {
+  return `${ergonId}.${number}`;
 }
 
 /**
@@ -2076,12 +2218,12 @@ export function jobIdOf(kitId, number) {
  * @param {string} unit
  * @param {ParkData} texts
  * @param {LeaseContext} context
- * @param {{jobDone?: boolean}} [options]
+ * @param {{athlosDone?: boolean}} [options]
  * @returns {string}
  */
-export function unitState(unit, texts, context, { jobDone = false } = {}) {
+export function unitState(unit, texts, context, { athlosDone = false } = {}) {
   const states = _states(texts);
-  if (jobDone) {
+  if (athlosDone) {
     return states.done;
   }
   const lease = readLease(unit, texts);
@@ -2095,39 +2237,39 @@ export function unitState(unit, texts, context, { jobDone = false } = {}) {
 }
 
 /**
- * The state of a kit, joined from its jobs and its own lease and note (ADR 0028 D08, D09).
+ * The state of an ergon, joined from its athlos and its own lease and note (ADR 0028 D08, D09).
  *
- * A kit is **active** when it or any of its jobs is held, else **done** when every job is done, else
- * **parked** when it or any of its jobs is parked, else **not started**. With a plan that lists
- * jobs, "every job" is every listed job: it has a folder whose `JOB.md` is done, and a job with no
- * folder has not started. With no plan, or a plan that lists no jobs, the job folders that exist
- * decide. A kit whose jobs are all done is done even when its own note is still there; only a live
- * lease on the kit itself outranks that.
- * @param {string} kit
+ * An ergon is **active** when it or any of its athlos is held, else **done** when every athlos is done, else
+ * **parked** when it or any of its athlos is parked, else **not started**. With a plan that lists
+ * athlos, "every athlos" is every listed athlos: it has a folder whose `ATHLOS.md` is done, and an athlos with no
+ * folder has not started. With no plan, or a plan that lists no athlos, the athlos folders that exist
+ * decide. An ergon whose athlos are all done is done even when its own note is still there; only a live
+ * lease on the ergon itself outranks that.
+ * @param {string} ergon
  * @param {ParkData} texts
  * @param {LeaseContext} context
  * @returns {string}
  */
-export function kitState(kit, texts, context) {
+export function ergonState(ergon, texts, context) {
   const states = _states(texts);
-  const docs = _jobFolders(kit).map((folder) => ({ folder, doc: readJobDoc(pyPath(folder, JOB_FILE), texts) }));
-  const jobStates = docs.flatMap(({ folder, doc }) =>
-    doc === null ? [] : [unitState(folder, texts, context, { jobDone: doc.done })],
+  const docs = _athlosFolders(ergon).map((folder) => ({ folder, doc: readAthlosDoc(athlosFileOf(folder), texts) }));
+  const athlosStates = docs.flatMap(({ folder, doc }) =>
+    doc === null ? [] : [unitState(folder, texts, context, { athlosDone: doc.done })],
   );
-  const own = unitState(kit, texts, context);
-  if ([own, ...jobStates].includes(states.active)) {
+  const own = unitState(ergon, texts, context);
+  if ([own, ...athlosStates].includes(states.active)) {
     return states.active;
   }
-  const plan = readPlan(kit);
-  if (plan !== null && plan.jobs.length > 0) {
-    const doneIds = new Set(docs.filter(({ doc }) => doc !== null && doc.done).map(({ doc }) => doc?.header.job));
-    if (plan.jobs.every((job) => doneIds.has(job.id))) {
+  const plan = readPlan(ergon, texts);
+  if (plan !== null && plan.athlos.length > 0) {
+    const doneIds = new Set(docs.filter(({ doc }) => doc !== null && doc.done).map(({ doc }) => doc?.header.athlos));
+    if (plan.athlos.every((line) => doneIds.has(line.id))) {
       return states.done;
     }
   } else if (docs.length > 0 && docs.every(({ doc }) => doc !== null && doc.done)) {
     return states.done;
   }
-  return [own, ...jobStates].includes(states.parked) ? states.parked : states.not_started;
+  return [own, ...athlosStates].includes(states.parked) ? states.parked : states.not_started;
 }
 
 /**
@@ -2145,18 +2287,18 @@ function _ageDays(path, now) {
 }
 
 // --------------------------------------------------------------------------------------
-// writing a kit and a job
+// writing an ergon and an athlos
 // --------------------------------------------------------------------------------------
 
 /**
- * Park the work: write `RESUME.md` and `PARK.md` into the kit folder.
+ * Park the work: write `RESUME.md` and `PARK.md` into the ergon folder.
  *
- * The kit folder is created when missing. Everything that can be refused is checked before any
- * file is touched; the files then land together (`writeFiles`), `PARK.md` last among the kit's, and
+ * The ergon folder is created when missing. Everything that can be refused is checked before any
+ * file is touched; the files then land together (`writeFiles`), `PARK.md` last among the ergon's, and
  * a failure removes the folder it created when that folder is still empty.
  *
  * The sessions of the note are kept, not rebuilt: the sessions an earlier write recorded, the holder a
- * takeover kept (`SESSIONS` when the kit had no note yet), and then the ones on this command line.
+ * takeover kept (`SESSIONS` when the ergon had no note yet), and then the ones on this command line.
  *
  * The branch and the revisions come from git, and the note records the time it was written.
  * @param {ParkFields} fields
@@ -2164,148 +2306,151 @@ function _ageDays(path, now) {
  * @param {string} root
  * @param {ParkData} texts
  * @param {string} cwd where git is asked for the branch and the revisions
- * @returns {string} the kit folder
- * @throws {ParkError} a field fails its check, a kit with this id has another name, a closed kit has
+ * @returns {string} the ergon folder
+ * @throws {ParkError} a field fails its check, an ergon with this id has another name, a closed ergon has
  *   this id and name, or the note already there does not parse
  */
-export function writeKit(fields, body, root, texts, cwd) {
+export function writeErgon(fields, body, root, texts, cwd) {
   checkFields(fields, texts);
   checkBody(body, texts);
-  refuseKitConflict(fields, root, texts);
-  const kit = pyPath(ergonRoot(root), `${fields.id}-${fields.name}`);
-  const parkPath = _displayPath(pyPath(kit, PARK_FILE), root);
-  const sessions = mergeSessions(_noteSessions(kit, texts), readPendingSessions(kit, texts), fields.sessions);
+  refuseErgonConflict(fields, root, texts);
+  const ergon = pyPath(ergonRoot(root), `${fields.id}-${fields.name}`);
+  const parkPath = _displayPath(pyPath(ergon, PARK_FILE), root);
+  const sessions = mergeSessions(_noteSessions(ergon, texts), readPendingSessions(ergon, texts), fields.sessions);
   const stamped = { ...fields, sessions, branch: gitBranch(cwd), revisions: gitRevisions(cwd), written: nowStamp() };
   /** @type {[string, string][]} */
   const files = [
-    [pyPath(kit, RESUME_FILE), renderResume(stamped, body, parkPath, texts)],
-    [pyPath(kit, PARK_FILE), renderNote(stamped, body, texts)],
+    [pyPath(ergon, RESUME_FILE), renderResume(stamped, body, parkPath, texts)],
+    [pyPath(ergon, PARK_FILE), renderNote(stamped, body, texts)],
   ];
-  const created = !isDir(kit);
+  const created = !isDir(ergon);
   try {
-    fs.mkdirSync(kit, { recursive: true });
+    fs.mkdirSync(ergon, { recursive: true });
     writeFiles(files);
   } catch (error) {
     if (created) {
-      _removeIfEmpty(kit);
+      _removeIfEmpty(ergon);
     }
     throw error;
   }
-  unlinkMissingOk(pyPath(kit, SESSIONS_FILE)); // merged into the note just written
-  return kit;
+  unlinkMissingOk(pyPath(ergon, SESSIONS_FILE)); // merged into the note just written
+  return ergon;
 }
 
 /**
- * The sessions the kit's note already carries; none when the kit has no note yet.
- * @param {string} kit
+ * The sessions the ergon's note already carries; none when the ergon has no note yet.
+ * @param {string} ergon
  * @param {ParkData} texts
  * @returns {readonly SessionRef[]}
  */
-function _noteSessions(kit, texts) {
-  if (!isFile(pyPath(kit, PARK_FILE))) {
+function _noteSessions(ergon, texts) {
+  if (!isFile(pyPath(ergon, PARK_FILE))) {
     return [];
   }
-  return readNote(kit, texts).fields.sessions;
+  return readNote(ergon, texts).fields.sessions;
 }
 
 /**
- * Refuse a kit whose id is taken by another name, or whose id and name belong to a closed kit.
+ * Refuse an ergon whose id is taken by another name, or whose id and name belong to a closed ergon.
  *
- * A closed kit keeps its id and name for good, so a write never reuses them; `local-id` counts the
- * closed kits for the same reason.
+ * A closed ergon keeps its id and name for good, so a write never reuses them; `local-id` counts the
+ * closed ergons for the same reason.
  * @param {ParkFields} fields
  * @param {string} root
  * @param {ParkData} texts
- * @throws {ParkError} a live or closed kit carries the id under another name, or a closed kit has both
+ * @throws {ParkError} a live or closed ergon carries the id under another name, or a closed ergon has both
  */
-export function refuseKitConflict(fields, root, texts) {
-  const kitName = `${fields.id}-${fields.name}`;
-  const closedNames = _kitNames(root, { closed: true });
-  const other = [..._kitNames(root), ...closedNames].filter((name) => _kitId(name) === fields.id && name !== kitName);
+export function refuseErgonConflict(fields, root, texts) {
+  const ergonName = `${fields.id}-${fields.name}`;
+  const closedNames = _ergonNames(root, { closed: true });
+  const other = [..._ergonNames(root), ...closedNames].filter(
+    (name) => _ergonId(name) === fields.id && name !== ergonName,
+  );
   if (other.length > 0) {
-    throw _error(texts, "kit_other_name", { existing: other[0], id: fields.id, name: fields.name });
+    throw _error(texts, "ergon_other_name", { existing: other[0], id: fields.id, name: fields.name });
   }
-  if (closedNames.includes(kitName)) {
-    throw _error(texts, "kit_closed", { kit: kitName });
+  if (closedNames.includes(ergonName)) {
+    throw _error(texts, "ergon_closed", { ergon: ergonName });
   }
 }
 
 /**
- * Write a job's own file, creating its folder when missing; a reader sees the old file or the new one.
+ * Write an athlos's own file, creating its folder when missing; a reader sees the old file or the new one.
  * @param {string} folder
- * @param {JobDoc} doc
+ * @param {AthlosDoc} doc
  * @param {ParkData} texts
  */
-export function writeJobDoc(folder, doc, texts) {
+export function writeAthlosDoc(folder, doc, texts) {
   fs.mkdirSync(folder, { recursive: true });
-  _writeAtomically(pyPath(folder, JOB_FILE), renderJobDoc(doc, texts));
+  _writeAtomically(pyPath(folder, ATHLOS_FILE), renderAthlosDoc(doc, texts));
 }
 
 /**
- * Refuse a job file whose header would not read back, naming the kit and the offending value.
+ * Refuse an athlos file whose header would not read back, naming the ergon and the offending value.
  *
- * The header is built from the plan's header and job line, so the plan is what is at fault: a plan
- * `id` that is no task id, say, would make a `JOB.md` that `park list` cannot parse.
- * @param {JobDoc} doc
- * @param {string} kitName
+ * The header is built from the plan's header and athlos line, so the plan is what is at fault: a plan
+ * `id` that is no task id, say, would make a `ATHLOS.md` that `park list` cannot parse.
+ * @param {AthlosDoc} doc
+ * @param {string} ergonName
  * @param {ParkData} texts
- * @throws {ParkError} the plan's header or job line breaks the header's contract
+ * @throws {ParkError} the plan's header or athlos line breaks the header's contract
  */
-function _checkJobDoc(doc, kitName, texts) {
+function _checkAthlosDoc(doc, ergonName, texts) {
   try {
     checkFields(doc.header, texts);
   } catch (error) {
     if (error instanceof ParkError) {
-      throw _error(texts, "bad_plan", { kit: kitName, reason: error.message });
+      throw _error(texts, "bad_plan", { ergon: ergonName, reason: error.message });
     }
     throw error;
   }
 }
 
 /**
- * The job file a job starts with: its header from the plan's job line, no steps yet.
- * @param {JobLine} job
- * @param {string} kitId
- * @param {string} kitName
+ * The athlos file an athlos starts with: its header from the plan's athlos line, no steps yet.
+ * @param {AthlosLine} athlos
+ * @param {string} ergonId
+ * @param {string} ergonName
  * @param {Plan | null} plan
- * @returns {JobDoc}
+ * @param {string} cwd where git is asked for the branch
+ * @returns {AthlosDoc}
  */
-export function jobDocFor(job, kitId, kitName, plan) {
+export function athlosDocFor(athlos, ergonId, ergonName, plan, cwd) {
   const header = parkFields({
-    id: kitId,
-    name: kitName,
-    nextAction: job.result,
+    id: ergonId,
+    name: ergonName,
+    nextAction: athlos.result,
     plan: plan !== null ? plan.header.id : "",
-    job: job.id,
-    tasks: job.tasks,
-    branch: gitBranch(process.cwd()),
+    athlos: athlos.id,
+    tasks: athlos.tasks,
+    branch: gitBranch(cwd),
   });
   return { header, steps: [], done: false };
 }
 
 // --------------------------------------------------------------------------------------
-// the listing: the kits, their jobs, and the states derived from the folders
+// the listing: the ergons, their athlos, and the states derived from the folders
 // --------------------------------------------------------------------------------------
 
 /**
- * What `list` says of one kit; a kit with no `PARK.md` has no age and no next action.
- * @param {string} kit
+ * What `list` says of one ergon; an ergon with no `PARK.md` has no age and no next action.
+ * @param {string} ergon
  * @param {ParkData} texts
  * @param {LeaseContext} context
- * @returns {KitSummary}
+ * @returns {ErgonSummary}
  */
-export function summarizeKit(kit, texts, context) {
-  const kitName = posix.basename(kit);
-  const id = _kitId(kitName);
-  const name = Array.from(kitName)
+export function summarizeErgon(ergon, texts, context) {
+  const ergonName = posix.basename(ergon);
+  const id = _ergonId(ergonName);
+  const name = Array.from(ergonName)
     .slice(Array.from(id).length + 1)
     .join("");
-  const note = pyPath(kit, PARK_FILE);
+  const note = pyPath(ergon, PARK_FILE);
   if (!isFile(note)) {
     return {
       id,
       name,
-      state: kitState(kit, texts, context),
+      state: ergonState(ergon, texts, context),
       plan: "",
       nextAction: "",
       decisions: 0,
@@ -2313,11 +2458,11 @@ export function summarizeKit(kit, texts, context) {
       ageDays: null,
     };
   }
-  const { fields, body } = readNote(kit, texts);
+  const { fields, body } = readNote(ergon, texts);
   return {
     id,
     name,
-    state: kitState(kit, texts, context),
+    state: ergonState(ergon, texts, context),
     plan: fields.plan,
     nextAction: fields.nextAction,
     decisions: body.decisions.length,
@@ -2327,107 +2472,110 @@ export function summarizeKit(kit, texts, context) {
 }
 
 /**
- * What `list` says of one job, or `null` when the folder carries no job file.
+ * What `list` says of one athlos, or `null` when the folder carries no athlos file.
  * @param {string} folder
  * @param {ParkData} texts
  * @param {LeaseContext} context
- * @returns {JobSummary | null}
+ * @returns {AthlosSummary | null}
  */
-export function summarizeJob(folder, texts, context) {
-  const doc = readJobDoc(pyPath(folder, JOB_FILE), texts);
+export function summarizeAthlos(folder, texts, context) {
+  const doc = readAthlosDoc(athlosFileOf(folder), texts);
   if (doc === null) {
     return null;
   }
-  const state = unitState(folder, texts, context, { jobDone: doc.done });
+  const state = unitState(folder, texts, context, { athlosDone: doc.done });
   return {
-    id: doc.header.job || posix.basename(folder),
+    id: doc.header.athlos || posix.basename(folder),
     name: posix.basename(folder),
     state,
     tasks: doc.header.tasks,
-    nextAction: jobDocNextStep(doc),
+    nextAction: athlosDocNextStep(doc),
     branch: doc.header.branch,
-    ageDays: _ageDays(pyPath(folder, JOB_FILE), context.now),
+    ageDays: _ageDays(athlosFileOf(folder), context.now),
   };
 }
 
 /**
- * The task ids a kit carries: from its plan header, its job lines and its jobs' files.
- * @param {string} kit
- * @param {readonly JobSummary[]} jobs
+ * The task ids an ergon carries: from its plan header, its athlos lines and its athlos files.
+ * @param {string} ergon
+ * @param {readonly AthlosSummary[]} summaries
+ * @param {ParkData} texts
  * @returns {string[]}
+ * @throws {ParkError} an athlos line of the plan carries an unknown field
  */
-function _kitTasks(kit, jobs) {
+function _ergonTasks(ergon, summaries, texts) {
   /** @type {string[]} */
   const tasks = [];
-  const plan = readPlan(kit);
+  const plan = readPlan(ergon, texts);
   if (plan !== null) {
     tasks.push(...plan.header.tasks);
-    for (const job of plan.jobs) {
-      tasks.push(...job.tasks);
+    for (const line of plan.athlos) {
+      tasks.push(...line.tasks);
     }
   }
-  for (const job of jobs) {
-    tasks.push(...job.tasks);
+  for (const summary of summaries) {
+    tasks.push(...summary.tasks);
   }
   return tasks;
 }
 
 /**
- * Whether a kit passes the filters of `list`.
- * @param {KitSummary} summary
- * @param {readonly JobSummary[]} jobs
- * @param {string} kit
+ * Whether an ergon passes the filters of `list`.
+ * @param {ErgonSummary} summary
+ * @param {readonly AthlosSummary[]} athlos
+ * @param {string} ergon
  * @param {ListQuery} query
+ * @param {ParkData} texts
  * @returns {boolean}
  */
-function _matches(summary, jobs, kit, query) {
+function _matches(summary, athlos, ergon, query, texts) {
   if (query.plan && summary.plan !== query.plan) {
     return false;
   }
   if (query.state && summary.state !== query.state) {
     return false;
   }
-  return !query.task || _kitTasks(kit, jobs).includes(query.task);
+  return !query.task || _ergonTasks(ergon, athlos, texts).includes(query.task);
 }
 
 /**
- * The kits under `.ergon/` that match `query`, and the jobs of those kits.
+ * The ergons under `.ergon/` that match `query`, and the athlos of those ergons.
  *
- * Reads only: the local index is retired, so the folders are the whole record. A kit whose files do
- * not parse is listed with its `unreadable` reason, whatever the filters, and the other kits are
+ * Reads only: the local index is retired, so the folders are the whole record. An ergon whose files do
+ * not parse is listed with its `unreadable` reason, whatever the filters, and the other ergons are
  * listed as usual.
  * @param {string} root
  * @param {ListQuery} query
  * @param {ParkData} texts
  * @param {LeaseContext} context
- * @returns {{kits: KitSummary[], jobs: JobSummary[]}}
+ * @returns {{ergons: ErgonSummary[], athlos: AthlosSummary[]}}
  */
-export function listKits(root, query, texts, context) {
-  /** @type {KitSummary[]} */
+export function listErgons(root, query, texts, context) {
+  /** @type {ErgonSummary[]} */
   const summaries = [];
-  /** @type {JobSummary[]} */
-  const jobs = [];
-  const ergon = ergonRoot(root);
-  const entries = _kitNames(root).map((name) => pyPath(ergon, name));
+  /** @type {AthlosSummary[]} */
+  const units = [];
+  const layer = ergonRoot(root);
+  const entries = _ergonNames(root).map((name) => pyPath(layer, name));
   if (query.closed) {
-    entries.push(..._kitNames(root, { closed: true }).map((name) => pyPath(ergon, CLOSED_DIR, name)));
+    entries.push(..._ergonNames(root, { closed: true }).map((name) => pyPath(layer, CLOSED_DIR, name)));
   }
-  for (const kit of entries) {
-    /** @type {KitSummary} */
+  for (const ergon of entries) {
+    /** @type {ErgonSummary} */
     let summary;
-    /** @type {(JobSummary | null)[]} */
+    /** @type {(AthlosSummary | null)[]} */
     let summarized;
     try {
-      summary = summarizeKit(kit, texts, context);
-      summarized = _jobFolders(kit).map((folder) => summarizeJob(folder, texts, context));
+      summary = summarizeErgon(ergon, texts, context);
+      summarized = _athlosFolders(ergon).map((folder) => summarizeAthlos(folder, texts, context));
     } catch (error) {
       if (!(error instanceof ParkError)) {
         throw error;
       }
-      // one bad kit is reported on its own line, never stops the others
-      const kitName = posix.basename(kit);
-      const id = _kitId(kitName);
-      const name = Array.from(kitName)
+      // one bad ergon is reported on its own line, never stops the others
+      const ergonName = posix.basename(ergon);
+      const id = _ergonId(ergonName);
+      const name = Array.from(ergonName)
         .slice(Array.from(id).length + 1)
         .join("");
       const reason = error.message.replace(LINE_BREAKS_RE, " ");
@@ -2444,14 +2592,14 @@ export function listKits(root, query, texts, context) {
       });
       continue;
     }
-    const kitJobs = summarized.filter((job) => job !== null);
-    if (!_matches(summary, kitJobs, kit, query)) {
+    const ergonAthlos = summarized.filter((item) => item !== null);
+    if (!_matches(summary, ergonAthlos, ergon, query, texts)) {
       continue;
     }
     summaries.push(summary);
-    jobs.push(...kitJobs);
+    units.push(...ergonAthlos);
   }
-  return { kits: summaries.sort((a, b) => _compareCodePoints(a.id, b.id)), jobs };
+  return { ergons: summaries.sort((a, b) => _compareCodePoints(a.id, b.id)), athlos: units };
 }
 
 /**
@@ -2477,7 +2625,7 @@ function _ageCell(ageDays, empty) {
 
 /**
  * One `list` line; an absent value is the empty cell and the age is whole days (`3d`).
- * @param {KitSummary} item
+ * @param {ErgonSummary} item
  * @param {ParkData} texts
  * @returns {string}
  */
@@ -2499,14 +2647,14 @@ export function formatSummary(item, texts) {
 }
 
 /**
- * One job line of `list`.
- * @param {JobSummary} item
+ * One athlos line of `list`.
+ * @param {AthlosSummary} item
  * @param {ParkData} texts
  * @returns {string}
  */
-export function formatJob(item, texts) {
+export function formatAthlos(item, texts) {
   const empty = texts.empty_cell;
-  return fill(texts.list.job_line, {
+  return fill(texts.list.athlos_line, {
     id: item.id,
     name: item.name,
     state: item.state,
@@ -2522,35 +2670,35 @@ export function formatJob(item, texts) {
 // --------------------------------------------------------------------------------------
 
 /**
- * The kit id and the job number a worktree's folder names, or `null`.
+ * The ergon id and the athlos number a worktree's folder names, or `null`.
  *
- * The folder is `<id>-<name>.<n>`: the kit's own folder name and the job's number.
+ * The folder is `<id>-<name>.<n>`: the ergon's own folder name and the athlos's number.
  * @param {string} folder
- * @returns {{kitId: string, number: number} | null}
+ * @returns {{ergonId: string, number: number} | null}
  */
 export function worktreeUnit(folder) {
   const name = posix.basename(folder);
   const dot = name.lastIndexOf(".");
   const base = name.slice(0, Math.max(dot, 0));
   const tail = dot < 0 ? "" : name.slice(dot + 1);
-  if (base === "" || !WORKTREE_TAIL_RE.test(tail)) {
+  if (base === "" || !DIGITS_RE.test(tail)) {
     return null;
   }
-  const match = KIT_RE.exec(base);
+  const match = ERGON_RE.exec(base);
   if (match === null) {
     return null;
   }
-  return { kitId: match[1], number: pyInt(tail) };
+  return { ergonId: match[1], number: pyInt(tail) };
 }
 
 /**
- * The kit and the job this session is in, read from the folder it works in.
+ * The ergon and the athlos this session is in, read from the folder it works in.
  *
- * A session in the main checkout has no active unit until it picks one; a session in a job's
- * worktree is in that job, named by the worktree's own folder.
+ * A session in the main checkout has no active unit until it picks one; a session in an athlos's
+ * worktree is in that athlos, named by the worktree's own folder.
  * @param {string} root
  * @param {ParkData} texts
- * @returns {{kit: string, kitId: string, number: number} | null}
+ * @returns {{ergon: string, ergonId: string, number: number} | null}
  */
 export function activeUnit(root, texts) {
   if (posix.basename(dirname(root)) !== WORKTREES_DIR) {
@@ -2561,7 +2709,7 @@ export function activeUnit(root, texts) {
     return null;
   }
   try {
-    return { kit: findKit(root, unit.kitId, texts), kitId: unit.kitId, number: unit.number };
+    return { ergon: findErgon(root, unit.ergonId, texts), ergonId: unit.ergonId, number: unit.number };
   } catch (exc) {
     if (!(exc instanceof ParkError)) {
       throw exc;
@@ -2571,7 +2719,7 @@ export function activeUnit(root, texts) {
 }
 
 // --------------------------------------------------------------------------------------
-// the export: the kit's files, its leases left out (ADR 0028 D07, branch B10)
+// the export: the ergon's files, its leases left out (ADR 0028 D07, branch B10)
 // --------------------------------------------------------------------------------------
 
 /**
@@ -2595,23 +2743,23 @@ function _filesUnder(folder, base) {
 }
 
 /**
- * Write the kit's files to one bundle file, its leases left out.
+ * Write the ergon's files to one bundle file, its leases left out.
  *
  * The bundle is plain text: the file's path, then its content, so any language reads it.
- * @param {string} kit
+ * @param {string} ergon
  * @param {string} out
  * @param {ParkData} texts
  * @returns {string} the bundle path
  */
-export function exportKit(kit, out, texts) {
+export function exportErgon(ergon, out, texts) {
   const spec = texts.export;
-  const lines = [fill(spec.title, { kit: posix.basename(kit) }), ""];
-  for (const relative of _filesUnder(kit, kit).sort(_comparePaths)) {
+  const lines = [fill(spec.title, { ergon: posix.basename(ergon) }), ""];
+  for (const relative of _filesUnder(ergon, ergon).sort(_comparePaths)) {
     if (posix.basename(relative) === HOLDER_FILE) {
       continue;
     }
     lines.push(fill(spec.file_header, { path: relative }));
-    lines.push(rstripChars(readText(pyPath(kit, relative)), "\n"));
+    lines.push(rstripChars(readText(pyPath(ergon, relative)), "\n"));
     lines.push(spec.end);
     lines.push("");
   }
@@ -2621,13 +2769,13 @@ export function exportKit(kit, out, texts) {
 }
 
 // --------------------------------------------------------------------------------------
-// the local ids: `_T<n>` counted over the kits, live and closed, never reused
+// the local ids: `_T<n>` counted over the ergons, live and closed, never reused
 // --------------------------------------------------------------------------------------
 
 /**
  * The `_T<n>` numbers the retired local index `<DEV>/.local/TASKS.md` still holds.
  *
- * Read as legacy input and never written (ADR 0028 D12). The index sits with the kits in the main
+ * Read as legacy input and never written (ADR 0028 D12). The index sits with the ergons in the main
  * checkout, so a linked worktree reads that one. No such file holds no number.
  * @param {string} root
  * @returns {number[]}
@@ -2649,14 +2797,14 @@ function _legacyLocalIds(root) {
 }
 
 /**
- * The next free local id: `_T<n>` counted over every kit, live and closed, and the legacy index.
+ * The next free local id: `_T<n>` counted over every ergon, live and closed, and the legacy index.
  * @param {string} root
  * @returns {string}
  */
 export function nextLocalId(root) {
   const numbers = [0, ..._legacyLocalIds(root)];
-  for (const name of [..._kitNames(root), ..._kitNames(root, { closed: true })]) {
-    const match = LOCAL_ID_RE.exec(_kitId(name));
+  for (const name of [..._ergonNames(root), ..._ergonNames(root, { closed: true })]) {
+    const match = LOCAL_ID_RE.exec(_ergonId(name));
     if (match !== null) {
       numbers.push(pyInt(match[1]));
     }
@@ -2738,7 +2886,7 @@ function _withCommon(options) {
   return [...options, ROOT_OPTION, MACHINE_OPTION];
 }
 
-/** The commands, in the order the Python parser adds them: whether each takes the kit id, and its options. */
+/** The commands, in the order the Python parser adds them: whether each takes the ergon id, and its options. */
 const COMMANDS = {
   write: {
     id: true,
@@ -2769,7 +2917,7 @@ const COMMANDS = {
     ]),
   },
   release: { id: true, options: _withCommon([_flag("--number", { kind: "int" })]) },
-  job: {
+  athlos: {
     id: true,
     options: _withCommon([
       _flag("--number", { kind: "int", required: true }),
@@ -3093,35 +3241,38 @@ function _projectRoot(explicit, texts) {
 }
 
 /**
- * The holder a command acts as: the flags, or the machine it runs on.
+ * The holder a command acts as: the flags, or the machine it runs on, and the folder it works in.
+ *
+ * The worktree is the folder the process started in, read once at the entry (`_run`) and carried on
+ * the run — a command never asks the file system where it is from inside the logic.
  * @param {ParsedArgs} args
- * @param {string} machine
+ * @param {{machine: string, cwd: string}} run
  * @returns {Holder}
  */
-function _holderOf(args, machine) {
+function _holderOf(args, run) {
   return {
     harness: _text(args, "harness"),
     sessionId: _text(args, "sessionId"),
-    machine: _text(args, "machine") || machine,
-    worktree: process.cwd(),
+    machine: _text(args, "machine") || run.machine,
+    worktree: run.cwd,
   };
 }
 
 /**
- * The folder of the unit a command acts on: the kit root, or one of its jobs.
- * @param {string} kit
+ * The folder of the unit a command acts on: the ergon root, or one of its athlos.
+ * @param {string} ergon
  * @param {number | null} number
  * @param {ParkData} texts
  * @returns {string}
  */
-function _unitOf(kit, number, texts) {
+function _unitOf(ergon, number, texts) {
   if (number === null) {
-    return kit;
+    return ergon;
   }
-  const jobId = jobIdOf(_kitId(posix.basename(kit)), number);
-  const folder = findJobFolder(kit, jobId, texts);
+  const athlosId = athlosIdOf(_ergonId(posix.basename(ergon)), number);
+  const folder = athlosFolder(ergon, number);
   if (folder === null) {
-    throw _error(texts, "no_job", { kit: posix.basename(kit), job: jobId });
+    throw _error(texts, "no_athlos", { ergon: posix.basename(ergon), athlos: athlosId });
   }
   return folder;
 }
@@ -3142,31 +3293,32 @@ function _machineLabel() {
 }
 
 /**
- * The resume prompt of a kit, and the proof that its note reads: nothing is held yet.
- * @param {string} kit
+ * The resume prompt of an ergon, and the proof that its note reads: nothing is held yet.
+ * @param {string} ergon
  * @param {ParkData} texts
  * @returns {string}
- * @throws {ParkError} the kit has no `RESUME.md`, was never parked, or its note does not parse
+ * @throws {ParkError} the ergon has no `RESUME.md`, was never parked, or its note does not parse
  */
-function _readResume(kit, texts) {
-  const resume = pyPath(kit, RESUME_FILE);
+function _readResume(ergon, texts) {
+  const resume = pyPath(ergon, RESUME_FILE);
   if (!isFile(resume)) {
-    throw _error(texts, "no_resume", { kit: posix.basename(kit) });
+    throw _error(texts, "no_resume", { ergon: posix.basename(ergon) });
   }
-  readNote(kit, texts);
+  readNote(ergon, texts);
   return rstripChars(readText(resume), "\n");
 }
 
 /**
- * The resume prompt of a kit, followed by a blank line and its capped digest.
+ * The resume prompt of an ergon, followed by a blank line and its capped digest.
  * @param {string} prompt
- * @param {string} kit
+ * @param {string} ergon
  * @param {string} root
  * @param {ParkData} texts
+ * @param {string} machine
  * @returns {string}
  */
-function _resumeText(prompt, kit, root, texts) {
-  return `${prompt}\n\n${digest(kit, texts.default_cap, root, texts)}`;
+function _resumeText(prompt, ergon, root, texts, machine) {
+  return `${prompt}\n\n${digest(ergon, texts.default_cap, root, texts, machine)}`;
 }
 
 /**
@@ -3177,83 +3329,85 @@ function _print(text) {
 }
 
 /**
- * The usable job line of a plan for `jobId`: it names a folder and a result for `JOB.md`.
- * @param {string} kit
+ * The usable athlos line of a plan for `athlosId`: it names a folder and a result for `ATHLOS.md`.
+ * @param {string} ergon
  * @param {Plan} plan
- * @param {string} jobId
+ * @param {string} athlosId
  * @param {ParkData} texts
- * @returns {JobLine}
- * @throws {ParkError} the plan has no such job, or the line has no label or no result
+ * @returns {AthlosLine}
+ * @throws {ParkError} the plan has no such athlos, or the line has no label or no result
  */
-function _plannedJob(kit, plan, jobId, texts) {
-  const line = plan.jobs.find((job) => job.id === jobId);
+function _plannedAthlos(ergon, plan, athlosId, texts) {
+  const line = plan.athlos.find((athlos) => athlos.id === athlosId);
   if (line === undefined) {
-    throw _error(texts, "no_job", { kit: posix.basename(kit), job: jobId });
+    throw _error(texts, "no_athlos", { ergon: posix.basename(ergon), athlos: athlosId });
   }
   if (line.label === "") {
-    throw _error(texts, "job_label", { id: jobId });
+    throw _error(texts, "athlos_label", { id: athlosId });
   }
   if (line.result === "") {
-    throw _error(texts, "bad_plan", { kit: posix.basename(kit), reason: `job ${jobId} has no result` });
+    throw _error(texts, "bad_plan", { ergon: posix.basename(ergon), reason: `athlos ${athlosId} has no result` });
   }
   return line;
 }
 
 /**
- * The folder and the file a job write starts from: the job's own when it exists, else the ones the
- * plan's job line gives it.
- * @param {string} kit
+ * The folder and the file an athlos write starts from: the athlos's own when it exists, else the ones the
+ * plan's athlos line gives it.
+ *
+ * The file lands in the folder of the athlos's number; a record written in the retired `jobs/` layout is
+ * carried there by this write, once (ADR 0029 D11, D12).
+ * @param {string} ergon
  * @param {Plan} plan
- * @param {string} jobId
+ * @param {number} number
  * @param {ParkData} texts
- * @returns {{folder: string, doc: JobDoc}}
- * @throws {ParkError} the job has no folder yet and the plan has no usable line for it
+ * @param {string} cwd where git is asked for the branch
+ * @returns {{folder: string, doc: AthlosDoc}}
+ * @throws {ParkError} the athlos has no folder yet and the plan has no usable line for it
  */
-function _jobToWrite(kit, plan, jobId, texts) {
-  const existing = findJobFolder(kit, jobId, texts);
-  const doc = existing !== null ? readJobDoc(pyPath(existing, JOB_FILE), texts) : null;
-  if (existing !== null && doc !== null) {
-    return { folder: existing, doc };
+function _athlosToWrite(ergon, plan, number, texts, cwd) {
+  const athlosId = athlosIdOf(_ergonId(posix.basename(ergon)), number);
+  const existing = athlosFolder(ergon, number);
+  const doc = existing !== null ? readAthlosDoc(athlosFileOf(existing), texts) : null;
+  if (doc !== null) {
+    return { folder: moveAthlosFolder(ergon, number, existing), doc };
   }
-  const line = _plannedJob(kit, plan, jobId, texts);
-  const kitId = _kitId(posix.basename(kit));
-  const kitName = Array.from(posix.basename(kit))
-    .slice(Array.from(kitId).length + 1)
+  const line = _plannedAthlos(ergon, plan, athlosId, texts);
+  const ergonId = _ergonId(posix.basename(ergon));
+  const ergonName = Array.from(posix.basename(ergon))
+    .slice(Array.from(ergonId).length + 1)
     .join("");
-  const fresh = jobDocFor(line, kitId, kitName, plan);
-  _checkJobDoc(fresh, posix.basename(kit), texts);
-  const folder = existing ?? pyPath(_jobsDir(kit), `${line.number}-${jobSlug(line.label)}`);
-  return { folder, doc: fresh };
+  const fresh = athlosDocFor(line, ergonId, ergonName, plan, cwd);
+  _checkAthlosDoc(fresh, posix.basename(ergon), texts);
+  return { folder: moveAthlosFolder(ergon, number, existing), doc: fresh };
 }
 
 /**
- * Write a job's own file: create it from the plan's job line, then add its steps.
+ * Write an athlos's own file: create it from the plan's athlos line, then add its steps.
  *
  * Everything that can be refused is checked before the lease is taken or a file is touched. The
- * first write into a job's folder takes its lease, so two sessions never write one file. The plan's
+ * first write into an athlos's folder takes its lease, so two sessions never write one file. The plan's
  * shared-path warnings go to stderr.
  * @param {ParsedArgs} args
  * @param {Run} run
- * @throws {ParkError} the kit has no plan, the plan has no usable line for the job, or the job is held
+ * @throws {ParkError} the ergon has no plan, the plan has no usable line for the athlos, or the athlos is held
  */
-function _writeJob(args, run) {
+function _writeAthlos(args, run) {
   const { root, texts } = run;
-  const kit = findKit(root, pyStrip(args.id), texts);
-  const kitId = _kitId(posix.basename(kit));
+  const ergon = findErgon(root, pyStrip(args.id), texts);
   const number = /** @type {number} */ (_numberOf(args, "number"));
-  const jobId = jobIdOf(kitId, number);
-  const plan = readPlan(kit);
+  const plan = readPlan(ergon, texts);
   if (plan === null) {
-    throw _error(texts, "no_plan", { kit: posix.basename(kit) });
+    throw _error(texts, "no_plan", { ergon: posix.basename(ergon) });
   }
-  const { folder, doc } = _jobToWrite(kit, plan, jobId, texts);
-  acquireLease(folder, _holderOf(args, run.lease.machine), texts, run.lease);
+  const { folder, doc } = _athlosToWrite(ergon, plan, number, texts, run.cwd);
+  acquireLease(folder, _holderOf(args, run), texts, run.lease);
   /** @type {(readonly [string, boolean])[]} */
   const steps = [
     ...doc.steps,
     ..._listOf(args, "step").map((text) => /** @type {[string, boolean]} */ ([text, false])),
   ];
-  writeJobDoc(folder, { header: doc.header, steps, done: doc.done || _switchOf(args, "done") }, texts);
+  writeAthlosDoc(folder, { header: doc.header, steps, done: doc.done || _switchOf(args, "done") }, texts);
   _print(_displayPath(folder, root));
   for (const warning of sharedPathWarnings(plan, texts)) {
     process.stderr.write(`${warning}\n`);
@@ -3261,7 +3415,7 @@ function _writeJob(args, run) {
 }
 
 /**
- * Print the unit this session is in: the job of the worktree it works in.
+ * Print the unit this session is in: the athlos of the worktree it works in.
  * @param {Run} run
  */
 function _printActive(run) {
@@ -3271,16 +3425,16 @@ function _printActive(run) {
     _print(texts.active.none);
     return;
   }
-  const jobId = jobIdOf(found.kitId, found.number);
-  const folder = findJobFolder(found.kit, jobId, texts);
-  const unit = folder !== null ? folder : found.kit;
+  const athlosId = athlosIdOf(found.ergonId, found.number);
+  const folder = findAthlosFolder(found.ergon, athlosId, texts);
+  const unit = folder !== null ? folder : found.ergon;
   const lease = readLease(unit, texts);
   const state = unitState(unit, texts, run.lease);
   const path = _displayPath(unit, root);
   _print(
     fill(texts.active.line, {
-      kind: folder !== null ? "job" : "kit",
-      id: folder !== null ? jobId : found.kitId,
+      kind: folder !== null ? "athlos" : "ergon",
+      id: folder !== null ? athlosId : found.ergonId,
       name: posix.basename(unit),
       state,
       holder: lease !== null ? holderLabel(lease.holder) : texts.empty_cell,
@@ -3290,20 +3444,22 @@ function _printActive(run) {
 }
 
 /**
- * What every command of one invocation shares: the root, the texts, the lease clock, the machine.
+ * What every command of one invocation shares: the root, the texts, the lease clock, the machine, the folder.
  * @typedef {object} Run
  * @property {string} root
  * @property {ParkData} texts
  * @property {LeaseContext} lease
+ * @property {string} machine
+ * @property {string} cwd the folder the process started in, read once at the entry
  */
 
 /**
- * The folder a kit has, or the one it would have; the name conflict is the writer's to refuse.
+ * The folder an ergon has, or the one it would have; the name conflict is the writer's to refuse.
  * @param {string} root
  * @param {ParkFields} fields
  * @returns {string}
  */
-function _kitFolder(root, fields) {
+function _ergonFolder(root, fields) {
   return pyPath(ergonRoot(root), `${fields.id}-${fields.name}`);
 }
 
@@ -3355,26 +3511,26 @@ function _releaseOwnLease(unit, lease, texts) {
 function _cmdWrite(args, run) {
   const fields = _fieldsFrom(args, run.texts);
   const body = _bodyFrom(args);
-  const kit = _kitFolder(run.root, fields);
-  const holder = _holderOf(args, run.lease.machine);
+  const ergon = _ergonFolder(run.root, fields);
+  const holder = _holderOf(args, run);
   checkFields(fields, run.texts);
   checkBody(body, run.texts);
-  refuseKitConflict(fields, run.root, run.texts);
-  _refuseForeignLease(kit, holder, run);
-  const free = readLease(kit, run.texts) === null;
-  // The write holds the kit while it writes: a lease taken since the check is refused, not overwritten.
-  const lease = acquireLease(kit, holder, run.texts, run.lease);
+  refuseErgonConflict(fields, run.root, run.texts);
+  _refuseForeignLease(ergon, holder, run);
+  const free = readLease(ergon, run.texts) === null;
+  // The write holds the ergon while it writes: a lease taken since the check is refused, not overwritten.
+  const lease = acquireLease(ergon, holder, run.texts, run.lease);
   try {
-    writeKit(fields, body, run.root, run.texts, process.cwd());
+    writeErgon(fields, body, run.root, run.texts, run.cwd);
   } catch (error) {
     if (free) {
-      _releaseOwnLease(kit, lease, run.texts);
-      _removeIfEmpty(kit);
+      _releaseOwnLease(ergon, lease, run.texts);
+      _removeIfEmpty(ergon);
     }
     throw error;
   }
-  _releaseOwnLease(kit, lease, run.texts);
-  _print(_displayPath(kit, run.root));
+  _releaseOwnLease(ergon, lease, run.texts);
+  _print(_displayPath(ergon, run.root));
   return 0;
 }
 
@@ -3384,10 +3540,10 @@ function _cmdWrite(args, run) {
  * @returns {number}
  */
 function _cmdUnpark(args, run) {
-  const kit = findKit(run.root, pyStrip(args.id), run.texts);
-  const prompt = _readResume(kit, run.texts); // everything that can be refused, before a lease is taken
-  acquireLease(kit, _holderOf(args, run.lease.machine), run.texts, run.lease);
-  _print(_resumeText(prompt, kit, run.root, run.texts));
+  const ergon = findErgon(run.root, pyStrip(args.id), run.texts);
+  const prompt = _readResume(ergon, run.texts); // everything that can be refused, before a lease is taken
+  acquireLease(ergon, _holderOf(args, run), run.texts, run.lease);
+  _print(_resumeText(prompt, ergon, run.root, run.texts, run.machine));
   return 0;
 }
 
@@ -3402,7 +3558,7 @@ function _cmdDigest(args, run) {
   if (cap < 0) {
     throw _error(run.texts, "bad_cap", { value: cap });
   }
-  _print(digest(findKit(run.root, pyStrip(args.id), run.texts), cap, run.root, run.texts));
+  _print(digest(findErgon(run.root, pyStrip(args.id), run.texts), cap, run.root, run.texts, run.machine));
   return 0;
 }
 
@@ -3418,16 +3574,17 @@ function _cmdList(args, run) {
     state: _text(args, "state"),
     closed: _switchOf(args, "closed"),
   };
-  const { kits, jobs } = listKits(run.root, query, run.texts, run.lease);
-  if (kits.length > 0) {
+  const { ergons, athlos } = listErgons(run.root, query, run.texts, run.lease);
+  if (ergons.length > 0) {
     /** @type {string[]} */
     const lines = [];
-    for (const summary of kits) {
+    for (const summary of ergons) {
       lines.push(formatSummary(summary, run.texts));
-      lines.push(...jobs.filter((job) => job.id.startsWith(`${summary.id}.`)).map((job) => formatJob(job, run.texts)));
+      const units = athlos.filter((item) => item.id.startsWith(`${summary.id}.`));
+      lines.push(...units.map((item) => formatAthlos(item, run.texts)));
     }
     _print(lines.join("\n"));
-  } else if (_kitNames(run.root).length === 0) {
+  } else if (_ergonNames(run.root).length === 0) {
     _print(fill(run.texts.list.empty, { path: _displayPath(ergonRoot(run.root), run.root) }));
   } else {
     _print(run.texts.list.no_match);
@@ -3441,9 +3598,9 @@ function _cmdList(args, run) {
  * @returns {number}
  */
 function _cmdHold(args, run) {
-  const kit = findKit(run.root, pyStrip(args.id), run.texts);
-  const unit = _unitOf(kit, _numberOf(args, "number"), run.texts);
-  const holder = _holderOf(args, run.lease.machine);
+  const ergon = findErgon(run.root, pyStrip(args.id), run.texts);
+  const unit = _unitOf(ergon, _numberOf(args, "number"), run.texts);
+  const holder = _holderOf(args, run);
   const takeover = _switchOf(args, "takeover");
   if (takeover) {
     _printReplacedPaths(unit, holder, run);
@@ -3483,8 +3640,8 @@ function _printReplacedPaths(unit, holder, run) {
  * @returns {number}
  */
 function _cmdRelease(args, run) {
-  const kit = findKit(run.root, pyStrip(args.id), run.texts);
-  const unit = _unitOf(kit, _numberOf(args, "number"), run.texts);
+  const ergon = findErgon(run.root, pyStrip(args.id), run.texts);
+  const unit = _unitOf(ergon, _numberOf(args, "number"), run.texts);
   if (readLease(unit, run.texts) === null) {
     throw _error(run.texts, "no_holder", { unit: posix.basename(unit) });
   }
@@ -3498,8 +3655,8 @@ function _cmdRelease(args, run) {
  * @param {Run} run
  * @returns {number}
  */
-function _cmdJob(args, run) {
-  _writeJob(args, run);
+function _cmdAthlos(args, run) {
+  _writeAthlos(args, run);
   return 0;
 }
 
@@ -3519,25 +3676,25 @@ function _cmdActive(_args, run) {
  * @returns {number}
  */
 function _cmdClose(args, run) {
-  const kit = findKit(run.root, pyStrip(args.id), run.texts);
-  _refuseLiveForeignLease(kit, _holderOf(args, run.lease.machine), run);
+  const ergon = findErgon(run.root, pyStrip(args.id), run.texts);
+  _refuseLiveForeignLease(ergon, _holderOf(args, run), run);
   const closed = pyPath(ergonRoot(run.root), CLOSED_DIR);
-  const target = pyPath(closed, posix.basename(kit));
+  const target = pyPath(closed, posix.basename(ergon));
   if (pyStat(target) !== null) {
     throw _error(run.texts, "close_exists", {
-      kit: posix.basename(kit),
+      ergon: posix.basename(ergon),
       target: _displayPath(target, run.root),
     });
   }
   fs.mkdirSync(closed, { recursive: true });
   try {
-    fs.renameSync(kit, target);
+    fs.renameSync(ergon, target);
   } catch (error) {
     if (!isOSError(error)) {
       throw error;
     }
     const reason = /** @type {NodeJS.ErrnoException} */ (error).code ?? "OSError";
-    throw _error(run.texts, "close_failed", { kit: posix.basename(kit), reason });
+    throw _error(run.texts, "close_failed", { ergon: posix.basename(ergon), reason });
   }
   releaseLeases(target); // after the move, so a close that is refused or fails changes nothing
   _print(_displayPath(target, run.root));
@@ -3545,16 +3702,16 @@ function _cmdClose(args, run) {
 }
 
 /**
- * Refuse to close a kit while a live lease of another session is in it, the plan's or a job's.
+ * Refuse to close an ergon while a live lease of another session is in it, the plan's or an athlos's.
  *
  * A stale lease holds nothing, and the closing session's own leases are its to release.
- * @param {string} kit
+ * @param {string} ergon
  * @param {Holder} holder
  * @param {Run} run
- * @throws {ParkError} another session holds a unit of the kit; the message names the unit and the holder
+ * @throws {ParkError} another session holds a unit of the ergon; the message names the unit and the holder
  */
-function _refuseLiveForeignLease(kit, holder, run) {
-  for (const unit of [kit, ..._jobFolders(kit)]) {
+function _refuseLiveForeignLease(ergon, holder, run) {
+  for (const unit of [ergon, ..._athlosFolders(ergon)]) {
     const lease = readLease(unit, run.texts);
     if (lease === null || leaseIsStale(lease, run.lease) || holderSameAs(lease.holder, holder)) {
       continue;
@@ -3569,9 +3726,9 @@ function _refuseLiveForeignLease(kit, holder, run) {
  * @returns {number}
  */
 function _cmdExport(args, run) {
-  const kit = findKit(run.root, pyStrip(args.id), run.texts);
+  const ergon = findErgon(run.root, pyStrip(args.id), run.texts);
   const out = pyPath(/** @type {string} */ (args.values.get("out")));
-  exportKit(kit, out, run.texts);
+  exportErgon(ergon, out, run.texts);
   _print(out);
   return 0;
 }
@@ -3598,7 +3755,7 @@ function _commandHandlers() {
     list: _cmdList,
     hold: _cmdHold,
     release: _cmdRelease,
-    job: _cmdJob,
+    athlos: _cmdAthlos,
     active: _cmdActive,
     close: _cmdClose,
     export: _cmdExport,
@@ -3628,7 +3785,13 @@ function _run(args, texts) {
   const root = _projectRoot(typeof rootValue === "string" ? pyPath(rootValue) : null, texts);
   const machine = _effectiveMachine(args);
   /** @type {Run} */
-  const run = { root, texts, lease: { now: Date.now() / 1000, staleHours: texts.stale_after_hours, machine } };
+  const run = {
+    root,
+    texts,
+    lease: { now: Date.now() / 1000, staleHours: texts.stale_after_hours, machine },
+    machine,
+    cwd: process.cwd(), // read once here; a command below never asks the process where it is
+  };
   return _commandHandlers()[args.command](args, run);
 }
 

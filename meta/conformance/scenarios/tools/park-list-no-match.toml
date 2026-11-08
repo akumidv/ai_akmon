@@ -3,7 +3,7 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# Kits exist but none matches the filters: `list` says so (a different line from the empty folder),
+# Ergons exist but none matches the filters: `list` says so (a different line from the empty folder),
 # exit 0.
 
 [fixture]
@@ -20,4 +20,4 @@ argv = ["list", "--plan", "Z9"]
 [expected]
 exit = 0
 stderr = ""
-stdout = "no kit matches the filters\n"
+stdout = "no ergon matches the filters\n"

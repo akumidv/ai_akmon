@@ -4,7 +4,7 @@ kind = "tool"
 covers = ["tool:park/park"]
 
 # A note written before the header dropped `state` and `peers` still parses: both retired keys are
-# read and ignored, the retired `peers` list takes its items with it, and the kit lists with its
+# read and ignored, the retired `peers` list takes its items with it, and the ergon lists with its
 # derived state (`parked`: a note and no live lease), whatever the old `state` said.
 
 [fixture]

@@ -3,8 +3,8 @@ ecosystem = "shared"
 kind = "tool"
 covers = ["tool:park/park"]
 
-# `export` writes the kit's files to one bundle file, in path order, each under a `--- file:` line and
-# closed by `--- end`. The leases are left out: the HOLDER file of the kit is not in the bundle, whoever
+# `export` writes the ergon's files to one bundle file, in path order, each under a `--- file:` line and
+# closed by `--- end`. The leases are left out: the HOLDER file of the ergon is not in the bundle, whoever
 # holds it. The bundle is plain text.
 
 [fixture]
@@ -26,4 +26,4 @@ stderr = ""
 stdout = "bundle.md\n"
 
 [expected.files]
-"bundle.md" = "# akmon kit bundle: C183-park-helper\n\n--- file: PARK.md\n---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n--- end\n\n--- file: RESUME.md\n# Resume C183-park-helper\n\nShort resume.\n--- end\n"
+"bundle.md" = "# akmon ergon bundle: C183-park-helper\n\n--- file: PARK.md\n---\nid: C183\nname: park-helper\nplan: A59\nrow:\nbranch:\nrevisions:\nowned_paths:\ntasks:\nnext: Twin it in JS\nsessions:\norigin:\nreadiness:\nwritten: 2000-01-01T00:00:00Z\n---\n\n# C183-park-helper\n\n## Goal\n\nBuild the park helper\n\n## Next action\n\nTwin it in JS\n--- end\n\n--- file: RESUME.md\n# Resume C183-park-helper\n\nShort resume.\n--- end\n"
