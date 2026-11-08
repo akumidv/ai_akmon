@@ -89,3 +89,10 @@ target-version = "py312"
 [tool.ruff.lint]
 # ℹ is the notice glyph akmon's hooks print — meant, not a mistyped `i`.
 allowed-confusables = ["ℹ"]
+
+[tool.pytest.ini_options]
+# `docker` marks a test that runs a real container. It belongs to the full local suite
+# (`uv run pytest`) and is left out of CI (`-m "not docker"`), which has no docker daemon.
+# Where it does run, it skips itself with the reason when docker is missing, the daemon is down
+# or the user may not reach its socket.
+markers = ["docker: runs a real container; local full suite only, CI deselects it (-m 'not docker')"]

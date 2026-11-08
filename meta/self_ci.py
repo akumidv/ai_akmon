@@ -154,6 +154,8 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "hooks/hook_core.json",
         "hooks/delegation_log.json",
         "hooks/codex_hook.json",
+        "tools/model_profile/profile.json",
+        "tools/model_profile/items/seed_cases.json",
         "tools/model_routing/registry.json",
         "tools/model_routing/agents.json",
         "tools/model_routing/gate.json",

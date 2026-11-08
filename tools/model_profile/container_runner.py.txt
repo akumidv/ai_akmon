@@ -1,0 +1,44 @@
+
+import contextlib
+import importlib.util
+import io
+import json
+import os
+import sys
+import traceback
+
+
+def main() -> int:
+    test_path, work, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
+    nonce_path = os.path.join(work, "_probe_nonce")
+    with open(nonce_path, encoding="utf-8") as handle:
+        nonce = handle.read().strip()
+    os.unlink(nonce_path)
+    report = sys.__stdout__
+    sys.path.insert(0, work)
+    spec = importlib.util.spec_from_file_location("hidden_test", os.path.join(work, test_path))
+    module = importlib.util.module_from_spec(spec)
+    results = {}
+    error = None
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            error = traceback.format_exc()
+        else:
+            for name in sorted(dir(module)):
+                function = getattr(module, name)
+                if not name.startswith("test_") or not callable(function):
+                    continue
+                try:
+                    function()
+                except BaseException:
+                    results[name] = "failed"
+                else:
+                    results[name] = "passed"
+    report.write("\n" + prefix + " " + nonce + " " + json.dumps({"tests": results, "error": error}) + "\n")
+    report.flush()
+    return 0
+
+
+raise SystemExit(main())

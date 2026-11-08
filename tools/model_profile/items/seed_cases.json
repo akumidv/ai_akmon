@@ -1,0 +1,64 @@
+{
+  "version": "seed-1",
+  "note": "Pilot items for the model profile probe. Small, synthetic, self-authored: the repository below is written for this suite and exists in no public corpus. Every hidden test is gold-sanity gated - the runner proves it fails on the buggy program and passes on the fixed one before any model is asked.",
+  "cases": [
+    {
+      "id": "invoice-coupon",
+      "families": ["fix-traceback", "fix-symptom"],
+      "bug": {
+        "file": "invoice.py",
+        "function": "apply_coupon",
+        "kind": "percentage-not-divided"
+      },
+      "files": {
+        "invoice.py": "\"\"\"Invoice arithmetic over line items, in cents.\"\"\"\n\n\ndef line_total(item):\n    \"\"\"Total of one line item, in cents.\"\"\"\n    return item[\"unit_cents\"] * item[\"quantity\"]\n\n\ndef invoice_total(items):\n    \"\"\"Total of an invoice, in cents.\"\"\"\n    return sum(line_total(item) for item in items)\n\n\ndef apply_coupon(total_cents, code):\n    \"\"\"Apply a coupon code to a total expressed in cents.\"\"\"\n    discounts = {\"SAVE10\": 10, \"SAVE20\": 20}\n    pct = discounts.get(code, 0)\n    return total_cents - total_cents * pct\n",
+        "report.py": "\"\"\"Rendering of an invoice as plain text.\"\"\"\n\nfrom invoice import apply_coupon, invoice_total\n\n\ndef render(items, code=None):\n    \"\"\"Render an invoice, applying a coupon when one is given.\"\"\"\n    total = invoice_total(items)\n    if code:\n        total = apply_coupon(total, code)\n    lines = [f\"total: {total} cents\"]\n    for item in items:\n        lines.append(f\"  {item['name']}: {item['unit_cents'] * item['quantity']}\")\n    return \"\\n\".join(lines)\n",
+        "helpers.py": "\"\"\"Small helpers shared by the invoice package.\"\"\"\n\n\ndef clamp(value, low, high):\n    \"\"\"Clamp a value into the inclusive range [low, high].\"\"\"\n    return max(low, min(high, value))\n\n\ndef split_cents(amount):\n    \"\"\"Split an amount in cents into whole units and the remainder.\"\"\"\n    return amount // 100, amount % 100\n"
+      },
+      "fixed_files": {
+        "invoice.py": "\"\"\"Invoice arithmetic over line items, in cents.\"\"\"\n\n\ndef line_total(item):\n    \"\"\"Total of one line item, in cents.\"\"\"\n    return item[\"unit_cents\"] * item[\"quantity\"]\n\n\ndef invoice_total(items):\n    \"\"\"Total of an invoice, in cents.\"\"\"\n    return sum(line_total(item) for item in items)\n\n\ndef apply_coupon(total_cents, code):\n    \"\"\"Apply a coupon code to a total expressed in cents.\"\"\"\n    discounts = {\"SAVE10\": 10, \"SAVE20\": 20}\n    pct = discounts.get(code, 0)\n    return total_cents - total_cents * pct // 100\n"
+      },
+      "hidden_test": {
+        "path": "test_invoice.py",
+        "content": "\"\"\"The hidden oracle: it must fail on the buggy program and pass on the fixed one.\"\"\"\n\nfrom invoice import apply_coupon\n\n\ndef test_coupon_takes_ten_percent_off():\n    assert apply_coupon(1000, \"SAVE10\") == 900\n\n\ndef test_coupon_takes_twenty_percent_off():\n    assert apply_coupon(2500, \"SAVE20\") == 2000\n\n\ndef test_unknown_coupon_changes_nothing():\n    assert apply_coupon(1000, \"NOPE\") == 1000\n"
+      },
+      "asks": {
+        "fix-traceback": {
+          "system": "You are a careful Python engineer. You return one fenced ```python block and nothing else.",
+          "user": "A test of this package fails. The traceback is:\n\n```\nTraceback (most recent call last):\n  File \"/work/test_invoice.py\", line 6, in test_coupon_takes_ten_percent_off\n    assert apply_coupon(1000, \"SAVE10\") == 900\nAssertionError: assert -9000 == 900\n```\n\nThe files of the package:\n\n```python\n# invoice.py\n\"\"\"Invoice arithmetic over line items, in cents.\"\"\"\n\n\ndef line_total(item):\n    \"\"\"Total of one line item, in cents.\"\"\"\n    return item[\"unit_cents\"] * item[\"quantity\"]\n\n\ndef invoice_total(items):\n    \"\"\"Total of an invoice, in cents.\"\"\"\n    return sum(line_total(item) for item in items)\n\n\ndef apply_coupon(total_cents, code):\n    \"\"\"Apply a coupon code to a total expressed in cents.\"\"\"\n    discounts = {\"SAVE10\": 10, \"SAVE20\": 20}\n    pct = discounts.get(code, 0)\n    return total_cents - total_cents * pct\n\n# report.py\n\"\"\"Rendering of an invoice as plain text.\"\"\"\n\nfrom invoice import apply_coupon, invoice_total\n\n\ndef render(items, code=None):\n    \"\"\"Render an invoice, applying a coupon when one is given.\"\"\"\n    total = invoice_total(items)\n    if code:\n        total = apply_coupon(total, code)\n    lines = [f\"total: {total} cents\"]\n    for item in items:\n        lines.append(f\"  {item['name']}: {item['unit_cents'] * item['quantity']}\")\n    return \"\\n\".join(lines)\n\n# helpers.py\n\"\"\"Small helpers shared by the invoice package.\"\"\"\n\n\ndef clamp(value, low, high):\n    \"\"\"Clamp a value into the inclusive range [low, high].\"\"\"\n    return max(low, min(high, value))\n\n\ndef split_cents(amount):\n    \"\"\"Split an amount in cents into whole units and the remainder.\"\"\"\n    return amount // 100, amount % 100\n```\n\nReturn the full corrected content of the file that holds the defect, as a single fenced ```python block. Change nothing else."
+        },
+        "fix-symptom": {
+          "system": "You are a careful Python engineer. You return one fenced ```python block and nothing else.",
+          "user": "A customer applied the coupon SAVE10 to an invoice of 1000 cents and the reported total came back as -9000 cents. Another customer applied SAVE20 to 2500 cents and the total came back as -22500 cents. Applying an unknown coupon leaves the total unchanged, which is correct.\n\nThe files of the package:\n\n```python\n# invoice.py\n\"\"\"Invoice arithmetic over line items, in cents.\"\"\"\n\n\ndef line_total(item):\n    \"\"\"Total of one line item, in cents.\"\"\"\n    return item[\"unit_cents\"] * item[\"quantity\"]\n\n\ndef invoice_total(items):\n    \"\"\"Total of an invoice, in cents.\"\"\"\n    return sum(line_total(item) for item in items)\n\n\ndef apply_coupon(total_cents, code):\n    \"\"\"Apply a coupon code to a total expressed in cents.\"\"\"\n    discounts = {\"SAVE10\": 10, \"SAVE20\": 20}\n    pct = discounts.get(code, 0)\n    return total_cents - total_cents * pct\n\n# report.py\n\"\"\"Rendering of an invoice as plain text.\"\"\"\n\nfrom invoice import apply_coupon, invoice_total\n\n\ndef render(items, code=None):\n    \"\"\"Render an invoice, applying a coupon when one is given.\"\"\"\n    total = invoice_total(items)\n    if code:\n        total = apply_coupon(total, code)\n    lines = [f\"total: {total} cents\"]\n    for item in items:\n        lines.append(f\"  {item['name']}: {item['unit_cents'] * item['quantity']}\")\n    return \"\\n\".join(lines)\n\n# helpers.py\n\"\"\"Small helpers shared by the invoice package.\"\"\"\n\n\ndef clamp(value, low, high):\n    \"\"\"Clamp a value into the inclusive range [low, high].\"\"\"\n    return max(low, min(high, value))\n\n\ndef split_cents(amount):\n    \"\"\"Split an amount in cents into whole units and the remainder.\"\"\"\n    return amount // 100, amount % 100\n```\n\nReturn the full corrected content of the file that holds the defect, as a single fenced ```python block. Change nothing else."
+        }
+      }
+    },
+    {
+      "id": "inventory-available",
+      "families": ["hunt"],
+      "bug": {
+        "file": "inventory.py",
+        "function": "available",
+        "kind": "negative-not-clamped"
+      },
+      "files": {
+        "inventory.py": "\"\"\"Stock keeping for a small warehouse.\"\"\"\n\n\ndef available(stock, reserved):\n    \"\"\"Units available to sell.\"\"\"\n    return stock - reserved\n\n\ndef received(stock, count):\n    \"\"\"Stock after a delivery.\"\"\"\n    return stock + count\n\n\ndef reserved_for(stock, orders):\n    \"\"\"Units reserved across a list of orders.\"\"\"\n    return sum(order[\"units\"] for order in orders)\n",
+        "pricing.py": "\"\"\"Price list arithmetic.\"\"\"\n\n\ndef unit_price(cents, quantity):\n    \"\"\"Price of a line, in cents.\"\"\"\n    return cents * quantity\n\n\ndef discount(price_cents, pct):\n    \"\"\"Price after a percentage discount, in cents.\"\"\"\n    return price_cents - price_cents * pct // 100\n",
+        "shipping.py": "\"\"\"Shipping thresholds.\"\"\"\n\n\ndef free_shipping(subtotal_cents, threshold_cents=10000):\n    \"\"\"True when an order ships free.\"\"\"\n    return subtotal_cents >= threshold_cents\n\n\ndef shipping_cost(subtotal_cents):\n    \"\"\"Shipping cost in cents for an order.\"\"\"\n    return 0 if free_shipping(subtotal_cents) else 495\n"
+      },
+      "fixed_files": {
+        "inventory.py": "\"\"\"Stock keeping for a small warehouse.\"\"\"\n\n\ndef available(stock, reserved):\n    \"\"\"Units available to sell.\"\"\"\n    return max(0, stock - reserved)\n\n\ndef received(stock, count):\n    \"\"\"Stock after a delivery.\"\"\"\n    return stock + count\n\n\ndef reserved_for(stock, orders):\n    \"\"\"Units reserved across a list of orders.\"\"\"\n    return sum(order[\"units\"] for order in orders)\n"
+      },
+      "hidden_test": {
+        "path": "test_inventory.py",
+        "content": "\"\"\"The hidden oracle: it must fail on the buggy program and pass on the fixed one.\"\"\"\n\nfrom inventory import available\n\n\ndef test_available_is_stock_minus_reserved():\n    assert available(10, 3) == 7\n\n\ndef test_available_never_goes_negative():\n    assert available(2, 5) == 0\n"
+      },
+      "asks": {
+        "hunt": {
+          "system": "You are a careful Python engineer. You answer with one line and nothing else.",
+          "user": "One of the files below holds a defect. Name the file and the function that holds it.\n\nAnswer exactly in this form and nothing else:\nfile.py:function_name\n\n```python\n# inventory.py\n\"\"\"Stock keeping for a small warehouse.\"\"\"\n\n\ndef available(stock, reserved):\n    \"\"\"Units available to sell.\"\"\"\n    return stock - reserved\n\n\ndef received(stock, count):\n    \"\"\"Stock after a delivery.\"\"\"\n    return stock + count\n\n\ndef reserved_for(stock, orders):\n    \"\"\"Units reserved across a list of orders.\"\"\"\n    return sum(order[\"units\"] for order in orders)\n\n# pricing.py\n\"\"\"Price list arithmetic.\"\"\"\n\n\ndef unit_price(cents, quantity):\n    \"\"\"Price of a line, in cents.\"\"\"\n    return cents * quantity\n\n\ndef discount(price_cents, pct):\n    \"\"\"Price after a percentage discount, in cents.\"\"\"\n    return price_cents - price_cents * pct // 100\n\n# shipping.py\n\"\"\"Shipping thresholds.\"\"\"\n\n\ndef free_shipping(subtotal_cents, threshold_cents=10000):\n    \"\"\"True when an order ships free.\"\"\"\n    return subtotal_cents >= threshold_cents\n\n\ndef shipping_cost(subtotal_cents):\n    \"\"\"Shipping cost in cents for an order.\"\"\"\n    return 0 if free_shipping(subtotal_cents) else 495\n```"
+        }
+      }
+    }
+  ]
+}

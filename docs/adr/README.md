@@ -176,3 +176,9 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   id + `zone:`; only a session holds a lease, the head holds the ergon and one athlos at a time; the
   record in the folder, the harness the transport; worktrees follow the harness; only an explicit export
   moves an ergon. Supersedes parts of 0028 D02/D08/D10 and 0021 D04; amends 0028 D11.
+- [0030 — Models are measured by one method and ranked per role, apart from the harness](0030-models-are-measured-by-one-method-and-ranked-per-role.md)
+  — a graded probe suite (hidden tests, gold-sanity gate, no model-written oracle), a score keyed by
+  model, case set, envelope and scaffold, three bands against a hand-measured reference with a 5-point
+  margin; a harness is a provider row and a binding is evaluated, measured locally or declared; the
+  runner is `tools/model_profile/` with a JavaScript twin over shared configuration, state in the local
+  layer, first shipped set `claude` and `codex`. Extends 0004 and 0024/D02.
