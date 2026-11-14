@@ -189,3 +189,9 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   `/style`, `.local/work.json`, `[work] style`, switched by the owner at a park boundary; access is a
   matrix of actor × action × place carried by the launcher's environment value, the autonomous actor
   commits and pushes its own branch. Extends 0025 and 0029.
+- [0032 — akmon-browser: one shipped skill for an agent working in a real browser](0032-akmon-browser-a-shared-browser-skill.md)
+  — one development skill over one Node tool and the pinned `chrome-devtools-mcp` server, for six scenarios
+  (shared window, e2e attach, extension bench, web check, tracker and wiki reading, joint debugging);
+  set up only on request; one Chrome per project, a foreign one only through `attach`; the skill reads
+  through the interface with no direct requests; the developer's session's tool, not an autonomous run's;
+  recording scope is the user's, a secret redacted at capture. Extends 0022/D07 and 0031/D07.

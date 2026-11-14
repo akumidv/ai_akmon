@@ -161,7 +161,7 @@ def test_claude_settings_wires_hooks_into_valid_json(tmp_path):
     # the pre-existing groups keep their hooks (regression: entry-level dedup must not
     # swallow them)
     all_matchers = {entry["matcher"] for entry in settings["hooks"]["PreToolUse"]}
-    assert {"Bash", "Edit|Write|MultiEdit", "Task|Agent"} <= all_matchers
+    assert {"Bash|mcp__akmon-browser__.*", "Edit|Write|MultiEdit", "Task|Agent"} <= all_matchers
 
 
 def test_codex_hooks_wires_neutral_hook_entrypoint(tmp_path):
@@ -719,7 +719,10 @@ def test_sync_data_pins_its_structure():
     # the wiring tables: matcher entries and hook commands, order load-bearing
     assert list(_SYNC_DATA["claude_hooks"]) == ["PreToolUse", "SessionStart", "UserPromptSubmit", "Stop"]
     assert len(_SYNC_DATA["claude_hooks"]["PreToolUse"]) == 4
-    assert _SYNC_DATA["claude_hooks"]["PreToolUse"][0] == {"matcher": "Bash", "commands": ["git-commit-guard"]}
+    assert _SYNC_DATA["claude_hooks"]["PreToolUse"][0] == {
+        "matcher": "Bash|mcp__akmon-browser__.*",
+        "commands": ["git-commit-guard"],
+    }
     assert _SYNC_DATA["claude_hooks"]["Stop"][0]["commands"] == ["gate-audit"]
     # the owner's `/style` switch is captured per turn beside the orchestrator detection (ADR 0031/D03)
     assert _SYNC_DATA["claude_hooks"]["UserPromptSubmit"] == [

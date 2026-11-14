@@ -1,0 +1,21 @@
+# The developer's own session drives the browser through the MCP server.
+id = "hooks/browser-guard-developer-session-mcp-allowed"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "mcp__akmon-browser__take_snapshot"
+session_id = "sess-bg-developer-session-mcp-allowed"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = {}
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

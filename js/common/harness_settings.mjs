@@ -22,6 +22,7 @@
 
 import { fill } from "./jsondata.mjs";
 import { JSONDecodeError, jsonLoads } from "./pyjson.mjs";
+import { pySplitlines } from "./pyvalue.mjs";
 
 /**
  * The shape of `common/harness_settings.json`.
@@ -33,9 +34,6 @@ import { JSONDecodeError, jsonLoads } from "./pyjson.mjs";
  */
 
 const _TOML_HEADER = /^\[\[?\s*(.+?)\s*\]\]?\s*(?:#.*)?$/;
-// Python's `str.splitlines()` boundaries; the string spelling keeps U+2028 and U+2029 from being written into the source.
-// oxlint-disable-next-line no-control-regex -- the control characters are the point: they are splitlines() boundaries
-const _LINE_BREAK = new RegExp("\\r\\n|[\\n\\r\\v\\f\\x1c\\x1d\\x1e\\x85\\u2028\\u2029]");
 const _TOML_KEY = /^([A-Za-z0-9_.\-"' ]+?)\s*=/;
 
 /**
@@ -190,7 +188,7 @@ export function tomlEnvLines(text, names) {
   const kept = [];
   let inTable = false;
   let belongs = false;
-  for (const raw of (text ?? "").split(_LINE_BREAK)) {
+  for (const raw of pySplitlines(text ?? "")) {
     const line = raw.trim();
     if (line === "" || line.startsWith("#")) {
       continue;

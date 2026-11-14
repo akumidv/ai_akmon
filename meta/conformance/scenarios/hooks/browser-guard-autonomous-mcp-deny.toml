@@ -1,0 +1,24 @@
+# An autonomous run is denied the browser MCP server's tools.
+id = "hooks/browser-guard-autonomous-mcp-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[env]
+AKMON_ACTOR = "autonomous"
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "mcp__akmon-browser__take_snapshot"
+session_id = "sess-bg-autonomous-mcp-deny"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = {}
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Browser guardrail (autonomous run): the shared browser is the developer's session's tool, and an autonomous run has no developer to share it with. Use the ordinary web request (WebFetch, WebSearch) instead.\"}}\n"

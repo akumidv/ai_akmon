@@ -334,3 +334,29 @@ deferred (D10, A37). Mounted scenarios may be `shared` or `node`-tagged.
   no Python files.
 - **Runtime and hooks.** The Node floor is D04's. The hooks keep one template, which takes the
   mount's hooks directory.
+
+## Amendment — D01: a tool that drives an external application is implemented once, natively (A82)
+
+Accepted by the owner in the browser-skill design ([design](../design/browser-skill.md),
+D-BROWSER-RUNTIME), stated as a rule for every such tool, not only the browser.
+
+D01's two permanent implementations are narrowed for one class of tool: **a tool whose work is
+driving an external tool or application** (a browser, an editor, a device, a service's own client).
+Such a tool is implemented **as natively as possible**: once, in the toolchain and the environment
+in which that application can be driven, using that environment's own client and libraries rather
+than a re-implementation of its protocol in the other language. Each of the two supported
+environments carries a **wrapper** that calls the one implementation, so the tool is reached the
+same way from both packages (`akmon tool <name>`, D06), which are published separately.
+
+- **The prerequisite is the application's environment.** Using the tool needs that environment on
+  the machine whichever package carries akmon (Node for the browser tool, also from the Python
+  package). The tool states the missing prerequisite in one line and stops; it never installs a
+  runtime on its own.
+- **The wrapper adds no behaviour.** It passes the arguments, the standard streams and the exit
+  status through unchanged. The behaviour and its corpus scenarios belong to the one
+  implementation.
+- **Everything else stays under D01.** Hooks, the CLI and the tools that do akmon's own work keep
+  two implementations and the shared corpus.
+
+The first tool under this rule is `akmon tool browser`, implemented in Node, with a Python-package
+wrapper calling `node`.

@@ -61,6 +61,27 @@ project-local hook surface.
   attended, `0` unattended; M199, M200) and hands it down, and where the variable is absent
   the interactive `default` permission mode attends; `bypassPermissions` and `dontAsk` never do
   ([ADR 0025 D06](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0025-actors-and-action-repertoire.md)).
+  The same hook carries the **browser class** of the access matrix
+  ([ADR 0032 D07](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0032-akmon-browser-a-shared-browser-skill.md)),
+  `hook_core.browser_guard_result`: a `Bash` call whose command words run the browser tool (`akmon tool browser`,
+  `npx akmon tool browser`, `node .../tools/browser.mjs`, `python3 .../tools/browser.py`; the words are the
+  `browser` table of `hook_core.json`) and a call of the `akmon-browser` MCP server (`tool_name` starting
+  `mcp__akmon-browser__`; wired by the matcher `Bash|mcp__akmon-browser__.*`) read the matrix's `browser_session`
+  row, or `browser_delegated` when the payload carries `agent_id` (every tool event inside a Claude subagent does, M189).
+  A developer's own session passes; a delegated agent and an autonomous run are denied, with a reason that points
+  to the ordinary web request (and, for a delegated agent, to handing the step back to the main session). A quoted
+  mention is text and passes. Wrapper commands (`env`, `timeout`, `xargs`, `nice`, `setsid`, `stdbuf`, `exec` and
+  the like) are peeled before the words are read; interpreters are matched by pattern (`node`, `node.exe`, `bun`,
+  `deno`, `python3.N`), and the script is their first non-option argument (its path normalized and, when relative,
+  joined to the directory the command runs in, so `cd js/tools && node browser.mjs` is read); a word is read with its
+  quotes removed, a `--` after `akmon` is skipped, and `python -m akmon[.x]` is the entry. The guard reads command
+  words: a deliberate evasion through another interpreter's inline code or a shell it is piped to (`echo ... | bash`,
+  `bash <<<`, `script -c`, `env -S`, `busybox sh -c`, `strace`, `node -e`, `cmd.exe /c`, a direct run through the
+  executable bit) is not caught, and the skill forbids it. When the git and browser rules both
+  decide on one command, the strictest decision wins (deny over ask over allow), so a git ask cannot hide a browser
+  deny. While the project has an active attach (`<DEV>/.local/.browser/attach.json`), a `close`-named tool of the
+  MCP server is denied for every actor: in attach mode the agent never closes the window or the page.
+  The Codex route of this hook does not read the class (Codex does not wire this hook).
   Runs as a **PreToolUse → Bash** hook, and carries the
   neutral **unclassified-shell-route diagnostic** ([ADR 0012 D02](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0012-stage1-contracts-and-vocabulary.md)): the advisories below key off a
   file path, so a write that arrives through the shell is invisible to them on Claude as well —

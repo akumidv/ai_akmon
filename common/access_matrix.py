@@ -45,6 +45,11 @@ RUN_BRANCH_PATTERNS_KEY = "run_branch_patterns"
 
 _NON_ACTOR_KEYS = (PROTECTED_BRANCHES_KEY, RUN_BRANCH_PATTERNS_KEY)
 
+# The action classes of driving the shared browser (ADR 0032/D07): from the developer's own session, and from a
+# delegated agent (a subagent's tool event carries ``agent_id``, M189); the actor picks the row.
+BROWSER_SESSION_CLASS = "browser_session"
+BROWSER_DELEGATED_CLASS = "browser_delegated"
+
 # The action class of an AI trailer (``Co-Authored-By``): a floor of the commit guard, denied for every actor.
 AI_TRAILER_CLASS = "ai_trailer"
 

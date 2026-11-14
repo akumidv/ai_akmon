@@ -1,0 +1,22 @@
+# A delegated agent is denied the browser MCP server's tools.
+id = "hooks/browser-guard-delegated-mcp-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "mcp__akmon-browser__take_snapshot"
+session_id = "sess-bg-delegated-mcp-deny"
+permission_mode = "default"
+cwd = "{{root}}"
+agent_id = "agent-1"
+tool_input = {}
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Browser guardrail: the shared browser is the developer's session's tool, and a delegated agent does not drive it. Use the ordinary web request (WebFetch, WebSearch) instead; if the step needs the browser, hand it back to the main session.\"}}\n"

@@ -42,6 +42,13 @@ export const ACTOR_ENV = "AKMON_ACTOR";
 /** What an action class may be mapped to, from the most permissive to the most restrictive. */
 export const OUTCOMES = Object.freeze(["allow", "ask", "deny"]);
 
+/**
+ * The action classes of driving the shared browser (ADR 0032/D07): from the developer's own session, and from a
+ * delegated agent (a subagent's tool event carries `agent_id`, M189); the actor picks the row.
+ */
+export const BROWSER_SESSION_CLASS = "browser_session";
+export const BROWSER_DELEGATED_CLASS = "browser_delegated";
+
 /** The action class of an AI trailer (`Co-Authored-By`): a floor of the commit guard, denied for every actor. */
 export const AI_TRAILER_CLASS = "ai_trailer";
 

@@ -16,4 +16,4 @@ argv = ["tool", "model_routing/routing"]
 [expected]
 exit = 2
 stdout = ""
-stderr = "akmon tool: unknown tool 'model_routing/routing'; available: model_profile/cli, model_routing/coverage_map, model_routing/gate_pack, model_routing/init, model_routing/models, model_routing/second_opinion, model_routing/stats, park/park, release/release_check, tasks/archive\n"
+stderr = "akmon tool: unknown tool 'model_routing/routing'; available: browser, model_profile/cli, model_routing/coverage_map, model_routing/gate_pack, model_routing/init, model_routing/models, model_routing/second_opinion, model_routing/stats, park/park, release/release_check, tasks/archive\n"

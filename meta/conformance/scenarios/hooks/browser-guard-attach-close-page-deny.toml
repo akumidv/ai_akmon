@@ -1,0 +1,24 @@
+# In attach mode a developer's own session is denied the browser MCP server's close tools.
+id = "hooks/browser-guard-attach-close-page-deny"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[fixture]
+files = { "_aitna/.local/.browser/attach.json" = "{}" }
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "mcp__akmon-browser__close_page"
+session_id = "sess-bg-attach-close-page-deny"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = {}
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Browser guardrail (attach mode): the browser is attached, so it is the user's own Chrome; the agent never closes its window or its page. Leave it open, and ask the user to close it.\"}}\n"

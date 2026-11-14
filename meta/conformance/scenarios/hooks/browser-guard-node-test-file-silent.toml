@@ -1,0 +1,22 @@
+# A test file of the tool run by node --test is not the tool.
+id = "hooks/browser-guard-node-test-file-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Bash"
+session_id = "sess-bg-node-test-file-silent"
+permission_mode = "default"
+cwd = "{{root}}"
+agent_id = "agent-1"
+tool_input = { command = "node --test js/tools/browser/attach.test.mjs" }
+
+[expected]
+exit = 0
+stderr = "akmon hook: a shell call may mutate the filesystem, but the path-keyed advisories cannot classify this route; hook-process stderr diagnostic only — role-on-code, analysis-guard and the path-keyed reminders receive no inferred target\n"
+stdout = ""

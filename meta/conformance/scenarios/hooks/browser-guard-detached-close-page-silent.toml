@@ -1,0 +1,21 @@
+# With no attach a developer's own session closes a page of its own Chrome.
+id = "hooks/browser-guard-detached-close-page-silent"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:git-commit-guard"]
+
+[run]
+script = "git-commit-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "mcp__akmon-browser__close_page"
+session_id = "sess-bg-detached-close-page-silent"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = {}
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

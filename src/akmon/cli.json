@@ -13,6 +13,7 @@
   "tool_missing_name": "akmon tool: missing tool name; available: {{available}}",
   "tool_unknown": "akmon tool: unknown tool {{name}}; available: {{available}}",
   "tools": [
+    "browser",
     "model_profile/cli",
     "model_routing/coverage_map",
     "model_routing/gate_pack",

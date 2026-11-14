@@ -566,7 +566,9 @@ together.
                      #   and the step or revision that fixed it
 ```
 
-- `<purpose>` is a **series**: `review`, `audit`, `second-opinion`, `plan-to-realize`, `evaluate`.
+- `<purpose>` is a **series**: `review`, `audit`, `second-opinion`, `plan-to-realize`, `evaluate`, and
+  `stage` — a batch of prompts the developer carries to stage sessions of the controlling work style, with
+  the sessions' reports and the answers ledger ([ADR 0031/D09](../adr/0031-work-styles-delegating-and-controlling.md#d09--between-sessions-a-prompt-waits-for-the-answers-and-the-report-and-each-batch-is-a-round)).
   `<n>` is the **round**, counted from 1 within the series and never reused.
 - **A review rarely ends in one round.** Round 1 finds problems; the producer fixes them and records
   in `DISPOSITION.md` which finding led to which step or revision; round 2's brief cites that

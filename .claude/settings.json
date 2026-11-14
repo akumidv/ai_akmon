@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|mcp__akmon-browser__.*",
         "hooks": [
           {
             "type": "command",

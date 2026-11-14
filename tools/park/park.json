@@ -114,7 +114,7 @@
     "commit": "git commit -m \"{{message}}\"",
     "placeholder": "<message>",
     "propose": "Propose the commit message and put it in place of <message>.",
-    "reminder": "The owner runs these, or asks the agent to; write the hand-off prompt to the next session in chat, in the developer's language, addressed to the receiving session and pointing to {{resume}}."
+    "reminder": "The owner runs these, or asks the agent to; then write the hand-off prompt to the next session in chat, in the developer's language, addressed to the receiving session. It is whole: its label and items, and the answers and decisions it depends on pasted as text — never \"still in force\" and never a change against an earlier prompt. It is ready only when every question it depends on is answered and the receiving session's latest report is verified; otherwise it is a draft. It may point to {{resume}} once that record is committed. Say in chat that the record is written, so the context may be compacted."
   },
   "export": {
     "title": "# akmon ergon bundle: {{ergon}}",

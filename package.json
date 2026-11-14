@@ -11,6 +11,7 @@
   },
   "exports": {
     "./package.json": "./package.json",
+    "./tools/browser": "./js/tools/browser.mjs",
     "./tools/model_profile/cli": "./js/tools/model_profile/cli.mjs",
     "./tools/model_routing/coverage_map": "./js/tools/model_routing/coverage_map.mjs",
     "./tools/model_routing/gate_pack": "./js/tools/model_routing/gate_pack.mjs",

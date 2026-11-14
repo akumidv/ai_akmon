@@ -29,8 +29,8 @@ no subagents; state the reason. **The work style** sets the rest
 ([ADR 0031/D06](docs/adr/0031-work-styles-delegating-and-controlling.md#d06--the-delegation-rule-reads-the-style)):
 *delegating* also hands whole athla and higher-tier calls to delegates; *controlling* leaves
 stages to sessions the developer starts, and where a reasoner, auditor or athlos implementer would
-be called it recommends which, for what and why. This clause is direct rather than imported for the same reason
-the shipped block states it directly: Codex does not expand nested `@` imports in `AGENTS.md`.
+be called it recommends which, for what and why. Controlling: a delegate's brief is in the developer's language.
+This clause is direct, not imported: Codex does not expand nested `@` imports.
 
 ## akmon runs on itself
 

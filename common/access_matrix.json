@@ -34,7 +34,9 @@
     "release_create": "ask",
     "config_push_write": "allow",
     "forge_write_other": "allow",
-    "ai_trailer": "deny"
+    "ai_trailer": "deny",
+    "browser_session": "allow",
+    "browser_delegated": "deny"
   },
   "autonomous": {
     "history_unresolved": "deny",
@@ -58,6 +60,8 @@
     "release_create": "ask",
     "config_push_write": "deny",
     "forge_write_other": "ask",
-    "ai_trailer": "deny"
+    "ai_trailer": "deny",
+    "browser_session": "deny",
+    "browser_delegated": "deny"
   }
 }

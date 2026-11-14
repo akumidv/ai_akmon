@@ -150,6 +150,14 @@ labelled options when the choice is bounded, and a recommendation with its reaso
 is a basis for one. Questions requiring owner knowledge may remain open rather than inventing
 options or a recommendation.
 
+Write each request for the owner, not for its author. A term, abbreviation or code the owner has not
+used is spelled out where it first appears; a choice about a shape, a name or a data layout carries one
+concrete example per option; a recommendation carries its reason, never the bare label, because the owner
+may ask *why is it better?*. A proposal from another agent or session is an option to weigh against the
+alternatives, not a decision; one that departs from an accepted decision block names which of that
+block's reasons no longer holds, and does not simply endorse it. A request the owner calls unclear is
+asked again with an example, not argued.
+
 The owner may reply with a code plus an option label or free text, in any order and for any
 subset of requests. Match each response by code, not by position; omitted or unresolved items
 stay pending. A bare code identifies an item but does not accept it. Ordinary unambiguous

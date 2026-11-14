@@ -31,6 +31,7 @@
 # covered instead. An exempt item needs no scenario.
 [exempt]
 "code:codex.host-trust:warn" = "needs a live Codex install; the corpus hides codex from PATH, N10 probes it"
+"tool:browser" = "implemented once, in Node, for an external application (ADR 0020 amendment to D01, ADR 0032/D02): there is no second implementation for a shared scenario to compare, and the tool drives a real Chrome the corpus cannot start; js/tools/browser/*.test.mjs covers the Node behaviour and meta/tests/test_browser_wrapper.py the Python wrapper"
 
 # [dynamic] — emission sites that pass a non-literal severity or code (`<path>::<qualname>`).
 # Their codes cannot be derived at the site, so each is listed with the reason it hides none;

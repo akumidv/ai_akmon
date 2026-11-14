@@ -78,7 +78,7 @@
     "no_agent_line": "No role is declared yet.",
     "pick_by_operation": "Pick the role (never an agent name) by operation: decompose an existing thing → review · construct a new structure/decision → architect · realize a decided structure in code → engineer. If unclear, ask.",
     "pick_generic": "Pick the role the task calls for, one of the roles listed above, never an agent name; if unclear, ask.",
-    "delegation_line": "Delegation is the default for non-atomic work: before the first repository sweep, edit, or test run, decompose the task and delegate every independent sub-step to available subagents. Keep only decomposition, routing, synthesis, and owner dialogue in the orchestrator. Skip delegation only when the task is atomic or the harness exposes no subagents; state the reason. The work style sets the rest: delegating also hands whole athla and higher-tier calls to delegates; controlling leaves stages to sessions the developer starts and, where a reasoner, auditor or athlos implementer would be called, recommends which, for what and why.",
+    "delegation_line": "Delegation is the default for non-atomic work: before the first repository sweep, edit, or test run, decompose the task and delegate every independent sub-step to available subagents. Keep only decomposition, routing, synthesis, and owner dialogue in the orchestrator. Skip delegation only when the task is atomic or the harness exposes no subagents; state the reason. The work style sets the rest: delegating also hands whole athla and higher-tier calls to delegates; controlling leaves stages to sessions the developer starts and, where a reasoner, auditor or athlos implementer would be called, recommends which, for what and why. Controlling: a delegate's brief is in the developer's language.",
     "work_style_line": "work style: {{style}} ({{source}})",
     "work_style_sources": {
       "session": "set in this session with /style",
@@ -101,6 +101,61 @@
   "git_commit_ref_reason": "Commit guardrail: git {{subcommand}} moves, renames or deletes {{target}}. The agent moves, renames or deletes no ref but its own `_aitna/` job branches, and removes or moves no worktree, in any directory — confirm explicitly, or leave it to the owner.",
   "git_commit_ref_target_current_branch": "the current branch",
   "git_commit_ref_target_stdin": "the refs named on its standard input",
+  "browser_reason": "Browser guardrail: the shared browser is the developer's session's tool, and this run may not drive it. Use the ordinary web request (WebFetch, WebSearch) instead.",
+  "browser_reason_delegated": "Browser guardrail: the shared browser is the developer's session's tool, and a delegated agent does not drive it. Use the ordinary web request (WebFetch, WebSearch) instead; if the step needs the browser, hand it back to the main session.",
+  "browser_reason_autonomous": "Browser guardrail (autonomous run): the shared browser is the developer's session's tool, and an autonomous run has no developer to share it with. Use the ordinary web request (WebFetch, WebSearch) instead.",
+  "browser_attached_close_reason": "Browser guardrail (attach mode): the browser is attached, so it is the user's own Chrome; the agent never closes its window or its page. Leave it open, and ask the user to close it.",
+  "browser": {
+    "mcp_prefix": "mcp__akmon-browser__",
+    "mcp_close_word": "close",
+    "attach_file": [".browser", "attach.json"],
+    "launchers": [
+      "akmon",
+      "cli.mjs",
+      "npx",
+      "npm",
+      "bunx",
+      "pnpx",
+      "pnpm",
+      "yarn",
+      "uv",
+      "uvx",
+      "pipx",
+      "pdm",
+      "poetry",
+      "hatch",
+      "rye",
+      "mise",
+      "direnv",
+      "find",
+      "parallel",
+      "watch"
+    ],
+    "interpreter_pattern": "^(node(\\.exe)?|node[0-9]+|bun|deno|py|python([0-9]+(\\.[0-9]+)*)?(\\.exe)?)$",
+    "interpreter_valued_options": ["--import", "--require", "-r", "--loader", "--experimental-loader", "--env-file", "-W", "-X"],
+    "interpreter_inline_options": ["-e", "-c", "-p", "-m", "--eval", "--print"],
+    "interpreter_subcommands": ["run"],
+    "entries": ["akmon", "cli.mjs"],
+    "module_option": "-m",
+    "verb": ["tool", "browser"],
+    "scripts": ["js/tools/browser.mjs", "tools/browser.py"],
+    "keywords": ["!", "{", "}", "if", "then", "else", "elif", "do", "while", "until"],
+    "wrappers": {
+      "env": { "valued_options": ["-u", "--unset", "-C", "--chdir"] },
+      "command": {},
+      "exec": { "valued_options": ["-a"] },
+      "time": { "valued_options": ["-f", "--format", "-o", "--output"] },
+      "nohup": {},
+      "timeout": { "valued_options": ["-s", "--signal", "-k", "--kill-after"], "operands": 1 },
+      "nice": { "valued_options": ["-n", "--adjustment"] },
+      "ionice": { "valued_options": ["-c", "--class", "-n", "--classdata", "-p", "--pid"] },
+      "setsid": {},
+      "stdbuf": { "valued_options": ["-i", "--input", "-o", "--output", "-e", "--error"] },
+      "xargs": {
+        "valued_options": ["-a", "--arg-file", "-d", "--delimiter", "-E", "-e", "-I", "-i", "-L", "-l", "-n", "-P", "-s"]
+      }
+    }
+  },
   "git_commit_guard_crash_reason": "Commit guardrail (autonomous run): the access matrix could not be read, or the guard failed while evaluating this command, so an autonomous run is denied — nothing was run. The owner restores the setup (`akmon verify`); a developer run is let through in the same case.",
   "git_commit_where_unresolved": "a directory the guard cannot resolve from the command text",
   "git_commit_where_not_repository": "{{directory}} (not a git repository)",
@@ -149,7 +204,9 @@
       "release_create": "gh_release_create_reason",
       "config_push_write": "git_config_push_write_reason",
       "forge_write_other": "gh_forge_write_other_reason",
-      "ai_trailer": "git_commit_no_ai_trailer_reason"
+      "ai_trailer": "git_commit_no_ai_trailer_reason",
+      "browser_session": "browser_reason",
+      "browser_delegated": "browser_reason_delegated"
     },
     "autonomous": {
       "history_unresolved": "git_commit_history_reason_autonomous",
@@ -173,7 +230,9 @@
       "release_create": "gh_publish_reason_autonomous",
       "config_push_write": "git_config_push_write_reason_autonomous",
       "forge_write_other": "gh_forge_write_other_reason_autonomous",
-      "ai_trailer": "git_commit_no_ai_trailer_reason"
+      "ai_trailer": "git_commit_no_ai_trailer_reason",
+      "browser_session": "browser_reason_autonomous",
+      "browser_delegated": "browser_reason_autonomous"
     }
   },
   "access_where": {

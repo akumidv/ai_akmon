@@ -335,7 +335,7 @@ test("Claude wiring keeps the table's shape: a matcher-less entry has no matcher
     assert.deepEqual([...session[0].keys()], ["hooks"]);
     const pre = claudeHooks(data, root).get("hooks").get("PreToolUse");
     assert.deepEqual([...pre[0].keys()], ["matcher", "hooks"]);
-    assert.equal(pre[0].get("matcher"), "Bash");
+    assert.equal(pre[0].get("matcher"), "Bash|mcp__akmon-browser__.*");
   });
 });
 

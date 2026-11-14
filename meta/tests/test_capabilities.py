@@ -397,12 +397,12 @@ def test_the_shipped_matrix_population_is_pinned():
     text = (root / MATRIX_FILE).read_text(encoding="utf-8")
     region = text[text.index(REGION_BEGIN) : text.index(REGION_END)]
     titles = [line[4:].strip() for line in region.splitlines() if line.startswith("### ")]
-    assert len(titles) == 26
+    assert len(titles) == 28
     assert len(set(titles)) == len(titles), "one claim per capability-and-vendor pair"
     vendors = [title.rsplit("—", 1)[-1].strip() for title in titles]
     assert {vendor: vendors.count(vendor) for vendor in set(vendors)} == {
-        "Claude Code": 11,
-        "Codex CLI": 11,
+        "Claude Code": 12,
+        "Codex CLI": 12,
         "Gemini CLI": 1,
         # The basic-port second-opinion carriers (ADR 0024/D09): a row each, `delivered: unmeasured`.
         "Qwen Code": 1,

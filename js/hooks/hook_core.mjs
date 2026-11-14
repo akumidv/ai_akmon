@@ -57,6 +57,7 @@ import {
   AITNA_ROOT_DEFAULT,
   aitnaRootName,
   findProjectRoot,
+  localRoot,
   locateProjectRoot,
   resolvePath,
 } from "../common/project_root.mjs";
@@ -84,6 +85,8 @@ import { codePointSort } from "../common/sort.mjs";
 import {
   ACTORS,
   AI_TRAILER_CLASS,
+  BROWSER_DELEGATED_CLASS,
+  BROWSER_SESSION_CLASS,
   outcome as accessOutcome,
   isOwnBranch,
   isProtectedBranch,
@@ -1610,6 +1613,20 @@ function _mostRestrictive(results) {
 }
 
 /**
+ * The result with the strictest decision among `results` (`deny` before `ask` before a pass). The first
+ * of equally strict results wins, so a caller lists the guard whose reason it prefers first.
+ *
+ * Runtime classification: operational
+ * Rationale: it picks among results the guards already rendered and authors no rule or text of its own;
+ * the entry points combine the commit guard and the browser guard with it (ADR 0032/D07).
+ * @param {(HookResult | null)[]} results
+ * @returns {HookResult | null}
+ */
+export function strictestResult(results) {
+  return _mostRestrictive(results);
+}
+
+/**
  * Where `directory` puts a history write: its action class in the matrix, and the values naming it.
  * `history_unresolved` and `history_not_repository` have no facts; the rest are
  * `history_{checkout|worktree}_{default|detached|branch}` — a linked worktree or not, on a default
@@ -2344,6 +2361,334 @@ export function gitCommitGuardResult(
     }
   }
   return null;
+}
+
+// --------------------------------------------------------------------------------------
+// The browser class of the access matrix (ADR 0032/D07)
+// --------------------------------------------------------------------------------------
+
+/**
+ * @typedef {object} CommandLine
+ * @property {string[]} words the words of one command (quotes removed, wrappers kept)
+ * @property {string | null} directory the directory it runs in, `null` when the text does not determine it
+ */
+
+/**
+ * Every command of `script` as its words (the command word first, quotes removed), nested scripts included.
+ *
+ * Each line carries the directory it runs in: `directory` where the script starts, moved by a `cd` /
+ * `pushd` before it (`null` where the text does not determine it).
+ * @param {ShellUnit[]} script
+ * @param {string | null} start
+ * @param {string | null} home
+ * @param {CommandLine[]} found
+ * @returns {void}
+ */
+function _commandLines(script, start, home, found) {
+  let directory = start;
+  for (const unit of script) {
+    if (unit.kind === "group") {
+      _commandLines(unit.script, directory, home, found);
+      continue;
+    }
+    for (const word of unit.words) {
+      for (const substitution of word.substitutions) {
+        _commandLines(substitution, directory, home, found);
+      }
+    }
+    const words = unit.words.filter((word) => word.operand);
+    const [index] = _commandStart(words);
+    if (index >= words.length) {
+      continue;
+    }
+    const operands = words.slice(index + 1);
+    // The line keeps the wrappers (`timeout 30 node ...`): their shapes are read from `hook_core.json`.
+    const first = words.findIndex((word) => !_ASSIGNMENT_RE.test(word.value));
+    found.push({ words: words.slice(first === -1 ? index : first).map((word) => word.value), directory });
+    const nested = _nestedScript(words[index].value, operands);
+    if (nested !== null) {
+      _commandLines(new _Parser(nested).script(false), directory, home, found);
+    }
+    if (words[index].value === "cd" || words[index].value === "pushd") {
+      directory = _changedDirectory(operands, directory, home);
+    } else if (words[index].value === "popd") {
+      directory = null;
+    }
+  }
+}
+
+/**
+ * @param {string} path
+ * @returns {string} the last segment of `path`
+ */
+function _lastSegment(path) {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+/**
+ * The words of the command `line` runs once its wrappers (`timeout 30`, `nice -n 5`, `env`) are peeled.
+ *
+ * A wrapper's options, the values of its valued options and its leading operands (`timeout`'s duration)
+ * are skipped by the shape `browser.wrappers` gives it; the shell keywords and `VAR=value` words are
+ * skipped too. A wrapper is known by its last path segment (`/usr/bin/env`).
+ * @param {string[]} line
+ * @param {any} browser the `browser` table of `hook_core.json`
+ * @returns {string[]}
+ */
+function _wrappedCommand(line, browser) {
+  let words = line;
+  while (words.length > 0) {
+    const name = _lastSegment(words[0]);
+    if (browser.keywords.includes(name) || _ASSIGNMENT_RE.test(words[0])) {
+      words = words.slice(1);
+      continue;
+    }
+    const shape = Object.hasOwn(browser.wrappers, name) ? browser.wrappers[name] : null;
+    if (shape === null) {
+      break;
+    }
+    const rest = words.slice(1);
+    const valued = shape.valued_options ?? [];
+    let index = 0;
+    while (index < rest.length && rest[index].startsWith("-") && rest[index].length > 1) {
+      if (rest[index] === "--") {
+        index += 1;
+        break;
+      }
+      index += valued.includes(rest[index]) ? 2 : 1;
+    }
+    index += shape.operands ?? 0;
+    words = rest.slice(index);
+  }
+  return words;
+}
+
+/**
+ * `script` normalized (`a/./b`, `a/../b`) and, when relative and `directory` is known, joined to it.
+ * @param {string} script
+ * @param {string | null} directory
+ * @returns {string}
+ */
+function _scriptPath(script, directory) {
+  const joined = script.startsWith("/") || directory === null ? script : `${directory}/${script}`;
+  const normal = pathModule.posix.normalize(joined);
+  return normal.length > 1 && normal.endsWith("/") ? normal.slice(0, -1) : normal;
+}
+
+/**
+ * Whether an interpreter given `args` runs the tool's script: its first non-option argument is it. The
+ * values of the valued options (`--import x`) are skipped; `-e`/`-c`/`-m` mean inline code or a module, so
+ * no script follows. The path is normalized and, when relative, resolved against `directory` (where the
+ * command runs), so `./js/tools/browser.mjs`, `js/tools/./browser.mjs` and `browser.mjs` run from
+ * `js/tools` all name the script.
+ * @param {string[]} args
+ * @param {string | null} directory
+ * @param {any} browser the `browser` table of `hook_core.json`
+ * @returns {boolean}
+ */
+function _runsScript(args, directory, browser) {
+  let index = 0;
+  while (index < args.length) {
+    const word = args[index];
+    if (browser.interpreter_inline_options.includes(word)) {
+      return false;
+    }
+    if (browser.interpreter_valued_options.includes(word)) {
+      index += 2;
+    } else if ((word.startsWith("-") && word.length > 1) || browser.interpreter_subcommands.includes(word)) {
+      index += 1;
+    } else {
+      break;
+    }
+  }
+  if (index >= args.length) {
+    return false;
+  }
+  const script = _scriptPath(args[index], directory);
+  return browser.scripts.some((/** @type {string} */ name) => script === name || script.endsWith(`/${name}`));
+}
+
+/**
+ * Whether `tool browser` is the next words from `position`, past any `--` separating it from the entry.
+ * @param {string[]} words
+ * @param {number} position
+ * @param {any} browser the `browser` table of `hook_core.json`
+ * @returns {boolean}
+ */
+function _verbFollows(words, position, browser) {
+  let at = position;
+  while (at < words.length && words[at] === "--") {
+    at += 1;
+  }
+  return browser.verb.every((/** @type {string} */ part, /** @type {number} */ offset) => words[at + offset] === part);
+}
+
+/**
+ * Whether `words[index]` is akmon's entry (`akmon`, `cli.mjs` or `-m akmon[.x]`) followed by the verb.
+ * @param {string[]} words
+ * @param {number} index
+ * @param {any} browser the `browser` table of `hook_core.json`
+ * @returns {boolean}
+ */
+function _runsEntry(words, index, browser) {
+  if (browser.entries.includes(_lastSegment(words[index]))) {
+    return _verbFollows(words, index + 1, browser);
+  }
+  if (words[index] === browser.module_option && index + 1 < words.length) {
+    const module = words[index + 1];
+    if (browser.entries.some((/** @type {string} */ entry) => module === entry || module.startsWith(`${entry}.`))) {
+      return _verbFollows(words, index + 2, browser);
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether the command `line` runs the browser tool: `akmon tool browser` or the tool's script.
+ *
+ * The wrappers are peeled first ({@link _wrappedCommand}). A launcher (`npx`, `uv`, `akmon`, ...) or an
+ * interpreter (`node`, `python3`, `bun`, ...) runs what its arguments name, so `tool browser` after an
+ * `akmon` / `cli.mjs` / `-m akmon` word anywhere in them (a `--` may sit between), or the tool's script
+ * as an interpreter's first non-option argument, runs the tool. A shell's `-c` string behind a wrapper
+ * is read as a script of its own. Any other program (`echo`, `grep`, `oxfmt`) takes the words as text.
+ * @param {CommandLine} line
+ * @param {string | null} home
+ * @param {any} browser the `browser` table of `hook_core.json`
+ * @returns {boolean}
+ */
+function _runsBrowserTool(line, home, browser) {
+  const words = _wrappedCommand(line.words, browser);
+  if (words.length === 0) {
+    return false;
+  }
+  const program = _lastSegment(words[0]);
+  if (_SHELLS.has(program)) {
+    const text = _shellScript(
+      words.slice(1).map((word) => ({ value: word, expands: false, substitutions: [], operand: true, write: false })),
+    );
+    if (text === null) {
+      return false;
+    }
+    /** @type {CommandLine[]} */
+    const lines = [];
+    _commandLines(new _Parser(text).script(false), line.directory, home, lines);
+    return lines.some((nested) => _runsBrowserTool(nested, home, browser));
+  }
+  const interpreter = new RegExp(browser.interpreter_pattern);
+  if (!browser.launchers.includes(program) && !interpreter.test(program)) {
+    return false;
+  }
+  for (const [index, word] of words.entries()) {
+    if (_runsEntry(words, index, browser)) {
+      return true;
+    }
+    if (interpreter.test(_lastSegment(word)) && _runsScript(words.slice(index + 1), line.directory, browser)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a shell command's command words run the browser tool (`akmon tool browser` and its spellings).
+ *
+ * Only command words count — a quoted argument (`echo "akmon tool browser"`) and a heredoc body are
+ * text; a word is read with its quotes removed, so `akmon tool 'brow'ser` is the tool. The command is
+ * read as {@link gitInvocations} reads it: `;`, `&&`, pipes, `$(...)`, `bash -c` and `eval` are
+ * followed. A command is read past its wrappers (`timeout`, `nice`, `xargs`, `env`, ...), and what it
+ * runs is the tool when `tool browser` follows an `akmon` word anywhere in a launcher's arguments
+ * (`npx -y -p akmon akmon tool browser`, `npx akmon -- tool browser`, `uv run --frozen akmon tool
+ * browser`, `python -m akmon.cli tool browser`), or when the tool's `js/tools/browser.mjs` /
+ * `tools/browser.py` script is the first non-option argument of an interpreter — as the path reads once
+ * normalized and, when relative, joined to `directory` (where the command starts; a `cd` before it moves
+ * it), so `cd js/tools && node browser.mjs` is the tool. A path named to another program — `oxfmt`,
+ * `grep`, `node --test` of a test file — runs nothing. All of it is the `browser` table of
+ * `hook_core.json`. A deliberate evasion through another interpreter's inline code (`echo ... | bash`,
+ * `node -e`) is not read: the skill forbids it.
+ * @param {HookData} data
+ * @param {string} command
+ * @param {string | null} [directory]
+ * @returns {boolean}
+ */
+export function browserCommandDrives(data, command, directory = null) {
+  const browser = _core(data, "browser");
+  const home = _homeDirectory();
+  /** @type {CommandLine[]} */
+  const lines = [];
+  // An unknown start is the current directory: a relative `cd` after it still names a place.
+  _commandLines(new _Parser(_subject(command)).script(false), directory ?? ".", home, lines);
+  return lines.some((line) => _runsBrowserTool(line, home, browser));
+}
+
+/**
+ * Whether the project at `directory` has an active attach: `<dev root>/.local/.browser/attach.json`
+ * exists. A project the hook cannot resolve (no project root, an unreadable `.aitna-root`) has none: the
+ * check is skipped rather than guessed.
+ * @param {HookData} data
+ * @param {string | null} directory
+ * @returns {boolean}
+ */
+function _attachActive(data, directory) {
+  try {
+    const root = locateProjectRoot(directory === null || directory === "" ? null : directory);
+    if (root === null) {
+      return false;
+    }
+    return fs.statSync(pyPath(localRoot(root), ...dictItem(_core(data, "browser"), "attach_file"))).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Guard the browser class of the access matrix: who may drive the shared browser (ADR 0032/D07).
+ *
+ * A call drives the browser when it is a `Bash` call whose command words run the tool
+ * ({@link browserCommandDrives}) or an MCP call of the `akmon-browser` server (`toolName` starts with
+ * the `browser.mcp_prefix` of `hook_core.json`). The matrix row is `browser_delegated` for a delegated
+ * agent (`delegated`: the payload carried `agent_id`) and `browser_session` otherwise; the actor picks
+ * the column. A `developer`'s own session passes, a delegated agent and every `autonomous` call are
+ * denied, and an `ask` nobody attends becomes a `deny`. While the project has an active attach
+ * (`_attachActive` at `directory`) a `close` tool of the server is denied to every actor, a developer's
+ * own session included: an attached browser is the user's Chrome, and the agent never closes its window
+ * or its page. Any other call is not this guard's.
+ *
+ * Runtime classification: operational
+ * Rationale: the rule is the browser class of the access matrix (ADR 0032/D07) and its text lives in the
+ * `akmon-browser` skill, not in guardrail prose, so no `Runtime check` marker can claim a policy ID for
+ * it; ADR-0012/D07 requires the classification to be stated rather than left silent.
+ * @param {HookData} data
+ * @param {string} toolName
+ * @param {string} [command]
+ * @param {{actor?: Actor, delegated?: boolean, permissionMode?: string | null, attended?: boolean | null, directory?: string | null}} [options]
+ * @returns {HookResult | null}
+ */
+export function browserGuardResult(
+  data,
+  toolName,
+  command = "",
+  { actor = ACTORS.DEVELOPER, delegated = false, permissionMode = null, attended = null, directory = null } = {},
+) {
+  const browser = _core(data, "browser");
+  const prefix = dictItem(browser, "mcp_prefix");
+  const isMcp = toolName.startsWith(prefix);
+  if (!isMcp && !(toolName === "Bash" && browserCommandDrives(data, command, directory))) {
+    return null;
+  }
+  const matrix = new _Access(data, actor).result(delegated ? BROWSER_DELEGATED_CLASS : BROWSER_SESSION_CLASS, {});
+  const result = matrix === null ? null : _escalateUnattendedAsk(data, matrix, permissionMode, attended);
+  const closes = isMcp && toolName.slice(prefix.length).toLowerCase().includes(dictItem(browser, "mcp_close_word"));
+  if (closes && _attachActive(data, directory)) {
+    return strictestResult([
+      result,
+      new HookResult({
+        eventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionReason: _core(data, "browser_attached_close_reason"),
+      }),
+    ]);
+  }
+  return result;
 }
 
 // --------------------------------------------------------------------------------------

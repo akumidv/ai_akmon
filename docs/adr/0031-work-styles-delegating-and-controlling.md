@@ -1,17 +1,22 @@
 # 0031 — Work styles: delegating and controlling, apart from the actor and its access matrix
 
-- **Status:** Accepted for **D01–D08**. The owner answered each code in session: the two styles as
+- **Status:** Accepted for **D01–D09**. The owner answered each code in session: the two styles as
   fixed bundles, with the reading of delegation in the controlling style the owner stated
   (**D01**, **D02**, D-STYLE-AXES); where a style is set and switched (**D03**, D-STYLE-CARRIER);
   the block commit printed by the agent and run by the owner (**D04**, D-STYLE-COMMIT (a)); the
   hand-off prompt in chat in the developer's language, recorded in the common guardrail (**D05**,
   D-STYLE-LANG (a)); the style-aware delegation rule (**D06**, D-STYLE-DELEG); the access matrix by
   actor, its carrier and the AI trailer (**D07**, D-ACCESS-MATRIX); what no style changes (**D08**).
+  After the owner read the sessions of a consuming project that ran in this style, the owner decided
+  the whole shape of a prompt and what a prompt waits for (**D05** amended, **D09**:
+  D-STYLE-PROMPT-SHAPE, D-STYLE-PROMPT-GATE (a) with (b) on a violation, D-STYLE-LEDGER (rounds of
+  0028/D07), D-STYLE-DELEGATE-LANG (b)).
 - **Owner:** akuminov@gmail.com
 - **Extends:** [0025](0025-actors-and-action-repertoire.md) — the access matrix is the actor's
   repertoire made data; D07 decides the design's D-ACTOR-CARRIER and D-COAUTHOR ·
   [0029](0029-ergon-athlos-step-one-method-of-work.md) — a style chooses how the method's sessions are
-  started, not what the method is.
+  started, not what the method is · [0028/D07](0028-park-and-resume-the-kit-and-the-dotted-layer.md#d07--scratch-in-three-tiers-the-answers-of-other-readers-live-in-the-kit)
+  — D09 uses its rounds for the hand-over between stage sessions.
 - **Amends, for the `autonomous` actor only:** [0029/D09](0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree)
   ("pushing, tagging and publishing stay the owner's everywhere") and the common guardrail's
   job-branch carve-out ("never pushes or tags") — an autonomous run pushes its own branch and opens a
@@ -51,8 +56,8 @@ person in the run and *owner* where a rule says only that person may act.
 3. The style is set by an in-session command, the developer's local setting, or the project's
    setting, in that order, and switched only by the owner at a park boundary (**D03**).
 4. In the controlling style the agent prints the block's commit and the owner runs it (**D04**).
-5. A prompt carried between sessions by the developer is chat, in the developer's language;
-   the records it points to stay English (**D05**).
+5. A prompt carried between sessions by the developer is chat, in the developer's language and whole:
+   a label, its items, the answers pasted as text; the records stay English (**D05**).
 6. The delegation rule reads the style: mechanical delegation stays the default in both; in the
    controlling style stages are the developer's and a higher-tier delegate is recommended, not
    called (**D06**).
@@ -60,6 +65,9 @@ person in the run and *owner* where a rule says only that person may act.
    value; an autonomous actor commits and pushes its own branch (**D07**).
 8. Guardrails, the actor's ceiling and the learning and release agents do not depend on the style
    (**D08**).
+9. Between sessions a prompt waits for the answers and for the receiving session's latest report; each
+   batch of prompts is a round of the ergon's briefs, which holds the answers and the status; a brief to
+   a delegate is in the developer's language (**D09**).
 
 ## Alternatives considered
 
@@ -77,6 +85,14 @@ person in the run and *owner* where a rule says only that person may act.
 - **No subagents at all in the controlling style** (the first reading of D-STYLE-DELEG). The owner
   rejected it: the stage session would do mechanical work on the orchestrator tier, slowly and at the
   highest price.
+- **The answers and the statuses of prompts in `PLAN.md`** (the first reading of D-STYLE-LEDGER).
+  0028/D08 keeps the plan to structure with one writer per file and its status computed from the files;
+  a table of answers and a status per prompt is state that changes at every step. The rounds of
+  0028/D07 already hold a hand-over, its answers and their disposition.
+- **The prompt gate as a refusal of the tool from the start** (D-STYLE-PROMPT-GATE (b)). Chosen only
+  for a violation, so the tool is built when the prose is seen to fail, not before.
+- **Briefs to delegates in English in the controlling style** (D-STYLE-DELEGATE-LANG (a)). The
+  developer reads and checks what the session hands out in this style, delegates' briefs included.
 - **The access matrix keyed by style.** The style is chosen inside a developer's run and can change;
   the actor is fixed for the run (0025/D01). Permissions follow the fixed axis.
 
@@ -90,7 +106,11 @@ person in the run and *owner* where a rule says only that person may act.
   nudge are not delivered, so there both styles and the matrix are prose until its probes land
   (D-ACTOR-PARITY); the rows say so.
 - The common guardrail's § Language gains a third surface (D05).
-- `AGENTS.md` § Delegation and the shipped delegation block become style-aware (D06).
+- `AGENTS.md` § Delegation and the shipped delegation block become style-aware (D06), and say that in
+  the controlling style a brief to a delegate is in the developer's language (D09).
+- The stage sessions of an ergon leave a series `stage` in its `briefs/` (D09); the return after a
+  compaction reads the statuses of its rounds, so the first thing said after it is where the work is and
+  what it waits for.
 - The common guardrail's § Commits (the carve-out and its runtime-check line), `AGENTS.md` § Commits
   and 0029/D09 gain the autonomous actor's exception (D07).
 
@@ -118,7 +138,7 @@ agent ask more or do less; it never makes a denied action pass.
 | Who starts sessions | the orchestrator: subagents, parallel athla in worktrees | the developer: each stage of the ergon runs in a session the developer starts, and its result is carried back by the developer |
 | Stage size | an athlos, to its result | a block of steps the developer can check, ending in a park (`PARK.md` and `RESUME.md`) |
 | Questions | at gates, one `Needed from you` block at the end | at every stage boundary, plus the developer's reading of the prompt before it runs |
-| Prompts | internal briefs to delegates, in English | a prompt addressed to the receiving session, written in the developer's language (D05) |
+| Prompts | internal briefs to delegates, in English | a whole prompt addressed to the receiving session, and a brief to a delegate, written in the developer's language (D05, D09) |
 | Place and commit | worktrees; the agent commits on its branch and prints the squash (0029/D09) | the main checkout, sessions in sequence; one commit per block, printed by the agent and run by the owner (D04) |
 
 In the controlling style the orchestrating session holds the ergon; a stage is cut out of it by the
@@ -154,16 +174,24 @@ paths to stage and one `git commit -m "<message>"` with the message it proposes 
 them, or asks the agent to. This is 0029/D09 unchanged: the main checkout's history stays the owner's,
 and the commit guard needs no new case.
 
-### D05 — A prompt the developer carries is chat, in the developer's language
+### D05 — A prompt the developer carries is chat, in the developer's language, and whole
 
 `Decision-ID: ADR-0031/D05`
 
 A prompt one session hands to another through the developer — the start of a stage session, or the
 result a stage session returns to the orchestrating one — is printed in chat, addressed to the
 session that receives it and written in the developer's language, because the developer reads it,
-checks it and pastes it. It points to the records by path; `PARK.md`, `RESUME.md`, the plan and every
+checks it and pastes it. **It is whole.** It names its label (`P3e`) and lists the items it carries, so
+the developer and the receiving session can tell what was sent. The answers and decisions it depends on
+are pasted into it as text: never "still in force" by reference to an earlier prompt, and never a change
+against one — the receiver has the prompt and nothing else. It stops at the boundary of the receiving
+session's own project and does not design what lies beyond it. It points by path only to records that
+are committed and that the receiver reads as the source — never to a draft, to the prompt file of
+another session or to the orchestrating session's scratch. `PARK.md`, `RESUME.md`, the plan and every
 other record stay English. The common guardrail's § Language records this as its third surface: a
-prompt carried by the owner between sessions is chat.
+prompt carried by the owner between sessions is chat. (The first reading had a prompt "point to the
+records by path"; the sessions of a consuming project showed the receiver then missing the very answers
+the prompt relied on, D-STYLE-PROMPT-SHAPE.)
 
 ### D06 — The delegation rule reads the style
 
@@ -227,3 +255,50 @@ read for a `developer` run (D07 widens push for the `autonomous` actor only), an
 role declaration, decision codes, English artifacts. So do the actor, its ceiling and its unconditional
 prohibitions (0025/D01, D02, D06). The learning and release agents follow their own fixed procedures;
 a style applies to the development agent only.
+
+### D09 — Between sessions: a prompt waits for the answers and the report, and each batch is a round
+
+`Decision-ID: ADR-0031/D09`
+
+In the controlling style the orchestrating session hands each stage to a session the developer starts
+and gets its result back through the developer. Four things follow, each from a loss the owner met in a
+consuming project's sessions: prompts written before their answers, answers that no record held,
+prompts taken for sent when they were not, and a state that did not survive a compaction.
+
+**The order.** A prompt for session X is *ready* only when (a) every question it depends on is answered
+by the developer, and (b) X's latest report is in hand and verified. Before that it is a *draft*: marked
+as one, never offered as the text to send, with no recommendation standing where an answer is missing.
+When the developer holds a report that has not been pasted, the agent asks for it first — a prompt
+written before a pending report loses what the report carried. The rule is prose first
+(D-STYLE-PROMPT-GATE (a)); once a violation is seen — a prompt handed out with an open question or
+without the session's report — it becomes a refusal of the tool that prints the prompt while a
+question of its round is open or the report is missing (D-STYLE-PROMPT-GATE (b)).
+
+**The record is a round of 0028/D07.** The hand-over is a series `stage` of the ergon's `briefs/`; a
+round is one batch of prompts handed out together:
+- `BRIEF.md` — one section per receiving session: its label, its items, the text as printed; and a
+  `sent:` field the agent sets only when the developer says it was sent. An agent never infers `sent`
+  from a summary, a plan or its own earlier reply.
+- `answers/<session>.md` — the session's report, saved by the agent as the developer pasted it.
+- `DISPOSITION.md` — the ledger: for each question the session raised, its code kept as the session
+  wrote it (never renumbered), the question, the developer's answer, and where the answer goes (a
+  prompt label or a record); then the agent's verification of the report. An answer whose codes do not
+  match the questions asked is not entered: the agent states the questions again under their codes.
+  The next round's `BRIEF.md` cites this disposition and carries only what changed (0028/D07). The
+  codes of another project's session are kept in this ledger as they are; akmon's own decision requests
+  still end in the accepted block (design-flow § Decision requests).
+
+**Status is read, not remembered.** *draft* — a brief with no `sent`; *sent* — `sent` set on the
+developer's word; *reported* — the session's answer file exists; *verified* — the disposition holds the
+verification. What the developer says of a session ("not committed", "no answers yet") is recorded as
+their status, in their words. After a resume or a compaction the first thing the agent says is where the
+work is and what it waits for, read from these files.
+
+**Verification before the next prompt** is read-only: the report's claims against the receiving
+session's repository. Where it is unclear what a session received, the agent reads that session's own
+transcript before asking the developer. After the round is written the agent says in chat that the
+record is written, so the developer knows the context may be compacted.
+
+**A brief to a delegate** in the controlling style is written in the developer's language, because the
+developer reads it before it runs (D02); it says that what the delegate writes into records stays
+English (D-STYLE-DELEGATE-LANG (b)). The delegating style keeps English briefs (D02).

@@ -6,8 +6,8 @@ covers = ["tool:park/park"]
 # In the controlling work style (the developer's `.local/work.json`), a `write` in the main checkout prints
 # the block commit after the ergon path: `git add --` with the ergon's owned paths (each once, quoted when
 # the shell needs it) and `git commit -m` with the `--commit-message` text escaped for double quotes, then
-# the reminder that the owner runs them and that the hand-off prompt is written in chat, pointing to
-# RESUME.md (ADR 0031 D04, D05). The tool prints the commands and never runs them, and writes none of it
+# the reminder that the owner runs them and that the hand-off prompt is written in chat, whole and only
+# once its answers and the session's report are in (ADR 0031 D04, D05, D09). The tool prints the commands and never runs them, and writes none of it
 # into PARK.md or RESUME.md.
 
 [fixture]
@@ -24,4 +24,4 @@ argv = ["write", "C183", "--name", "park-helper", "--goal", "Build the park help
 [expected]
 exit = 0
 stderr = ""
-stdout = "_aitna/.ergon/C183-park-helper\n\nBlock commit\ncd {{root}}\ngit add -- tools/park/park.py 'docs/a file.md'\ngit commit -m \"C183: park the \\\"helper\\\" \\$now\"\n\nThe owner runs these, or asks the agent to; write the hand-off prompt to the next session in chat, in the developer's language, addressed to the receiving session and pointing to _aitna/.ergon/C183-park-helper/RESUME.md.\n"
+stdout = "_aitna/.ergon/C183-park-helper\n\nBlock commit\ncd {{root}}\ngit add -- tools/park/park.py 'docs/a file.md'\ngit commit -m \"C183: park the \\\"helper\\\" \\$now\"\n\nThe owner runs these, or asks the agent to; then write the hand-off prompt to the next session in chat, in the developer's language, addressed to the receiving session. It is whole: its label and items, and the answers and decisions it depends on pasted as text — never \"still in force\" and never a change against an earlier prompt. It is ready only when every question it depends on is answered and the receiving session's latest report is verified; otherwise it is a draft. It may point to _aitna/.ergon/C183-park-helper/RESUME.md once that record is committed. Say in chat that the record is written, so the context may be compacted.\n"

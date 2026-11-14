@@ -360,6 +360,7 @@ SNAPSHOT_FILES = (
     "hooks/hook_core.json",
     "hooks/delegation_log.json",
     "hooks/codex_hook.json",
+    "tools/browser.py",
     "tools/model_profile/profile.json",
     "tools/model_profile/container_runner.py.txt",
     "tools/model_profile/items/seed_cases.json",

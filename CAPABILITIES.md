@@ -127,6 +127,24 @@ Gemini CLI and Copilot are in that position for everything except the generated 
 - crash-posture: unmeasured
 - evidence: akmon wires no D5 entry in `.codex/hooks.json`, so sync does not wire the guard route on Codex and the actor matrix is prose there; the raw-harness deny N2 measured, and M59 again on the Bash route on 0.153.4, is not shipped support
 
+### Browser class — a delegated agent and an autonomous run do not drive the shared browser — Claude Code
+
+- documented: yes
+- delivered: unmeasured
+- route: vendor=claude-code; version=unmeasured; event=PreToolUse; matcher=Bash|mcp__akmon-browser__.*
+- effect: none
+- crash-posture: unmeasured
+- evidence:
+
+### Browser class — a delegated agent and an autonomous run do not drive the shared browser — Codex CLI
+
+- documented: yes
+- delivered: no
+- route: vendor=codex-cli; version=0.146.0; event=n/a; matcher=n/a
+- effect: none
+- crash-posture: unmeasured
+- evidence: akmon wires no browser class on Codex: the class is carried by the Claude `git-commit-guard` hook, and the `git-commit-guard` route of `codex-hook`, which sync does not wire (see the Codex commit guard claim), does not read it. A Codex subagent's tool events do carry `agent_id` (M192), so the delegated half could be told apart when a Codex route is wired; that is a later step, after the Codex deny contract is verified
+
 ### Harness settings `env` write guard — the actor's carrier is closed to the agent — Claude Code
 
 - documented: yes

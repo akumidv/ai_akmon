@@ -1557,6 +1557,11 @@ def test_hook_core_json_holds_the_policy_and_texts():
         "git_ref_unconditional",
         "git_fetch_valued_options",
         "git_default_branches",
+        "browser",
+        "browser_reason",
+        "browser_reason_delegated",
+        "browser_reason_autonomous",
+        "browser_attached_close_reason",
         "escalated_ask_suffix",
         "stale_guardrail_notice",
     }

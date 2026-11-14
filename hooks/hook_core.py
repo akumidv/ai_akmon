@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -16,7 +17,7 @@ import tempfile
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypedDict, Unpack
+from typing import Any, NamedTuple, TypedDict, Unpack
 
 # Where the dev layer is, what it is called, and how the project root is found are not this
 # module's facts — they belong to ``common.project_root``, which is stdlib-only and sits
@@ -44,6 +45,7 @@ from common.project_root import (  # noqa: E402
     aitna_root_name,
     akmon_mount,
     find_project_root,
+    local_root,
     locate_project_root,
 )
 
@@ -1103,6 +1105,18 @@ def _most_restrictive(results: Sequence[HookResult | None]) -> HookResult | None
     return max(decided, key=lambda result: _OUTCOME_ORDER[result.permission_decision or "allow"])
 
 
+def strictest_result(results: Sequence[HookResult | None]) -> HookResult | None:
+    """The result with the strictest decision among ``results`` (``deny`` before ``ask`` before a pass).
+
+    The first of equally strict results wins, so a caller lists the guard whose reason it prefers first.
+
+    Runtime classification: operational
+    Rationale: it picks among results the guards already rendered and authors no rule or text of its own;
+    the entry points combine the commit guard and the browser guard with it (ADR 0032/D07).
+    """
+    return _most_restrictive(results)
+
+
 def _history_place(
     directory: str | None, repository_at: Callable[[str], RepositoryFacts | None], access: _Access
 ) -> tuple[str, dict[str, str]]:
@@ -1572,6 +1586,16 @@ class GuardFacts(TypedDict, total=False):
     run_branch: str | None
 
 
+class BrowserFacts(TypedDict, total=False):
+    """The keyword facts of one call that :func:`browser_guard_result` takes."""
+
+    actor: access_matrix.Actor
+    delegated: bool
+    permission_mode: str | None
+    attended: bool | None
+    directory: str | None
+
+
 def git_commit_guard_result(command: str, **facts: Unpack[GuardFacts]) -> HookResult | None:
     """Guard ``git``, ``gh`` and ``glab`` commands by the access matrix: who writes history, publishes, opens a PR.
 
@@ -1624,6 +1648,249 @@ def commit_guard_decision(
         if decision is not None:
             return _escalate_unattended_ask(decision, run.permission_mode, attended=run.attended)
     return None
+
+
+# --------------------------------------------------------------------------------------
+# The browser class of the access matrix (ADR 0032/D07)
+# --------------------------------------------------------------------------------------
+
+
+class _CommandLine(NamedTuple):
+    """The words of one command (quotes removed, wrappers kept) and the directory it runs in, if known."""
+
+    words: list[str]
+    directory: str | None
+
+
+def _command_lines(script: Sequence[Any], directory: str | None, home: str | None, found: list[_CommandLine]) -> None:
+    """Every command of ``script`` as its words (the command word first, quotes removed), nested scripts included.
+
+    Each line carries the directory it runs in: ``directory`` where the script starts, moved by a ``cd`` / ``pushd``
+    before it (``None`` where the text does not determine it).
+    """
+    for unit in script:
+        if isinstance(unit, _Group):
+            _command_lines(unit.script, directory, home, found)
+            continue
+        for word in unit.words:
+            for substitution in word.substitutions:
+                _command_lines(substitution, directory, home, found)
+        words = [word for word in unit.words if word.operand]
+        index, _ = _command_start(words)
+        if index >= len(words):
+            continue
+        operands = words[index + 1 :]
+        # The line keeps the wrappers (``timeout 30 node ...``): their shapes are read from ``hook_core.json``.
+        first = next((at for at, word in enumerate(words) if not _ASSIGNMENT_RE.match(word.value)), index)
+        found.append(_CommandLine([word.value for word in words[first:]], directory))
+        nested = _nested_script(words[index].value, operands)
+        if nested is not None:
+            _command_lines(_Parser(nested).script(nested=False), directory, home, found)
+        if words[index].value in ("cd", "pushd"):
+            directory = _changed_directory(operands, directory, home)
+        elif words[index].value == "popd":
+            directory = None
+
+
+def _last_segment(path: str) -> str:
+    return path.rsplit("/", 1)[-1]
+
+
+def _wrapped_command(line: Sequence[str], browser: Mapping[str, Any]) -> list[str]:
+    """The words of the command ``line`` runs once its wrappers (``timeout 30``, ``nice -n 5``, ``env``) are peeled.
+
+    A wrapper's options, the values of its valued options and its leading operands (``timeout``'s duration) are
+    skipped by the shape ``browser["wrappers"]`` gives it; the shell keywords and ``VAR=value`` words are skipped
+    too. A wrapper is known by its last path segment (``/usr/bin/env``).
+    """
+    words = list(line)
+    while words:
+        name = _last_segment(words[0])
+        if name in browser["keywords"] or _ASSIGNMENT_RE.match(words[0]):
+            words = words[1:]
+            continue
+        shape = browser["wrappers"].get(name)
+        if shape is None:
+            break
+        rest = words[1:]
+        index = 0
+        while index < len(rest) and rest[index].startswith("-") and len(rest[index]) > 1:
+            if rest[index] == "--":
+                index += 1
+                break
+            index += 2 if rest[index] in shape.get("valued_options", ()) else 1
+        index += shape.get("operands", 0)
+        words = rest[index:]
+    return words
+
+
+def _script_path(script: str, directory: str | None) -> str:
+    """``script`` normalized (``a/./b``, ``a/../b``) and, when relative and ``directory`` is known, joined to it."""
+    if script.startswith("/") or directory is None:
+        return posixpath.normpath(script)
+    return posixpath.normpath(f"{directory}/{script}")
+
+
+def _runs_script(arguments: Sequence[str], directory: str | None, browser: Mapping[str, Any]) -> bool:
+    """Whether an interpreter given ``arguments`` runs the tool's script: its first non-option argument is it.
+
+    The values of the valued options (``--import x``) are skipped; ``-e``/``-c``/``-m`` mean inline code or a
+    module, so no script follows. The path is normalized and, when relative, resolved against ``directory`` (where
+    the command runs), so ``./js/tools/browser.mjs``, ``js/tools/./browser.mjs`` and ``browser.mjs`` run from
+    ``js/tools`` all name the script.
+    """
+    index = 0
+    while index < len(arguments):
+        word = arguments[index]
+        if word in browser["interpreter_inline_options"]:
+            return False
+        if word in browser["interpreter_valued_options"]:
+            index += 2
+        elif (word.startswith("-") and len(word) > 1) or word in browser["interpreter_subcommands"]:
+            index += 1
+        else:
+            break
+    if index >= len(arguments):
+        return False
+    script = _script_path(arguments[index], directory)
+    return any(script == name or script.endswith("/" + name) for name in browser["scripts"])
+
+
+def _shell_runs_browser_tool(line: _CommandLine, home: str | None, browser: Mapping[str, Any]) -> bool:
+    """Whether the ``-c`` string of the shell command ``line`` runs the browser tool."""
+    operands = [_Word(value=word, expands=False, substitutions=(), operand=True) for word in line.words[1:]]
+    text = _shell_script(operands)
+    if text is None:
+        return False
+    lines: list[_CommandLine] = []
+    _command_lines(_Parser(text).script(nested=False), line.directory, home, lines)
+    return any(_runs_browser_tool(nested, home, browser) for nested in lines)
+
+
+def _verb_follows(words: Sequence[str], position: int, browser: Mapping[str, Any]) -> bool:
+    """Whether ``tool browser`` is the next words from ``position``, past any ``--`` separating it from the entry."""
+    while position < len(words) and words[position] == "--":
+        position += 1
+    verb = browser["verb"]
+    return list(words[position : position + len(verb)]) == verb
+
+
+def _runs_entry(words: Sequence[str], index: int, browser: Mapping[str, Any]) -> bool:
+    """Whether ``words[index]`` is akmon's entry (``akmon``, ``cli.mjs`` or ``-m akmon[.x]``) followed by the verb."""
+    name = _last_segment(words[index])
+    if name in browser["entries"]:
+        return _verb_follows(words, index + 1, browser)
+    if words[index] == browser["module_option"] and index + 1 < len(words):
+        module = words[index + 1]
+        if any(module == entry or module.startswith(entry + ".") for entry in browser["entries"]):
+            return _verb_follows(words, index + 2, browser)
+    return False
+
+
+def _runs_browser_tool(line: _CommandLine, home: str | None, browser: Mapping[str, Any]) -> bool:
+    """Whether the command ``line`` runs the browser tool: ``akmon tool browser`` or the tool's script.
+
+    The wrappers are peeled first (:func:`_wrapped_command`). A launcher (``npx``, ``uv``, ``akmon``, ...) or an
+    interpreter (``node``, ``python3``, ``bun``, ...) runs what its arguments name, so ``tool browser`` after an
+    ``akmon`` / ``cli.mjs`` / ``-m akmon`` word anywhere in them (a ``--`` may sit between), or the tool's script as
+    an interpreter's first non-option argument, runs the tool. A shell's ``-c`` string behind a wrapper is read as a
+    script of its own. Any other program (``echo``, ``grep``, ``oxfmt``) takes the words as text.
+    """
+    words = _wrapped_command(line.words, browser)
+    program = _last_segment(words[0]) if words else ""
+    interpreter = re.compile(browser["interpreter_pattern"])
+    if program in _SHELLS:
+        return _shell_runs_browser_tool(_CommandLine(words, line.directory), home, browser)
+    if program not in browser["launchers"] and interpreter.fullmatch(program) is None:
+        return False
+    for index, word in enumerate(words):
+        if _runs_entry(words, index, browser):
+            return True
+        if interpreter.fullmatch(_last_segment(word)) is not None and _runs_script(
+            words[index + 1 :], line.directory, browser
+        ):
+            return True
+    return False
+
+
+def browser_command_drives(command: str, directory: str | None = None) -> bool:
+    """Whether a shell command's command words run the browser tool (``akmon tool browser`` and its spellings).
+
+    Only command words count -- a quoted argument (``echo "akmon tool browser"``) and a heredoc body are text; a
+    word is read with its quotes removed, so ``akmon tool 'brow'ser`` is the tool. The command is read as
+    :func:`git_invocations` reads it: ``;``, ``&&``, pipes, ``$(...)``, ``bash -c`` and ``eval`` are followed.
+    A command is read past its wrappers (``timeout``, ``nice``, ``xargs``, ``env``, ...), and what it runs is the
+    tool when ``tool browser`` follows an ``akmon`` word anywhere in a launcher's arguments (``npx -y -p akmon
+    akmon tool browser``, ``npx akmon -- tool browser``, ``uv run --frozen akmon tool browser``, ``python -m
+    akmon.cli tool browser``), or when the tool's ``js/tools/browser.mjs`` / ``tools/browser.py`` script is the
+    first non-option argument of an interpreter -- as the path reads once normalized and, when relative, joined
+    to ``directory`` (where the command starts; a ``cd`` before it moves it), so ``cd js/tools && node
+    browser.mjs`` is the tool. A path named to another program -- ``oxfmt``, ``grep``, ``node --test`` of a test
+    file -- runs nothing. All of it is the ``browser`` table of ``hook_core.json``. A deliberate evasion through
+    another interpreter's inline code (``echo ... | bash``, ``node -e``) is not read: the skill forbids it.
+    """
+    browser = _hook_core_data()["browser"]
+    home = _home_directory()
+    lines: list[_CommandLine] = []
+    # An unknown start is the current directory: a relative ``cd`` after it still names a place.
+    _command_lines(_Parser(command).script(nested=False), directory or ".", home, lines)
+    return any(_runs_browser_tool(line, home, browser) for line in lines)
+
+
+def _attach_active(directory: str | None) -> bool:
+    """Whether the project at ``directory`` has an active attach: ``<dev root>/.local/.browser/attach.json`` exists.
+
+    A project the hook cannot resolve (no project root, an unreadable ``.aitna-root``) has none: the check is
+    skipped rather than guessed.
+    """
+    try:
+        root = locate_project_root(Path(directory) if directory else None)
+        if root is None:
+            return False
+        return local_root(root).joinpath(*_hook_core_data()["browser"]["attach_file"]).is_file()
+    except (OSError, ValueError):
+        return False
+
+
+def browser_guard_result(tool_name: str, command: str = "", **facts: Unpack[BrowserFacts]) -> HookResult | None:
+    """Guard the browser class of the access matrix: who may drive the shared browser (ADR 0032/D07).
+
+    A call drives the browser when it is a ``Bash`` call whose command words run the tool
+    (:func:`browser_command_drives`) or an MCP call of the ``akmon-browser`` server (``tool_name`` starts with
+    the ``browser.mcp_prefix`` of ``hook_core.json``). The matrix row is ``browser_delegated`` for a delegated
+    agent (``delegated``: the payload carried ``agent_id``) and ``browser_session`` otherwise; the actor picks the
+    column. A ``developer``'s own session passes, a delegated agent and every ``autonomous`` call are denied, and
+    an ``ask`` nobody attends becomes a ``deny``. While the project has an active attach (:func:`_attach_active`
+    at ``directory``) a ``close`` tool of the server is denied to every actor, a developer's own session
+    included: an attached browser is the user's Chrome, and the agent never closes its window or its page. Any
+    other call is not this guard's.
+
+    Runtime classification: operational
+    Rationale: the rule is the browser class of the access matrix (ADR 0032/D07) and its text lives in the
+    ``akmon-browser`` skill, not in guardrail prose, so no ``Runtime check`` marker can claim a policy ID for it;
+    ADR-0012/D07 requires the classification to be stated rather than left silent.
+    """
+    texts = _hook_core_data()
+    browser = texts["browser"]
+    is_mcp = tool_name.startswith(browser["mcp_prefix"])
+    if not is_mcp and not (tool_name == "Bash" and browser_command_drives(command, facts.get("directory"))):
+        return None
+    access = _Access(facts.get("actor", access_matrix.Actor.DEVELOPER))
+    action_class = (
+        access_matrix.BROWSER_DELEGATED_CLASS if facts.get("delegated") else access_matrix.BROWSER_SESSION_CLASS
+    )
+    result = access.result(action_class, {})
+    if result is not None:
+        result = _escalate_unattended_ask(result, facts.get("permission_mode"), attended=facts.get("attended"))
+    closes = is_mcp and browser["mcp_close_word"] in tool_name[len(browser["mcp_prefix"]) :].lower()
+    if closes and _attach_active(facts.get("directory")):
+        attached = HookResult(
+            event_name="PreToolUse",
+            permission_decision="deny",
+            permission_reason=texts["browser_attached_close_reason"],
+        )
+        return strictest_result([result, attached])
+    return result
 
 
 # The reason a crashed commit guard gives an autonomous run when ``hook_core.json`` cannot be read either: the
