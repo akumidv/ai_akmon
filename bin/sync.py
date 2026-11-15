@@ -316,10 +316,26 @@ def _codex_readme(data: Mapping[str, Any], root: Path) -> str:
     return jsondata.fill(data["vendor_pointers"]["codex_readme"], {"banner": generated_banner(root)})
 
 
+def is_self_hosted(project_root: Path) -> bool:
+    """Whether ``project_root`` is the standard's own tree, running itself (C207).
+
+    Not package mode, no mount at ``<dev root>/akmon``, and the project root is the tree this
+    script runs from: akmon developing on its own layer. Its hooks are in the tree, so the wiring
+    names them in place (``hooks/``) instead of a mount that does not exist. A consumer never
+    matches: its tree is a mount or an installed package, never its own project root. The
+    JavaScript twin is ``isSelfHosted`` in ``js/bin/sync.mjs``.
+    """
+    if is_package_mode(project_root) or akmon_root(project_root).exists():
+        return False
+    return project_root.resolve() == _TREE_ROOT
+
+
 # The mounted hooks dir, as a POSIX suffix appended after a vendor's root anchor (Codex: git
 # toplevel · Claude: $CLAUDE_PROJECT_DIR). Mounted modes only: mode ``package`` names no
-# directory at all — see ``launcher_relative``.
+# directory at all — see ``launcher_relative``. Self-hosted, the hooks are in the project's tree.
 def _mounted_hooks_dir(root: Path) -> str:
+    if is_self_hosted(root):
+        return "hooks"
     return f"{aitna_root_name(root)}/akmon/hooks"
 
 
@@ -399,7 +415,12 @@ def _akmon_hook_markers(data: Mapping[str, Any], root: Path) -> tuple[str, ...]:
     # hook that merely mentions the word.
     aitna = aitna_root_name(root)
     shapes = data["akmon_hook_markers"]
-    return tuple(jsondata.fill(shape, {"aitna": aitna, "cli": _cli_name(data)}) for shape in shapes)
+    markers = [jsondata.fill(shape, {"aitna": aitna, "cli": _cli_name(data)}) for shape in shapes]
+    # Self-hosted (C207) the entries sync wrote are spelled in-tree; they are recognised so the
+    # next run replaces them rather than keeping them as a user's and appending a duplicate set.
+    if is_self_hosted(root):
+        markers.extend(data["akmon_in_tree_hook_markers"])
+    return tuple(markers)
 
 
 def _codex_hook_command(root: Path, data: Mapping[str, Any]) -> str:
@@ -414,7 +435,7 @@ def _codex_hook_command(root: Path, data: Mapping[str, Any]) -> str:
     anchor = "$(git rev-parse --show-toplevel)"
     if is_package_mode(root):
         return f'"{anchor}/{launcher_relative(root, data)}" hook codex-hook'
-    return f'python3 "{anchor}/{_mounted_hooks_dir(root)}/codex-hook.py"'
+    return jsondata.fill(data["python_codex_hook_command"], {"anchor": anchor, "hooks_dir": _mounted_hooks_dir(root)})
 
 
 def _codex_hooks(root: Path, data: Mapping[str, Any] | None = None) -> dict:
@@ -455,7 +476,10 @@ def _claude_hooks(root: Path, data: Mapping[str, Any] | None = None) -> dict:
         """
         if package_mode:
             return f'"$CLAUDE_PROJECT_DIR/{launcher}" hook {script}'
-        return f'python3 "$CLAUDE_PROJECT_DIR/{_mounted_hooks_dir(root)}/{script}.py"'
+        return jsondata.fill(
+            data["python_hook_command"],
+            {"anchor": "$CLAUDE_PROJECT_DIR", "hooks_dir": _mounted_hooks_dir(root), "script": script},
+        )
 
     # The matcher/command table (``sync.json``). The Bash entry also carries the
     # unclassified-shell-route diagnostic (C49, ADR-0012/D02): the edit-tool advisories would
@@ -686,15 +710,23 @@ def moved_imports(data: Mapping[str, Any] | None = None) -> dict[str, str]:
 def import_base(root: Path) -> str:
     """The directory the standard's files are imported from, ``@`` and trailing slash left out.
 
-    The materialized copy in package mode, the mount otherwise.
+    The materialized copy in package mode, the mount otherwise; empty when the project is the
+    standard's own tree (:func:`is_self_hosted`, C207), whose files are imported in place.
     """
+    if is_self_hosted(root):
+        return ""
     name = aitna_root_name(root)
     return f"{name}/.akmon" if is_package_mode(root) else f"{name}/akmon"
 
 
+def _import_line(base: str, name: str) -> str:
+    """The ``@``-import of the standard's ``name`` from ``base`` (see :func:`import_base`)."""
+    return f"@{base}/{name}" if base else f"@{name}"
+
+
 def import_prefix(root: Path) -> str:
     """The ``@``-import prefix of the standard's files in this project's ``AGENTS.md``."""
-    return f"@{import_base(root)}/"
+    return _import_line(import_base(root), "")
 
 
 def imports_region(base: str, data: Mapping[str, Any] | None = None) -> list[str]:
@@ -706,7 +738,7 @@ def imports_region(base: str, data: Mapping[str, Any] | None = None) -> list[str
     """
     data = _or_read(data)
     markers = data["imports_region"]
-    return [markers["open"], *(f"@{base}/{name}" for name in always_imported(data)), markers["close"]]
+    return [markers["open"], *(_import_line(base, name) for name in always_imported(data)), markers["close"]]
 
 
 def _fence_flags(lines: Sequence[str]) -> list[bool]:
@@ -750,14 +782,14 @@ def _sync_block_region(block: str, root: Path, data: Mapping[str, Any]) -> str:
     base = import_base(root)
     moved = moved_imports(data)
     wanted = always_imported(data)
-    rule_lines = {f"@{base}/{name}" for name in wanted}
-    rule_lines.update(f"@{base}/{old}" for old, new in moved.items() if new in wanted)
+    rule_lines = {_import_line(base, name) for name in wanted}
+    rule_lines.update(_import_line(base, old) for old, new in moved.items() if new in wanted)
     standard = [i for i, line in enumerate(lines) if line.strip() in rule_lines and not fenced[i]]
     if standard:
         first = standard[0]
         kept = [line for i, line in enumerate(lines) if i not in standard[1:]]
         return "\n".join([*kept[:first], *region, *kept[first + 1 :]])
-    profiles = f"@{base}/profiles/"
+    profiles = _import_line(base, "profiles/")
     before = next(
         (i for i, line in enumerate(lines) if line.strip().startswith(profiles) and not fenced[i]),
         None,

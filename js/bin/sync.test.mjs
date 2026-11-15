@@ -25,10 +25,12 @@ import {
   codexHooksText,
   hasPython,
   importBase,
+  importPrefix,
   importedStandardFiles,
   importsRegion,
   installedAkmonVersion,
   isAkmonEntry,
+  isSelfHosted,
   languageProfiles,
   main,
   materializationRoot,
@@ -174,6 +176,81 @@ function pinStatus(manifest) {
   });
   return status;
 }
+
+test("isSelfHosted: the running tree without a mount is, a consumer in any mode is not (C207)", () => {
+  assert.equal(isSelfHosted(TREE), true);
+  withScratch((scratch) => {
+    assert.equal(isSelfHosted(project(scratch)), false);
+  });
+  withScratch((scratch) => {
+    assert.equal(isSelfHosted(mountedProject(scratch)), false);
+  });
+});
+
+test("isSelfHosted: a root that is not the running tree is not, even without a record or a mount", () => {
+  withScratch((scratch) => {
+    assert.equal(isSelfHosted(project(scratch, { record: null, link: false })), false);
+  });
+});
+
+test("self-hosted wiring is the Python reference, byte for byte the committed files (C207)", () => {
+  assert.equal(codexHooksText(data, TREE), get(TREE, ".codex/hooks.json"));
+  const settings = claudeSettings(data, TREE);
+  assert.equal(settings.path, posix.join(TREE, ".claude", "settings.json"));
+  assert.equal(settings.content, get(TREE, ".claude/settings.json"));
+  const claude = claudeHooks(data, TREE).get("hooks").get("PreToolUse")[0].get("hooks")[0].get("command");
+  assert.equal(claude, 'python3 "$CLAUDE_PROJECT_DIR/hooks/git-commit-guard.py"');
+});
+
+test("a consumer's wiring is unchanged by the Python template in sync.json", () => {
+  withScratch((scratch) => {
+    const claude = claudeHooks(data, mountedProject(scratch)).get("hooks").get("PreToolUse")[0].get("hooks")[0];
+    assert.equal(claude.get("command"), 'node "$CLAUDE_PROJECT_DIR/_aitna/akmon/js/hooks/git-commit-guard.mjs"');
+  });
+});
+
+test("self-hosted: the record is not required, and sync --check on the committed tree is clean (C207)", () => {
+  assert.equal(unsupportedRecord(data, TREE), null);
+  const result = run(["--project-root", TREE, "--check"]);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.ok(!result.stdout.includes("ERROR"), result.stdout);
+});
+
+test("self-hosted: the standard's files are imported in place, so the region is the in-tree one (C207)", () => {
+  assert.equal(importBase(TREE), "");
+  assert.equal(importPrefix(TREE), "@");
+  assert.deepEqual(
+    importsRegion(data, importBase(TREE)).slice(1, -1),
+    alwaysImported(data).map((name) => `@${name}`),
+  );
+  const agents = get(TREE, "AGENTS.md");
+  assert.equal(syncImportsRegion(data, agents, TREE), agents);
+  const stale = `# AGENTS\n\n${HEADING}\n\n${OPEN}\n@_aitna/akmon/guardrails/_common.md\n${CLOSE}\n`;
+  const wanted = syncImportsRegion(data, stale, TREE);
+  assert.ok(wanted.includes("\n@guardrails/_common.md\n"), wanted);
+  assert.equal(syncImportsRegion(data, wanted, TREE), wanted);
+});
+
+test("self-hosted: the in-tree spellings are akmon's own, so a repeat replaces them; a consumer keeps them as its own (C207)", () => {
+  const inTree = {
+    hooks: [{ type: "command", command: 'python3 "$CLAUDE_PROJECT_DIR/hooks/git-commit-guard.py"' }],
+  };
+  const inTreeNode = {
+    hooks: [{ type: "command", command: 'node "$CLAUDE_PROJECT_DIR/js/hooks/git-commit-guard.mjs"' }],
+  };
+  const inTreeCodex = {
+    hooks: [{ type: "command", command: 'python3 "$(git rev-parse --show-toplevel)/hooks/codex-hook.py" a' }],
+  };
+  for (const entry of [inTree, inTreeNode, inTreeCodex]) {
+    assert.equal(isAkmonEntry(data, entry, TREE), true);
+  }
+  withScratch((scratch) => {
+    const root = project(scratch);
+    for (const entry of [inTree, inTreeNode, inTreeCodex]) {
+      assert.equal(isAkmonEntry(data, entry, root), false);
+    }
+  });
+});
 
 test("packagePinStatus: no package.json is no pin, and pyproject.toml is never read", () => {
   withScratch((scratch) => {

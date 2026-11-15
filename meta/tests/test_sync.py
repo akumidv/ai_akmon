@@ -668,6 +668,102 @@ def test_package_pin_status_reports_a_manifest_that_is_not_valid_toml(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
+# self-hosting: akmon's own tree is the project root (C207)
+# --------------------------------------------------------------------------------------
+
+
+def _self_hosted_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A tree with no mount that the running script treats as its own."""
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    monkeypatch.setattr(sync, "_TREE_ROOT", tmp_path.resolve())
+    return tmp_path
+
+
+def test_is_self_hosted_for_the_running_tree_without_a_mount(tmp_path, monkeypatch):
+    assert sync.is_self_hosted(_self_hosted_root(tmp_path, monkeypatch))
+
+
+def test_is_self_hosted_is_false_for_a_consumer(tmp_path):
+    assert not sync.is_self_hosted(_make_root(tmp_path))
+
+
+def test_is_self_hosted_is_false_when_a_mount_exists(tmp_path, monkeypatch):
+    root = _self_hosted_root(tmp_path, monkeypatch)
+    (root / "_aitna" / "akmon").mkdir(parents=True)
+    assert not sync.is_self_hosted(root)
+
+
+def test_is_self_hosted_is_false_in_package_mode(tmp_path, monkeypatch):
+    root = _self_hosted_root(tmp_path, monkeypatch)
+    (root / "_aitna").mkdir()
+    (root / "_aitna" / ".akmon.toml").write_text('mount = "package"\n', encoding="utf-8")
+    assert not sync.is_self_hosted(root)
+
+
+def test_self_hosted_wiring_names_the_in_tree_hooks(tmp_path, monkeypatch):
+    root = _self_hosted_root(tmp_path, monkeypatch)
+    blob = json.dumps(sync._claude_hooks(root)) + json.dumps(sync._codex_hooks(root))
+    assert "$CLAUDE_PROJECT_DIR/hooks/git-commit-guard.py" in blob
+    assert "$(git rev-parse --show-toplevel)/hooks/codex-hook.py" in blob
+    assert "/akmon/hooks/" not in blob
+
+
+def test_self_hosted_sync_replaces_its_in_tree_entries_instead_of_duplicating_them(tmp_path, monkeypatch):
+    root = _self_hosted_root(tmp_path, monkeypatch)
+    data = sync.read_sync_data()
+    settings = root / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps(sync._claude_hooks(root, data)), encoding="utf-8")
+    planned = {file.path: file.content for file in sync._planned_files(root, data)[0]}
+    assert json.loads(planned[settings]) == sync._claude_hooks(root, data)
+
+
+def test_a_consumer_keeps_an_in_tree_looking_entry_as_its_own(tmp_path):
+    root = _make_root(tmp_path)
+    data = sync.read_sync_data()
+    own = _akmon_entry("$CLAUDE_PROJECT_DIR/hooks/mine.py")
+    merged = sync._merge_hook_entries([own], sync._claude_hooks(root, data)["hooks"]["PreToolUse"], root, data)
+    assert own in merged
+
+
+def test_a_mounted_consumers_python_wiring_is_spelled_from_the_shared_template(tmp_path):
+    root = _make_root(tmp_path)
+    claude = sync._claude_hooks(root)["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    codex = sync._codex_hooks(root)["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert claude == 'python3 "$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/git-commit-guard.py"'
+    assert codex.startswith('python3 "$(git rev-parse --show-toplevel)/_aitna/akmon/hooks/codex-hook.py" ')
+
+
+def test_no_python_hook_command_is_spelled_inline_in_the_sync_script():
+    """C207: the template lives in ``sync.json`` only; the JavaScript sync reads the same one."""
+    source = Path(sync.__file__).read_text(encoding="utf-8")
+    assert 'python3 "' not in source
+
+
+def test_import_base_is_empty_when_self_hosted_and_the_mount_otherwise(tmp_path, monkeypatch):
+    (tmp_path / "consumer").mkdir()
+    (tmp_path / "own").mkdir()
+    consumer = _make_root(tmp_path / "consumer")
+    assert sync.import_base(consumer) == "_aitna/akmon"
+    assert sync.import_prefix(consumer) == "@_aitna/akmon/"
+    root = _self_hosted_root(tmp_path / "own", monkeypatch)
+    assert sync.import_base(root) == ""
+    assert sync.import_prefix(root) == "@"
+
+
+def test_self_hosted_sync_writes_the_in_tree_imports_region(tmp_path, monkeypatch):
+    root = _self_hosted_root(tmp_path, monkeypatch)
+    data = sync.read_sync_data()
+    markers = data["imports_region"]
+    stale = f"# AGENTS\n\n{_HEADING}\n\n{markers['open']}\n@_aitna/akmon/guardrails/_common.md\n{markers['close']}\n"
+    region = sync.imports_region("", data)
+    assert region[1] == "@guardrails/_common.md"
+    wanted = sync.sync_imports_region(stale, root, data)
+    assert [line for line in wanted.splitlines() if line.startswith("@")] == region[1:-1]
+    assert sync.sync_imports_region(wanted, root, data) == wanted
+
+
+# --------------------------------------------------------------------------------------
 # bin/sync.json — the shared sync text and tables (C102)
 # --------------------------------------------------------------------------------------
 
@@ -681,6 +777,12 @@ def test_sync_data_pins_its_structure():
         "cli_name",
         "default_launcher_rel",
         "akmon_hook_markers",
+        # the in-tree spellings recognised when akmon runs sync on itself (C207)
+        "akmon_in_tree_hook_markers",
+        # the Python hook command templates both implementations spell the wiring from: a consumer's
+        # Python wiring, and akmon's own self-hosted wiring (C207)
+        "python_hook_command",
+        "python_codex_hook_command",
         # the JavaScript sync's own keys (C105): the Node wiring spelling and the refusal of a record
         # that is not Node package mode; this file never reads them
         "node_hook_command",
@@ -724,6 +826,14 @@ def test_sync_data_pins_its_structure():
         "/node_modules/akmon/js/hooks/",
         "{{aitna}}/akmon/js/hooks/",
     ]
+    assert _SYNC_DATA["akmon_in_tree_hook_markers"] == [
+        "$CLAUDE_PROJECT_DIR/hooks/",
+        "$(git rev-parse --show-toplevel)/hooks/",
+        "$CLAUDE_PROJECT_DIR/js/hooks/",
+        "$(git rev-parse --show-toplevel)/js/hooks/",
+    ]
+    assert _SYNC_DATA["python_hook_command"] == 'python3 "{{anchor}}/{{hooks_dir}}/{{script}}.py"'
+    assert _SYNC_DATA["python_codex_hook_command"] == 'python3 "{{anchor}}/{{hooks_dir}}/codex-hook.py"'
     # one template per harness, the hooks directory a placeholder: node_modules/akmon/js/hooks in
     # package mode, <dev root>/akmon/js/hooks in a mounted one (js/bin/sync.mjs::nodeHooksDir)
     assert _SYNC_DATA["node_hook_command"] == 'node "{{anchor}}/{{hooks_dir}}/{{script}}.mjs"'

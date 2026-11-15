@@ -286,6 +286,16 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   Running akmon on itself, the standard tree is the project root, so `skills/` was read twice and
   each skill was flagged `duplicate skill name`; a folder reached through two roots is now read
   once, and two different folders holding one name stay an error.
+- **`sync` on akmon's own repository writes the in-tree hook paths, in both implementations (C207).** With
+  no mount at `<dev root>/akmon` and the project root being the running tree, `sync` names `hooks/`
+  in place instead of the consumer mount `meta/akmon/hooks/`, imports the standard's files in place
+  (`@guardrails/…`), and recognises its in-tree entries (`akmon_in_tree_hook_markers` in
+  `bin/sync.json`) so a run replaces them rather than appending a dead duplicate set; `sync --check`
+  passes on the committed `.claude/settings.json` and `.codex/hooks.json`. The self-hosted wiring is
+  always the Python reference, so the JavaScript `sync` also writes `python3 …/hooks/*.py` there and no
+  longer refuses akmon's tree for lacking a record; both read the Python command templates
+  (`python_hook_command`, `python_codex_hook_command`) from `bin/sync.json`. A consumer is never
+  self-hosted and its wiring is unchanged. `is_self_hosted` / `isSelfHosted`.
 - **A hook `ask` reaches an owner who is present ([ADR-0025](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0025-actors-and-action-repertoire.md)/D06, C178).**
   The commit guard's `push`/`tag`/`merge` and commit-on-the-default-branch ask, and the delegation
   tier-floor ask, were turned into a deny whenever `permission_mode` was not `default`, so an

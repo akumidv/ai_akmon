@@ -97,6 +97,9 @@ import { codePointCompare, codePointSort } from "../common/sort.mjs";
  * @typedef {object} SyncDocument
  * @property {string} cli_name
  * @property {string[]} akmon_hook_markers
+ * @property {string[]} akmon_in_tree_hook_markers
+ * @property {string} python_hook_command
+ * @property {string} python_codex_hook_command
  * @property {string} node_hook_command
  * @property {string} node_codex_hook_command
  * @property {string} unsupported_record
@@ -239,6 +242,22 @@ export function standardTreeRoot(projectRoot) {
   }
   const standard = pyPath(projectRoot, "node_modules", "akmon");
   return _sameDirectory(standard, TREE_ROOT) ? standard : TREE_ROOT;
+}
+
+/**
+ * Whether `projectRoot` is the standard's own tree, running itself (C207): not package mode, no mount
+ * at `<dev root>/akmon`, and the project root is the tree this module runs from — akmon developing on
+ * its own layer, where the hooks are in the tree and no mount exists. A consumer never matches: its
+ * tree is a mount or an installed package, never its own project root. The Python twin is
+ * `is_self_hosted` in `bin/sync.py`.
+ * @param {string} projectRoot
+ * @returns {boolean}
+ */
+export function isSelfHosted(projectRoot) {
+  if (isPackageMode(projectRoot) || _exists(pyPath(aitnaRoot(projectRoot), "akmon"))) {
+    return false;
+  }
+  return _sameDirectory(projectRoot, TREE_ROOT);
 }
 
 /**
@@ -628,12 +647,34 @@ function _codexReadme(/** @type {SyncData} */ data, /** @type {string} */ root) 
  */
 function _akmonHookMarkers(data, root) {
   const aitna = aitnaRootName(root);
-  return data.sync.akmon_hook_markers.map((shape) => fill(shape, { aitna, cli: data.sync.cli_name }));
+  const markers = data.sync.akmon_hook_markers.map((shape) => fill(shape, { aitna, cli: data.sync.cli_name }));
+  // Self-hosted (C207) the entries sync wrote are spelled in-tree; recognised so the next run replaces
+  // them instead of keeping them as a user's and appending a duplicate set.
+  return isSelfHosted(root) ? [...markers, ...data.sync.akmon_in_tree_hook_markers] : markers;
 }
 
 /** An ordered JSON object from `[key, value]` pairs — a `Map`, so the key order a file is written in is the one built. */
 function _object(/** @type {Array<[string, Json]>} */ pairs) {
   return new Map(pairs);
+}
+
+/**
+ * The command templates and hooks directory the wiring is spelled from (`sync.json`): the Node hooks
+ * of the project's mode, or — for akmon's own self-hosted tree (C207) — the in-tree Python hooks, the
+ * reference runtime, from the template the Python `sync` reads too.
+ * @param {SyncData} data
+ * @param {string} root
+ * @returns {{claude: string, codex: string, hooksDir: string}}
+ */
+function _hookSpelling(data, root) {
+  if (isSelfHosted(root)) {
+    return { claude: data.sync.python_hook_command, codex: data.sync.python_codex_hook_command, hooksDir: "hooks" };
+  }
+  return {
+    claude: data.sync.node_hook_command,
+    codex: data.sync.node_codex_hook_command,
+    hooksDir: nodeHooksDir(root),
+  };
 }
 
 /**
@@ -648,10 +689,8 @@ function _object(/** @type {Array<[string, Json]>} */ pairs) {
  * @returns {Map<string, Json>}
  */
 export function codexHooks(data, root) {
-  const base = fill(data.sync.node_codex_hook_command, {
-    anchor: "$(git rev-parse --show-toplevel)",
-    hooks_dir: nodeHooksDir(root),
-  });
+  const spelling = _hookSpelling(data, root);
+  const base = fill(spelling.codex, { anchor: "$(git rev-parse --show-toplevel)", hooks_dir: spelling.hooksDir });
   const hooks = new Map();
   for (const [event, entries] of Object.entries(data.sync.codex_hooks)) {
     hooks.set(
@@ -691,7 +730,7 @@ export function codexHooks(data, root) {
  * @returns {Map<string, Json>}
  */
 export function claudeHooks(data, root) {
-  const hooksDir = nodeHooksDir(root);
+  const spelling = _hookSpelling(data, root);
   const hooks = new Map();
   for (const [event, entries] of Object.entries(data.sync.claude_hooks)) {
     hooks.set(
@@ -700,10 +739,7 @@ export function claudeHooks(data, root) {
         const commands = entry.commands.map((script) =>
           _object([
             ["type", "command"],
-            [
-              "command",
-              fill(data.sync.node_hook_command, { anchor: "$CLAUDE_PROJECT_DIR", hooks_dir: hooksDir, script }),
-            ],
+            ["command", fill(spelling.claude, { anchor: "$CLAUDE_PROJECT_DIR", hooks_dir: spelling.hooksDir, script })],
           ]),
         );
         return entry.matcher === null
@@ -1380,13 +1416,27 @@ export function alwaysImported(data) {
 
 /**
  * The directory the standard's files are imported from, `@` and trailing slash left out: the
- * materialized copy in package mode, the mount otherwise.
+ * materialized copy in package mode, the mount otherwise; empty when the project is the standard's
+ * own tree ({@link isSelfHosted}, C207), whose files are imported in place.
  * @param {string} root
  * @returns {string}
  */
 export function importBase(root) {
+  if (isSelfHosted(root)) {
+    return "";
+  }
   const name = aitnaRootName(root);
   return isPackageMode(root) ? `${name}/.akmon` : `${name}/akmon`;
+}
+
+/**
+ * The `@`-import of the standard's `name` from `base` ({@link importBase}).
+ * @param {string} base
+ * @param {string} name
+ * @returns {string}
+ */
+function _importLine(base, name) {
+  return base === "" ? `@${name}` : `@${base}/${name}`;
 }
 
 /**
@@ -1395,7 +1445,7 @@ export function importBase(root) {
  * @returns {string}
  */
 export function importPrefix(root) {
-  return `@${importBase(root)}/`;
+  return _importLine(importBase(root), "");
 }
 
 /**
@@ -1409,7 +1459,7 @@ export function importPrefix(root) {
  */
 export function importsRegion(data, base) {
   const markers = data.sync.imports_region;
-  return [markers.open, ...alwaysImported(data).map((name) => `@${base}/${name}`), markers.close];
+  return [markers.open, ...alwaysImported(data).map((name) => _importLine(base, name)), markers.close];
 }
 
 /**
@@ -1470,10 +1520,10 @@ function _syncBlockRegion(data, block, root) {
   }
   const moved = movedImports(data);
   const wanted = alwaysImported(data);
-  const ruleLines = new Set(wanted.map((name) => `@${base}/${name}`));
+  const ruleLines = new Set(wanted.map((name) => _importLine(base, name)));
   for (const [old, target] of Object.entries(moved)) {
     if (wanted.includes(target)) {
-      ruleLines.add(`@${base}/${old}`);
+      ruleLines.add(_importLine(base, old));
     }
   }
   const standard = lines.flatMap((line, i) => (ruleLines.has(pyStrip(line)) && !fenced[i] ? [i] : []));
@@ -1482,7 +1532,7 @@ function _syncBlockRegion(data, block, root) {
     const kept = lines.filter((_, i) => !standard.slice(1).includes(i));
     return [...kept.slice(0, first), ...region, ...kept.slice(first + 1)].join("\n");
   }
-  const profiles = `@${base}/profiles/`;
+  const profiles = _importLine(base, "profiles/");
   const before = lines.findIndex((line, i) => pyStrip(line).startsWith(profiles) && !fenced[i]);
   if (before >= 0) {
     return [...lines.slice(0, before), ...region, ...lines.slice(before)].join("\n");
@@ -2214,6 +2264,10 @@ export function printSummary(data, result, { root, mode }) {
  * @returns {string | null}
  */
 export function unsupportedRecord(data, root) {
+  // akmon's own tree has no record and needs none (C207): `sync` there writes the Python reference wiring.
+  if (isSelfHosted(root) && !isFile(pyPath(aitnaRoot(root), ".akmon.toml"))) {
+    return null;
+  }
   const what = unsupportedFound(data, root);
   return what === null ? null : fill(data.sync.unsupported_record, { found: what });
 }

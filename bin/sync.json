@@ -8,6 +8,14 @@
     "/node_modules/akmon/js/hooks/",
     "{{aitna}}/akmon/js/hooks/"
   ],
+  "akmon_in_tree_hook_markers": [
+    "$CLAUDE_PROJECT_DIR/hooks/",
+    "$(git rev-parse --show-toplevel)/hooks/",
+    "$CLAUDE_PROJECT_DIR/js/hooks/",
+    "$(git rev-parse --show-toplevel)/js/hooks/"
+  ],
+  "python_hook_command": "python3 \"{{anchor}}/{{hooks_dir}}/{{script}}.py\"",
+  "python_codex_hook_command": "python3 \"{{anchor}}/{{hooks_dir}}/codex-hook.py\"",
   "node_hook_command": "node \"{{anchor}}/{{hooks_dir}}/{{script}}.mjs\"",
   "node_codex_hook_command": "node \"{{anchor}}/{{hooks_dir}}/codex-hook.mjs\"",
   "unsupported_record": "akmon sync: the JavaScript implementation serves Node projects only (ecosystem = \"node\" in <dev root>/.akmon.toml), but this project has {{found}}; run the Python implementation of akmon for it.",

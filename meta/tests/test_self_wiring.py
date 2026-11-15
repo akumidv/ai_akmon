@@ -23,28 +23,48 @@ _IN_TREE_HOOKS = "$CLAUDE_PROJECT_DIR/hooks/"
 _IN_TREE_CODEX_HOOK = "$(git rev-parse --show-toplevel)/hooks/codex-hook.py"
 
 
-def _shipped_wiring() -> dict:
-    """What `akmon sync` would write for a mounted consumer, re-pointed at this tree."""
-    mounted = f"$CLAUDE_PROJECT_DIR/{sync.aitna_root_name(_ROOT)}/akmon/hooks/"
-    blob = json.dumps(sync._claude_hooks(_ROOT))
+def _consumer_root(tmp_path: Path) -> Path:
+    """A throwaway mounted consumer: the one place the mounted spelling is built for comparison."""
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / "_aitna" / "akmon").mkdir(parents=True)
+    return tmp_path
+
+
+def _consumer_wiring(tmp_path: Path) -> dict:
+    """What `akmon sync` writes for a mounted consumer's Claude wiring, re-pointed at this tree."""
+    consumer = _consumer_root(tmp_path)
+    mounted = "$CLAUDE_PROJECT_DIR/_aitna/akmon/hooks/"
+    blob = json.dumps(sync._claude_hooks(consumer))
     assert mounted in blob, "the shipped wiring no longer names the mounted hook directory"
     return json.loads(blob.replace(mounted, _IN_TREE_HOOKS))
 
 
-def _shipped_codex_wiring() -> dict:
-    """What `akmon sync` would write for a mounted consumer's Codex wiring, re-pointed at this tree."""
-    mounted = f"$(git rev-parse --show-toplevel)/{sync.aitna_root_name(_ROOT)}/akmon/hooks/codex-hook.py"
-    blob = json.dumps(sync._codex_hooks(_ROOT))
+def _consumer_codex_wiring(tmp_path: Path) -> dict:
+    """What `akmon sync` writes for a mounted consumer's Codex wiring, re-pointed at this tree."""
+    consumer = _consumer_root(tmp_path)
+    mounted = "$(git rev-parse --show-toplevel)/_aitna/akmon/hooks/codex-hook.py"
+    blob = json.dumps(sync._codex_hooks(consumer))
     assert mounted in blob, "the shipped Codex wiring no longer names the mounted hook script"
     return json.loads(blob.replace(mounted, _IN_TREE_CODEX_HOOK))
 
 
-def test_akmon_wires_its_own_repository_exactly_as_it_wires_a_consumer():
-    assert json.loads(_SETTINGS.read_text(encoding="utf-8")) == _shipped_wiring()
+def test_akmon_wires_its_own_repository_exactly_as_it_wires_a_consumer(tmp_path):
+    assert json.loads(_SETTINGS.read_text(encoding="utf-8")) == _consumer_wiring(tmp_path)
 
 
-def test_akmon_wires_its_own_codex_hooks_exactly_as_it_wires_a_consumer():
-    assert json.loads(_CODEX.read_text(encoding="utf-8")) == _shipped_codex_wiring()
+def test_akmon_wires_its_own_codex_hooks_exactly_as_it_wires_a_consumer(tmp_path):
+    assert json.loads(_CODEX.read_text(encoding="utf-8")) == _consumer_codex_wiring(tmp_path)
+
+
+def test_sync_on_akmon_itself_writes_the_committed_wiring():
+    """C207: self-hosted, sync spells the in-tree path itself, so no mount prefix is mapped here."""
+    assert sync.is_self_hosted(_ROOT)
+    assert json.loads(_SETTINGS.read_text(encoding="utf-8")) == sync._claude_hooks(_ROOT)
+    assert json.loads(_CODEX.read_text(encoding="utf-8")) == sync._codex_hooks(_ROOT)
+
+
+def test_sync_check_passes_on_the_committed_tree():
+    assert sync.main(["--project-root", str(_ROOT), "--check"]) == 0
 
 
 def test_every_wired_hook_script_exists_in_this_tree():
